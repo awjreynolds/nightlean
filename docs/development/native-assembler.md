@@ -70,7 +70,7 @@ The output parent directory must already exist. The selected output directory mu
 
 The stdout summary contains the contract address, public artifact/state digests, operation counts, expiry, source revisions and qualification flags. It omits witness values and private configuration digests. Private configuration parse errors retain numeric locations and discard value-bearing parser causes, including under full Rust error-chain formatting. The constructor check is recorded separately from proof generation and ledger acceptance. This tool does neither. A native toolkit step supplies fees, proving, signing and submission later.
 
-The current bound is one call with no explicit circuit input/output payload beyond the compiler-owned transcript representation. Native state-map initialization and reads-after-writes retain the evaluator's existing restrictions. The assembler targets the pinned ledger revision and ZKIR 3.2.0 profile. It does not qualify another prover release by changing a label.
+The current bound is one call with no explicit circuit input/output payload beyond the compiler-owned transcript representation. Native state-map initialization and reads-after-writes retain the evaluator's existing restrictions. Each assembler build targets the pinned ledger revision and one matching native source: default ZKIR 3.2.0 or explicitly selected 3.2.1. Profile labels cannot switch the linked implementation. See [selectable-profile integration](zkir-3.2.1-integrated.md) for exact pins, build flags, public-bundle checks and new ledger evidence.
 
 ## Verification
 

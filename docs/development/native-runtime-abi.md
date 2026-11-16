@@ -8,7 +8,7 @@ The original scalar-input slice now includes an optional versioned host-capabili
 
 The header is `runtime/include/nightlean_runtime.h`. Cargo builds `rlib`, `cdylib` and `staticlib` artifacts. ABI version 1 uses explicit UTF-8 JSON buffers, without a trailing NUL. No Rust layout crosses the boundary. Binary encodings require a separate versioned contract.
 
-The supported profile is `midnight-ledger-9-zkir-3.2.0`. The exact Rust source revisions remain those recorded in [native-rust-runtime.md](native-rust-runtime.md). This work does not upgrade to ZKIR 3.2.1. The npm distribution and native ledger crate versions differ. Existing canonical state/transcript vectors qualify their shared behavior.
+Each native build selects one profile: default `midnight-ledger-9-zkir-3.2.0` or explicit `midnight-ledger-9-zkir-3.2.1`. The release/source identity and build flags are recorded in [selectable-profile integration](zkir-3.2.1-integrated.md). A consumer rejects a different profile, rather than switching implementations from an input label. The upstream 3.2.1 source still declares crate/banner version 3.2.0. The npm distribution and native ledger crate versions differ, so canonical state/transcript vectors and new acceptance evidence qualify their shared behavior.
 
 Native field values are canonical decimal strings, with no sign, whitespace or redundant leading zero. Values must be smaller than the BLS12-381 scalar modulus. Bool values are JSON booleans. JavaScript numbers and string booleans reject. Only explicitly public output declarations enter completion results.
 
@@ -31,7 +31,7 @@ The unsigned scalar extension uses normalized `UIntRange<N>` types and canonical
 }
 ```
 
-`plan`, `state`, serialized ledger parameters and circuit use the existing qualified artifact formats. The abbreviated objects above show envelope fields, not a runnable fixture. `publicInputs` must contain exactly every declared public input. Private inputs reject in this object. The address is exactly 32 bytes encoded in hex. Unknown envelope fields reject. The artifact producer and target profile remain trusted for circuit/plan correspondence. This slice does not verify a signed or content-addressed artifact manifest.
+`plan`, `state`, serialized ledger parameters and circuit use the existing qualified artifact formats. The abbreviated objects above show envelope fields, not a runnable fixture. `publicInputs` must contain exactly every declared public input. Private inputs reject in this object. The address is exactly 32 bytes encoded in hex. Unknown envelope fields reject. The artifact producer and target profile remain trusted for circuit/plan correspondence. This raw ABI begin path does not verify a signed or content-addressed artifact manifest. The Rust assembler has a separate verified-bundle entry point; a complete high-level C binding remains follow-up SDK work.
 
 Begin returns a session token and a `ready` result token. The host calls `nightlean_session_advance`. Each missing private input yields a request in declaration order:
 

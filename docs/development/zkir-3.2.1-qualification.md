@@ -1,6 +1,6 @@
 # Native ZKIR 3.2.1 qualification
 
-Checked on 2026-11-16. This is an experimental native-toolchain qualification, separate from the existing [default profile](../../profiles/midnight-ledger-9.json) and its [3.2.0 localnet evidence](native-localnet.md). The [experimental manifest](../../profiles/midnight-ledger-9-zkir-3.2.1.json) records the source pin and limited qualification scope. The Lean target selector still accepts the existing default target. No Compact compiler or runtime was installed or invoked for these checks.
+Checked on 2026-11-16. This document preserves the earlier experimental native-toolchain qualification, separate from the existing [default profile](../../profiles/midnight-ledger-9.json) and its [3.2.0 localnet evidence](native-localnet.md). The [experimental manifest](../../profiles/midnight-ledger-9-zkir-3.2.1.json) records the source pin and limited qualification scope. At the time of this experiment, the Lean target selector accepted the existing default target. The later [selectable-profile integration](zkir-3.2.1-integrated.md) records a separate exact-commit build and qualification. No Compact compiler or runtime was installed or invoked for these checks.
 
 ## Upstream identity
 
@@ -82,4 +82,4 @@ The first funding attempt used the existing helper's default 20 RPC fetch worker
 
 This experiment does not qualify a public network, the complete ZKIR instruction set, source Jubjub types, generic deserialization, foreign curves, signatures, token operations, events, cross-contract calls or full feature equivalence. Library presence supplies implementation options. Each source feature still needs its own type rules, lowering, runtime ABI and acceptance cases from the [feature baseline](../research/compact-equivalence-baseline.md).
 
-The default profile, Lean target parser, existing 3.2.0 receipts and native Rust probe remain on their original versions. Moving the compiler's accepted target or production dependency lock to 3.2.1 is a separate change with corresponding profile/schema and regression work.
+This experiment left the default profile, Lean target parser, existing 3.2.0 receipts and native Rust probe on their original versions. The later selectable-profile integration is recorded separately, with matching source pins, consumer validation and new qualification evidence. Historical receipt and provenance files from this experiment remain unchanged.

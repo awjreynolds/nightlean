@@ -1,0 +1,229 @@
+{
+  "schemaVersion": 1,
+  "qualification": "exact-commit-selected-native-profile-integration",
+  "checkedOn": "2026-11-16",
+  "compilerRevision": "41482a1602111ea7d3ede9db343439355c7b2935",
+  "sourceBuild": "isolated git archive and clean Lean build; isolated runtime source build with pinned shared dependency cache",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "nativeSource": {
+    "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "cargoLockSha256": "f6044eb43d4d8e6f2ed3dab33cb8f70fe1a59784fcc987e18aef4dab46a16c6b",
+    "command": "cargo +1.100.0 build --release --locked --package midnight-zkir --features binary",
+    "expectedCliVersion": "3.2.0",
+    "host": "darwin-arm64",
+    "releaseLabel": "3.2.1",
+    "repository": "https://github.com/midnightntwrk/midnight-zkir",
+    "requestedVersion": "3.2.1",
+    "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "rust": "1.100.0",
+    "version": "midnight-zkir 3.2.0"
+  },
+  "nativeConsumers": {
+    "320Feature": "zkir-320 (default)",
+    "321Feature": "zkir-321 (--no-default-features)",
+    "runtime321BinarySha256": "f08156d22888cb6bbb436deb1622aed3b4c3d44a651bcab89799e95a694fe674",
+    "assembler321BinarySha256": "66dc325219d1dc15e705ea086bf68088460c508bb9e2d3ed06a314d546f25280",
+    "buildSelection": {
+      "neither": {
+        "rejected": true,
+        "exitCode": 101
+      },
+      "both": {
+        "rejected": true,
+        "exitCode": 101
+      },
+      "320": {
+        "selectedV3": "midnight-zkir v3.2.0 (https://github.com/midnightntwrk/midnight-zkir?rev=446c7fecc6bd41dab99ebe89ab404e9d077d11a9#446c7fec)"
+      },
+      "321": {
+        "selectedV3": "midnight-zkir v3.2.0 (https://github.com/midnightntwrk/midnight-zkir?rev=7a51b3385bbf4bce3604df87a7c70867c9ab43c0#7a51b338)"
+      }
+    }
+  },
+  "regressions": {
+    "defaultSerializedCompilerOutputsUnchanged": true,
+    "native320TestsPassed": 53,
+    "native321TestsPassed": 54,
+    "externalFixtureTestsOptIn": 3,
+    "booleanSemanticCases": 10,
+    "adversarialScalarCases": 34,
+    "exactCommitAdversarialScalarCasesPassed": true,
+    "linkedCppClaimUIntAndJournalPassed": true,
+    "verifiedAssemblyTamperAndRetainedBytesPassed": true,
+    "intermediateJubjub": {
+      "native320Exit": 101,
+      "native321Exit": 0,
+      "k": 10,
+      "rows": 684
+    },
+    "booleanNative321Keygen": {
+      "exit": 0,
+      "k": 9,
+      "rows": 20
+    }
+  },
+  "workloads": {
+    "claim": {
+      "publicManifestSha256": "963f742b2e4f959685ad1667a31da3b71a56c053af532ebc8801c76d81e8c365",
+      "compilerRevision": "41482a1602111ea7d3ede9db343439355c7b2935",
+      "nativeAssembly": {
+        "address": "1711bb63f1a6a4eef4d4e9cd136675972af8037c6831e6936647ec76c8f81cd2",
+        "runtimeProfile": "midnight-ledger-9-zkir-3.2.1",
+        "zkirRelease": "3.2.1",
+        "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+        "sourcePlanSha256": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42",
+        "nativeCircuitSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+        "ledgerParametersSha256": "d412f77763b2cb7d1f5260fdad837750b66321d486a5babed4b786cd52c5a43b",
+        "predictedStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "officialConstructorPreimageChecked": true,
+        "nativeSerializationRoundtrip": true
+      },
+      "publicBundleAcceptedBy321": true,
+      "publicBundleRejectedBy320": true,
+      "nativeProofAndLedger": {
+        "negativeChecks": [
+          {
+            "name": "secret",
+            "rejected": true
+          },
+          {
+            "name": "path",
+            "rejected": true
+          },
+          {
+            "name": "direction",
+            "rejected": true
+          },
+          {
+            "name": "root",
+            "rejected": true
+          },
+          {
+            "name": "nullifier",
+            "rejected": true
+          }
+        ],
+        "replayRejected": true,
+        "replayTransactionSubmitted": false,
+        "artifactAssembly": "native Rust",
+        "executionChecks": "native Rust",
+        "orchestration": "Node localnet harness and native funding/proof toolkit",
+        "route": "Lean ZKIR and native ledger artifacts, without Compact",
+        "network": "undeployed",
+        "address": "1711bb63f1a6a4eef4d4e9cd136675972af8037c6831e6936647ec76c8f81cd2",
+        "deployment": {
+          "outcome": "applied",
+          "network": "undeployed",
+          "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+          "finalizedAt": "0xfd5b62b1e9d582504fe5ad641f7f983d49d7926f939ad82dfdcd62c67b229f17",
+          "blockHash": "0xfd5b62b1e9d582504fe5ad641f7f983d49d7926f939ad82dfdcd62c67b229f17",
+          "height": "2876",
+          "extrinsicIndex": 4,
+          "extrinsicHash": "0x9c006bc8d08a2cc8c5153f24ddae8cc643a91e479e95f260e5ba5b24fac22a99",
+          "txHash": "0x34dc0db054dc4ab0791e5c4e8bc1086e182b2d399ecb2d9a10bf3bbbe1a5b823",
+          "contractAddress": "0x1711bb63f1a6a4eef4d4e9cd136675972af8037c6831e6936647ec76c8f81cd2",
+          "contractEvent": "ContractDeploy",
+          "ledgerEvent": "TxApplied"
+        },
+        "call": {
+          "outcome": "applied",
+          "network": "undeployed",
+          "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+          "finalizedAt": "0x49e99ff617589f595e44f0fce17155f39c1043b7a4675520e959c771698c4cd0",
+          "blockHash": "0x49e99ff617589f595e44f0fce17155f39c1043b7a4675520e959c771698c4cd0",
+          "height": "2879",
+          "extrinsicIndex": 4,
+          "extrinsicHash": "0x954923576ca38c937fbaa20fb5b0e167e71c942d777b02571965360239f7a77b",
+          "txHash": "0x417d6079cc70eb368c529d984fdc64bcd6dd02398adf7500f1ae3a52224dc039",
+          "contractAddress": "0x1711bb63f1a6a4eef4d4e9cd136675972af8037c6831e6936647ec76c8f81cd2",
+          "contractEvent": "ContractCall",
+          "ledgerEvent": "TxApplied"
+        },
+        "stateMatches": true,
+        "stateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3"
+      }
+    },
+    "uint": {
+      "publicManifestSha256": "e16984ee8832ea06b6dc9982e72edf9017f9ef9c12b22b9831e95efa5bee4a93",
+      "compilerRevision": "41482a1602111ea7d3ede9db343439355c7b2935",
+      "nativeAssembly": {
+        "address": "2a1d827eb937dd7050d5e707a6850aa6ba7c1a9f635b2137c1055624f7e3ed7b",
+        "runtimeProfile": "midnight-ledger-9-zkir-3.2.1",
+        "zkirRelease": "3.2.1",
+        "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+        "sourcePlanSha256": "40a6300b986160cebdd679a25addeca5c090ca4efd293f5f785398047be0cbb5",
+        "nativeCircuitSha256": "f53ca548b1bddec7fa6f90fa080308f1222ed468a05adf57879e4fb9279f6cd8",
+        "ledgerParametersSha256": "d412f77763b2cb7d1f5260fdad837750b66321d486a5babed4b786cd52c5a43b",
+        "predictedStateSha256": "af3582afe2dfe37f8ffb362286cee7a1e0de035c481e63594b0fde25c609d9cf",
+        "officialConstructorPreimageChecked": true,
+        "nativeSerializationRoundtrip": true
+      },
+      "publicBundleAcceptedBy321": true,
+      "publicBundleRejectedBy320": true,
+      "nativeProofAndLedger": {
+        "negativeChecks": [
+          {
+            "name": "wrongSum",
+            "rejected": true
+          },
+          {
+            "name": "leftRange",
+            "rejected": true
+          }
+        ],
+        "replayRejected": true,
+        "replayTransactionSubmitted": false,
+        "artifactAssembly": "native Rust",
+        "executionChecks": "native Rust",
+        "orchestration": "Node localnet harness and native funding/proof toolkit",
+        "route": "Lean ZKIR and native ledger artifacts, without Compact",
+        "network": "undeployed",
+        "address": "2a1d827eb937dd7050d5e707a6850aa6ba7c1a9f635b2137c1055624f7e3ed7b",
+        "deployment": {
+          "outcome": "applied",
+          "network": "undeployed",
+          "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+          "finalizedAt": "0xfd837415d3d037a99af26191f40ef794407c886c796ab2a4ac6d6a0de1c4a48f",
+          "blockHash": "0x8d6c47dc250fa2ade04d014386f6c5db5f706ecbe08d57fea9395cb1a3be9f99",
+          "height": "2902",
+          "extrinsicIndex": 4,
+          "extrinsicHash": "0x25a400a05b9f8717019d8bb768e4887aee9ddb4ce35420aa8d2c1b9237936404",
+          "txHash": "0x363aeaba0c6cf0e2a4274b3e674b2486f6bb4bd6fa5892c949d03d4d50a9c2d1",
+          "contractAddress": "0x2a1d827eb937dd7050d5e707a6850aa6ba7c1a9f635b2137c1055624f7e3ed7b",
+          "contractEvent": "ContractDeploy",
+          "ledgerEvent": "TxApplied"
+        },
+        "call": {
+          "outcome": "applied",
+          "network": "undeployed",
+          "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+          "finalizedAt": "0x87a2fac054b278ddc12fbc1dcfefa71a632e60363780e589d2eb79e7fb7ec72d",
+          "blockHash": "0x87a2fac054b278ddc12fbc1dcfefa71a632e60363780e589d2eb79e7fb7ec72d",
+          "height": "2930",
+          "extrinsicIndex": 4,
+          "extrinsicHash": "0x2f4e9233aef0c133cef2c1e7958b202ca5e7fd869290e00016d29f4e0ebb2ac4",
+          "txHash": "0x71991c0e1e2277bcfb5698ae5cd52492d07acb2baee68cdbcb2bef231f348a8e",
+          "contractAddress": "0x2a1d827eb937dd7050d5e707a6850aa6ba7c1a9f635b2137c1055624f7e3ed7b",
+          "contractEvent": "ContractCall",
+          "ledgerEvent": "TxApplied"
+        },
+        "stateMatches": true,
+        "stateSha256": "af3582afe2dfe37f8ffb362286cee7a1e0de035c481e63594b0fde25c609d9cf"
+      }
+    }
+  },
+  "recovery": {
+    "uintReceiptWatcherMissingClientDependency": true,
+    "matchingArchivedPackageAndLockVerified": true,
+    "installedLockedClientDependenciesReused": true,
+    "existingDeploymentRecoveredWithoutResubmission": true,
+    "callResumed": true
+  },
+  "excludedFromFinalProvenance": "earlier dirty-development-tree functional receipts",
+  "limits": [
+    "selected scalar/claim workflows only",
+    "raw intermediate-Jubjub and Boolean regressions do not implement source curves/deserialization",
+    "no public-network qualification",
+    "not full feature equivalence"
+  ]
+}
