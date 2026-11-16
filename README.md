@@ -5,6 +5,7 @@
 <p align="center">
   <a href="#try-the-compiler">Quick start</a> ·
   <a href="docs/README.md">Documentation</a> ·
+  <a href="docs/assets/noctium-capabilities.png">Capability goals</a> ·
   <a href="docs/designs/architecture.md">Architecture &amp; assurance</a> ·
   <a href="https://github.com/awjreynolds/noctium/issues/1">Roadmap</a>
 </p>
@@ -80,7 +81,9 @@ Native cryptography, parser/VM agreement, host behavior and authenticated author
 
 The destination is [full native ZKIR v3 and Midnight ledger capability coverage](docs/compatibility/GOAL.md). Compact feature equivalence is a minimum comparison, not the scope limit.
 
-Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, scalar disclosure checks, and lazy host control. Checked composite layouts and codecs are present. Aggregate source effects, native guarded execution, broader ledger composition and mobile/WASM bindings remain open.
+SDK goals cover native Rust/C/C++, TypeScript with WASM for web dapps, Kotlin for Android and Swift for iOS. Rust and the C/C++ runtime subset have qualified execution evidence. Web/mobile packages and full proof/transaction bindings remain goals.
+
+Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, scalar disclosure checks, and lazy host control. Checked composite layouts and codecs are present. Aggregate source effects, native guarded execution and broader ledger composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
 
 Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/1) and [contribution guide](CONTRIBUTING.md). The [documentation index](docs/README.md) connects authoring, runtime integration, proof reproduction and capability research.
 

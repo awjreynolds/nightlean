@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
-  <title id="title">Noctium research preview: prove contract behavior, compile for Midnight</title>
-  <desc id="description">Authors specify contract behavior and prove properties in Lean. The Lean compiler emits ZKIR and Impact artifacts for a Rust application and Midnight localnet. Published claim-specific evidence includes correctness, scoped privacy and exact artifact certificates. Native ZK proofs and finalized transactions provide integration evidence. Generic compiler preservation and deployed verifier binding remain open.</desc>
+  <title id="title">Noctium: contract proofs and the full native Midnight capability goal</title>
+  <desc id="description">Research preview. Project goals include every instruction and value type in native ZKIR v3, Midnight ledger state, cryptography, composition, events and assets, a Lean contract language with generics, bounded control, private state and guarded disclosure, and Rust, C/C++, TypeScript/WASM, Kotlin and Swift host SDKs. Published evidence covers claim-specific proofs, exact artifacts, native localnet runs and a Rust/C++ runtime subset. Generic compiler preservation and deployed verifier binding remain open. These goals are not a claim of full delivered coverage.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#101D30"/>
@@ -10,83 +10,64 @@
       <stop offset="0" stop-color="#70E6CF"/>
       <stop offset="1" stop-color="#8BAFFF"/>
     </linearGradient>
-    <marker id="arrow" viewBox="0 0 6 8" refX="5" refY="4" markerWidth="6" markerHeight="8" orient="auto-start-reverse">
-      <path d="M1 1 5 4 1 7" fill="none" stroke="#7388A6" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
-    </marker>
   </defs>
-
   <rect width="1200" height="630" fill="url(#background)"/>
   <path d="M0 2H1200" stroke="url(#accent)" stroke-width="4"/>
 
-  <!-- Original circuit monogram. All artwork is local, with no external fonts or assets. -->
   <g stroke="#70E6CF" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M62 112V64L98 112V64"/>
-    <path d="M50 88H62M98 88H110" stroke-width="2" opacity="0.65"/>
-    <circle cx="62" cy="64" r="4" fill="#101D30"/>
-    <circle cx="98" cy="112" r="4" fill="#101D30"/>
+    <path d="M62 96V48L98 96V48"/>
+    <path d="M50 72H62M98 72H110" stroke-width="2" opacity="0.65"/>
+    <circle cx="62" cy="48" r="4" fill="#101D30"/>
+    <circle cx="98" cy="96" r="4" fill="#101D30"/>
   </g>
-
   <g font-family="Inter, Arial, Helvetica, sans-serif">
-    <text x="129" y="111" fill="#F4F7FC" font-size="62" font-weight="700" letter-spacing="-2">Noctium</text>
-    <rect x="920" y="65" width="220" height="36" rx="18" fill="#142A32" stroke="#315654"/>
-    <circle cx="941" cy="83" r="4" fill="#70E6CF"/>
-    <text x="957" y="89" fill="#B9E9DF" font-size="14" font-weight="700" letter-spacing="1.3">RESEARCH PREVIEW</text>
+    <text x="129" y="95" fill="#F4F7FC" font-size="58" font-weight="700" letter-spacing="-2">Noctium</text>
+    <rect x="920" y="49" width="220" height="36" rx="18" fill="#142A32" stroke="#315654"/>
+    <circle cx="941" cy="67" r="4" fill="#70E6CF"/>
+    <text x="957" y="73" fill="#B9E9DF" font-size="14" font-weight="700" letter-spacing="1.3">RESEARCH PREVIEW</text>
 
-    <text x="60" y="174" fill="#F4F7FC" font-size="32" font-weight="600" letter-spacing="-0.6">Prove contract behavior. Compile for Midnight.</text>
-    <text x="60" y="211" fill="#AEBFD5" font-size="21">Author-written specifications. Lean-checked proofs. Native execution.</text>
+    <text x="60" y="147" fill="#F4F7FC" font-size="32" font-weight="600" letter-spacing="-0.6">Prove contract behavior. Compile for Midnight.</text>
+    <text x="60" y="181" fill="#AEBFD5" font-size="20">Author-written specifications. Lean-checked proofs. A direct native backend.</text>
+    <text x="60" y="218" fill="#8BAFFF" font-size="14" font-weight="700" letter-spacing="1.8">PROJECT GOALS</text>
+    <text x="1140" y="218" fill="#AEBFD5" font-size="15" text-anchor="end">Full target scope · Selected programs qualified today</text>
 
-    <!-- The five stages describe an implemented path for the current source slice. -->
     <g fill="#132236" stroke="#30435E">
-      <rect x="60" y="260" width="190" height="150" rx="12"/>
-      <rect x="282" y="260" width="190" height="150" rx="12"/>
-      <rect x="504" y="260" width="190" height="150" rx="12"/>
-      <rect x="726" y="260" width="190" height="150" rx="12"/>
-      <rect x="948" y="260" width="192" height="150" rx="12"/>
+      <rect x="60" y="234" width="344" height="198" rx="12"/>
+      <rect x="428" y="234" width="344" height="198" rx="12"/>
+      <rect x="796" y="234" width="344" height="198" rx="12"/>
     </g>
-    <g fill="none" stroke="#7388A6" stroke-width="1.5" marker-end="url(#arrow)">
-      <path d="M256 335H275"/>
-      <path d="M478 335H497"/>
-      <path d="M700 335H719"/>
-      <path d="M922 335H941"/>
+    <g fill="#F4F7FC" font-size="23" font-weight="600" letter-spacing="-0.3">
+      <text x="80" y="271">Full native ZKIR v3</text>
+      <text x="448" y="271">Lean language + proofs</text>
+      <text x="816" y="271">Host SDK targets</text>
     </g>
-    <g fill="#78DACD" font-size="12" font-weight="700" letter-spacing="1.6">
-      <text x="78" y="286">01 / SOURCE</text>
-      <text x="300" y="286">02 / COMPILER</text>
-      <text x="522" y="286">03 / ARTIFACTS</text>
-      <text x="744" y="286">04 / RUNTIME</text>
-      <text x="966" y="286">05 / LEDGER</text>
-    </g>
-    <g fill="#F4F7FC" font-size="27" font-weight="600" letter-spacing="-0.3">
-      <text x="78" y="326">Contract</text>
-      <text x="78" y="358">+ proofs</text>
-      <text x="300" y="326">Lean</text>
-      <text x="300" y="358">compiler</text>
-      <text x="522" y="326">Native</text>
-      <text x="522" y="358">artifacts</text>
-      <text x="744" y="326">Rust</text>
-      <text x="744" y="358">application</text>
-      <text x="966" y="326">Midnight</text>
-      <text x="966" y="358">localnet</text>
-    </g>
-    <g fill="#AEBFD5" font-size="16">
-      <text x="78" y="389">Lean theorems</text>
-      <text x="300" y="389">Typed IR · lowering</text>
-      <text x="522" y="389">ZKIR + Impact plans</text>
-      <text x="744" y="389">ZK proof · submit</text>
-      <text x="966" y="389">Finalized state</text>
+    <g fill="#C5D2E4" font-size="17">
+      <text x="80" y="310">Every instruction + value type</text>
+      <text x="80" y="339">Ledger state + cryptography</text>
+      <text x="80" y="368">Composition · events · assets</text>
+      <text x="80" y="397">Native proving + key generation</text>
+
+      <text x="448" y="310">Modules · generics · bounded loops</text>
+      <text x="448" y="339">Composite types · private state</text>
+      <text x="448" y="368">Guarded disclosure · correctness</text>
+      <text x="448" y="397">Source-to-deployment assurance</text>
+
+      <text x="816" y="310">Native: Rust + C/C++</text>
+      <text x="816" y="339">Web dapps: TypeScript + WASM</text>
+      <text x="816" y="368">Android: Kotlin · iOS: Swift</text>
+      <text x="816" y="397">Shared artifacts + host interfaces</text>
     </g>
 
-    <!-- Evidence labels are deliberately separate from the execution arrows. -->
-    <path d="M60 446H1140" stroke="#293A52"/>
-    <text x="60" y="479" fill="#70E6CF" font-size="13" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
-    <text x="60" y="509" fill="#E3EBF5" font-size="18">Claim-specific correctness + scoped privacy</text>
-    <text x="60" y="537" fill="#AEBFD5" font-size="18">Exact artifact certificates + finalized localnet runs</text>
-    <path d="M620 471V540" stroke="#293A52"/>
-    <text x="653" y="479" fill="#CFB58A" font-size="13" font-weight="700" letter-spacing="1.8">OPEN ASSURANCE</text>
-    <text x="653" y="509" fill="#E3EBF5" font-size="18">Generic compiler preservation</text>
-    <text x="653" y="537" fill="#AEBFD5" font-size="18">Deployed verifier + operation binding</text>
+    <path d="M60 456H1140" stroke="#293A52"/>
+    <text x="60" y="484" fill="#70E6CF" font-size="13" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
+    <text x="60" y="512" fill="#E3EBF5" font-size="18">Claim proofs · scoped privacy · exact artifacts</text>
+    <text x="60" y="540" fill="#AEBFD5" font-size="18">Native localnet runs · Rust/C++ runtime subset</text>
+    <path d="M620 479V543" stroke="#293A52"/>
+    <text x="653" y="484" fill="#CFB58A" font-size="13" font-weight="700" letter-spacing="1.8">OPEN ASSURANCE</text>
+    <text x="653" y="512" fill="#E3EBF5" font-size="18">Generic compiler preservation</text>
+    <text x="653" y="540" fill="#AEBFD5" font-size="18">Deployed verifier + operation binding</text>
 
-    <text x="60" y="594" fill="#92A9C7" font-size="17">github.com/awjreynolds/noctium</text>
-    <text x="1140" y="594" fill="#92A9C7" font-size="16" text-anchor="end">LEAN 4 · RUST · ZKIR v3</text>
+    <text x="60" y="599" fill="#92A9C7" font-size="17">github.com/awjreynolds/noctium</text>
+    <text x="1140" y="599" fill="#92A9C7" font-size="15" text-anchor="end">LEAN 4 COMPILER · NO COMPACT DEPENDENCY</text>
   </g>
 </svg>
