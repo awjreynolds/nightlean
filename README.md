@@ -17,7 +17,7 @@ Nightlean is a Lean 4 compiler and native runtime for Midnight private contracts
 
 The compiler and primary lowering are written in Lean. The Rust application path handles proving, funding, submission and recovery without Node. No Compact compiler or runtime dependency sits between your source and the native backend.
 
-**Research preview, with published proofs and finalized localnet runs.** The current private-claim workload has source correctness proofs, claim-specific native preservation proofs and scoped privacy proofs. Whole-compiler correctness, exact artifact/build qualification and deployed verifier binding remain open.
+**Research preview, with published proofs and finalized localnet runs.** The current private-claim workload has source correctness proofs, claim-specific native preservation proofs and scoped privacy proofs. Exact byte/build certificates now join those proofs to the retained claim artifacts. Whole-compiler correctness and deployed verifier binding remain open.
 
 Lean serves two roles: a finite language for compilable contracts and a full proof language for specifications and theorems. Circuit constraints and ledger state effects stay separate, so each has an explicit semantics and assurance boundary. See the [architecture overview](docs/designs/architecture.md).
 
@@ -65,10 +65,11 @@ The full example writes the result to a ledger cell. [`PrivateClaim.lean`](examp
 | [Typed proof audit](docs/development/proof-registration.md) | Exact obligation and model checks, fresh Lean kernel replay, and a transitive axiom policy. Functional and privacy obligations are separate. |
 | [Native relation](docs/development/private-claim-lowering-proofs.md) and [state preservation](docs/development/private-claim-native-state-proofs.md) | Claim-specific soundness for arbitrary satisfying assignments and checked VM traces, source completeness, and certificates for the emitted JSON trees. |
 | [Native privacy](docs/development/private-claim-native-privacy-proofs.md) | Equal public native observations for successful claim executions under explicit host-context and implementation assumptions. Proof bytes, failures, logs and timing are outside the observer. |
+| [Exact artifact certificates](docs/development/private-claim-artifact-certificates.md) | Independent immutable-source builds, kernel checks of retained raw bytes, and functional/privacy composition. Eight stale-binding mutations reject. |
 | [Rust client qualification](docs/development/native-client.md#retained-qualification) | Real proofs, funded deployment and claim submission, finalized state checks, and durable recovery on both selected 3.2.0 and 3.2.1 profiles. |
 | [Bounded scalars](docs/development/unsigned-localnet.md) | Finalized deployment and call, exact predicted state, and 34 adversarial witness cases against both native checker profiles. |
 
-Lean checks the stated theorems. Localnet receipts establish tested integration behavior. Neither establishes a universally verified compiler or a production-ready contract. Native cryptography, parser/VM agreement, host behavior and the missing artifact/deployment links remain explicit [trust boundaries](docs/designs/architecture.md#assurance-boundaries).
+Lean checks the stated theorems. Localnet receipts establish tested integration behavior. Neither establishes a universally verified compiler or a production-ready contract. Native cryptography, parser/VM agreement, host behavior and the remaining deployment links stay explicit [trust boundaries](docs/designs/architecture.md#assurance-boundaries).
 
 ## Direction and contributions
 

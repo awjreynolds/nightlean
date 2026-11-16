@@ -4,7 +4,9 @@ This package joins the actual PrivateClaim source/specification proofs, native s
 
 The qualified subject remains the actual claim: its 27-instruction standalone relation, 55-instruction native call, 21-operation state plan and selected target profile. This is not a whole-language compiler theorem. The normal compiler gains no permanent ASCII, JSON or artifact-size feature ceiling from these claim-specific qualification limits.
 
-Qualification status: the implementation is at a provisional checkpoint. Core parser and exact-byte/data-checker prototypes have passed. The immutable published-source authority/candidate qualification is still pending. No authenticated build receipt is claimed yet.
+Qualification status: the immutable published-source authority/candidate qualification passed for commit `925164d0e17d994038d77d3b2b71c410619557d3`, tree `380ced01c6ced4409c7aedf59a9985d21b50f582`. Two fresh archives produced identical source, imported products, compiler product, public artifacts, model/theorem exports and generated certificate export. A separate trusted data/kernel process checked the retained byte constants and the concrete functional, completeness and privacy statements. The parent independently matched all 289 published source files and 10,194 toolchain files, replayed the base proof export, pinned the reviewed inputs, and separately reran the final retained-authority byte/kernel check. Both independent checking runs passed.
+
+The receipt describes that exact published commit. Later documentation or unrelated working-tree changes do not enter the qualified source snapshot. `tests/private-claim-artifacts-evidence.json` retains the results, digests and explicit scope.
 
 Key/deployed-operation identity remains issue 57. Native implementation, parser and cryptographic assumptions remain explicit. No unqualified verified-contract label follows from this package. `compiledContractVerified` stays false.
 
@@ -62,6 +64,31 @@ The independent data process imports only trusted checker code and authenticated
 `AuditArtifactExport.lean` constructs a `List UInt8` term directly from each separately read retained file. `Kernel.check` and `Kernel.isDefEq` compare this term with the exported byte constant. Every byte matters, including whitespace. The checker also compares against the independent authority's retained files. It does not rely solely on an AST equality or a candidate-supplied hash label.
 
 The Lean sub-check is one component of the protocol. It expects its authority/model inputs to have passed the controller's external-pin and provenance checks. Calling that component with an arbitrary self-selected authority is not authenticated build qualification.
+
+## Retained qualification
+
+The independent parent review matched all 289 published Git blobs and all 10,194 measured toolchain files. It also replayed the base theorem closure with the official Lean checker. The separate authority and candidate then rebuilt the public source without private invocation input. All 35 retained imported products and the compiler executable matched.
+
+The immutable run records these identities:
+
+| Input or output | SHA256 |
+| --- | --- |
+| Parent-reviewed external trust input | `5d7e11b0948e6e1f86de23b3d4d13a112a66d43cc4df6f76fe6edf7334684e4b` |
+| Authority JSON | `5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb` |
+| Public source closure | `082858c4c2bf3e172f633cda29dab97dd0822878e1c11fa3d34b8a57b7045014` |
+| Selected profile bytes | `02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093` |
+| Reviewed model export | `c04b41c999ed7fe42d1eeffacd447e6ae095be891709179cec4a3198bea8ff0e` |
+| Base theorem/dependency export | `7b291d62a201525313519d2b646431b226ecf48b352433a4db6b633f0060e2ed` |
+| Toolchain closure | `86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e` |
+| Reproduced certificate export | `bfbe2928a9059cc758db7ea130ef213e4f59520aa99b6f341350172716d6f79e` |
+
+The retained authority root is `/private/tmp/nightlean-artifact-authority-925164d`. The candidate root is `/private/tmp/nightlean-artifact-candidate-925164d`. Those local directories contain the archives, actual build products, public artifacts, exports and kernel replay logs. The public evidence receipt embeds the audit, regression and parser-sample reports so their results survive cleanup of local temporary directories. Reproduction requires fresh directories and independently reviewed pins, rather than trusting a copied candidate manifest.
+
+The audit admits only `propext`, `Classical.choice` and `Quot.sound`. It checks source functional/privacy roles, native privacy, concrete byte functional preservation, eligible-source completeness and concrete byte privacy composition. Thus the formal privacy foundation from child issue 63 now composes with an instantiated byte/build certificate for this commit. The observer remains `successfulClaimPublicTranscriptV1`, with the explicit scope and host premises above.
+
+Eight old-binding mutation cases passed: whitespace bytes, semantic bytes, source definition, specification, theorem body, imported product, selected target and certificate export. A separate kernel check rejected changed whitespace after bypassing the earlier hash gate. A fresh whitespace variant passed the parser/model equality. Removing the root assertion failed at the real `decide +kernel` equality. Import/setup errors contributed no semantic rejection evidence.
+
+Nine accepted samples matched Rust serde_json 1.0.154. Four whitespace/ASCII-escape variants matched the official ZKIR 3.2.1 parser. These checks provide finite sample evidence and leave `NativeParserAgreement` as an implementation assumption. They prove neither the Rust implementation nor full JSON-language agreement.
 
 ## Commands
 

@@ -80,7 +80,7 @@ The audit exports and replays the required theorem/certificate closure and check
 
 An independent trusted model export and digest are supported through `--trusted-model-export` and `--trusted-model-sha256`. Without those arguments, the runner uses a retained local regression baseline. A local baseline is not independent review of the business specification. The export checker reads data, compares declarations and replays terms. It imports no candidate modules or initializers.
 
-`NativePrivacy.ExactArtifactBinding` exposes the remaining byte/build obligations: the actual parser must map retained bytes to the certified trees, and the authenticated build predicate must bind those bytes to the reviewed source identity. `exact_artifact_composition` joins those future arguments to the decoded bound-privacy obligation. No byte/build certificate inhabitant is supplied. The parser and build predicate must themselves be pinned and qualified by issue 56. This interface does not authenticate UTF-8 bytes, import provenance, a compiler executable or keys.
+`NativePrivacy.ExactArtifactBinding` exposes the remaining byte/build obligations: the actual parser must map retained bytes to the certified trees, and the authenticated build predicate must bind those bytes to the reviewed source identity. `exact_artifact_composition` joins those future arguments to the decoded bound-privacy obligation. No byte/build certificate inhabitant is supplied by this original foundation package. The parser and build predicate must themselves be pinned and qualified by issue 56. This interface does not authenticate UTF-8 bytes, import provenance, a compiler executable or keys.
 
 Retained development evidence lives under `.nightlean/audits/private-claim-privacy/`. The portable summary is `tests/private-claim-privacy-evidence.json`. The summary reports the policy, observer, exclusions, host/binding premises, required assumptions, rejected mutations and pending issue 56/57 links.
 
@@ -91,3 +91,9 @@ Retained development evidence lives under `.nightlean/audits/private-claim-priva
 The sample also requires the deprecated JS `ContractCallPrototype.intoCall` path to reject for the same nonzero randomness. In the pinned legacy ledger-v9 JS adapter, that method supplies the randomness as commitment and ignores its parent-binding argument. `Intent.addCall` computes the proper commitment. This regression prevents silently falling back to a zero-randomness diagnostic or the deprecated constructor.
 
 The adapter's constructor binding remains the zero placeholder. The sample labels final proof-phase override as unverified. It proves no zero-knowledge property of generated proof bytes and sends no transaction.
+
+## Exact-byte integration
+
+The later [exact artifact certificate](private-claim-artifact-certificates.md) instantiates this foundation interface for immutable public compiler commit `925164d0e17d994038d77d3b2b71c410619557d3`. Independent authority and candidate builds matched, and a separate kernel checker matched retained bytes to the concrete functional, completeness and privacy certificate. The [new receipt](../../tests/private-claim-artifacts-evidence.json) records the qualified source/tool/model identities and parent verification.
+
+The original privacy evidence above retains its historical foundation-snapshot flags. The new certificate closes its byte/build integration obligation for the actual claim. Key generation and deployed operation identity remain [issue 57](https://github.com/awjreynolds/nightlean/issues/57). The observer, successful-run scope and excluded observables stay as stated above.

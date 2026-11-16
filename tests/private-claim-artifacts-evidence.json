@@ -1,23 +1,119 @@
 {
+  "audit": {
+    "axioms": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "bootstrapVerified": false,
+    "compiledContractVerified": false,
+    "concreteByteFunctionalPreservationChecked": true,
+    "concreteBytePrivacyCompositionChecked": true,
+    "deployedIdentityAuthenticated": false,
+    "eligibleSourceCompletenessChecked": true,
+    "exactArtifactByteBuildBindingVerified": true,
+    "externalAuthorityKernelMatched": true,
+    "externalAuthoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+    "finalBindingImplementationAgreementRequired": true,
+    "hashAndNativeImplementationAgreementRequired": true,
+    "nativePrivacyChecked": true,
+    "observer": "successfulClaimPublicTranscriptV1",
+    "privateInvocationInputsConsumed": false,
+    "proofByteZeroKnowledgeProved": false,
+    "remainingRequiredBridge": "issue57 key/deployment identity",
+    "reproduciblePublicBuildChecked": true,
+    "retainedBytesKernelMatched": true,
+    "scope": "actual PrivateClaim 27-instruction scalar / 55-instruction call / 21-operation state plan",
+    "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+    "sourceFunctionalChecked": true,
+    "sourcePrivacyChecked": true,
+    "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+    "specificationReviewVerified": false,
+    "status": "exact-retained-artifact-bytes-and-scoped-privacy-checked",
+    "successfulValidExecutionsOnly": true,
+    "toolchainSha256": "86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e"
+  },
+  "bootstrapVerified": false,
   "businessSpecificationReviewed": false,
   "compiledContractVerified": false,
   "deployedIdentityAuthenticated": false,
-  "developmentLogs": "/private/tmp/nightlean-artifact-core-2fb0cb6/prototype-logs",
-  "exactArtifactByteBuildBindingVerified": false,
-  "externalAuthorityAuthenticated": false,
-  "implementationFiles": [
-    "Nightlean/Verification/ArtifactBytes.lean",
-    "Nightlean/Verification/ArtifactCertificate.lean",
-    "proofs/PrivateClaimArtifacts.lean",
-    "tests/ArtifactBytes.lean",
-    "scripts/proofs/AuditArtifactExport.lean",
-    "scripts/proofs/check-private-claim-artifacts.py",
-    "scripts/proofs/artifact-json-native/Cargo.toml",
-    "scripts/proofs/artifact-json-native/Cargo.lock",
-    "scripts/proofs/artifact-json-native/src/main.rs",
-    "docs/development/private-claim-artifact-certificates.md"
+  "exactArtifactByteBuildBindingVerified": true,
+  "excludedObservables": [
+    "rejected outcomes",
+    "termination",
+    "timing and resources",
+    "proof bytes",
+    "host/provider access",
+    "host logs"
   ],
-  "implementationSha256": {
+  "externalAuthorityPinsReviewed": true,
+  "externalPins": {
+    "authorityPath": "/private/tmp/nightlean-artifact-authority-925164d/authority.json",
+    "authoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+    "reviewClass": "independent parent engineering review, not business specification or verified bootstrap",
+    "reviewedPublishedFiles": 289,
+    "reviewedToolchainFiles": 10194,
+    "trustInputPath": "/private/tmp/nightlean-artifact-measure-925164d/parent-reviewed-trust-input.json",
+    "trustInputSha256": "5d7e11b0948e6e1f86de23b3d4d13a112a66d43cc4df6f76fe6edf7334684e4b"
+  },
+  "historicalPrototypeBase": "2fb0cb65c6e85195c016cafd3d2dbd9fdeccf990",
+  "hostPremise": "shared parent public context and communication randomness; real proof-phase binding agrees with the public binding view",
+  "identities": {
+    "artifactSha256": {
+      "PrivateClaim.claim.impact.json": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42",
+      "PrivateClaim.claim.zkir": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+      "claimRelation.zkir": "c3a8c9aad701302d54e630961ff159a97e5957e699ae6fc14cc7d5aa78d3395c",
+      "nightlean.json": "8f6fb8a82e693d1fcb68c8055ef1bf9bc72c66b2c0a872cc1258927d09ad6139",
+      "target-profile.json": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093"
+    },
+    "baseTheoremClosureSha256": "7b291d62a201525313519d2b646431b226ecf48b352433a4db6b633f0060e2ed",
+    "certificateExportSha256": "bfbe2928a9059cc758db7ea130ef213e4f59520aa99b6f341350172716d6f79e",
+    "compilerProductSha256": "7c1234a04dcbb279ee2d2d7ed301ef46ec777e4a5e5869f23538b7e82256fde1",
+    "importProductCount": 35,
+    "targetProfileSha256": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093",
+    "toolchainSha256": "86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e",
+    "trustedModelSha256": "c04b41c999ed7fe42d1eeffacd447e6ae095be891709179cec4a3198bea8ff0e"
+  },
+  "implementationAssumptions": [
+    "Lean/checker/toolchain bootstrap and host OS/process/filesystem integrity",
+    "SHA256 and externally supplied source/toolchain/authority pin authenticity",
+    "finite-artifact Rust/serde/native parser agreement",
+    "native VM/scalar/hash implementation agreement and resource admission",
+    "final proof-phase binding implementation agreement",
+    "proof-system security and proof-byte zero knowledge, when those claims are required"
+  ],
+  "nativeParserImplementationProved": false,
+  "nativeParserSamples": {
+    "acceptedSamples": 9,
+    "boundedAsciiParserAgreement": true,
+    "nativeParserAgreementProved": false,
+    "officialCheckerModuleSha256": "a4ec641776c45bd06fe033f25b8d74fccca7900d5e97cc360468ddeacfa2424c",
+    "officialParserVariants": 4,
+    "scope": "accepted actual artifact subset samples, not a proof of Rust/serde",
+    "serdeJsonVersion": "1.0.154",
+    "whitespaceAndAsciiEscapesAgree": true
+  },
+  "nativePolicy": "Nightlean.PrivateClaimNativePrivacy.policy",
+  "observer": "successfulClaimPublicTranscriptV1",
+  "officialCheckerWasmSha256": "3568fafaf225469dbbd038b0236d1b6b76e0da19da565caba33efe2ceb682cfc",
+  "parentFinalAuthorityReview": {
+    "authoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+    "reportPath": "/private/tmp/nightlean-artifact-candidate-925164d/parent-final-check.json",
+    "reportSha256": "022deee3008cd49f36a1300dbd69b4cc28c90144d7e0d67bf4755bcd021cbd0d",
+    "scope": "independent engineering source/tool/model/authority and fresh retained-byte kernel check, not business specification, bootstrap or deployed identity",
+    "separateVerifierPassed": true,
+    "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3"
+  },
+  "parentFinalAuthorityReviewPending": false,
+  "parserLimits": {
+    "bytes": 65536,
+    "containers": 64,
+    "number": "minimal nonnegative UInt64",
+    "strings": "ASCII with standard and ASCII-valued Unicode escapes"
+  },
+  "privateInvocationInputsConsumed": false,
+  "proofByteZeroKnowledgeProved": false,
+  "qualifiedSourceFileSha256": {
     "Nightlean/Verification/ArtifactBytes.lean": "8c14b0fd07ddcb098213794ad05cf255550e6dab673ed9eb1ca42baff406c254",
     "Nightlean/Verification/ArtifactCertificate.lean": "ac83d105fd8ae43f2a1f130fc35936c8a533426d3207ea6b79022faacba53f1b",
     "docs/development/private-claim-artifact-certificates.md": "dc216b20bb3b41864e297c63d99a19b98b23235cb51a777a980a8d45a590c872",
@@ -29,44 +125,43 @@
     "scripts/proofs/check-private-claim-artifacts.py": "64a86fdc87e42d434314efd6304e40bb8ee84fe862433dc3cced6c80a727919e",
     "tests/ArtifactBytes.lean": "93502252f956cd470216cd8cc5946b7f53b08df9793456e2222ae2402700502a"
   },
-  "nativeParserImplementationProved": false,
-  "parserLimits": {
-    "bytes": 65536,
-    "containers": 64,
-    "number": "minimal nonnegative UInt64",
-    "strings": "ASCII with standard and ASCII-valued Unicode escapes"
+  "receiptPaths": {
+    "authority": "/private/tmp/nightlean-artifact-authority-925164d",
+    "candidate": "/private/tmp/nightlean-artifact-candidate-925164d"
   },
-  "prototypeBase": "2fb0cb65c6e85195c016cafd3d2dbd9fdeccf990",
-  "prototypeChecker": {
-    "axioms": [
-      "propext",
-      "Classical.choice",
-      "Quot.sound"
-    ],
+  "receiptSha256": {
+    "audit.json": "28f1709ab9a3a7d9d870d135b0b64582fa388b8fa52e3ab2ff917ec8860142b7",
+    "manifest.json": "bb933f49fc19a87d48b26cd9fa6993e631c233fefcb7cf65e48f64f4950c33a8",
+    "native-parser-agreement.json": "fd249a84a65949216a38e0f384a362d10b8c0f11a9b3579378b4bed6d0b2869f",
+    "regressions.json": "4bb715d22b1ff12c3c340be7063f944b282a7c7e5c10bc30639653b948c049e3"
+  },
+  "regressions": {
     "compiledContractVerified": false,
-    "concreteByteFunctionalPreservationChecked": true,
-    "concreteBytePrivacyCompositionChecked": true,
-    "deployedIdentityAuthenticated": false,
-    "eligibleSourceCompletenessChecked": true,
-    "externalAuthorityKernelMatched": true,
-    "nativePrivacyChecked": true,
-    "retainedBytesKernelMatched": true,
-    "sourceFunctionalChecked": true,
-    "sourcePrivacyChecked": true,
-    "specificationReviewVerified": false,
-    "status": "exact-retained-artifact-bytes-and-scoped-privacy-checked"
+    "importSetupErrorsCountedAsSemanticRejection": false,
+    "oldBindingsRejected": [
+      "whitespace-bytes",
+      "semantic-bytes",
+      "source-definition",
+      "specification",
+      "theorem-body",
+      "imported-product",
+      "selected-target",
+      "certificate-body"
+    ],
+    "retainedWhitespaceKernelMismatchRejected": true,
+    "semanticMutantKernelEqualityRejected": true,
+    "status": "passed",
+    "whitespaceParserCertificateAccepted": true
   },
-  "prototypeModelExportSha256": "c04b41c999ed7fe42d1eeffacd447e6ae095be891709179cec4a3198bea8ff0e",
-  "prototypeProofExportSha256": "3f85db4f111919081a645b5dcdcd0d9ceee1f8a1e9960cecafc24b961425e68a",
-  "remainingQualification": [
-    "publish reviewed implementation checkpoint",
-    "independently pin immutable source/model/profile/toolchain measurements",
-    "rebuild external authority and candidate in fresh isolation",
-    "verify retained files against kernel byte constants and run negative/native-parser checks"
-  ],
-  "remainingRequiredBridgeAfterQualification": "issue57 key/deployment identity",
-  "reproducibleImmutableBuildQualified": false,
-  "scope": "actual PrivateClaim exact-byte translation validator and formal63 composition",
-  "status": "implementation-checkpoint-prototype-passed-immutable-authority-qualification-pending",
-  "unpublishedNonArtifactChangesIncluded": false
+  "remainingRequiredBridge": "issue57 key/deployment identity",
+  "reproducibleImmutableBuildQualified": true,
+  "scope": "actual PrivateClaim 27-instruction standalone / 55-instruction call / 21-operation state plan",
+  "sourceClosureSha256": "082858c4c2bf3e172f633cda29dab97dd0822878e1c11fa3d34b8a57b7045014",
+  "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+  "sourcePolicy": "Nightlean.PrivateClaimVerification.policy",
+  "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+  "status": "immutable-public-source-exact-byte-build-and-scoped-privacy-qualified",
+  "successfulValidExecutionsOnly": true,
+  "unpublishedNonArtifactChangesIncluded": false,
+  "wholeCompilerOrAllNativeFeaturesQualified": false
 }

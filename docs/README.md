@@ -33,7 +33,7 @@ Keep private invocation files separate from public artifacts. Receipt reports id
 | Source relation to native constraints | [Arbitrary-witness soundness and source completeness](development/private-claim-lowering-proofs.md) |
 | Source transition to native VM and transcript | [State, framing, replay and public transcript preservation](development/private-claim-native-state-proofs.md) |
 | Source privacy to native observations | [Successful-run native privacy and its excluded observables](development/private-claim-native-privacy-proofs.md) |
-| Exact bytes and build provenance | [Published implementation checkpoint](development/private-claim-artifact-certificates.md), immutable-build qualification pending in [issue 56](https://github.com/awjreynolds/nightlean/issues/56) |
+| Exact bytes and build provenance | [Qualified immutable builds and exact retained-byte certificates](development/private-claim-artifact-certificates.md), with functional/privacy composition |
 | Deployed identity | Open [key/deployment binding](https://github.com/awjreynolds/nightlean/issues/57) |
 | Generic compiler preservation | Open [scalar compiler proof work](https://github.com/awjreynolds/nightlean/issues/64), followed by broader feature coverage |
 
