@@ -40,7 +40,10 @@ function hydrate(value) {
 }
 
 const operations = hydrate(JSON.parse(await readFile(operationsPath, 'utf8')));
-const relation = zkir.Zkir.fromJson(await readFile(circuitPath, 'utf8'));
+const source = await readFile(circuitPath, 'utf8');
+assert.equal(JSON.parse(source).do_communications_commitment, true,
+  'native ContractCall verification always requires a communication commitment');
+const relation = zkir.Zkir.fromJson(source);
 const provider = {
   lookupKey: async () => ({ ir: relation.serialize(),
     proverKey: new Uint8Array(), verifierKey: new Uint8Array() }),
@@ -54,6 +57,8 @@ const preimage = (ops = operations, witness = secret) =>
   ledger.proofDataIntoSerializedPreimage(empty, empty, ops,
     [witness, 17n, 23n, 0n, 1n].map(field), 'nightlean/direct-impact');
 const accepted = await zkir.check(preimage(), provider);
+assert.equal(accepted.length, operations.length,
+  'the ledger needs one activity group per native VM operation');
 
 async function expectRelationRejection(name, ops, witness = secret) {
   await assert.rejects(async () => zkir.check(preimage(ops, witness), provider),

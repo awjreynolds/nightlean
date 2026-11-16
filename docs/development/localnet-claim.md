@@ -45,7 +45,7 @@ The first native proof attempt reached checking but lacked the k=9 public parame
 
 ## Remaining gate
 
-This evidence establishes local source-to-contract proof and state acceptance for the selected workload. It does not establish Preview deployment, general source-feature coverage, or complete compiler verification. Keep the vertical-slice ticket open until the same accepted claim runs on Preview using a separately funded Preview identity.
+This evidence establishes local source-to-contract proof and state acceptance for the selected workload. It does not establish Preview deployment, general source-feature coverage, or complete compiler verification. After this run, the user explicitly chose localnet as the POC target on 2026-11-16. The finalized local receipts satisfy that environment target. Preview funding and deployment remain separate future work.
 
 ## Finalized event receipts
 

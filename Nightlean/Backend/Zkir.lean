@@ -1,5 +1,6 @@
 import Nightlean.IR
 import Nightlean.Backend.Impact
+import Nightlean.Passes
 
 namespace Nightlean.Backend.Zkir
 
@@ -113,6 +114,7 @@ private def lowerBody (c : Circuit) : LowerM Unit := do
 Public values are explicitly bound with Impact. The surrounding contract must
 still bind this public-input sequence to its accepted ledger call transcript. -/
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
+  let c := Passes.pruneCircuit c
   c.validate { poseidon2 := true }
   for condition in c.constraints do
     match checkConstants condition with
@@ -150,8 +152,10 @@ private def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : Lowe
     if read.ty == .bool then emit "constrain_to_boolean" [("val", toJson output)]
   for condition in plan.guards do
     emit "assert" [("cond", toJson (← lowerExpr condition))]
-  let fields ← plan.fields.mapM lowerExpr
-  bindPublic fields
+  -- The ledger consumes one activity/skip entry per VM opcode. Flattening
+  -- these groups preserves field values but breaks transaction proving.
+  for operation in plan.operations do
+    bindPublic (← operation.fields.mapM lowerExpr)
   -- Contract outputs are named values used in state effects. The transaction
   -- call has empty explicit return value; all disclosed values are in transcript.
   emit "output" [("vals", toJson ([] : List String))]
@@ -160,12 +164,15 @@ private def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : Lowe
 all opcode, alignment, key, read-result and write-value fields. The caller must
 execute the matching Impact plan, not the standalone circuit artifact. -/
 def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Json := do
+  let entry := Passes.pruneEntrypoint entry
   let plan ← Impact.lower state entry
   let (_, result) := (lowerEntrypointBody entry plan).run {}
   return Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
     ("inputs", Json.arr #[]), ("outputs", Json.arr #[]),
-    ("do_communications_commitment", toJson false),
+    -- Ledger ContractCall.public_inputs always includes the commitment after
+    -- binding input. Standalone relations above deliberately keep it disabled.
+    ("do_communications_commitment", toJson true),
     ("instructions", Json.arr result.instructions)]
 
 end Nightlean.Backend.Zkir

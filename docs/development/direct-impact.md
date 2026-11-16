@@ -4,6 +4,13 @@ The Lean native backend compiles the private claim relation and state guards
 without Compact. `Nightlean.Backend.Impact.lower` builds a symbolic native VM
 plan. `Nightlean.Backend.Zkir.lowerEntrypoint` binds its complete field encoding,
 including opcodes, alignments, keys, read results, and write values.
+The relation emits one Impact group for each native VM operation. The checker
+returns one activity entry per group, which transaction proving consumes in
+operation order. A single group over the same flattened field values passes
+standalone checking but fails this transaction-level requirement.
+Native contract entrypoints also enable the communication commitment. The
+ledger verifier always places this commitment after the binding input in the
+proof's public instance. Standalone relations leave this flag disabled.
 
 The state layout is a root array in declaration order. Native and boolean cells
 use Native field alignment. Native VM map membership produces a byte-aligned
@@ -39,7 +46,9 @@ The locked dependencies are `@midnight-ntwrk/ledger-v9` 1.0.2 and the official
 The official ZKIR implementation accepts the generated relation and its ledger
 proof preimage. This covers preprocessing and assertion checking, with the
 native full-transcript encoding rather than a synthetic list of public values.
-The fixture has k=9 and serializes to 2,451 bytes.
+The fixture has k=9 and serializes to 2,610 bytes. Its 21 native VM operations
+produce 21 checker activity entries. The harness asserts this count as a
+transaction-binding regression check.
 
 Negative preprocessing checks reject a wrong secret, public root, public
 campaign, stored root, and stored campaign. The native ledger VM separately

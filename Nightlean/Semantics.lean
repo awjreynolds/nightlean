@@ -66,6 +66,15 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if value >= ctx.modulus then throw "hash oracle returned noncanonical value"
     pure value
 
+/-- Check constraints in source order, preserving the first evaluation error. -/
+def runConstraints (ctx : EvalContext) (env : EvalEnv) : List (Expr .bool) → Except String Unit
+  | [] => .ok ()
+  | condition :: rest =>
+    match condition.eval ctx env with
+    | .error message => .error message
+    | .ok false => .error "circuit constraint failed"
+    | .ok true => runConstraints ctx env rest
+
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
   match c.validate {nativeModulus := ctx.modulus, poseidon2 := true} with
   | .error diagnostic => throw diagnostic.message
@@ -77,8 +86,7 @@ def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except Strin
     let some raw := env.lookup input.name | throw s!"missing input '{input.name}'"
     let some value := raw.as input.ty | throw s!"input type mismatch for '{input.name}'"
     if !canonical ctx input.ty value then throw s!"noncanonical input '{input.name}'"
-  for condition in c.constraints do
-    if !(← condition.eval ctx env) then throw "circuit constraint failed"
+  runConstraints ctx env c.constraints
   c.outputs.mapM fun output => do
     pure (output.name, Value.pack output.ty (← output.value.eval ctx env))
 

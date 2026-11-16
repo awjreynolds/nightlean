@@ -81,10 +81,15 @@ private unsafe def registeredContracts : CommandElabM (Array (Name × Contract))
 
 private def artifactName (name : Name) : String := name.toString
 
-private def validateArtifactName (name : Name) : CommandElabM Unit := do
-  let text := artifactName name
+private def validateArtifactStem (text : String) : CommandElabM Unit := do
   if text.contains '/' || text.contains '\\' || (text.splitOn "..").length > 1 then
-    throwError "circuit declaration name is not a safe artifact filename: {name}"
+    throwError "declaration name is not a safe artifact filename: {text}"
+
+private def validateArtifactName (name : Name) : CommandElabM Unit :=
+  validateArtifactStem (artifactName name)
+
+private def nativeCircuitFile (contract : Name) (ep : Entrypoint) : String :=
+  artifactName contract ++ "." ++ ep.name ++ ".zkir"
 
 private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
   if (← get).messages.hasErrors then
@@ -96,6 +101,7 @@ private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Nam
   for (name, contract) in contracts do
     validateArtifactName name
     for ep in contract.entrypoints do
+      validateArtifactStem ep.name
       unless circuits.any (fun (_, circuit) => circuit.name == ep.circuit.name) do
         throwError "contract entrypoint references imported circuit '{ep.circuit.name}'; include its source declaration in this compilation unit"
   return (circuits, contracts)
@@ -112,6 +118,11 @@ private def compileArtifacts (directory : String) (withCompact : _root_.Bool) : 
     match Backend.Zkir.lowerCircuit circuit with
     | .error d => failDiagnostic d
     | .ok json => lowered := lowered.push (artifactName name ++ ".zkir", json.pretty)
+  for (name, contract) in contracts do
+    for ep in contract.entrypoints do
+      match Backend.Zkir.lowerEntrypoint contract.state ep with
+      | .error d => failDiagnostic d
+      | .ok json => lowered := lowered.push (nativeCircuitFile name ep, json.pretty)
   if withCompact && contracts.isEmpty then
     throwError "Compact adapter requires a Nightlean contract declaration"
   if withCompact then
@@ -119,11 +130,15 @@ private def compileArtifacts (directory : String) (withCompact : _root_.Bool) : 
       match Backend.Compact.emit contract with
       | .error message => throwError "Compact adapter: {message}"
       | .ok source => lowered := lowered.push (artifactName name ++ ".compact", source)
+  unless uniqueNames (lowered.toList.map (·.1)) do
+    throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
   let contractMetadata := contracts.map fun (name, contract) => Json.mkObj [
     ("name", toJson name.toString),
     ("state", toJson (contract.state.map stateJson)),
     ("entrypoints", toJson (contract.entrypoints.map fun ep => Json.mkObj [
       ("name", toJson ep.name), ("circuit", toJson ep.circuit.name),
+      ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
+      ("nativeCircuitQualified", toJson Bool.false),
       ("effects", toJson (ep.effects.map effectJson))]))]
   let adapterBindings := if withCompact then contracts.map fun (name, contract) =>
     Json.mkObj [("contract", toJson name.toString),
@@ -147,7 +162,8 @@ private def compileArtifacts (directory : String) (withCompact : _root_.Bool) : 
   for (name, content) in lowered do
     liftIO <| IO.FS.writeFile (path / name) (content ++ "\n")
   liftIO <| IO.FS.writeFile (path / "nightlean.json") (metadata.pretty ++ "\n")
-  logInfo m!"emitted {circuits.size} relation(s) and state metadata to {path}; not a deployable contract bundle"
+  let nativeCount : Nat := contracts.foldl (fun total (_, contract) => total + contract.entrypoints.length) 0
+  logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {path}; not a deployable contract bundle"
 
 elab "#nightlean_compile" directory:str : command =>
   compileArtifacts directory.getString Bool.false

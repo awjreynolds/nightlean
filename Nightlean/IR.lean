@@ -107,7 +107,7 @@ abbrev TypeEnv := List (String × Ty)
 def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except String Unit
   | .native value =>
     if value < caps.nativeModulus then pure () else .error "noncanonical native constant"
-  | .bool _ => pure ()
+  | .bool _ => .ok ()
   | .ref name =>
     match env.lookup name with
     | none => .error s!"unknown reference '{name}'"
@@ -133,16 +133,22 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
 
 def uniqueNames (names : List String) : Bool := names.eraseDups.length == names.length
 
+/-- Preserve first constraint diagnostic and source span in list order. -/
+def validateConstraints (caps : Capabilities) (env : TypeEnv) (span : SourceSpan) :
+    List (Expr .bool) → Except Diagnostic Unit
+  | [] => .ok ()
+  | condition :: rest =>
+    match condition.validate caps env with
+    | .error message => .error {span, message}
+    | .ok _ => validateConstraints caps env span rest
+
 def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Unit := do
   if !uniqueNames (c.inputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit input"}
   if !uniqueNames (c.outputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit output"}
   let env := c.inputs.map fun i => (i.name, i.ty)
-  for condition in c.constraints do
-    match condition.validate caps env with
-    | .error message => throw {span := c.span, message}
-    | .ok _ => pure ()
+  validateConstraints caps env c.span c.constraints
   for output in c.outputs do
     if (env.lookup output.name).isSome then
       throw {span := output.span, message := s!"output '{output.name}' shadows a circuit input"}

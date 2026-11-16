@@ -4,7 +4,7 @@ Nightlean is a Lean 4 compiler project for Midnight contracts. Its source elabor
 
 The current compiler checks restricted contract and circuit declarations, emits ZKIR v3 relations, and describes contract state effects in separate metadata. The emitted metadata marks the bundle as unqualified and nondeployable until ledger transcript integration is complete. The public Wayfinder map tracks the remaining proof and deployment work.
 
-The private one-time claim has completed deployment and a finalized call on an isolated ledger 9 development chain through the optional Lean-generated packaging adapter. Five invalid-claim cases and nullifier replay leave ledger state unchanged. [Localnet evidence](docs/development/localnet-claim.md) and [independent finalized receipts](docs/development/localnet-receipts.json) record the exact transactions. Preview qualification is pending and is tracked separately.
+The private one-time claim has completed deployment and a finalized call on an isolated ledger 9 development chain through the optional Lean-generated packaging adapter. Five invalid-claim cases and nullifier replay leave ledger state unchanged. [Localnet evidence](docs/development/localnet-claim.md) and [independent finalized receipts](docs/development/localnet-receipts.json) record the exact transactions. The selected POC target is localnet. Public-network qualification is separate future work.
 
 ```sh
 lake build

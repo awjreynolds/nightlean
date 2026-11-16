@@ -19,9 +19,20 @@ expect_failure() {
 "$cli" compile examples/PrivateClaim.lean --output "$scratch/second"
 diff -r "$scratch/first" "$scratch/second"
 test -f "$scratch/first/claimRelation.zkir"
+test -f "$scratch/first/PrivateClaim.claim.zkir"
 test -f "$scratch/first/nightlean.json"
 grep -F '"deployable": false' "$scratch/first/nightlean.json" > /dev/null
 grep -F '"ledger": "9.1.0.1"' "$scratch/first/nightlean.json" > /dev/null
+grep -F '"nativeCircuitFile": "PrivateClaim.claim.zkir"' "$scratch/first/nightlean.json" > /dev/null
+grep -F '"nativeCircuitQualified": false' "$scratch/first/nightlean.json" > /dev/null
+lake env lean --run tests/Impact.lean --zkir > "$scratch/reference.zkir"
+node --input-type=module - "$scratch/first/PrivateClaim.claim.zkir" "$scratch/reference.zkir" <<'JS'
+import { readFileSync } from 'node:fs';
+import { deepStrictEqual } from 'node:assert';
+const [generated, reference] = process.argv.slice(2).map(path => JSON.parse(readFileSync(path, 'utf8')));
+deepStrictEqual(generated, reference, 'Lean source entrypoint differs from the native reference fixture');
+deepStrictEqual(generated.do_communications_commitment, true);
+JS
 
 cat > "$scratch/later-error.lean" <<'LEAN'
 import Nightlean.Frontend
@@ -51,6 +62,40 @@ expect_failure "$cli" compile "$scratch/traversal.lean" --output "$scratch/trave
 grep -F 'not a safe artifact filename' "$scratch/stdout" > /dev/null
 test ! -e "$scratch/traversal-output"
 test ! -e "$scratch/escape.zkir"
+
+cat > "$scratch/entry-traversal.lean" <<'LEAN'
+import Nightlean.Frontend
+open scoped Nightlean
+nightlean_circuit relation where
+  public value : Native
+  output result : Native := value
+end
+nightlean_contract SafeContract where
+  entry «../escape» uses relation where
+  end
+end
+LEAN
+expect_failure "$cli" compile "$scratch/entry-traversal.lean" --output "$scratch/entry-traversal-output"
+grep -F 'not a safe artifact filename' "$scratch/stdout" > /dev/null
+test ! -e "$scratch/entry-traversal-output"
+
+cat > "$scratch/collision.lean" <<'LEAN'
+import Nightlean.Frontend
+open scoped Nightlean
+namespace Collision
+nightlean_circuit claim where
+  public value : Native
+  output result : Native := value
+end
+end Collision
+nightlean_contract Collision where
+  entry claim uses Collision.claim where
+  end
+end
+LEAN
+expect_failure "$cli" compile "$scratch/collision.lean" --output "$scratch/collision-output"
+grep -F 'artifact filenames collide' "$scratch/stdout" > /dev/null
+test ! -e "$scratch/collision-output"
 
 cat > "$scratch/imported.lean" <<'LEAN'
 import examples.PrivateClaim
@@ -84,6 +129,7 @@ expect_failure "$cli" check examples/PrivateClaim.lean --adapter compact
 expect_failure "$cli" compile examples/PrivateClaim.lean --adapter unknown
 "$cli" compile examples/PrivateClaim.lean --adapter compact --output "$scratch/compact-adapter"
 test -f "$scratch/compact-adapter/claimRelation.zkir"
+test -f "$scratch/compact-adapter/PrivateClaim.claim.zkir"
 test -f "$scratch/compact-adapter/PrivateClaim.compact"
 grep -F '"adapter": "compact-source"' "$scratch/compact-adapter/nightlean.json" > /dev/null
 echo "CLI conformance checks passed"
