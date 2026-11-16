@@ -6,6 +6,7 @@ import { resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { observeLocalReceipt } from './receipt.mjs';
+import {nativeToolkitConfig,nativeToolkitTimeout} from './native-toolkit-config.mjs';
 const exec=promisify(execFile);
 const [artifactArg,workArg,mode]=process.argv.slice(2);
 if(mode && mode!=='--resume-call')throw Error('Unknown mode');
@@ -21,7 +22,8 @@ if(await rpc('chain_getBlockHash',[0])!=='0x823383ec0302be8417cfcbcc62f21df08f40
 const runtime=await rpc('state_getRuntimeVersion');
 if(runtime.specVersion!==2001100||runtime.transactionVersion!==4)throw Error('Refusing unsupported development runtime');
 const fromBlock=BigInt((await rpc('chain_getHeader')).number).toString();
-const run=async args=>await exec('docker',['run','--rm','--pull','never','--network','nightlean-dev','--cpus=4','--memory=4g','--pids-limit=256','--cap-drop','ALL','--security-opt','no-new-privileges','--user',`${process.getuid()}:${process.getgid()}`,'--workdir','/work','--mount',`type=bind,source=${work},target=/work`,'--mount',`type=bind,source=${artifacts},target=/work/artifacts,readonly`,'--mount',`type=bind,source=${params},target=/params,readonly`,'--env','MIDNIGHT_PP=/params','--env','MN_FETCH_CACHE=inmemory','--env','MN_LEDGER_CACHE_DB=','--entrypoint','/midnight-node-toolkit',image,...args],{timeout:120000,maxBuffer:2**22});
+const toolkit=await nativeToolkitConfig(work);
+const run=async args=>await exec('docker',['run','--rm','--pull','never','--network','nightlean-dev','--cpus=4','--memory=4g','--pids-limit=256','--cap-drop','ALL','--security-opt','no-new-privileges','--user',`${process.getuid()}:${process.getgid()}`,'--workdir','/work','--mount',`type=bind,source=${work},target=/work`,'--mount',`type=bind,source=${artifacts},target=/work/artifacts,readonly`,'--mount',`type=bind,source=${params},target=/params,readonly`,'--env','MIDNIGHT_PP=/params','--entrypoint','/midnight-node-toolkit',image,...toolkit.args(args)],{timeout:nativeToolkitTimeout,maxBuffer:2**22});
 await writeFile(`${work}/zswap.json`,JSON.stringify({coinPublicKey:{bytes:Array.from(Buffer.from('1bd4f827be97ff013c4a702e4b08f30ec378728a54670cf7cc92cb9b1a14eff6','hex'))},currentIndex:'0',inputs:[],outputs:[]}));
 async function submit(intent,filename,event){
  console.error(`Funding and submitting native ${event}`);

@@ -44,6 +44,16 @@ The output directory contains `source-plan.json`, `runtime-config.json`, `ledger
 
 The transaction runner refuses the wrong genesis, funds through the published local development identity, requires finalized matching receipts, checks accepted state against predicted state, and verifies invalid witnesses and replay rejection. Its accepted evidence is `local/native-localnet.json`.
 
+Funding and contract-state queries use two RPC fetch workers, two fetch-compute workers and two wallet replay workers. Each toolkit command has a ten-minute timeout. These explicit flags override the pinned toolkit's 20-worker fetch default, which exhausted the development node's 3 GiB memory limit during a historical scan. The runner keeps fetch data and wallet snapshots in a private `.native-toolkit-*` directory inside the work directory. Sequential commands share these disk caches. Each invocation, including `--resume-call`, starts with fresh caches, so a reset development chain or abandoned run does not supply old snapshots. Completed cache directories are disposable development data.
+
+Check the bounded configuration without a running chain:
+
+```sh
+node --test tests/localnet-toolkit-config.mjs
+```
+
+The 2026-11-16 check also exercised the pinned toolkit with network-disabled funding/state dry runs, including an inherited 20-thread replay setting. The explicit two-thread flag prevailed. Two live read-only state queries then used this configuration on the isolated chain. The first fetched 1,083 blocks with two fetch and two compute workers. The second fetched two new blocks and read 1,082 from the shared disk cache. Both returned the accepted state bytes with SHA-256 `d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3`. The node stayed running at 256.5 MiB after the checks. No new deployment or claim was submitted for this configuration check.
+
 The standalone checks are also reusable:
 
 ```sh
