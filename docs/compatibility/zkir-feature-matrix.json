@@ -1,0 +1,4619 @@
+{
+  "schemaVersion": 1,
+  "title": "Full pinned ZKIR v3 and native ledger capability inventory",
+  "checkedOn": "2026-11-16",
+  "target": {
+    "compilerImplementation": "Lean 4",
+    "capabilityBoundary": "Full safe source representation of coherent capabilities in pinned native ZKIR v3, together with native ledger composition. Compact 0.36.1, language 0.28, is a minimum comparison only.",
+    "compactCompilerRuntimeDependencyAllowed": false,
+    "zkirRelease": "3.2.1",
+    "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "cliReportedVersion": "midnight-zkir 3.2.0",
+    "nativeCliBannerAloneIdentifiesRelease": false,
+    "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+    "ledgerRelease": "9.1.0.1",
+    "irMinorVersionsAccepted": [
+      0,
+      1,
+      2
+    ],
+    "instructionGatingByMinorVersion": false,
+    "versionEvidence": "IrSource::load accepts major 3 and minors 0 through 2. The pinned VM dispatch does not branch on the minor-version field. These are source-inspection facts rather than a new cross-version acceptance run."
+  },
+  "auditMethod": {
+    "sourceClean": true,
+    "enumExtraction": "Top-level Instruction and IrType variants extracted from exact pinned source and compared to all rows. Source order retained for binary-layout review.",
+    "meaningOfCounts": "Enum and requirement coverage only. These counts do not measure completion, enumerate every overload or constitute an executable conformance corpus.",
+    "existingEvidence": "Three previously executed 3.2.1 workload records seed native keygen, checker, proof and ledger observations. Membership in a successful workload does not qualify an operation independently.",
+    "scopeLimit": "Public networks and whole-language safety remain unqualified. The included Agda draft predates expanded types and instructions.",
+    "sourceObservation": "The Nightlean working tree was read during concurrent bounded-scalar implementation. Source and test definitions are observations, without newly executed scalar proof or ledger results."
+  },
+  "counts": {
+    "instructionVariants": 47,
+    "valueTypeVariants": 15,
+    "sourceEntityRows": 62,
+    "formallyDeprecatedInstructions": 7,
+    "deprecatedWithNamedReplacement": 5,
+    "deprecatedWithoutNamedReplacement": 2,
+    "additionalPlannedRetirementNotes": 3,
+    "globalSafetyAndIntegrationRequirements": 22,
+    "nativeLedgerObligations": 8,
+    "expectedCaseFamilies": 184,
+    "fullyQualifiedSourceEntities": 0,
+    "localLoweringOpcodeNamesObserved": 16,
+    "workloadEvidence": {
+      "keygen": {
+        "instructionVariants": 14,
+        "valueTypeVariants": 3
+      },
+      "checker": {
+        "instructionVariants": 14,
+        "valueTypeVariants": 3
+      },
+      "proof": {
+        "instructionVariants": 12,
+        "valueTypeVariants": 3
+      },
+      "ledger": {
+        "instructionVariants": 9,
+        "valueTypeVariants": 1
+      }
+    }
+  },
+  "sources": {
+    "ZKIR-IR": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs",
+      "sha256": "da50a43f68158c93bfa6fd68975518810fc2cc6f11da82edc8b78e37bc69173c"
+    },
+    "ZKIR-TYPES": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_types.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs",
+      "sha256": "0dea7314da3e5c3c12e3efd0f7c348f89c33b621edee4b7055e93d7aeb00b98c"
+    },
+    "ZKIR-VM": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_vm.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_vm.rs",
+      "sha256": "17e65a033f507e319db046bfeec90cd1f1350df4f7c69433ab3c3f3b76f9bc29"
+    },
+    "ZKIR-TYPEPASS": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/type_inference.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/type_inference.rs",
+      "sha256": "05a81a634c8d17e68dcfb0d899fbfb5100a4d1a088ac4ca131f043bb2df0caab"
+    },
+    "ZKIR-HELPER-ADD": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/add.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/add.rs",
+      "sha256": "5ae42d6bdf19bbf9bdd51cc398fede47fcb116edc0ccfb4d485f2f42be240797"
+    },
+    "ZKIR-HELPER-MUL": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/mul.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/mul.rs",
+      "sha256": "7d377be8c8dfee6a1473c521aa8a52dd8a9fd8c1837ff014bfd55ff29ea2fd66"
+    },
+    "ZKIR-HELPER-NEG": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/neg.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/neg.rs",
+      "sha256": "77220150eee727f81542400d0a28a56a18263a80f9bcca0d076e301c2c964b80"
+    },
+    "ZKIR-HELPER-INV": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/inv.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/inv.rs",
+      "sha256": "7ff09b6d6e2b931ed5f202383fc677d147d1b67f80a90463e607a22a57a49795"
+    },
+    "ZKIR-HELPER-EQ": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/eq.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/eq.rs",
+      "sha256": "27e90dedcacaa54468911d062d1e8f23ff2b3c609a5132cc8c3997821d0ff46d"
+    },
+    "ZKIR-HELPER-SELECT": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/select.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/select.rs",
+      "sha256": "3eaf5dc7baf9cecdc661bd3b9234085816631b47af7bc248ad3a7c363e602e6c"
+    },
+    "ZKIR-HELPER-CONSTRAIN-EQ": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/constrain_eq.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/constrain_eq.rs",
+      "sha256": "164e4fbe2d55ad11b8b11453fd3180a1fca5a9ba68d281ca0c2075c2f086b2c3"
+    },
+    "ZKIR-HELPER-ENCODE": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/encode.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/encode.rs",
+      "sha256": "c0936f89ea2fb3fdd6e77a1402998c6d3484637390e4204977cc2846e811c44b"
+    },
+    "ZKIR-HELPER-ASSIGN": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/assign.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/assign.rs",
+      "sha256": "4252ec4af3b93165380fea6e2dba0a35e5c8c1704932f3b3910cba3d87514e7d"
+    },
+    "ZKIR-HELPER-ASSIGN-CONSTANT": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/assign_constant.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/assign_constant.rs",
+      "sha256": "26daf74b5ccf96a4a7901adedb397fa0aec4bac3b48f7196737f9fca9858a846"
+    },
+    "ZKIR-HELPER-EC-MUL": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/ec_mul.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/ec_mul.rs",
+      "sha256": "f982dbe3c49f29fe09fa6c268430066c81a490adb428d4791532795009fc70f3"
+    },
+    "ZKIR-HELPER-FROM-COORDINATES": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/from_coordinates.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/from_coordinates.rs",
+      "sha256": "b64a26c36116edc50af949b5a63db9e316486b03565644fc4c42b093e8f6adb0"
+    },
+    "ZKIR-HELPER-INTO-COORDINATES": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/into_coordinates.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/into_coordinates.rs",
+      "sha256": "553bff5324778e604b6c010007480c3003cb2bf5bb30c53a4a5434644c5dc6dd"
+    },
+    "ZKIR-HELPER-FROM-BYTES": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/from_bytes.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/from_bytes.rs",
+      "sha256": "e83ceee554cb03b01c2aba15a96708eecbe355ed5bfb14b81e7b4d1bc3f23b51"
+    },
+    "ZKIR-HELPER-TO-BYTES": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/src/ir_instructions/to_bytes.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_instructions/to_bytes.rs",
+      "sha256": "2d0af490a70c7bcc38ed7c63a0c25d362966f861a67196e03c378278d0801b17"
+    },
+    "ZKIR-UPSTREAM-PROOF-TESTS": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/tests/proofs.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/tests/proofs.rs",
+      "sha256": "7b070979efefdac443235fe804e92943ba96d0b5fdab242eca9d79053dd19dd5"
+    },
+    "ZKIR-UPSTREAM-OUTPUT-TESTS": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir/tests/typed_outputs/conformance.rs",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/tests/typed_outputs/conformance.rs",
+      "sha256": "42ddb34c0b65ef9f6beda442dd4b9b68f12b54f40a8c644bfc0c6975d7d25664"
+    },
+    "ZKIR-OLD-DRAFT": {
+      "repository": "midnightntwrk/midnight-zkir",
+      "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "path": "zkir-spec/docs/zkir-v3-spec.md",
+      "url": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir-spec/docs/zkir-v3-spec.md",
+      "sha256": "d4a461fd92becea07d753968240debf95dab3ed27a4ae0bd501f6cde56d7205e"
+    },
+    "LEDGER-CONSTRUCT": {
+      "repository": "midnightntwrk/midnight-ledger",
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "path": "ledger/src/construct.rs",
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger/src/construct.rs",
+      "sha256": "e6ed66bd11827ea62aa402560a88cc1290170a14ab27f517b3b6d8ecdb160d6d"
+    },
+    "LEDGER-VERIFY": {
+      "repository": "midnightntwrk/midnight-ledger",
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "path": "ledger/src/verify.rs",
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger/src/verify.rs",
+      "sha256": "92eebdc2a0eb69de9f2dcfee923e7879b8a8509a054b649f6100563e5131db7d"
+    },
+    "LEDGER-PROVE": {
+      "repository": "midnightntwrk/midnight-ledger",
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "path": "ledger/src/prove.rs",
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger/src/prove.rs",
+      "sha256": "c9d024eebf712266b3c008a064570c91cdae46b8aa5a1c5cdb94491b0c428477"
+    },
+    "LEDGER-STRUCTURE": {
+      "repository": "midnightntwrk/midnight-ledger",
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "path": "ledger/src/structure.rs",
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger/src/structure.rs",
+      "sha256": "79b158910a79dee54bc840adafb5a1f38a791d1094f156dba5c8a037b6a85ecb"
+    },
+    "LEDGER-VM": {
+      "repository": "midnightntwrk/midnight-ledger",
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "path": "onchain-vm/src/ops.rs",
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-vm/src/ops.rs",
+      "sha256": "0c1a3e17dc37e81ca84e6284a7992aedf4985181c8b76cbb627971b5a5eb47e7"
+    },
+    "LEDGER-MAINTENANCE": {
+      "repository": "midnightntwrk/midnight-ledger",
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "path": "ledger-wasm/src/contract.rs",
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger-wasm/src/contract.rs",
+      "sha256": "e761ea145110d2857f1b91bcdf677449115856201f0ba54c37ad22dadce8ce45"
+    },
+    "LEDGER-PREIMAGE": {
+      "repository": "midnightntwrk/midnight-ledger",
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "path": "transient-crypto/src/proofs.rs",
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/transient-crypto/src/proofs.rs",
+      "sha256": "4b5552c53f69ba230ddc0ee775220d4b88e2672814e68b3e3686ca35b6d50fe0"
+    }
+  },
+  "evidenceRegister": {
+    "E-NATIVE321-CLAIM": {
+      "kind": "executed-workload",
+      "refs": [
+        "../development/zkir-3.2.1-qualification.md",
+        "../../tests/zkir321/qualification-evidence.json",
+        "../../tests/zkir321/check-native-claim.mjs"
+      ],
+      "zkirPin": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+      "scope": "actual Lean Native/Bool claim, typed Native encodings, always-active Impact groups, empty explicit outputs",
+      "keygen": true,
+      "checker": true,
+      "proof": true,
+      "ledger": true,
+      "ledgerHeights": [
+        1012,
+        1015
+      ],
+      "opcodeCounts": {
+        "public_input": 6,
+        "private_input": 5,
+        "constrain_to_boolean": 3,
+        "transient_hash": 4,
+        "cond_select": 5,
+        "test_eq": 5,
+        "assert": 5,
+        "impact": 21,
+        "output": 1
+      },
+      "negativeEvidence": "Five changed witnesses rejected by checker. Replay host guard rejected against fetched spent state. No replay transaction submitted.",
+      "privacyEvidence": "No general disclosure analysis or private-dependent activity proof"
+    },
+    "E-RAW321-BOOL": {
+      "kind": "executed-raw-fixture",
+      "refs": [
+        "../../tests/zkir321/boolean-deserialization-contract.zkir",
+        "../../tests/zkir321/boolean-cases.json",
+        "../../tests/zkir321/check-fixtures.mjs",
+        "../../tests/zkir321/qualification-evidence.json"
+      ],
+      "keygen": true,
+      "checker": true,
+      "proof": false,
+      "ledger": false,
+      "scope": "Four positive and six negative raw Native eight-bit and Native 0/1 scenarios. No IrType::Bool, IrType::Byte or Lean deserialization feature is exercised.",
+      "opcodes": [
+        "assert",
+        "cond_select",
+        "constrain_bits",
+        "constrain_eq",
+        "constrain_to_boolean",
+        "less_than",
+        "output",
+        "test_eq"
+      ]
+    },
+    "E-RAW321-JUBJUB": {
+      "kind": "executed-raw-fixture",
+      "refs": [
+        "../../tests/zkir321/jubjub-intermediate.zkir",
+        "../../tests/zkir321/check-fixtures.mjs",
+        "../../tests/zkir321/qualification-evidence.json"
+      ],
+      "keygen": true,
+      "checker": true,
+      "proof": true,
+      "ledger": false,
+      "scope": "Native input 7 produces an intermediate JubjubScalar and generator point, self-equality and empty output. This supplies no independent curve vector or source Jubjub feature.",
+      "opcodes": [
+        "constrain_eq",
+        "ec_mul_generator",
+        "jubjub_scalar_from_native",
+        "output"
+      ],
+      "regression": "Native 3.2.0 keygen exits 101 with a missing Jubjub chip. Tagged 3.2.1 keygen succeeds at k=10, 684 rows."
+    },
+    "E-LOCAL-SOURCE": {
+      "kind": "source-and-test-definition-inspection-only",
+      "refs": [
+        "../../Nightlean/Backend/Zkir.lean",
+        "../../Nightlean/IR.lean",
+        "../../tests/Zkir.lean",
+        "../../tests/BoundedScalars.lean",
+        "../../tests/ScalarPolicy.lean"
+      ],
+      "scope": "Working tree includes concurrent bounded-scalar work. Read as lowering/test definitions, not a new proof or ledger result.",
+      "observedLoweredOpcodes": [
+        "add",
+        "assert",
+        "cond_select",
+        "constrain_bits",
+        "constrain_eq",
+        "constrain_to_boolean",
+        "impact",
+        "less_than",
+        "mul",
+        "neg",
+        "not",
+        "output",
+        "private_input",
+        "public_input",
+        "test_eq",
+        "transient_hash"
+      ],
+      "lowererSha256": "1428d194a07c071442d7278645f682342cdaa75e8516014fbb557cf565a228b4",
+      "testsExecutedForThisAudit": false
+    },
+    "E-UPSTREAM-TEST-DEFINITIONS": {
+      "kind": "source-inspection-only",
+      "sources": [
+        "ZKIR-UPSTREAM-PROOF-TESTS",
+        "ZKIR-UPSTREAM-OUTPUT-TESTS",
+        "ZKIR-TYPEPASS"
+      ],
+      "scope": "Upstream proof, typed-output and chip-inference tests are definitions only. Not executed or credited as Nightlean acceptance."
+    }
+  },
+  "requirements": [
+    {
+      "id": "ZKIR-REQ-WELLFORMED",
+      "requirement": "Require unique typed definitions, use-before-definition rejection and exactly one final Output, independently of upstream prose.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-WELLFORMED-P",
+          "polarity": "positive",
+          "expected": "Accept one final correctly typed Output and a valid straight-line dependency graph."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-WELLFORMED-N",
+          "polarity": "negative",
+          "expected": "Reject duplicate/missing/nonfinal Output, duplicate names and use before definition."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-TYPECHECK",
+      "requirement": "Validate each exact operand/result overload in Lean. The upstream types pass selects chips and explicitly is not a type checker.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-TYPECHECK-P",
+          "polarity": "positive",
+          "expected": "Accept every audited supported overload with exact output type and length."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-TYPECHECK-N",
+          "polarity": "negative",
+          "expected": "Reject cross-curve operands, Native/Bool confusion and unsupported Bytes selection before keygen."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-BOOLEAN",
+      "requirement": "Establish Native 0/1 preconditions before Assert, selectors, Not and transcript guards. Distinguish native bits from IrType::Bool.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-BOOLEAN-P",
+          "polarity": "positive",
+          "expected": "Constrained Native bits and encoded typed Bool drive the expected truth table."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-BOOLEAN-N",
+          "polarity": "negative",
+          "expected": "Malicious Native 2 must not satisfy a source Boolean assertion or alter guarded activity."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-RANGES",
+      "requirement": "Prove input ranges needed by LessThan and conversions, including inactive-arm totalization.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-RANGES-P",
+          "polarity": "positive",
+          "expected": "Compare zero/max bounded operands and valid narrowing boundaries."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-RANGES-N",
+          "polarity": "negative",
+          "expected": "Reject out-of-range operands, widths and underflow without relying only on preprocessing."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-GUARDEDINPUTS",
+      "requirement": "PublicInput and PrivateInput guards only select preprocessing transcript consumption/defaults. Constrain source meaning separately. Guarded source lowering must totalize partial inactive computations, including zero inversion and Weierstrass identity coordinate extraction, without changing active semantics.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-GUARDEDINPUTS-P",
+          "polarity": "positive",
+          "expected": "An inactive read uses the declared default and consumes no transcript values. Inactive partial operations receive a valid neutral/replacement input and preserve active results."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-GUARDEDINPUTS-N",
+          "polarity": "negative",
+          "expected": "Reject a malicious default/read substitution or extra/short transcript and any assumption that guard constrains witness allocation. Reject eager partial operations on inactive defaults when no validated totalization exists."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-PUBLICBINDING",
+      "requirement": "Bind public source values through actual Impact public inputs or an audited commitment path. PublicInput allocation alone supplies no binding.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-PUBLICBINDING-P",
+          "polarity": "positive",
+          "expected": "Changing a bound public statement changes verification outcome."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-PUBLICBINDING-N",
+          "polarity": "negative",
+          "expected": "Reject unbound public arguments and reordered/mismatched activity groups."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-DISCLOSURE",
+      "requirement": "Track explicit and control-dependent flow from private data into public values, activity, state keys, events and call structure. Require an explicit checked release boundary.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-PROVE",
+        "LEDGER-VERIFY",
+        "LEDGER-VM"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-DISCLOSURE-P",
+          "polarity": "positive",
+          "expected": "Accept a documented explicit release with allowed derived data and an approved public effect guard."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-DISCLOSURE-N",
+          "polarity": "negative",
+          "expected": "Reject private-dependent public branches, effect presence/order, destination/key choices and implicit derived leaks without release."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-PRIVATEHOST",
+      "requirement": "Define host witness/private-state ABI, execution order, cancellation, error redaction and atomic commit after accepted lifecycle outcomes.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-PREIMAGE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-PRIVATEHOST-P",
+          "polarity": "positive",
+          "expected": "Two independent hosts compute matching canonical witness values and commit private state once."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-PRIVATEHOST-N",
+          "polarity": "negative",
+          "expected": "Proving failure, rejected transaction, cancellation or restart must not commit private state or expose witness logs."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-COMMITMENT",
+      "requirement": "Match header input/output encoding, communications randomness, binding input, entrypoint and transcript conventions to the accepted contract call.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-CONSTRUCT",
+        "LEDGER-VERIFY",
+        "LEDGER-PREIMAGE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-COMMITMENT-P",
+          "polarity": "positive",
+          "expected": "Correct commitment/binding verifies for exact signature and deployment."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-COMMITMENT-N",
+          "polarity": "negative",
+          "expected": "Reject changed output, nonce/randomness, binding input, wrong entrypoint and mismatched verifier key."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-CANONICAL",
+      "requirement": "Use exact typed canonical input encodings. Do not confuse modular FromBytes reduction with strict typed decoding.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-CANONICAL-P",
+          "polarity": "positive",
+          "expected": "Round-trip each typed value and identity with its exact native limb widths."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-CANONICAL-N",
+          "polarity": "negative",
+          "expected": "Reject wrong limb counts, noncanonical typed encodings and invalid points, while accepting specified field reduction only through FromBytes."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-DEPENDENCIES",
+      "requirement": "Keep the compiler in Lean and dependency closure free of Compact compiler/runtime. Compact is a minimum semantic comparison, not a capability cap.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-DEPENDENCIES-P",
+          "polarity": "positive",
+          "expected": "Build, check and deploy native artifacts from documented native pins alone."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-DEPENDENCIES-N",
+          "polarity": "negative",
+          "expected": "Fail dependency/manifest validation if Compact execution/imports or unsupported pin substitutions enter required paths."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-PROOFBOUNDARY",
+      "requirement": "Separate parser/keygen/checker/proof/verifier/ledger evidence and test malicious witnesses beyond honest preprocessing.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-PROOFBOUNDARY-P",
+          "polarity": "positive",
+          "expected": "A proof verifies against independently specified public inputs and exact deployed key."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-PROOFBOUNDARY-N",
+          "polarity": "negative",
+          "expected": "Altered relation/key/public statement or forged internal witness fails verification, including cases the honest checker already rejects."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-LEDGERTRANSCRIPT",
+      "requirement": "Preserve VM opcode/alignment/read/write ordering, activity groups, runtime cost model and guaranteed/fallible partitions.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-CONSTRUCT",
+        "LEDGER-PROVE",
+        "LEDGER-VERIFY"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-LEDGERTRANSCRIPT-P",
+          "polarity": "positive",
+          "expected": "Accepted transaction produces exact predicted state with matching finalized events."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-LEDGERTRANSCRIPT-N",
+          "polarity": "negative",
+          "expected": "Reject reordered groups, stale reads, mismatched encodings and partial outcomes presented as full success."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-COMPOSITION",
+      "requirement": "Define native contract signatures and authenticated call graph with entrypoint hashes, callee key identity, communications commitments and allowed re-entry.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-CONSTRUCT",
+        "LEDGER-STRUCTURE",
+        "LEDGER-VERIFY"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-COMPOSITION-P",
+          "polarity": "positive",
+          "expected": "Two contracts compose with independently verified callee/caller bindings and expected state."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-COMPOSITION-N",
+          "polarity": "negative",
+          "expected": "Reject wrong callee/entrypoint/key/nonce, forged caller and prohibited re-entry."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-FAILURE",
+      "requirement": "Specify guaranteed/fallible effects, partial failure and private host commit behavior at every boundary.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-CONSTRUCT",
+        "LEDGER-VERIFY"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-FAILURE-P",
+          "polarity": "positive",
+          "expected": "Allowed failure partition yields exact documented effects and host outcome."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-FAILURE-N",
+          "polarity": "negative",
+          "expected": "Reject treating partial application as full acceptance or committing private changes after failed/abandoned execution."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-LEDGERASSETS",
+      "requirement": "Bind assets, amounts, addresses, ownership, mint/burn authority, nullifiers and change to native ledger conservation rules.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-VM",
+        "LEDGER-VERIFY"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-LEDGERASSETS-P",
+          "polarity": "positive",
+          "expected": "Valid authorized asset transfer/mint lifecycle preserves balances and accepted state."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-LEDGERASSETS-N",
+          "polarity": "negative",
+          "expected": "Reject unauthorized mint/spend, imbalance, wrong recipient/asset and replayed coin/nullifier."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-LIFECYCLE",
+      "requirement": "Specify constructor, sealed state, verifier/IR replacement, authority threshold and maintenance counter semantics.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS",
+        "LEDGER-MAINTENANCE",
+        "LEDGER-VERIFY"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-LIFECYCLE-P",
+          "polarity": "positive",
+          "expected": "Authorized version/key transition preserves state and authenticated interface agreement."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-LIFECYCLE-N",
+          "polarity": "negative",
+          "expected": "Reject unauthorized update, stale counter, mismatched key and unsupported transition."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-RESOURCE",
+      "requirement": "Bound source sizes, IR counts, byte lengths, proving work and host/network concurrency below upstream allocation ceilings.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-RESOURCE-P",
+          "polarity": "positive",
+          "expected": "Valid bounded circuit and two-worker local replay complete within stated resource limits."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-RESOURCE-N",
+          "polarity": "negative",
+          "expected": "Reject excessive types/widths/allocations before processing and avoid unsafe 20-worker default replay."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-SOURCEPROVENANCE",
+      "requirement": "Pin native source, Rust, parameters, key identity and artifact hashes separately from version banners.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-SOURCEPROVENANCE-P",
+          "polarity": "positive",
+          "expected": "Known source/hash reproduces supported relation/key/checker outcome."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-SOURCEPROVENANCE-N",
+          "polarity": "negative",
+          "expected": "Reject source/hash drift and treating the 3.2.0 CLI banner as sufficient identity for tagged 3.2.1."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-FORMAT",
+      "requirement": "Version the language, ZKIR producer format, native executable release, ledger profile and host ABI independently.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-FORMAT-P",
+          "polarity": "positive",
+          "expected": "Audited 3.0/3.1/3.2 IR parses under exact release pin with stable instruction binary ordering."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-FORMAT-N",
+          "polarity": "negative",
+          "expected": "Reject unknown major/minor/schema revisions and reordered enum discriminants."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-HASHALIGNMENT",
+      "requirement": "Match actual FAB byte representation and supported alignment atoms. Option and Compress alignment paths fail in-circuit in this pin.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-HASHALIGNMENT-P",
+          "polarity": "positive",
+          "expected": "Independent vectors agree for supported byte/field alignments and hash padding/domain rules."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-HASHALIGNMENT-N",
+          "polarity": "negative",
+          "expected": "Reject unsupported Option/Compress alignments, malformed widths and assumptions that similarly named source hash APIs have identical semantics."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    },
+    {
+      "id": "ZKIR-REQ-MALICIOUSWITNESS",
+      "requirement": "Treat unchecked/internal prover witnesses as adversarial. Honest checker rejection alone is insufficient evidence of circuit soundness or privacy.",
+      "status": "unverified-complete",
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPES",
+        "ZKIR-TYPEPASS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-CASE-REQ-MALICIOUSWITNESS-P",
+          "polarity": "positive",
+          "expected": "Valid relations satisfy independent circuit/verification checks."
+        },
+        {
+          "id": "ZKIR-CASE-REQ-MALICIOUSWITNESS-N",
+          "polarity": "negative",
+          "expected": "Attempt Native Assert=2, unchecked range overflow, false-guard transcript substitution, forged outputs and activity/commitment changes."
+        }
+      ],
+      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+    }
+  ],
+  "entries": [
+    {
+      "id": "ZKIR-OP-ENCODE",
+      "kind": "instruction",
+      "symbol": "Encode",
+      "jsonOpcode": "encode",
+      "binaryVariantOrdinal": 0,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-ENCODE"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L423",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "All 15 typed values to canonical Native limbs, including Bytes chunks of 31 bytes.",
+        "preconditionsAndLimits": "Output count equals IrType.encoded_len; encoding computes representation, not a public release."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PUBLICBINDING",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-ENCODE-P",
+          "polarity": "positive",
+          "expected": "Round-trip every typed value and identity with the exact limb count. Cover Bytes lengths 1, 31, 32, 62 and 63."
+        },
+        {
+          "id": "ZKIR-OP-ENCODE-N",
+          "polarity": "negative",
+          "expected": "Reject wrong output count and implicit publication without the public-binding path."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-ASSERT",
+      "kind": "instruction",
+      "symbol": "Assert",
+      "jsonOpcode": "assert",
+      "binaryVariantOrdinal": 1,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L432",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "A source Boolean assertion on Native bits.",
+        "preconditionsAndLimits": "Documented UB for non-bits; preprocessing requires 1, circuit asserts nonzero. Compiler must establish Booleanity."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-BOOLEAN"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-ASSERT-P",
+          "polarity": "positive",
+          "expected": "Accept constrained Native 1 and true equality outputs."
+        },
+        {
+          "id": "ZKIR-OP-ASSERT-N",
+          "polarity": "negative",
+          "expected": "Reject Native 0 and malicious Native 2 even when bypassing honest preprocessing."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-RAW321-BOOL",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-COND-SELECT",
+      "kind": "instruction",
+      "symbol": "CondSelect",
+      "jsonOpcode": "cond_select",
+      "binaryVariantOrdinal": 2,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-SELECT"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L452",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Eager value selection using a Native bit across implemented in-circuit overloads.",
+        "preconditionsAndLimits": "Both arms resolve. Native bit is converted in-circuit. Same types required. Off-circuit accepts Bytes but in-circuit has no Bytes arm. Selection does not suppress evaluation of a partial inactive-arm operation, including zero inversion or affine extraction from a Weierstrass identity."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-BOOLEAN",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PUBLICBINDING"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-COND-SELECT-P",
+          "polarity": "positive",
+          "expected": "Select both arms for supported Native/Bool/Byte/field/point overloads with same types."
+        },
+        {
+          "id": "ZKIR-OP-COND-SELECT-N",
+          "polarity": "negative",
+          "expected": "Reject mixed types, Native 2 selector, unresolved inactive arm and raw Bytes selection; lower bytewise only after separate validation."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-RAW321-BOOL",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-CONSTRAIN-BITS",
+      "kind": "instruction",
+      "symbol": "ConstrainBits",
+      "jsonOpcode": "constrain_bits",
+      "binaryVariantOrdinal": 3,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L465",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Constrain Native to an unsigned bit bound.",
+        "preconditionsAndLimits": "Preprocess rejects bits >= FR_BITS; synthesis uses assigned_to_le_bits with a different full-width mode. Safe compiler must choose audited common range."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RANGES"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-CONSTRAIN-BITS-P",
+          "polarity": "positive",
+          "expected": "Accept zero and 2^bits - 1 for audited widths, including width 0 where supported."
+        },
+        {
+          "id": "ZKIR-OP-CONSTRAIN-BITS-N",
+          "polarity": "negative",
+          "expected": "Reject 2^bits, excessive width and unsafe widths before backend calls."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-RAW321-BOOL",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-CONSTRAIN-EQ",
+      "kind": "instruction",
+      "symbol": "ConstrainEq",
+      "jsonOpcode": "constrain_eq",
+      "binaryVariantOrdinal": 4,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-CONSTRAIN-EQ"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L487",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Equality constraints for all 15  matching types, including same-length Bytes.",
+        "preconditionsAndLimits": "Exact type/length match required; native field equality is modular field equality."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-CONSTRAIN-EQ-P",
+          "polarity": "positive",
+          "expected": "Accept equal independently generated values across each type and identity."
+        },
+        {
+          "id": "ZKIR-OP-CONSTRAIN-EQ-N",
+          "polarity": "negative",
+          "expected": "Reject unequal values, mixed types and Bytes length mismatch."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-RAW321-BOOL",
+          "E-RAW321-JUBJUB",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-CONSTRAIN-TO-BOOLEAN",
+      "kind": "instruction",
+      "symbol": "ConstrainToBoolean",
+      "jsonOpcode": "constrain_to_boolean",
+      "binaryVariantOrdinal": 5,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L496",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Constrain a Native value to0/1.",
+        "preconditionsAndLimits": "Consumes Native, not IrType::Bool; in-circuit convert inserts the bit constraint."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-BOOLEAN"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-CONSTRAIN-TO-BOOLEAN-P",
+          "polarity": "positive",
+          "expected": "Accept 0 and 1 from inputs and arithmetic-derived values."
+        },
+        {
+          "id": "ZKIR-OP-CONSTRAIN-TO-BOOLEAN-N",
+          "polarity": "negative",
+          "expected": "Reject 2 and non-Native operands including an unencoded typed Bool."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-RAW321-BOOL",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-COPY",
+      "kind": "instruction",
+      "symbol": "Copy",
+      "jsonOpcode": "copy",
+      "binaryVariantOrdinal": 6,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L504",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Copy an already defined value without new relation constraints.",
+        "preconditionsAndLimits": "Typed aliases must preserve identity and visibility. Redefinition/use-before-definition remain compiler errors."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PUBLICBINDING"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-COPY-P",
+          "polarity": "positive",
+          "expected": "Copy each type, including immutable Bytes values."
+        },
+        {
+          "id": "ZKIR-OP-COPY-N",
+          "polarity": "negative",
+          "expected": "Reject unknown source and type/visibility laundering through aliases."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-IMPACT",
+      "kind": "instruction",
+      "symbol": "Impact",
+      "jsonOpcode": "impact",
+      "binaryVariantOrdinal": 7,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L521",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Guarded sequence of Native public inputs with one activity/skip entry per instruction.",
+        "preconditionsAndLimits": "Guard is Native 0/1; inactive group contributes zero PI slots plus Some(count), active group consumes public transcript inputs. All operands must be Native in circuit even if inactive."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee. Existing ledger evidence covers only the always-active scalar claim and empty explicit native return signature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-BOOLEAN",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PUBLICBINDING",
+        "ZKIR-REQ-COMMITMENT",
+        "ZKIR-REQ-LEDGERTRANSCRIPT"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-IMPACT-P",
+          "polarity": "positive",
+          "expected": "Bind active groups and zero inactive groups while preserving exact per-VM-op activity boundaries."
+        },
+        {
+          "id": "ZKIR-OP-IMPACT-N",
+          "polarity": "negative",
+          "expected": "Reject 2 guard, unsupported input types, changed group order/width, mismatched public inputs and private-dependent activity without release."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-EC-MUL",
+      "kind": "instruction",
+      "symbol": "EcMul",
+      "jsonOpcode": "ec_mul",
+      "binaryVariantOrdinal": 8,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-EC-MUL"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L538",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Point times matching scalar for Jubjub, K256, P256 and Curve25519.",
+        "preconditionsAndLimits": "Operand curve families match and point/scalar encodings satisfy audited membership/canonical rules."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-EC-MUL-P",
+          "polarity": "positive",
+          "expected": "Independent scalar 0/1/order - 1 vectors and subgroup/identity behavior for each curve."
+        },
+        {
+          "id": "ZKIR-OP-EC-MUL-N",
+          "polarity": "negative",
+          "expected": "Reject wrong curve/scalar family, invalid point encoding and unvalidated subgroup assumptions."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-EC-MUL-GENERATOR",
+      "kind": "instruction",
+      "symbol": "EcMulGenerator",
+      "jsonOpcode": "ec_mul_generator",
+      "binaryVariantOrdinal": 9,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L557",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Generator times Jubjub/K256/P256/Curve25519 scalar; result curve follows scalar type.",
+        "preconditionsAndLimits": "Scalar must have typed matching curve field. Intermediate-only chip inference regression fixed in 3.2.1."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-EC-MUL-GENERATOR-P",
+          "polarity": "positive",
+          "expected": "Known generator multiples for all four curves and intermediate scalar sources."
+        },
+        {
+          "id": "ZKIR-OP-EC-MUL-GENERATOR-N",
+          "polarity": "negative",
+          "expected": "Reject Native masquerading as typed scalar and old missing-chip keygen regression."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-RAW321-JUBJUB"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-HASH-TO-CURVE",
+      "kind": "instruction",
+      "symbol": "HashToCurve",
+      "jsonOpcode": "hash_to_curve",
+      "binaryVariantOrdinal": 10,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L567",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Native sequence to a Jubjub point via pinned transient hash-to-curve implementation.",
+        "preconditionsAndLimits": "Inputs are Native and domain/serialization rules need exact independent vectors."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-HASH-TO-CURVE-P",
+          "polarity": "positive",
+          "expected": "Known empty/single/multiple-element vectors where specified, domain-separated applications."
+        },
+        {
+          "id": "ZKIR-OP-HASH-TO-CURVE-N",
+          "polarity": "negative",
+          "expected": "Reject non-Native inputs and public/private-domain substitution."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-INTO-COORDINATES",
+      "kind": "instruction",
+      "symbol": "IntoCoordinates",
+      "jsonOpcode": "into_coordinates",
+      "binaryVariantOrdinal": 11,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-INTO-COORDINATES"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L584",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Affine coordinates for all four curves. Jubjub gives Native, others give matching base fields.",
+        "preconditionsAndLimits": "K256/P256 identity has no affine coordinates and must fail. Edwards identities follow their own encoding."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-INTO-COORDINATES-P",
+          "polarity": "positive",
+          "expected": "Round-trip nonidentity points and valid Edwards identity coordinates."
+        },
+        {
+          "id": "ZKIR-OP-INTO-COORDINATES-N",
+          "polarity": "negative",
+          "expected": "Reject Weierstrass identity coordinate extraction and nonpoint operands. An inactive input defaulting to a Weierstrass identity must not reach eager coordinate extraction without a valid totalizing replacement."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-FROM-COORDINATES",
+      "kind": "instruction",
+      "symbol": "FromCoordinates",
+      "jsonOpcode": "from_coordinates",
+      "binaryVariantOrdinal": 12,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-FROM-COORDINATES"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L601",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Construct Jubjub, K256, P256 and Curve25519 points from matching base-coordinate pairs.",
+        "preconditionsAndLimits": "Validate curve equation and required subgroup. Weierstrass identity cannot be constructed this way."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-FROM-COORDINATES-P",
+          "polarity": "positive",
+          "expected": "Known valid coordinates and supported Edwards identity cases."
+        },
+        {
+          "id": "ZKIR-OP-FROM-COORDINATES-N",
+          "polarity": "negative",
+          "expected": "Reject off-curve/non-subgroup coordinates, mixed base fields and invented Weierstrass identity coordinates."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-INTO-BYTES32",
+      "kind": "instruction",
+      "symbol": "IntoBytes32",
+      "jsonOpcode": "into_bytes32",
+      "binaryVariantOrdinal": 13,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-TO-BYTES"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L625",
+      "lifecycle": {
+        "status": "deprecated",
+        "replacement": "ToBytes",
+        "note": "Prefer modern replacement in new emission."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Legacy fixed 32-byte ToBytes wrapper.",
+        "preconditionsAndLimits": "Formally deprecated. VM delegates ToBytes then checks 32 bytes; enum prime-field-only prose is narrower than actual helper delegation."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-INTO-BYTES32-P",
+          "polarity": "positive",
+          "expected": "Legacy field vectors and any 32-byte helper-supported point encoding under a compatibility profile."
+        },
+        {
+          "id": "ZKIR-OP-INTO-BYTES32-N",
+          "polarity": "negative",
+          "expected": "Reject 33-byte SEC1 point encoding and unsupported types; new emission should use ToBytes."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-FROM-BYTES32",
+      "kind": "instruction",
+      "symbol": "FromBytes32",
+      "jsonOpcode": "from_bytes32",
+      "binaryVariantOrdinal": 14,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-FROM-BYTES"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L648",
+      "lifecycle": {
+        "status": "deprecated",
+        "replacement": "FromBytes",
+        "note": "Prefer modern replacement in new emission."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Legacy fixed 32-byte FromBytes wrapper.",
+        "preconditionsAndLimits": "Formally deprecated. Requires Bytes<32> before helper dispatch; enum prime-field-only prose is narrower than VM helper delegation."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-FROM-BYTES32-P",
+          "polarity": "positive",
+          "expected": "Legacy field reduction and audited 32-byte point decoding under compatibility rules."
+        },
+        {
+          "id": "ZKIR-OP-FROM-BYTES32-N",
+          "polarity": "negative",
+          "expected": "Reject wrong input size, invalid canonical point and unsupported output type; new emission should use FromBytes."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-REVERSE-BYTES",
+      "kind": "instruction",
+      "symbol": "ReverseBytes",
+      "jsonOpcode": "reverse_bytes",
+      "binaryVariantOrdinal": 15,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L664",
+      "lifecycle": {
+        "status": "deprecated",
+        "replacement": "Reverse",
+        "note": "Prefer modern replacement in new emission."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Legacy name of Reverse on Bytes(n).",
+        "preconditionsAndLimits": "Formally deprecated; VM shares the exact same reverse arm."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-REVERSE-BYTES-P",
+          "polarity": "positive",
+          "expected": "Reverse 32-byte legacy fixtures and arbitrary supported fixed byte lengths."
+        },
+        {
+          "id": "ZKIR-OP-REVERSE-BYTES-N",
+          "polarity": "negative",
+          "expected": "Reject non-Bytes; preserve byte order through modern replacement."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-BYTES32-INTO-LOW-HIGH",
+      "kind": "instruction",
+      "symbol": "Bytes32IntoLowHigh",
+      "jsonOpcode": "bytes32_into_low_high",
+      "binaryVariantOrdinal": 16,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-ENCODE"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L688",
+      "lifecycle": {
+        "status": "deprecated",
+        "replacement": "BytesIntoNatives",
+        "note": "Prefer modern replacement in new emission."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Legacy Bytes<32> to low 31-byte/high one-byte Native pair.",
+        "preconditionsAndLimits": "Formally deprecated. Input must be exactly Bytes<32>."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-BYTES32-INTO-LOW-HIGH-P",
+          "polarity": "positive",
+          "expected": "Round-trip boundary chunks and byte-order vectors."
+        },
+        {
+          "id": "ZKIR-OP-BYTES32-INTO-LOW-HIGH-N",
+          "polarity": "negative",
+          "expected": "Reject wrong input length/type and changed low/high ordering."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-BYTES32-FROM-LOW-HIGH",
+      "kind": "instruction",
+      "symbol": "Bytes32FromLowHigh",
+      "jsonOpcode": "bytes32_from_low_high",
+      "binaryVariantOrdinal": 17,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-TO-BYTES"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L720",
+      "lifecycle": {
+        "status": "deprecated",
+        "replacement": "BytesFromNatives",
+        "note": "Prefer modern replacement in new emission."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Legacy composition of a supported 32-byte low encoding with one Native high byte, returning Bytes<32>.",
+        "preconditionsAndLimits": "Formally deprecated. Preprocessing delegates both operands through ToBytes. Synthesis requires high to be exact Native, converts high to a constrained byte, and delegates low through any supported 32-byte ToBytes encoding before requiring byte 31 to be zero. Low therefore includes helper-supported Edwards point encodings. A conservative fresh-source Native/Native ABI must not be mistaken for the entire permissive raw wrapper. Native low must be below 2^248 and Native high below 256."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RANGES"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-BYTES32-FROM-LOW-HIGH-P",
+          "polarity": "positive",
+          "expected": "Reconstruct Native low zero/maximal 31-byte values with Native high zero/255. Separately audit compatible 32-byte low encodings against both preprocessing and synthesis."
+        },
+        {
+          "id": "ZKIR-OP-BYTES32-FROM-LOW-HIGH-N",
+          "polarity": "negative",
+          "expected": "Reject excess low byte 31, Native high at or above 256, unsupported low encodings and non-Native high values even when preprocessing ToBytes would accept them."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-DIV-MOD-POWER-OF-TWO",
+      "kind": "instruction",
+      "symbol": "DivModPowerOfTwo",
+      "jsonOpcode": "div_mod_power_of_two",
+      "binaryVariantOrdinal": 18,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L732",
+      "lifecycle": {
+        "status": "deprecated",
+        "replacement": null,
+        "note": "No direct replacement documented; safe desugaring needs a separate equivalence proof."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Legacy Native split into quotient and remainder by 2^bits.",
+        "preconditionsAndLimits": "Formally deprecated, no direct replacement documented. Exactly two outputs and audited bit width required."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RANGES"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-DIV-MOD-POWER-OF-TWO-P",
+          "polarity": "positive",
+          "expected": "Split/recompose 0, field maximum and bit-boundary vectors under a compatibility policy."
+        },
+        {
+          "id": "ZKIR-OP-DIV-MOD-POWER-OF-TWO-N",
+          "polarity": "negative",
+          "expected": "Reject wrong output count/excessive bits and any unchecked range weakening in a desugaring."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-RECONSTITUTE-FIELD",
+      "kind": "instruction",
+      "symbol": "ReconstituteField",
+      "jsonOpcode": "reconstitute_field",
+      "binaryVariantOrdinal": 19,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L747",
+      "lifecycle": {
+        "status": "deprecated",
+        "replacement": null,
+        "note": "No direct replacement documented; safe desugaring needs a separate equivalence proof."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Legacy quotient<<bits plus remainder with canonical Native result.",
+        "preconditionsAndLimits": "Formally deprecated, no direct replacement documented. Bound both parts and rule out field overflow."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RANGES"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-RECONSTITUTE-FIELD-P",
+          "polarity": "positive",
+          "expected": "Inverse valid legacy split, including modulus boundary cases."
+        },
+        {
+          "id": "ZKIR-OP-RECONSTITUTE-FIELD-N",
+          "polarity": "negative",
+          "expected": "Reject remainder >= 2^bits, excessive bits and recomposed integer >= native modulus."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-TRANSIENT-HASH",
+      "kind": "instruction",
+      "symbol": "TransientHash",
+      "jsonOpcode": "transient_hash",
+      "binaryVariantOrdinal": 20,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L760",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Native sequence to Native via pinned Poseidon/transient_hash.",
+        "preconditionsAndLimits": "Exact domain tags and input sequence matter. General source API parity is separate from this opcode."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-TRANSIENT-HASH-P",
+          "polarity": "positive",
+          "expected": "Independent known domain/input vectors including existing two-input claim domains."
+        },
+        {
+          "id": "ZKIR-OP-TRANSIENT-HASH-N",
+          "polarity": "negative",
+          "expected": "Reject non-Native operands, reordered/domain-swapped values and mismatched public hash outputs."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-PERSISTENT-HASH",
+      "kind": "instruction",
+      "symbol": "PersistentHash",
+      "jsonOpcode": "persistent_hash",
+      "binaryVariantOrdinal": 21,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L770",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "SHA-256 digest of supported FAB-aligned binary representation to Bytes<32>.",
+        "preconditionsAndLimits": "Native limb inputs. In-circuit alignment Option and Compress paths fail; name alone does not establish Compact generic persistentHash equivalence."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-HASHALIGNMENT"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-PERSISTENT-HASH-P",
+          "polarity": "positive",
+          "expected": "Independent SHA-256 vectors over exact supported FAB bytes and boundary lengths."
+        },
+        {
+          "id": "ZKIR-OP-PERSISTENT-HASH-N",
+          "polarity": "negative",
+          "expected": "Reject unsupported alignments, malformed field/byte alignment counts and wrong expected digest."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-KECCAK256",
+      "kind": "instruction",
+      "symbol": "Keccak256",
+      "jsonOpcode": "keccak256",
+      "binaryVariantOrdinal": 22,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L782",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Keccak-256 digest of supported FAB-aligned bytes to Bytes<32>.",
+        "preconditionsAndLimits": "Native limb inputs, supported alignments and Keccak padding distinct from SHA3-256."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-HASHALIGNMENT"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-KECCAK256-P",
+          "polarity": "positive",
+          "expected": "Known Keccak vectors over exact FAB bytes including empty input if allowed."
+        },
+        {
+          "id": "ZKIR-OP-KECCAK256-N",
+          "polarity": "negative",
+          "expected": "Reject SHA3-256 substitution, unsupported alignments and malformed input counts."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-TEST-EQ",
+      "kind": "instruction",
+      "symbol": "TestEq",
+      "jsonOpcode": "test_eq",
+      "binaryVariantOrdinal": 23,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-EQ"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L806",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Typed equality test producing Native 0/1, including Bool/Byte/Bytes.",
+        "preconditionsAndLimits": "Matching type required. Off-circuit unequal Bytes lengths return false, in-circuit only same-length Bytes supported."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-TEST-EQ-P",
+          "polarity": "positive",
+          "expected": "Equal/unequal pairs across all matching types and same-length byte strings."
+        },
+        {
+          "id": "ZKIR-OP-TEST-EQ-N",
+          "polarity": "negative",
+          "expected": "Reject mixed types and mismatched Bytes lengths before synthesis."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-RAW321-BOOL",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-ADD",
+      "kind": "instruction",
+      "symbol": "Add",
+      "jsonOpcode": "add",
+      "binaryVariantOrdinal": 24,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-ADD"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L830",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Native/curve-field addition and point group addition for all four curves.",
+        "preconditionsAndLimits": "Matching arithmetic types only. Bool/Byte/Bytes are not numeric overloads. Source bounded integers need separate bounds."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-ADD-P",
+          "polarity": "positive",
+          "expected": "Field wraparound and independent curve group/identity vectors."
+        },
+        {
+          "id": "ZKIR-OP-ADD-N",
+          "polarity": "negative",
+          "expected": "Reject mixed curves/types and unsigned overflow escaping declared source bound."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-MUL",
+      "kind": "instruction",
+      "symbol": "Mul",
+      "jsonOpcode": "mul",
+      "binaryVariantOrdinal": 25,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-MUL"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L850",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Multiplication for Native and all supported curve scalar/base fields.",
+        "preconditionsAndLimits": "No point/Bool/Byte/Bytes multiplication. Point-scalar multiplication is EcMul."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-MUL-P",
+          "polarity": "positive",
+          "expected": "Independent field 0/1/max products and bounded-integer widening boundaries."
+        },
+        {
+          "id": "ZKIR-OP-MUL-N",
+          "polarity": "negative",
+          "expected": "Reject point multiplication through Mul, mixed fields and result-bound overflow."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-NEG",
+      "kind": "instruction",
+      "symbol": "Neg",
+      "jsonOpcode": "neg",
+      "binaryVariantOrdinal": 26,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-NEG"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L874",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Additive inverse for Native and all supported fields/curve points.",
+        "preconditionsAndLimits": "Matching typed field/group semantics; source unsigned subtraction is a separate checked operation."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-NEG-P",
+          "polarity": "positive",
+          "expected": "Negate 0/1/max and point identity/generator vectors."
+        },
+        {
+          "id": "ZKIR-OP-NEG-N",
+          "polarity": "negative",
+          "expected": "Reject Bool/Byte/Bytes and unsigned underflow silently interpreted as field wraparound."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-INV",
+      "kind": "instruction",
+      "symbol": "Inv",
+      "jsonOpcode": "inv",
+      "binaryVariantOrdinal": 27,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-INV"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L892",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Multiplicative inverse for Native and supported scalar/base fields.",
+        "preconditionsAndLimits": "Zero is an error. No point or byte/Boolean inverse. Guarded source use needs a totalized inactive input."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-INV-P",
+          "polarity": "positive",
+          "expected": "Independent nonzero inverse vectors and multiplicative identity checks."
+        },
+        {
+          "id": "ZKIR-OP-INV-N",
+          "polarity": "negative",
+          "expected": "Reject zero, unsupported types and invalid private guard totalization."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-NOT",
+      "kind": "instruction",
+      "symbol": "Not",
+      "jsonOpcode": "not",
+      "binaryVariantOrdinal": 28,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L901",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Boolean negation over Native 0/1, producing Native 0/1.",
+        "preconditionsAndLimits": "This legacy bit operation differs from typed Bool And/Or/Xor. Input converted to constrained bit in circuit."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-BOOLEAN"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-NOT-P",
+          "polarity": "positive",
+          "expected": "Native 0 -> 1 and 1 -> 0, including encoded typed Bool bridge."
+        },
+        {
+          "id": "ZKIR-OP-NOT-N",
+          "polarity": "negative",
+          "expected": "Reject Native 2 and direct typed Bool without an explicit supported encoding bridge."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-LESS-THAN",
+      "kind": "instruction",
+      "symbol": "LessThan",
+      "jsonOpcode": "less_than",
+      "binaryVariantOrdinal": 29,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L911",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Native bounded unsigned comparison yielding Native 0/1.",
+        "preconditionsAndLimits": "Documented UB outside bits. Preprocess checks ranges, synthesis rounds bits up to even and at least 4 before lower_than. Compiler must separately constrain original bounds."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RANGES"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-LESS-THAN-P",
+          "polarity": "positive",
+          "expected": "Zero, maximum, equal and adjacent values for audited widths including odd/small widths."
+        },
+        {
+          "id": "ZKIR-OP-LESS-THAN-N",
+          "polarity": "negative",
+          "expected": "Reject operands >= 2^original_bits and malicious out-of-range witness bypassing honest preprocess."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-RAW321-BOOL",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-JUBJUB-SCALAR-FROM-NATIVE",
+      "kind": "instruction",
+      "symbol": "JubjubScalarFromNative",
+      "jsonOpcode": "jubjub_scalar_from_native",
+      "binaryVariantOrdinal": 30,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-ENCODE"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L925",
+      "lifecycle": {
+        "status": "planned-retirement-note",
+        "replacement": null,
+        "note": "Future removal/temporary bridge note does not imply absence in this pin."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Native reduced modulo Jubjub scalar order.",
+        "preconditionsAndLimits": "Marked for future removal when BigUint arrives, not one of seven formally deprecated instructions. Source canonical conversion semantics must be explicit."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-JUBJUB-SCALAR-FROM-NATIVE-P",
+          "polarity": "positive",
+          "expected": "0/order - 1/order/Native field maximum reduction vectors and intermediate chip regression."
+        },
+        {
+          "id": "ZKIR-OP-JUBJUB-SCALAR-FROM-NATIVE-N",
+          "polarity": "negative",
+          "expected": "Reject wrong source type and assuming this conversion preserves Native integer injectivity."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-RAW321-JUBJUB"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-PUBLIC-INPUT",
+      "kind": "instruction",
+      "symbol": "PublicInput",
+      "jsonOpcode": "public_input",
+      "binaryVariantOrdinal": 31,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L943",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Read next typed public transcript output or a typed default when guarded off during preprocessing.",
+        "preconditionsAndLimits": "In circuit allocates free typed witness. Guard is ignored. This is not itself a public-input binding. Short raw transcripts use unchecked slices in preprocessing."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee. Existing ledger evidence covers only the always-active scalar claim and empty explicit native return signature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-GUARDEDINPUTS",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-PRIVATEHOST",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PUBLICBINDING",
+        "ZKIR-REQ-COMMITMENT",
+        "ZKIR-REQ-LEDGERTRANSCRIPT"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-PUBLIC-INPUT-P",
+          "polarity": "positive",
+          "expected": "Guarded/default read cases with exact typed consumption plus separate audited public binding."
+        },
+        {
+          "id": "ZKIR-OP-PUBLIC-INPUT-N",
+          "polarity": "negative",
+          "expected": "Reject missing/extra transcripts, wrong types, malicious free-witness substitution and public-unbound source declarations."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-PRIVATE-INPUT",
+      "kind": "instruction",
+      "symbol": "PrivateInput",
+      "jsonOpcode": "private_input",
+      "binaryVariantOrdinal": 32,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L966",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Read next typed private transcript value or typed default when guarded off during preprocessing.",
+        "preconditionsAndLimits": "In circuit allocates free typed witness. Guard is ignored. Host witness execution/side effects are not defined by this opcode. Short raw transcripts use unchecked slices."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee. Existing ledger evidence covers only the always-active scalar claim and empty explicit native return signature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-GUARDEDINPUTS",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-PRIVATEHOST",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PUBLICBINDING"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-PRIVATE-INPUT-P",
+          "polarity": "positive",
+          "expected": "Exact private transcript order, inactive defaults and a constrained downstream relation."
+        },
+        {
+          "id": "ZKIR-OP-PRIVATE-INPUT-N",
+          "polarity": "negative",
+          "expected": "Reject short/extra/mistyped transcripts, forged inactive witness assumptions and leaking witness-dependent effects."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-OUTPUT",
+      "kind": "instruction",
+      "symbol": "Output",
+      "jsonOpcode": "output",
+      "binaryVariantOrdinal": 33,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L981",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Accumulate typed result values with exact output-signature matching; optionally included in communications commitment.",
+        "preconditionsAndLimits": "Prose says terminator but VM loops continue. Require exactly one final Output in Nightlean. Output alone is not Impact/public release."
+      },
+      "safeLeanSourceSupport": {
+        "status": "scalar-subset-lowering-observed",
+        "scope": "Current lowering uses Native representations, constrained Native source Bool and recently added bounded-scalar definitions. No general guarded disclosure guarantee. Existing ledger evidence covers only the always-active scalar claim and empty explicit native return signature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PUBLICBINDING",
+        "ZKIR-REQ-COMMITMENT",
+        "ZKIR-REQ-LEDGERTRANSCRIPT"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-OUTPUT-P",
+          "polarity": "positive",
+          "expected": "Exact arity/type final output plus valid communications commitment where enabled."
+        },
+        {
+          "id": "ZKIR-OP-OUTPUT-N",
+          "polarity": "negative",
+          "expected": "Reject missing/multiple/nonfinal Output, wrong arity/type and changed committed outputs."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-RAW321-BOOL",
+          "E-RAW321-JUBJUB",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-SLICE",
+      "kind": "instruction",
+      "symbol": "Slice",
+      "jsonOpcode": "slice",
+      "binaryVariantOrdinal": 34,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L999",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Compile-time Bytes(n) subslice ->Bytes(len), selecting wires without new constraints.",
+        "preconditionsAndLimits": "len >= 1, start + len <= n, checked addition, Byte is not Bytes."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RESOURCE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-SLICE-P",
+          "polarity": "positive",
+          "expected": "First/last/full slices and byte ordering with fixed lengths."
+        },
+        {
+          "id": "ZKIR-OP-SLICE-N",
+          "polarity": "negative",
+          "expected": "Reject zero length, overflowing/out-of-bounds positions and non-Bytes input."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-NTH",
+      "kind": "instruction",
+      "symbol": "Nth",
+      "jsonOpcode": "nth",
+      "binaryVariantOrdinal": 35,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1020",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Compile-time index into Bytes(n), returning Byte.",
+        "preconditionsAndLimits": "0 <= index < n; no dynamic secret-index opcode."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RESOURCE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-NTH-P",
+          "polarity": "positive",
+          "expected": "First/last byte and each fixed index in independent vectors."
+        },
+        {
+          "id": "ZKIR-OP-NTH-N",
+          "polarity": "negative",
+          "expected": "Reject index >= n and non-Bytes input; do not replace a secret index with public compile-time structure."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-CONCAT",
+      "kind": "instruction",
+      "symbol": "Concat",
+      "jsonOpcode": "concat",
+      "binaryVariantOrdinal": 36,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1036",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Nonempty Byte/Bytes sequence ->fixed Bytes(sum lengths).",
+        "preconditionsAndLimits": "No empty result, only byte types and total length <= 2^24. Compiler resource limit should be much smaller."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RESOURCE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-CONCAT-P",
+          "polarity": "positive",
+          "expected": "Mixed Byte/Bytes concatenations preserving exact order."
+        },
+        {
+          "id": "ZKIR-OP-CONCAT-N",
+          "polarity": "negative",
+          "expected": "Reject empty list, wrong type and excessive length before allocation."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-LOAD-CONSTANT",
+      "kind": "instruction",
+      "symbol": "LoadConstant",
+      "jsonOpcode": "load_constant",
+      "binaryVariantOrdinal": 37,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-ASSIGN-CONSTANT"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1057",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Canonical typed fixed assignment for all 15 types.",
+        "preconditionsAndLimits": "Exact typed Native-limb encoding, all entries immediate not variable; fixed values must not bake private inputs into artifact."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-RESOURCE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-LOAD-CONSTANT-P",
+          "polarity": "positive",
+          "expected": "Canonical constants for every type/identity and intermediate chip inference."
+        },
+        {
+          "id": "ZKIR-OP-LOAD-CONSTANT-N",
+          "polarity": "negative",
+          "expected": "Reject malformed encodings, variable encoding entries, noncanonical point/field limbs and private data embedded as constants."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-SHA512",
+      "kind": "instruction",
+      "symbol": "Sha512",
+      "jsonOpcode": "sha512",
+      "binaryVariantOrdinal": 38,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1071",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "SHA-512 digest of supported FAB-aligned bytes ->Bytes64.",
+        "preconditionsAndLimits": "Same Native-limb/alignment restrictions as other byte hashes."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-HASHALIGNMENT"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-SHA512-P",
+          "polarity": "positive",
+          "expected": "Independent SHA-512 vectors including 64-byte hash-to-foreign-scalar reduction compositions."
+        },
+        {
+          "id": "ZKIR-OP-SHA512-N",
+          "polarity": "negative",
+          "expected": "Reject malformed alignment, unsupported Option/Compress and wrong digest/byte order."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-AND",
+      "kind": "instruction",
+      "symbol": "And",
+      "jsonOpcode": "and",
+      "binaryVariantOrdinal": 39,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1085",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Nonempty list of typed Bool values ->typed Bool conjunction.",
+        "preconditionsAndLimits": "Native 0/1 is not IrType::Bool. No implicit short-circuit witness/ledger effects."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-AND-P",
+          "polarity": "positive",
+          "expected": "Truth-table and long-list conjunction vectors over typed Bool."
+        },
+        {
+          "id": "ZKIR-OP-AND-N",
+          "polarity": "negative",
+          "expected": "Reject empty list, Native bits and secret-dependent host effects disguised as a Boolean gate."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-OR",
+      "kind": "instruction",
+      "symbol": "Or",
+      "jsonOpcode": "or",
+      "binaryVariantOrdinal": 40,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1097",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Nonempty list of typed Bool values ->typed Bool disjunction.",
+        "preconditionsAndLimits": "Native 0/1 is not IrType::Bool. Gate evaluation does not implement source short-circuit effects."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-OR-P",
+          "polarity": "positive",
+          "expected": "Truth-table and long-list disjunction vectors over typed Bool."
+        },
+        {
+          "id": "ZKIR-OP-OR-N",
+          "polarity": "negative",
+          "expected": "Reject empty list, Native bits and unguarded host/deserialization effects in inactive branches."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-XOR",
+      "kind": "instruction",
+      "symbol": "Xor",
+      "jsonOpcode": "xor",
+      "binaryVariantOrdinal": 41,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1109",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Nonempty list of typed Bool values ->typed Bool parity.",
+        "preconditionsAndLimits": "Native 0/1 is not IrType::Bool. Explicit typed/native representation bridge required for control ops."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-XOR-P",
+          "polarity": "positive",
+          "expected": "Truth-table and even/odd parity vectors."
+        },
+        {
+          "id": "ZKIR-OP-XOR-N",
+          "polarity": "negative",
+          "expected": "Reject empty list, non-Bool inputs and silent representation confusion."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-TO-BYTES",
+      "kind": "instruction",
+      "symbol": "ToBytes",
+      "jsonOpcode": "to_bytes",
+      "binaryVariantOrdinal": 42,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-TO-BYTES"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1137",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Prime fields ->32 little-endian canonical bytes; Edwards points->32 compressed bytes; Weierstrass points->33 SEC1 compressed bytes.",
+        "preconditionsAndLimits": "No Bool/Byte/Bytes overload. Identity encodings are curve-specific, including padded-zero SEC1 identity."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-TO-BYTES-P",
+          "polarity": "positive",
+          "expected": "Independent field/point/identity byte vectors for all supported types."
+        },
+        {
+          "id": "ZKIR-OP-TO-BYTES-N",
+          "polarity": "negative",
+          "expected": "Reject unsupported types, wrong byte order/length and noncanonical point representations."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-FROM-BYTES",
+      "kind": "instruction",
+      "symbol": "FromBytes",
+      "jsonOpcode": "from_bytes",
+      "binaryVariantOrdinal": 43,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-FROM-BYTES"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1169",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Bytes(n) to supported prime fields by modular reduction, or to points by exact canonical compressed decoding.",
+        "preconditionsAndLimits": "Field reduction accepts noncanonical integers, point decoding rejects noncanonical encodings. No Bool/Byte/Bytes output overload."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-FROM-BYTES-P",
+          "polarity": "positive",
+          "expected": "Field zero/modulus/modulus plus one/64-byte reduction and canonical point/identity roundtrips."
+        },
+        {
+          "id": "ZKIR-OP-FROM-BYTES-N",
+          "polarity": "negative",
+          "expected": "Reject invalid/noncanonical point encodings, wrong point widths and treating reduction as strict canonical deserialization."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-REVERSE",
+      "kind": "instruction",
+      "symbol": "Reverse",
+      "jsonOpcode": "reverse",
+      "binaryVariantOrdinal": 44,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1185",
+      "lifecycle": {
+        "status": "current",
+        "replacement": null,
+        "note": ""
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Reverse byte order of Bytes(n).",
+        "preconditionsAndLimits": "Byte alone and non-Bytes types rejected; length preserved."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-REVERSE-P",
+          "polarity": "positive",
+          "expected": "Odd/even fixed lengths and reverse-twice identity."
+        },
+        {
+          "id": "ZKIR-OP-REVERSE-N",
+          "polarity": "negative",
+          "expected": "Reject wrong input type and mistaken scalar-endianness conversions without explicit byte semantics."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-BYTES-INTO-NATIVES",
+      "kind": "instruction",
+      "symbol": "BytesIntoNatives",
+      "jsonOpcode": "bytes_into_natives",
+      "binaryVariantOrdinal": 45,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-ENCODE"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1221",
+      "lifecycle": {
+        "status": "planned-retirement-note",
+        "replacement": null,
+        "note": "Future removal/temporary bridge note does not imply absence in this pin."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Bytes(n) ->ceil(n/31) Native chunks in little-endian order.",
+        "preconditionsAndLimits": "Exact output count. Temporary compatibility bridge note, not formally deprecated. Packing does not publish values."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RESOURCE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-BYTES-INTO-NATIVES-P",
+          "polarity": "positive",
+          "expected": "Boundary lengths 1/31/32/62/63 and inverse reassembly."
+        },
+        {
+          "id": "ZKIR-OP-BYTES-INTO-NATIVES-N",
+          "polarity": "negative",
+          "expected": "Reject wrong type/count and using these chunks as a different FAB alignment without validation."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-OP-BYTES-FROM-NATIVES",
+      "kind": "instruction",
+      "symbol": "BytesFromNatives",
+      "jsonOpcode": "bytes_from_natives",
+      "binaryVariantOrdinal": 46,
+      "sources": [
+        "ZKIR-IR",
+        "ZKIR-VM",
+        "ZKIR-TYPEPASS",
+        "ZKIR-HELPER-ENCODE"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir.rs#L1258",
+      "lifecycle": {
+        "status": "planned-retirement-note",
+        "replacement": null,
+        "note": "Future removal/temporary bridge note does not imply absence in this pin."
+      },
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "ceil(len / 31) Native chunks ->Bytes(len) with per-chunk range checks.",
+        "preconditionsAndLimits": "1 <= len <= 2^24, exact count, each chunk < 2^(8 * contributed_bytes). Temporary bridge note, not formally deprecated."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-by-current-lean-lowerer",
+        "scope": "Backend source availability does not establish a safe source feature.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-WELLFORMED",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS",
+        "ZKIR-REQ-RANGES",
+        "ZKIR-REQ-RESOURCE"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-OP-BYTES-FROM-NATIVES-P",
+          "polarity": "positive",
+          "expected": "Boundary lengths/chunks with zero/max values and packing roundtrip."
+        },
+        {
+          "id": "ZKIR-OP-BYTES-FROM-NATIVES-N",
+          "polarity": "negative",
+          "expected": "Reject wrong count/length and any excess high bits, including the short final chunk."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeOverloadQualification": false
+      }
+    },
+    {
+      "id": "ZKIR-TYPE-NATIVE",
+      "kind": "value-type",
+      "symbol": "Native",
+      "jsonType": "Scalar<BLS12-381>",
+      "sourceDeclarationOrdinal": 0,
+      "nativeEncodingWidth": 1,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L62",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "BLS12-381 scalar field, also the Jubjub base field. Canonical Native values are below 52435875175126190479447740508185965837690552500527637822603658699938581184513."
+      },
+      "safeLeanSourceSupport": {
+        "status": "native-representation-subset",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-NATIVE-P",
+          "polarity": "positive",
+          "expected": "Zero, one, modulus minus one, field wraparound and constrained Native Bool/Uint boundaries."
+        },
+        {
+          "id": "ZKIR-TYPE-NATIVE-N",
+          "polarity": "negative",
+          "expected": "Reject the modulus as a canonical input, negative host integer ambiguity and silent narrowing."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-NATIVE321-CLAIM",
+          "E-RAW321-BOOL",
+          "E-RAW321-JUBJUB",
+          "E-LOCAL-SOURCE"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": true,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 0
+    },
+    {
+      "id": "ZKIR-TYPE-BOOL",
+      "kind": "value-type",
+      "symbol": "Bool",
+      "jsonType": "Bool",
+      "sourceDeclarationOrdinal": 1,
+      "nativeEncodingWidth": 1,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L65",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Dedicated Boolean type, distinct from constrained Native 0/1. And/Or/Xor require this type. Legacy control operations consume Native bits."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-BOOL-P",
+          "polarity": "positive",
+          "expected": "Canonical typed false/true encodings and an explicit Encode bridge to Native control operations."
+        },
+        {
+          "id": "ZKIR-TYPE-BOOL-N",
+          "polarity": "negative",
+          "expected": "Reject Native 2 encoding, Native bits passed directly to typed gates, and typed Bool passed to Native-only controls."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 13
+    },
+    {
+      "id": "ZKIR-TYPE-BYTE",
+      "kind": "value-type",
+      "symbol": "Byte",
+      "jsonType": "Byte",
+      "sourceDeclarationOrdinal": 2,
+      "nativeEncodingWidth": 1,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L68",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Dedicated u8 type, distinct from an eight-bit constrained Native. Byte supports byte APIs rather than field arithmetic."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-BYTE-P",
+          "polarity": "positive",
+          "expected": "Canonical 0, 1 and 255 encodings, Nth results and mixed Concat inputs."
+        },
+        {
+          "id": "ZKIR-TYPE-BYTE-N",
+          "polarity": "negative",
+          "expected": "Reject 256, incorrect Native/Byte overloads and noncanonical encodings."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 14
+    },
+    {
+      "id": "ZKIR-TYPE-BYTES",
+      "kind": "value-type",
+      "symbol": "Bytes",
+      "jsonType": "Bytes<n>",
+      "sourceDeclarationOrdinal": 3,
+      "nativeEncodingWidth": "ceil(n/31)",
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L75",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Fixed length from 1 through 2^24 bytes. Canonical type syntax rejects zero, leading zeros and excessive lengths. Bytes<32> is a parameter case, not an extra IrType variant."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-BYTES-P",
+          "polarity": "positive",
+          "expected": "Lengths 1, 31, 32, 62 and 63, canonical chunk packing, fixed indices/slices and byte-hash outputs."
+        },
+        {
+          "id": "ZKIR-TYPE-BYTES-N",
+          "polarity": "negative",
+          "expected": "Reject zero/excessive/noncanonical type lengths, incorrect chunk counts, excess high bits and unsupported raw Bytes CondSelect."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": {
+        "n=32": 1,
+        "other-valid-n": 15
+      },
+      "binaryEncodingNote": "Bytes<32> retains legacy tag 1 without a payload. Other valid lengths use tag 15 followed by u32 n. Tag 15 with n=32 is rejected as noncanonical."
+    },
+    {
+      "id": "ZKIR-TYPE-JUBJUB-POINT",
+      "kind": "value-type",
+      "symbol": "JubjubPoint",
+      "jsonType": "Point<Jubjub>",
+      "sourceDeclarationOrdinal": 4,
+      "nativeEncodingWidth": 2,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L78",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Prime-subgroup Jubjub point with two Native affine coordinates. Compressed point encoding occupies 32 bytes."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-JUBJUB-POINT-P",
+          "polarity": "positive",
+          "expected": "Generator, identity, independent multiples, affine-coordinate round trips and compressed encoding round trips."
+        },
+        {
+          "id": "ZKIR-TYPE-JUBJUB-POINT-N",
+          "polarity": "negative",
+          "expected": "Reject off-curve, non-subgroup or noncanonical points and incorrect encoding widths."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-RAW321-JUBJUB"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 2
+    },
+    {
+      "id": "ZKIR-TYPE-JUBJUB-SCALAR",
+      "kind": "value-type",
+      "symbol": "JubjubScalar",
+      "jsonType": "Scalar<Jubjub>",
+      "sourceDeclarationOrdinal": 5,
+      "nativeEncodingWidth": 1,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L81",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Jubjub scalar field encoded in one Native limb. The upstream encoding helper constrains any extra assigned-scalar limbs to zero."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-JUBJUB-SCALAR-P",
+          "polarity": "positive",
+          "expected": "Canonical 0, 1 and order minus one. Test Native order reduction through the explicit conversion."
+        },
+        {
+          "id": "ZKIR-TYPE-JUBJUB-SCALAR-N",
+          "polarity": "negative",
+          "expected": "Reject typed scalars at or above the order and noncanonical extra limbs. Keep modular reduction distinct from strict decoding."
+        }
+      ],
+      "evidence": {
+        "ids": [
+          "E-RAW321-JUBJUB"
+        ],
+        "keygenWorkloadObserved": true,
+        "checkerWorkloadObserved": true,
+        "proofWorkloadObserved": true,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 3
+    },
+    {
+      "id": "ZKIR-TYPE-SECP256K1-POINT",
+      "kind": "value-type",
+      "symbol": "Secp256k1Point",
+      "jsonType": "Point<Secp256k1>",
+      "sourceDeclarationOrdinal": 6,
+      "nativeEncodingWidth": 5,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L84",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "K256 point encoded as two Native limbs per coordinate plus an identity flag. Compressed SEC1 representation occupies 33 bytes."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-SECP256K1-POINT-P",
+          "polarity": "positive",
+          "expected": "Generator and identity encodings, independent point addition and scalar multiplication vectors."
+        },
+        {
+          "id": "ZKIR-TYPE-SECP256K1-POINT-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical identity flags/coordinates, off-curve points, incorrect compressed widths and identity coordinate extraction."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 4
+    },
+    {
+      "id": "ZKIR-TYPE-SECP256K1-BASE",
+      "kind": "value-type",
+      "symbol": "Secp256k1Base",
+      "jsonType": "Base<Secp256k1>",
+      "sourceDeclarationOrdinal": 7,
+      "nativeEncodingWidth": 2,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L87",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "K256 base field with canonical two-Native-limb encoding."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-SECP256K1-BASE-P",
+          "polarity": "positive",
+          "expected": "Zero, one, modulus minus one, field arithmetic and canonical little-endian byte conversion."
+        },
+        {
+          "id": "ZKIR-TYPE-SECP256K1-BASE-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical typed limbs and cross-field/scalar operand mixing."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 5
+    },
+    {
+      "id": "ZKIR-TYPE-SECP256K1-SCALAR",
+      "kind": "value-type",
+      "symbol": "Secp256k1Scalar",
+      "jsonType": "Scalar<Secp256k1>",
+      "sourceDeclarationOrdinal": 8,
+      "nativeEncodingWidth": 2,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L90",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "K256 scalar field with canonical two-Native-limb encoding."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-SECP256K1-SCALAR-P",
+          "polarity": "positive",
+          "expected": "Zero, one, order minus one and independent modular FromBytes reduction vectors."
+        },
+        {
+          "id": "ZKIR-TYPE-SECP256K1-SCALAR-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical typed limbs and generator selection for the wrong curve."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 6
+    },
+    {
+      "id": "ZKIR-TYPE-SECP256R1-POINT",
+      "kind": "value-type",
+      "symbol": "Secp256r1Point",
+      "jsonType": "Point<Secp256r1>",
+      "sourceDeclarationOrdinal": 9,
+      "nativeEncodingWidth": 5,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L93",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "P256 point encoded as two Native limbs per coordinate plus an identity flag. Compressed SEC1 representation occupies 33 bytes."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-SECP256R1-POINT-P",
+          "polarity": "positive",
+          "expected": "Generator and identity encodings, independent point addition and scalar multiplication vectors."
+        },
+        {
+          "id": "ZKIR-TYPE-SECP256R1-POINT-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical identity flags/coordinates, off-curve points, incorrect compressed widths and identity coordinate extraction."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 7
+    },
+    {
+      "id": "ZKIR-TYPE-SECP256R1-BASE",
+      "kind": "value-type",
+      "symbol": "Secp256r1Base",
+      "jsonType": "Base<Secp256r1>",
+      "sourceDeclarationOrdinal": 10,
+      "nativeEncodingWidth": 2,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L96",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "P256 base field with canonical two-Native-limb encoding."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-SECP256R1-BASE-P",
+          "polarity": "positive",
+          "expected": "Zero, one, modulus minus one, field arithmetic and canonical little-endian byte conversion."
+        },
+        {
+          "id": "ZKIR-TYPE-SECP256R1-BASE-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical typed limbs and cross-field/scalar operand mixing."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 8
+    },
+    {
+      "id": "ZKIR-TYPE-SECP256R1-SCALAR",
+      "kind": "value-type",
+      "symbol": "Secp256r1Scalar",
+      "jsonType": "Scalar<Secp256r1>",
+      "sourceDeclarationOrdinal": 11,
+      "nativeEncodingWidth": 2,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L99",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "P256 scalar field with canonical two-Native-limb encoding."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-SECP256R1-SCALAR-P",
+          "polarity": "positive",
+          "expected": "Zero, one, order minus one and independent modular FromBytes reduction vectors."
+        },
+        {
+          "id": "ZKIR-TYPE-SECP256R1-SCALAR-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical typed limbs and generator selection for the wrong curve."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 9
+    },
+    {
+      "id": "ZKIR-TYPE-CURVE25519-POINT",
+      "kind": "value-type",
+      "symbol": "Curve25519Point",
+      "jsonType": "Point<Curve25519>",
+      "sourceDeclarationOrdinal": 12,
+      "nativeEncodingWidth": 4,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L102",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Prime-subgroup Edwards25519 point encoded as two Native limbs per coordinate, without a Weierstrass identity flag. Compressed RFC 8032 representation occupies 32 bytes."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-CURVE25519-POINT-P",
+          "polarity": "positive",
+          "expected": "Generator, identity, subgroup vectors and canonical compressed encoding round trips."
+        },
+        {
+          "id": "ZKIR-TYPE-CURVE25519-POINT-N",
+          "polarity": "negative",
+          "expected": "Reject non-subgroup, off-curve or noncanonical points and Edwards/Weierstrass encoding confusion."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 10
+    },
+    {
+      "id": "ZKIR-TYPE-CURVE25519-BASE",
+      "kind": "value-type",
+      "symbol": "Curve25519Base",
+      "jsonType": "Base<Curve25519>",
+      "sourceDeclarationOrdinal": 13,
+      "nativeEncodingWidth": 2,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L105",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Curve25519 base field with canonical two-Native-limb encoding."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-CURVE25519-BASE-P",
+          "polarity": "positive",
+          "expected": "Zero, one, modulus minus one, field arithmetic and canonical little-endian byte conversion."
+        },
+        {
+          "id": "ZKIR-TYPE-CURVE25519-BASE-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical typed limbs and cross-field/scalar operand mixing."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 11
+    },
+    {
+      "id": "ZKIR-TYPE-CURVE25519-SCALAR",
+      "kind": "value-type",
+      "symbol": "Curve25519Scalar",
+      "jsonType": "Scalar<Curve25519>",
+      "sourceDeclarationOrdinal": 14,
+      "nativeEncodingWidth": 2,
+      "sources": [
+        "ZKIR-TYPES",
+        "ZKIR-HELPER-ENCODE",
+        "ZKIR-HELPER-ASSIGN"
+      ],
+      "declaration": "https://github.com/midnightntwrk/midnight-zkir/blob/7a51b3385bbf4bce3604df87a7c70867c9ab43c0/zkir/src/ir_types.rs#L108",
+      "backend": {
+        "status": "implemented-with-preconditions",
+        "semantics": "Curve25519 scalar field with canonical two-Native-limb encoding. A 64-byte FromBytes reduction supplies an Ed25519 building block, without implementing a signature verifier."
+      },
+      "safeLeanSourceSupport": {
+        "status": "not-exposed-as-this-zkir-type",
+        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "fullyVerified": false
+      },
+      "requirements": [
+        "ZKIR-REQ-TYPECHECK",
+        "ZKIR-REQ-CANONICAL",
+        "ZKIR-REQ-DISCLOSURE",
+        "ZKIR-REQ-PROOFBOUNDARY",
+        "ZKIR-REQ-MALICIOUSWITNESS"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-TYPE-CURVE25519-SCALAR-P",
+          "polarity": "positive",
+          "expected": "Zero, one, order minus one and independent 64-byte hash reduction vectors."
+        },
+        {
+          "id": "ZKIR-TYPE-CURVE25519-SCALAR-N",
+          "polarity": "negative",
+          "expected": "Reject noncanonical typed limbs and claims of complete Ed25519 validation from scalar reduction alone."
+        }
+      ],
+      "evidence": {
+        "ids": [],
+        "keygenWorkloadObserved": false,
+        "checkerWorkloadObserved": false,
+        "proofWorkloadObserved": false,
+        "ledgerWorkloadObserved": false,
+        "completeTypeQualification": false
+      },
+      "binaryDiscriminant": 12
+    }
+  ],
+  "nativeLedgerObligations": [
+    {
+      "id": "ZKIR-LEDGER-CALLIDENTITY",
+      "requirement": "Bind contract address, entrypoint name/hash, verifier key, communications commitment and transaction binding input.",
+      "status": "partial-scalar-local-evidence-only",
+      "requirements": [
+        "ZKIR-REQ-COMMITMENT",
+        "ZKIR-REQ-COMPOSITION"
+      ],
+      "evidenceIds": [
+        "E-NATIVE321-CLAIM"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-CALLIDENTITY-P",
+          "polarity": "positive",
+          "expected": "A registered entrypoint accepts its exact authenticated and proved call."
+        },
+        {
+          "id": "ZKIR-LEDGER-CALLIDENTITY-N",
+          "polarity": "negative",
+          "expected": "Reject a wrong key, address, entrypoint or communication commitment."
+        }
+      ],
+      "sources": [
+        "LEDGER-CONSTRUCT",
+        "LEDGER-PREIMAGE",
+        "LEDGER-STRUCTURE",
+        "LEDGER-VERIFY"
+      ]
+    },
+    {
+      "id": "ZKIR-LEDGER-STATE",
+      "requirement": "Specify native VM state layout, typed keys/values, ordered read/write transcripts, activity groups and cost-aware partitions.",
+      "status": "partial-scalar-local-evidence-only",
+      "requirements": [
+        "ZKIR-REQ-LEDGERTRANSCRIPT",
+        "ZKIR-REQ-CANONICAL"
+      ],
+      "evidenceIds": [
+        "E-NATIVE321-CLAIM"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-STATE-P",
+          "polarity": "positive",
+          "expected": "Native scalar and composite effects produce exact accepted state bytes."
+        },
+        {
+          "id": "ZKIR-LEDGER-STATE-N",
+          "polarity": "negative",
+          "expected": "Reject stale reads, reordered operations and mismatched keys. Report partial outcomes with their exact documented state."
+        }
+      ],
+      "sources": [
+        "LEDGER-CONSTRUCT",
+        "LEDGER-PROVE",
+        "LEDGER-VERIFY"
+      ]
+    },
+    {
+      "id": "ZKIR-LEDGER-CROSSCALL",
+      "requirement": "Define authenticated cross-contract claims, callee inputs/outputs, caller semantics and re-entry policy.",
+      "status": "unverified",
+      "requirements": [
+        "ZKIR-REQ-COMPOSITION",
+        "ZKIR-REQ-DISCLOSURE"
+      ],
+      "evidenceIds": [],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-CROSSCALL-P",
+          "polarity": "positive",
+          "expected": "Two contracts compose with a valid callee proof and interface, producing expected state."
+        },
+        {
+          "id": "ZKIR-LEDGER-CROSSCALL-N",
+          "polarity": "negative",
+          "expected": "Reject forged callers, wrong callee/key/entrypoint hash, prohibited re-entry and unauthorized private call-graph disclosure."
+        }
+      ],
+      "sources": [
+        "LEDGER-CONSTRUCT",
+        "LEDGER-PROVE",
+        "LEDGER-STRUCTURE",
+        "LEDGER-VERIFY",
+        "LEDGER-VM"
+      ]
+    },
+    {
+      "id": "ZKIR-LEDGER-ASSETS",
+      "requirement": "Assemble shielded/unshielded asset intents and bind conservation, ownership, nullifiers, mint/burn and change.",
+      "status": "unverified",
+      "requirements": [
+        "ZKIR-REQ-LEDGERASSETS",
+        "ZKIR-REQ-DISCLOSURE"
+      ],
+      "evidenceIds": [],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-ASSETS-P",
+          "polarity": "positive",
+          "expected": "Valid balances and ownership produce accepted native asset transitions."
+        },
+        {
+          "id": "ZKIR-LEDGER-ASSETS-N",
+          "polarity": "negative",
+          "expected": "Reject unauthorized mint/spend, imbalanced amounts, wrong recipients and double spends."
+        }
+      ],
+      "sources": [
+        "LEDGER-PROVE",
+        "LEDGER-VERIFY",
+        "LEDGER-VM"
+      ]
+    },
+    {
+      "id": "ZKIR-LEDGER-EVENTS",
+      "requirement": "Bind versioned public log/event schema, payload bytes, order and disclosure.",
+      "status": "unverified",
+      "requirements": [
+        "ZKIR-REQ-LEDGERTRANSCRIPT",
+        "ZKIR-REQ-DISCLOSURE"
+      ],
+      "evidenceIds": [],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-EVENTS-P",
+          "polarity": "positive",
+          "expected": "An accepted call produces the exact ordered native public log bytes."
+        },
+        {
+          "id": "ZKIR-LEDGER-EVENTS-N",
+          "polarity": "negative",
+          "expected": "Reject malformed native payload/schema and unauthorized private disclosure. Any event restriction during source construction needs an explicit Nightlean source-policy basis rather than an invented native ledger ban."
+        }
+      ],
+      "sources": [
+        "LEDGER-CONSTRUCT",
+        "LEDGER-PROVE",
+        "LEDGER-VERIFY",
+        "LEDGER-VM"
+      ]
+    },
+    {
+      "id": "ZKIR-LEDGER-PRIVATEHOST",
+      "requirement": "Specify portable witnesses, private-state initialization/evolution and atomic commit relative to proof/ledger outcomes.",
+      "status": "unverified",
+      "requirements": [
+        "ZKIR-REQ-PRIVATEHOST",
+        "ZKIR-REQ-FAILURE"
+      ],
+      "evidenceIds": [],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-PRIVATEHOST-P",
+          "polarity": "positive",
+          "expected": "Two hosts agree on canonical values and commit private state once after the required accepted outcome."
+        },
+        {
+          "id": "ZKIR-LEDGER-PRIVATEHOST-N",
+          "polarity": "negative",
+          "expected": "Rejected, partial, cancelled or abandoned calls must not commit incorrect private effects."
+        }
+      ],
+      "sources": [
+        "LEDGER-CONSTRUCT",
+        "LEDGER-PREIMAGE",
+        "LEDGER-VERIFY"
+      ]
+    },
+    {
+      "id": "ZKIR-LEDGER-MAINTENANCE",
+      "requirement": "Authenticate authority/key/IR updates with thresholds, maintenance counters and interface identity continuity.",
+      "status": "unverified",
+      "requirements": [
+        "ZKIR-REQ-LIFECYCLE",
+        "ZKIR-REQ-COMPOSITION"
+      ],
+      "evidenceIds": [],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-MAINTENANCE-P",
+          "polarity": "positive",
+          "expected": "An authorized upgrade preserves state and aligns keys with the new interface."
+        },
+        {
+          "id": "ZKIR-LEDGER-MAINTENANCE-N",
+          "polarity": "negative",
+          "expected": "Reject stale counters, unauthorized authority and mismatched deployed keys or IR."
+        }
+      ],
+      "sources": [
+        "LEDGER-CONSTRUCT",
+        "LEDGER-MAINTENANCE",
+        "LEDGER-STRUCTURE",
+        "LEDGER-VERIFY"
+      ]
+    },
+    {
+      "id": "ZKIR-LEDGER-NETWORK",
+      "requirement": "Qualify the exact ledger/runtime/proof-service/parameter and host ABI combination, independently for local and public networks.",
+      "status": "partial-scalar-local-evidence-only",
+      "requirements": [
+        "ZKIR-REQ-SOURCEPROVENANCE",
+        "ZKIR-REQ-FORMAT",
+        "ZKIR-REQ-RESOURCE"
+      ],
+      "evidenceIds": [
+        "E-NATIVE321-CLAIM"
+      ],
+      "expectedCases": [
+        {
+          "id": "ZKIR-LEDGER-NETWORK-P",
+          "polarity": "positive",
+          "expected": "Reproduce the pinned local deployment and receipt, then qualify a public-network adapter separately."
+        },
+        {
+          "id": "ZKIR-LEDGER-NETWORK-N",
+          "polarity": "negative",
+          "expected": "Reject an unsupported network genesis/runtime, parameter drift and local receipts presented as public-network qualification."
+        }
+      ],
+      "sources": [
+        "LEDGER-VERIFY",
+        "LEDGER-CONSTRUCT"
+      ]
+    }
+  ],
+  "relatedNotes": [
+    "../research/zkir-v3-full-coverage.md",
+    "../research/midnight-zkir-capability-matrix.md",
+    "../research/compact-equivalence-baseline.md",
+    "../development/zkir-3.2.1-qualification.md"
+  ]
+}

@@ -176,7 +176,7 @@
       "id": "C-LANG-UINT",
       "layer": "language",
       "surface": "Uint<n> and Uint<0..n>",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Pinned compiler uses inclusive maxima internally. For ordinary Uint<0..m> and Uint<0..n>, addition returns exclusive bound m+n-1 and multiplication returns (m-1)*(n-1)+1. This contradicts the looser reference prose. Subtraction retains the left maximum and asserts a nonnegative result. Follow pinned implementation parity, not prose equations. Nominal aliases have separate checked-result rules.",
       "source": [
         "reference",
@@ -277,7 +277,19 @@
         "typed-const",
         "ledger-write",
         "function-argument"
-      ]
+      ],
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Bounded UInt widths/ranges, checked add/sub/mul, canonical scalar ABI and one finalized state round trip now exist. Nominal aliases and complete operator/context coverage remain unverified.",
+        "evidence": [
+          "Nightlean/ScalarPolicy.lean",
+          "tests/BoundedScalars.lean",
+          "tests/scalars/constraint-cases.json",
+          "tests/scalars/localnet-evidence.json",
+          "docs/development/unsigned-localnet.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-BYTES",
@@ -396,7 +408,7 @@
       "id": "C-LANG-SUBTYPE",
       "layer": "language",
       "surface": "Subtyping and least upper bounds",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Compare normalized inclusive Uint maxima. Source/prose result-bound discrepancy changes return, binding, ledger-write and argument acceptance. See C-LANG-UINT conformance cases. Compact value semantics need a Lean surface design rather than copied syntax.",
       "source": [
         "reference",
@@ -408,13 +420,22 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Scalar widening and Native embedding are implemented. Composite, nominal and function-argument subtyping remain open.",
+        "evidence": [
+          "tests/BoundedScalars.lean",
+          "Nightlean/Frontend.lean"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-CAST",
       "layer": "language",
       "surface": "Type conversions",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Each permitted and rejected source/target pair, range failures, byte order and foreign-field restrictions.",
       "source": [
         "reference"
@@ -424,13 +445,23 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Native/Bool/UInt scalar conversions and narrowing checks are implemented. Bytes, foreign fields, composites and aliases remain open.",
+        "evidence": [
+          "tests/BoundedScalars.lean",
+          "runtime/tests/unsigned.rs",
+          "tests/scalars/constraint-cases.json"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-DEFAULT",
       "layer": "language",
       "surface": "Type defaults",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Defaults for every supported type, including inactive Maybe/Either payloads.",
       "source": [
         "reference"
@@ -440,7 +471,16 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Native/Bool/UInt scalar defaults are implemented. Composite and inactive sum-payload defaults remain open.",
+        "evidence": [
+          "tests/BoundedScalars.lean",
+          "tests/scalars/constraint-cases.json"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-SELECT",
@@ -843,7 +883,17 @@
         "Nightlean/Target.lean",
         "docs/development/native-localnet-receipts.json"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Native public entrypoint bundle assembler/verifier records canonical hashes, sizes and provenance. Trusted external manifest digest is optional. Consumer integration, signed releases and semantic/deployed-key correspondence remain open.",
+        "evidence": [
+          "runtime/src/artifacts.rs",
+          "runtime/tests/artifacts.rs",
+          "docs/development/portable-artifacts.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ARTIFACT-HOST",
@@ -863,7 +913,18 @@
         "scripts/zkir/native-runtime.mjs",
         "scripts/zkir/native-contract.mjs"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Native Rust execution, linked C/C++ resumable scalar inputs and canonical Native/Bool/UInt encodings are tested without Node execution. Rust assembles real intents and a local ledger accepted one. General providers/private-state journals, native proof/submission SDK APIs, mobile and WASM remain open.",
+        "evidence": [
+          "docs/development/native-runtime-abi.md",
+          "docs/development/native-assembler.md",
+          "docs/development/unsigned-localnet.md",
+          "runtime/tests/cpp_smoke.cpp"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ARTIFACT-LEDGER",
@@ -4411,5 +4472,11 @@
       "observedEvidence": [],
       "equivalence": "unverified"
     }
-  ]
+  ],
+  "nativeCapabilityGoal": {
+    "reference": "docs/compatibility/zkir-feature-matrix.json",
+    "compactIsMinimumComparison": true,
+    "compilerDisclosurePolicyRequired": true,
+    "fullGoal": "docs/compatibility/GOAL.md"
+  }
 }

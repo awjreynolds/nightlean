@@ -1,6 +1,8 @@
-# Feature-equivalent Nightlean
+# Full native-capability Nightlean
 
-The active goal is verified feature equivalence with the pinned Compact capability baseline, expressed through Lean and native Midnight execution. The compiler and primary lowering remain Lean 4. Compact is reference material only and must not become a compiler, runtime, or mandatory test dependency.
+The active goal is full coverage of the pinned ZKIR v3 implementation and native Midnight ledger contract capabilities, with verified Compact feature equivalence as a minimum coverage check. The compiler and primary lowering remain Lean 4. Compact supplies engineering lessons, source-semantic evidence and regression ideas. It must not become a compiler, runtime, or mandatory consumer dependency, and its exposed features do not cap Nightlean's scope.
+
+The user's 2026-11-16 clarification explicitly adds native composability beyond Compact's current exposure and compiler checks for guarded disclosure of private state into public state. Existing scalar, runtime and artifact work continues under this expanded destination.
 
 ## Baseline
 
@@ -10,7 +12,10 @@ The [baseline report](../research/compact-equivalence-baseline.md) and [machine 
 
 ## Required outcomes
 
+- Every type and instruction in the pinned ZKIR v3 implementation has an explicit source mapping, type/precondition rules and execution evidence, or a recorded upstream blocker. Deprecated operations receive explicit compatibility or tested replacement handling. Raw parser support is not source support or ledger acceptance.
 - Equivalent contract capabilities and observable semantics across the baseline's types, expressions, bounded control flow, functions/modules/generics, private execution, disclosure, ledger ADTs, cryptography, contracts, events and assets.
+- Native-ledger contract composability, including capabilities not yet exposed by Compact, qualified against actual call claims, entrypoints, keys, communication commitments, state effects and failure behavior.
+- Compiler-enforced information-flow rules for both private value dependencies and private control dependencies at public outputs, ledger writes, events and contract calls. A constant public write under a private guard still requires explicit authorized disclosure. Track provider/private-state origins and classify assertion/failure side channels separately.
 - Native ZKIR, ledger artifacts, proof and transaction construction, with canonical encodings and reproducible provenance.
 - A host-neutral runtime and provider ABI, usable without Node by a Rust application, with qualified C/C++, Kotlin, Swift, TypeScript and portable WASM options.
 - Explicit private-state and transaction failure/commit rules, bounded execution and host-capability handling.
@@ -22,10 +27,12 @@ Unrestricted general-purpose Lean compilation and duplication of wallet UIs, ind
 ## Execution tracks
 
 1. Expand the source inventory into executable semantic cases and qualify the current toolchain profile, including the Boolean-deserialization and Jubjub key-generation patch regressions.
+   Audit the complete native ZKIR type/instruction surface independently of the Compact inventory. Use source-derived preconditions and targeted proving/ledger tests to choose implementation packages.
 2. Replace the mandatory JavaScript execution path with a native Rust reference runtime using the existing source-generated private-claim vectors. Define a versioned provider protocol and canonical artifact ABI. See [portable runtime design](../designs/portable-runtime.md).
 3. Add bounded integers, conversions, composite values and function/control-flow facilities to the typed Lean representation, elaborator, evaluator and native lowering.
 4. Complete scalar state operations, constructors and sealed fields, then collections, nested ADTs, tree operations and Kernel effects with ledger-backed tests.
 5. Add the complete cryptographic, contract-call, event and asset capability set, split into bounded implementation packages with feature IDs and native evidence.
+   Implement disclosure analysis over the typed source/IR before exposing guarded public effects. Learn from Compact's dependency and control-flow analysis, then justify and test any differences against Nightlean's native architecture.
 6. Qualify native host bindings, optional WASM execution, mobile packaging, private-state lifecycle and provider capabilities against the same artifacts and conformance vectors.
 7. Finish assurance, release documentation, developer packaging and the feature-equivalence evidence audit.
 
@@ -35,4 +42,4 @@ These tracks contain dependencies, not a delivery estimate. The public issue map
 
 The [native private-claim POC](../development/native-localnet.md) demonstrates one source program through native ZKIR and finalized local ledger execution. The [Rust runtime](../development/native-rust-runtime.md) reproduces its state and checker preimage without Node. The [first C ABI slice](../development/native-runtime-abi.md) also executes the claim in linked C++ and validates resumable scalar-input requests. Proof generation and transaction submission through that ABI, general providers, private-state journals, mobile/WASM SDKs, full feature parity and complete formal verification remain outstanding.
 
-The [scalar policy](../designs/scalar-types.md) records source-backed unsigned bounds, conversions and executable boundary checks. Bounded integers are not yet supported by the source DSL or native runtime.
+The [scalar slice](../development/unsigned-localnet.md) implements source-backed unsigned bounds, conversions, canonical ABI values and native range constraints. Thirty-four raw-witness cases pass against both qualified checker releases. The Rust-assembled integer contract has finalized local deployment/call and exact state-byte evidence. Nominal aliases, additional scalar operators and full feature equivalence remain outstanding.
