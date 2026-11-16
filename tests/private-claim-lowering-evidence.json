@@ -1,0 +1,104 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-16",
+  "scope": "actual claim scalar/Boolean/hash target relation and JSON-tree certificate",
+  "sourceSha256": "5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771",
+  "standaloneArtifactSha256": "c3a8c9aad701302d54e630961ff159a97e5957e699ae6fc14cc7d5aa78d3395c",
+  "proofExportSha256": "cbce2abc5c223b380ab654e2e4dd4c961ae7ae92e59641dedcbe47250f433c4b",
+  "axioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ],
+  "kernelReplayed": true,
+  "arbitrarySatisfyingWitnessSoundness": true,
+  "sourceCompleteness": true,
+  "hashAgreementRequired": true,
+  "mutantsRejected": [
+    "swapped-first-path-selector",
+    "missing-root-assertion"
+  ],
+  "nativeQualification": {
+    "scope": "native implementation qualification; no arbitrary-internal-witness proof, ledger call or byte certificate",
+    "sourceRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "artifactSha256": "c3a8c9aad701302d54e630961ff159a97e5957e699ae6fc14cc7d5aa78d3395c",
+    "checkerModuleSha256": "a4ec641776c45bd06fe033f25b8d74fccca7900d5e97cc360468ddeacfa2424c",
+    "outputBinding": "Final Impact authenticates the returned nullifier. Standalone Output alone is a host observation.",
+    "publicDevelopmentFixture": {
+      "secret": "42",
+      "campaign": "9",
+      "siblings": [
+        "17",
+        "23"
+      ],
+      "directions": [
+        0,
+        1
+      ],
+      "leaf": "1082518872019621331943973154275074015113783887089473624992784855177925755681",
+      "node": "12121850227235200008413541270582093464718106924127765164724200008113963971325",
+      "root": "28399696706114328615841781920356350076672934126225635254148383513591039775413",
+      "nullifier": "16533581147424469099777953019315187868248076859940057971562926865714239641352"
+    },
+    "cases": [
+      {
+        "id": "valid-source-claim",
+        "checkerAccepted": true,
+        "impactGroups": 4
+      },
+      {
+        "id": "wrong-direction",
+        "checkerAccepted": false,
+        "error": "Failed direct assertion"
+      },
+      {
+        "id": "non-boolean-direction",
+        "checkerAccepted": false,
+        "error": "Expected boolean, found: 02"
+      },
+      {
+        "id": "wrong-root",
+        "checkerAccepted": false,
+        "error": "Failed direct assertion"
+      },
+      {
+        "id": "wrong-nullifier",
+        "checkerAccepted": false,
+        "error": "Failed direct assertion"
+      },
+      {
+        "id": "wrong-final-impact-return",
+        "checkerAccepted": false,
+        "error": "Public transcript input mismatch for input 3; expected: Some(0917262f67bde227c91ea48111bca47abbb3cb2cea7ca4acabd562d9e0ac8d24), computed: Some(0817262f67bde227c91ea48111bca47abbb3cb2cea7ca4acabd562d9e0ac8d24)"
+      },
+      {
+        "id": "missing-root-assert-admits-wrong-root",
+        "checkerAccepted": true,
+        "impactGroups": 4
+      },
+      {
+        "id": "swapped-path-rejects-original-witness",
+        "checkerAccepted": false,
+        "error": "Failed direct assertion"
+      },
+      {
+        "id": "swapped-path-admits-different-relation",
+        "checkerAccepted": true,
+        "impactGroups": 4
+      }
+    ],
+    "proof": {
+      "nativeKeygenSucceeded": true,
+      "serverSelfVerified": true,
+      "proofBytes": 3852,
+      "proofSha256": "d9a793c602ba642952ffafeaafc0809b42323ca999bc6a82f4ad2fd2f2dfa61e"
+    }
+  },
+  "byteParserCorrespondenceProved": false,
+  "compilerBuildAuthenticated": false,
+  "ledgerStatePreservationProved": false,
+  "compiledContractVerified": false,
+  "reproduction": "python3 scripts/proofs/check-private-claim-lowering.py",
+  "nativeReproduction": "node tests/private-claim-lowering-checker.mjs OFFICIAL_321_CHECKER .nightlean/audits/private-claim-lowering/emitted/claimRelation.zkir [NATIVE_321_CLI]",
+  "boundary": "Kernel theorem and quoted JSON-tree identity; exact byte/build/key/deployment chain remains open."
+}
