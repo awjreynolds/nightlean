@@ -4,7 +4,7 @@
 //! runtime validates nulls/lengths, but a foreign caller must provide readable
 //! input memory and writable output memory. Invalid raw addresses are not
 //! recoverable by Rust panic handling.
-use crate::{Plan, Value, check, create_state, environment, input_value, prepare};
+use crate::{Plan, ScalarType, check, create_state, environment, input_value, prepare};
 use base_crypto::hash::HashOutput;
 use coin_structure::contract::ContractAddress;
 use ledger::structure::LedgerParameters;
@@ -184,7 +184,20 @@ fn validate_circuit(value: &Json) -> Result<(), i32> {
                 | "assert"
                 | "impact"
                 | "output"
+                | "neg"
+                | "not"
+                | "constrain_eq"
+                | "constrain_bits"
+                | "less_than"
         ) {
+            return Err(INVALID_ARGUMENT);
+        }
+        if matches!(operation, "constrain_bits" | "less_than")
+            && !instruction
+                .get("bits")
+                .and_then(Json::as_u64)
+                .is_some_and(|bits| bits > 0 && bits <= crate::MAX_UINT_BITS as u64)
+        {
             return Err(INVALID_ARGUMENT);
         }
         if let Some(inputs) = instruction.get("inputs").and_then(Json::as_array) {
@@ -215,7 +228,7 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
     for input in &plan.circuit.inputs {
         if input.name.len() > 128
             || !names.insert(input.name.clone())
-            || !matches!(input.ty.as_str(), "Native" | "Bool")
+            || ScalarType::parse(&input.ty).is_err()
             || !matches!(input.visibility.as_str(), "public" | "private")
         {
             return Err(INVALID_ARGUMENT);
@@ -244,7 +257,7 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
         if output.visibility != "public"
             || output.name.len() > 128
             || !names.insert(output.name.clone())
-            || !matches!(output.ty.as_str(), "Native" | "Bool")
+            || ScalarType::parse(&output.ty).is_err()
         {
             return Err(INVALID_ARGUMENT);
         }
@@ -292,10 +305,7 @@ fn complete(session: &Session) -> Result<Json, ()> {
         .outputs
         .iter()
         .map(|out| {
-            let value = match &env[&out.name] {
-                Value::Native(n) => Json::String(crate::field_decimal(*n)),
-                Value::Bool(b) => Json::Bool(*b),
-            };
+            let value = env[&out.name].public_json();
             (out.name.clone(), value)
         })
         .collect();
@@ -524,6 +534,22 @@ pub extern "C" fn nightlean_result_free(result: u64) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn unsigned_instruction_limits_are_explicit() {
+        let mut circuit = json!({"version":{"major":3,"minor":2},"do_communications_commitment":true,"inputs":[],"outputs":[],"instructions":[]});
+        for operation in ["neg", "not", "constrain_eq", "constrain_bits", "less_than"] {
+            circuit["instructions"] = json!([{"op":operation,"bits":248}]);
+            assert!(validate_circuit(&circuit).is_ok());
+        }
+        for bits in [json!(0), json!(249), json!("8"), json!(-1), Json::Null] {
+            circuit["instructions"] = json!([{"op":"constrain_bits","bits":bits}]);
+            assert_eq!(validate_circuit(&circuit), Err(INVALID_ARGUMENT));
+        }
+        for unsupported in ["sub", "assert_equal", "eval"] {
+            circuit["instructions"] = json!([{"op":unsupported}]);
+            assert_eq!(validate_circuit(&circuit), Err(INVALID_ARGUMENT));
+        }
+    }
     #[test]
     fn null_inputs_and_forged_tokens_reject() {
         assert_eq!(nightlean_runtime_abi_version(), 1);

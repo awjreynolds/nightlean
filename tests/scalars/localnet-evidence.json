@@ -1,0 +1,94 @@
+{
+  "negativeChecks": [
+    {
+      "name": "wrongSum",
+      "rejected": true
+    },
+    {
+      "name": "leftRange",
+      "rejected": true
+    }
+  ],
+  "replayRejected": true,
+  "replayTransactionSubmitted": false,
+  "artifactAssembly": "native Rust",
+  "executionChecks": "native Rust",
+  "orchestration": "Node localnet harness and native funding/proof toolkit",
+  "route": "Lean ZKIR and native ledger artifacts, without Compact",
+  "network": "undeployed",
+  "address": "ec4310960c77761a48f32638bfdaae5e9dd28f2ce9023e90f2fd6c1795c05a3c",
+  "deployment": {
+    "outcome": "applied",
+    "network": "undeployed",
+    "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+    "finalizedAt": "0x95eda7f9cad35c66207f4fd6ed5b742d4ee3de9e39df72c1c6e759927c811af4",
+    "blockHash": "0x95eda7f9cad35c66207f4fd6ed5b742d4ee3de9e39df72c1c6e759927c811af4",
+    "height": "1304",
+    "extrinsicIndex": 4,
+    "extrinsicHash": "0x7867f41a593791e57588e0c6f8255288aee2253ce26a04304c7d9780f46c4d49",
+    "txHash": "0x70238d343813888c4b6dab58811b63d383d681b0ceb1be5d9c302279b13a8d9c",
+    "contractAddress": "0xec4310960c77761a48f32638bfdaae5e9dd28f2ce9023e90f2fd6c1795c05a3c",
+    "contractEvent": "ContractDeploy",
+    "ledgerEvent": "TxApplied"
+  },
+  "call": {
+    "outcome": "applied",
+    "network": "undeployed",
+    "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+    "finalizedAt": "0xc463c03642b69a2346fa9f456cf411a30e931e2a3ba1980688eee2bb5bf9079e",
+    "blockHash": "0xc463c03642b69a2346fa9f456cf411a30e931e2a3ba1980688eee2bb5bf9079e",
+    "height": "1308",
+    "extrinsicIndex": 4,
+    "extrinsicHash": "0xc17086b549f2b0a86941399f56c893246446841e5c29f731e473b9ce186a6182",
+    "txHash": "0x68ae6a86d9ffb9727a27ead53d3b948972ecd4e2aec83e31acbed508973b6cee",
+    "contractAddress": "0xec4310960c77761a48f32638bfdaae5e9dd28f2ce9023e90f2fd6c1795c05a3c",
+    "contractEvent": "ContractCall",
+    "ledgerEvent": "TxApplied"
+  },
+  "stateMatches": true,
+  "stateSha256": "af3582afe2dfe37f8ffb362286cee7a1e0de035c481e63594b0fde25c609d9cf",
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-16",
+  "source": "examples/BoundedScalars.lean",
+  "scope": "bounded unsigned scalar slice and native Rust intent assembly; not full scalar/native feature equivalence",
+  "sourceSha256": "1adc9a2f90b5663860c60130b3d106c5e36c53fdc3c0a1f5d8e5b68a0fd2ba98",
+  "circuitSha256": "f53ca548b1bddec7fa6f90fa080308f1222ed468a05adf57879e4fb9279f6cd8",
+  "planSha256": "9147c2583a36ae542595d685272794a11b1e6a7db0b166771db4a1a2f78a73fa",
+  "proverKeySha256": "4459ee9f56f46b9e9611404f6702c107b8524010f7bfb48ea195ecd1fcde7982",
+  "verifierKeySha256": "98813db756d64ffe78b442398ca0141d7ff0f39cfa3b820f07d974848185d6d5",
+  "ledgerParametersSha256": "d412f77763b2cb7d1f5260fdad837750b66321d486a5babed4b786cd52c5a43b",
+  "constructorPreimageChecked": true,
+  "nativeIntentRoundtripChecked": true,
+  "freshCryptographicRandomness": true,
+  "nativeKeygen": {
+    "release": "3.2.0",
+    "revision": "446c7fecc6bd41dab99ebe89ab404e9d077d11a9",
+    "binarySha256": "2664d4d6f97c04e882b4208b9926f27f1e1d03082ca508e69f0145c491aa694a",
+    "k": 8,
+    "rows": 125
+  },
+  "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+  "proofServer": "9.0.0",
+  "rawWitnessConformance": {
+    "source": "tests/BoundedScalars.lean",
+    "cases": "tests/scalars/constraint-cases.json",
+    "caseCount": 34,
+    "checkerReleases": [
+      "3.2.0",
+      "3.2.1"
+    ],
+    "runtimeValidationBypassed": true
+  },
+  "replayBoundary": "native host prepare/check rejects against decoded fetched spent state; no replay transaction submitted",
+  "publicResult": "510",
+  "defaultProfileChanged": false,
+  "unverified": [
+    "whole Uint/operator semantics",
+    "nominal aliases",
+    "guarded source execution",
+    "compiler disclosure analysis",
+    "full ZKIR v3 capability coverage",
+    "public network acceptance",
+    "formal end-to-end compiler correctness"
+  ]
+}

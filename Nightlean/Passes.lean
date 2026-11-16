@@ -19,6 +19,7 @@ theorem prune_validation (caps : Capabilities) (env : TypeEnv) (span : SourceSpa
     | ref name => simp only [pruneTrue, validateConstraints, ih]
     | eq a b => simp only [pruneTrue, validateConstraints, ih]
     | select condition a b => simp only [pruneTrue, validateConstraints, ih]
+    | cast target value => simp only [pruneTrue, validateConstraints, ih]
 
 theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
     (conditions : List (Expr .bool)) :
@@ -31,6 +32,7 @@ theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
     | ref name => simp only [pruneTrue, runConstraints, ih]
     | eq a b => simp only [pruneTrue, runConstraints, ih]
     | select condition a b => simp only [pruneTrue, runConstraints, ih]
+    | cast target value => simp only [pruneTrue, runConstraints, ih]
 
 theorem pruneCircuit_validate (caps : Capabilities) (c : Circuit) :
     (pruneCircuit c).validate caps = c.validate caps := by

@@ -22,4 +22,10 @@ envelope = {
     "address": contract["address"],
     "circuit": json.loads((source / "zkir" / f"{plan['entrypoint']}.zkir").read_text()),
 }
+if len(sys.argv) == 4:
+    assert sys.argv[3] == "--unsigned-fixture"
+    fixture = pathlib.Path(__file__).parent / "fixtures" / "unsigned"
+    envelope.update(plan=json.loads((fixture / "plan.json").read_text()),
+                    publicInputs={"expected": "510"}, state={"total": "0"},
+                    circuit=json.loads((fixture / "circuit.zkir").read_text()))
 pathlib.Path(sys.argv[2]).write_text(json.dumps(envelope, separators=(",", ":")))

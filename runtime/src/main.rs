@@ -2,7 +2,8 @@ use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::hash::HashOutput;
 use coin_structure::contract::ContractAddress;
 use nightlean_runtime::{
-    Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, check, create_state, prepare,
+    Db, LEDGER_REVISION, Plan, ZKIR_REVISION, check, create_state, environment,
+    parse_private_config, prepare,
 };
 use onchain_runtime::state::ContractState;
 use serialize::{tagged_deserialize, tagged_serialize};
@@ -20,12 +21,17 @@ fn load<T: serde::de::DeserializeOwned>(path: &Path) -> Result<T> {
 fn run() -> Result<()> {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
     ensure!(
-        args.len() == 1 || args.len() == 3 && args[1] == "--write-checker-preimage",
-        "usage: nightlean-runtime ARTIFACT_DIRECTORY [--write-checker-preimage PRIVATE_FILE]"
+        args.len() == 1
+            || args.len() == 3 && args[1] == "--write-checker-preimage"
+            || args.len() == 4 && args[1] == "--check-state" && args[3] == "--expect-rejection",
+        "usage: nightlean-runtime ARTIFACT_DIRECTORY [--write-checker-preimage PRIVATE_FILE | --check-state STATE.bin --expect-rejection]"
     );
     let directory = Path::new(&args[0]);
     let plan: Plan = load(&directory.join("source-plan.json"))?;
-    let config: Config = load(&directory.join("runtime-config.json"))?;
+    let config = parse_private_config(
+        &fs::read(directory.join("runtime-config.json"))
+            .context("cannot read private configuration")?,
+    )?;
     ensure!(
         plan.entrypoint
             .bytes()
@@ -49,6 +55,37 @@ fn run() -> Result<()> {
     .try_into()
     .map_err(|_| anyhow!("invalid public address"))?;
     let address = ContractAddress(HashOutput(address_bytes));
+    if args.len() == 4 {
+        // Decode and validate before treating an execution error as rejection.
+        environment(&plan, &config.inputs)?;
+        let state_bytes = fs::read(&args[2]).context("cannot read supplied state")?;
+        let mut reader = state_bytes.as_slice();
+        let supplied: ContractState<Db> =
+            tagged_deserialize(&mut reader).context("invalid supplied contract state")?;
+        ensure!(
+            reader.is_empty(),
+            "trailing bytes in supplied contract state"
+        );
+        let unchanged = bytes(&supplied)?;
+        let rejected = prepare(&plan, &config.inputs, &supplied.data, &parameters, address)
+            .and_then(|execution| check(&execution, &ir))
+            .is_err();
+        ensure!(
+            bytes(&supplied)? == unchanged,
+            "state check mutated supplied state"
+        );
+        ensure!(rejected, "execution accepted supplied state");
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "runtime":"native Rust","nodeInvoked":false,"rejected":true,
+                "scope":"execution and official circuit checking against supplied state",
+                "stateSha256":hex::encode(Sha256::digest(&state_bytes)),
+                "stateUnchangedOnRejection":true
+            }))?
+        );
+        return Ok(());
+    }
     let state = create_state(&plan, &config.state)?;
     let golden_initial: ContractState<Db> =
         tagged_deserialize(fs::read(directory.join("initial-state.bin"))?.as_slice())?;
@@ -94,6 +131,7 @@ fn run() -> Result<()> {
             &parameters,
             address
         )
+        .and_then(|execution| check(&execution, &ir))
         .is_err(),
         "native replay was accepted"
     );

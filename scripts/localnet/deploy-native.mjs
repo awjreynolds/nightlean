@@ -15,6 +15,9 @@ const artifacts=await realpath(artifactArg),work=resolve(workArg);
 await mkdir(work,{recursive:true});
 const summary=JSON.parse(await readFile(`${artifacts}/native-contract.json`,'utf8'));
 if(!/^[a-f0-9]{64}$/.test(summary.address))throw Error('Invalid native contract address');
+const rustAssembly=summary.runtime==='native Rust';
+const nativeRuntime=process.env.NIGHTLEAN_NATIVE_RUNTIME;
+if(rustAssembly&&!nativeRuntime)throw Error('Rust-assembled artifacts require NIGHTLEAN_NATIVE_RUNTIME pointing to the native runtime executable');
 const params=await realpath(process.env.NIGHTLEAN_PROOF_CACHE??'/private/tmp/nightlean-proof-params');
 const image='midnightntwrk/midnight-node-toolkit@sha256:904f824f3350530bc2fb03448906cc5f9f200b98e98bd9fbb274a1cc25b9f89c';
 const rpc=async(method,params=[])=>{const response=await fetch('http://127.0.0.1:19944',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});const body=await response.json();if(body.error)throw Error('local RPC failed');return body.result;};
@@ -34,7 +37,16 @@ async function submit(intent,filename,event){
  await run(['generate-txs',`--src-file=/work/${filename}`,'send','-d','ws://nightlean-dev-node:9944']);
  for(let i=0;;i++)try{return await observeLocalReceipt({txHash,address:summary.address,event,fromBlock});}catch(error){if(i===20||!error.message.includes('not found'))throw error;await sleep(1000);}
 }
-await exec(process.execPath,[new URL('../zkir/check-native-cases.mjs',import.meta.url).pathname,artifacts,`${artifacts}/initial-state.bin`,'negative'],{timeout:30000,maxBuffer:2**20});
+let negativeChecks;
+if(rustAssembly){
+ const checked=await exec(nativeRuntime,[artifacts],{timeout:30000,maxBuffer:2**20});
+ const result=JSON.parse(checked.stdout);
+ if(!result.validCheck||!result.stateUnchangedOnRejection||!result.negativeChecks?.length||result.negativeChecks.some(value=>!value.rejected))throw Error('Native runtime preflight checks failed');
+ negativeChecks=result.negativeChecks;
+}else{
+ await exec(process.execPath,[new URL('../zkir/check-native-cases.mjs',import.meta.url).pathname,artifacts,`${artifacts}/initial-state.bin`,'negative'],{timeout:30000,maxBuffer:2**20});
+ negativeChecks=JSON.parse(await readFile(`${artifacts}/negative-checks.json`));
+}
 const deployment=mode==='--resume-call' ? JSON.parse(await readFile(`${work}/deployment-receipt.json`,'utf8')) : await submit('deploy-intent.bin','native-deploy.mn','ContractDeploy');
 if(deployment.contractAddress!=='0x'+summary.address)throw Error('Resume contract address mismatch');
 await writeFile(`${work}/deployment-receipt.json`,JSON.stringify(deployment,null,2));
@@ -42,10 +54,12 @@ const call=await submit('call-intent.bin','native-call.mn','ContractCall');
 await run(['contract-state','--src-url','ws://nightlean-dev-node:9944','--contract-address',summary.address,'--dest-file','/work/observed-state.bin']);
 const observed=await readFile(`${work}/observed-state.bin`),predicted=await readFile(`${artifacts}/predicted-state.bin`);
 if(!observed.equals(predicted))throw Error('Native accepted state differs from predicted state');
-await exec(process.execPath,[new URL('../zkir/check-native-cases.mjs',import.meta.url).pathname,artifacts,`${work}/observed-state.bin`,'replay'],{timeout:30000,maxBuffer:2**20});
+if(rustAssembly){
+ const checked=await exec(nativeRuntime,[artifacts,'--check-state',`${work}/observed-state.bin`,'--expect-rejection'],{timeout:30000,maxBuffer:2**20});
+ if(JSON.parse(checked.stdout).rejected!==true)throw Error('Native runtime accepted replay against fetched state');
+}else await exec(process.execPath,[new URL('../zkir/check-native-cases.mjs',import.meta.url).pathname,artifacts,`${work}/observed-state.bin`,'replay'],{timeout:30000,maxBuffer:2**20});
 await run(['contract-state','--src-url','ws://nightlean-dev-node:9944','--contract-address',summary.address,'--dest-file','/work/after-replay-state.bin']);
 if(!(await readFile(`${work}/after-replay-state.bin`)).equals(observed))throw Error('Rejected replay changed ledger state');
-const negativeChecks=JSON.parse(await readFile(`${artifacts}/negative-checks.json`));
-const evidence={negativeChecks,replayRejected:true,route:'Lean ZKIR and native ledger artifacts, without Compact',network:'undeployed',address:summary.address,deployment,call,stateMatches:true,stateSha256:createHash('sha256').update(observed).digest('hex')};
+const evidence={negativeChecks,replayRejected:true,replayTransactionSubmitted:false,artifactAssembly:rustAssembly?'native Rust':'JavaScript conformance reference',executionChecks:rustAssembly?'native Rust':'JavaScript conformance reference',orchestration:'Node localnet harness and native funding/proof toolkit',route:'Lean ZKIR and native ledger artifacts, without Compact',network:'undeployed',address:summary.address,deployment,call,stateMatches:true,stateSha256:createHash('sha256').update(observed).digest('hex')};
 await writeFile(`${work}/native-localnet.json`,JSON.stringify(evidence,null,2));
 console.log(JSON.stringify(evidence,null,2));

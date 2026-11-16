@@ -1,0 +1,540 @@
+//! Native assembly of private, unbalanced deploy/call intents. No proving or network.
+use crate::artifacts::{Role, VerifiedBundle};
+use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, create_state, field_value, prepare};
+use anyhow::{Context, Result, anyhow, ensure};
+use base_crypto::{
+    fab::{AlignedValue, Alignment, Value as FabValue},
+    time::Timestamp,
+};
+use ledger::{
+    construct::{ContractCallPrototype, PreTranscript, partition_transcripts},
+    structure::{
+        ContractAction, ContractDeploy, Intent, LedgerParameters, ProofPreimageMarker,
+        ProofPreimageVersioned, Signature,
+    },
+};
+use midnight_zkir::IrSource;
+use onchain_runtime::{
+    context::QueryContext,
+    state::{ContractOperation, ContractState, EntryPointBuf},
+};
+use rand::{Rng, rngs::OsRng};
+use serde_json::{Value as Json, json};
+use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
+use sha2::{Digest, Sha256};
+use std::{
+    borrow::Cow,
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
+use transient_crypto::{
+    commitment::PedersenRandomness,
+    curve::Fr,
+    proofs::{KeyLocation, ProofPreimage, ProverKey, VerifierKey, Zkir},
+};
+
+pub type NativeIntent = Intent<Signature, ProofPreimageMarker, PedersenRandomness, Db>;
+/// Explicit input bytes. Keys must come from a trusted, pinned key-generation step.
+/// The assembler checks native encodings and k, not cryptographic key/IR correspondence.
+pub struct Inputs<'a> {
+    pub plan: &'a [u8],
+    pub circuit: &'a [u8],
+    pub prover_key: &'a [u8],
+    pub verifier_key: &'a [u8],
+    pub ledger_parameters: &'a [u8],
+    pub config: &'a [u8],
+    pub ttl_unix: u64,
+}
+fn bytes<T: Serializable + Tagged>(value: &T) -> Result<Vec<u8>> {
+    let mut bytes = Vec::new();
+    tagged_serialize(value, &mut bytes)?;
+    Ok(bytes)
+}
+fn decode<T: Serializable + Deserializable + Tagged>(value: &[u8]) -> Result<T> {
+    let mut reader = value;
+    let decoded = tagged_deserialize(&mut reader)?;
+    ensure!(reader.is_empty(), "trailing serialized bytes");
+    Ok(decoded)
+}
+fn roundtrip<T: Serializable + Deserializable + Tagged>(value: &T) -> Result<(T, Vec<u8>)> {
+    let encoded = bytes(value)?;
+    let decoded = decode(&encoded)?;
+    ensure!(
+        bytes(&decoded)? == encoded,
+        "native serialization roundtrip changed bytes"
+    );
+    Ok((decoded, encoded))
+}
+fn digest(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+fn real_preimage(intent: &NativeIntent) -> Result<&ProofPreimage> {
+    ensure!(
+        intent.actions.len() == 1,
+        "expected exactly one contract call"
+    );
+    let Some(ContractAction::Call(call)) = intent.actions.iter_deref().next() else {
+        return Err(anyhow!("expected contract call"));
+    };
+    match &call.proof {
+        ProofPreimageVersioned::V2(preimage) => Ok(preimage),
+        _ => Err(anyhow!("unsupported preimage version")),
+    }
+}
+struct Built {
+    initial: ContractState<Db>,
+    predicted: ContractState<Db>,
+    deploy: NativeIntent,
+    call: NativeIntent,
+    address: String,
+    operations: usize,
+    guaranteed: usize,
+    fallible: usize,
+}
+fn build(
+    plan: &Plan,
+    config: &Config,
+    parameters: &LedgerParameters,
+    operation: ContractOperation,
+    circuit: &IrSource,
+    ttl: u64,
+) -> Result<Built> {
+    ensure!(ttl > 0, "TTL must be explicit Unix seconds");
+    ensure!(
+        !plan.entrypoint.is_empty()
+            && plan.entrypoint.len() <= 128
+            && plan
+                .entrypoint
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            && !plan.entrypoint.as_bytes()[0].is_ascii_digit(),
+        "invalid entrypoint"
+    );
+    let mut rng = OsRng;
+    let entry = EntryPointBuf(plan.entrypoint.as_bytes().to_vec());
+    let mut initial = ContractState::<Db>::default();
+    initial.data = create_state(plan, &config.state)?;
+    initial.operations = initial.operations.insert(entry.clone(), operation.clone());
+    let deployment = ContractDeploy::new(&mut rng, initial.clone());
+    let address = deployment.address();
+    // prepare's zero-randomness preimage is diagnostic only. Reuse only its
+    // evaluated program and private fields, then repartition for this commitment.
+    let evaluated = prepare(plan, &config.inputs, &initial.data, parameters, address)?;
+    let empty = AlignedValue {
+        value: FabValue(vec![]),
+        alignment: Alignment(vec![]),
+    };
+    let randomness: Fr = loop {
+        let r = rng.r#gen();
+        if r != Fr::from(0u64) {
+            break r;
+        }
+    };
+    let commitment =
+        onchain_runtime::communication_commitment(empty.clone(), empty.clone(), randomness);
+    let context = QueryContext::new(initial.data.clone(), address);
+    let mut partitions = partition_transcripts(
+        &[PreTranscript {
+            context: context.clone(),
+            program: evaluated.program.clone(),
+            comm_comm: Some(commitment),
+        }],
+        parameters,
+    )
+    .map_err(|_| anyhow!("native transaction partition failed"))?;
+    ensure!(partitions.len() == 1, "expected one call partition");
+    let (guaranteed, fallible) = partitions.pop().unwrap();
+    let mut after = context;
+    let cost = &parameters.cost_model.runtime_cost_model;
+    for transcript in guaranteed.iter().chain(fallible.iter()) {
+        after = after
+            .run_transcript(transcript, cost)
+            .map_err(|_| anyhow!("native transaction transcript rejected"))?
+            .context;
+    }
+    let guaranteed_count = guaranteed.as_ref().map_or(0, |t| t.program.len());
+    let fallible_count = fallible.as_ref().map_or(0, |t| t.program.len());
+    let prototype = ContractCallPrototype {
+        address,
+        entry_point: entry,
+        op: operation,
+        guaranteed_public_transcript: guaranteed,
+        fallible_public_transcript: fallible,
+        private_transcript_outputs: evaluated
+            .preimage
+            .private_transcript
+            .iter()
+            .copied()
+            .map(field_value)
+            .collect(),
+        input: empty.clone(),
+        output: empty,
+        communication_commitment_rand: randomness,
+        key_location: KeyLocation(Cow::Owned(plan.entrypoint.clone())),
+    };
+    let ttl = Timestamp::from_secs(ttl);
+    let deploy = NativeIntent::empty(&mut rng, ttl).add_deploy(deployment);
+    let call = NativeIntent::empty(&mut rng, ttl).add_call::<ProofPreimage>(prototype);
+    let checked = real_preimage(&call)?
+        .check(circuit)
+        .map_err(|_| anyhow!("constructor preimage rejected by official checker"))?;
+    ensure!(
+        checked.len() == evaluated.program.len(),
+        "constructor activity metadata mismatch"
+    );
+    ensure!(
+        real_preimage(&call)?.communications_commitment == Some((commitment, randomness)),
+        "constructor communication commitment mismatch"
+    );
+    let mut predicted = initial.clone();
+    predicted.data = after.state;
+    Ok(Built {
+        initial,
+        predicted,
+        deploy,
+        call,
+        address: hex::encode(address.0.0),
+        operations: evaluated.program.len(),
+        guaranteed: guaranteed_count,
+        fallible: fallible_count,
+    })
+}
+
+struct OutputDirectory {
+    path: PathBuf,
+    keep: bool,
+}
+impl OutputDirectory {
+    fn new(path: &Path) -> Result<Self> {
+        let mut options = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            options.mode(0o700);
+        }
+        options
+            .create(path)
+            .context("output directory must be new")?;
+        Ok(Self {
+            path: path.to_owned(),
+            keep: false,
+        })
+    }
+    fn directory(&self, name: &str) -> Result<()> {
+        let mut options = fs::DirBuilder::new();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::DirBuilderExt;
+            options.mode(0o700);
+        }
+        options.create(self.path.join(name))?;
+        Ok(())
+    }
+    fn write(&self, name: &str, value: &[u8]) -> Result<()> {
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(self.path.join(name))?;
+        file.write_all(value)?;
+        file.sync_all()?;
+        Ok(())
+    }
+}
+impl Drop for OutputDirectory {
+    fn drop(&mut self) {
+        if !self.keep {
+            let _ = fs::remove_dir_all(&self.path);
+        }
+    }
+}
+
+/// Validate and assemble before creating the private output directory. Never overwrites.
+/// Output intents contain witness material and require private storage.
+pub fn assemble(inputs: Inputs<'_>, output: &Path) -> Result<Json> {
+    ensure!(
+        inputs.plan.len() <= 1_048_576
+            && inputs.config.len() <= 1_048_576
+            && inputs.circuit.len() <= 4_194_304
+            && inputs.ledger_parameters.len() <= 1_048_576
+            && inputs.prover_key.len() <= 134_217_728
+            && inputs.verifier_key.len() <= 1_048_576,
+        "assembly input limit exceeded"
+    );
+    ensure!(!output.exists(), "output directory already exists");
+    let plan: Plan = serde_json::from_slice(inputs.plan).context("invalid source plan")?;
+    let config = crate::parse_private_config(inputs.config)?;
+    let parameters: LedgerParameters =
+        decode(inputs.ledger_parameters).context("invalid ledger parameters")?;
+    let circuit = IrSource::load(inputs.circuit).context("invalid native circuit")?;
+    ensure!(
+        circuit.do_communications_commitment,
+        "circuit must bind communication commitment"
+    );
+    let prover: ProverKey<IrSource> =
+        decode(inputs.prover_key).context("invalid native prover key")?;
+    let raw = prover
+        .init()
+        .map_err(|_| anyhow!("native prover key initialization failed"))?;
+    ensure!(
+        raw.k() == circuit.k(),
+        "prover key and circuit size mismatch"
+    );
+    let verifier: VerifierKey =
+        decode(inputs.verifier_key).context("invalid native verifier key")?;
+    verifier
+        .init()
+        .map_err(|_| anyhow!("native verifier key initialization failed"))?;
+    let operation = ContractOperation::new(Some(verifier), None);
+    let operation_bytes = bytes(&operation)?;
+    let built = build(
+        &plan,
+        &config,
+        &parameters,
+        operation,
+        &circuit,
+        inputs.ttl_unix,
+    )?;
+    let (deploy, deploy_bytes) = roundtrip(&built.deploy)?;
+    let (call, call_bytes) = roundtrip(&built.call)?;
+    let (initial, initial_bytes) = roundtrip(&built.initial)?;
+    let (_, predicted_bytes) = roundtrip(&built.predicted)?;
+    ensure!(
+        real_preimage(&call)?
+            .check(&circuit)
+            .map_err(|_| anyhow!("serialized constructor preimage rejected"))?
+            .len()
+            == built.operations,
+        "serialized activity metadata mismatch"
+    );
+    ensure!(
+        deploy.ttl.to_secs() == inputs.ttl_unix && call.ttl.to_secs() == inputs.ttl_unix,
+        "serialized TTL mismatch"
+    );
+    let Some(ContractAction::Deploy(deployment)) = deploy.actions.iter_deref().next() else {
+        return Err(anyhow!("serialized deployment missing"));
+    };
+    ensure!(
+        bytes(&deployment.initial_state)? == bytes(&initial)?
+            && hex::encode(deployment.address().0.0) == built.address,
+        "serialized deployment state mismatch"
+    );
+    let summary = json!({"qualification":"native Rust constructor preimage checked; no proof or ledger acceptance","runtime":"native Rust","nodeInvoked":false,"address":built.address,"entrypoint":plan.entrypoint,"k":circuit.k(),"operationBytes":operation_bytes.len(),"operations":built.operations,"guaranteedOps":built.guaranteed,"fallibleOps":built.fallible,"ttlUnix":inputs.ttl_unix,"sourcePlanSha256":digest(inputs.plan),"nativeCircuitSha256":digest(inputs.circuit),"ledgerParametersSha256":digest(inputs.ledger_parameters),"initialStateSha256":digest(&initial_bytes),"predictedStateSha256":digest(&predicted_bytes),"ledgerRevision":LEDGER_REVISION,"zkirRevision":ZKIR_REVISION,"officialConstructorPreimageChecked":true,"nativeSerializationRoundtrip":true,"freshCryptographicRandomness":true,"keyPairAssociationVerified":false,"cryptographicProofGenerated":false,"transactionSubmitted":false});
+    let mut directory = OutputDirectory::new(output)?;
+    directory.directory("keys")?;
+    directory.directory("zkir")?;
+    for (name, value) in [
+        (
+            format!("keys/{}.prover", plan.entrypoint),
+            inputs.prover_key.to_vec(),
+        ),
+        (
+            format!("keys/{}.verifier", plan.entrypoint),
+            inputs.verifier_key.to_vec(),
+        ),
+        (
+            format!("zkir/{}.zkir", plan.entrypoint),
+            inputs.circuit.to_vec(),
+        ),
+        (format!("zkir/{}.bzkir", plan.entrypoint), bytes(&circuit)?),
+        ("initial-state.bin".into(), initial_bytes),
+        ("predicted-state.bin".into(), predicted_bytes),
+        ("deploy-intent.bin".into(), deploy_bytes),
+        ("call-intent.bin".into(), call_bytes),
+        (
+            "constructor-preimage.bin".into(),
+            bytes(real_preimage(&call)?)?,
+        ),
+        ("source-plan.json".into(), inputs.plan.to_vec()),
+        ("runtime-config.json".into(), inputs.config.to_vec()),
+        ("ledger.params".into(), inputs.ledger_parameters.to_vec()),
+        (
+            "native-contract.json".into(),
+            serde_json::to_vec_pretty(&summary)?,
+        ),
+    ] {
+        directory.write(&name, &value)?;
+    }
+    directory.keep = true;
+    Ok(summary)
+}
+
+/// Assemble exclusively from retained, verified public payloads and separate private inputs.
+/// Callers authenticate the bundle with an external trusted manifest digest at verification.
+pub fn assemble_verified(
+    bundle: &VerifiedBundle,
+    private_config: &[u8],
+    ttl_unix: u64,
+    output: &Path,
+) -> Result<Json> {
+    assemble(
+        Inputs {
+            plan: bundle.file(Role::Plan)?,
+            circuit: bundle.file(Role::Circuit)?,
+            prover_key: bundle.file(Role::ProverKey)?,
+            verifier_key: bundle.file(Role::VerifierKey)?,
+            ledger_parameters: bundle.file(Role::LedgerParameters)?,
+            config: private_config,
+            ttl_unix,
+        },
+        output,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn sample() -> (Plan, Config, IrSource) {
+        (serde_json::from_str(include_str!("../tests/fixtures/unsigned/plan.json")).unwrap(),
+         serde_json::from_value(json!({"inputs":{"left":"255","right":"255","expected":"510"},"state":{"total":"0"}})).unwrap(),
+         IrSource::load(include_bytes!("../tests/fixtures/unsigned/circuit.zkir").as_slice()).unwrap())
+    }
+    #[test]
+    fn constructor_uses_fresh_randomness_and_roundtrips_real_preimage() {
+        let (plan, config, circuit) = sample();
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+        // A key-free operation tests constructor/checker semantics only. CLI integration
+        // separately validates real tagged prover and verifier keys before building.
+        let first = build(
+            &plan,
+            &config,
+            parameters,
+            ContractOperation::new(None, None),
+            &circuit,
+            2_000_000_000,
+        )
+        .unwrap();
+        let second = build(
+            &plan,
+            &config,
+            parameters,
+            ContractOperation::new(None, None),
+            &circuit,
+            2_000_000_000,
+        )
+        .unwrap();
+        assert_ne!(first.address, second.address);
+        let first_proof = real_preimage(&first.call).unwrap();
+        let second_proof = real_preimage(&second.call).unwrap();
+        assert_ne!(
+            first_proof.communications_commitment,
+            second_proof.communications_commitment
+        );
+        assert_ne!(
+            first_proof.communications_commitment.unwrap().1,
+            Fr::from(0u64)
+        );
+        let (decoded, _) = roundtrip(&first.call).unwrap();
+        assert_eq!(
+            real_preimage(&decoded)
+                .unwrap()
+                .check(&circuit)
+                .unwrap()
+                .len(),
+            8
+        );
+        let (decoded, _) = roundtrip(&first.deploy).unwrap();
+        assert_eq!(decoded.ttl.to_secs(), 2_000_000_000);
+    }
+    #[test]
+    fn wrong_inputs_reject_the_real_constructor_preimage() {
+        let (plan, mut config, circuit) = sample();
+        config.inputs.insert("expected".into(), json!("509"));
+        assert!(
+            build(
+                &plan,
+                &config,
+                &ledger::structure::INITIAL_PARAMETERS,
+                ContractOperation::new(None, None),
+                &circuit,
+                2_000_000_000
+            )
+            .is_err()
+        );
+    }
+    #[test]
+    fn private_output_rollback_and_no_overwrite() {
+        let path =
+            std::env::temp_dir().join(format!("nightlean-assembly-test-{}", OsRng.r#gen::<u64>()));
+        {
+            let directory = OutputDirectory::new(&path).unwrap();
+            directory.write("private.bin", b"synthetic").unwrap();
+            assert!(OutputDirectory::new(&path).is_err());
+            assert!(directory.write("private.bin", b"replacement").is_err());
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                assert_eq!(
+                    fs::metadata(&path).unwrap().permissions().mode() & 0o777,
+                    0o700
+                );
+                assert_eq!(
+                    fs::metadata(path.join("private.bin"))
+                        .unwrap()
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o600
+                );
+            }
+        }
+        assert!(!path.exists());
+    }
+    #[test]
+    fn invalid_assembly_leaves_destination_absent() {
+        let path = std::env::temp_dir().join(format!(
+            "nightlean-assembly-invalid-{}",
+            OsRng.r#gen::<u64>()
+        ));
+        assert!(
+            assemble(
+                Inputs {
+                    plan: b"{}",
+                    circuit: b"{}",
+                    prover_key: b"",
+                    verifier_key: b"",
+                    ledger_parameters: b"",
+                    config: b"{}",
+                    ttl_unix: 2_000_000_000
+                },
+                &path
+            )
+            .is_err()
+        );
+        assert!(!path.exists());
+    }
+    #[test]
+    fn malformed_private_config_discards_value_bearing_parser_cause() {
+        let path = std::env::temp_dir().join(format!(
+            "nightlean-assembly-privacy-{}",
+            OsRng.r#gen::<u64>()
+        ));
+        let error = assemble(
+            Inputs {
+                plan: include_bytes!("../tests/fixtures/unsigned/plan.json"),
+                circuit: b"{}",
+                prover_key: b"",
+                verifier_key: b"",
+                ledger_parameters: b"",
+                config: br#"{"inputs":"SENTINEL_SECRET_PRIVATE_CONFIG","state":{}}"#,
+                ttl_unix: 2_000_000_000,
+            },
+            &path,
+        )
+        .unwrap_err();
+        for rendered in [
+            format!("{error}"),
+            format!("{error:#}"),
+            format!("{error:?}"),
+        ] {
+            assert!(rendered.contains("invalid private configuration"));
+            assert!(!rendered.contains("SENTINEL_SECRET_PRIVATE_CONFIG"));
+        }
+        assert_eq!(error.chain().count(), 1);
+        assert!(!path.exists());
+    }
+}

@@ -5,20 +5,24 @@ namespace Nightlean
 abbrev Ty.Denote : Ty → Type
   | .native => Nat
   | .bool => Bool
+  | .uint _ => Nat
 
 inductive Value where
   | native (value : Nat)
   | bool (value : Bool)
+  | uint (maximum value : Nat)
   deriving Repr, BEq, DecidableEq
 
 def Value.as : (ty : Ty) → Value → Option ty.Denote
   | .native, .native n => some n
   | .bool, .bool b => some b
+  | .uint maximum, .uint found n => if maximum == found then some n else none
   | _, _ => none
 
 def Value.pack : (ty : Ty) → ty.Denote → Value
   | .native, n => .native n
   | .bool, b => .bool b
+  | .uint maximum, n => .uint maximum n
 
 abbrev EvalEnv := List (String × Value)
 
@@ -31,17 +35,33 @@ structure EvalContext where
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
   | .bool, a, b => a == b
+  | .uint _, a, b => a == b
 
 private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   match ty with
   | .native => v < ctx.modulus
   | .bool => true
+  | .uint maximum => maximum ≤ ScalarPolicy.maxUint && v ≤ maximum && v < ctx.modulus
+
+private def scalarNumber : (ty : Ty) → ty.Denote → Nat
+  | .native, n | .uint _, n => n
+  | .bool, b => if b then 1 else 0
+
+private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except String target.Denote :=
+  match target with
+  | .native => if number < ctx.modulus then pure number else .error "noncanonical scalar conversion"
+  | .bool => pure (number != 0)
+  | .uint maximum =>
+    if maximum ≤ ScalarPolicy.maxUint && number ≤ maximum && number < ctx.modulus then pure number
+    else .error "scalar conversion exceeds unsigned bound"
 
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/
 def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty.Denote
   | .native n => if n < ctx.modulus then pure n else .error "noncanonical native constant"
   | .bool b => .ok b
+  | .uint maximum n =>
+    if canonical ctx (.uint maximum) n then pure n else .error "noncanonical unsigned constant"
   | .ref name => do
     let some raw := env.lookup name | throw s!"missing value '{name}'"
     let some value := raw.as ty | throw s!"value type mismatch for '{name}'"
@@ -53,6 +73,22 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
   | .mul a b => do
     if ctx.modulus == 0 then throw "invalid zero field modulus"
     pure (((← a.eval ctx env) * (← b.eval ctx env)) % ctx.modulus)
+  | .sub a b => do
+    if ctx.modulus == 0 then throw "invalid zero field modulus"
+    pure ((ctx.modulus + (← a.eval ctx env) - (← b.eval ctx env)) % ctx.modulus)
+  | .uadd (m := m) (n := n) a b => do
+    let result := (← a.eval ctx env) + (← b.eval ctx env)
+    scalarCast ctx (.uint (m + n)) result
+  | .umul (m := m) (n := n) a b => do
+    let result := (← a.eval ctx env) * (← b.eval ctx env)
+    scalarCast ctx (.uint (m * n)) result
+  | .usub (m := m) a b => do
+    let a ← a.eval ctx env
+    let b ← b.eval ctx env
+    if a < b then throw "unsigned subtraction underflow"
+    scalarCast ctx (.uint m) (a - b)
+  | .cast (source := source) target value => do
+    scalarCast ctx target (scalarNumber source (← value.eval ctx env))
   | .eq (ty := ty) a b => do
     pure (sameValue ty (← a.eval ctx env) (← b.eval ctx env))
   | .select c a b => do
@@ -110,12 +146,14 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
     | .readCell name destination ty =>
       let some raw := next.cells.lookup name | throw s!"missing state cell '{name}'"
       let some value := raw.as ty | throw s!"state cell type mismatch '{name}'"
+      if !canonical ctx ty value then throw s!"noncanonical state cell '{name}'"
       env := (destination, Value.pack ty value) :: env
     | .readMap name destination keyTy valueTy key =>
       let key := Value.pack keyTy (← key.eval ctx env)
       let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
       let some raw := entries.lookup key | throw s!"missing map key in '{name}'"
       let some value := raw.as valueTy | throw s!"state map value type mismatch '{name}'"
+      if !canonical ctx valueTy value then throw s!"noncanonical state map value '{name}'"
       env := (destination, Value.pack valueTy value) :: env
     | .require condition =>
       if !(← condition.eval ctx env) then throw "state transition guard failed"
@@ -166,5 +204,32 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
     | ref name => simp [pruneTrue, ConstraintsHold, ih]
     | eq a b => simp [pruneTrue, ConstraintsHold, ih]
     | select condition a b => simp [pruneTrue, ConstraintsHold, ih]
+    | cast target value => simp [pruneTrue, ConstraintsHold, ih]
+
+theorem unsigned_addition_no_wrap (a b m n : Nat) (ha : a ≤ m) (hb : b ≤ n)
+    (hbound : m + n ≤ ScalarPolicy.maxUint) : (a + b) % Field.modulus = a + b :=
+  Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt
+    (Nat.le_trans (ScalarPolicy.addition_range a b m n ha hb) hbound)
+    ScalarPolicy.maxUint_lt_native)
+
+theorem unsigned_multiplication_no_wrap (a b m n : Nat) (ha : a ≤ m) (hb : b ≤ n)
+    (hbound : m * n ≤ ScalarPolicy.maxUint) : (a * b) % Field.modulus = a * b :=
+  Nat.mod_eq_of_lt (Nat.lt_of_le_of_lt
+    (Nat.le_trans (ScalarPolicy.multiplication_range a b m n ha hb) hbound)
+    ScalarPolicy.maxUint_lt_native)
+
+/-- An underflowed field subtraction lies above every supported unsigned bound. -/
+theorem unsigned_underflow_outside_range (a b : Nat) (_hab : a < b)
+    (hb : b ≤ ScalarPolicy.maxUint) : ScalarPolicy.maxUint < Field.modulus + a - b := by
+  have hseparation : 2 * ScalarPolicy.maxUint < Field.modulus := by decide
+  omega
+
+theorem unsigned_underflow_modulo_rejected (a b : Nat) (hab : a < b)
+    (hb : b ≤ ScalarPolicy.maxUint) :
+    ScalarPolicy.maxUint < (Field.modulus + a - b) % Field.modulus := by
+  have hfield := ScalarPolicy.maxUint_lt_native
+  have hbelow : Field.modulus + a - b < Field.modulus := by omega
+  rw [Nat.mod_eq_of_lt hbelow]
+  exact unsigned_underflow_outside_range a b hab hb
 
 end Nightlean

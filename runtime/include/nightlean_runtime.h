@@ -34,7 +34,8 @@ enum nightlean_status {
  * memory addresses are a caller error, beyond Rust panic recovery.
  *
  * JSON is UTF-8 without a terminator. Native fields use canonical decimal
- * strings, Bool uses JSON true/false. Calls return a numeric status and clear
+ * strings, Bool uses JSON true/false. UIntRange<N> uses canonical decimal
+ * strings in [0,N), with 1 <= N <= 2^248. Calls return a numeric status and clear
  * output handles before validation. Errors never contain input values.
  * Begin/resume payloads are limited to NIGHTLEAN_MAX_INPUT_BYTES.
  *

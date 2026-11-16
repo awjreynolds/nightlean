@@ -2,7 +2,7 @@
 
 The feature reference is Compact 0.36.1 at `7fa3a117c5e7efe9d2c51da04263e5f0b3509144`. Nightlean uses its observed scalar semantics as a comparison contract. The source syntax, typed representation and backend remain Nightlean's own.
 
-`Nightlean/ScalarPolicy.lean` is an executable policy foundation. It does not add bounded integers to the circuit DSL, native lowering or runtime ABI. Those changes belong to the bounded-integer implementation package. The feature matrix remains unverified.
+`Nightlean/ScalarPolicy.lean` is the executable policy foundation. The bounded scalar slice now extends this policy through the circuit DSL, native lowering and runtime ABI. A selected source program has [finalized local ledger evidence](../development/unsigned-localnet.md). The feature matrix remains unverified for full equivalence.
 
 ## Bounds
 
@@ -22,6 +22,8 @@ Boolean arithmetic requires an explicit conversion. A mixed field/unsigned opera
 
 `tests/ScalarPolicy.lean` checks 23 boundary, arithmetic, conversion, literal and invalid-value cases. Lean checks proofs of range preservation for addition, multiplication, subtraction and widening, plus normalization of the exclusive addition bound. The policy also proves the maximum unsigned value is smaller than the native field order.
 
-This establishes a tested semantic policy, not a proof of compiler correctness. The compiler slice still needs typed expressions, elaboration/coercion rules, checked inputs and ledger reads, circuit range constraints, runtime canonical encodings and matching evaluator behavior. Negative circuit tests must reject an altered witness outside a declared bound and subtraction underflow. A finalized ledger round trip must exercise the integer representation before the implementation ticket closes.
+The compiler implements typed expressions, source elaboration/coercion, checked inputs and ledger reads, circuit range constraints, canonical runtime encodings and matching scalar evaluation. Lean proves addition/multiplication do not wrap within accepted result bounds and field-wrapped underflow fails every supported unsigned range. Thirty-four direct circuit cases bypass runtime validation, and the selected integer state round trip has finalized local receipts.
+
+This is not a proof of compiler correctness or complete scalar feature equivalence. Nominal aliases, composite subtyping, additional operators and guarded execution remain separate packages. Ordinary source numbers retain their existing Native interpretation except at an explicitly expected UInt declaration. `uint(n)` exposes a prefix-range literal. This Nightlean syntax distinction is deliberate and does not duplicate Compact's syntax.
 
 The policy has no Compact runtime or compiler dependency. No reference compiler was executed to obtain these results.

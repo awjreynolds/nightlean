@@ -41,6 +41,7 @@ pub type Program = Vec<Op<ResultModeVerify, Db>>;
 pub enum Value {
     Native(Fr),
     Bool(bool),
+    UInt { number: BigUint, maximum: BigUint },
 }
 impl Value {
     fn field(&self) -> Result<Fr> {
@@ -83,10 +84,7 @@ pub fn field_value(n: Fr) -> AlignedValue {
 }
 fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
     match alignment {
-        "field" => Ok(field_value(match value {
-            Value::Native(n) => *n,
-            Value::Bool(b) => Fr::from(*b),
-        })),
+        "field" => Ok(field_value(value.field_encoding()?)),
         "bit" => Ok(AlignedValue {
             value: FabValue(vec![ValueAtom(if value.boolean()? {
                 vec![1]
@@ -106,6 +104,34 @@ pub enum Expr {
     },
     Bool {
         value: bool,
+    },
+    Uint {
+        maximum: String,
+        value: String,
+    },
+    Uadd {
+        left: Box<Expr>,
+        right: Box<Expr>,
+        maximum: String,
+    },
+    Usub {
+        left: Box<Expr>,
+        right: Box<Expr>,
+        maximum: String,
+    },
+    Umul {
+        left: Box<Expr>,
+        right: Box<Expr>,
+        maximum: String,
+    },
+    Sub {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    Cast {
+        #[serde(rename = "type")]
+        ty: String,
+        value: Box<Expr>,
     },
     Reference {
         name: String,
@@ -135,7 +161,42 @@ pub enum Expr {
 }
 pub type Environment = BTreeMap<String, Value>;
 pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
-    Ok(match expr {
+    let result = match expr {
+        Expr::Uint { maximum, value } => scalars::unsigned_literal(maximum, value)?,
+        Expr::Uadd {
+            left,
+            right,
+            maximum,
+        } => scalars::unsigned_arithmetic(
+            scalars::UnsignedOp::Add,
+            evaluate(left, env)?,
+            evaluate(right, env)?,
+            maximum,
+        )?,
+        Expr::Usub {
+            left,
+            right,
+            maximum,
+        } => scalars::unsigned_arithmetic(
+            scalars::UnsignedOp::Sub,
+            evaluate(left, env)?,
+            evaluate(right, env)?,
+            maximum,
+        )?,
+        Expr::Umul {
+            left,
+            right,
+            maximum,
+        } => scalars::unsigned_arithmetic(
+            scalars::UnsignedOp::Mul,
+            evaluate(left, env)?,
+            evaluate(right, env)?,
+            maximum,
+        )?,
+        Expr::Cast { ty, value } => evaluate(value, env)?.cast(&ScalarType::parse(ty)?)?,
+        Expr::Sub { left, right } => {
+            Value::Native(evaluate(left, env)?.field()? - evaluate(right, env)?.field()?)
+        }
         Expr::Constant { value } => Value::Native(canonical_field(value)?),
         Expr::Bool { value } => Value::Bool(*value),
         Expr::Reference { name } => env
@@ -151,10 +212,7 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         Expr::Eq { left, right } => {
             let a = evaluate(left, env)?;
             let b = evaluate(right, env)?;
-            ensure!(
-                std::mem::discriminant(&a) == std::mem::discriminant(&b),
-                "equality type mismatch"
-            );
+            ensure!(a.scalar_type() == b.scalar_type(), "equality type mismatch");
             Value::Bool(a == b)
         }
         Expr::Select { condition, yes, no } => {
@@ -162,7 +220,7 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             let a = evaluate(yes, env)?;
             let b = evaluate(no, env)?;
             ensure!(
-                std::mem::discriminant(&a) == std::mem::discriminant(&b),
+                a.scalar_type() == b.scalar_type(),
                 "selection type mismatch"
             );
             if c { a } else { b }
@@ -176,7 +234,9 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             evaluate(left, env)?.field()?,
             evaluate(right, env)?.field()?,
         ])),
-    })
+    };
+    result.validate()?;
+    Ok(result)
 }
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -249,22 +309,39 @@ pub struct Config {
     #[serde(rename = "negativeCases", default)]
     pub negative_cases: Vec<NegativeCase>,
 }
+/// Private decoding errors retain locations, never parser messages or values.
+pub fn parse_private_config(bytes: &[u8]) -> Result<Config> {
+    serde_json::from_slice(bytes).map_err(|error| {
+        anyhow!(
+            "invalid private configuration (line {}, column {})",
+            error.line(),
+            error.column()
+        )
+    })
+}
 #[derive(Clone, Deserialize)]
 pub struct NegativeCase {
     pub name: String,
     pub inputs: BTreeMap<String, Json>,
 }
 fn input_value(ty: &str, json: &Json) -> Result<Value> {
-    match ty {
-        "Native" => Ok(Value::Native(canonical_field(
+    match ScalarType::parse(ty)? {
+        ScalarType::Native => Ok(Value::Native(canonical_field(
             json.as_str()
                 .ok_or_else(|| anyhow!("Native input requires decimal string"))?,
         )?)),
-        "Bool" => Ok(Value::Bool(
+        ScalarType::Bool => Ok(Value::Bool(
             json.as_bool()
                 .ok_or_else(|| anyhow!("Bool input requires boolean"))?,
         )),
-        _ => bail!("unsupported value type"),
+        ScalarType::UInt(maximum) => Ok(Value::UInt {
+            number: canonical_unsigned(
+                json.as_str()
+                    .ok_or_else(|| anyhow!("unsigned input requires decimal string"))?,
+                &maximum,
+            )?,
+            maximum,
+        }),
     }
 }
 pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Environment> {
@@ -295,10 +372,10 @@ pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Envir
         ensure!(o.visibility == "public", "unsupported output visibility");
         ensure!(!env.contains_key(&o.name), "output shadows existing name");
         let v = evaluate(&o.expression, &env)?;
-        match (&v, o.ty.as_str()) {
-            (Value::Native(_), "Native") | (Value::Bool(_), "Bool") => {}
-            _ => bail!("output type mismatch"),
-        };
+        ensure!(
+            v.scalar_type() == ScalarType::parse(&o.ty)?,
+            "output type mismatch"
+        );
         env.insert(o.name.clone(), v);
     }
     Ok(env)
@@ -324,7 +401,7 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                 types.len() == 2
                     && types
                         .iter()
-                        .all(|t| matches!(t.as_str(), Some("Native" | "Bool"))),
+                        .all(|t| t.as_str().is_some_and(|t| ScalarType::parse(t).is_ok())),
                 "unsupported map schema"
             );
             ensure!(
@@ -353,12 +430,12 @@ fn read_cell(context: &QueryContext<Db>, slot: u32, ty: &str) -> Result<Value> {
     let mut fields = Vec::new();
     value.value_only_field_repr(&mut fields);
     ensure!(fields.len() == 1, "expected scalar state cell");
-    match ty {
-        "Native" => Ok(Value::Native(fields[0])),
-        "Bool" => Ok(Value::Bool(
+    match ScalarType::parse(ty)? {
+        ScalarType::Native => Ok(Value::Native(fields[0])),
+        ScalarType::Bool => Ok(Value::Bool(
             bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
         )),
-        _ => bail!("unsupported state type"),
+        ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
     }
 }
 pub struct Execution {
@@ -414,7 +491,15 @@ pub fn prepare(
                     .get(read_index)
                     .ok_or_else(|| anyhow!("missing read schema"))?;
                 read_index += 1;
-                if let Expr::Reference { name } = expression {
+                let read_reference = match expression {
+                    Expr::Reference { name } => Some(name),
+                    Expr::Cast { ty, value } if ty == "Native" => match value.as_ref() {
+                        Expr::Reference { name } => Some(name),
+                        _ => None,
+                    },
+                    _ => None,
+                };
+                if let Some(name) = read_reference {
                     if !env.contains_key(name) {
                         ensure!(
                             !has_written,
@@ -545,3 +630,12 @@ pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usi
 
 /// Versioned C ABI over the bounded provider/session runtime.
 pub mod ffi;
+
+mod scalars;
+pub use scalars::{MAX_UINT_BITS, ScalarType, canonical_unsigned, max_uint};
+
+/// Versioned portable artifact manifests.
+pub mod artifacts;
+
+/// Native private transaction artifact assembly.
+pub mod assembly;

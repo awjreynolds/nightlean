@@ -46,7 +46,7 @@ static void resume(uint64_t session, uint64_t id, const std::string &value,
   else assert(result == 0);
 }
 int main(int argc, char **argv) {
-  assert(argc == 2);
+  assert(argc == 2 || argc == 3);
   std::ifstream file(argv[1]);
   std::string envelope((std::istreambuf_iterator<char>(file)), {});
   assert(!envelope.empty());
@@ -96,5 +96,26 @@ int main(int argc, char **argv) {
   resume(cancelled, 1, "\"42\"", NIGHTLEAN_INVALID_STATE);
   assert(nightlean_session_free(cancelled) == NIGHTLEAN_OK);
   assert(nightlean_session_free(cancelled) == NIGHTLEAN_INVALID_HANDLE);
+  if (argc == 3) {
+    std::ifstream unsigned_file(argv[2]);
+    const std::string unsigned_envelope((std::istreambuf_iterator<char>(unsigned_file)), {});
+    const auto unsigned_session = start_session(unsigned_envelope);
+    const auto request = advance(unsigned_session);
+    assert(contains(request, "\"name\":\"left\""));
+    assert(contains(request, "\"type\":\"UIntRange<256>\""));
+    resume(unsigned_session, 1, "255", NIGHTLEAN_INVALID_RESPONSE);
+    resume(unsigned_session, 1, "true", NIGHTLEAN_INVALID_RESPONSE);
+    resume(unsigned_session, 1, "\"256\"", NIGHTLEAN_INVALID_RESPONSE);
+    resume(unsigned_session, 1, "\"0255\"", NIGHTLEAN_INVALID_RESPONSE);
+    assert(advance(unsigned_session) == request);
+    resume(unsigned_session, 1, "\"255\"", NIGHTLEAN_OK);
+    assert(contains(advance(unsigned_session), "\"name\":\"right\""));
+    resume(unsigned_session, 2, "\"255\"", NIGHTLEAN_OK);
+    const auto unsigned_completed = advance(unsigned_session);
+    assert(contains(unsigned_completed, "\"status\":\"completed\""));
+    assert(contains(unsigned_completed, "\"result\":\"510\""));
+    assert(contains(unsigned_completed, "\"officialCircuitChecked\":true"));
+    assert(nightlean_session_free(unsigned_session) == NIGHTLEAN_OK);
+  }
   return 0;
 }

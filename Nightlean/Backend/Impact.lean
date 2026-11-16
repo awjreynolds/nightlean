@@ -53,6 +53,12 @@ def Plan.fields (plan : Plan) : List Scalar := plan.operations.flatMap Op.fields
 private def nativeValue : (ty : Ty) → Expr ty → Scalar
   | .native, value => value
   | .bool, value => .select value (.native 1) (.native 0)
+  | .uint _, value => .cast .native value
+
+private def nativeRead (ty : Ty) (name : String) : Scalar :=
+  match ty with
+  | .native | .bool => .ref name
+  | .uint maximum => .cast .native (.ref name : Expr (.uint maximum))
 
 private def stateSlot (state : List StateDecl) (name : String) : Except String Nat :=
   match state.findIdx? (·.name == name) with
@@ -76,7 +82,7 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
     -- Public parameters must appear among Popeq reads consumed by public_input.
     for input in entry.circuit.inputs do
       if input.visibility == .«public» then
-        let value := Aligned.field (.ref input.name)
+        let value := Aligned.field (nativeRead input.ty input.name)
         plan := { plan with
           operations := plan.operations ++ [.push value, .popeq value]
           reads := plan.reads ++ [{name := input.name, ty := input.ty}] }
@@ -85,7 +91,7 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
       | .readCell name destination ty =>
         let slot ← stateSlot state name
         plan := { plan with
-          operations := plan.operations ++ [.dup, .index slot, .popeq (.field (.ref destination))]
+          operations := plan.operations ++ [.dup, .index slot, .popeq (.field (nativeRead ty destination))]
           reads := plan.reads ++ [{name := destination, ty}] }
       | .require condition =>
         plan := {plan with guards := plan.guards ++ [condition]}

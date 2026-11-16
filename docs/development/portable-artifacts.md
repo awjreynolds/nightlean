@@ -1,0 +1,96 @@
+# Public entrypoint bundles
+
+The native Rust `nightlean-bundle` tool assembles and verifies a versioned public bundle for one contract entrypoint. Lean still implements compilation and primary lowering. Bundling neither invokes Compact nor executes the circuit, generates a proof or submits a transaction.
+
+The initial supported profile is the unchanged `midnight-ledger-9` default: ledger 9.1.0.1 at `a2b30128ca4b660b73a068e29b56b48ede8c9a74`, native ZKIR 3.2.0 at `446c7fecc6bd41dab99ebe89ab404e9d077d11a9`, and Lean 4.35.0. The separately qualified experimental 3.2.1 profile is not accepted by this first bundle format.
+
+## Artifact stages
+
+1. Lean compilation emits the circuit, symbolic Impact plan and `nightlean.json` schemas. Compilation does not generate keys.
+2. The pinned native ZKIR tool generates prover/verifier keys. Its build manifest records source, executable and lockfile identities.
+3. The bundler selects public files, checks their associations and writes canonical manifest bytes. Private execution belongs outside this directory.
+
+Required roles are explicit source files, native contract ZKIR, its `.impact.json` plan, compiler metadata, one ABI header/schema, target profile, public ledger parameters, prover key, verifier key and native tool provenance. Only source selections permit multiple entries. The recipe stays outside the bundle. File selection never recursively copies an input directory.
+
+| Role | Bundle path |
+| --- | --- |
+| source | `source/<explicit logical source name>` |
+| circuit | `circuit/entrypoint.zkir` |
+| plan | `plan/entrypoint.impact.json` |
+| metadata | `schema/nightlean.json` |
+| abi | `schema/nightlean_runtime.h` or `schema/abi.schema.json` |
+| profile | `profile/target.json` |
+| ledgerParameters | `parameters/ledger.params` |
+| proverKey, verifierKey | `keys/entrypoint.prover`, `keys/entrypoint.verifier` |
+| toolchain | `provenance/native-zkir.json` |
+
+Each manifest entry records its role, logical name, fixed relative path, byte size and lowercase SHA-256. Logical circuit and plan names preserve the compiler's original filenames even though bundle paths are fixed. The selected plan must name the selected native circuit. Compiler metadata must agree on the contract, entrypoint, state schema, plan name and complete circuit schema. Target/component/source identities must match the supported profile. Public JSON artifacts reject unknown top-level fields.
+
+## Build and use
+
+Build the runtime with its pinned Rust toolchain and lockfile:
+
+```sh
+cargo build --manifest-path runtime/Cargo.toml --locked --bin nightlean-bundle
+cargo test --manifest-path runtime/Cargo.toml --locked --test artifacts
+```
+
+The local recipe uses schema version 1, a declared compiler Git revision and a file array. This example shows all required selections. Replace each `input` with the corresponding public input file, and use the exact revision of the compiler which produced the output.
+
+```json
+{
+  "schemaVersion": 1,
+  "compilerRevision": "0851aca03586164708981742e9e833c080897661",
+  "files": [
+    {"role":"source","name":"examples/PrivateClaim.lean","input":"examples/PrivateClaim.lean"},
+    {"role":"circuit","name":"PrivateClaim.claim.zkir","input":"compiled/PrivateClaim.claim.zkir"},
+    {"role":"plan","name":"PrivateClaim.claim.impact.json","input":"compiled/PrivateClaim.claim.impact.json"},
+    {"role":"metadata","name":"nightlean.json","input":"compiled/nightlean.json"},
+    {"role":"abi","name":"nightlean_runtime.h","input":"runtime/include/nightlean_runtime.h"},
+    {"role":"profile","name":"target.json","input":"profiles/midnight-ledger-9.json"},
+    {"role":"ledgerParameters","name":"ledger.params","input":"public/ledger.params"},
+    {"role":"proverKey","name":"entrypoint.prover","input":"public/claim.prover"},
+    {"role":"verifierKey","name":"entrypoint.verifier","input":"public/claim.verifier"},
+    {"role":"toolchain","name":"native-zkir.json","input":"native-zkir/build-manifest.json"}
+  ]
+}
+```
+
+```sh
+nightlean-bundle assemble recipe.json new-public-bundle
+nightlean-bundle verify new-public-bundle TRUSTED_MANIFEST_SHA256
+```
+
+`assemble` requires a new output directory and reports `manifestSha256`. Input path strings never enter the manifest. Native provenance is normalized to public source/tool identities, hashes and build command. The local absolute `binary` path is removed. The verifier rejects changed or missing payloads, unsafe relative paths, path conflicts, symlinks and unlisted files/directories. Paths which differ only by case also conflict. Every shared directory prefix must use identical casing, so `Foo/A.lean` and `foo/B.lean` reject before the output directory is created. Exclusive file creation rejects additional aliases normalized by the host filesystem. Existing destinations are never overwritten. A failed write removes only the output directory created by that assembly attempt.
+
+The verifier optionally accepts a trusted manifest digest, supplied through a separate trusted channel. Without this digest or another authentication scheme, verification establishes internal consistency only. An attacker who replaces both a payload and its unsigned manifest is not detected. Signing, release trust distribution and deployed-key agreement are separate work.
+
+Errors use JSON with stable `error.code` values, including `unsupported_version`, `unsupported_name`, `profile_mismatch`, `plan_mismatch`, `digest_mismatch`, `manifest_digest_mismatch`, `unsafe_path`, `private_artifact`, `missing_role` and `limit_exceeded`. Error messages omit input values and local paths.
+
+## Canonical representation and limits
+
+Manifest schema 1 uses UTF-8 compact JSON, object keys in ascending string order, unsigned decimal sizes, lowercase hexadecimal digests and one trailing LF. Entries follow the declared role order (`source`, `circuit`, `plan`, `metadata`, `abi`, `profile`, `ledgerParameters`, `proverKey`, `verifierKey`, `toolchain`), then ascending logical name within a role. The verifier rejects alternate whitespace, unknown manifest fields and noncanonical entry ordering.
+
+Logical artifact names use ASCII in this first schema. Physical input paths and source contents still support UTF-8. This restriction follows a reproduced macOS filesystem mismatch: composed `é/A.lean` and decomposed `e\u0301/B.lean` shared one materialized directory, allowing assembly followed by verification failure. Both forms now reject before output creation. General Unicode logical names need a portable encoding or normalization contract in a later schema. This remains an explicit portability gap within the full feature goal. Circuit and plan logical names must still match compiler metadata, so Unicode-generated artifact names also remain unsupported by this first bundler.
+
+There are no timestamps or absolute build paths in the generated manifest. Identical selected bytes and compiler revision produce identical bundles regardless of recipe selection order. This does not establish determinism for the external compiler or key generator. Proof bytes and runtime values are excluded.
+
+Limits are 64 entries, 256 MiB per payload, 1 GiB total payloads and 2 MiB per JSON artifact. Assembly and verification retain bounded payload bytes in memory. These are interface limits, not a hostile filesystem or compiler sandbox. Filesystem inputs must stay under the caller's control during reading. Arbitrary source code or mislabeled binary data still requires a trusted producer.
+
+Known private filenames, including `runtime-config.json`, witness JSON, preimages and private-state snapshots, reject even when selected under a public logical name. Physical input extensions must also match their selected role, such as `.lean`, `.zkir`, `.params`, `.prover` or `.verifier`. Extra bundle files reject. These checks prevent accidental inclusion of known execution files. They do not detect a secret embedded in a source constant, header, renamed binary or permitted program expression. The producer must select public programs and parameters. The tool does not resolve the Lean import closure or validate a build against its declared compiler revision.
+
+## Rust consumer boundary
+
+`artifacts::verify(root, trusted_digest)` returns `VerifiedBundle`. `manifest()` exposes immutable metadata. `file(Role::Plan)` and the other role getters return retained verified bytes. Source getters require an explicit logical source name. Consumers should execute these retained bytes instead of reopening mutable filesystem paths after verification.
+
+The native assembler now accepts `nightlean-assemble --bundle DIRECTORY --manifest-sha256 TRUSTED_DIGEST --config PRIVATE_CONFIG.json --ttl-unix UNIX_SECONDS NEW_OUTPUT_DIRECTORY`. This route verifies public inputs before reading private configuration, then passes retained bytes to `assembly::assemble_verified`. Rust callers use `artifacts::verify(root, Some(trusted_digest))` followed by the same consumer API. See [native assembler evidence](native-assembler.md) for the real-key checks, altered-plan/key/profile rejection and execution after deleting the verified bundle directory.
+
+Low-level explicit-input assembly and the C ABI retain their documented trusted-artifact boundary. Hashes and matching schemas do not prove circuit/plan semantic equivalence, correct key generation, executable provenance, or correspondence with a deployed verifier key. The external source revisions and native-tool hashes are recorded declarations, not build attestations. Native parameter/key decoding and official checker/prover/ledger acceptance remain separate gates.
+
+## Reproduced private-claim bundle
+
+On 2026-11-16, the compiler source was exported from immutable revision `0851aca03586164708981742e9e833c080897661` into an isolated directory and built with Lean 4.35.0. Fresh compilation of `examples/PrivateClaim.lean` produced circuit and plan objects equal to the accepted native private-claim artifacts. The bundle used those fresh compiler outputs, the matching source/header/profile, public ledger parameters, accepted prover/verifier keys and original native build provenance. No witness, runtime configuration, proof preimage or private-state file was selected.
+
+The output at `/private/tmp/nightlean-public-bundle-0851aca` contains 10 payloads totaling 471,777 bytes, plus a 2,153-byte manifest. Its manifest SHA-256 is `17265934c3891263c3d7acb62abbb21777add0bf4131f28e3e909a1b3cb1d583`. A fresh native process with `env -i PATH=/usr/bin:/bin` verified the bundle against this external digest. No Node process participated. This packages previously accepted keys and parameters. It does not constitute a new deployment or proof run.
+
+Eleven focused Rust tests cover canonical/reordered assembly, retained bytes after file mutation, every payload role's tampering rejection, target/source pin and plan mismatches, known private files and unknown plan fields, traversal/path conflicts/shared directory casing/symlinks, Unicode logical-name rejection with UTF-8 source preservation, missing/extra files, unsupported schemas and external-digest authentication. Synthetic key fixtures test integrity behavior only. The real bundle above exercises the accepted claim materials.

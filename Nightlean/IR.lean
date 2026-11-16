@@ -1,4 +1,4 @@
-import Nightlean.Field
+import Nightlean.ScalarPolicy
 
 namespace Nightlean
 
@@ -10,7 +10,13 @@ structure SourceSpan where
 
 inductive Ty where
   | native | bool
+  | uint (maximum : Nat)
   deriving Repr, BEq, DecidableEq, Inhabited
+
+def Ty.scalarKind : Ty → ScalarPolicy.Kind
+  | .native => .native
+  | .bool => .bool
+  | .uint maximum => .uint maximum
 
 inductive Visibility where
   | «public» | «private»
@@ -20,9 +26,15 @@ inductive Visibility where
 inductive Expr : Ty → Type where
   | native (value : Nat) : Expr .native
   | bool (value : Bool) : Expr .bool
+  | uint (maximum value : Nat) : Expr (.uint maximum)
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
+  | sub (a b : Expr .native) : Expr .native
+  | uadd (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint (m + n))
+  | usub (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint m)
+  | umul (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint (m * n))
+  | cast (target : Ty) (value : Expr source) : Expr target
   | eq (a b : Expr ty) : Expr .bool
   | select (condition : Expr .bool) (yes no : Expr ty) : Expr ty
   | poseidon2 (domain : Nat) (a b : Expr .native) : Expr .native
@@ -104,18 +116,35 @@ structure Diagnostic where
 
 abbrev TypeEnv := List (String × Ty)
 
+def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
+  ScalarPolicy.validate ty.scalarKind
+  if let .uint maximum := ty then
+    unless maximum < caps.nativeModulus do throw "unsigned type exceeds native representation"
+
 def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except String Unit
   | .native value =>
     if value < caps.nativeModulus then pure () else .error "noncanonical native constant"
+  | .uint maximum value => do
+    (Ty.uint maximum).validate caps
+    if value ≤ maximum then pure () else .error "unsigned constant exceeds its type"
   | .bool _ => .ok ()
-  | .ref name =>
+  | .ref name => do
+    ty.validate caps
     match env.lookup name with
     | none => .error s!"unknown reference '{name}'"
     | some found => if found == ty then pure () else .error s!"type mismatch for '{name}'"
-  | .add a b | .mul a b => do
+  | .add a b | .mul a b | .sub a b => do
     if !caps.nativeArithmetic then throw "target lacks native arithmetic"
     a.validate caps env
     b.validate caps env
+  | .uadd a b | .usub a b | .umul a b => do
+    ty.validate caps
+    if !caps.nativeArithmetic then throw "target lacks native arithmetic"
+    a.validate caps env
+    b.validate caps env
+  | .cast target value => do
+    target.validate caps
+    value.validate caps env
   | .eq a b => do
     if !caps.equality then throw "target lacks equality"
     a.validate caps env
@@ -148,8 +177,15 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
   if !uniqueNames (c.outputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit output"}
   let env := c.inputs.map fun i => (i.name, i.ty)
+  for input in c.inputs do
+    match input.ty.validate caps with
+    | .error message => throw {span := input.span, message}
+    | .ok _ => pure ()
   validateConstraints caps env c.span c.constraints
   for output in c.outputs do
+    match output.ty.validate caps with
+    | .error message => throw {span := output.span, message}
+    | .ok _ => pure ()
     if (env.lookup output.name).isSome then
       throw {span := output.span, message := s!"output '{output.name}' shadows a circuit input"}
     match output.value.validate caps env with
@@ -163,6 +199,14 @@ private def requireState (decls : List StateDecl) (name : String) (kind : StateK
 
 /-- Validate state names, typed reads, guards and writes in execution order. -/
 def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entrypoint) : Except Diagnostic Unit := do
+  for decl in decls do
+    let types := match decl.kind with
+      | .cell ty => [ty]
+      | .map keyTy valueTy => [keyTy, valueTy]
+    for ty in types do
+      match ty.validate caps with
+      | .error message => throw {span := decl.span, message}
+      | .ok _ => pure ()
   e.circuit.validate caps
   let mut env := (e.circuit.inputs.filter (·.visibility == .«public»)).map fun i => (i.name, i.ty)
   for output in e.circuit.outputs do
@@ -216,6 +260,14 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
     throw {span := c.span, message := "duplicate state declaration"}
   if !uniqueNames (c.entrypoints.map (·.name)) then
     throw {span := c.span, message := "duplicate contract entrypoint"}
+  for decl in c.state do
+    let types := match decl.kind with
+      | .cell ty => [ty]
+      | .map keyTy valueTy => [keyTy, valueTy]
+    for ty in types do
+      match ty.validate caps with
+      | .error message => throw {span := decl.span, message}
+      | .ok _ => pure ()
   for entry in c.entrypoints do entry.validate caps c.state
 
 end Nightlean

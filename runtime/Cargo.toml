@@ -16,6 +16,7 @@ num-bigint = "0.4"
 hex = "0.4"
 sha2 = "0.11"
 zeroize = "1.9"
+rand = "0.8"
 ledger = { package = "midnight-ledger-v9", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 onchain-runtime = { package = "midnight-onchain-runtime", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 base-crypto = { package = "midnight-base-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }

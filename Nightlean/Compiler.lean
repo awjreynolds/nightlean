@@ -11,13 +11,22 @@ private def sourceCapabilities : Capabilities :=
 private def typeName : Ty → String
   | .native => "Native"
   | .bool => "Bool"
+  | .uint maximum => s!"UIntRange<{maximum + 1}>"
 
 private def expressionJson : Expr ty → Json
   | .native n => Json.mkObj [("native", toJson (toString n))]
   | .bool b => Json.mkObj [("bool", toJson b)]
+  | .uint maximum value => Json.mkObj [("uint", Json.mkObj [
+      ("maximum", toJson (toString maximum)), ("value", toJson (toString value))])]
   | .ref name => Json.mkObj [("ref", toJson name)]
   | .add a b => Json.mkObj [("add", toJson [expressionJson a, expressionJson b])]
   | .mul a b => Json.mkObj [("mul", toJson [expressionJson a, expressionJson b])]
+  | .sub a b => Json.mkObj [("sub", toJson [expressionJson a, expressionJson b])]
+  | .uadd a b => Json.mkObj [("uadd", toJson [expressionJson a, expressionJson b])]
+  | .usub a b => Json.mkObj [("usub", toJson [expressionJson a, expressionJson b])]
+  | .umul a b => Json.mkObj [("umul", toJson [expressionJson a, expressionJson b])]
+  | .cast target value => Json.mkObj [("cast", Json.mkObj [
+      ("type", toJson (typeName target)), ("value", expressionJson value)])]
   | .eq a b => Json.mkObj [("eq", toJson [expressionJson a, expressionJson b])]
   | .select c a b => Json.mkObj [("select", toJson [expressionJson c, expressionJson a, expressionJson b])]
   | .poseidon2 domain a b => Json.mkObj [("poseidon2", Json.mkObj [
@@ -28,9 +37,17 @@ never an execution witness. Decimal field constants avoid JavaScript number trun
 private def nativeExpressionJson : Expr ty → Json
   | .native n => Json.mkObj [("tag", toJson ("constant" : String)), ("value", toJson (toString n))]
   | .bool b => Json.mkObj [("tag", toJson ("bool" : String)), ("value", toJson b)]
+  | .uint maximum value => Json.mkObj [("tag", toJson ("uint" : String)),
+      ("maximum", toJson (toString maximum)), ("value", toJson (toString value))]
   | .ref name => Json.mkObj [("tag", toJson ("reference" : String)), ("name", toJson name)]
   | .add a b => binary "add" (nativeExpressionJson a) (nativeExpressionJson b)
   | .mul a b => binary "mul" (nativeExpressionJson a) (nativeExpressionJson b)
+  | .sub a b => binary "sub" (nativeExpressionJson a) (nativeExpressionJson b)
+  | .uadd (m := m) (n := n) a b => unsigned "uadd" (m + n) (nativeExpressionJson a) (nativeExpressionJson b)
+  | .usub (m := m) a b => unsigned "usub" m (nativeExpressionJson a) (nativeExpressionJson b)
+  | .umul (m := m) (n := n) a b => unsigned "umul" (m * n) (nativeExpressionJson a) (nativeExpressionJson b)
+  | .cast target value => Json.mkObj [("tag", toJson ("cast" : String)),
+      ("type", toJson (typeName target)), ("value", nativeExpressionJson value)]
   | .eq a b => binary "eq" (nativeExpressionJson a) (nativeExpressionJson b)
   | .select c a b => Json.mkObj [("tag", toJson ("select" : String)),
       ("condition", nativeExpressionJson c), ("yes", nativeExpressionJson a), ("no", nativeExpressionJson b)]
@@ -39,6 +56,9 @@ private def nativeExpressionJson : Expr ty → Json
 where
   binary (tag : String) (left right : Json) : Json :=
     Json.mkObj [("tag", toJson tag), ("left", left), ("right", right)]
+  unsigned (tag : String) (maximum : Nat) (left right : Json) : Json :=
+    Json.mkObj [("tag", toJson tag), ("maximum", toJson (toString maximum)),
+      ("left", left), ("right", right)]
 
 private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json) :=
   match value with

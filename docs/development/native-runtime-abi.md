@@ -12,6 +12,8 @@ The supported profile is `midnight-ledger-9-zkir-3.2.0`. The exact Rust source r
 
 Native field values are canonical decimal strings, with no sign, whitespace or redundant leading zero. Values must be smaller than the BLS12-381 scalar modulus. Bool values are JSON booleans. JavaScript numbers and string booleans reject. Only explicitly public output declarations enter completion results.
 
+The unsigned scalar extension uses normalized `UIntRange<N>` types and canonical decimal strings in `[0,N)`, with exclusive bound at most `2^248`. Its checked arithmetic, conversion and provider rules are recorded in [native-unsigned-scalars.md](native-unsigned-scalars.md).
+
 ## Host protocol
 
 `nightlean_session_begin` consumes this envelope:

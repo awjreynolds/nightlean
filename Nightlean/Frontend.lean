@@ -26,6 +26,8 @@ initialize contractRegistry : SimplePersistentEnvExtension Name (Array Name) ←
 declare_syntax_cat nltype
 scoped syntax "Native" : nltype
 scoped syntax "Bool" : nltype
+scoped syntax "UInt" num : nltype
+scoped syntax "UIntRange" num : nltype
 
 declare_syntax_cat nlexpr
 scoped syntax ident : nlexpr
@@ -34,6 +36,10 @@ scoped syntax "true" : nlexpr
 scoped syntax "false" : nlexpr
 scoped syntax "add(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "mul(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "sub(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "uint(" num ")" : nlexpr
+scoped syntax "cast(" nltype "," nlexpr ")" : nlexpr
+scoped syntax "default(" nltype ")" : nlexpr
 scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
@@ -67,11 +73,22 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
   match stx with
   | `(nltype| Native) => pure .native
   | `(nltype| Bool) => pure .bool
+  | `(nltype| UInt $bits:num) =>
+    match ScalarPolicy.sized bits.getNat with
+    | .ok (.uint maximum) => pure (.uint maximum)
+    | .error message => throwErrorAt stx message
+    | _ => throwErrorAt stx "invalid unsigned width"
+  | `(nltype| UIntRange $exclusive:num) =>
+    match ScalarPolicy.bounded exclusive.getNat with
+    | .ok (.uint maximum) => pure (.uint maximum)
+    | .error message => throwErrorAt stx message
+    | _ => throwErrorAt stx "invalid unsigned range"
   | _ => throwErrorAt stx "unsupported Nightlean type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .native => `(Nightlean.Ty.native)
   | .bool => `(Nightlean.Ty.bool)
+  | .uint maximum => `(Nightlean.Ty.uint $(⟨Syntax.mkNumLit (toString maximum)⟩))
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
@@ -85,6 +102,36 @@ private def spanTerm (stx : Syntax) : CommandElabM (TSyntax `term) := do
 
 private abbrev Bindings := List (String × Ty × TSyntax `term)
 
+private def coerceExpression (stx : Syntax) (found target : Ty) (value : TSyntax `term) :
+    CommandElabM (TSyntax `term) := do
+  if found == target then return value
+  match found, target with
+  | .uint m, .uint n =>
+    unless m ≤ n do throwErrorAt stx "Nightlean expression type mismatch; use an explicit narrowing cast"
+    `(Nightlean.Expr.cast $(← tyTerm target) $value)
+  | .uint _, .native => `(Nightlean.Expr.cast Nightlean.Ty.native $value)
+  | _, _ => throwErrorAt stx "Nightlean expression type mismatch"
+
+private def commonType (stx : Syntax) (left right : Ty) : CommandElabM Ty := do
+  if left == right then return left
+  match left, right with
+  | .uint m, .uint n => pure (.uint (max m n))
+  | .native, .uint _ | .uint _, .native => pure .native
+  | _, _ => throwErrorAt stx "Nightlean expression type mismatch"
+
+/-- A new partial scalar operation must execute even beneath a total wrapper.
+Mark every subtraction conservatively, including total native-field subtraction. -/
+private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
+  match stx with
+  | `(nlexpr| cast($_:nltype, $_:nlexpr)) => Bool.true
+  | `(nlexpr| sub($_:nlexpr, $_:nlexpr)) => Bool.true
+  | `(nlexpr| add($a, $b)) | `(nlexpr| mul($a, $b))
+  | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
+    hasPartialScalar a || hasPartialScalar b
+  | `(nlexpr| select($c, $a, $b)) =>
+    hasPartialScalar c || hasPartialScalar a || hasPartialScalar b
+  | _ => Bool.false
+
 private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     CommandElabM (Ty × TSyntax `term) := do
   match stx with
@@ -95,22 +142,40 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| $n:num) => pure (.native, ← `(Nightlean.Expr.native $n))
   | `(nlexpr| true) => pure (.bool, ← `(Nightlean.Expr.bool Bool.true))
   | `(nlexpr| false) => pure (.bool, ← `(Nightlean.Expr.bool Bool.false))
+  | `(nlexpr| uint($n:num)) =>
+    match ScalarPolicy.validate (.uint n.getNat) with
+    | .error message => throwErrorAt stx message
+    | .ok _ => pure (.uint n.getNat, ← `(Nightlean.Expr.uint $n $n))
+  | `(nlexpr| cast($target:nltype, $value:nlexpr)) =>
+    let target ← readTy target
+    let (_, value) ← expression env value
+    pure (target, ← `(Nightlean.Expr.cast $(← tyTerm target) $value))
+  | `(nlexpr| default($target:nltype)) =>
+    let target ← readTy target
+    match target with
+    | .native => pure (.native, ← `(Nightlean.Expr.native 0))
+    | .bool => pure (.bool, ← `(Nightlean.Expr.bool Bool.false))
+    | .uint maximum => pure (target, ← `(Nightlean.Expr.uint $(natTerm maximum) 0))
   | `(nlexpr| add($a, $b)) =>
-    let a ← expected env a .native
-    let b ← expected env b .native
-    pure (.native, ← `(Nightlean.Expr.add $a $b))
+    arithmetic env stx .add a b
   | `(nlexpr| mul($a, $b)) =>
-    let a ← expected env a .native
-    let b ← expected env b .native
-    pure (.native, ← `(Nightlean.Expr.mul $a $b))
+    arithmetic env stx .mul a b
+  | `(nlexpr| sub($a, $b)) =>
+    arithmetic env stx .sub a b
   | `(nlexpr| eq($a, $b)) =>
-    let (ty, a) ← expression env a
-    let b ← expected env b ty
+    let (ta, a) ← expression env a
+    let (tb, b) ← expression env b
+    let ty ← commonType stx ta tb
+    let a ← coerceExpression stx ta ty a
+    let b ← coerceExpression stx tb ty b
     pure (.bool, ← `(Nightlean.Expr.eq $a $b))
   | `(nlexpr| select($c, $a, $b)) =>
     let c ← expected env c .bool
-    let (ty, a) ← expression env a
-    let b ← expected env b ty
+    let (ta, a) ← expression env a
+    let (tb, b) ← expression env b
+    let ty ← commonType stx ta tb
+    let a ← coerceExpression stx ta ty a
+    let b ← coerceExpression stx tb ty b
     pure (ty, ← `(Nightlean.Expr.select $c $a $b))
   | `(nlexpr| poseidon2($domain:num, $a, $b)) =>
     let a ← expected env a .native
@@ -119,15 +184,44 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | _ => throwErrorAt stx "unsupported Nightlean expression"
 where
   expected (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) : CommandElabM (TSyntax `term) := do
+    if let .uint maximum := ty then
+      if let `(nlexpr| $n:num) := stx then
+        unless n.getNat ≤ maximum do throwErrorAt stx "unsigned constant exceeds its type"
+        return ← `(Nightlean.Expr.uint $(natTerm maximum) $n)
     let (found, value) ← expression env stx
-    unless found == ty do throwErrorAt stx "Nightlean expression type mismatch"
-    pure value
+    coerceExpression stx found ty value
+  arithmetic (env : Bindings) (stx : Syntax) (op : ScalarPolicy.Binary)
+      (left right : TSyntax `nlexpr) : CommandElabM (Ty × TSyntax `term) := do
+    let (lt, left) ← expression env left
+    let (rt, right) ← expression env right
+    let result ← match ScalarPolicy.infer op lt.scalarKind rt.scalarKind with
+      | .ok result => pure result
+      | .error message => throwErrorAt stx message
+    match result with
+    | .native =>
+      let left ← coerceExpression stx lt .native left
+      let right ← coerceExpression stx rt .native right
+      let term ← match op with
+        | .add => `(Nightlean.Expr.add $left $right)
+        | .sub => `(Nightlean.Expr.sub $left $right)
+        | .mul => `(Nightlean.Expr.mul $left $right)
+      pure (.native, term)
+    | .uint maximum =>
+      let term ← match op with
+        | .add => `(Nightlean.Expr.uadd $left $right)
+        | .sub => `(Nightlean.Expr.usub $left $right)
+        | .mul => `(Nightlean.Expr.umul $left $right)
+      pure (.uint maximum, term)
+    | .bool => throwErrorAt stx "invalid arithmetic result type"
 
 private def checkedExpression (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) :
     CommandElabM (TSyntax `term) := do
+  if let .uint maximum := ty then
+    if let `(nlexpr| $n:num) := stx then
+      unless n.getNat ≤ maximum do throwErrorAt stx "unsigned constant exceeds its type"
+      return ← `(Nightlean.Expr.uint $(natTerm maximum) $n)
   let (found, value) ← expression env stx
-  unless found == ty do throwErrorAt stx "Nightlean expression type mismatch"
-  pure value
+  coerceExpression stx found ty value
 
 private def ensureFresh (env : Bindings) (id : TSyntax `ident) : CommandElabM Unit := do
   if env.any (fun p => p.1 == id.getId.toString) then
@@ -160,7 +254,12 @@ private def ensureFresh (env : Bindings) (id : TSyntax `ident) : CommandElabM Un
       | `(nlcstmt| let $id:ident : $ty:nltype := $value:nlexpr) =>
         ensureFresh env id
         let t ← readTy ty
+        let retain := (match t with | .uint _ => Bool.true | _ => Bool.false) || hasPartialScalar value
         let value ← checkedExpression env value t
+        if retain then
+          -- Equality keeps partial range/underflow checks in unused bindings.
+          -- Removing it requires a proof that evaluating the expression cannot reject.
+          constraints := constraints.push (← `(Nightlean.Expr.eq $value $value))
         env := (id.getId.toString, t, value) :: env
       | `(nlcstmt| assert $value:nlexpr) =>
         constraints := constraints.push (← checkedExpression env value .bool)
