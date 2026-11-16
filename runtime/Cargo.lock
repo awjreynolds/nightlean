@@ -2234,14 +2234,17 @@ name = "nightlean-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "futures",
  "hex",
  "midnight-base-crypto",
  "midnight-coin-structure",
  "midnight-ledger-v9",
  "midnight-onchain-runtime",
+ "midnight-proofs 0.8.3",
  "midnight-serialize",
  "midnight-storage",
  "midnight-transient-crypto 3.0.1",
+ "midnight-zk-stdlib 2.4.0",
  "midnight-zkir 3.2.0 (git+https://github.com/midnightntwrk/midnight-zkir?rev=446c7fecc6bd41dab99ebe89ab404e9d077d11a9)",
  "midnight-zkir 3.2.0 (git+https://github.com/midnightntwrk/midnight-zkir?rev=7a51b3385bbf4bce3604df87a7c70867c9ab43c0)",
  "num-bigint",

@@ -18,7 +18,7 @@ use onchain_runtime::{
     context::QueryContext,
     state::{ContractOperation, ContractState, EntryPointBuf},
 };
-use rand::{Rng, rngs::OsRng};
+use rand::{CryptoRng, Rng, rngs::OsRng};
 use serde_json::{Value as Json, json};
 use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
 use sha2::{Digest, Sha256};
@@ -82,6 +82,20 @@ fn real_preimage(intent: &NativeIntent) -> Result<&ProofPreimage> {
         _ => Err(anyhow!("unsupported preimage version")),
     }
 }
+
+fn nonzero_random(rng: &mut (impl Rng + CryptoRng)) -> Result<Fr> {
+    // Bound both zero rejection and noncanonical field rejection from a broken host RNG.
+    for _ in 0..128 {
+        let mut bytes = zeroize::Zeroizing::new([0u8; 32]);
+        rng.fill_bytes(&mut *bytes);
+        if let Some(value) = Fr::from_le_bytes(&*bytes) {
+            if value != Fr::from(0u64) {
+                return Ok(value);
+            }
+        }
+    }
+    Err(anyhow!("host entropy rejected"))
+}
 struct Built {
     initial: ContractState<Db>,
     predicted: ContractState<Db>,
@@ -100,6 +114,19 @@ fn build(
     circuit: &IrSource,
     ttl: u64,
 ) -> Result<Built> {
+    build_with_rng(
+        plan, config, parameters, operation, circuit, ttl, &mut OsRng,
+    )
+}
+fn build_with_rng(
+    plan: &Plan,
+    config: &Config,
+    parameters: &LedgerParameters,
+    operation: ContractOperation,
+    circuit: &IrSource,
+    ttl: u64,
+    mut rng: &mut (impl Rng + CryptoRng),
+) -> Result<Built> {
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     ensure!(
         !plan.entrypoint.is_empty()
@@ -111,7 +138,6 @@ fn build(
             && !plan.entrypoint.as_bytes()[0].is_ascii_digit(),
         "invalid entrypoint"
     );
-    let mut rng = OsRng;
     let entry = EntryPointBuf(plan.entrypoint.as_bytes().to_vec());
     let mut initial = ContractState::<Db>::default();
     initial.data = create_state(plan, &config.state)?;
@@ -125,12 +151,7 @@ fn build(
         value: FabValue(vec![]),
         alignment: Alignment(vec![]),
     };
-    let randomness: Fr = loop {
-        let r = rng.r#gen();
-        if r != Fr::from(0u64) {
-            break r;
-        }
-    };
+    let randomness = nonzero_random(rng)?;
     let commitment =
         onchain_runtime::communication_commitment(empty.clone(), empty.clone(), randomness);
     let context = QueryContext::new(initial.data.clone(), address);
@@ -199,6 +220,28 @@ fn build(
         guaranteed: guaranteed_count,
         fallible: fallible_count,
     })
+}
+
+/// In-memory constructor used by the native proof API after authenticating public material.
+pub(crate) fn prepare_call(
+    plan: &Plan,
+    config: &Config,
+    parameters: &LedgerParameters,
+    verifier: VerifierKey,
+    circuit: &IrSource,
+    ttl: u64,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<(NativeIntent, NativeIntent)> {
+    let built = build_with_rng(
+        plan,
+        config,
+        parameters,
+        ContractOperation::new(Some(verifier), None),
+        circuit,
+        ttl,
+        rng,
+    )?;
+    Ok((built.deploy, built.call))
 }
 
 struct OutputDirectory {
@@ -392,6 +435,52 @@ pub fn assemble_verified(
 #[cfg(test)]
 mod tests {
     use super::*;
+    struct ConstantRng(u8, usize);
+    impl rand::RngCore for ConstantRng {
+        fn next_u32(&mut self) -> u32 {
+            u32::from_le_bytes([self.0; 4])
+        }
+        fn next_u64(&mut self) -> u64 {
+            u64::from_le_bytes([self.0; 8])
+        }
+        fn fill_bytes(&mut self, bytes: &mut [u8]) {
+            self.1 += 1;
+            assert!(self.1 <= 128, "entropy sampling did not stop");
+            bytes.fill(self.0);
+        }
+        fn try_fill_bytes(&mut self, bytes: &mut [u8]) -> std::result::Result<(), rand::Error> {
+            self.fill_bytes(bytes);
+            Ok(())
+        }
+    }
+    impl CryptoRng for ConstantRng {}
+
+    #[test]
+    fn constructor_bounds_zero_and_noncanonical_host_entropy() {
+        let (plan, config, circuit) = sample();
+        for byte in [0, 255] {
+            let mut rng = ConstantRng(byte, 0);
+            let error = build_with_rng(
+                &plan,
+                &config,
+                &ledger::structure::INITIAL_PARAMETERS,
+                ContractOperation::new(None, None),
+                &circuit,
+                2_000_000_000,
+                &mut rng,
+            )
+            .err()
+            .unwrap();
+            assert_eq!(error.to_string(), "host entropy rejected");
+            assert_eq!(rng.1, 128);
+        }
+        let mut rng = ConstantRng(1, 0);
+        assert_eq!(
+            nonzero_random(&mut rng).unwrap(),
+            Fr::from_le_bytes(&[1; 32]).unwrap()
+        );
+        assert_eq!(rng.1, 1);
+    }
     fn selected_fixture_json() -> Json {
         let mut value: Json =
             serde_json::from_str(include_str!("../tests/fixtures/unsigned/plan.json")).unwrap();

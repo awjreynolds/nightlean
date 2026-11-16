@@ -663,3 +663,4 @@ pub use zkir_320 as zkir;
 pub use zkir_321 as zkir;
 pub mod profile;
 pub mod aggregates;
+pub mod proof;

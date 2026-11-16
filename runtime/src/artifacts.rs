@@ -127,8 +127,13 @@ pub struct Compiler {
 pub struct VerifiedBundle {
     manifest: Manifest,
     files: BTreeMap<String, Vec<u8>>,
+    authenticated_manifest_sha256: Option<String>,
 }
 impl VerifiedBundle {
+    /// External authority supplied to `verify`. Integrity-only verification returns `None`.
+    pub fn authenticated_manifest_sha256(&self) -> Option<&str> {
+        self.authenticated_manifest_sha256.as_deref()
+    }
     pub fn manifest(&self) -> &Manifest {
         &self.manifest
     }
@@ -974,5 +979,9 @@ pub fn verify(root: &Path, trusted_manifest_sha256: Option<&str>) -> Result<Veri
                 .map(move |(name, bytes)| (role.path(&name), bytes))
         })
         .collect();
-    Ok(VerifiedBundle { manifest, files })
+    Ok(VerifiedBundle {
+        manifest,
+        files,
+        authenticated_manifest_sha256: trusted_manifest_sha256.map(str::to_owned),
+    })
 }
