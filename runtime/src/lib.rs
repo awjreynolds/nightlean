@@ -202,6 +202,7 @@ pub struct Input {
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct Output {
+    pub visibility: String,
     pub name: String,
     #[serde(rename = "type")]
     pub ty: String,
@@ -291,6 +292,7 @@ pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Envir
         );
     }
     for o in &plan.circuit.outputs {
+        ensure!(o.visibility == "public", "unsupported output visibility");
         ensure!(!env.contains_key(&o.name), "output shadows existing name");
         let v = evaluate(&o.expression, &env)?;
         match (&v, o.ty.as_str()) {
@@ -540,3 +542,6 @@ pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usi
     );
     Ok(active)
 }
+
+/// Versioned C ABI over the bounded provider/session runtime.
+pub mod ffi;

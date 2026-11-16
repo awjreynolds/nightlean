@@ -25,6 +25,19 @@ fn canonical_native_boundaries() {
 }
 
 #[test]
+fn only_declared_public_outputs_leave_the_runtime() {
+    let plan: Plan = serde_json::from_value(json!({
+        "schemaVersion":1,"entrypoint":"claim",
+        "circuit":{"inputs":[],"outputs":[{
+            "name":"secret","visibility":"private","type":"Native",
+            "expression":{"tag":"constant","value":"42"}
+        }]},"state":[],"operations":[],"reads":[]
+    }))
+    .unwrap();
+    assert!(environment(&plan, &BTreeMap::new()).is_err());
+}
+
+#[test]
 fn eager_selection_and_type_errors_are_preserved() {
     let tree = expr(
         json!({"tag":"select","condition":{"tag":"bool","value":true},"yes":{"tag":"constant","value":"1"},"no":{"tag":"reference","name":"missing"}}),
