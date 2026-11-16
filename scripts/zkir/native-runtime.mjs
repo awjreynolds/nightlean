@@ -13,6 +13,8 @@ export function evaluate(expr,env){
  switch(expr.tag){
   case 'constant':return native(expr.value);
   case 'bool':if(typeof expr.value!=='boolean')throw Error('Invalid boolean constant');return expr.value;
+  case 'let':{const value=evaluate(expr.value,env),local=new Map(env);local.set(expr.name,value);return evaluate(expr.body,local);}
+  case 'assertThen':if(evaluate(expr.condition,env)!==true)throw Error('helper assertion failed');return evaluate(expr.body,env);
   case 'reference':if(!env.has(expr.name))throw Error(`Unbound native reference ${expr.name}`);return env.get(expr.name);
   case 'add':return (evaluate(expr.left,env)+evaluate(expr.right,env))%prime;
   case 'mul':return (evaluate(expr.left,env)*evaluate(expr.right,env))%prime;

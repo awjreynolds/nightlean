@@ -48,6 +48,12 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .cast _ value => origins env value
   | .select condition yes no => do
     pure (merge (← origins env condition) (merge (← origins env yes) (← origins env no)))
+  | .letE name value body => do
+    let value ← origins env value
+    origins ((name, value) :: env) body
+  | .assertE condition body => do
+    discard (origins env condition)
+    origins env body
   | .disclose _ value => do
     discard (origins env value)
     pure []

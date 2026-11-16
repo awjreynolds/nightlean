@@ -18,6 +18,7 @@ abbrev AliasEnvironment := List (String × Term)
 structure Normalized where
   term : Term
   bounds : List (Term × Nat) := []
+  assertions : List Term := []
 
 private def requireSourceType (ty : Ty) (term : Term) (bounds : List (Term × Nat)) : Normalized :=
   {term, bounds := match ty with
@@ -26,10 +27,10 @@ private def requireSourceType (ty : Ty) (term : Term) (bounds : List (Term × Na
     | .uint maximum => bounds ++ [(term, maximum)]}
 
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
-  requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds)
+  {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
 
 private def subtraction (ty : Ty) (left right : Normalized) : Normalized :=
-  requireSourceType ty (.binary "add" left.term (.unary "neg" right.term)) (left.bounds ++ right.bounds)
+  {requireSourceType ty (.binary "add" left.term (.unary "neg" right.term)) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
 
 def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Normalized
   | .native value => pure {term := .constant value}
@@ -50,18 +51,29 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let term := match target with
       | .bool => .unary "not" (.binary "test_eq" value.term (.constant 0))
       | _ => value.term
-    pure (requireSourceType target term value.bounds)
+    pure {requireSourceType target term value.bounds with assertions := value.assertions}
+  | .letE name value body => do
+    let value ← normalize env value
+    let body ← normalize ((name, value.term) :: env) body
+    pure {body with bounds := value.bounds ++ body.bounds, assertions := value.assertions ++ body.assertions}
+  | .assertE condition body => do
+    let condition ← normalize env condition
+    let body ← normalize env body
+    pure {body with
+      bounds := condition.bounds ++ body.bounds
+      assertions := condition.assertions ++ [condition.term] ++ body.assertions}
   | .disclose _ value => normalize env value
   | .select condition yes no => do
     let condition ← normalize env condition
     let yes ← normalize env yes
     let no ← normalize env no
-    pure (requireSourceType ty (.select condition.term yes.term no.term)
-      (condition.bounds ++ yes.bounds ++ no.bounds))
+    pure {requireSourceType ty (.select condition.term yes.term no.term)
+      (condition.bounds ++ yes.bounds ++ no.bounds) with
+      assertions := condition.assertions ++ yes.assertions ++ no.assertions}
   | .poseidon2 domain left right => do
     let left ← normalize env left
     let right ← normalize env right
-    pure {term := .hash [.constant domain, left.term, right.term], bounds := left.bounds ++ right.bounds}
+    pure {term := .hash [.constant domain, left.term, right.term], bounds := left.bounds ++ right.bounds, assertions := left.assertions ++ right.assertions}
 
 structure InputRequirement where
   identifier : String

@@ -27,6 +27,9 @@ private def expressionJson : Expr ty → Json
   | .umul a b => Json.mkObj [("umul", toJson [expressionJson a, expressionJson b])]
   | .cast target value => Json.mkObj [("cast", Json.mkObj [
       ("type", toJson (typeName target)), ("value", expressionJson value)])]
+  | .letE name value body => Json.mkObj [("let", Json.mkObj [
+      ("name", toJson name), ("value", expressionJson value), ("body", expressionJson body)])]
+  | .assertE condition body => Json.mkObj [("assertThen", toJson [expressionJson condition, expressionJson body])]
   | .disclose _ value => expressionJson value
   | .eq a b => Json.mkObj [("eq", toJson [expressionJson a, expressionJson b])]
   | .select c a b => Json.mkObj [("select", toJson [expressionJson c, expressionJson a, expressionJson b])]
@@ -49,6 +52,10 @@ private def nativeExpressionJson : Expr ty → Json
   | .umul (m := m) (n := n) a b => unsigned "umul" (m * n) (nativeExpressionJson a) (nativeExpressionJson b)
   | .cast target value => Json.mkObj [("tag", toJson ("cast" : String)),
       ("type", toJson (typeName target)), ("value", nativeExpressionJson value)]
+  | .letE name value body => Json.mkObj [("tag", toJson ("let" : String)),
+      ("name", toJson name), ("value", nativeExpressionJson value), ("body", nativeExpressionJson body)]
+  | .assertE condition body => Json.mkObj [("tag", toJson ("assertThen" : String)),
+      ("condition", nativeExpressionJson condition), ("body", nativeExpressionJson body)]
   | .disclose _ value => nativeExpressionJson value
   | .eq a b => binary "eq" (nativeExpressionJson a) (nativeExpressionJson b)
   | .select c a b => Json.mkObj [("tag", toJson ("select" : String)),

@@ -29,6 +29,8 @@ private def checkConstants : Expr ty → Except String Unit
   | .add a b | .mul a b | .sub a b | .eq a b
   | .uadd a b | .usub a b | .umul a b => do checkConstants a; checkConstants b
   | .cast _ value => checkConstants value
+  | .letE _ value body => do checkConstants value; checkConstants body
+  | .assertE condition body => do checkConstants condition; checkConstants body
   | .disclose _ value => checkConstants value
   | .select c a b => do checkConstants c; checkConstants a; checkConstants b
   | .poseidon2 domain a b => do
@@ -134,6 +136,16 @@ private def lowerExpr : Expr ty → LowerM String
     | .uint maximum => do
       constrainUnsigned maximum output
       pure output
+  | .letE name value body => do
+    let value ← lowerExpr value
+    let aliases := (← get).aliases
+    modify fun s => {s with aliases := (name, value) :: aliases}
+    let result ← lowerExpr body
+    modify fun s => {s with aliases := aliases}
+    pure result
+  | .assertE condition body => do
+    emit "assert" [("cond", toJson (← lowerExpr condition))]
+    lowerExpr body
   | .disclose _ value => lowerExpr value
   | .eq a b => do binary "test_eq" (← lowerExpr a) (← lowerExpr b)
   | .select condition yes no => do

@@ -1,4 +1,5 @@
 import Nightlean.Disclosure
+import Nightlean.Helpers
 import Lean
 
 namespace Nightlean
@@ -377,6 +378,37 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
     elabCommand (← `(def $name : Nightlean.Contract := {name := $(stringTerm fullName.toString), state := [$stateTerms,*], entrypoints := [$entryTerms,*], span := $span }))
     unsafe checkGeneratedContract fullName
     modifyEnv fun e => contractRegistry.addEntry e fullName
+  | _ => throwUnsupportedSyntax
+
+/-- Structured source declarations support forward references and lexical IDs.
+The generated value enters exactly the same circuit registry and compiler. -/
+scoped syntax (name := helperCircuitCommand) "nightlean_helper_circuit" ident
+  "from" ident "entry" str : command
+
+open scoped Nightlean
+
+@[command_elab helperCircuitCommand] unsafe def elabHelperCircuit : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_helper_circuit $name:ident from $source:ident entry $exportName:str) =>
+    let namespaceName := (← getCurrNamespace) ++ source.getId
+    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+    let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+    let value ← match Helpers.compile program exportName.getString with
+      | .ok value => pure value
+      | .error diagnostic => failDisclosure diagnostic *> throwError "helper compilation failed"
+    let fullName := (← getCurrNamespace) ++ name.getId
+    let sourceTerm := mkIdent sourceName
+    elabCommand (← `(def $name : Nightlean.Circuit :=
+      match Nightlean.Helpers.compile $sourceTerm $exportName with
+      | .ok value => {value with name := $(stringTerm fullName.toString)}
+      | .error _ => {name := $(stringTerm fullName.toString)}))
+    checkGeneratedCircuit fullName
+    modifyEnv fun env => circuitRegistry.addEntry env {
+      declName := fullName
+      inputs := value.inputs.map fun input => (input.name, input.ty)
+      publicInputs := (value.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty)
+      outputs := value.outputs.map fun item => (item.name, item.ty)
+    }
   | _ => throwUnsupportedSyntax
 
 end Nightlean

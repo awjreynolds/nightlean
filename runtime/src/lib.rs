@@ -136,6 +136,16 @@ pub enum Expr {
     Reference {
         name: String,
     },
+    Let {
+        name: String,
+        value: Box<Expr>,
+        body: Box<Expr>,
+    },
+    #[serde(rename = "assertThen")]
+    AssertThen {
+        condition: Box<Expr>,
+        body: Box<Expr>,
+    },
     Add {
         left: Box<Expr>,
         right: Box<Expr>,
@@ -193,6 +203,16 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             evaluate(right, env)?,
             maximum,
         )?,
+        Expr::Let { name, value, body } => {
+            let value = evaluate(value, env)?;
+            let mut local = env.clone();
+            local.insert(name.clone(), value);
+            evaluate(body, &local)?
+        }
+        Expr::AssertThen { condition, body } => {
+            ensure!(evaluate(condition, env)?.boolean()?, "helper assertion failed");
+            evaluate(body, env)?
+        }
         Expr::Cast { ty, value } => evaluate(value, env)?.cast(&ScalarType::parse(ty)?)?,
         Expr::Sub { left, right } => {
             Value::Native(evaluate(left, env)?.field()? - evaluate(right, env)?.field()?)
@@ -661,6 +681,6 @@ compile_error!("select exactly one native profile: zkir-320 or zkir-321");
 pub use zkir_320 as zkir;
 #[cfg(all(feature = "zkir-321", not(feature = "zkir-320")))]
 pub use zkir_321 as zkir;
-pub mod profile;
 pub mod aggregates;
+pub mod profile;
 pub mod proof;

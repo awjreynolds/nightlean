@@ -89,6 +89,12 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     scalarCast ctx (.uint m) (a - b)
   | .cast (source := source) target value => do
     scalarCast ctx target (scalarNumber source (← value.eval ctx env))
+  | .letE (source := source) name value body => do
+    let value ← value.eval ctx env
+    body.eval ctx ((name, Value.pack source value) :: env)
+  | .assertE condition body => do
+    unless (← condition.eval ctx env) do throw "helper assertion failed"
+    body.eval ctx env
   | .disclose _ value => value.eval ctx env
   | .eq (ty := ty) a b => do
     pure (sameValue ty (← a.eval ctx env) (← b.eval ctx env))
@@ -210,6 +216,8 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
     | eq a b => simp [pruneTrue, ConstraintsHold, ih]
     | select condition a b => simp [pruneTrue, ConstraintsHold, ih]
     | cast target value => simp [pruneTrue, ConstraintsHold, ih]
+    | letE name value body => simp [pruneTrue, ConstraintsHold, ih]
+    | assertE condition body => simp [pruneTrue, ConstraintsHold, ih]
     | disclose span value => simp [pruneTrue, ConstraintsHold, ih]
 
 theorem unsigned_addition_no_wrap (a b m n : Nat) (ha : a ≤ m) (hb : b ≤ n)

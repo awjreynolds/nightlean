@@ -39,6 +39,8 @@ inductive Expr : Ty → Type where
   | usub (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint m)
   | umul (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint (m * n))
   | cast (target : Ty) (value : Expr source) : Expr target
+  | letE (name : String) (value : Expr source) (body : Expr ty) : Expr ty
+  | assertE (condition : Expr .bool) (body : Expr ty) : Expr ty
   | disclose (span : SourceSpan) (value : Expr ty) : Expr ty
   | eq (a b : Expr ty) : Expr .bool
   | select (condition : Expr .bool) (yes no : Expr ty) : Expr ty
@@ -154,6 +156,12 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .cast target value => do
     target.validate caps
     value.validate caps env
+  | .letE (source := source) name value body => do
+    value.validate caps env
+    body.validate caps ((name, source) :: env)
+  | .assertE condition body => do
+    condition.validate caps env
+    body.validate caps env
   | .disclose _ value => value.validate caps env
   | .eq a b => do
     if !caps.equality then throw "target lacks equality"

@@ -20,6 +20,8 @@ theorem prune_validation (caps : Capabilities) (env : TypeEnv) (span : SourceSpa
     | eq a b => simp only [pruneTrue, validateConstraints, ih]
     | select condition a b => simp only [pruneTrue, validateConstraints, ih]
     | cast target value => simp only [pruneTrue, validateConstraints, ih]
+    | letE name value body => simp only [pruneTrue, validateConstraints, ih]
+    | assertE condition body => simp only [pruneTrue, validateConstraints, ih]
     | disclose span value => simp only [pruneTrue, validateConstraints, ih]
 
 theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
@@ -34,6 +36,8 @@ theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
     | eq a b => simp only [pruneTrue, runConstraints, ih]
     | select condition a b => simp only [pruneTrue, runConstraints, ih]
     | cast target value => simp only [pruneTrue, runConstraints, ih]
+    | letE name value body => simp only [pruneTrue, runConstraints, ih]
+    | assertE condition body => simp only [pruneTrue, runConstraints, ih]
     | disclose span value => simp only [pruneTrue, runConstraints, ih]
 
 theorem pruneCircuit_validate (caps : Capabilities) (c : Circuit) :
@@ -54,6 +58,8 @@ theorem prune_disclosure_constraints (env : Disclosure.Environment) (span : Sour
     | eq a b => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | select condition a b => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | cast target value => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | letE name value body => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | assertE condition body => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | disclose span value => simp only [pruneTrue, Disclosure.checkConstraints, ih]
 
 theorem pruneCircuit_disclosure (c : Circuit) (control : Disclosure.Origins) :

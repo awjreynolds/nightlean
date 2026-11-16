@@ -1,0 +1,139 @@
+{
+  "scope": "scalar typed helpers and direct relation; no general compiler preservation or ledger claim",
+  "nativeVersion": "3.2.1",
+  "checkerWasmSha256": "3568fafaf225469dbbd038b0236d1b6b76e0da19da565caba33efe2ceb682cfc",
+  "relations": [
+    {
+      "name": "helperDirect",
+      "k": 4,
+      "sourceSha256": "157deb93853f5269a071e56f485bb48cf792e4af6186e29855a473adfd20cc66",
+      "binarySha256": "2f789e40a09576e2e82d039cb99fd05810de5dcde1d43c1c14697acdb3f9b036",
+      "cases": [
+        {
+          "id": "FN-NATIVE-VALID",
+          "accepted": true
+        },
+        {
+          "id": "FN-NATIVE-ZERO",
+          "accepted": true
+        },
+        {
+          "id": "FN-NATIVE-WRONG-SECRET",
+          "accepted": false
+        },
+        {
+          "id": "FN-NATIVE-WRONG-PUBLIC",
+          "accepted": false
+        },
+        {
+          "id": "FN-NATIVE-WRONG-OUTPUT",
+          "accepted": false
+        }
+      ],
+      "proof": {
+        "bytes": 3468,
+        "sha256": "5ba9d1bc94ff4cc68f864c207898a935d23b3829da9d1ce60afab1c05604b324",
+        "nativeServerSelfVerified": true
+      }
+    },
+    {
+      "name": "helperComposed",
+      "k": 4,
+      "sourceSha256": "157deb93853f5269a071e56f485bb48cf792e4af6186e29855a473adfd20cc66",
+      "binarySha256": "2f789e40a09576e2e82d039cb99fd05810de5dcde1d43c1c14697acdb3f9b036",
+      "cases": [
+        {
+          "id": "FN-NATIVE-VALID",
+          "accepted": true
+        },
+        {
+          "id": "FN-NATIVE-ZERO",
+          "accepted": true
+        },
+        {
+          "id": "FN-NATIVE-WRONG-SECRET",
+          "accepted": false
+        },
+        {
+          "id": "FN-NATIVE-WRONG-PUBLIC",
+          "accepted": false
+        },
+        {
+          "id": "FN-NATIVE-WRONG-OUTPUT",
+          "accepted": false
+        }
+      ],
+      "proof": {
+        "bytes": 3468,
+        "sha256": "0f9a367cf9032d4be5d9e7e17529ba50d09b63933e9c618d595df13895abff5e",
+        "nativeServerSelfVerified": true
+      }
+    }
+  ],
+  "identicalNativeRelations": true,
+  "checkedOn": "2026-11-16",
+  "compilerBuildAuthenticated": false,
+  "compiledContractVerified": false,
+  "sourceAuthoringSha256": "03bf37e6df89e034c67c56492af7b0971aec806089604bbaa0efc053da2fa5e7",
+  "nativeCompiler": {
+    "release": "3.2.1",
+    "banner": "midnight-zkir 3.2.0",
+    "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "rows": 10
+  },
+  "parameters": {
+    "operation": "pinned ParamsKZG::downsize(4), checked parent decoding",
+    "parentK": 5,
+    "parentSha256": "0a1c9229f315fc1868ff25f668fb83aec4d09f4f23a706b5197c692c619d72c6",
+    "k": 4,
+    "sha256": "232f401fad10c7ddf8828d2aa4c85c6506c5da09795998cecaeb9f75fc8f6ada",
+    "bytes": 3460,
+    "ceremonyTrustExternal": true,
+    "utility": "runtime/examples/qualify_helper_parameters.rs"
+  },
+  "existingPrivateClaimRegression": {
+    "sourceProofsPassed": true,
+    "semanticSourceMutantsRejected": 6,
+    "freshNativeCertificatePassed": true,
+    "nativeCertificateMutantsRejected": 2,
+    "freshKernelReplayed": true,
+    "nativeArtifactSha256": "c3a8c9aad701302d54e630961ff159a97e5957e699ae6fc14cc7d5aa78d3395c",
+    "proofExportSha256": "b1685bd0d550bf22c8f7d80b0b1de4de037865b2afb1fdf8795ebfe86f19ffcf",
+    "scope": "Fresh independent parent replay after let/assert core extension. Helper resource checks are source-only, not a generic helper preservation proof."
+  },
+  "isolatedStagedSnapshot": true,
+  "validationBaseCommit": "fd03a31",
+  "sourceFilesSha256": {
+    "Nightlean/Helpers.lean": "a52a95de767f2328265854a7ef957a673fbdedea6b7ecced5cecfa7835ff959a",
+    "Nightlean/Frontend.lean": "4e188a5029fe6befb7981b187f0f5b7acedb031a50cf105bcef3391a21a5f9ef",
+    "Nightlean/IR.lean": "b5168c75beb5ea9a4f257d2b4bde1149c604979eed1f46b62f67e0a6c3567045",
+    "Nightlean/Semantics.lean": "173759b759a7b9344476cdf6d48317cac9de2de7c901390db1330fefb252dafa",
+    "Nightlean/Disclosure.lean": "7636b142c03cd16a859bbce5834ba93ee7c68da6b263cace4a81f9c6af641956",
+    "Nightlean/Passes.lean": "2a3d40b59efb8205ce8802a62a3151e25e5541f76bf1f610f3b5649676ed83e6",
+    "Nightlean/Backend/Zkir.lean": "de762f72058ecd87b635f03500019a9841ef6146d1dc8878f15afbf72bf29415",
+    "Nightlean/Backend/NativeMeaning.lean": "e77a1b4f69b95c8c7ac8f50ffa40fd91c0fdbd6c772b625aa48e9b451b1039e9",
+    "Nightlean/Backend/NativeExpected.lean": "927738be5523b1449a3af5fa892ab8ceb8cadb451715ba4acbc8c571d823e85b",
+    "Nightlean/Compiler.lean": "4ed9bf0fae658db98f45b7dd2a0ca73ed5f7d9800de5c718ef8e669a374ff04b",
+    "runtime/src/lib.rs": "b4212eb85f262f181710167a9d096a06e5f7c759053ad7672070c912d03dc879",
+    "scripts/zkir/native-runtime.mjs": "aee63b605f7c4ccd73dd3e8b75f535ca25ccb3763ae81ddfaa094f89ee897955",
+    "tests/Helpers.lean": "1c46fd88a402a5e4e2a7d68e16477003b225ca49675b15be0797676634419c2c",
+    "tests/HelperSource.lean": "03bf37e6df89e034c67c56492af7b0971aec806089604bbaa0efc053da2fa5e7",
+    "runtime/tests/helpers.rs": "ed433b9ad159d590e6adf76b2bacd70b03c0871807d5cceb279539b735a131cc",
+    "runtime/examples/qualify_helper_parameters.rs": "5707ec37b8c9709a9c256243716794dcc6032a001a7095edff14ea85d080fc63"
+  },
+  "leanGuards": {
+    "tests/Helpers.lean": 61,
+    "tests/HelperSource.lean": 3
+  },
+  "nativeRuntimeUnitTestsPassed": 4,
+  "resourceRegression": {
+    "callMultiplicityPreserved": true,
+    "memoizedSummaries": true,
+    "doublingDepth12RejectedBeforeExpansion": true,
+    "lowerAndTraceFuelBounded": true,
+    "all11RaisedLimitsRejected": true,
+    "tighterBoundaryBudgetsTested": true,
+    "sourcePolicyIsLocalImplementationLimit": true
+  }
+}
