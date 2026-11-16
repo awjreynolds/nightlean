@@ -37,6 +37,8 @@ Checked fixtures demonstrate the limits. A contract with an intentional private-
 
 These checks establish source-only guarantees. Independently reviewed specification pins, immutable source/import/build provenance, native lowering preservation, exact-byte certificates and deployed key/entrypoint binding form separate mandatory gates. Current reports keep `compiledContractVerified` and `specificationReviewVerified` false. No documented proof gap waives a required release proof.
 
+The [standalone claim lowering proofs](private-claim-lowering-proofs.md) now establish soundness for arbitrary satisfying native assignments and completeness for eligible actual source executions, under an explicit hash agreement. A kernel-checked decoder certificate binds a freshly emitted quoted JSON tree to an independently specified target graph. The returned nullifier is authenticated by its final public Impact group. Standalone Output alone is a host observation. This selected relation proof does not establish byte-parser/build provenance, full contract-call state/transcript preservation or deployed identity. Those gates remain open.
+
 ## Unproved compiler and external boundaries
 
 The following work remains before claiming full semantic preservation:
@@ -67,6 +69,7 @@ bash tests/uint-cli.sh
 bash tests/disclosure-cli.sh
 bash scripts/proofs/check-private-claim.sh
 python3 scripts/proofs/check-private-claim-audit.py
+python3 scripts/proofs/check-private-claim-lowering.py
 python3 scripts/proofs/check-registration.py
 ```
 
