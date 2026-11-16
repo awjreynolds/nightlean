@@ -27,7 +27,6 @@ A deployable compiler for a defined subset of Lean 4 programs used to build Midn
 
 ## Not yet specified
 
-- Which backend Nightlean should commit to after a chosen workload passes compilation, proof, artifact, and deployment checks.
 - Compiler packaging and user workflow, and support for future ledger eras.
 
 ## Out of scope
