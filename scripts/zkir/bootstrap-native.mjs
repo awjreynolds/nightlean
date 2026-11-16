@@ -4,10 +4,32 @@ import { access, copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
-const revision = '446c7fecc6bd41dab99ebe89ab404e9d077d11a9';
+const releases = {
+  '3.2.0': { revision: '446c7fecc6bd41dab99ebe89ab404e9d077d11a9', cliVersion: '3.2.0', directory: '/private/tmp/nightlean-native-zkir' },
+  // The official 3.2.1 tag retains 3.2.0 in zkir/Cargo.toml. Preserve that upstream
+  // provenance rather than rewriting source or treating the CLI banner as the release identity.
+  '3.2.1': { revision: '7a51b3385bbf4bce3604df87a7c70867c9ab43c0', cliVersion: '3.2.0', directory: '/private/tmp/nightlean-native-zkir-321' },
+};
+let requestedVersion = '3.2.0';
+let requestedDirectory;
+let versionSeen = false;
+const args = process.argv.slice(2);
+for (let index = 0; index < args.length; index++) {
+  const argument = args[index];
+  if (argument === '--version') {
+    if (versionSeen) throw new Error('Duplicate --version option');
+    requestedVersion = args[++index];
+    if (!requestedVersion || !Object.hasOwn(releases, requestedVersion))
+      throw new Error('Supported native ZKIR versions: 3.2.0, 3.2.1');
+    versionSeen = true;
+  } else if (argument.startsWith('-')) throw new Error(`Unknown option: ${argument}`);
+  else if (requestedDirectory) throw new Error('Expected one output directory');
+  else requestedDirectory = argument;
+}
+const { revision, cliVersion } = releases[requestedVersion];
 const repository = 'https://github.com/midnightntwrk/midnight-zkir';
 const rust = '1.100.0';
-const directory = resolve(process.argv[2] ?? '/private/tmp/nightlean-native-zkir');
+const directory = resolve(requestedDirectory ?? releases[requestedVersion].directory);
 const source = resolve(process.env.NIGHTLEAN_ZKIR_SOURCE ?? join(directory, 'source'));
 const cargo = process.env.NIGHTLEAN_CARGO ?? 'cargo';
 const env = { ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '4' };
@@ -32,10 +54,12 @@ if (await run('git', ['status', '--porcelain', '--untracked-files=no'], source, 
 await run(cargo, [`+${rust}`, 'build', '--release', '--locked', '--package', 'midnight-zkir', '--features', 'binary'], source);
 await mkdir(join(directory, 'bin'), { recursive: true });
 const binary = join(directory, 'bin', process.platform === 'win32' ? 'zkir.exe' : 'zkir');
-await copyFile(join(source, 'target/release', process.platform === 'win32' ? 'zkir.exe' : 'zkir'), binary);
+const target = resolve(source, process.env.CARGO_TARGET_DIR ?? 'target');
+await copyFile(join(target, 'release', process.platform === 'win32' ? 'zkir.exe' : 'zkir'), binary);
 const version = await run(binary, ['--version'], directory, true);
-if (version !== 'midnight-zkir 3.2.0') throw new Error(`Unexpected native compiler version: ${version}`);
-const manifest = { repository, revision, rust, host: `${process.platform}-${process.arch}`, version, binary,
+if (version !== `midnight-zkir ${cliVersion}`) throw new Error(`Unexpected native compiler version: ${version}`);
+const manifest = { repository, revision, rust, host: `${process.platform}-${process.arch}`, requestedVersion,
+  releaseLabel: requestedVersion, expectedCliVersion: cliVersion, version, binary,
   binarySha256: await digest(binary), cargoLockSha256: await digest(join(source, 'Cargo.lock')),
   command: 'cargo +1.100.0 build --release --locked --package midnight-zkir --features binary' };
 await writeFile(join(directory, 'build-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');

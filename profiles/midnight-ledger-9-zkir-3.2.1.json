@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "kind": "experimental-native-toolchain-qualification",
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "qualification": "native-claim-localnet-qualified-only",
+  "defaultTargetChanged": false,
+  "acceptedByNightleanTargetSelector": false,
+  "ledger": "9.1.0.1",
+  "zkir": "3.2.1",
+  "circuits": "7.3.0",
+  "zkStdlib": "2.4.0",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource": {
+    "repository": "https://github.com/midnightntwrk/midnight-zkir",
+    "tag": "zkir-3.2.1",
+    "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "declaredCrateVersion": "3.2.0",
+    "reportedCliVersion": "midnight-zkir 3.2.0",
+    "rust": "1.100.0",
+    "host": "darwin-arm64",
+    "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "cargoLockSha256": "f6044eb43d4d8e6f2ed3dab33cb8f70fe1a59784fcc987e18aef4dab46a16c6b"
+  },
+  "officialChecker": {
+    "version": "3.2.1",
+    "releaseAsset": "https://github.com/midnightntwrk/midnight-zkir/releases/download/zkir-3.2.1/midnight-zkir-v3-3.2.1.tgz",
+    "releaseAssetSha256": "f2f4d6c1aaa85e2d9cec1c9f204f4f47ae5c7650ef170a68b1675441ea037133"
+  },
+  "referenceOnly": {
+    "compactToolchain": "0.36.1",
+    "language": "0.28.0",
+    "compactCompilerOrRuntimeDependency": false
+  },
+  "scope": {
+    "sourceNativeBoolClaim": "native-keygen-official-checker-proof-and-development-ledger",
+    "intermediateJubjub": "raw-zkir-keygen-regression-checker-and-standalone-proof-only",
+    "booleanDeserialization": "raw-zkir-semantic-contract-only-source-feature-unimplemented",
+    "otherFeatures": "unqualified",
+    "publicNetworks": "unqualified"
+  },
+  "evidence": "../docs/development/zkir-3.2.1-qualification.md"
+}

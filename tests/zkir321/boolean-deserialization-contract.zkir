@@ -1,0 +1,21 @@
+{
+  "version": { "major": 3, "minor": 2 },
+  "inputs": [
+    { "name": "%byte", "type": "Scalar<BLS12-381>" },
+    { "name": "%flag", "type": "Scalar<BLS12-381>" },
+    { "name": "%expected", "type": "Scalar<BLS12-381>" }
+  ],
+  "outputs": ["Scalar<BLS12-381>"],
+  "do_communications_commitment": false,
+  "instructions": [
+    { "op": "constrain_bits", "val": "%byte", "bits": 8 },
+    { "op": "constrain_to_boolean", "val": "%flag" },
+    { "op": "cond_select", "bit": "%flag", "a": "0x00", "b": "%byte", "output": "%selected" },
+    { "op": "less_than", "a": "%selected", "b": "0x02", "bits": 8, "output": "%valid" },
+    { "op": "assert", "cond": "%valid" },
+    { "op": "test_eq", "a": "%selected", "b": "0x01", "output": "%decoded" },
+    { "op": "cond_select", "bit": "%flag", "a": "0x01", "b": "%decoded", "output": "%result" },
+    { "op": "constrain_eq", "a": "%result", "b": "%expected" },
+    { "op": "output", "vals": ["%result"] }
+  ]
+}

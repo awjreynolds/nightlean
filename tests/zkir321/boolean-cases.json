@@ -1,0 +1,12 @@
+[
+  { "name": "false", "byte": "0", "flag": "0", "accepted": true, "result": "0" },
+  { "name": "true", "byte": "1", "flag": "0", "accepted": true, "result": "1" },
+  { "name": "invalid-two", "byte": "2", "flag": "0", "accepted": false },
+  { "name": "invalid-max-byte", "byte": "255", "flag": "0", "accepted": false },
+  { "name": "guarded-two", "byte": "2", "flag": "1", "accepted": true, "result": "1" },
+  { "name": "guarded-max-byte", "byte": "255", "flag": "1", "accepted": true, "result": "1" },
+  { "name": "outside-byte-range", "byte": "256", "flag": "0", "accepted": false },
+  { "name": "invalid-guard", "byte": "0", "flag": "2", "accepted": false },
+  { "name": "wrong-false-result", "byte": "0", "flag": "0", "accepted": false, "result": "1" },
+  { "name": "wrong-true-result", "byte": "1", "flag": "0", "accepted": false, "result": "0" }
+]

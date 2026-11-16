@@ -1,0 +1,26 @@
+// Qualify the official release checker against Nightlean's existing native claim adapter.
+import assert from 'node:assert/strict';
+import {readFile} from 'node:fs/promises';
+import {resolve,join} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {createRequire} from 'node:module';
+import {empty,callPrototype} from '../../scripts/zkir/native-runtime.mjs';
+const [checkerPath,artifactPath]=process.argv.slice(2);
+if(!checkerPath||!artifactPath)throw Error('usage: node tests/zkir321/check-native-claim.mjs OFFICIAL_WASM_FS_MODULE ARTIFACT_DIRECTORY');
+const {Zkir,check}=await import(pathToFileURL(resolve(checkerPath)).href);
+const require=createRequire(new URL('../../scripts/zkir/package.json',import.meta.url));
+const ledger=await import(pathToFileURL(require.resolve('@midnight-ntwrk/ledger-v9')).href);
+const artifacts=resolve(artifactPath);
+const plan=JSON.parse(await readFile(join(artifacts,'source-plan.json'),'utf8'));
+const config=JSON.parse(await readFile(join(artifacts,'runtime-config.json'),'utf8'));
+const summary=JSON.parse(await readFile(join(artifacts,'native-contract.json'),'utf8'));
+const state=ledger.ContractState.deserialize(await readFile(join(artifacts,'initial-state.bin')));
+const parameters=ledger.LedgerParameters.deserialize(await readFile(join(artifacts,'ledger.params')));
+const operation=state.operation(plan.entrypoint);
+const built=callPrototype(plan,config.inputs,state,summary.address,operation,parameters);
+const preimage=ledger.proofDataIntoSerializedPreimage(empty,empty,built.program,built.privateOutputs,plan.entrypoint);
+const ir=Zkir.fromJson(await readFile(join(artifacts,'zkir',plan.entrypoint+'.zkir'),'utf8'));
+const material={ir:ir.serialize(),proverKey:await readFile(join(artifacts,'keys',plan.entrypoint+'.prover')),verifierKey:await readFile(join(artifacts,'keys',plan.entrypoint+'.verifier'))};
+const activity=await check(preimage,{lookupKey:async()=>material});
+assert.equal(activity.length,built.program.length);
+console.log(JSON.stringify({qualification:'official 3.2.1 checker accepts source-driven native claim preimage',activity:activity.length,k:ir.getK()}));
