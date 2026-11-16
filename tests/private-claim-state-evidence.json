@@ -1,0 +1,132 @@
+{
+  "arbitrarySatisfyingWitnessAndTraceSoundness": true,
+  "axioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ],
+  "byteParserCorrespondenceProved": false,
+  "callSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+  "compiledContractVerified": false,
+  "compilerBuildAuthenticated": false,
+  "developmentEvidenceDirectory": ".nightlean/audits/private-claim-state/",
+  "eligibleSourceCompleteness": true,
+  "isolatedStagedSnapshot": true,
+  "kernelReplayed": true,
+  "mutantsRejected": [
+    "WrongSlot",
+    "WrongPath",
+    "WrongKey",
+    "WrongValue",
+    "WrongRead",
+    "WrongAlignment",
+    "WrongStorage",
+    "WrongReadOrder",
+    "WrongOpcodeGroup",
+    "InactiveGroup"
+  ],
+  "nativeQualification": {
+    "activity": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ],
+    "allGroupsActive": true,
+    "callSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+    "checkerSha256": "a4ec641776c45bd06fe033f25b8d74fccca7900d5e97cc360468ddeacfa2424c",
+    "compiledContractVerified": false,
+    "emptyCommunicationCommitmentChecked": true,
+    "exactSuccessor": true,
+    "fallibleOperations": 0,
+    "guaranteedOperations": 21,
+    "initialStateUnchanged": true,
+    "ledgerTransactionSubmitted": false,
+    "mutations": [
+      {
+        "id": "slot",
+        "nativeRelationRejected": true
+      },
+      {
+        "id": "path",
+        "nativeRelationRejected": true
+      },
+      {
+        "id": "key",
+        "nativeRelationRejected": true
+      },
+      {
+        "id": "value",
+        "nativeRelationRejected": true
+      },
+      {
+        "id": "read",
+        "nativeRelationRejected": true
+      },
+      {
+        "id": "opcode-group",
+        "nativeRelationRejected": true
+      },
+      {
+        "id": "alignment",
+        "nativeRelationRejected": true
+      },
+      {
+        "id": "storage",
+        "nativeRelationRejected": true
+      }
+    ],
+    "opcodeGroups": 21,
+    "partitionedOpcodeOrderPreserved": true,
+    "planSha256": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42",
+    "presentFalseValueRejected": true,
+    "readValues": [
+      "28399696706114328615841781920356350076672934126225635254148383513591039775413",
+      "9",
+      "16533581147424469099777953019315187868248076859940057971562926865714239641352",
+      "28399696706114328615841781920356350076672934126225635254148383513591039775413",
+      "9",
+      "0"
+    ],
+    "replayRejected": true,
+    "resourceScope": "initial native CostModel and this finite fixture only",
+    "scope": "local native ledger and official 3.2.1 checker samples",
+    "unrelatedEntryPreserved": true,
+    "wrongConfiguredCampaignRejected": true,
+    "wrongConfiguredRootRejected": true
+  },
+  "nativeSamplesChecked": true,
+  "nativeStatePreservationProved": true,
+  "planSha256": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42",
+  "proofExportBytes": 43871291,
+  "proofExportSha256": "eb7aff11254248f2a492925ffb3314814b3a93e117f71edc49afa6b6b48344fb",
+  "resourceAdmission": "21 operations and map length + 1; actual ledger cost/size agreement remains explicit",
+  "scope": "actual claim native state/public transcript preservation and decoded plan/call JSON trees",
+  "sourceFilesSha256": {
+    "Nightlean/Verification/NativeState.lean": "5e795a1c77a7e85504e0ddb8ce66a5e6e7281c5d5c1222e1b1c6235943b702f0",
+    "Nightlean/Verification/NativeStateJson.lean": "311527b4e1d432bfb854a0eaaf1406b5cf176c3f75073959a13f9d764816c553",
+    "proofs/PrivateClaimNativeState.lean": "2cb7331ddcea34251db3a0a53dfa498cc00711773b8c39830d044f5f32e81ffe",
+    "scripts/proofs/check-private-claim-state.py": "5093ec5732d68d5ea72a952511b50f605a97148c39cf72c79c166921b97fa91e",
+    "tests/private-claim-state-checker.mjs": "0ec4a37b7d2a1fa188e844dc56c9ab0528cd412f728294d3b85dfab82f36a7fb"
+  },
+  "sourceSha256": "5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771",
+  "status": "passed",
+  "validationBaseCommit": "6492027"
+}

@@ -1,0 +1,166 @@
+import Nightlean.Verification.NativeRelation
+
+namespace Nightlean.Verification.NativeState
+open NativeRelation
+
+inductive Alignment where
+  | field | bit
+  deriving Repr, DecidableEq
+
+structure Cell where
+  alignment : Alignment
+  value : Scalar
+  deriving Repr, DecidableEq
+
+def field (value : Scalar) : Cell := ⟨.field, value⟩
+def boolean (value : _root_.Bool) : Cell := ⟨.bit, bit value⟩
+
+/-- The claim uses an array of two cells and one field-keyed map. Other native
+state constructors are deliberately outside this qualified VM subset. -/
+inductive Node where
+  | cell (value : Cell)
+  | map (entries : List (Scalar × Scalar))
+  | array (cells : List Cell) (entries : List (Scalar × Scalar))
+  deriving Repr, DecidableEq
+
+inductive Op where
+  | push (value : Cell) (storage : _root_.Bool)
+  | popeq (value : Cell)
+  | dup
+  | index (slot : Nat) (pushPath : _root_.Bool)
+  | member
+  | insert (levels : Nat)
+  deriving Repr, DecidableEq
+
+structure Machine where
+  stack : List Node
+  reads : List Cell := []
+  deriving Repr, DecidableEq
+
+/-- Native stack insertion walks saved (container,key) pairs from the top.
+Map replacement and root-array insertion are separate VM steps. -/
+def insert : Nat → Node → List Node → Option (List Node)
+  | 0, value, rest => some (value :: rest)
+  | n + 1, .cell ⟨.field, value⟩, .cell ⟨.field, key⟩ :: .map entries :: rest =>
+    insert n (.map ((key, value) :: entries.filter (fun p => p.1 != key))) rest
+  | n + 1, .map entries, .cell ⟨.field, key⟩ :: .array cells _ :: rest =>
+    if key.val = cells.length then insert n (.array cells entries) rest else none
+  | _, _, _ => none
+
+/-- Executable semantics independent of source.run and compiler lowering.
+Popeq consumes actual stack cells and compares complete aligned values. -/
+def step (op : Op) (machine : Machine) : Option Machine := do
+  match op, machine.stack with
+  | .push value _, rest => pure {machine with stack := .cell value :: rest}
+  | .popeq expected, .cell actual :: rest =>
+    if actual = expected then pure {stack := rest, reads := machine.reads ++ [actual]} else none
+  | .dup, top :: rest => pure {machine with stack := top :: top :: rest}
+  | .index slot path, .array cells entries :: rest =>
+    let child ← if slot < cells.length then cells[slot]?.map Node.cell
+      else if slot = cells.length then some (.map entries) else none
+    let rest := if path then .cell (field (scalar slot)) :: .array cells entries :: rest else rest
+    pure {machine with stack := child :: rest}
+  | .member, .cell ⟨.field, key⟩ :: .map entries :: rest =>
+    pure {machine with stack := .cell (boolean (entries.any (fun p => p.1 == key))) :: rest}
+  | .insert levels, value :: rest =>
+    let stack ← insert levels value rest
+    pure {machine with stack}
+  | _, _ => none
+
+def run : List Op → Machine → Option Machine
+  | [], machine => some machine
+  | op :: rest, machine => (step op machine).bind (run rest)
+
+@[simp] theorem field_inj (a b : Scalar) : field a = field b ↔ a = b := by simp [field, Cell.mk.injEq]
+@[simp] theorem boolean_ne : boolean true ≠ boolean false := by decide
+
+theorem run_nil (machine : Machine) : run [] machine = some machine := by rfl
+
+theorem run_push (value : Cell) (storage : _root_.Bool) (ops : List Op) (stack : List Node) (reads : List Cell) :
+    run (.push value storage :: ops) ⟨stack, reads⟩ = run ops ⟨.cell value :: stack, reads⟩ := by rfl
+
+theorem run_popeq (actual expected : Cell) (ops : List Op) (stack : List Node) (reads : List Cell) :
+    run (.popeq expected :: ops) ⟨.cell actual :: stack, reads⟩ =
+      if actual = expected then run ops ⟨stack, reads ++ [actual]⟩ else none := by
+  by_cases eq : actual = expected <;> simp [run, step, eq]
+
+theorem run_dup (top : Node) (ops : List Op) (stack : List Node) (reads : List Cell) :
+    run (.dup :: ops) ⟨top :: stack, reads⟩ = run ops ⟨top :: top :: stack, reads⟩ := by rfl
+
+theorem run_index_zero (a b : Cell) (entries : List (Scalar × Scalar)) (ops : List Op)
+    (stack : List Node) (reads : List Cell) :
+    run (.index 0 false :: ops) ⟨.array [a,b] entries :: stack, reads⟩ =
+      run ops ⟨.cell a :: stack, reads⟩ := by rfl
+
+theorem run_index_one (a b : Cell) (entries : List (Scalar × Scalar)) (ops : List Op)
+    (stack : List Node) (reads : List Cell) :
+    run (.index 1 false :: ops) ⟨.array [a,b] entries :: stack, reads⟩ =
+      run ops ⟨.cell b :: stack, reads⟩ := by rfl
+
+theorem run_index_two (a b : Cell) (entries : List (Scalar × Scalar)) (path : _root_.Bool) (ops : List Op)
+    (stack : List Node) (reads : List Cell) :
+    run (.index 2 path :: ops) ⟨.array [a,b] entries :: stack, reads⟩ =
+      run ops ⟨.map entries :: (if path then .cell (field (scalar 2)) :: .array [a,b] entries :: stack else stack), reads⟩ := by rfl
+
+theorem run_member (key : Scalar) (entries : List (Scalar × Scalar)) (ops : List Op)
+    (stack : List Node) (reads : List Cell) :
+    run (.member :: ops) ⟨.cell (field key) :: .map entries :: stack, reads⟩ =
+      run ops ⟨.cell (boolean (entries.any (fun p => p.1 == key))) :: stack, reads⟩ := by rfl
+
+theorem run_insert_two (a b : Cell) (entries : List (Scalar × Scalar)) (key value : Scalar)
+    (ops : List Op) (stack : List Node) (reads : List Cell) :
+    run (.insert 2 :: ops) ⟨.cell (field value) :: .cell (field key) :: .map entries ::
+      .cell (field (scalar 2)) :: .array [a,b] entries :: stack, reads⟩ =
+      run ops ⟨.array [a,b] ((key,value) :: entries.filter (fun p => p.1 != key)) :: stack, reads⟩ := by
+  simp [run, step, insert, field, show (scalar 2).val = 2 by decide]
+
+/-- Every executed prefix is checked, including the exact final stack and read
+stream. An adversarial trace is accepted only when every transition holds. -/
+inductive Trace : List Op → Machine → Machine → Prop where
+  | nil (machine) : Trace [] machine machine
+  | cons {op ops before middle after} : step op before = some middle →
+      Trace ops middle after → Trace (op :: ops) before after
+
+theorem trace_iff_run (ops : List Op) (before after : Machine) :
+    Trace ops before after ↔ run ops before = some after := by
+  constructor
+  · intro trace
+    induction trace with
+    | nil => rfl
+    | cons h _ ih => simp only [run, h, Option.bind_some, ih]
+  · induction ops generalizing before with
+    | nil => intro h; cases Option.some.inj h; exact .nil _
+    | cons op ops ih =>
+      intro h
+      cases hs : step op before with
+      | none => simp [run, hs] at h
+      | some middle => exact .cons hs (ih middle (by simpa [run, hs] using h))
+
+def Cell.fields (value : Cell) : List Scalar :=
+  [one, if value.alignment = .field then scalar (Field.modulus - 2) else one, value.value]
+
+def Op.fields : Op → List Scalar
+  | .push value storage => [scalar (if storage then 0x11 else 0x10), one] ++ value.fields
+  | .popeq value => scalar 0x0c :: value.fields
+  | .dup => [scalar 0x30]
+  | .index slot path => scalar (if path then 0x70 else 0x50) :: (field (scalar slot)).fields
+  | .member => [scalar 0x18]
+  | .insert levels => [scalar (0x90 + levels)]
+
+/-- All groups are active, so there are no skip/activity choices in this subset.
+Binding groups as lists preserves opcode boundaries, not merely concatenation. -/
+def groups (ops : List Op) : List (List Scalar) := ops.map Op.fields
+
+def initial (root campaign : Scalar) (entries : List (Scalar × Scalar)) : Machine :=
+  ⟨[.array [field root, field campaign] entries], []⟩
+
+/-- A symbolic bound for the formal machine. Mapping these units to pinned
+ledger cost/size limits is an explicit implementation admission obligation. -/
+structure Budget where
+  operations : Nat
+  entries : Nat
+
+def Admitted (budget : Budget) (ops : List Op) (entries : List (Scalar × Scalar)) : Prop :=
+  ops.length ≤ budget.operations ∧ entries.length + 1 ≤ budget.entries
+
+end Nightlean.Verification.NativeState

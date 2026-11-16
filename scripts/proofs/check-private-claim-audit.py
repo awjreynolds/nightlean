@@ -33,7 +33,7 @@ def main() -> int:
         parser.error("external model export and SHA256 must be supplied together")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    run(["lake", "build", "Nightlean.Verification.ExportAudit"])
+    run(["lake", "build", "Nightlean", "Nightlean.Frontend", "Nightlean.Verification.ExportAudit"])
     with tempfile.TemporaryDirectory(prefix="nightlean-private-claim-audit-") as directory:
         scratch = Path(directory)
         imports = scratch / "imports"

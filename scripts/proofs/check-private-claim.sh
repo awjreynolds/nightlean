@@ -6,7 +6,7 @@ scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/imports/examples" "$scratch/imports/proofs"
 
-lake build Nightlean
+lake build Nightlean Nightlean.Frontend
 # Relative source names preserve stable SourceSpan filenames in the declarations.
 lake env lean -o "$scratch/imports/examples/PrivateClaim.olean" examples/PrivateClaim.lean
 

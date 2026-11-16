@@ -151,7 +151,7 @@ def main() -> int:
             raise AssertionError(f"malformed JSON accepted: {malformed!r}")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    run(["lake", "build", "nightlean", "Nightlean.Verification.NativeRelationJson"])
+    run(["lake", "build", "nightlean", "Nightlean", "Nightlean.Frontend", "Nightlean.Verification.NativeRelationJson"])
     run(["lake", "env", "lean", "tests/NativeRelationJson.lean"])
     with tempfile.TemporaryDirectory(prefix="nightlean-claim-lowering-") as directory:
         scratch = Path(directory)

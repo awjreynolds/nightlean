@@ -2,6 +2,8 @@
 
 The actual private-claim circuit now has kernel-checked soundness and completeness against an independently defined native scalar/Boolean/hash relation. Soundness covers every satisfying internal SSA assignment, including assignments never produced by the evaluator. Completeness covers arbitrary canonical eligible source inputs and, separately, any successful source execution with correct native Boolean encodings.
 
+The separate [native state/transcript package](private-claim-native-state-proofs.md) now proves the actual ledger call's formal state preservation and decoded plan/call binding.
+
 This package qualifies the standalone `claimRelation.zkir` scalar relation. It does not establish the contract-call relation's state/Impact execution semantics, authenticated compiler builds, exact byte parsing, keys or deployed ledger identity. `compiledContractVerified` stays false.
 
 ## Independent model and source binding
