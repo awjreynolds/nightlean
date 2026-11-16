@@ -1,0 +1,75 @@
+{
+  "sourceCommit": "1a972c3032ac9efe55b8f8950ab43c3718cd9b3d",
+  "cleanProjectBuildSeconds": 8.597908542025834,
+  "buildExitCode": 0,
+  "platform": "Darwin arm64",
+  "sampleCount": 5,
+  "scope": "prebuilt CLI; source elaboration/checking and ZKIR/Impact metadata emission; excludes keys, proving and source theorem suites",
+  "concurrentDevelopmentBuilds": true,
+  "measurements": [
+    {
+      "source": "examples/PrivateClaim.lean",
+      "operation": "check",
+      "seconds": [
+        1.7787793750176206,
+        0.9677714169956744,
+        0.9364930419251323,
+        0.9601489590713754,
+        1.0543492080178112
+      ],
+      "medianSeconds": 0.9677714169956744,
+      "minSeconds": 0.9364930419251323,
+      "maxSeconds": 1.7787793750176206,
+      "medianCpuSeconds": 0.9432830000000001
+    },
+    {
+      "source": "examples/PrivateClaim.lean",
+      "operation": "compile",
+      "seconds": [
+        1.8835124999750406,
+        1.8125007919734344,
+        1.8009212500182912,
+        1.853688000002876,
+        1.8309138750191778
+      ],
+      "medianSeconds": 1.8309138750191778,
+      "minSeconds": 1.8009212500182912,
+      "maxSeconds": 1.8835124999750406,
+      "medianCpuSeconds": 1.7846810000000009
+    },
+    {
+      "source": "examples/BoundedScalars.lean",
+      "operation": "check",
+      "seconds": [
+        1.0520104590104893,
+        0.9295380000257865,
+        0.8898335830308497,
+        0.8982767080888152,
+        0.899548124987632
+      ],
+      "medianSeconds": 0.899548124987632,
+      "minSeconds": 0.8898335830308497,
+      "maxSeconds": 1.0520104590104893,
+      "medianCpuSeconds": 0.8888159999999985
+    },
+    {
+      "source": "examples/BoundedScalars.lean",
+      "operation": "compile",
+      "seconds": [
+        1.7656782499980181,
+        1.795104791992344,
+        1.7609284169739112,
+        1.8564499579370022,
+        1.8194719169987366
+      ],
+      "medianSeconds": 1.795104791992344,
+      "minSeconds": 1.7609284169739112,
+      "maxSeconds": 1.8564499579370022,
+      "medianCpuSeconds": 1.7564869999999981
+    }
+  ],
+  "measuredOn": "2026-11-16",
+  "toolchain": "Lean 4.35.0 already installed",
+  "comparison": "No matched Compact timing was performed. These small-workload measurements establish no relative speed claim.",
+  "method": "Clean git archive of the source commit, lake build, then five fresh CLI processes per operation and source. Compile outputs use distinct new directories."
+}
