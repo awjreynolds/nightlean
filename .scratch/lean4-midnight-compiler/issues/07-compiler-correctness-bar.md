@@ -1,13 +1,13 @@
 # 07: Set the compiler correctness bar
 
-Type: grilling
+Type: research
+
+Status: resolved
 
 ## Question
 
-What correctness and assurance evidence must v1 provide before developers use generated contracts on a public Midnight network? Choose the required claim and evidence, such as a formally verified translation, a checked semantic embedding with strong differential tests, or a documented compiler with independent audit and integration evidence.
+What correctness and assurance evidence should v1 require for the supported Lean subset and its generated Midnight artifacts? Separate internal compiler transformations, the external ZKIR/proving boundary, and public-network release claims.
 
-## Blocked by
+## Answer
 
-04: Assess Moriarty and Midnight backend paths.
-05: Choose the first contract workloads.
-06: Choose the Lean source surface.
+V1 has a layered assurance bar. Define reference semantics in Lean and prove internal typed-IR transformations preserve them. Differentially validate emitted ZKIR, proof generation and verification, contract artifacts, and the private-claim state transition against the reference semantics and exact ledger 9 toolchain. Reject unsupported source before code generation. Require independent security review and successful Preview integration before production. Do not claim end-to-end formal verification until proofs cover ZKIR, proving, and contract execution as well as Lean compiler passes.

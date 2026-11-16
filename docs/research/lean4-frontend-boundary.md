@@ -22,4 +22,4 @@ Checked 2026-11-16 against the Lean reference manual and the Lean 4 repository.
 
 ## Recommendation
 
-Prototype a Lean package extension with a dedicated circuit declaration and elaborator first. Keep the accepted AST explicit and small, retain original syntax spans for diagnostics, and reject unsupported constructs at the elaboration boundary. Consider traversing arbitrary Lean definitions only if the required workloads demand ordinary Lean syntax; if selected, whitelist core expressions and pin the Lean version.
+V1 uses a dedicated Lean `circuit` declaration and elaborator for the private one-time claim. The declaration marks private inputs, public inputs, outputs, and supported circuit operations explicitly. Elaboration checks types, preserves original syntax spans for diagnostics, and produces a compiler-owned typed representation. Reject ordinary Lean definitions and constructs outside the declared subset. This avoids treating arbitrary Lean core expressions as circuit features while keeping both Nightlean's implementation and source interface in Lean.
