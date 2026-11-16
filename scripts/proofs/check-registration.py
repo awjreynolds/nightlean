@@ -93,6 +93,28 @@ def main() -> int:
         counterexample = export("privacy-counterexample.ndjson", ["VerificationFixture.releasingNotPrivate"])
         run(["lake", "env", "leanchecker", "--from-export", str(counterexample)])
 
+        # Keep the original model roots/pin stable. This separate UInt model
+        # exercises fresh-environment numeral reporting and failure-channel scope.
+        failure_model = export("failure-model.ndjson", [
+            "Nightlean.Verification.FunctionalObligation",
+            "Nightlean.Verification.PrivacyObligation",
+            "VerificationFixture.failurePolicy", "VerificationFixture.failureAllOutcomesPolicy",
+            "propext", "Classical.choice", "Quot.sound",
+        ])
+        failure_pin = hashlib.sha256(failure_model.read_bytes()).hexdigest()
+        failure_proofs = export("failure-proofs.ndjson", [
+            "VerificationFixture.failureFunctional", "VerificationFixture.failureSuccessfulPrivacy",
+            "VerificationFixture.failureNotAllOutcomesPrivate",
+        ])
+        failure_accepted = audit(failure_model, failure_proofs, failure_pin, name="failureFunctional",
+                                 privacy=True, policy_name="failurePolicy", privacy_name="failureSuccessfulPrivacy")
+        assert failure_accepted["specification"]["privacyScope"] == "successful-only-under-pinned-precondition"
+        assert failure_accepted["specification"]["releasePolicy"] == "none"
+        audit(failure_model, failure_proofs, failure_pin, name="failureFunctional", privacy=True,
+              policy_name="failureAllOutcomesPolicy", privacy_name="failureSuccessfulPrivacy",
+              expected_error="wrong_obligation")
+        run(["lake", "env", "leanchecker", "--from-export", str(failure_proofs)])
+
         for name in ["fromUserAxiom", "admitted", "alsoAdmitted", "fromNativeComputation"]:
             bad = export(f"{name}.ndjson", [f"VerificationFixture.{name}"])
             # Replay alone accepts these valid derivations relative to bad axioms.
@@ -112,6 +134,7 @@ def main() -> int:
         print(json.dumps({"status": "passed", "scope": "PA01 source proof and scoped privacy registration",
                           "trustedModelSha256": pin, "modelBytes": model.stat().st_size,
                           "proofBytes": proofs.stat().st_size, "axioms": accepted["axioms"],
+                          "failurePrivacyScope": failure_accepted["specification"]["privacyScope"],
                           "compiledContractVerified": False}, sort_keys=True))
     return 0
 

@@ -83,6 +83,8 @@ python3 scripts/proofs/check-registration.py
 
 The intentional sorry/admit and user-axiom declarations appear only in rejection fixtures. They do not enter the accepted proof closure. The tests exercise valid source functional/privacy proofs, missing privacy, the proved functional-but-not-private counterexample, wrong contract/specification/role, irrelevant `True`, user axioms, sorry/admit, native-computation axioms, wrong model digest and a valid changed specification under unchanged module/declaration names. The latter rejects both as an altered model and as a model collision in the proof closure.
 
+The same script creates a separate model pin and proof export for the UInt failure-channel fixture, preserving the original fixture model roots and digest. It checks successful-only/no-release scope through the audit driver, rejects substituting that proof for all-outcomes privacy, and replays the functional proof, successful-only privacy proof and all-outcomes counterexample with the official checker. This UInt export also exercises numeral display in the fresh kernel environment.
+
 ## Remaining trust boundary
 
 The repository, audit driver, pinned Lean/export parser/kernel executables and controlled tool search path are trusted. Full immutable source/import/build-product provenance, sandboxed producer builds, independent-kernel qualification and authenticated distribution of reviewed policy pins belong to PA-02 and later release assurance. `specificationReviewVerified` stays false. A correct proof relative to an approved pin does not show the pin reflects business intent.
