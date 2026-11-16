@@ -1,12 +1,15 @@
 import Lake
 open Lake DSL
 
-package nightlean where
+package noctium where
   version := v!"0.1.0"
 
 @[default_target]
 lean_lib Nightlean
 
 @[default_target]
+lean_exe noctium where
+  root := `NoctiumMain
+
 lean_exe nightlean where
   root := `Main

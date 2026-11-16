@@ -1,6 +1,6 @@
-# Contributing to Nightlean
+# Contributing to Noctium
 
-Start with the [public issue map](https://github.com/awjreynolds/nightlean/issues/1). GitHub Issues track decisions, research, implementation and dependencies. Open or join an issue before substantial work so the proposed scope and required evidence are clear.
+Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/1). GitHub Issues track decisions, research, implementation and dependencies. Open or join an issue before substantial work so the proposed scope and required evidence are clear.
 
 ## Development checks
 

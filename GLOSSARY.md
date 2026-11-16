@@ -1,6 +1,6 @@
-# Nightlean glossary
+# Noctium glossary
 
-This glossary defines Nightlean's source, compiler, and Midnight target terms.
+This glossary defines Noctium's source, compiler, and Midnight target terms.
 
 ## Language and target
 
@@ -39,7 +39,7 @@ A value computed by a circuit relation and exposed for proof verification or con
 A declared state read or write performed by a contract transition around a verified circuit relation. State effects are modeled separately from circuit constraints.
 
 **Contract-call transcript**:
-The public call data and proof-bound values that Midnight validates when deciding whether to accept a contract transaction. Nightlean must bind declared public inputs and outputs to the target ledger's transcript format.
+The public call data and proof-bound values that Midnight validates when deciding whether to accept a contract transaction. Noctium must bind declared public inputs and outputs to the target ledger's transcript format.
 
 **Nullifier**:
 A value derived from private claim data and bound into the public proof or call. Ledger state records spent nullifiers to reject reuse.
@@ -48,10 +48,10 @@ A value derived from private claim data and bound into the public proof or call.
 A cryptographic value that binds data while hiding the committed private values. A public Merkle root can commit to a set of eligible claims.
 
 **One-time claim**:
-The first Nightlean vertical-slice workload. A claimant proves membership using private eligibility data and a private Merkle path, supplies a public root, and publishes a nullifier that ledger state marks as spent.
+The first Noctium vertical-slice workload. A claimant proves membership using private eligibility data and a private Merkle path, supplies a public root, and publishes a nullifier that ledger state marks as spent.
 
 **Target profile**:
-A versioned set of Midnight ledger, ZKIR, proving, proof-server, and on-chain runtime interfaces that a Nightlean build supports. Target profile capabilities are separate from source-language semantics.
+A versioned set of Midnight ledger, ZKIR, proving, proof-server, and on-chain runtime interfaces that a Noctium build supports. Target profile capabilities are separate from source-language semantics.
 
 **Supported capability**:
-A Nightlean operation with evidence at four boundaries: compiler implementation, target proving or verifier acceptance, contract artifact integration, and transaction execution on the named profile. Presence in a library or ZKIR source alone is not sufficient.
+A Noctium operation with evidence at four boundaries: compiler implementation, target proving or verifier acceptance, contract artifact integration, and transaction execution on the named profile. Presence in a library or ZKIR source alone is not sufficient.

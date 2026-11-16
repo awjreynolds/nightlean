@@ -4,18 +4,18 @@ namespace Nightlean.Cli
 
 def version : String := "0.1.0"
 
-def usage : String := "Nightlean " ++ version ++ "\n\
-Usage: nightlean --version\n\
-       nightlean profiles\n\
-       nightlean check <file> [--target <manifest>]\n\
-       nightlean compile <file> [--target <manifest>] [--output <directory>]\n\
+def usage : String := "Noctium " ++ version ++ "\n\
+Usage: noctium --version\n\
+       noctium profiles\n\
+       noctium check <file> [--target <manifest>]\n\
+       noctium compile <file> [--target <manifest>] [--output <directory>]\n\
 Default target: profiles/midnight-ledger-9.json\n\
 The selectable ZKIR 3.2.1 profile qualifies a selected native subset only."
 
 structure Options where
   input : String
   target : String := "profiles/midnight-ledger-9.json"
-  output : String := "build/nightlean"
+  output : String := "build/noctium"
   deriving Repr
 
 private def parseOptions (input : String) (args : List String) (compiling : Bool) :
@@ -39,7 +39,7 @@ where
     | arg :: _ => .error s!"unexpected argument '{arg}'"
 
 private def error (message : String) : IO UInt32 := do
-  (← IO.getStderr).putStrLn s!"nightlean: error: {message}"
+  (← IO.getStderr).putStrLn s!"noctium: error: {message}"
   return 1
 
 private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
@@ -51,7 +51,7 @@ private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
   let source ← try IO.FS.readFile opts.input catch _ =>
     return ← error s!"cannot read source '{opts.input}'"
   if source.trimAscii.toString.startsWith "module" then
-    return ← error "Lean module-mode files are not part of the current Nightlean source surface"
+    return ← error "Lean module-mode files are not part of the current Noctium source surface"
   -- Lean accepts a filename with --stdin. This keeps module identity and source diagnostics,
   -- avoids a temporary source file, and preserves line numbers by placing the extra import
   -- on the original first line. Inputs are trusted Lean source, like `lake env lean` itself.
@@ -80,7 +80,7 @@ def run (args : List String) : IO UInt32 := do
     IO.println usage
     return 0
   | ["--version"] =>
-    IO.println s!"Nightlean {version} (Lean {Lean.versionString})"
+    IO.println s!"Noctium {version} (Lean {Lean.versionString})"
     return 0
   | ["profiles"] =>
     IO.println "midnight-ledger-9 profiles/midnight-ledger-9.json source-baseline-unqualified"

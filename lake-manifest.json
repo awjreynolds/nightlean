@@ -1,6 +1,6 @@
 {"version": "1.3.0",
  "packagesDir": ".lake/packages",
  "packages": [],
- "name": "nightlean",
+ "name": "noctium",
  "lakeDir": ".lake",
  "fixedToolchain": false}

@@ -1,8 +1,10 @@
 # Architecture and assurance
 
-Nightlean places the contract language, typed intermediate representation, reference semantics and primary native lowering in Lean 4. Contract authors use a finite circuit DSL and ordinary Lean specifications, theorems and tactics. The proof language is broader than the executable contract subset.
+Noctium combines contract authoring, specifications and correctness proofs in Lean 4, then compiles to Midnight's native formats. The compiler, typed IR, reference semantics and primary lowering also use Lean. A finite DSL defines executable contracts. Ordinary Lean theorems and tactics prove their specified properties.
 
-![Nightlean source, compiler, artifacts and native execution, with published claim-specific evidence and open assurance links.](../assets/nightlean-social.png)
+Lean proofs and runtime ZK proofs have different jobs. The former establish properties of contract behavior. The latter establish satisfaction of a circuit and its bound statement for an invocation. Compilation preservation and artifact certificates connect source properties to native artifacts for the qualified private claim.
+
+![Noctium source, compiler, artifacts and native execution, with published claim-specific evidence and open assurance links.](../assets/noctium-social.png)
 
 ## Four boundaries
 
@@ -18,21 +20,22 @@ The application path needs no Node or Compact runtime. Independent Midnight libr
 
 ## Assurance boundaries
 
-The strongest published formal results concern the actual private-claim program. They connect its imported source definitions to independent native relation and state models. Soundness quantifies over arbitrary satisfying assignments and checked VM traces, rather than assuming an honest witness generator.
+The published contract-to-artifact guarantees apply to the actual private-claim program. Its proofs connect imported source definitions to independent native relation and state models, then to retained artifact bytes. Soundness quantifies over arbitrary satisfying assignments and checked VM traces. The proof does not assume an honest witness generator.
 
 | Layer | Established today | Remaining boundary |
 | --- | --- | --- |
 | [Source properties](../development/private-claim-proofs.md) | Eligibility equations, exact updates, invariants, framing, replay rejection and scoped source privacy | Correctness of the intended business specification and stated hash assumptions |
-| [Proof audit](../development/proof-registration.md) | Typed obligation matching, pinned model comparison, fresh-kernel replay and transitive axiom checks | Independent specification review and authenticated release provenance |
+| [Proof audit](../development/proof-registration.md) | Typed obligation matching, pinned model comparison, fresh-kernel replay and transitive axiom checks | Business-specification review and authenticity of external authority pins |
 | [Native relation](../development/private-claim-lowering-proofs.md) and [state](../development/private-claim-native-state-proofs.md) | Claim-specific soundness, completeness, state/transcript preservation and JSON-tree certificates | Native implementation agreement, real admission limits and deployed identity |
 | [Native privacy](../development/private-claim-native-privacy-proofs.md) | Equal declared public observations for successful runs with coupled host context | Proof-byte zero knowledge, failure channels, timing, logs and provider observations |
+| [Exact artifacts](../development/private-claim-artifact-certificates.md) | Independent immutable builds and kernel checks bind the claim proofs to exact retained bytes | Trusted bootstrap, authenticated authority inputs and deployed key/operation identity |
 | [Native integration](../development/native-client.md#retained-qualification) | Real proofs, finalized localnet execution, state comparison and recovery tests | General feature coverage, public-network qualification and independent security review |
 
-Fresh-kernel audits admit only the pinned foundational axioms `propext`, `Classical.choice` and `Quot.sound`. Replay alone does not enforce this policy. The checker also examines transitive dependencies and exact theorem statements.
+Fresh-kernel audits admit only the pinned foundational axioms `propext`, `Classical.choice` and `Quot.sound`. User axioms, admitted proofs and native-computation axioms reject. The checker enforces this policy over transitive dependencies and matches exact theorem statements.
 
 The kernel checks the modeled propositions. Native parser, hash, VM, proof-system and host implementations retain explicit agreement assumptions. The scoped privacy theorem does not prove cryptographic secrecy of proof bytes or hide success versus failure. Functional correctness supplies no automatic confidentiality guarantee.
 
-Two open links deserve particular attention: [deployed key and operation binding](https://github.com/awjreynolds/nightlean/issues/57) and [generic scalar compiler preservation](https://github.com/awjreynolds/nightlean/issues/64). The [exact artifact certificate](../development/private-claim-artifact-certificates.md) passed independent immutable builds, retained-byte kernel checks and scoped functional/privacy composition. Broader native features need their own preservation evidence. `compiledContractVerified` stays false until the required chain is established.
+Two links remain open: [deployed key and operation binding](https://github.com/awjreynolds/noctium/issues/57) and [generic scalar compiler preservation](https://github.com/awjreynolds/noctium/issues/64). Broader native features need their own preservation evidence. `compiledContractVerified` stays false until the required chain is established.
 
 ## Scope and growth
 
@@ -40,4 +43,4 @@ The current source slice includes `Native`, `Bool`, bounded unsigned scalars, [t
 
 The [capability goal](../compatibility/GOAL.md) follows the full native ZKIR v3 and ledger interfaces. Compact supplies comparison cases and compiler engineering lessons, with no compiler or runtime dependency. [Capability inventories](../compatibility/zkir-feature-matrix.json) track the target surface separately from implemented and qualified source features.
 
-For implementation order and active work, use the [public issue map](https://github.com/awjreynolds/nightlean/issues/1). For reproducible checks, start at the [documentation index](../README.md).
+For implementation order and active work, use the [public issue map](https://github.com/awjreynolds/noctium/issues/1). For reproducible checks, start at the [documentation index](../README.md).

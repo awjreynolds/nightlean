@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
-  <title id="title">Nightlean research preview: Lean contracts, native Midnight execution</title>
-  <desc id="description">Lean contracts, specifications and proofs pass through the Lean compiler to ZKIR and Impact artifacts, a Rust application and Midnight localnet. Published evidence includes claim-specific proofs, scoped native privacy and finalized localnet transactions. Exact artifact certificates are qualified. Generic compiler preservation and deployed verifier binding remain open.</desc>
+  <title id="title">Noctium research preview: prove contract behavior, compile for Midnight</title>
+  <desc id="description">Authors specify contract behavior and prove properties in Lean. The Lean compiler emits ZKIR and Impact artifacts for a Rust application and Midnight localnet. Published claim-specific evidence includes correctness, scoped privacy and exact artifact certificates. Native ZK proofs and finalized transactions provide integration evidence. Generic compiler preservation and deployed verifier binding remain open.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#101D30"/>
@@ -27,13 +27,13 @@
   </g>
 
   <g font-family="Inter, Arial, Helvetica, sans-serif">
-    <text x="129" y="111" fill="#F4F7FC" font-size="62" font-weight="700" letter-spacing="-2">Nightlean</text>
+    <text x="129" y="111" fill="#F4F7FC" font-size="62" font-weight="700" letter-spacing="-2">Noctium</text>
     <rect x="920" y="65" width="220" height="36" rx="18" fill="#142A32" stroke="#315654"/>
     <circle cx="941" cy="83" r="4" fill="#70E6CF"/>
     <text x="957" y="89" fill="#B9E9DF" font-size="14" font-weight="700" letter-spacing="1.3">RESEARCH PREVIEW</text>
 
-    <text x="60" y="174" fill="#F4F7FC" font-size="32" font-weight="600" letter-spacing="-0.6">Lean contracts. Native Midnight execution.</text>
-    <text x="60" y="211" fill="#AEBFD5" font-size="21">Contract semantics, proof obligations and native execution in one project.</text>
+    <text x="60" y="174" fill="#F4F7FC" font-size="32" font-weight="600" letter-spacing="-0.6">Prove contract behavior. Compile for Midnight.</text>
+    <text x="60" y="211" fill="#AEBFD5" font-size="21">Author-written specifications. Lean-checked proofs. Native execution.</text>
 
     <!-- The five stages describe an implemented path for the current source slice. -->
     <g fill="#132236" stroke="#30435E">
@@ -69,24 +69,24 @@
       <text x="966" y="358">localnet</text>
     </g>
     <g fill="#AEBFD5" font-size="16">
-      <text x="78" y="389">Specs + theorems</text>
+      <text x="78" y="389">Lean theorems</text>
       <text x="300" y="389">Typed IR · lowering</text>
       <text x="522" y="389">ZKIR + Impact plans</text>
-      <text x="744" y="389">Prove · fund · submit</text>
+      <text x="744" y="389">ZK proof · submit</text>
       <text x="966" y="389">Finalized state</text>
     </g>
 
     <!-- Evidence labels are deliberately separate from the execution arrows. -->
     <path d="M60 446H1140" stroke="#293A52"/>
     <text x="60" y="479" fill="#70E6CF" font-size="13" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
-    <text x="60" y="509" fill="#E3EBF5" font-size="18">Claim proofs · Scoped privacy · Exact artifact certificates</text>
-    <text x="60" y="537" fill="#AEBFD5" font-size="18">Native proofs + finalized localnet transactions</text>
+    <text x="60" y="509" fill="#E3EBF5" font-size="18">Claim-specific correctness + scoped privacy</text>
+    <text x="60" y="537" fill="#AEBFD5" font-size="18">Exact artifact certificates + finalized localnet runs</text>
     <path d="M620 471V540" stroke="#293A52"/>
     <text x="653" y="479" fill="#CFB58A" font-size="13" font-weight="700" letter-spacing="1.8">OPEN ASSURANCE</text>
     <text x="653" y="509" fill="#E3EBF5" font-size="18">Generic compiler preservation</text>
     <text x="653" y="537" fill="#AEBFD5" font-size="18">Deployed verifier + operation binding</text>
 
-    <text x="60" y="594" fill="#92A9C7" font-size="17">github.com/awjreynolds/nightlean</text>
+    <text x="60" y="594" fill="#92A9C7" font-size="17">github.com/awjreynolds/noctium</text>
     <text x="1140" y="594" fill="#92A9C7" font-size="16" text-anchor="end">LEAN 4 · RUST · ZKIR v3</text>
   </g>
 </svg>
