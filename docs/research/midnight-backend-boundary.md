@@ -1,6 +1,6 @@
 # Midnight backend boundary for a Lean frontend
 
-Context pointer: [ticket 01, Map the deployable Midnight backend boundary](../../.scratch/lean4-midnight-compiler/issues/01-midnight-backend-boundary.md)
+Context pointer: [GitHub issue #3, Map the deployable Midnight backend boundary](https://github.com/awjreynolds/nightlean/issues/3)
 
 Research checked on 2026-11-16 against official Midnight documentation and repositories.
 

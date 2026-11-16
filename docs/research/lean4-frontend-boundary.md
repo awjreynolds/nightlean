@@ -1,6 +1,6 @@
 # Lean 4 frontend options for a restricted compiler
 
-Research ticket: [02: Identify Lean 4 frontend constraints for a compiler subset](../../.scratch/lean4-midnight-compiler/issues/02-lean-frontend-boundary.md)
+Research ticket: [GitHub issue #6: Identify Lean 4 frontend constraints for a compiler subset](https://github.com/awjreynolds/nightlean/issues/6)
 
 Checked 2026-11-16 against the Lean reference manual and the Lean 4 repository.
 
@@ -22,4 +22,4 @@ Checked 2026-11-16 against the Lean reference manual and the Lean 4 repository.
 
 ## Recommendation
 
-V1 uses a dedicated Lean `circuit` declaration and elaborator for the private one-time claim. The declaration marks private inputs, public inputs, outputs, and supported circuit operations explicitly. Elaboration checks types, preserves original syntax spans for diagnostics, and produces a compiler-owned typed representation. Reject ordinary Lean definitions and constructs outside the declared subset. This avoids treating arbitrary Lean core expressions as circuit features while keeping both Nightlean's implementation and source interface in Lean.
+Use Lean-elaborated declarations for contracts and circuits. A contract describes ledger state and transition entrypoints. A circuit relation describes private witnesses, public inputs, constraints, and outputs. Compose these in a compiler-owned typed representation while keeping relation semantics separate from state effects. Preserve syntax spans for diagnostics and reject arbitrary Lean definitions outside the supported surface. The private claim is the first program in this model, not its defining language feature. This is an architectural recommendation recorded in [GitHub issue #2](https://github.com/awjreynolds/nightlean/issues/2).

@@ -2,6 +2,8 @@
 
 The canonical issue tracker is GitHub Issues in `awjreynolds/nightlean`.
 
+The public map is [issue #1](https://github.com/awjreynolds/nightlean/issues/1). Link every decision, research task, and implementation task as a native child issue. Link blockers with GitHub issue dependencies so a new implementation agent sees the actual execution order.
+
 ## Wayfinding operations
 
 - The map is a GitHub issue labelled `wayfinder:map`.

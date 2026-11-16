@@ -1,5 +1,7 @@
 # 03: Set the v1 scope and compiler implementation language
 
+> Current source of truth: [public issue #4](https://github.com/awjreynolds/nightlean/issues/4). Use GitHub for the latest decision and dependencies.
+
 Type: grilling
 
 Status: resolved

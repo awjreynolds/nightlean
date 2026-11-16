@@ -1,5 +1,7 @@
 # 04: Assess Moriarty and Midnight backend paths
 
+> Current source of truth: [public issue #7](https://github.com/awjreynolds/nightlean/issues/7). Use GitHub for the latest decision and dependencies.
+
 Type: research
 
 Status: resolved

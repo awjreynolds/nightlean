@@ -1,5 +1,7 @@
 # 08: Run the first Lean-to-ZKIR vertical slice
 
+> Current source of truth: [public issue #9](https://github.com/awjreynolds/nightlean/issues/9). It includes witness/state checks and all current blockers.
+
 Type: task
 
 ## Task

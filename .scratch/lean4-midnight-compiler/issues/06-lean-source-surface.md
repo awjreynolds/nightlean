@@ -1,5 +1,7 @@
 # 06: Choose the Lean source surface
 
+> Current source of truth: [public issue #2](https://github.com/awjreynolds/nightlean/issues/2). The current decision separates contract state transitions from circuit relations and keeps the source model general.
+
 Type: research
 
 Status: resolved

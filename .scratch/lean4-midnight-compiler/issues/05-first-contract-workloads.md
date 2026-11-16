@@ -1,5 +1,7 @@
 # 05: Choose the first contract workloads
 
+> Current source of truth: [public issue #8](https://github.com/awjreynolds/nightlean/issues/8). Use GitHub for the latest decision and dependencies.
+
 Type: grilling
 
 Status: resolved
