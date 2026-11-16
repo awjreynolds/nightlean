@@ -66,6 +66,7 @@ bash tests/cli.sh
 bash tests/uint-cli.sh
 bash tests/disclosure-cli.sh
 bash scripts/proofs/check-private-claim.sh
+python3 scripts/proofs/check-private-claim-audit.py
 python3 scripts/proofs/check-registration.py
 ```
 

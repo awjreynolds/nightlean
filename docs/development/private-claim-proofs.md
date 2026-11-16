@@ -50,7 +50,7 @@ The canonical state invariant is proved initially and after recording. A separat
 
 The proof module uses ordinary Lean theorem syntax, induction, simplification, arithmetic reasoning and kernel computation. It contains no `sorry`, `admit`, user axiom, `native_decide` or unsafe proof. Transitive axiom output for the main claims contains only the standard foundational axioms `propext`, `Classical.choice` and `Quot.sound`, or subsets of those names. The script prints the main dependency reports.
 
-Kernel replay, transitive axiom policy, trusted statement matching and exact source/build/deployment provenance are distinct audit requirements. This local script establishes source theorem checking and source-mutation regressions. It does not issue an authenticated audit certificate or replace the required proof registry and artifact-binding work.
+Kernel replay, transitive axiom policy, trusted statement matching and exact source/build/deployment provenance are distinct audit requirements. The shell script establishes source theorem checking and source-mutation regressions. The separate audit check below binds the actual source policy to its checked proof statements. Neither check issues an authenticated build/deployment certificate.
 
 The non-vacuity fixture is an explicit abstract-model instance. Its constant-zero hash oracle makes all four equations true and the actual circuit/entrypoint succeeds before replay rejection. A second successful fixture uses different secrets, siblings and directions while retaining the same declared public values, and instantiates the two-run observation theorem. This is deliberately not a qualified Poseidon implementation or native cryptographic evidence. The generic progress theorem instead accepts any canonical hash trace, including one supplied by the qualified target implementation once that correspondence is established.
 
@@ -59,3 +59,41 @@ The non-vacuity fixture is an explicit abstract-model instance. Its constant-zer
 The current theorems prove the stated source-semantic properties. They do not prove that emitted ZKIR constraints and Impact operations preserve these semantics, that an arbitrary satisfying native witness has the same source meaning, or that generated keys and the deployed verifier implement the proved relation. Native receipts and conformance tests provide separate evidence for selected executions.
 
 Required follow-on work includes compiler/lowering soundness, canonical state/encoding correspondence, a formal target hash specification and explicit cryptographic assumptions, native prover/verifier and ledger assumptions, registered business specifications, non-vacuity policy, full axiom/statement checks and immutable proof-to-artifact/deployment binding. Membership and authorization claims must state the modeled eligibility tree and their cryptographic assumptions. The full correctness goal stays open until those obligations are met.
+
+
+## Actual-source policy and export audit
+
+`proofs/PrivateClaimVerification.lean` binds `Nightlean.PrivateClaimVerification.policy` to the imported actual `PrivateClaim` contract and entrypoint index zero. Its `functional` and `privacy` theorems have the exact `FunctionalObligation policy` and `PrivacyObligation policy` types. Both register through the source proof registry. Their direct transitive axiom reports contain only `propext`, `Classical.choice` and `Quot.sound`.
+
+The reviewed predicates separate accepted-execution safety from progress:
+
+- `initial` describes canonical configured root/campaign values and an empty spent map. `checked_initializer` independently connects the existing checked initializer to this state.
+- `invariant` describes the canonical configured cells and a map of unique canonical keys marked true.
+- Broad `precondition` fixes the field modulus and requires the exact declared typed input environment with canonical values and domain tags. It does not assume a valid path, a correct nullifier, matching configuration, absence of the key or circuit/entrypoint acceptance.
+- `enabled` supplies the four explicit `HashTrace` equations, matching configured public parameters and an absent nullifier. Those conditions establish progress. Nonvacuity uses the explicitly labeled constant-zero abstract hash model.
+- `postcondition` derives configuration matches and absence from successful actual entrypoint execution. It requires reconstruction of the supplied root and nullifier, exact returned nullifier and recorded successor state, plus rejection of a repeated execution. The functional obligation also preserves the invariant.
+
+`accepted_authorized` proves the backward safety step. Missing configuration guards or the absence check invalidate this reasoning. Eligibility is not hidden inside broad Pre. Hash equations for progress are explicit context assumptions, with no cryptographic injectivity or hiding assumption.
+
+The privacy obligation uses the API's actual declared public input projection. Equal root, campaign and supplied nullifier, together with identical context and complete initial public state, imply equal successful source outcomes. Its release policy is `none`, meaning no additional release beyond those already declared public inputs. Its scope is `successfulOnly`, so failure observations are excluded. This theorem does not prove hiding of the public hashes, zero knowledge of native proof bytes, timing independence, provider privacy or compiler preservation.
+
+Run fresh source compilation, proof export, kernel replay, direct axiom checks and exact-policy audit:
+
+```sh
+python3 scripts/proofs/check-private-claim-audit.py
+```
+
+The script compiles the actual source and both proof modules into a temporary import directory. Source filenames stay relative to the repository. It retains model/proof NDJSON bytes, the SHA256 pin, direct axiom reports, checker JSON and negative-test evidence under `.nightlean/audits/private-claim-source/`. It supplies the retained model hash separately to `audit-source-proof.py`. The trusted checker starts from an empty environment, replays the exported kernel terms, checks the exact obligation types and rejects any changed declaration shared with the pinned model.
+
+The default run treats its fresh baseline as trusted for this regression only. It does not authenticate a human specification review. After reviewing and retaining a model export, supply its independently recorded pin explicitly:
+
+```sh
+python3 scripts/proofs/check-private-claim-audit.py \
+  --trusted-model-export /path/to/reviewed-model.ndjson \
+  --trusted-model-sha256 <independently-recorded-sha256> \
+  --output-dir /path/to/audit-evidence
+```
+
+The regression rejects the actual functional proof against a different policy with a weakened postcondition. It also freshly compiles a source mutation removing the root guard, deliberately pairs the changed relation with stale proof objects and requires `model_declaration_mismatch`. This tests source identity in addition to the six semantic proof-sensitivity mutations. No source files in the checkout change during either regression. The wrong-policy negative runs with the default baseline, which explicitly retains the generated test policy.
+
+A successful audit reports `sourceFunctionalChecked: true`, `sourcePrivacyChecked: true` and `compiledContractVerified: false`. `specificationReviewVerified` and `sourceAuthorizationCorrespondenceProved` stay false. This is checked registration of an exact source statement and source contract, with scoped privacy. Emitted ZKIR/Impact preservation, target hash correspondence, verifier/key identity and deployed artifact binding remain separate open obligations.
