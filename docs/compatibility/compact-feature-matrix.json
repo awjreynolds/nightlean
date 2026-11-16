@@ -319,12 +319,14 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
           "Nightlean/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
-          "docs/development/composite-types.md"
+          "docs/development/composite-types.md",
+          "docs/development/composite-values.md",
+          "tests/composite-values/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -346,12 +348,14 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
           "Nightlean/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
-          "docs/development/composite-types.md"
+          "docs/development/composite-types.md",
+          "docs/development/composite-values.md",
+          "tests/composite-values/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -373,12 +377,14 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
           "Nightlean/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
-          "docs/development/composite-types.md"
+          "docs/development/composite-types.md",
+          "docs/development/composite-values.md",
+          "tests/composite-values/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -400,12 +406,14 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
           "Nightlean/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
-          "docs/development/composite-types.md"
+          "docs/development/composite-types.md",
+          "docs/development/composite-values.md",
+          "tests/composite-values/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -427,12 +435,14 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
           "Nightlean/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
-          "docs/development/composite-types.md"
+          "docs/development/composite-types.md",
+          "docs/development/composite-values.md",
+          "tests/composite-values/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -621,7 +631,7 @@
       "id": "C-LANG-FUNCTION",
       "layer": "language",
       "surface": "Named circuits and circuit calls",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Parameters, arity, results, helper calls and recursive-call rejection.",
       "source": [
         "reference"
@@ -631,13 +641,26 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Structured Lean helper declarations support lexical overload groups, typed scalar/unit signatures, ordered once-only arguments, recursion rejection, transitive effects and scalar disclosure checks. Source/expansion/execution resource policies are enforced. Structured branch purity and external effect backend execution remain open.",
+        "evidence": [
+          "Nightlean/Helpers.lean",
+          "tests/Helpers.lean",
+          "tests/HelperSource.lean",
+          "runtime/tests/helpers.rs",
+          "docs/development/named-helpers.md",
+          "tests/helpers/qualification-evidence.json"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-PURITY",
       "layer": "language",
       "surface": "Pure/impure analysis",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Pure circuits exclude ledger operations, events and witness calls.",
       "source": [
         "reference"
@@ -647,7 +670,20 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Structured Lean helper declarations support lexical overload groups, typed scalar/unit signatures, ordered once-only arguments, recursion rejection, transitive effects and scalar disclosure checks. Source/expansion/execution resource policies are enforced. Structured branch purity and external effect backend execution remain open.",
+        "evidence": [
+          "Nightlean/Helpers.lean",
+          "tests/Helpers.lean",
+          "tests/HelperSource.lean",
+          "runtime/tests/helpers.rs",
+          "docs/development/named-helpers.md",
+          "tests/helpers/qualification-evidence.json"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-GENERICS",
@@ -685,7 +721,7 @@
       "id": "C-LANG-SCOPE",
       "layer": "language",
       "surface": "Bindings, patterns and lexical scope",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "const binding, shadowing, destructuring and left-to-right expression evaluation.",
       "source": [
         "reference"
@@ -695,7 +731,20 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Structured Lean helper declarations support lexical overload groups, typed scalar/unit signatures, ordered once-only arguments, recursion rejection, transitive effects and scalar disclosure checks. Source/expansion/execution resource policies are enforced. Structured branch purity and external effect backend execution remain open.",
+        "evidence": [
+          "Nightlean/Helpers.lean",
+          "tests/Helpers.lean",
+          "tests/HelperSource.lean",
+          "runtime/tests/helpers.rs",
+          "docs/development/named-helpers.md",
+          "tests/helpers/qualification-evidence.json"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-PRAGMA",
@@ -1031,14 +1080,17 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Native Rust execution, linked C/C++ resumable scalar inputs, scoped typed provider transport and private transaction-bound journals are tested without Node execution. Rust assembles real intents and a local ledger accepted one. General source witness functions, durable host adapters, native proof/submission SDK APIs, mobile and WASM remain open.",
+        "scope": "Native Rust execution, linked C/C++ scalar providers/private journals and aggregate codecs are tested without Node application execution. Rust assembles real intents and constructs, locally verifies and attaches proofs on both profiles. Source witness functions, native funding/signing/submission/finality, complete C ABI, mobile and WASM remain open.",
         "evidence": [
           "docs/development/native-runtime-abi.md",
           "docs/development/native-assembler.md",
           "docs/development/unsigned-localnet.md",
           "runtime/tests/cpp_smoke.cpp",
           "runtime/tests/cpp_host_smoke.cpp",
-          "docs/designs/private-state-lifecycle.md"
+          "docs/designs/private-state-lifecycle.md",
+          "docs/development/native-proof-api.md",
+          "tests/native-proof-evidence.json",
+          "docs/development/composite-values.md"
         ],
         "fullEquivalence": "unverified"
       }
@@ -1059,7 +1111,16 @@
       "observedEvidence": [
         "docs/development/native-localnet.md"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Actual private claim native state/transcript preservation is kernel checked against an independent VM with explicit encoding/hash/implementation and resource agreement assumptions. Fresh decoded plan/call tree certificates reject ten mutants. General ADTs, composition, byte/build and deployed-key correspondence remain unverified.",
+        "evidence": [
+          "docs/development/private-claim-native-state-proofs.md",
+          "tests/private-claim-state-evidence.json"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-DIAGNOSTIC",
@@ -4599,7 +4660,7 @@
     "separateScopedPrivacyObligationRequired": true
   },
   "publishedImplementationObservation": {
-    "commit": "9377f61",
+    "commit": "69c5c87",
     "checkedOn": "2026-11-16",
     "scope": "Incremental published implementation evidence supplements the original immutable POC observation. Full equivalence stays unverified. Unpublished aggregate/helper/SDK work receives no completion credit."
   }

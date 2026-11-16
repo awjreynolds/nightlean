@@ -4652,6 +4652,42 @@
         "../development/private-claim-lowering-proofs.md",
         "../../tests/private-claim-lowering-evidence.json"
       ]
+    },
+    {
+      "issue": 40,
+      "commit": "eef4757",
+      "scope": "Checked logical aggregate values, canonical Rust/C++ codec and nested native relation proof fixture. Chained selection preserves prior bounds. Source aggregate disclosure integration remains open.",
+      "refs": [
+        "../development/composite-values.md",
+        "../../tests/composite-values/qualification-evidence.json"
+      ]
+    },
+    {
+      "issue": 59,
+      "commit": "6492027",
+      "scope": "In-process Rust native proof service, exact statement verification before typed attachment and safe retained-key/SRS parsing. Both profiles pass 24 isolated tests each. Funding/signing/submission and complete source-to-deployment assurance remain open.",
+      "refs": [
+        "../development/native-proof-api.md",
+        "../../tests/native-proof-evidence.json"
+      ]
+    },
+    {
+      "issue": 55,
+      "commit": "fd03a31",
+      "scope": "Actual claim state and public transcript preservation for arbitrary native satisfying assignments and independent VM traces, with source completeness and decoded JSON-tree certificates. Real native resource/implementation agreement stays explicit. Native privacy and byte/build/deployment binding remain open.",
+      "refs": [
+        "../development/private-claim-native-state-proofs.md",
+        "../../tests/private-claim-state-evidence.json"
+      ]
+    },
+    {
+      "issue": 41,
+      "commit": "69c5c87",
+      "scope": "Typed scalar/unit helper calls preserve ordered arguments, nested assertions, scalar origins and safe expansion budgets. Direct/helper fixture emits identical native bytes and passes real proving. Structured branch guards and external helper effects remain unqualified.",
+      "refs": [
+        "../development/named-helpers.md",
+        "../../tests/helpers/qualification-evidence.json"
+      ]
     }
   ]
 }
