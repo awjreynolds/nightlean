@@ -18,6 +18,8 @@ const params=await realpath(process.env.NIGHTLEAN_PROOF_CACHE??'/private/tmp/nig
 const image='midnightntwrk/midnight-node-toolkit@sha256:904f824f3350530bc2fb03448906cc5f9f200b98e98bd9fbb274a1cc25b9f89c';
 const rpc=async(method,params=[])=>{const response=await fetch('http://127.0.0.1:19944',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method,params})});const body=await response.json();if(body.error)throw Error('local RPC failed');return body.result;};
 if(await rpc('chain_getBlockHash',[0])!=='0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d')throw Error('Refusing non-development genesis');
+const runtime=await rpc('state_getRuntimeVersion');
+if(runtime.specVersion!==2001100||runtime.transactionVersion!==4)throw Error('Refusing unsupported development runtime');
 const fromBlock=BigInt((await rpc('chain_getHeader')).number).toString();
 const run=async args=>await exec('docker',['run','--rm','--pull','never','--network','nightlean-dev','--cpus=4','--memory=4g','--pids-limit=256','--cap-drop','ALL','--security-opt','no-new-privileges','--user',`${process.getuid()}:${process.getgid()}`,'--workdir','/work','--mount',`type=bind,source=${work},target=/work`,'--mount',`type=bind,source=${artifacts},target=/work/artifacts,readonly`,'--mount',`type=bind,source=${params},target=/params,readonly`,'--env','MIDNIGHT_PP=/params','--env','MN_FETCH_CACHE=inmemory','--env','MN_LEDGER_CACHE_DB=','--entrypoint','/midnight-node-toolkit',image,...args],{timeout:120000,maxBuffer:2**22});
 await writeFile(`${work}/zswap.json`,JSON.stringify({coinPublicKey:{bytes:Array.from(Buffer.from('1bd4f827be97ff013c4a702e4b08f30ec378728a54670cf7cc92cb9b1a14eff6','hex'))},currentIndex:'0',inputs:[],outputs:[]}));
@@ -30,6 +32,7 @@ async function submit(intent,filename,event){
  await run(['generate-txs',`--src-file=/work/${filename}`,'send','-d','ws://nightlean-dev-node:9944']);
  for(let i=0;;i++)try{return await observeLocalReceipt({txHash,address:summary.address,event,fromBlock});}catch(error){if(i===20||!error.message.includes('not found'))throw error;await sleep(1000);}
 }
+await exec(process.execPath,[new URL('../zkir/check-native-cases.mjs',import.meta.url).pathname,artifacts,`${artifacts}/initial-state.bin`,'negative'],{timeout:30000,maxBuffer:2**20});
 const deployment=mode==='--resume-call' ? JSON.parse(await readFile(`${work}/deployment-receipt.json`,'utf8')) : await submit('deploy-intent.bin','native-deploy.mn','ContractDeploy');
 if(deployment.contractAddress!=='0x'+summary.address)throw Error('Resume contract address mismatch');
 await writeFile(`${work}/deployment-receipt.json`,JSON.stringify(deployment,null,2));
@@ -37,6 +40,10 @@ const call=await submit('call-intent.bin','native-call.mn','ContractCall');
 await run(['contract-state','--src-url','ws://nightlean-dev-node:9944','--contract-address',summary.address,'--dest-file','/work/observed-state.bin']);
 const observed=await readFile(`${work}/observed-state.bin`),predicted=await readFile(`${artifacts}/predicted-state.bin`);
 if(!observed.equals(predicted))throw Error('Native accepted state differs from predicted state');
-const evidence={route:'Lean ZKIR and native ledger artifacts, without Compact',network:'undeployed',address:summary.address,deployment,call,stateMatches:true,stateSha256:createHash('sha256').update(observed).digest('hex')};
+await exec(process.execPath,[new URL('../zkir/check-native-cases.mjs',import.meta.url).pathname,artifacts,`${work}/observed-state.bin`,'replay'],{timeout:30000,maxBuffer:2**20});
+await run(['contract-state','--src-url','ws://nightlean-dev-node:9944','--contract-address',summary.address,'--dest-file','/work/after-replay-state.bin']);
+if(!(await readFile(`${work}/after-replay-state.bin`)).equals(observed))throw Error('Rejected replay changed ledger state');
+const negativeChecks=JSON.parse(await readFile(`${artifacts}/negative-checks.json`));
+const evidence={negativeChecks,replayRejected:true,route:'Lean ZKIR and native ledger artifacts, without Compact',network:'undeployed',address:summary.address,deployment,call,stateMatches:true,stateSha256:createHash('sha256').update(observed).digest('hex')};
 await writeFile(`${work}/native-localnet.json`,JSON.stringify(evidence,null,2));
 console.log(JSON.stringify(evidence,null,2));

@@ -1,5 +1,7 @@
 # Private one-time claim on the isolated ledger 9 development network
 
+Historical adapter experiment. The Compact backend and its deployment runner have been removed at the user's request. These receipts describe the former route only. Current native-route evidence is in [native-localnet.md](native-localnet.md).
+
 Observed 2026-11-16. This evidence qualifies the local contract path. Preview acceptance remains a separate gate.
 
 ## Source and route

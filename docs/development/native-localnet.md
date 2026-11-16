@@ -1,50 +1,44 @@
-# Native artifact localnet qualification
+# Native private claim accepted on localnet
 
-Checked 2026-11-16. This experiment targets the same isolated development ledger as the completed private-claim adapter path. The compiler's Lean ZKIR emitter, native runtime operations, keys, contract state, ContractOperation, ContractDeploy, ContractCallPrototype, and Intent are assembled without Compact.
+On 2026-11-16, the actual `examples/PrivateClaim.lean` source compiled through Nightlean's Lean frontend, typed circuit/state model, native entrypoint lowerer, and symbolic Impact plan exporter. Native runtime helpers assembled ledger artifacts, the official final ZKIR 3.2.0 tool generated keys, and the isolated ledger accepted deployment and a private one-time claim. This route invokes no Compact compiler, runtime, source adapter, or generated contract bindings.
 
-The generated artifacts originate from `scripts/zkir/native-contract.mjs`. The local-only funding and submission harness is `scripts/localnet/deploy-native.mjs`. The latter refuses any genesis except the pinned published development chain, funds through its public seeded development identity, and requires independent finalized `TxApplied` plus the corresponding contract event.
+## Accepted evidence
 
-## First native deployment
+The machine-readable evidence is [native-localnet-receipts.json](native-localnet-receipts.json).
 
-Command:
+- Contract address: `dc6910da6b30913df3670122d8abbf9512bded7e8711062e7e1bbabb73442d43`.
+- Deployment ledger transaction: `0xfe234f7f10ca1822b11b779cbcd9b66ac18e6bf569efb215b137163dd3ced027`, finalized block 398, block hash `0x3c9c0924b8fab4a4797b1de66a93e5646adcfb8e38e0724eea9206f8b21c4bb6`.
+- Claim ledger transaction: `0xa81671aac5baa1a03aaa7fd13ac4fa4e829287e996f5bc020fdcd98ddec53c16`, finalized block 401, block hash `0x667a0e08c0e51226482c2c807bc14fffe15d167069728c9e5b9e788a16cdfa95`.
+- Both receipts contain exact matching `TxApplied` and contract events under extrinsic index 4. The observer verifies the development genesis, runtime, canonical finalized block, exact transaction hash, contract address, and `midnight.sendMnTransaction` call.
+- The fetched accepted public state matches the native predicted state byte for byte. SHA-256: `d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3`.
+- Serialized claim transaction SHA-256: `9f4eada8cdbb6d7c53ae3ee009c610e01a12c5d6c0007368ce0fc52fdf9adbc0`.
 
-```sh
-NIGHTLEAN_WALLET_DEPENDENCIES=/private/tmp/nightlean-preview-wallet node scripts/localnet/deploy-native.mjs /private/tmp/nightlean-native-contract /private/tmp/nightlean-native-local
-```
+The network is `undeployed`, genesis `0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d`, runtime `2001100`, transaction version `4`. Funding uses the published synthetic development identity on Nightlean's isolated chain.
 
-The direct native contract deployment was accepted and finalized:
+## Source and toolchain provenance
 
-- Contract address: `bb5a07cb09a83dceff850e3bfee389ff9f9d2aed9a21bfea8cf44644b6b5247d`.
-- Ledger transaction hash: `0xf0494fc80f2b1acd5502c469ce02e635d863da15b787ce47d956269678befa02`.
-- Finalized block: 203, block hash `0x6c28a1107e60a6acf06fac66e5114b7fe88e4cc8446e9b5a7f3dd830a036c592`.
-- Extrinsic index: 4.
-- Extrinsic hash: `0x2b23ff1aa844a7be6858baef245366e251799d41c8cb49041ee201928c72d879`.
-- Matching events: `TxApplied` and `ContractDeploy`.
+The compiled Lean source SHA-256 is `5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771`. The source-generated symbolic plan SHA-256 is `cbb84324fa64596fcf076b6fe8dd566ad5956a82ce1e04682e030bc1b7c14242`. The native entrypoint ZKIR SHA-256 is `c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c`.
 
-This establishes language-independent deployment of the native state and verifier-key operation. It does not establish an accepted call for this first circuit revision.
+The independent official ZKIR CLI was built from revision `446c7fecc6bd41dab99ebe89ab404e9d077d11a9` using Rust 1.100.0 and the upstream lockfile. Its native Darwin ARM64 binary SHA-256 is `2664d4d6f97c04e882b4208b9926f27f1e1d03082ca508e69f0145c491aa694a`. The bootstrap records source, lockfile, Rust version, command, binary version, and digest.
 
-## First call boundary and repair
+Native key generation reports `k=9`, 297 rows. Prover key SHA-256: `b9b7e5dd38f01468aecf6b698a74905800227a41e3ca7d7ef302dc287fc64e55`. Verifier key SHA-256: `bc1e417d74922fee9a97778a0a00e7f9910e38f356cba94aa2dee0788b3fa536`. The final official ZKIR WASM checker accepts the preimage. Proof server 9.0.0 generates and self-verifies a 3,852-byte diagnostic contract proof. Transaction funding generates a separate proof bound to the final transaction.
 
-Official native preprocessing accepted the call, but the toolkit's transaction proof builder failed at ledger `prove.rs:284` with `range start index 1 out of range for slice of length 0`. The failure occurred before the call transaction was created or submitted.
+## Invalid witnesses and replay
 
-Source inspection found the compiler had bound the entire VM program with one ZKIR `impact` instruction. The checker therefore returned one activity/skip entry. The transaction builder requires one such entry per VM operation and consumed the metadata once per operation. The bounded repair preserves the exact program field sequence but emits a separate ZKIR impact instruction for each VM operation. The replacement circuit needs regenerated keys and a new contract deployment.
+Before deployment, the official checker rejected five separate altered cases: secret, Merkle sibling, path direction, public root, and supplied nullifier. Every rejection was `Failed direct assertion`, and the immutable initial native state stayed unchanged.
 
-The complete successful private-claim localnet evidence remains in [localnet-claim.md](localnet-claim.md). This native experiment is an additional route qualification, not a replacement for the accepted evidence.
+After the valid transaction finalized, the runtime loaded the fetched accepted native state and attempted the same claim. Its expected absent-nullifier read conflicted with the spent map and failed. A second node-state fetch proved replay left state unchanged. The replay test performs no transaction submission after this failed native execution.
 
-## Final bounded retry
+Additional runtime checks reject noncanonical field strings, wrong boolean input types, unknown input names, and references hidden in an unselected expression arm. Source expressions use eager selection to match the Lean reference semantics and ZKIR lowering.
 
-The compiler repaired per-operation activity metadata and enabled the communications commitment for contract entrypoints. Ledger verification always includes the communication commitment after the binding input, so omitting this circuit input caused the intermediate revision's final transaction proof check to fail. Standalone circuit lowering keeps its separate commitment policy.
+## Reproduction
 
-The corrected native contract deployed and finalized again:
+Follow [native-contract.md](native-contract.md) for the complete source-driven commands and [the localnet guide](../../scripts/localnet/README.md) for the isolated services. Keep artifacts from one assembly invocation together because deployment addresses include randomness. Public development fixture values come from `scripts/zkir/claim-config.mjs`; actual witness files belong outside tracked source.
 
-- Contract address: `0897cddc6b6543ede0724a649ad5931571da9aff2ea367a058940b641a245a51`.
-- Deployment transaction hash: `0xd263fea5c2a3e59b3231a7605f759782d4e38d830c019b33ad0f7e4fec082fd3`.
-- Finalized block: 255, block hash `0x6328c6d8f5c4e383619c432e7107c9e8e58899a9f52abb7787b1ed8da911a2c1`.
-- Extrinsic index: 4, extrinsic hash `0x4e028244e35e49bdcf35f14280cdd17897d03757be789578d4a3623cad376933`.
-- Matching events: `TxApplied` and `ContractDeploy`.
+The successful run used actual parameters captured from this development node, SHA-256 `d412f77763b2cb7d1f5260fdad837750b66321d486a5babed4b786cd52c5a43b`. Recapturing parameters later changes fee-price data as the chain advances, so the parameter digest is observation-specific.
 
-The official toolkit then generated and cryptographically checked the complete native call transaction. Submission reached the node, which rejected transaction `0x8de41e8269ddded4e6d4c4407de4d2ce7afdaf03335737fec3cb45de7cee8b11` with custom error 104. The node log states the precise reason: `guaranteed execution would fail: ran out of gas budget`.
+## Binding requirements established by execution
 
-This revision attached the entire program as guaranteed execution. The remaining native route work is to partition and budget guaranteed/fallible transcripts using actual ledger parameters, then repeat the accepted-call and replay checks. No native call acceptance is claimed. The transaction was rejected by the mempool before inclusion.
+The native entrypoint binds one activity group per VM operation and includes the mandatory communication commitment. Runtime assembly uses the actual ledger cost model and `partitionTranscripts` to obtain valid guaranteed/fallible budgets. Setting the transcript's gas to measured query cost alone caused an earlier node rejection for insufficient guaranteed execution budget. The official partitioner fixed this, and the final native call finalized.
 
-The successful POC route remains the Lean-generated packaging adapter, whose exact deployment, accepted claim, invalid witnesses, and replay evidence are recorded separately. The direct route now has native deployment, native VM state execution, full transcript preprocessing, proof generation and verification, and transaction construction evidence, with its remaining gate identified at node gas-budget validation.
+This qualifies the selected source subset and private-claim workload on the isolated local ledger. Broader feature coverage and production assurance remain separate work.

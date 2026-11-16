@@ -11,7 +11,7 @@ const label = 'org.nightlean.localnet';
 const params = resolve(process.env.NIGHTLEAN_PROOF_CACHE ?? '/private/tmp/nightlean-proof-params');
 const images = {
   node: 'midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a',
-  relay: 'midnightntwrk/midnight-node-toolkit@sha256:edcfc892eafc850c60db58045e6f2575d600cd84dc30a73e35bf9f5086dcc24f',
+  relay: 'node@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf',
   toolkit: 'midnightntwrk/midnight-node-toolkit@sha256:904f824f3350530bc2fb03448906cc5f9f200b98e98bd9fbb274a1cc25b9f89c',
   proof: 'midnightntwrk/proof-server@sha256:5617e26aa76d06c44f4bee667c37eb71ccf02fefe0e5848100fa84001282d515',
   indexer: 'midnightntwrk/indexer-standalone@sha256:119f35db548ba1c390845f215bb1e928e73038bef7c315825aee0461bd54499d',
@@ -57,6 +57,13 @@ async function startProof() {
   await start('proof', ['--network', name, '--mount', `type=bind,source=${params},target=/params`, '--env', 'MIDNIGHT_PP=/params', '--env', 'MIDNIGHT_PROOF_SERVER_JOB_CAPACITY=2', images.proof]);
   await waitFor(async () => (await fetch(`${endpoints.proof}/health`, { signal: AbortSignal.timeout(2000) })).ok, 'proof server');
 }
+async function startRelay() {
+  const relay = "const net=require('net'); for(const [port,host,target] of [[9944,'nightlean-dev-node',9944],[6300,'nightlean-dev-proof',6300],[8088,'nightlean-dev-indexer',8088]]) net.createServer(s=>{const t=net.connect(target,host);s.pipe(t);t.pipe(s);s.on('error',()=>t.destroy());t.on('error',()=>s.destroy());}).listen(port,'0.0.0.0');";
+  await start('relay', ['--read-only', '-p', '127.0.0.1:19944:9944', '-p', '127.0.0.1:16300:6300', '-p', '127.0.0.1:18088:8088', '--entrypoint', 'node', images.relay, '-e', relay]);
+  const relayInfo = await exists(`${name}-relay`);
+  if (!relayInfo.NetworkSettings.Networks[name]) await docker(['network', 'connect', name, `${name}-relay`]);
+  await waitFor(async () => Boolean(await rpc('system_health')), 'node relay');
+}
 if (process.argv[2] === 'down') {
   for (const role of ['relay', 'indexer', 'proof', 'node']) {
     const prior = await exists(`${name}-${role}`);
@@ -72,6 +79,24 @@ if (process.argv[2] === 'down') {
   if (prior) await docker(['rm', '-f', `${name}-proof`]);
   await startProof();
   console.log(JSON.stringify({ proof: endpoints.proof, cache: params, healthy: true }));
+} else if (process.argv[2] === 'restart-relay') {
+  const beforeHash = await rpc('chain_getFinalizedHead');
+  const before = await rpc('chain_getHeader', [beforeHash]);
+  if (await rpc('chain_getBlockHash', [0]) !== endpoints.genesis) throw new Error('Development genesis mismatch');
+  const prior = await exists(`${name}-relay`);
+  if (prior && prior.Config.Labels?.[label] !== name) throw new Error('Relay container belongs to another owner');
+  await docker(['image', 'inspect', images.relay]);
+  if (prior) await docker(['rm', '-f', `${name}-relay`]);
+  await startRelay();
+  const afterHash = await rpc('chain_getFinalizedHead');
+  const after = await rpc('chain_getHeader', [afterHash]);
+  if (await rpc('chain_getBlockHash', [0]) !== endpoints.genesis || BigInt(after.number) < BigInt(before.number)) throw new Error('Chain state changed unexpectedly during relay replacement');
+  await waitFor(async () => (await fetch(`${endpoints.proof}/health`, { signal: AbortSignal.timeout(2000) })).ok, 'proof relay');
+  await waitFor(async () => {
+    const response = await fetch(endpoints.indexer, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{__typename}' }), signal: AbortSignal.timeout(2000) });
+    return (await response.json()).data?.__typename === 'Query';
+  }, 'indexer relay');
+  console.log(JSON.stringify({ relay: images.relay, healthy: true, genesis: endpoints.genesis, finalizedHeightBefore: BigInt(before.number).toString(), finalizedHeightAfter: BigInt(after.number).toString(), finalizedHashAfter: afterHash }));
 } else if (process.argv[2] === 'up') {
   await prepareProofCache();
   await access(params);
@@ -79,10 +104,7 @@ if (process.argv[2] === 'down') {
   const networks = await docker(['network', 'ls', '--format', '{{.Name}}']);
   if (!networks.split('\n').includes(name)) await docker(['network', 'create', '--internal', '--label', `${label}=${name}`, name]);
   await start('node', ['--network', name, '--env', 'CFG_PRESET=dev', images.node, '--dev', '--force-authoring', '--base-path', '/tmp/nightlean-dev', '--no-telemetry', '--reserved-only', '--state-pruning', 'archive', '--blocks-pruning', 'archive', '--rpc-external', '--rpc-cors', 'all']);
-  const relay = "const net=require('net'); for(const [port,host,target] of [[9944,'nightlean-dev-node',9944],[6300,'nightlean-dev-proof',6300],[8088,'nightlean-dev-indexer',8088]]) net.createServer(s=>{const t=net.connect(target,host);s.pipe(t);t.pipe(s);s.on('error',()=>t.destroy());t.on('error',()=>s.destroy());}).listen(port,'0.0.0.0');";
-  await start('relay', ['--read-only', '-p', '127.0.0.1:19944:9944', '-p', '127.0.0.1:16300:6300', '-p', '127.0.0.1:18088:8088', '--entrypoint', 'node', images.relay, '-e', relay]);
-  const relayInfo = await exists(`${name}-relay`);
-  if (!relayInfo.NetworkSettings.Networks[name]) await docker(['network', 'connect', name, `${name}-relay`]);
+  await startRelay();
   await waitFor(async () => Number.parseInt(await rpc('chain_getHeader').then((h) => h.number), 16) >= 1, 'development block one');
   if (await rpc('chain_getBlockHash', [0]) !== endpoints.genesis) throw new Error('Development genesis mismatch');
   await startProof();
@@ -94,6 +116,6 @@ if (process.argv[2] === 'down') {
   }, 'indexer');
   console.log(JSON.stringify({ ...endpoints, containers: name, runtime: await rpc('state_getRuntimeVersion'), images }, null, 2));
 } else {
-  console.error('Usage: node scripts/localnet/stack.mjs up|down|restart-proof');
+  console.error('Usage: node scripts/localnet/stack.mjs up|down|restart-proof|restart-relay');
   process.exitCode = 1;
 }

@@ -1,0 +1,63 @@
+{
+  "negativeChecks": [
+    {
+      "name": "secret",
+      "rejected": true,
+      "reason": "Failed direct assertion"
+    },
+    {
+      "name": "path",
+      "rejected": true,
+      "reason": "Failed direct assertion"
+    },
+    {
+      "name": "direction",
+      "rejected": true,
+      "reason": "Failed direct assertion"
+    },
+    {
+      "name": "root",
+      "rejected": true,
+      "reason": "Failed direct assertion"
+    },
+    {
+      "name": "nullifier",
+      "rejected": true,
+      "reason": "Failed direct assertion"
+    }
+  ],
+  "replayRejected": true,
+  "route": "Lean ZKIR and native ledger artifacts, without Compact",
+  "network": "undeployed",
+  "address": "dc6910da6b30913df3670122d8abbf9512bded7e8711062e7e1bbabb73442d43",
+  "deployment": {
+    "outcome": "applied",
+    "network": "undeployed",
+    "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+    "finalizedAt": "0x3c9c0924b8fab4a4797b1de66a93e5646adcfb8e38e0724eea9206f8b21c4bb6",
+    "blockHash": "0x3c9c0924b8fab4a4797b1de66a93e5646adcfb8e38e0724eea9206f8b21c4bb6",
+    "height": "398",
+    "extrinsicIndex": 4,
+    "extrinsicHash": "0x1adc99ea5dbe071b5c900ba2c8a76fc1550941e0d4983a45edf06bf6c12e237b",
+    "txHash": "0xfe234f7f10ca1822b11b779cbcd9b66ac18e6bf569efb215b137163dd3ced027",
+    "contractAddress": "0xdc6910da6b30913df3670122d8abbf9512bded7e8711062e7e1bbabb73442d43",
+    "contractEvent": "ContractDeploy",
+    "ledgerEvent": "TxApplied"
+  },
+  "call": {
+    "outcome": "applied",
+    "network": "undeployed",
+    "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+    "finalizedAt": "0x667a0e08c0e51226482c2c807bc14fffe15d167069728c9e5b9e788a16cdfa95",
+    "blockHash": "0x667a0e08c0e51226482c2c807bc14fffe15d167069728c9e5b9e788a16cdfa95",
+    "height": "401",
+    "extrinsicIndex": 4,
+    "extrinsicHash": "0xf512e2968af341e248b8630322cf58b4d73121c488b83a6d617e46d62415645a",
+    "txHash": "0xa81671aac5baa1a03aaa7fd13ac4fa4e829287e996f5bc020fdcd98ddec53c16",
+    "contractAddress": "0xdc6910da6b30913df3670122d8abbf9512bded7e8711062e7e1bbabb73442d43",
+    "contractEvent": "ContractCall",
+    "ledgerEvent": "TxApplied"
+  },
+  "stateMatches": true,
+  "stateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3"
+}

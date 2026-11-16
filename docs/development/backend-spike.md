@@ -1,5 +1,7 @@
 # Native ZKIR backend spike
 
+Historical investigation. Compact packaging observations below do not describe an available backend. That adapter was removed. Current compilation emits native ZKIR and Impact plans; see [native-localnet.md](native-localnet.md) for the replacement route.
+
 Ticket: [Run the first Lean-to-ZKIR vertical slice](https://github.com/awjreynolds/nightlean/issues/9). Checked 2026-11-16. This records actual local experiments, with ledger contract integration still pending.
 
 ## Qualified components

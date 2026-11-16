@@ -1,6 +1,6 @@
 # Isolated Nightlean development chain
 
-The launcher uses the cached released Midnight node, toolkit, Proof Server 9, and Indexer 4.4.101 images. It creates only `nightlean-dev` containers and an internal network with the same name. Existing AuthZK containers and chains stay untouched.
+The launcher uses the cached released Midnight node, native Rust toolkit, Proof Server 9, Indexer 4.4.101, and official Node.js relay images. The relay uses only Node's TCP API. Native contract funding and submission invoke the Rust toolkit executable. These commands do not invoke a source-language compiler or JavaScript contract adapter. The launcher creates only `nightlean-dev` containers and an internal network with the same name. Existing AuthZK containers and chains stay untouched.
 
 ```sh
 node scripts/localnet/stack.mjs up
@@ -23,7 +23,7 @@ The public development genesis is `0x823383ec0302be8417cfcbcc62f21df08f4047bca37
 The writable proof parameter cache defaults to `/private/tmp/nightlean-proof-params`. The shared AuthZK cache is never mounted writable. Set `NIGHTLEAN_PROOF_CACHE` to another dedicated cache directory to run elsewhere. To bootstrap from public parameter files already verified by the pinned official toolchain, supply read-only source directories:
 
 ```sh
-NIGHTLEAN_PROOF_CACHE_SOURCE=/private/tmp/authzk-compact036-params \
+NIGHTLEAN_PROOF_CACHE_SOURCE=/path/to/verified-public-parameters \
 NIGHTLEAN_PROOF_CACHE_EXTRA_SOURCE="$HOME/.cache/midnight/zk-params" \
 node scripts/localnet/stack.mjs up
 ```
@@ -56,3 +56,13 @@ node scripts/localnet/receipt.mjs TX_HASH CONTRACT_ADDRESS ContractCall FROM_BLO
 The observer uses the SDK helper's locked Polkadot API install. Set `NIGHTLEAN_WALLET_DEPENDENCIES` if that install lives outside `scripts/preview`. It requires the exact local genesis and runtime, a canonical finalized block, one matching ledger `TxApplied`, a matching contract event in the same extrinsic, and `midnight.sendMnTransaction`. A partial ledger outcome fails. The initial private-claim receipts are recorded in [`localnet-receipts.json`](../../docs/development/localnet-receipts.json).
 
 The setup follows the released local profile inspected in the sibling AuthZK project, especially `backend/preprod/release-smoke.mjs` and `backend/adapter/local.mjs`. Public upstream references: [Ledger 9](https://docs.midnight.network/relnotes/ledger-9), [proof-server installation](https://docs.midnight.network/getting-started/installation), and [local wallet funding](https://docs.midnight.network/guides/node-server-wallet).
+
+## Native private-claim workflow
+
+The actual Lean source now completes a native deployment and accepted claim on this chain. Build the independent official ZKIR CLI, capture real ledger parameters, and use the source-generated plan to assemble native contract artifacts. The full command sequence is in [native-contract.md](../../docs/development/native-contract.md). No source-language adapter or generated contract JavaScript participates.
+
+The runtime config generator produces public development fixture values and five explicit invalid cases. The native runner checks those cases, funds and submits deployment and claim intents, requires exact finalized events, compares the fetched ledger state to the predicted state, and rejects replay against the accepted spent-nullifier map.
+
+The accepted native receipts and state digest are recorded in [native-localnet.md](../../docs/development/native-localnet.md) and [native-localnet-receipts.json](../../docs/development/native-localnet-receipts.json).
+
+To replace only the TCP relay with the pinned official Node image while preserving the node, proof server, indexer, and chain state, run `node scripts/localnet/stack.mjs restart-relay`.

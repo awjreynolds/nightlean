@@ -11,7 +11,7 @@ if (!['http:', 'https:'].includes(proofServer.protocol) ||
   throw new Error('Relation proving requires a loopback proof server');
 }
 
-function compact(value) {
+function encodeScaleInt(value) {
   let n = BigInt(value);
   if (n < 0n) throw new Error('negative SCALE value');
   const littleEndian = (v, count) => Buffer.from(Array.from({ length: count }, () => {
@@ -34,7 +34,7 @@ const field = value => {
 };
 const vector = values => {
   if (!Array.isArray(values)) throw new Error('missing transcript vector');
-  return Buffer.concat([compact(values.length), ...values.map(value => compact(field(value)))]);
+  return Buffer.concat([encodeScaleInt(values.length), ...values.map(value => encodeScaleInt(field(value)))]);
 };
 const args = process.argv.slice(2);
 if (args.length !== 5) {
@@ -49,8 +49,8 @@ if (args.length !== 5) {
     const serialized = Buffer.concat([
       Buffer.from('midnight:proof-preimage:'), vector(spec.inputs),
       vector(spec.privateTranscript), vector(spec.publicTranscriptInputs),
-      vector(spec.publicTranscriptOutputs), compact(field(spec.bindingInput)),
-      Buffer.from([0]), compact(key.length), key
+      vector(spec.publicTranscriptOutputs), encodeScaleInt(field(spec.bindingInput)),
+      Buffer.from([0]), encodeScaleInt(key.length), key
     ]);
     const ir = Zkir.fromJson(await readFile(args[0], 'utf8'));
     const material = {

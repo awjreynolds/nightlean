@@ -1,6 +1,5 @@
 import Nightlean.Frontend
 import Nightlean.Backend.Zkir
-import Nightlean.Backend.Compact
 import Nightlean.Target
 
 namespace Nightlean.Compiler
@@ -23,6 +22,37 @@ private def expressionJson : Expr ty → Json
   | .select c a b => Json.mkObj [("select", toJson [expressionJson c, expressionJson a, expressionJson b])]
   | .poseidon2 domain a b => Json.mkObj [("poseidon2", Json.mkObj [
       ("domain", toJson (toString domain)), ("args", toJson [expressionJson a, expressionJson b])])]
+
+/-- Symbolic source expressions for the native runtime. Values are AST constants or references,
+never an execution witness. Decimal field constants avoid JavaScript number truncation. -/
+private def nativeExpressionJson : Expr ty → Json
+  | .native n => Json.mkObj [("tag", toJson ("constant" : String)), ("value", toJson (toString n))]
+  | .bool b => Json.mkObj [("tag", toJson ("bool" : String)), ("value", toJson b)]
+  | .ref name => Json.mkObj [("tag", toJson ("reference" : String)), ("name", toJson name)]
+  | .add a b => binary "add" (nativeExpressionJson a) (nativeExpressionJson b)
+  | .mul a b => binary "mul" (nativeExpressionJson a) (nativeExpressionJson b)
+  | .eq a b => binary "eq" (nativeExpressionJson a) (nativeExpressionJson b)
+  | .select c a b => Json.mkObj [("tag", toJson ("select" : String)),
+      ("condition", nativeExpressionJson c), ("yes", nativeExpressionJson a), ("no", nativeExpressionJson b)]
+  | .poseidon2 domain a b => Json.mkObj [("tag", toJson ("poseidon2" : String)),
+      ("domain", toJson (toString domain)), ("left", nativeExpressionJson a), ("right", nativeExpressionJson b)]
+where
+  binary (tag : String) (left right : Json) : Json :=
+    Json.mkObj [("tag", toJson tag), ("left", left), ("right", right)]
+
+private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json) :=
+  match value with
+  | .field expression => [("alignment", toJson ("field" : String)), ("expression", nativeExpressionJson expression)]
+  | .bit b => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson (.bool b))]
+
+private def operationJson : Backend.Impact.Op → Json
+  | .dup => Json.mkObj [("op", toJson ("dup" : String))]
+  | .index slot pushPath => Json.mkObj [("op", toJson ("index" : String)),
+      ("slot", toJson slot), ("pushPath", toJson pushPath)]
+  | .push value storage => Json.mkObj ([("op", toJson ("push" : String)), ("storage", toJson storage)] ++ alignedJson value)
+  | .popeq value => Json.mkObj ([("op", toJson ("popeq" : String))] ++ alignedJson value)
+  | .member => Json.mkObj [("op", toJson ("member" : String))]
+  | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
 
 private def effectJson : Effect → Json
   | .readCell state destination ty => Json.mkObj [("op", toJson ("readCell" : String)),
@@ -51,7 +81,8 @@ private def circuitSchemaJson (name : Name) (circuit : Circuit) : Json :=
       ("visibility", toJson (if input.visibility == .«public» then "public" else "private"))])),
     ("outputs", toJson (circuit.outputs.map fun out => Json.mkObj [
       ("name", toJson out.name), ("type", toJson (typeName out.ty)),
-      ("visibility", toJson ("public" : String))]))]
+      ("visibility", toJson ("public" : String)), ("expression", nativeExpressionJson out.value)])),
+    ("constraints", toJson (circuit.constraints.map nativeExpressionJson))]
 
 private def failDiagnostic (d : Diagnostic) : CommandElabM α :=
   throwError "{d.span.file}:{d.span.line}:{d.span.column}: {d.message}"
@@ -91,6 +122,9 @@ private def validateArtifactName (name : Name) : CommandElabM Unit :=
 private def nativeCircuitFile (contract : Name) (ep : Entrypoint) : String :=
   artifactName contract ++ "." ++ ep.name ++ ".zkir"
 
+private def nativePlanFile (contract : Name) (ep : Entrypoint) : String :=
+  artifactName contract ++ "." ++ ep.name ++ ".impact.json"
+
 private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
   if (← get).messages.hasErrors then
     throwError "cannot export Nightlean artifacts after source elaboration errors"
@@ -110,7 +144,7 @@ elab "#nightlean_check" : command => do
   let (circuits, contracts) ← unsafe inspect
   logInfo m!"checked {circuits.size} circuit(s), {contracts.size} contract(s); target integration unqualified"
 
-private def compileArtifacts (directory : String) (withCompact : _root_.Bool) : CommandElabM Unit := do
+private def compileArtifacts (directory : String) : CommandElabM Unit := do
   let (circuits, contracts) ← unsafe inspect
   -- Lower everything before creating output files. Unsupported circuits cannot leave partial output.
   let mut lowered := #[]
@@ -120,16 +154,23 @@ private def compileArtifacts (directory : String) (withCompact : _root_.Bool) : 
     | .ok json => lowered := lowered.push (artifactName name ++ ".zkir", json.pretty)
   for (name, contract) in contracts do
     for ep in contract.entrypoints do
+      let ep := Passes.pruneEntrypoint ep
       match Backend.Zkir.lowerEntrypoint contract.state ep with
       | .error d => failDiagnostic d
       | .ok json => lowered := lowered.push (nativeCircuitFile name ep, json.pretty)
-  if withCompact && contracts.isEmpty then
-    throwError "Compact adapter requires a Nightlean contract declaration"
-  if withCompact then
-    for (name, contract) in contracts do
-      match Backend.Compact.emit contract with
-      | .error message => throwError "Compact adapter: {message}"
-      | .ok source => lowered := lowered.push (artifactName name ++ ".compact", source)
+      let plan ← match Backend.Impact.lower contract.state ep with
+        | .error d => failDiagnostic d
+        | .ok plan => pure plan
+      let planJson := Json.mkObj [
+        ("schemaVersion", toJson (1 : Nat)), ("contractName", toJson name.toString),
+        ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
+        ("state", toJson (contract.state.map stateJson)),
+        ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
+        ("operations", toJson (plan.operations.map operationJson)),
+        ("reads", toJson (plan.reads.map fun item => Json.mkObj [
+          ("name", toJson item.name), ("type", toJson (typeName item.ty))])),
+        ("guards", toJson (plan.guards.map nativeExpressionJson))]
+      lowered := lowered.push (nativePlanFile name ep, planJson.pretty)
   unless uniqueNames (lowered.toList.map (·.1)) do
     throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
   let contractMetadata := contracts.map fun (name, contract) => Json.mkObj [
@@ -138,23 +179,14 @@ private def compileArtifacts (directory : String) (withCompact : _root_.Bool) : 
     ("entrypoints", toJson (contract.entrypoints.map fun ep => Json.mkObj [
       ("name", toJson ep.name), ("circuit", toJson ep.circuit.name),
       ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
+      ("nativePlanFile", toJson (nativePlanFile name ep)),
       ("nativeCircuitQualified", toJson Bool.false),
       ("effects", toJson (ep.effects.map effectJson))]))]
-  let adapterBindings := if withCompact then contracts.map fun (name, contract) =>
-    Json.mkObj [("contract", toJson name.toString),
-      ("source", toJson (artifactName name ++ ".compact")),
-      ("witnesses", toJson ((Backend.Compact.witnessBindings contract).map fun binding =>
-        Json.mkObj [("entrypoint", toJson binding.entrypoint),
-          ("input", toJson binding.inputName), ("provider", toJson binding.providerName),
-          ("type", toJson (typeName binding.ty))]))]
-    else #[]
   let metadata := Json.mkObj [
     ("schemaVersion", toJson (1 : Nat)), ("target", toJson ("midnight-ledger-9" : String)),
     ("targetProfile", toJson TargetProfile.sourceBaseline),
     ("qualification", toJson ("unqualified-relation-and-state-description" : String)),
     ("deployable", toJson Bool.false),
-    ("adapter", if withCompact then toJson ("compact-source" : String) else Json.null),
-    ("adapterBindings", Json.arr adapterBindings),
     ("contracts", Json.arr contractMetadata),
     ("circuits", toJson (circuits.map fun (name, circuit) => circuitSchemaJson name circuit))]
   let path : System.FilePath := directory
@@ -166,9 +198,6 @@ private def compileArtifacts (directory : String) (withCompact : _root_.Bool) : 
   logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {path}; not a deployable contract bundle"
 
 elab "#nightlean_compile" directory:str : command =>
-  compileArtifacts directory.getString Bool.false
-
-elab "#nightlean_compile_compact" directory:str : command =>
-  compileArtifacts directory.getString Bool.true
+  compileArtifacts directory.getString
 
 end Nightlean.Compiler

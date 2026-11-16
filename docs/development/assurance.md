@@ -19,11 +19,11 @@ The native ZKIR lowerer applies the proven pass before relation and entrypoint l
 
 ## Current differential evidence
 
-The [native backend spike](backend-spike.md) records official ZKIR 3.2.0 checking, native key generation, and a 3,852-byte proof for the actual two-level claim relation. The proof server performs native cryptographic self-verification. Altering the secret, sibling, direction, root, or nullifier caused direct assertion failure. Four fixed Native Poseidon vectors matched the optional Compact adapter's typed Field-vector hash mapping. These finite checks do not establish equivalence for every field value or source program.
+The [native backend spike](backend-spike.md) records official ZKIR 3.2.0 checking, native key generation, and a 3,852-byte proof for the actual two-level claim relation. The proof server performs native cryptographic self-verification. Altering the secret, sibling, direction, root, or nullifier caused direct assertion failure. Native CPU hash values and emitted circuit relations have finite conformance checks. These checks do not establish equivalence for every field value or source program.
 
-The [direct Impact conformance harness](direct-impact.md) checks the Lean-generated native transcript with the ledger package and official ZKIR preprocessor. It rejects wrong witnesses, mismatched public or stored state values, and replay. The corrected direct transcript fixture has k=9, a 2,610-byte binary circuit, one activity group per VM operation, and the mandatory call communication commitment. That harness checks preprocessing and VM behavior. The separate [native transaction experiment](native-localnet.md) finalized deployment and generated a complete transaction proof, but the node rejected its call because guaranteed execution exceeded the gas budget. A direct native call is not yet qualified.
+The [direct Impact conformance harness](direct-impact.md) checks the Lean-generated native transcript with the ledger package and official ZKIR preprocessor. It rejects wrong witnesses, mismatched public or stored state values, and replay. The corrected direct transcript fixture has k=9, a 2,610-byte binary circuit, one activity group per VM operation, and the mandatory call communication commitment. The [source-driven native run](native-localnet.md) uses actual ledger parameters and the official transcript partitioner, and records finalized deployment and claim acceptance plus invalid-input and replay checks. This is finite execution evidence, not a compiler correspondence proof.
 
-The [local contract receipts](localnet-receipts.json) record finalized deployment and call acceptance on the isolated development chain, using the optional Compact packaging route. Their network is `undeployed`, not Preview. They provide ledger-acceptance evidence for those exact artifacts and calls, rather than a proof of equivalence between the adapter and native lowering. [Localnet reproduction](localnet-claim.md) records the end-to-end policy checks and environment.
+The earlier [local contract receipts](localnet-receipts.json) describe a historical packaging experiment. That backend has been removed. Current acceptance must use the native route and its own exact source, key, transaction, and receipt evidence. Public-network qualification remains separate.
 
 ## Unproved compiler and external boundaries
 
@@ -32,8 +32,7 @@ The following work remains before claiming full semantic preservation:
 - Prove the ZKIR operation mapping, Native arithmetic and boolean representation, output/public-input binding, and witness ordering against a model of the accepted target semantics.
 - Prove common-subexpression elimination preserves the generated circuit and transcript. Its current implementation uses serialized operation keys and exact input references. It is exercised by the native conformance fixtures, but has no Lean proof.
 - Prove the native Impact plan, field encodings, state layout, guards, and writes match the reference transition, including failure atomicity.
-- Prove the optional Compact adapter's entire mapping. Current support has typed validation, explicit visibility, negative checks, and finite hash vectors. Those checks do not constitute a compiler correspondence theorem.
-- Complete native transcript partitioning and gas budgeting for an accepted direct-contract call. The adapter route already has exact finalized receipts on the user-selected localnet POC target. Public-network qualification is separate future work.
+- Prove the native runtime plan materialization and ledger-parameter budgeting preserve the Lean state-transition semantics. Native acceptance experiments are recorded separately from formal correspondence.
 - Review the external checker, prover, verifier, proof-server serialization, and ledger execution boundaries. Existing upstream formalization does not cover every current ZKIR instruction, as recorded in the [source capability audit](../research/midnight-zkir-capability-matrix.md).
 - Complete independent security review before a production-readiness claim.
 
@@ -47,7 +46,6 @@ lake env lean tests/Passes.lean
 lake env lean tests/IR.lean
 lake env lean tests/Claim.lean
 lake env lean tests/Frontend.lean
-lake env lean tests/Compact.lean
 bash tests/cli.sh
 ```
 
