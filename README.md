@@ -1,49 +1,81 @@
-# Nightlean
+<p align="center">
+  <img src="docs/assets/nightlean-social.png" alt="Nightlean research preview. Lean contracts and proofs pass through the Lean compiler to native artifacts, a Rust application and Midnight localnet. Claim-specific proofs are published. The complete compiler-to-deployment assurance chain is open." width="100%">
+</p>
 
-Nightlean is a Lean 4 compiler project for Midnight contracts. Its source elaboration, typed intermediate representation, reference semantics, and ZKIR relation lowering are implemented in Lean.
+<p align="center">
+  <a href="#try-the-compiler">Quick start</a> ·
+  <a href="docs/README.md">Documentation</a> ·
+  <a href="docs/designs/architecture.md">Architecture &amp; assurance</a> ·
+  <a href="https://github.com/awjreynolds/nightlean/issues/1">Roadmap</a>
+</p>
 
-The active goal is [full native ZKIR v3 and ledger capability coverage](docs/compatibility/GOAL.md), with verified Compact feature equivalence as a minimum comparison. Compact supplies compiler engineering lessons and semantic reference cases. Its exposed features do not cap Nightlean's scope.
+<p align="center">
+  <a href="https://github.com/awjreynolds/nightlean/actions/workflows/ci.yml"><img src="https://github.com/awjreynolds/nightlean/actions/workflows/ci.yml/badge.svg" alt="Compiler and source proofs CI"></a>
+</p>
 
-Proof-backed functional correctness and auditability are core requirements. Authors should state contract specifications and prove their properties using ordinary Lean theorems, tactics and libraries. The verified product must connect those proofs to the compiled native artifacts and expose its remaining assumptions. Current scoped Lean proofs and localnet receipts do not yet establish that complete chain.
+Nightlean is a Lean 4 compiler and native runtime for Midnight private contracts. Write circuit relations and ledger transitions in a typed Lean DSL, state their properties with ordinary Lean theorems, and compile directly to native ZKIR and Impact plans.
 
-The current source supports Native, Bool and bounded UInt scalars with a small expression/state effect set. Native Rust execution, linked C/C++ providers, public bundle verification and private intent assembly are implemented for this slice. A mandatory [scalar disclosure pass](docs/development/disclosure.md) checks current public sinks. Scoped host providers and [private-state journals](docs/designs/private-state-lifecycle.md) have a tested native lifecycle. General source witness functions, guarded execution, broader types and native composition remain open. The [native inventory](docs/compatibility/zkir-feature-matrix.json) records 47 instructions and 15 value types, with no full-family qualification claims.
+The compiler and primary lowering are written in Lean. The Rust application path handles proving, funding, submission and recovery without Node. No Compact compiler or runtime dependency sits between your source and the native backend.
 
-[Typed named helpers](docs/development/named-helpers.md) support lexical overload resolution, declared scalar/unit results, ordered arguments, transitive effects and disclosure checks. Source and expansion budgets reject oversized call graphs before inlining. The helper/direct fixture produces identical native relations and real proofs. [Structured host control](docs/development/structured-control.md) adds lazy branches, short-circuit operators, witness suspension and invocation-local private staging. Rust and linked C++ execute the same generated fixtures. Native guarded circuit and ledger lowering remains disabled until its own preservation and backend checks pass.
+**Research preview, with published proofs and finalized localnet runs.** The current private-claim workload has source correctness proofs, claim-specific native preservation proofs and scoped privacy proofs. Whole-compiler correctness, exact artifact/build qualification and deployed verifier binding remain open.
 
-The [actual private-claim source proofs](docs/development/private-claim-proofs.md) establish eligibility equations, state invariants, framing and replay rejection under explicit hash assumptions. A separate theorem covers equal public observations of successful runs. Six source mutations invalidate their expected semantic clauses. The [proof-audit foundation](docs/development/proof-registration.md) matches typed obligations to a pinned model, replays exported proofs in a fresh Lean kernel and rejects forbidden axioms. These are source guarantees. Generic compiler preservation, exact artifact certificates and deployed verifier binding remain mandatory open gates.
+Lean serves two roles: a finite language for compilable contracts and a full proof language for specifications and theorems. Circuit constraints and ledger state effects stay separate, so each has an explicit semantics and assurance boundary. See the [architecture overview](docs/designs/architecture.md).
 
-The [standalone claim lowering proof](docs/development/private-claim-lowering-proofs.md) now establishes native arbitrary-witness soundness and source completeness for its scalar/Boolean/hash graph, with an exact quoted JSON-tree certificate and explicit implementation assumptions. The [claim state/transcript proof](docs/development/private-claim-native-state-proofs.md) now connects arbitrary satisfying call assignments and independent VM traces to actual source acceptance and the exact successor. The [scoped native privacy proof](docs/development/private-claim-native-privacy-proofs.md) covers arbitrary successful claim executions under its stated public-observation and implementation assumptions. Exact byte/build provenance and deployed binding remain required before a verified-contract claim. Generic compiler preservation is a separate mandatory obligation, tracked in [issue 64](https://github.com/awjreynolds/nightlean/issues/64). Claim-specific proofs do not establish whole-compiler correctness.
+## Try the compiler
 
-The compilation path is Lean source → typed circuit and contract IR → ZKIR v3 and native Impact runtime plans → Midnight proving and ledger libraries. The compiler emits standalone circuit relations, native entrypoint relations, and typed runtime metadata. The selected POC target is an isolated ledger 9 localnet.
-
-The actual private-claim source completed native deployment at finalized block 398 and a valid claim at block 401. Wrong secret, path, direction, root, and nullifier are rejected. Replay leaves state unchanged. [Native receipts and provenance](docs/development/native-localnet.md) record the tested source, independent ZKIR toolchain, keys, and transactions.
-
-The [bounded integer example](docs/development/unsigned-localnet.md) also finalized deployment at block 1304 and a call at 1308. Rust assembled its real intents, and the accepted state exactly matches its prediction. Thirty-four raw-witness scalar cases pass against the official 3.2.0 and 3.2.1 checkers. These selected programs do not establish full feature equivalence.
-
-The [selectable 3.2.1 profile](docs/development/zkir-3.2.1-integrated.md) now threads exact source identities through compilation, native runtime builds and authenticated retained bundles. An isolated compiler commit produced new finalized claim and scalar runs. The default 3.2.0 artifacts remain compatible. A mandatory [native producer gate](docs/development/native-producer-safety.md) checks current scalar invariants and rejects unsupported descriptors. [Canonical composite types and proof-bounded layouts](docs/development/composite-types.md) now support [checked values and Rust/C++ codecs](docs/development/composite-values.md). A typed aggregate relation passes native proving. Aggregate source effects remain gated on component disclosure analysis.
+Install [elan](https://github.com/leanprover/elan#installation) and Git. Elan selects the repository's pinned Lean **4.35.0** toolchain. Run:
 
 ```sh
+git clone https://github.com/awjreynolds/nightlean.git
+cd nightlean
 lake build
 lake exe nightlean check examples/PrivateClaim.lean
 lake exe nightlean compile examples/PrivateClaim.lean --output build/claim
-npm ci --prefix scripts/zkir
-node scripts/zkir/verify.mjs build/claim/claimRelation.zkir
 ```
 
-Compilation emits `claimRelation.zkir`, `PrivateClaim.claim.zkir`, `PrivateClaim.claim.impact.json`, and `nightlean.json`. The runtime plan describes witness visibility, the state schema, and native operations. Native artifact assembly uses Midnight's ledger APIs and actual ledger parameters for transcript partitioning and gas budgeting. [Native integration evidence](docs/development/native-localnet.md) records the exact tested boundaries. Full compiler assurance and public-network qualification remain separate work.
+The output includes the standalone `claimRelation.zkir`, contract-call `PrivateClaim.claim.zkir`, runtime plan `PrivateClaim.claim.impact.json`, and `nightlean.json` manifest. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source: imports and elaborators execute development code.
 
-Follow the [source-driven native workflow](docs/development/native-contract.md) to generate keys, supply witnesses, prove, and submit a local contract call. The [independent toolchain guide](docs/development/native-toolchain.md) builds the pinned upstream ZKIR CLI without another source-language compiler.
+For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 
-The [Rust runtime and C ABI](docs/development/native-runtime-abi.md) execute without Node. The [native assembler](docs/development/native-assembler.md) consumes retained bytes from a [verified public bundle](docs/development/portable-artifacts.md), keeping private invocation files separate. The [native proof SDK](docs/development/native-proof-api.md) constructs, verifies and attaches real contract proofs in Rust. Both profiles pass isolated proof qualification. The localnet harness still uses Node for development orchestration and receipt observation. Native funding, signing and submission adapters remain in progress.
+## A small, real example
 
-Lean source and imported modules are trusted executable development inputs. Nightlean restricts the circuit DSL, but does not sandbox Lean elaborators or imported metaprograms. The CLI runs through the pinned Lake/Lean toolchain from the repository root.
+This circuit from [`examples/BoundedScalars.lean`](examples/BoundedScalars.lean) constrains the sum of two private 8-bit values to a public result:
 
-The first implementation target is current Midnight ledger 9. Its first end-to-end workload is a private one-time claim: private eligibility data and Merkle path, public root and claim data, a proof relation, a derived nullifier, and ledger state that rejects reuse.
+```lean
+import Nightlean.Frontend
+open scoped Nightlean
 
-This workload sets the first delivery boundary. It does not define Nightlean's permanent language model. Nightlean's core will represent circuit relations and contract state transitions separately, with explicit private witnesses, public inputs, outputs, constraints, state reads, and state writes. The IR and target profile must support adding ledger-backed capabilities beyond this claim without redesigning around claim-specific operations.
+nightlean_circuit boundedRelation where
+  public expected : UIntRange 511
+  private left : UInt 8
+  private right : UInt 8
+  let sum : UIntRange 511 := add(left, right)
+  assert eq(sum, expected)
+  output result : UIntRange 511 := expected
+end
+```
 
-Supported features follow Midnight's ledger and proving interfaces, then require a verified path through proving and contract execution. Nightlean has no Compact source backend or Compact runtime dependency. Historical adapter experiments remain documented as superseded evidence.
+The full example writes the result to a ledger cell. [`PrivateClaim.lean`](examples/PrivateClaim.lean) adds a private Merkle path, a public nullifier and state updates which reject reuse. Its [proofs import the actual source](docs/development/private-claim-proofs.md).
 
-The public [Wayfinder map](https://github.com/awjreynolds/nightlean/issues/1) links the decisions, research, vertical-slice investigation, and implementation backlog. Evidence reports live in [`docs/research/`](docs/research/). [Moriarty](https://github.com/CharlesHoskinson/Moriarty) is a reference for ZKIR work, not a required compiler component or Nightlean language model.
+## Evidence, with boundaries
 
-Nightlean uses the MIT License.
+| Published result | What the evidence establishes |
+| --- | --- |
+| [Source correctness and privacy](docs/development/private-claim-proofs.md) | Claim eligibility equations, exact state updates, invariants, framing and replay rejection. Six source mutations break their expected proof clauses. Privacy compares successful runs under a declared public-observation policy. |
+| [Typed proof audit](docs/development/proof-registration.md) | Exact obligation and model checks, fresh Lean kernel replay, and a transitive axiom policy. Functional and privacy obligations are separate. |
+| [Native relation](docs/development/private-claim-lowering-proofs.md) and [state preservation](docs/development/private-claim-native-state-proofs.md) | Claim-specific soundness for arbitrary satisfying assignments and checked VM traces, source completeness, and certificates for the emitted JSON trees. |
+| [Native privacy](docs/development/private-claim-native-privacy-proofs.md) | Equal public native observations for successful claim executions under explicit host-context and implementation assumptions. Proof bytes, failures, logs and timing are outside the observer. |
+| [Rust client qualification](docs/development/native-client.md#retained-qualification) | Real proofs, funded deployment and claim submission, finalized state checks, and durable recovery on both selected 3.2.0 and 3.2.1 profiles. |
+| [Bounded scalars](docs/development/unsigned-localnet.md) | Finalized deployment and call, exact predicted state, and 34 adversarial witness cases against both native checker profiles. |
+
+Lean checks the stated theorems. Localnet receipts establish tested integration behavior. Neither establishes a universally verified compiler or a production-ready contract. Native cryptography, parser/VM agreement, host behavior and the missing artifact/deployment links remain explicit [trust boundaries](docs/designs/architecture.md#assurance-boundaries).
+
+## Direction and contributions
+
+The destination is [full native ZKIR v3 and Midnight ledger capability coverage](docs/compatibility/GOAL.md). Compact feature equivalence is a minimum comparison, not the scope limit.
+
+Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, scalar disclosure checks, and lazy host control. Checked composite layouts and codecs are present. Aggregate source effects, native guarded execution, broader ledger composition and mobile/WASM bindings remain open.
+
+Start with the [public issue map](https://github.com/awjreynolds/nightlean/issues/1) and [contribution guide](CONTRIBUTING.md). The [documentation index](docs/README.md) connects authoring, runtime integration, proof reproduction and capability research.
+
+[MIT license](LICENSE) · [Security reporting](SECURITY.md) · [Shareable project card](docs/README.md#project-visual)

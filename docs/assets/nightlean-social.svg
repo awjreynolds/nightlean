@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Nightlean research preview: Lean contracts, native Midnight execution</title>
+  <desc id="description">Lean contracts, specifications and proofs pass through the Lean compiler to ZKIR and Impact artifacts, a Rust application and Midnight localnet. Published evidence includes claim-specific proofs, scoped native privacy and finalized localnet transactions. Generic compiler preservation, artifact and build qualification, and deployed verifier binding remain open.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101D30"/>
+      <stop offset="1" stop-color="#080F1C"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#70E6CF"/>
+      <stop offset="1" stop-color="#8BAFFF"/>
+    </linearGradient>
+    <marker id="arrow" viewBox="0 0 6 8" refX="5" refY="4" markerWidth="6" markerHeight="8" orient="auto-start-reverse">
+      <path d="M1 1 5 4 1 7" fill="none" stroke="#7388A6" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#background)"/>
+  <path d="M0 2H1200" stroke="url(#accent)" stroke-width="4"/>
+
+  <!-- Original circuit monogram. All artwork is local, with no external fonts or assets. -->
+  <g stroke="#70E6CF" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M62 112V64L98 112V64"/>
+    <path d="M50 88H62M98 88H110" stroke-width="2" opacity="0.65"/>
+    <circle cx="62" cy="64" r="4" fill="#101D30"/>
+    <circle cx="98" cy="112" r="4" fill="#101D30"/>
+  </g>
+
+  <g font-family="Inter, Arial, Helvetica, sans-serif">
+    <text x="129" y="111" fill="#F4F7FC" font-size="62" font-weight="700" letter-spacing="-2">Nightlean</text>
+    <rect x="920" y="65" width="220" height="36" rx="18" fill="#142A32" stroke="#315654"/>
+    <circle cx="941" cy="83" r="4" fill="#70E6CF"/>
+    <text x="957" y="89" fill="#B9E9DF" font-size="14" font-weight="700" letter-spacing="1.3">RESEARCH PREVIEW</text>
+
+    <text x="60" y="174" fill="#F4F7FC" font-size="32" font-weight="600" letter-spacing="-0.6">Lean contracts. Native Midnight execution.</text>
+    <text x="60" y="211" fill="#AEBFD5" font-size="21">Contract semantics, proof obligations and native execution in one project.</text>
+
+    <!-- The five stages describe an implemented path for the current source slice. -->
+    <g fill="#132236" stroke="#30435E">
+      <rect x="60" y="260" width="190" height="150" rx="12"/>
+      <rect x="282" y="260" width="190" height="150" rx="12"/>
+      <rect x="504" y="260" width="190" height="150" rx="12"/>
+      <rect x="726" y="260" width="190" height="150" rx="12"/>
+      <rect x="948" y="260" width="192" height="150" rx="12"/>
+    </g>
+    <g fill="none" stroke="#7388A6" stroke-width="1.5" marker-end="url(#arrow)">
+      <path d="M256 335H275"/>
+      <path d="M478 335H497"/>
+      <path d="M700 335H719"/>
+      <path d="M922 335H941"/>
+    </g>
+    <g fill="#78DACD" font-size="12" font-weight="700" letter-spacing="1.6">
+      <text x="78" y="286">01 / SOURCE</text>
+      <text x="300" y="286">02 / COMPILER</text>
+      <text x="522" y="286">03 / ARTIFACTS</text>
+      <text x="744" y="286">04 / RUNTIME</text>
+      <text x="966" y="286">05 / LEDGER</text>
+    </g>
+    <g fill="#F4F7FC" font-size="27" font-weight="600" letter-spacing="-0.3">
+      <text x="78" y="326">Contract</text>
+      <text x="78" y="358">+ proofs</text>
+      <text x="300" y="326">Lean</text>
+      <text x="300" y="358">compiler</text>
+      <text x="522" y="326">Native</text>
+      <text x="522" y="358">artifacts</text>
+      <text x="744" y="326">Rust</text>
+      <text x="744" y="358">application</text>
+      <text x="966" y="326">Midnight</text>
+      <text x="966" y="358">localnet</text>
+    </g>
+    <g fill="#AEBFD5" font-size="16">
+      <text x="78" y="389">Specs + theorems</text>
+      <text x="300" y="389">Typed IR · lowering</text>
+      <text x="522" y="389">ZKIR + Impact plans</text>
+      <text x="744" y="389">Prove · fund · submit</text>
+      <text x="966" y="389">Finalized state</text>
+    </g>
+
+    <!-- Evidence labels are deliberately separate from the execution arrows. -->
+    <path d="M60 446H1140" stroke="#293A52"/>
+    <text x="60" y="479" fill="#70E6CF" font-size="13" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
+    <text x="60" y="509" fill="#E3EBF5" font-size="18">Claim-specific proofs · Scoped native privacy</text>
+    <text x="60" y="537" fill="#AEBFD5" font-size="18">Native proofs + finalized localnet transactions</text>
+    <path d="M620 471V540" stroke="#293A52"/>
+    <text x="653" y="479" fill="#CFB58A" font-size="13" font-weight="700" letter-spacing="1.8">OPEN ASSURANCE</text>
+    <text x="653" y="509" fill="#E3EBF5" font-size="18">Generic compiler preservation</text>
+    <text x="653" y="537" fill="#AEBFD5" font-size="18">Artifact/build + deployed verifier binding</text>
+
+    <text x="60" y="594" fill="#92A9C7" font-size="17">github.com/awjreynolds/nightlean</text>
+    <text x="1140" y="594" fill="#92A9C7" font-size="16" text-anchor="end">LEAN 4 · RUST · ZKIR v3</text>
+  </g>
+</svg>
