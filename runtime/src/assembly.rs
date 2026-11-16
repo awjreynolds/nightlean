@@ -1,5 +1,6 @@
 //! Native assembly of private, unbalanced deploy/call intents. No proving or network.
 use crate::artifacts::{Role, VerifiedBundle};
+use crate::zkir::IrSource;
 use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, create_state, field_value, prepare};
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::{
@@ -13,7 +14,6 @@ use ledger::{
         ProofPreimageVersioned, Signature,
     },
 };
-use midnight_zkir::IrSource;
 use onchain_runtime::{
     context::QueryContext,
     state::{ContractOperation, ContractState, EntryPointBuf},
@@ -267,6 +267,10 @@ pub fn assemble(inputs: Inputs<'_>, output: &Path) -> Result<Json> {
     );
     ensure!(!output.exists(), "output directory already exists");
     let plan: Plan = serde_json::from_slice(inputs.plan).context("invalid source plan")?;
+    ensure!(
+        crate::profile::validate_plan(plan.target.as_deref(), plan.target_profile.as_ref()),
+        "plan target differs from linked native profile"
+    );
     let config = crate::parse_private_config(inputs.config)?;
     let parameters: LedgerParameters =
         decode(inputs.ledger_parameters).context("invalid ledger parameters")?;
@@ -323,7 +327,7 @@ pub fn assemble(inputs: Inputs<'_>, output: &Path) -> Result<Json> {
             && hex::encode(deployment.address().0.0) == built.address,
         "serialized deployment state mismatch"
     );
-    let summary = json!({"qualification":"native Rust constructor preimage checked; no proof or ledger acceptance","runtime":"native Rust","nodeInvoked":false,"address":built.address,"entrypoint":plan.entrypoint,"k":circuit.k(),"operationBytes":operation_bytes.len(),"operations":built.operations,"guaranteedOps":built.guaranteed,"fallibleOps":built.fallible,"ttlUnix":inputs.ttl_unix,"sourcePlanSha256":digest(inputs.plan),"nativeCircuitSha256":digest(inputs.circuit),"ledgerParametersSha256":digest(inputs.ledger_parameters),"initialStateSha256":digest(&initial_bytes),"predictedStateSha256":digest(&predicted_bytes),"ledgerRevision":LEDGER_REVISION,"zkirRevision":ZKIR_REVISION,"officialConstructorPreimageChecked":true,"nativeSerializationRoundtrip":true,"freshCryptographicRandomness":true,"keyPairAssociationVerified":false,"cryptographicProofGenerated":false,"transactionSubmitted":false});
+    let summary = json!({"qualification":"native Rust constructor preimage checked; no proof or ledger acceptance","runtime":"native Rust","nodeInvoked":false,"address":built.address,"entrypoint":plan.entrypoint,"k":circuit.k(),"operationBytes":operation_bytes.len(),"operations":built.operations,"guaranteedOps":built.guaranteed,"fallibleOps":built.fallible,"ttlUnix":inputs.ttl_unix,"sourcePlanSha256":digest(inputs.plan),"nativeCircuitSha256":digest(inputs.circuit),"ledgerParametersSha256":digest(inputs.ledger_parameters),"initialStateSha256":digest(&initial_bytes),"predictedStateSha256":digest(&predicted_bytes),"ledgerRevision":LEDGER_REVISION,"zkirRevision":ZKIR_REVISION,"zkirRelease":crate::profile::RELEASE,"runtimeProfile":crate::profile::ABI,"officialConstructorPreimageChecked":true,"nativeSerializationRoundtrip":true,"freshCryptographicRandomness":true,"keyPairAssociationVerified":false,"cryptographicProofGenerated":false,"transactionSubmitted":false});
     let mut directory = OutputDirectory::new(output)?;
     directory.directory("keys")?;
     directory.directory("zkir")?;
@@ -388,8 +392,20 @@ pub fn assemble_verified(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn selected_fixture_json() -> Json {
+        let mut value: Json =
+            serde_json::from_str(include_str!("../tests/fixtures/unsigned/plan.json")).unwrap();
+        if cfg!(feature = "zkir-321") {
+            value["target"] = json!(crate::profile::NAME);
+            value["targetProfile"] = crate::profile::target_json();
+        }
+        value
+    }
+    fn selected_fixture_plan() -> Plan {
+        serde_json::from_value(selected_fixture_json()).unwrap()
+    }
     fn sample() -> (Plan, Config, IrSource) {
-        (serde_json::from_str(include_str!("../tests/fixtures/unsigned/plan.json")).unwrap(),
+        (selected_fixture_plan(),
          serde_json::from_value(json!({"inputs":{"left":"255","right":"255","expected":"510"},"state":{"total":"0"}})).unwrap(),
          IrSource::load(include_bytes!("../tests/fixtures/unsigned/circuit.zkir").as_slice()).unwrap())
     }
@@ -513,9 +529,10 @@ mod tests {
             "nightlean-assembly-privacy-{}",
             OsRng.r#gen::<u64>()
         ));
+        let selected_plan = serde_json::to_vec(&selected_fixture_json()).unwrap();
         let error = assemble(
             Inputs {
-                plan: include_bytes!("../tests/fixtures/unsigned/plan.json"),
+                plan: &selected_plan,
                 circuit: b"{}",
                 prover_key: b"",
                 verifier_key: b"",

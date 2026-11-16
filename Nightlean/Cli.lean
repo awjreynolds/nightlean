@@ -10,7 +10,7 @@ Usage: nightlean --version\n\
        nightlean check <file> [--target <manifest>]\n\
        nightlean compile <file> [--target <manifest>] [--output <directory>]\n\
 Default target: profiles/midnight-ledger-9.json\n\
-Target qualification: source baseline only; no deployable backend qualified."
+The selectable ZKIR 3.2.1 profile qualifies a selected native subset only."
 
 structure Options where
   input : String
@@ -43,9 +43,11 @@ private def error (message : String) : IO UInt32 := do
   return 1
 
 private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
-  match ← TargetProfile.load opts.target with
+  let profile ← match ← TargetProfile.load opts.target with
   | .error message => return ← error message
-  | .ok _ => pure ()
+  | .ok profile => pure profile
+  let profileJson := (Lean.toJson profile).compress
+  let profileLiteral := (Lean.toJson profileJson).compress
   let source ← try IO.FS.readFile opts.input catch _ =>
     return ← error s!"cannot read source '{opts.input}'"
   if source.trimAscii.toString.startsWith "module" then
@@ -53,7 +55,7 @@ private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
   -- Lean accepts a filename with --stdin. This keeps module identity and source diagnostics,
   -- avoids a temporary source file, and preserves line numbers by placing the extra import
   -- on the original first line. Inputs are trusted Lean source, like `lake env lean` itself.
-  let input := "import Nightlean.Compiler " ++ source ++ "\n#nightlean_check\n"
+  let input := "import Nightlean.Compiler " ++ source ++ "\n#nightlean_check_target " ++ profileLiteral ++ "\n"
   let result ← try
     IO.Process.output {cmd := "lake", args := #["env", "lean", "-D", "Elab.async=false", "--stdin", opts.input]} (some input)
   catch _ => return ← error "failed to launch the pinned Lean frontend through Lake"
@@ -63,7 +65,7 @@ private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
     return result.exitCode
   -- A separate successful full frontend pass is required before a command may write artifacts.
   -- Lean reports asynchronous earlier errors only when the frontend finishes.
-  let command := "#nightlean_compile " ++ (Lean.toJson opts.output).compress
+  let command := "#nightlean_compile_target " ++ (Lean.toJson opts.output).compress ++ " " ++ profileLiteral
   let compileInput := "import Nightlean.Compiler " ++ source ++ "\n" ++ command ++ "\n"
   let result ← try
     IO.Process.output {cmd := "lake", args := #["env", "lean", "-D", "Elab.async=false", "--stdin", opts.input]} (some compileInput)
@@ -82,6 +84,7 @@ def run (args : List String) : IO UInt32 := do
     return 0
   | ["profiles"] =>
     IO.println "midnight-ledger-9 profiles/midnight-ledger-9.json source-baseline-unqualified"
+    IO.println "midnight-ledger-9-zkir-3.2.1 profiles/midnight-ledger-9-zkir-3.2.1-target.json selected-native-subset-qualified"
     return 0
   | command :: input :: rest =>
     if command != "check" && command != "compile" then

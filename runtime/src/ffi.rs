@@ -4,11 +4,11 @@
 //! runtime validates nulls/lengths, but a foreign caller must provide readable
 //! input memory and writable output memory. Invalid raw addresses are not
 //! recoverable by Rust panic handling.
+use crate::zkir::IrSource;
 use crate::{Plan, ScalarType, check, create_state, environment, input_value, prepare};
 use base_crypto::hash::HashOutput;
 use coin_structure::contract::ContractAddress;
 use ledger::structure::LedgerParameters;
-use midnight_zkir::IrSource;
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
 use std::{
@@ -33,7 +33,7 @@ pub const MAX_SESSIONS: usize = 64;
 pub const MAX_RESULTS: usize = 256;
 const MAX_OPERATIONS: usize = 4096;
 const MAX_INPUTS: usize = 256;
-const PROFILE: &str = "midnight-ledger-9-zkir-3.2.0";
+const PROFILE: &str = crate::profile::ABI;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -222,6 +222,10 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
     if begin.abi_version != ABI_VERSION
         || begin.profile != PROFILE
         || begin.plan.schema_version != 1
+        || !crate::profile::validate_plan(
+            begin.plan.target.as_deref(),
+            begin.plan.target_profile.as_ref(),
+        )
     {
         return Err(INVALID_ARGUMENT);
     }

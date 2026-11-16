@@ -1,3 +1,4 @@
+mod common;
 use nightlean_runtime::ffi::*;
 use serde_json::{Value as Json, json};
 use std::{collections::BTreeMap, sync::Mutex};
@@ -9,7 +10,7 @@ fn envelope(attempt: char) -> Json {
     context["attemptId"] = json!(attempt.to_string().repeat(64));
     let mut params = Vec::new();
     serialize::tagged_serialize(&ledger::structure::INITIAL_PARAMETERS, &mut params).unwrap();
-    json!({"abiVersion":1,"profile":"midnight-ledger-9-zkir-3.2.0","plan":serde_json::from_str::<Json>(include_str!("fixtures/unsigned/plan.json")).unwrap(),"publicInputs":{"expected":"510"},"state":{"total":"0"},"ledgerParametersHex":hex::encode(params),"address":"00".repeat(32),"circuit":serde_json::from_str::<Json>(include_str!("fixtures/unsigned/circuit.zkir")).unwrap(),"hostContext":context})
+    json!({"abiVersion":1,"profile":nightlean_runtime::profile::ABI,"plan":common::unsigned_json(),"publicInputs":{"expected":"510"},"state":{"total":"0"},"ledgerParametersHex":hex::encode(params),"address":"00".repeat(32),"circuit":serde_json::from_str::<Json>(include_str!("fixtures/unsigned/circuit.zkir")).unwrap(),"hostContext":context})
 }
 fn take(token: u64) -> Json {
     let mut length = 0;

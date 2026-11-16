@@ -24,9 +24,9 @@ impl Fixture {
         fs::write(fixture.path("entry.zkir"), json!({"version":{"major":3,"minor":2},"do_communications_commitment":true,"instructions":[]}).to_string()).unwrap();
         let circuit = json!({"name":"relation","file":"relation.zkir","inputs":[],"outputs":[],"constraints":[]});
         fs::write(fixture.path("entry.impact.json"), json!({"schemaVersion":1,"nativeCircuitFile":"Contract.call.zkir","contractName":"Contract","entrypoint":"call","operations":[],"reads":[],"state":[],"circuit":circuit}).to_string()).unwrap();
-        let profile = json!({"schemaVersion":1,"name":"midnight-ledger-9","ledger":"9.1.0.1","zkir":"3.2.0","circuits":"7.3.0","zkStdlib":"2.4.0","proofServer":"9.0.0","onchainRuntime":"4.0.1","qualification":"source-baseline-unqualified"});
+        let profile = nightlean_runtime::profile::target_json();
         fs::write(fixture.path("target.json"), profile.to_string()).unwrap();
-        fs::write(fixture.path("nightlean.json"), json!({"schemaVersion":1,"target":"midnight-ledger-9","targetProfile":profile,"contracts":[{"name":"Contract","state":[],"entrypoints":[{"name":"call","circuit":"relation","nativeCircuitFile":"Contract.call.zkir","nativePlanFile":"Contract.call.impact.json"}]}],"circuits":[circuit]}).to_string()).unwrap();
+        fs::write(fixture.path("nightlean.json"), json!({"schemaVersion":1,"target":nightlean_runtime::profile::NAME,"targetProfile":profile,"contracts":[{"name":"Contract","state":[],"entrypoints":[{"name":"call","circuit":"relation","nativeCircuitFile":"Contract.call.zkir","nativePlanFile":"Contract.call.impact.json"}]}],"circuits":[circuit]}).to_string()).unwrap();
         fs::write(
             fixture.path("nightlean_runtime.h"),
             b"#define NIGHTLEAN_ABI_VERSION 1u\nint nightlean_session_begin(void);\n",
@@ -40,6 +40,21 @@ impl Fixture {
         )
         .unwrap();
         fs::write(fixture.path("tool.json"), json!({"repository":"https://github.com/midnightntwrk/midnight-zkir","revision":"446c7fecc6bd41dab99ebe89ab404e9d077d11a9","rust":"1.100.0","host":"test-host","version":"midnight-zkir 3.2.0","binary":"/private/local/build/zkir","binarySha256":"a".repeat(64),"cargoLockSha256":"b".repeat(64),"command":"cargo +1.100.0 build --release --locked --package midnight-zkir --features binary"}).to_string()).unwrap();
+        if cfg!(feature = "zkir-321") {
+            let mut plan: serde_json::Value =
+                serde_json::from_slice(&fs::read(fixture.path("entry.impact.json")).unwrap())
+                    .unwrap();
+            plan["target"] = json!(nightlean_runtime::profile::NAME);
+            plan["targetProfile"] = profile;
+            fs::write(fixture.path("entry.impact.json"), plan.to_string()).unwrap();
+            let mut tool: serde_json::Value =
+                serde_json::from_slice(&fs::read(fixture.path("tool.json")).unwrap()).unwrap();
+            tool["revision"] = json!(nightlean_runtime::profile::REVISION);
+            tool["requestedVersion"] = json!(nightlean_runtime::profile::RELEASE);
+            tool["releaseLabel"] = json!(nightlean_runtime::profile::RELEASE);
+            tool["expectedCliVersion"] = json!(nightlean_runtime::profile::CRATE_VERSION);
+            fs::write(fixture.path("tool.json"), tool.to_string()).unwrap();
+        }
         fixture
     }
     fn path(&self, name: &str) -> PathBuf {
@@ -161,7 +176,11 @@ fn unsupported_profiles_releases_and_plan_associations_reject() {
     let fixture = Fixture::new();
     let original = fs::read(fixture.path("target.json")).unwrap();
     let mut profile: serde_json::Value = serde_json::from_slice(&original).unwrap();
-    profile["zkir"] = json!("3.2.1");
+    profile["zkir"] = json!(if cfg!(feature = "zkir-321") {
+        "3.2.0"
+    } else {
+        "3.2.1"
+    });
     fs::write(fixture.path("target.json"), profile.to_string()).unwrap();
     assert_eq!(
         failure(artifacts::assemble(
@@ -458,4 +477,89 @@ fn symlinks_in_sources_payloads_or_bundle_roots_reject() {
         failure(artifacts::verify(&fixture.path("bundle"), None)),
         "unsafe_path"
     );
+}
+
+#[test]
+fn manifest_consumer_rejects_other_linked_native_profile() {
+    let fixture = Fixture::new();
+    let mut manifest = fixture.assemble("selected");
+    assert_eq!(manifest.zkir_revision, nightlean_runtime::profile::REVISION);
+    assert_eq!(manifest.profile, nightlean_runtime::profile::NAME);
+    manifest.profile = if cfg!(feature = "zkir-321") {
+        "midnight-ledger-9"
+    } else {
+        "midnight-ledger-9-zkir-3.2.1"
+    }
+    .into();
+    manifest.zkir_revision = if cfg!(feature = "zkir-321") {
+        "446c7fecc6bd41dab99ebe89ab404e9d077d11a9"
+    } else {
+        "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
+    }
+    .into();
+    rewrite_manifest(&fixture.path("selected"), &manifest);
+    assert_eq!(
+        failure(artifacts::verify(&fixture.path("selected"), None)),
+        "profile_mismatch"
+    );
+}
+#[test]
+fn tool_release_label_and_source_revision_cannot_be_mixed() {
+    let fixture = Fixture::new();
+    let original = fs::read(fixture.path("tool.json")).unwrap();
+    for (field, value) in [
+        (
+            "releaseLabel",
+            json!(if cfg!(feature = "zkir-321") {
+                "3.2.0"
+            } else {
+                "3.2.1"
+            }),
+        ),
+        ("expectedCliVersion", json!("3.2.1")),
+        (
+            "revision",
+            json!(if cfg!(feature = "zkir-321") {
+                "446c7fecc6bd41dab99ebe89ab404e9d077d11a9"
+            } else {
+                "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
+            }),
+        ),
+    ] {
+        let mut provenance: serde_json::Value = serde_json::from_slice(&original).unwrap();
+        provenance[field] = value;
+        fs::write(fixture.path("tool.json"), provenance.to_string()).unwrap();
+        assert_eq!(
+            failure(artifacts::assemble(
+                fixture.recipe(),
+                &fixture.path("mixed-tool")
+            )),
+            "profile_mismatch"
+        );
+        assert!(!fixture.path("mixed-tool").exists());
+    }
+}
+
+#[test]
+fn present_nonstring_plan_target_never_falls_back_to_legacy_profile() {
+    let fixture = Fixture::new();
+    let original = fs::read(fixture.path("entry.impact.json")).unwrap();
+    for target in [
+        json!(321),
+        json!({"profile":"midnight-ledger-9-zkir-3.2.1"}),
+        serde_json::Value::Null,
+    ] {
+        let mut plan: serde_json::Value = serde_json::from_slice(&original).unwrap();
+        plan.as_object_mut().unwrap().remove("targetProfile");
+        plan["target"] = target;
+        fs::write(fixture.path("entry.impact.json"), plan.to_string()).unwrap();
+        assert_eq!(
+            failure(artifacts::assemble(
+                fixture.recipe(),
+                &fixture.path("bad-target-type")
+            )),
+            "profile_mismatch"
+        );
+        assert!(!fixture.path("bad-target-type").exists());
+    }
 }

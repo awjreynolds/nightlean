@@ -1,4 +1,5 @@
 //! Native execution of the bounded Nightlean plan schema. No process or JavaScript API.
+use crate::zkir::IrSource;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
 use coin_structure::contract::ContractAddress;
@@ -6,7 +7,6 @@ use ledger::{
     construct::{PreTranscript, partition_transcripts},
     structure::LedgerParameters,
 };
-use midnight_zkir::IrSource;
 use num_bigint::BigUint;
 use onchain_runtime::{
     context::QueryContext,
@@ -31,7 +31,7 @@ use transient_crypto::{
 };
 
 pub const LEDGER_REVISION: &str = "a2b30128ca4b660b73a068e29b56b48ede8c9a74";
-pub const ZKIR_REVISION: &str = "446c7fecc6bd41dab99ebe89ab404e9d077d11a9";
+pub const ZKIR_REVISION: &str = profile::REVISION;
 pub const MODULUS: &str =
     "52435875175126190479447740508185965837690552500527637822603658699938581184513";
 pub type Db = InMemoryDB;
@@ -241,6 +241,10 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Plan {
+    #[serde(default)]
+    pub target: Option<String>,
+    #[serde(default)]
+    pub target_profile: Option<Json>,
     pub schema_version: u32,
     pub entrypoint: String,
     pub circuit: Circuit,
@@ -346,6 +350,10 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
 }
 pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Environment> {
     ensure!(plan.schema_version == 1, "unsupported plan schema");
+    ensure!(
+        profile::validate_plan(plan.target.as_deref(), plan.target_profile.as_ref()),
+        "plan target differs from linked native profile"
+    );
     ensure!(!plan.entrypoint.is_empty(), "missing entrypoint");
     let names: BTreeSet<_> = plan.circuit.inputs.iter().map(|i| &i.name).collect();
     ensure!(
@@ -644,3 +652,13 @@ pub mod assembly;
 pub mod host;
 /// Pure private-state lifecycle model.
 pub mod lifecycle;
+
+#[cfg(all(feature = "zkir-320", feature = "zkir-321"))]
+compile_error!("select exactly one native profile: zkir-320 or zkir-321");
+#[cfg(not(any(feature = "zkir-320", feature = "zkir-321")))]
+compile_error!("select exactly one native profile: zkir-320 or zkir-321");
+#[cfg(feature = "zkir-320")]
+pub use zkir_320 as zkir;
+#[cfg(all(feature = "zkir-321", not(feature = "zkir-320")))]
+pub use zkir_321 as zkir;
+pub mod profile;

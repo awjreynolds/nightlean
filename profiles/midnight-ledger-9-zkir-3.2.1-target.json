@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "zkir": "3.2.1",
+  "circuits": "7.3.0",
+  "zkStdlib": "2.4.0",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "qualification": "selected-native-subset-qualified",
+  "nativeSource": {
+    "repository": "https://github.com/midnightntwrk/midnight-zkir",
+    "tag": "zkir-3.2.1",
+    "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "declaredCrateVersion": "3.2.0",
+    "reportedCliVersion": "midnight-zkir 3.2.0"
+  }
+}

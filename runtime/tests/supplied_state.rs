@@ -1,3 +1,4 @@
+mod common;
 use nightlean_runtime::{Db, Plan, create_state, prepare};
 use onchain_runtime::state::ContractState;
 use rand::{Rng, rngs::OsRng};
@@ -53,8 +54,8 @@ fn supplied_state_checks_distinguish_rejection_from_loading_failures() {
         fs::set_permissions(&root.0, fs::Permissions::from_mode(0o700)).unwrap();
     }
     fs::create_dir(root.0.join("zkir")).unwrap();
-    let plan_bytes = include_bytes!("fixtures/unsigned/plan.json");
-    let plan: Plan = serde_json::from_slice(plan_bytes).unwrap();
+    let plan_bytes = serde_json::to_vec(&common::unsigned_json()).unwrap();
+    let plan: Plan = serde_json::from_slice(&plan_bytes).unwrap();
     let inputs: BTreeMap<String, Json> =
         serde_json::from_value(json!({"left":"255","right":"255","expected":"510"})).unwrap();
     let parameters = &ledger::structure::INITIAL_PARAMETERS;
@@ -71,7 +72,7 @@ fn supplied_state_checks_distinguish_rejection_from_loading_failures() {
     .unwrap();
     let mut predicted = initial.clone();
     predicted.data = execution.after.state;
-    write(&root.0, "source-plan.json", plan_bytes);
+    write(&root.0, "source-plan.json", &plan_bytes);
     write(
         &root.0,
         "zkir/apply.zkir",

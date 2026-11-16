@@ -1,3 +1,4 @@
+mod common;
 use nightlean_runtime::{
     Expr, MODULUS, Plan, Value, canonical_field, environment, evaluate, field_decimal,
 };
@@ -34,6 +35,7 @@ fn only_declared_public_outputs_leave_the_runtime() {
         }]},"state":[],"operations":[],"reads":[]
     }))
     .unwrap();
+    let plan = common::selected(plan);
     assert!(environment(&plan, &BTreeMap::new()).is_err());
 }
 
@@ -77,6 +79,7 @@ fn official_poseidon_matches_qualified_public_fixture_vector() {
 #[test]
 fn input_schema_is_exact_and_boolean_inputs_are_not_coerced() {
     let plan:Plan=serde_json::from_value(json!({"schemaVersion":1,"entrypoint":"claim","circuit":{"inputs":[{"name":"x","type":"Bool","visibility":"private"}],"outputs":[]},"state":[],"operations":[],"reads":[]})).unwrap();
+    let plan = common::selected(plan);
     for invalid in [
         json!({}),
         json!({"x":"true"}),
@@ -108,6 +111,7 @@ fn unknown_expression_variants_and_fields_reject() {
 #[test]
 fn unqualified_nonempty_map_state_rejects() {
     let plan:Plan=serde_json::from_value(json!({"schemaVersion":1,"entrypoint":"claim","circuit":{"inputs":[],"outputs":[]},"state":[{"name":"spent","kind":{"map":["Native","Bool"]}}],"operations":[],"reads":[]})).unwrap();
+    let plan = common::selected(plan);
     let config = serde_json::from_value(json!({"spent":[["1",true]]})).unwrap();
     assert!(nightlean_runtime::create_state(&plan, &config).is_err());
 }
@@ -120,6 +124,7 @@ fn unqualified_state_read_after_write_rejects_explicitly() {
         {"op":"insert","n":1},{"op":"dup"},{"op":"index","slot":0,"pushPath":false},
         {"op":"popeq","alignment":"field","expression":{"tag":"reference","name":"post"}}
     ],"reads":[{"name":"post","type":"Native"}]})).unwrap();
+    let plan = common::selected(plan);
     let state = nightlean_runtime::create_state(
         &plan,
         &serde_json::from_value(json!({"root":"1"})).unwrap(),

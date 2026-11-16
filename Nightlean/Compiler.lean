@@ -172,7 +172,20 @@ elab "#nightlean_check" : command => do
   let (circuits, contracts) ← unsafe inspect
   logInfo m!"checked {circuits.size} circuit(s), {contracts.size} contract(s); target integration unqualified"
 
-private def compileArtifacts (directory : String) : CommandElabM Unit := do
+private unsafe def checkTarget (profile : TargetProfile) : CommandElabM Unit := do
+  let (circuits, contracts) ← unsafe inspect
+  logInfo m!"checked {circuits.size} circuit(s), {contracts.size} contract(s); target {profile.name} ({profile.qualification})"
+
+private def parseTargetProfile (source : String) : CommandElabM TargetProfile := do
+  match TargetProfile.parse source with
+  | .ok profile => pure profile
+  | .error message => throwError "invalid target profile: {message}"
+
+elab "#nightlean_check_target" profileJson:str : command => do
+  let profile ← parseTargetProfile profileJson.getString
+  unsafe checkTarget profile
+
+private def compileArtifacts (directory : String) (profile : TargetProfile) : CommandElabM Unit := do
   let (circuits, contracts) ← unsafe inspect
   -- Lower everything before creating output files. Unsupported circuits cannot leave partial output.
   let mut lowered := #[]
@@ -189,15 +202,19 @@ private def compileArtifacts (directory : String) : CommandElabM Unit := do
       let plan ← match Backend.Impact.lower contract.state ep with
         | .error d => failDiagnostic d
         | .ok plan => pure plan
-      let planJson := Json.mkObj [
-        ("schemaVersion", toJson (1 : Nat)), ("contractName", toJson name.toString),
+      let targetPlanFields := if profile.name == TargetProfile.selected321.name then [
+        ("target", toJson profile.name), ("targetProfile", toJson profile)
+      ] else []
+      let planJson := Json.mkObj ([
+        ("schemaVersion", toJson (1 : Nat))] ++ targetPlanFields ++ [
+        ("contractName", toJson name.toString),
         ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
         ("state", toJson (contract.state.map stateJson)),
         ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
         ("operations", toJson (plan.operations.map operationJson)),
         ("reads", toJson (plan.reads.map fun item => Json.mkObj [
           ("name", toJson item.name), ("type", toJson (typeName item.ty))])),
-        ("guards", toJson (plan.guards.map nativeExpressionJson))]
+        ("guards", toJson (plan.guards.map nativeExpressionJson))])
       lowered := lowered.push (nativePlanFile name ep, planJson.pretty)
   unless uniqueNames (lowered.toList.map (·.1)) do
     throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
@@ -211,8 +228,8 @@ private def compileArtifacts (directory : String) : CommandElabM Unit := do
       ("nativeCircuitQualified", toJson Bool.false),
       ("effects", toJson (ep.effects.map effectJson))]))]
   let metadata := Json.mkObj [
-    ("schemaVersion", toJson (1 : Nat)), ("target", toJson ("midnight-ledger-9" : String)),
-    ("targetProfile", toJson TargetProfile.sourceBaseline),
+    ("schemaVersion", toJson (1 : Nat)), ("target", toJson profile.name),
+    ("targetProfile", toJson profile),
     ("qualification", toJson ("unqualified-relation-and-state-description" : String)),
     ("deployable", toJson Bool.false),
     ("contracts", Json.arr contractMetadata),
@@ -226,6 +243,10 @@ private def compileArtifacts (directory : String) : CommandElabM Unit := do
   logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {path}; not a deployable contract bundle"
 
 elab "#nightlean_compile" directory:str : command =>
-  compileArtifacts directory.getString
+  compileArtifacts directory.getString TargetProfile.sourceBaseline
+
+elab "#nightlean_compile_target" directory:str profileJson:str : command => do
+  let profile ← parseTargetProfile profileJson.getString
+  compileArtifacts directory.getString profile
 
 end Nightlean.Compiler

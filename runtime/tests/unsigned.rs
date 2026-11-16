@@ -1,3 +1,4 @@
+mod common;
 use nightlean_runtime::{
     Expr, Plan, ScalarType, Value, canonical_field, canonical_unsigned, create_state, environment,
     evaluate, max_uint,
@@ -16,12 +17,13 @@ fn cast(ty: &str, value: Json) -> Json {
     json!({"tag":"cast","type":ty,"value":value})
 }
 fn plan(ty: &str) -> Plan {
-    serde_json::from_value(json!({
+    let value = serde_json::from_value(json!({
         "schemaVersion":1,"entrypoint":"unsigned",
         "circuit":{"inputs":[{"name":"value","type":ty,"visibility":"private"}],"outputs":[]},
         "state":[],"operations":[],"reads":[]
     }))
-    .unwrap()
+    .unwrap();
+    common::selected(value)
 }
 
 #[test]
@@ -185,10 +187,11 @@ fn unsigned_equality_and_eager_selection_reject_type_confusion() {
 
 #[test]
 fn source_generated_unsigned_plan_passes_official_checker() {
-    let p: Plan = serde_json::from_str(include_str!("fixtures/unsigned/plan.json")).unwrap();
-    let ir =
-        midnight_zkir::IrSource::load(include_bytes!("fixtures/unsigned/circuit.zkir").as_slice())
-            .unwrap();
+    let p: Plan = serde_json::from_value(common::unsigned_json()).unwrap();
+    let ir = nightlean_runtime::zkir::IrSource::load(
+        include_bytes!("fixtures/unsigned/circuit.zkir").as_slice(),
+    )
+    .unwrap();
     let inputs = BTreeMap::from([
         ("left".into(), json!("255")),
         ("right".into(), json!("255")),

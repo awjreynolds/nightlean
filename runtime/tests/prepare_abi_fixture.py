@@ -13,7 +13,7 @@ public_names = {
 }
 envelope = {
     "abiVersion": 1,
-    "profile": "midnight-ledger-9-zkir-3.2.0",
+    "profile": contract.get("runtimeProfile", "midnight-ledger-9-zkir-3.2.0"),
     "plan": plan,
     "publicInputs": {key: value for key, value in config["inputs"].items()
                      if key in public_names},

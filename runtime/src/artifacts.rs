@@ -15,7 +15,7 @@ pub const MAX_FILE_BYTES: u64 = 256 * 1024 * 1024;
 pub const MAX_TOTAL_BYTES: u64 = 1024 * 1024 * 1024;
 pub const MAX_JSON_BYTES: u64 = 2 * 1024 * 1024;
 const LEDGER_REVISION: &str = "a2b30128ca4b660b73a068e29b56b48ede8c9a74";
-const ZKIR_REVISION: &str = "446c7fecc6bd41dab99ebe89ab404e9d077d11a9";
+const ZKIR_REVISION: &str = crate::profile::REVISION;
 const TOOL_REPOSITORY: &str = "https://github.com/midnightntwrk/midnight-zkir";
 
 #[derive(Debug, Serialize)]
@@ -341,13 +341,22 @@ fn normalize_toolchain(bytes: &[u8]) -> Result<Vec<u8>> {
         input["repository"] == TOOL_REPOSITORY
             && input["revision"] == ZKIR_REVISION
             && input["rust"] == "1.100.0"
-            && input["version"] == "midnight-zkir 3.2.0",
+            && input["version"] == crate::profile::CLI_BANNER,
         "profile_mismatch",
         "native tool identity does not match the supported profile",
     )?;
     for field in ["requestedVersion", "releaseLabel", "expectedCliVersion"] {
+        let expected = if field == "expectedCliVersion" {
+            crate::profile::CRATE_VERSION
+        } else {
+            crate::profile::RELEASE
+        };
         require(
-            input.get(field).is_none_or(|v| v == "3.2.0"),
+            if cfg!(feature = "zkir-321") {
+                input.get(field).is_some_and(|v| v == expected)
+            } else {
+                input.get(field).is_none_or(|v| v == expected)
+            },
             "profile_mismatch",
             "native tool release identity differs from profile",
         )?;
@@ -394,14 +403,22 @@ fn normalize_toolchain(bytes: &[u8]) -> Result<Vec<u8>> {
         }
         normalized.insert(field.to_owned(), text.to_owned());
     }
+    if cfg!(feature = "zkir-321") {
+        normalized.insert("requestedVersion".into(), crate::profile::RELEASE.into());
+        normalized.insert("releaseLabel".into(), crate::profile::RELEASE.into());
+        normalized.insert(
+            "expectedCliVersion".into(),
+            crate::profile::CRATE_VERSION.into(),
+        );
+    }
     canonical(&normalized)
 }
 fn validate_profile(value: &Value) -> Result<()> {
-    let expected = serde_json::json!({"schemaVersion":1,"name":"midnight-ledger-9","ledger":"9.1.0.1","zkir":"3.2.0","circuits":"7.3.0","zkStdlib":"2.4.0","proofServer":"9.0.0","onchainRuntime":"4.0.1","qualification":"source-baseline-unqualified"});
+    let expected = crate::profile::target_json();
     require(
         value == &expected,
         "profile_mismatch",
-        "target profile is not the supported default ledger 9 profile",
+        "target profile does not match the linked native consumer",
     )
 }
 
@@ -474,7 +491,24 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "state",
             "circuit",
             "guards",
+            "target",
+            "targetProfile",
         ],
+    )?;
+    if let Some(target) = plan.get("target") {
+        require(
+            target.is_string(),
+            "profile_mismatch",
+            "plan target must be a string when present",
+        )?;
+    }
+    require(
+        crate::profile::validate_plan(
+            plan.get("target").and_then(Value::as_str),
+            plan.get("targetProfile"),
+        ),
+        "profile_mismatch",
+        "plan target differs from linked native consumer",
     )?;
     require(
         plan["schemaVersion"] == 1
@@ -514,7 +548,7 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
     )?;
     require(
         metadata["schemaVersion"] == 1
-            && metadata["target"] == "midnight-ledger-9"
+            && metadata["target"] == crate::profile::NAME
             && metadata["targetProfile"] == profile,
         "profile_mismatch",
         "compiler metadata does not match the target profile",
@@ -576,7 +610,7 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
     } else {
         let abi = json(abi_bytes)?;
         require(
-            abi["abiVersion"] == 1 && abi["profile"] == "midnight-ledger-9-zkir-3.2.0",
+            abi["abiVersion"] == 1 && abi["profile"] == crate::profile::ABI,
             "invalid_abi",
             "unsupported ABI schema",
         )?;
@@ -605,7 +639,7 @@ fn validate_manifest(manifest: &Manifest) -> Result<()> {
         "unsupported bundle schema or kind",
     )?;
     require(
-        manifest.profile == "midnight-ledger-9"
+        manifest.profile == crate::profile::NAME
             && manifest.ledger_revision == LEDGER_REVISION
             && manifest.zkir_revision == ZKIR_REVISION,
         "profile_mismatch",
@@ -787,7 +821,7 @@ pub fn assemble(recipe: Recipe, destination: &Path) -> Result<Manifest> {
     let manifest = Manifest {
         schema_version: SCHEMA_VERSION,
         kind: "nightlean-public-entrypoint-bundle".into(),
-        profile: "midnight-ledger-9".into(),
+        profile: crate::profile::NAME.into(),
         ledger_revision: LEDGER_REVISION.into(),
         zkir_revision: ZKIR_REVISION.into(),
         compiler: Compiler {

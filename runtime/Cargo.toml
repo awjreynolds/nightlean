@@ -8,6 +8,11 @@ publish = false
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]
 
+[features]
+default = ["zkir-320"]
+zkir-320 = ["dep:zkir-320"]
+zkir-321 = ["dep:zkir-321"]
+
 [dependencies]
 anyhow = "1.0.102"
 serde = { version = "1.0", features = ["derive"] }
@@ -24,7 +29,8 @@ transient-crypto = { package = "midnight-transient-crypto", git = "https://githu
 serialize = { package = "midnight-serialize", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 storage = { package = "midnight-storage", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74", default-features = false }
 coin-structure = { package = "midnight-coin-structure", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
-midnight-zkir = { git = "https://github.com/midnightntwrk/midnight-zkir", rev = "446c7fecc6bd41dab99ebe89ab404e9d077d11a9" }
+zkir-320 = { package = "midnight-zkir", git = "https://github.com/midnightntwrk/midnight-zkir", rev = "446c7fecc6bd41dab99ebe89ab404e9d077d11a9", optional = true }
+zkir-321 = { package = "midnight-zkir", git = "https://github.com/midnightntwrk/midnight-zkir", rev = "7a51b3385bbf4bce3604df87a7c70867c9ab43c0", optional = true }
 
 [patch.crates-io]
 midnight-base-crypto = { git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
