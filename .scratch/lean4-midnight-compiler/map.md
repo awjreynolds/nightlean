@@ -14,6 +14,7 @@ A deployable compiler for a defined subset of Lean 4 programs used to build Midn
 - Assess Moriarty as an adjacent financial language and direct ZKIR implementation before choosing Nightlean's backend.
 - Current Midnight version research is in [midnight-compact-runtime-scope.md](../../docs/research/midnight-compact-runtime-scope.md).
 - Backend integration evidence is in [midnight-backend-boundary.md](../../docs/research/midnight-backend-boundary.md).
+- Moriarty overlap and backend comparison are in [moriarty-overlap.md](../../docs/research/moriarty-overlap.md).
 - Lean frontend evidence is in [lean4-frontend-boundary.md](../../docs/research/lean4-frontend-boundary.md).
 
 ## Decisions so far
@@ -21,10 +22,12 @@ A deployable compiler for a defined subset of Lean 4 programs used to build Midn
 - [Map the deployable Midnight backend boundary](issues/01-midnight-backend-boundary.md): Official docs describe the complete contract artifact path from Compact source; this documents one available path, not a required Nightlean target. See [the research report](../../docs/research/midnight-backend-boundary.md).
 - [Identify Lean 4 frontend constraints for a compiler subset](issues/02-lean-frontend-boundary.md): Lean supports custom elaborators with environment-aware checks and source-positioned diagnostics; ordinary Lean definitions need a strict expression whitelist. See [the research report](../../docs/research/lean4-frontend-boundary.md).
 - [Set the v1 circuit target boundary](issues/03-v1-capability-boundary.md): V1 is circuit-focused for ledger 9; Midnight's ledger and proving interfaces define the feature boundary.
+- [Assess Moriarty and Midnight backend paths](issues/04-backend-and-moriarty-research.md): Nightlean should own its semantics and typed representation; treat Moriarty as a candidate and verify compatibility through an end-to-end ledger 9 spike.
 
 ## Not yet specified
 
-- Compiler packaging, user workflow, and support for future ledger eras.
+- Which backend Nightlean should commit to after a chosen workload passes compilation, proof, artifact, and deployment checks.
+- Compiler packaging and user workflow, and support for future ledger eras.
 
 ## Out of scope
 
