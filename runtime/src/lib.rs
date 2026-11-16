@@ -684,7 +684,9 @@ pub use zkir_321 as zkir;
 pub mod aggregates;
 pub mod profile;
 pub mod proof;
-
+pub mod funding;
+pub mod client;
 pub mod control;
-
 pub mod control_ffi;
+#[cfg(feature = "localnet")]
+pub mod localnet;

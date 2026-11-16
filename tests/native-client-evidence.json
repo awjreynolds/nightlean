@@ -1,0 +1,353 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-16",
+  "scope": "Rust-only native development-host deploy and claim, trusted finalized loopback RPC, exact contract state and durable host journal/CAS. No production-wallet, consensus-light-client, cross-system atomicity or general source-to-deployment assurance claim.",
+  "applicationUsesNodeOrToolkitSubprocess": false,
+  "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+  "nodeSourceReference": {
+    "repository": "https://github.com/midnightntwrk/midnight-node",
+    "revision": "3ef49177d59a2f9735cabd044af8fae35fd808ca",
+    "license": "Apache-2.0 reference files, independently written narrow adapter",
+    "runningImageSourceCommitAuthenticated": false
+  },
+  "rustToolchain": "1.100.0",
+  "host": "darwin-arm64",
+  "profiles": [
+    {
+      "alteredPublicCommitmentRefused": true,
+      "claimedStateReplayRefused": true,
+      "contractParametersSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+      "dustParametersSha256": "d3324910969c4cc54143b8045b649e5c3a4bd5fb7b8f85fe1b770f640ce1c803",
+      "finalReplayBlockHash": "3c934798ec9d8eb2dccd3d5ecb63ef301f6c7078161c4fbdfdfcf32a8ba82ab0",
+      "finalReplayHeight": 4625,
+      "fundingCacheMismatchRefusedBeforeEntropyUse": true,
+      "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+      "invalidNativeProofRefused": true,
+      "manifestSha256": "17265934c3891263c3d7acb62abbb21777add0bf4131f28e3e909a1b3cb1d583",
+      "metadataMismatchRefused": true,
+      "metadataSha256": "0ac5917f03f657e594e7c6c6544a37440fbce7f19e58d07a7773c50fc1461713",
+      "metadataVersion": 16,
+      "nativeLedgerStateTaggedSha256": "15df2907ad1ef3727a7877467f9d11b9e46a9b8a534db1c4065c39733aa5b552",
+      "nativeStoredLedgerRootMatchedRuntime": true,
+      "negativeClaims": [
+        "secret",
+        "path",
+        "direction",
+        "root",
+        "nullifier"
+      ],
+      "profile": "midnight-ledger-9",
+      "rawReplayRefused": true,
+      "records": [
+        {
+          "blockHash": "fe3734d62e9e0f3d111dc294552bf9c12c3b2963f7d870f5bbe842e92114dc58",
+          "contractAddress": "24d2ee6e0bfd068d1c23db8cd6a2f206f47a9d029949c7dc091a96a36fe4e9c4",
+          "contractStateBytes": 1689,
+          "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+          "event": "Deploy",
+          "extrinsicHash": "79f4e8f7de873632a7f331f8ec3a1f873589ee691bcb30289260b9c578806e5a",
+          "extrinsicIndex": 4,
+          "height": 4622,
+          "intentId": "4cd45d2cfa6d43729d2bcd28045ea046d7e32d5ce00b91da7e3595b81540d7ad",
+          "transactionId": "fdc4975fd05e6dc6b8a7eba86673f01ede79f1af5068c67f9431606f5776138f"
+        },
+        {
+          "blockHash": "3c934798ec9d8eb2dccd3d5ecb63ef301f6c7078161c4fbdfdfcf32a8ba82ab0",
+          "contractAddress": "24d2ee6e0bfd068d1c23db8cd6a2f206f47a9d029949c7dc091a96a36fe4e9c4",
+          "contractStateBytes": 1874,
+          "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+          "event": "Call",
+          "extrinsicHash": "9032e0f6e68c977e88b967800f9947c2fb76b8105cd6bfbdea4947750f2d47fa",
+          "extrinsicIndex": 4,
+          "height": 4625,
+          "intentId": "727b8ef4a89f3d08ac3bdd4092dc0120f375cf2958766bd6eaef9b60da63e011",
+          "transactionId": "be083937bc02b9d564c15c915f45da4baead7db3d94d5a82752b3b350d00e6d4"
+        }
+      ],
+      "runtimeCodeHash": "110283b44ab3f1ce35165efc00cc24ef4bf6ca5aefab6c97652a0c9e68c30fb6",
+      "runtimeCodeMismatchRefused": true,
+      "schemaVersion": 1,
+      "scope": "native deploy and claim, lost acknowledgement, durable restart, byte-identical retry, postbroadcast cancellation/deadline, exact finalized state, committed private CAS and accepted-chain private CAS conflict",
+      "specVersion": 2001100,
+      "transactionVersion": 4,
+      "wrongGenesisRefused": true,
+      "wrongNetworkRefused": true,
+      "wrongProfileRefused": true,
+      "wrongReceiptFieldsRefused": true,
+      "actualLog": "/private/tmp/nightlean-client-320-actual.log",
+      "checks": [
+        {
+          "check": "regression",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-320-regression.log",
+          "summaries": [
+            "test result: ok. 35 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+            "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+            "test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+            "test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s",
+            "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+            "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 110,
+          "failed": 0,
+          "ignored": 7
+        },
+        {
+          "check": "proof-statements",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-320-proof-statements.log",
+          "summaries": [
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 36 filtered out; finished in 0.59s"
+          ],
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "check": "native-proof",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-320-native-proof.log",
+          "summaries": [
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s"
+          ],
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "check": "scalar",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-320-scalar.log",
+          "summaries": [
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+          ],
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "check": "core-no-localnet",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-320-core.log",
+          "summaries": [
+            "test result: ok. 30 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.02s"
+          ],
+          "passed": 30,
+          "failed": 0,
+          "ignored": 1
+        }
+      ]
+    },
+    {
+      "alteredPublicCommitmentRefused": true,
+      "claimedStateReplayRefused": true,
+      "contractParametersSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+      "dustParametersSha256": "d3324910969c4cc54143b8045b649e5c3a4bd5fb7b8f85fe1b770f640ce1c803",
+      "finalReplayBlockHash": "2dc670c65d92134f31df211da793ff4f5290849a78e9d02536423f52ea36cb13",
+      "finalReplayHeight": 4640,
+      "fundingCacheMismatchRefusedBeforeEntropyUse": true,
+      "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+      "invalidNativeProofRefused": true,
+      "manifestSha256": "963f742b2e4f959685ad1667a31da3b71a56c053af532ebc8801c76d81e8c365",
+      "metadataMismatchRefused": true,
+      "metadataSha256": "0ac5917f03f657e594e7c6c6544a37440fbce7f19e58d07a7773c50fc1461713",
+      "metadataVersion": 16,
+      "nativeLedgerStateTaggedSha256": "4347762a84502ee198d2296bc7efeecdb164a99c9e16a4c8685581834fff333a",
+      "nativeStoredLedgerRootMatchedRuntime": true,
+      "negativeClaims": [
+        "secret",
+        "path",
+        "direction",
+        "root",
+        "nullifier"
+      ],
+      "profile": "midnight-ledger-9-zkir-3.2.1",
+      "rawReplayRefused": true,
+      "records": [
+        {
+          "blockHash": "75d085055d7c5454b5fad27e8848b22c77aa7fb7276c6dddcbcbbb045e9d0dba",
+          "contractAddress": "a7a7a93417a119a866bf7a05d6697c203e1802a3d41951a7766545e5d5d56c35",
+          "contractStateBytes": 1689,
+          "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+          "event": "Deploy",
+          "extrinsicHash": "5336658a58ef0f6fa50ee871b9e4d8bdcb35adadc3e19df30799b5bab1a99670",
+          "extrinsicIndex": 4,
+          "height": 4637,
+          "intentId": "be9dea79fb26b753f6bfd93d17ab7f91baca0216980375a3889515199e084d5f",
+          "transactionId": "02a1c5b40287a5825f2f3c92696d961c25b513108ae75b0932d59caf1655614f"
+        },
+        {
+          "blockHash": "2dc670c65d92134f31df211da793ff4f5290849a78e9d02536423f52ea36cb13",
+          "contractAddress": "a7a7a93417a119a866bf7a05d6697c203e1802a3d41951a7766545e5d5d56c35",
+          "contractStateBytes": 1874,
+          "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+          "event": "Call",
+          "extrinsicHash": "d29184e5675a276cc97fc2007d37db0c1ff28659a4c5d88fcec07009aa85b724",
+          "extrinsicIndex": 4,
+          "height": 4640,
+          "intentId": "965b7d882aa5663c2e6546861e5937d6856b813a93d790d987df9c4f5e44c32d",
+          "transactionId": "1f7bab3f905d8aa472e0cd0c554d5bfc13df179c7adb8e4448d44235d46c663a"
+        }
+      ],
+      "runtimeCodeHash": "110283b44ab3f1ce35165efc00cc24ef4bf6ca5aefab6c97652a0c9e68c30fb6",
+      "runtimeCodeMismatchRefused": true,
+      "schemaVersion": 1,
+      "scope": "native deploy and claim, lost acknowledgement, durable restart, byte-identical retry, postbroadcast cancellation/deadline, exact finalized state, committed private CAS and accepted-chain private CAS conflict",
+      "specVersion": 2001100,
+      "transactionVersion": 4,
+      "wrongGenesisRefused": true,
+      "wrongNetworkRefused": true,
+      "wrongProfileRefused": true,
+      "wrongReceiptFieldsRefused": true,
+      "actualLog": "/private/tmp/nightlean-client-321-actual.log",
+      "checks": [
+        {
+          "check": "regression",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-321-regression.log",
+          "summaries": [
+            "test result: ok. 35 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.23s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+            "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s",
+            "test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s",
+            "test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.66s",
+            "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+            "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+            "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+          ],
+          "passed": 111,
+          "failed": 0,
+          "ignored": 7
+        },
+        {
+          "check": "proof-statements",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-321-proof-statements.log",
+          "summaries": [
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 36 filtered out; finished in 0.58s"
+          ],
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "check": "native-proof",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-321-native-proof.log",
+          "summaries": [
+            "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s"
+          ],
+          "passed": 4,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "check": "scalar",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-321-scalar.log",
+          "summaries": [
+            "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s"
+          ],
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        {
+          "check": "core-no-localnet",
+          "exitCode": 0,
+          "log": "/private/tmp/nightlean-client-321-core.log",
+          "summaries": [
+            "test result: ok. 30 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.02s"
+          ],
+          "passed": 30,
+          "failed": 0,
+          "ignored": 1
+        }
+      ]
+    }
+  ],
+  "scalarAdversarialCasesPerProfile": 34,
+  "standaloneExample": {
+    "source": "runtime/examples/native_client.rs",
+    "exitCode": 0,
+    "output": "/private/tmp/nightlean-native-client-example-output.jsonl",
+    "recoveryOutput": "/private/tmp/nightlean-native-client-resume-output.jsonl",
+    "recoverySeedConfigAndBundlePathsAbsent": true,
+    "transactions": [
+      {
+        "attemptId": "9ed09f439bbbf38cdda75658856b3818e305d3e91eaafca8cffbcf68678cf567",
+        "blockHash": "19d8d0e1e2ca58b08a52ea63257ea540744d57a14da42877deb89b70240bae1b",
+        "contractAddress": "cb1771d3529f1671bf2b0a78ebe244da0c3ec44f4318aab16f663ef475f5de35",
+        "event": "Deploy",
+        "height": 4664,
+        "privateCommitted": true,
+        "privateRevision": "r1",
+        "transactionId": "580a7a0df2f0c57291fbaa9efc711e4d3ea13ec57c94ee5690e44b597852d6e7"
+      },
+      {
+        "attemptId": "af6748e8d097bf2883bee039b299349e13b0cd627f9d96b431d4fb2cc961df96",
+        "blockHash": "56a748c1fec344338d758ddd51cd1bb17398132674f7ebd48c76291f62f89c97",
+        "contractAddress": "cb1771d3529f1671bf2b0a78ebe244da0c3ec44f4318aab16f663ef475f5de35",
+        "event": "Call",
+        "height": 4667,
+        "privateCommitted": true,
+        "privateRevision": "r2",
+        "transactionId": "ca340882eada325ea6bf5e4635f23b2fbd2423424189eaed03635b8ea9bb9e70"
+      }
+    ],
+    "elapsedSeconds": 40.71,
+    "compiledBinarySha256": "b2c394403b4383ecaa1abf1f8cb8f4b794988149960c084179d61f14071e139c"
+  },
+  "sourceSha256": {
+    "runtime/src/funding.rs": "2535753a24e9ce938c53efd1475eb144bffb8209196dfb891fa0dd856763a112",
+    "runtime/src/client.rs": "49c8b365c610e7da74fd4264d2f5f6678e4904517747820f29c611f21a14c355",
+    "runtime/src/localnet.rs": "1af22ab9f1561f960c643f054fc145c2b6dcf9a3304cbdfacfc102cd27c31d4e",
+    "runtime/src/localnet_store.rs": "3fdaed8b6a5e0cad88c4b8d79fbce6b4d144a15e864529e181e9f66fdba6e519",
+    "runtime/src/host.rs": "43e713d964c0abd02d22e88ff7c32f294105542fb5f4ea46522ebf1d0844e49a",
+    "runtime/src/lib.rs": "224664d6bc242b83de1f067bd67c75c4b060efa1e331b4f159d8570ada01d95d",
+    "runtime/Cargo.toml": "27de56282c03250ec925e9278ef9938e59fdf966aae6201dede596900bca3a7c",
+    "runtime/Cargo.lock": "0df66d3aa5162fa1826a8ec49180e02f5c8188e37e6a74fbfeb57e27d6b26153",
+    "runtime/examples/native_client.rs": "2a376a594396b1f1a017b3276507d5bc08d7ea2dafa7aead38fcc26169888f27",
+    "docs/development/native-client.md": "8e51a3a0ef561a4cd9de8aaab52c358f34d61e2eee40e192cd6f8180741e586b"
+  },
+  "reproduction": {
+    "actual": "cargo test --manifest-path runtime/Cargo.toml --locked --features localnet --lib localnet::tests::real_rust_only_funded_deploy_and_claim -- --ignored --nocapture",
+    "profile321": "add --no-default-features and use --features zkir-321,localnet",
+    "requiredActualEnvironment": [
+      "NIGHTLEAN_TEST_BUNDLE",
+      "NIGHTLEAN_TEST_MANIFEST_SHA256",
+      "NIGHTLEAN_TEST_PRIVATE_CONFIG"
+    ],
+    "explicitCacheInQualification": "/private/tmp/nightlean-proof-params",
+    "proofRegression": "cargo test --manifest-path runtime/Cargo.toml --locked --features localnet --test native_proof -- --include-ignored",
+    "proofStatementRegression": "cargo test --manifest-path runtime/Cargo.toml --locked --features localnet --lib proof::tests::real_crypto_rejects_each_statement_field_and_wrong_key -- --ignored",
+    "scalarRegression": "cargo test --manifest-path runtime/Cargo.toml --locked --features localnet --test scalar_release -- --ignored"
+  },
+  "qualification": {
+    "kind": "development-source-hashes",
+    "publishedCommitQualified": false,
+    "note": "Exact published-revision qualification follows the implementation checkpoint. Retained runs identify their reviewed source bytes."
+  }
+}

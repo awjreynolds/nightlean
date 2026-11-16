@@ -174,6 +174,8 @@ pub struct Runtime {
     writes: BTreeMap<String, Write>,
     pending: Option<Pending>,
     requests: usize,
+    retained_journal_digest: Option<String>,
+    completed_cas: Option<(bool, String)>,
 }
 impl Runtime {
     pub fn new(
@@ -251,6 +253,8 @@ impl Runtime {
             writes: BTreeMap::new(),
             pending: None,
             requests: 0,
+            retained_journal_digest: None,
+            completed_cas: None,
         };
         runtime.grant(&runtime.context.commit_capability, CAS, None)?;
         for provider in &runtime.context.providers {
@@ -467,6 +471,7 @@ impl Runtime {
     }
     pub fn notify(&mut self, notice: Notice) -> Result<bool> {
         require(notice.abi_version == 1, Error::Response)?;
+        let binding = notice.event == "bind";
         let event = match notice.event.as_str() {
             "bind" => {
                 require(
@@ -500,6 +505,14 @@ impl Runtime {
             _ => return Err(Error::Response),
         };
         let effect = self.lifecycle.apply(event).map_err(|_| Error::State)?;
+        if binding {
+            self.retained_journal_digest = Some(
+                self.private_journal()?["journalDigest"]
+                    .as_str()
+                    .ok_or(Error::State)?
+                    .to_owned(),
+            );
+        }
         let request = effect == Effect::RequestCas;
         self.effect(effect);
         require(self.lifecycle.invariant(), Error::State)?;
@@ -551,6 +564,7 @@ impl Runtime {
         )?;
         let transaction_id = value.transaction_id;
         let attempt_id = value.attempt_id;
+        let completed = (value.outcome == "committed", value.revision.clone());
         let event = match value.outcome.as_str() {
             "committed" => Event::CasCommitted {
                 transaction_id,
@@ -567,6 +581,7 @@ impl Runtime {
             _ => return Err(Error::Response),
         };
         let effect = self.lifecycle.apply(event).map_err(|_| Error::Response)?;
+        self.completed_cas = Some(completed);
         self.pending = None;
         self.effect(effect);
         require(self.lifecycle.invariant(), Error::State)
@@ -636,6 +651,25 @@ impl Runtime {
     }
     pub fn invariant(&self) -> bool {
         self.lifecycle.invariant()
+    }
+    pub(crate) fn matches_journal(
+        &self,
+        attempt: &str,
+        transaction: &str,
+        base: &str,
+        target: &str,
+        digest: &str,
+    ) -> bool {
+        self.lifecycle.attempt_id() == attempt
+            && self.lifecycle.transaction_id() == Some(transaction)
+            && self.lifecycle.base_revision() == base
+            && self.target == target
+            && self.retained_journal_digest.as_deref() == Some(digest)
+    }
+    pub(crate) fn matches_cas(&self, committed: bool, revision: &str) -> bool {
+        self.completed_cas
+            .as_ref()
+            .is_some_and(|(outcome, actual)| *outcome == committed && actual == revision)
     }
 }
 impl Drop for Runtime {

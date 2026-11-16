@@ -1,0 +1,1993 @@
+//! Host-authorized native transaction submission and private-journal recovery.
+//! Node finality reports and durable storage are explicit host trust boundaries.
+use crate::{
+    Db,
+    funding::{CONTRACT_SEGMENT, SealedTransaction, UnsealedTransaction},
+    host,
+    lifecycle::{Event, Lifecycle, Phase},
+    proof::ProvedNativeIntent,
+};
+use ledger::{
+    semantics::{TransactionContext, TransactionResult},
+    structure::{
+        ContractAction, Intent, LedgerState, PedersenDowngradeable, ProofMarker, Signature,
+        Transaction,
+    },
+    verify::WellFormedStrictness,
+};
+use onchain_runtime::context::BlockContext;
+use serde::{Deserialize, Serialize};
+use serialize::{Serializable, Tagged, tagged_deserialize, tagged_serialize};
+use sha2::{Digest, Sha256};
+use transient_crypto::commitment::Pedersen;
+use zeroize::{Zeroize, Zeroizing};
+
+const MAX_TRANSACTION: usize = 4 * 1024 * 1024;
+const MAX_STATE: usize = 1024 * 1024;
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Error {
+    Policy,
+    Network,
+    Parameters,
+    Funding,
+    Approval,
+    AlteredTransaction,
+    InvalidTransaction,
+    Identity,
+    Receipt,
+    StaleReceipt,
+    Persistence,
+    State,
+    Rejected,
+    Uncertain,
+    Deadline,
+    Cancelled,
+    CancellationAfterBroadcast,
+    StorageConflict,
+}
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "nightlean_client_{self:?}")
+    }
+}
+impl std::error::Error for Error {}
+type Result<T> = std::result::Result<T, Error>;
+fn require(valid: bool, error: Error) -> Result<()> {
+    if valid { Ok(()) } else { Err(error) }
+}
+fn hash(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
+fn canonical_hash(text: &str) -> bool {
+    text.len() == 64
+        && text
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+fn encode<T: Serializable + Tagged>(value: &T) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    tagged_serialize(value, &mut out).map_err(|_| Error::InvalidTransaction)?;
+    Ok(out)
+}
+fn body<T: Serializable>(value: &T) -> Result<Vec<u8>> {
+    let mut out = Vec::new();
+    Serializable::serialize(value, &mut out).map_err(|_| Error::InvalidTransaction)?;
+    Ok(out)
+}
+fn journal_valid(journal: &serde_json::Value, identity: &JournalIdentity) -> Result<()> {
+    let mut value = journal.clone();
+    let object = value.as_object_mut().ok_or(Error::Identity)?;
+    require(
+        object.len() == 9
+            && object
+                .remove("journalDigest")
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .as_deref()
+                == Some(identity.journal_digest.as_str()),
+        Error::Identity,
+    )?;
+    let bytes = Zeroizing::new(serde_json::to_vec(&value).map_err(|_| Error::Identity)?);
+    let mut digest = Sha256::new();
+    digest.update(b"nightlean.private-state-journal.v1\0");
+    digest.update(&*bytes);
+    require(
+        hex::encode(digest.finalize()) == identity.journal_digest,
+        Error::Identity,
+    )
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct NetworkPolicy {
+    pub network_id: String,
+    pub genesis: String,
+    pub spec_version: u32,
+    pub transaction_version: u32,
+    pub profile: String,
+    pub max_dust: u128,
+}
+impl NetworkPolicy {
+    pub fn validate(&self) -> Result<()> {
+        require(
+            !self.network_id.is_empty()
+                && self.network_id.len() <= 128
+                && canonical_hash(&self.genesis)
+                && self.profile == crate::profile::NAME
+                && self.max_dust > 0
+                && self.spec_version > 0
+                && self.transaction_version > 0,
+            Error::Policy,
+        )
+    }
+    pub fn check(&self, observed: &ChainIdentity) -> Result<()> {
+        self.validate()?;
+        require(
+            observed.network_id == self.network_id
+                && observed.genesis == self.genesis
+                && observed.spec_version == self.spec_version
+                && observed.transaction_version == self.transaction_version
+                && observed.profile == self.profile,
+            Error::Network,
+        )
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ChainIdentity {
+    pub network_id: String,
+    pub genesis: String,
+    pub spec_version: u32,
+    pub transaction_version: u32,
+    pub profile: String,
+}
+pub struct Snapshot {
+    pub chain: ChainIdentity,
+    pub finalized_hash: String,
+    pub height: u64,
+    pub state: LedgerState<Db>,
+    pub block: BlockContext,
+}
+impl Snapshot {
+    pub fn validate(&self, policy: &NetworkPolicy) -> Result<()> {
+        policy.check(&self.chain)?;
+        require(
+            canonical_hash(&self.finalized_hash) && self.state.network_id == policy.network_id,
+            Error::Network,
+        )
+    }
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum ContractEvent {
+    Deploy,
+    Call,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FinalizedReceipt {
+    pub chain: ChainIdentity,
+    pub block_hash: String,
+    pub height: u64,
+    pub finalized_hash: String,
+    pub finalized_height: u64,
+    pub extrinsic_hash: String,
+    pub extrinsic_index: u32,
+    pub transaction_id: String,
+    pub intent_id: String,
+    pub contract_address: String,
+    pub event: ContractEvent,
+    pub contract_state: Vec<u8>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Submission {
+    Broadcast,
+    Rejected,
+    Uncertain,
+}
+pub enum Observation {
+    Pending,
+    Rejected,
+    Finalized(FinalizedReceipt),
+}
+#[derive(Clone, Copy, Debug)]
+pub struct HostFailure;
+/// The adapter verifies canonical finalized ancestry, exact extrinsic payload and events.
+/// Credentials, endpoints, transport limits and deadlines stay in the host adapter.
+#[allow(async_fn_in_trait)]
+pub trait ChainAdapter {
+    async fn snapshot(&self) -> std::result::Result<Snapshot, HostFailure>;
+    async fn submit(
+        &self,
+        transaction: &BoundTransaction,
+    ) -> std::result::Result<Submission, HostFailure>;
+    async fn observe(
+        &self,
+        transaction: &BoundTransaction,
+    ) -> std::result::Result<Observation, HostFailure>;
+}
+#[allow(async_fn_in_trait)]
+pub trait FundingAdapter {
+    async fn fund(
+        &self,
+        contract: &ProvedNativeIntent,
+        snapshot: &Snapshot,
+        policy: &NetworkPolicy,
+    ) -> std::result::Result<UnsealedTransaction, HostFailure>;
+}
+#[allow(async_fn_in_trait)]
+pub trait SigningAdapter {
+    async fn approve_and_sign(
+        &self,
+        transaction: &UnsealedTransaction,
+        snapshot: &Snapshot,
+        policy: &NetworkPolicy,
+    ) -> std::result::Result<SealedTransaction, HostFailure>;
+}
+
+fn public_intent<B: storage::Storable<Db> + PedersenDowngradeable<Db>>(
+    intent: &Intent<Signature, ProofMarker, B, Db>,
+) -> Intent<Signature, ProofMarker, Pedersen, Db> {
+    Intent {
+        guaranteed_unshielded_offer: intent.guaranteed_unshielded_offer.clone(),
+        fallible_unshielded_offer: intent.fallible_unshielded_offer.clone(),
+        actions: intent.actions.clone(),
+        dust_actions: intent.dust_actions.clone(),
+        ttl: intent.ttl,
+        binding_commitment: intent.binding_commitment.downgrade(),
+    }
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BoundData {
+    policy: NetworkPolicy,
+    transaction: Vec<u8>,
+    transaction_id: String,
+    intent_id: String,
+    contract_address: String,
+    event: ContractEvent,
+    expected_state: Vec<u8>,
+    after_height: u64,
+}
+/// Exact signed native bytes and expected execution state. No mutation or private key access.
+pub struct BoundTransaction {
+    data: BoundData,
+}
+impl BoundTransaction {
+    pub async fn prepare(
+        contract: &ProvedNativeIntent,
+        policy: NetworkPolicy,
+        chain: &impl ChainAdapter,
+        funding: &impl FundingAdapter,
+        signer: &impl SigningAdapter,
+    ) -> Result<Self> {
+        policy.validate()?;
+        let snapshot = chain.snapshot().await.map_err(|_| Error::Network)?;
+        snapshot.validate(&policy)?;
+        require(
+            contract.actions.len() == 1
+                && contract.dust_actions.is_none()
+                && contract.guaranteed_unshielded_offer.is_none()
+                && contract.fallible_unshielded_offer.is_none(),
+            Error::InvalidTransaction,
+        )?;
+        let (address, event) = match contract
+            .actions
+            .iter_deref()
+            .next()
+            .ok_or(Error::InvalidTransaction)?
+        {
+            ContractAction::Deploy(deploy) => (deploy.address(), ContractEvent::Deploy),
+            ContractAction::Call(call) => (call.address, ContractEvent::Call),
+            _ => return Err(Error::InvalidTransaction),
+        };
+        let funded = funding
+            .fund(contract, &snapshot, &policy)
+            .await
+            .map_err(|_| Error::Funding)?;
+        let Transaction::Standard(funded_stx) = &funded else {
+            return Err(Error::Funding);
+        };
+        require(
+            funded_stx.network_id == policy.network_id
+                && funded_stx
+                    .intents
+                    .get(&CONTRACT_SEGMENT)
+                    .map(|intent| encode(&*intent))
+                    .transpose()?
+                    == Some(encode(contract)?),
+            Error::AlteredTransaction,
+        )?;
+        require(
+            funded_stx.guaranteed_coins.is_none()
+                && funded_stx.fallible_coins.is_empty()
+                && funded_stx.intents.iter().take(3).count() <= 2,
+            Error::Funding,
+        )?;
+        for item in funded_stx.intents.iter() {
+            if *item.0 != CONTRACT_SEGMENT {
+                require(
+                    *item.0 == crate::funding::FUNDING_SEGMENT
+                        && item.1.actions.is_empty()
+                        && item.1.guaranteed_unshielded_offer.is_none()
+                        && item.1.fallible_unshielded_offer.is_none()
+                        && item
+                            .1
+                            .dust_actions
+                            .as_ref()
+                            .is_some_and(|d| d.registrations.is_empty()),
+                    Error::Funding,
+                )?;
+            }
+        }
+        let approved = signer
+            .approve_and_sign(&funded, &snapshot, &policy)
+            .await
+            .map_err(|_| Error::Approval)?;
+        let Transaction::Standard(signed) = &approved else {
+            return Err(Error::AlteredTransaction);
+        };
+        require(
+            signed.network_id == policy.network_id
+                && signed.intents.iter().take(3).count()
+                    == funded_stx.intents.iter().take(3).count(),
+            Error::AlteredTransaction,
+        )?;
+        // Signing and binding seals must preserve every proof, action and public commitment.
+        for item in funded_stx.intents.iter() {
+            let signed_intent = signed
+                .intents
+                .get(&*item.0)
+                .ok_or(Error::AlteredTransaction)?;
+            require(
+                encode(&public_intent(&*item.1).erase_signatures())?
+                    == encode(&public_intent(&*signed_intent).erase_signatures())?,
+                Error::AlteredTransaction,
+            )?;
+        }
+        require(
+            body(&funded_stx.guaranteed_coins)? == body(&signed.guaranteed_coins)?
+                && body(&funded_stx.fallible_coins)? == body(&signed.fallible_coins)?,
+            Error::AlteredTransaction,
+        )?;
+        let fees = approved
+            .fees_with_margin(&snapshot.state.parameters, 0)
+            .map_err(|_| Error::Parameters)?;
+        let mut spent = 0u128;
+        for item in signed.intents.iter() {
+            if let Some(dust) = item.1.dust_actions.as_ref() {
+                for spend in dust.spends.iter_deref() {
+                    spent = spent.checked_add(spend.v_fee).ok_or(Error::Funding)?;
+                }
+            }
+        }
+        require(spent >= fees && spent <= policy.max_dust, Error::Funding)?;
+        let verified = approved
+            .well_formed(
+                &snapshot.state,
+                WellFormedStrictness::default(),
+                snapshot.block.tblock,
+            )
+            .map_err(|_| Error::InvalidTransaction)?;
+        let context = TransactionContext {
+            ref_state: snapshot.state.clone(),
+            block_context: snapshot.block.clone(),
+            whitelist: None,
+        };
+        let (predicted, outcome) = snapshot.state.apply(&verified, &context);
+        require(
+            matches!(outcome, TransactionResult::Success(_)),
+            Error::InvalidTransaction,
+        )?;
+        let expected_state = encode(
+            &*predicted
+                .contract
+                .get(&address)
+                .ok_or(Error::InvalidTransaction)?,
+        )?;
+        let transaction = encode(&approved)?;
+        require(
+            transaction.len() <= MAX_TRANSACTION && expected_state.len() <= MAX_STATE,
+            Error::InvalidTransaction,
+        )?;
+        let intent_id = hex::encode(
+            signed
+                .intents
+                .get(&CONTRACT_SEGMENT)
+                .ok_or(Error::Identity)?
+                .erase_proofs()
+                .erase_signatures()
+                .intent_hash(CONTRACT_SEGMENT)
+                .0
+                .0,
+        );
+        let transaction_id = hex::encode(approved.transaction_hash().0.0);
+        Ok(Self {
+            data: BoundData {
+                policy,
+                transaction,
+                transaction_id,
+                intent_id,
+                contract_address: hex::encode(address.0.0),
+                event,
+                expected_state,
+                after_height: snapshot.height,
+            },
+        })
+    }
+    pub fn bytes(&self) -> &[u8] {
+        &self.data.transaction
+    }
+    pub fn transaction_id(&self) -> &str {
+        &self.data.transaction_id
+    }
+    pub fn intent_id(&self) -> &str {
+        &self.data.intent_id
+    }
+    pub fn contract_address(&self) -> &str {
+        &self.data.contract_address
+    }
+    pub fn event(&self) -> ContractEvent {
+        self.data.event
+    }
+    pub fn after_height(&self) -> u64 {
+        self.data.after_height
+    }
+    pub fn policy(&self) -> &NetworkPolicy {
+        &self.data.policy
+    }
+    pub fn expected_state(&self) -> &[u8] {
+        &self.data.expected_state
+    }
+    pub fn check_receipt(&self, receipt: &FinalizedReceipt) -> Result<()> {
+        self.data.policy.check(&receipt.chain)?;
+        require(
+            receipt.height > self.data.after_height && receipt.height <= receipt.finalized_height,
+            Error::StaleReceipt,
+        )?;
+        require(
+            canonical_hash(&receipt.block_hash)
+                && canonical_hash(&receipt.finalized_hash)
+                && canonical_hash(&receipt.extrinsic_hash)
+                && receipt.transaction_id == self.data.transaction_id
+                && receipt.intent_id == self.data.intent_id
+                && receipt.contract_address == self.data.contract_address
+                && receipt.event == self.data.event
+                && receipt.contract_state == self.data.expected_state,
+            Error::Receipt,
+        )
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct JournalIdentity {
+    pub attempt_id: String,
+    pub transaction_id: String,
+    pub base_revision: String,
+    pub journal_digest: String,
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CasReceipt {
+    pub identity: JournalIdentity,
+    pub revision: String,
+    pub committed: bool,
+}
+#[derive(Clone, Copy, Eq, PartialEq, Serialize, Deserialize)]
+enum DurablePhase {
+    Prepared,
+    Persisted,
+    Submitted,
+    Uncertain,
+    Accepted,
+    Rejected,
+    Committed,
+    Conflicted,
+    Cancelled,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RecoveryRecord {
+    version: u32,
+    bound: BoundData,
+    identity: JournalIdentity,
+    journal: Vec<u8>,
+    phase: DurablePhase,
+    cas: Option<CasReceipt>,
+}
+impl Drop for RecoveryRecord {
+    fn drop(&mut self) {
+        self.journal.zeroize();
+    }
+}
+impl RecoveryRecord {
+    pub fn phase(&self) -> Phase {
+        match self.phase {
+            DurablePhase::Prepared | DurablePhase::Persisted => Phase::Prepared,
+            DurablePhase::Submitted => Phase::Submitted,
+            DurablePhase::Uncertain => Phase::Uncertain,
+            DurablePhase::Accepted => Phase::AwaitingCas,
+            DurablePhase::Rejected => Phase::Rejected,
+            DurablePhase::Committed => Phase::Committed,
+            DurablePhase::Conflicted => Phase::Conflicted,
+            DurablePhase::Cancelled => Phase::Cancelled,
+        }
+    }
+    pub fn cas_receipt(&self) -> Option<&CasReceipt> {
+        self.cas.as_ref()
+    }
+    pub fn identity(&self) -> &JournalIdentity {
+        &self.identity
+    }
+    pub fn transaction_bytes(&self) -> &[u8] {
+        &self.bound.transaction
+    }
+    pub fn journal_bytes(&self) -> &[u8] {
+        &self.journal
+    }
+    pub fn immutable_digest(&self) -> Result<String> {
+        let value = Zeroizing::new(
+            serde_json::to_vec(&(&self.version, &self.bound, &self.identity, &self.journal))
+                .map_err(|_| Error::Persistence)?,
+        );
+        Ok(hash(&value))
+    }
+    pub fn private_bytes(&self) -> Result<Zeroizing<Vec<u8>>> {
+        let bytes = serde_json::to_vec(self)
+            .map(Zeroizing::new)
+            .map_err(|_| Error::Persistence)?;
+        require(bytes.len() <= 32 * 1024 * 1024, Error::Persistence)?;
+        Ok(bytes)
+    }
+}
+#[allow(async_fn_in_trait)]
+pub trait JournalStore {
+    /// Read the current authoritative record and its storage revision atomically.
+    /// Importing unauthenticated caller bytes must never implement this operation.
+    async fn load(&self, attempt_id: &str) -> std::result::Result<StoredRecord, HostFailure>;
+    /// Durably retain exact bytes before acknowledging. Existing attempt bodies are immutable.
+    async fn persist(
+        &self,
+        record: &RecoveryRecord,
+        expected_revision: Option<u64>,
+    ) -> std::result::Result<StoreAcknowledgement, HostFailure>;
+    /// Deduplicate by the complete identity. Acceptance never implies private CAS success.
+    async fn compare_exchange(
+        &self,
+        record: &RecoveryRecord,
+    ) -> std::result::Result<CasReceipt, HostFailure>;
+}
+pub struct StoredRecord {
+    pub private_bytes: Zeroizing<Vec<u8>>,
+    pub revision: u64,
+}
+pub struct StoreAcknowledgement {
+    pub identity: JournalIdentity,
+    pub record_sha256: String,
+    pub revision: u64,
+}
+pub struct SubmissionAttempt {
+    record: RecoveryRecord,
+    store_revision: Option<u64>,
+    observed: bool,
+}
+impl SubmissionAttempt {
+    pub fn new(
+        bound: BoundTransaction,
+        attempt_id: &str,
+        runtime: &mut host::Runtime,
+    ) -> Result<Self> {
+        runtime
+            .notify(host::Notice {
+                abi_version: 1,
+                event: "bind".into(),
+                attempt_id: attempt_id.into(),
+                transaction_id: bound.transaction_id().into(),
+            })
+            .map_err(|_| Error::Identity)?;
+        let journal = runtime.private_journal().map_err(|_| Error::State)?;
+        require(
+            journal["contractAddress"].as_str() == Some(bound.contract_address()),
+            Error::Identity,
+        )?;
+        let identity: JournalIdentity = JournalIdentity {
+            attempt_id: attempt_id.into(),
+            transaction_id: bound.transaction_id().into(),
+            base_revision: journal["baseRevision"]
+                .as_str()
+                .ok_or(Error::Identity)?
+                .into(),
+            journal_digest: journal["journalDigest"]
+                .as_str()
+                .ok_or(Error::Identity)?
+                .into(),
+        };
+        journal_valid(&journal, &identity)?;
+        let record = RecoveryRecord {
+            version: 1,
+            bound: bound.data,
+            identity,
+            journal: serde_json::to_vec(&journal).map_err(|_| Error::Persistence)?,
+            phase: DurablePhase::Prepared,
+            cas: None,
+        };
+        let attempt = Self {
+            record,
+            store_revision: None,
+            observed: false,
+        };
+        attempt.model()?;
+        Ok(attempt)
+    }
+    pub async fn recover(store: &impl JournalStore, attempt_id: &str) -> Result<Self> {
+        require(canonical_hash(attempt_id), Error::Identity)?;
+        let loaded = store
+            .load(attempt_id)
+            .await
+            .map_err(|_| Error::Persistence)?;
+        require(loaded.revision > 0, Error::Persistence)?;
+        let attempt = Self::decode_record(&loaded.private_bytes, loaded.revision)?;
+        require(
+            attempt.record.identity.attempt_id == attempt_id,
+            Error::Identity,
+        )?;
+        Ok(attempt)
+    }
+    fn decode_record(bytes: &[u8], revision: u64) -> Result<Self> {
+        require(bytes.len() <= 32 * 1024 * 1024, Error::Persistence)?;
+        let record: RecoveryRecord =
+            serde_json::from_slice(bytes).map_err(|_| Error::Persistence)?;
+        record.bound.policy.validate()?;
+        require(
+            record.version == 1
+                && record.bound.transaction.len() <= MAX_TRANSACTION
+                && record.bound.expected_state.len() <= MAX_STATE
+                && record.journal.len() <= host::MAX_PRIVATE_BYTES,
+            Error::Persistence,
+        )?;
+        let transaction: SealedTransaction =
+            tagged_deserialize(record.bound.transaction.as_slice())
+                .map_err(|_| Error::Persistence)?;
+        require(
+            encode(&transaction)? == record.bound.transaction
+                && hex::encode(transaction.transaction_hash().0.0)
+                    == record.identity.transaction_id
+                && record.bound.transaction_id == record.identity.transaction_id,
+            Error::Identity,
+        )?;
+        let journal: serde_json::Value =
+            serde_json::from_slice(&record.journal).map_err(|_| Error::Identity)?;
+        require(
+            journal["attemptId"].as_str() == Some(&record.identity.attempt_id)
+                && journal["transactionId"].as_str() == Some(&record.identity.transaction_id)
+                && journal["baseRevision"].as_str() == Some(&record.identity.base_revision)
+                && journal["journalDigest"].as_str() == Some(&record.identity.journal_digest)
+                && journal["contractAddress"].as_str() == Some(&record.bound.contract_address),
+            Error::Identity,
+        )?;
+        journal_valid(&journal, &record.identity)?;
+        let Transaction::Standard(stx) = &transaction else {
+            return Err(Error::Identity);
+        };
+        let contract = stx.intents.get(&CONTRACT_SEGMENT).ok_or(Error::Identity)?;
+        require(
+            stx.network_id == record.bound.policy.network_id
+                && hex::encode(
+                    contract
+                        .erase_proofs()
+                        .erase_signatures()
+                        .intent_hash(CONTRACT_SEGMENT)
+                        .0
+                        .0,
+                ) == record.bound.intent_id,
+            Error::Identity,
+        )?;
+        let attempt = Self {
+            record,
+            store_revision: Some(revision),
+            observed: false,
+        };
+        attempt.model()?;
+        Ok(attempt)
+    }
+    pub fn record(&self) -> &RecoveryRecord {
+        &self.record
+    }
+    pub fn transaction(&self) -> BoundTransaction {
+        BoundTransaction {
+            data: self.record.bound.clone(),
+        }
+    }
+    pub fn phase(&self) -> Result<Phase> {
+        Ok(self.model()?.phase())
+    }
+    fn model(&self) -> Result<Lifecycle> {
+        let identity = &self.record.identity;
+        let mut model = Lifecycle::new(identity.attempt_id.clone(), identity.base_revision.clone())
+            .map_err(|_| Error::Identity)?;
+        model
+            .apply(Event::ExecutionSucceeded)
+            .map_err(|_| Error::State)?;
+        model
+            .apply(Event::Bind {
+                transaction_id: identity.transaction_id.clone(),
+            })
+            .map_err(|_| Error::Identity)?;
+        let ids = || (identity.transaction_id.clone(), identity.attempt_id.clone());
+        if self.record.phase != DurablePhase::Prepared
+            && self.record.phase != DurablePhase::Cancelled
+        {
+            let (transaction_id, attempt_id) = ids();
+            model
+                .apply(Event::Persisted {
+                    transaction_id,
+                    attempt_id,
+                })
+                .map_err(|_| Error::State)?;
+        }
+        if matches!(
+            self.record.phase,
+            DurablePhase::Submitted
+                | DurablePhase::Uncertain
+                | DurablePhase::Accepted
+                | DurablePhase::Rejected
+                | DurablePhase::Committed
+                | DurablePhase::Conflicted
+        ) {
+            let (transaction_id, attempt_id) = ids();
+            model
+                .apply(Event::Submitted {
+                    transaction_id,
+                    attempt_id,
+                })
+                .map_err(|_| Error::State)?;
+        }
+        if self.record.phase == DurablePhase::Uncertain {
+            let (transaction_id, attempt_id) = ids();
+            model
+                .apply(Event::Uncertain {
+                    transaction_id,
+                    attempt_id,
+                })
+                .map_err(|_| Error::State)?;
+        }
+        if matches!(
+            self.record.phase,
+            DurablePhase::Accepted | DurablePhase::Committed | DurablePhase::Conflicted
+        ) {
+            let (transaction_id, attempt_id) = ids();
+            model
+                .apply(Event::Accepted {
+                    transaction_id,
+                    attempt_id,
+                })
+                .map_err(|_| Error::State)?;
+        }
+        if self.record.phase == DurablePhase::Rejected {
+            let (transaction_id, attempt_id) = ids();
+            model
+                .apply(Event::Rejected {
+                    transaction_id,
+                    attempt_id,
+                })
+                .map_err(|_| Error::State)?;
+        }
+        if self.record.phase == DurablePhase::Cancelled {
+            model.apply(Event::Cancel).map_err(|_| Error::State)?;
+        }
+        if matches!(
+            self.record.phase,
+            DurablePhase::Committed | DurablePhase::Conflicted
+        ) {
+            let cas = self.record.cas.as_ref().ok_or(Error::State)?;
+            require(cas.identity == *identity, Error::Identity)?;
+            require(
+                cas.committed == (self.record.phase == DurablePhase::Committed),
+                Error::Identity,
+            )?;
+            let (transaction_id, attempt_id) = ids();
+            let event = if cas.committed {
+                Event::CasCommitted {
+                    transaction_id,
+                    attempt_id,
+                    base_revision: identity.base_revision.clone(),
+                    revision: cas.revision.clone(),
+                }
+            } else {
+                Event::CasConflict {
+                    transaction_id,
+                    attempt_id,
+                    base_revision: identity.base_revision.clone(),
+                    revision: cas.revision.clone(),
+                }
+            };
+            model.apply(event).map_err(|_| Error::State)?;
+        }
+        Ok(model)
+    }
+    fn notify(&self, runtime: &mut host::Runtime, event: &str) -> Result<bool> {
+        runtime
+            .notify(host::Notice {
+                abi_version: 1,
+                event: event.into(),
+                attempt_id: self.record.identity.attempt_id.clone(),
+                transaction_id: self.record.identity.transaction_id.clone(),
+            })
+            .map_err(|_| Error::State)
+    }
+    async fn persist(&mut self, store: &impl JournalStore) -> Result<()> {
+        let digest = hash(&self.record.private_bytes()?);
+        let previous = self.store_revision;
+        let ack = store
+            .persist(&self.record, previous)
+            .await
+            .map_err(|_| Error::Persistence)?;
+        require(
+            ack.identity == self.record.identity
+                && ack.record_sha256 == digest
+                && ack.revision > 0
+                && previous.is_none_or(|old| {
+                    ack.revision == old || old.checked_add(1) == Some(ack.revision)
+                }),
+            Error::Identity,
+        )?;
+        self.store_revision = Some(ack.revision);
+        Ok(())
+    }
+    /// Before retry, restore a host runtime with the same prepared reads/writes and replay
+    /// notifications. A changed journal is rejected even when attempt/transaction IDs match.
+    pub fn restore_runtime(&self, runtime: &mut host::Runtime) -> Result<()> {
+        self.notify(runtime, "bind")?;
+        require(
+            runtime.private_journal().map_err(|_| Error::State)?
+                == serde_json::from_slice::<serde_json::Value>(&self.record.journal)
+                    .map_err(|_| Error::Identity)?,
+            Error::Identity,
+        )?;
+        if self.record.phase != DurablePhase::Prepared
+            && self.record.phase != DurablePhase::Cancelled
+        {
+            self.notify(runtime, "persisted")?;
+        }
+        if matches!(
+            self.record.phase,
+            DurablePhase::Submitted
+                | DurablePhase::Uncertain
+                | DurablePhase::Accepted
+                | DurablePhase::Committed
+                | DurablePhase::Conflicted
+                | DurablePhase::Rejected
+        ) {
+            self.notify(runtime, "submitted")?;
+        }
+        if self.record.phase == DurablePhase::Uncertain {
+            self.notify(runtime, "uncertain")?;
+        }
+        if matches!(
+            self.record.phase,
+            DurablePhase::Accepted | DurablePhase::Committed | DurablePhase::Conflicted
+        ) {
+            self.notify(runtime, "accepted")?;
+        }
+        if self.record.phase == DurablePhase::Rejected {
+            self.notify(runtime, "rejected")?;
+        }
+        if self.record.phase == DurablePhase::Cancelled {
+            runtime.cancel().map_err(|_| Error::State)?;
+        }
+        Ok(())
+    }
+    pub async fn submit_once(
+        &mut self,
+        runtime: &mut host::Runtime,
+        chain: &impl ChainAdapter,
+        store: &impl JournalStore,
+    ) -> Result<Submission> {
+        self.check_runtime_identity(runtime)?;
+        require(
+            matches!(
+                self.phase()?,
+                Phase::Prepared | Phase::Submitted | Phase::Uncertain
+            ),
+            Error::State,
+        )?;
+        let snapshot = chain.snapshot().await.map_err(|_| Error::Network)?;
+        snapshot.validate(&self.record.bound.policy)?;
+        if self.record.phase == DurablePhase::Prepared {
+            self.record.phase = DurablePhase::Persisted;
+        }
+        self.persist(store).await?;
+        self.notify(runtime, "persisted")?;
+        self.record.phase = DurablePhase::Submitted;
+        // A crash after this durable write is an unknown broadcast outcome. Recovery only
+        // retransmits these exact bytes, never reconstructs a new funded transaction.
+        self.persist(store).await?;
+        self.notify(runtime, "submitted")?;
+        let outcome = chain
+            .submit(&self.transaction())
+            .await
+            .unwrap_or(Submission::Uncertain);
+        match outcome {
+            Submission::Broadcast => {}
+            Submission::Rejected => {
+                self.record.phase = DurablePhase::Rejected;
+                self.notify(runtime, "rejected")?;
+            }
+            Submission::Uncertain => {
+                self.record.phase = DurablePhase::Uncertain;
+                self.notify(runtime, "uncertain")?;
+            }
+        }
+        self.persist(store).await?;
+        Ok(outcome)
+    }
+    pub async fn observe_once(
+        &mut self,
+        runtime: &mut host::Runtime,
+        chain: &impl ChainAdapter,
+        store: &impl JournalStore,
+    ) -> Result<Option<FinalizedReceipt>> {
+        self.check_runtime_identity(runtime)?;
+        require(
+            matches!(
+                self.phase()?,
+                Phase::Submitted
+                    | Phase::Uncertain
+                    | Phase::AwaitingCas
+                    | Phase::Committed
+                    | Phase::Conflicted
+            ),
+            Error::State,
+        )?;
+        match chain
+            .observe(&self.transaction())
+            .await
+            .map_err(|_| Error::Uncertain)?
+        {
+            Observation::Pending => Ok(None),
+            Observation::Rejected => {
+                require(
+                    self.phase()? != Phase::Committed
+                        && self.phase()? != Phase::Conflicted
+                        && self.phase()? != Phase::AwaitingCas,
+                    Error::Receipt,
+                )?;
+                self.record.phase = DurablePhase::Rejected;
+                self.notify(runtime, "rejected")?;
+                self.persist(store).await?;
+                Err(Error::Rejected)
+            }
+            Observation::Finalized(receipt) => {
+                self.transaction().check_receipt(&receipt)?;
+                self.observed = true;
+                if !matches!(self.phase()?, Phase::Committed | Phase::Conflicted) {
+                    self.record.phase = DurablePhase::Accepted;
+                    self.notify(runtime, "accepted")?;
+                    self.persist(store).await?;
+                }
+                Ok(Some(receipt))
+            }
+        }
+    }
+    pub async fn commit_private(
+        &mut self,
+        runtime: &mut host::Runtime,
+        store: &impl JournalStore,
+        request_id: u64,
+    ) -> Result<CasReceipt> {
+        require(
+            matches!(
+                self.phase()?,
+                Phase::AwaitingCas | Phase::Committed | Phase::Conflicted
+            ),
+            Error::State,
+        )?;
+        self.check_runtime_identity(runtime)?;
+        require(self.observed, Error::Receipt)?;
+        if matches!(self.phase()?, Phase::Committed | Phase::Conflicted) {
+            let receipt = self.record.cas.as_ref().ok_or(Error::State)?.clone();
+            self.persist(store).await?;
+            if !runtime.matches_cas(receipt.committed, &receipt.revision) {
+                self.preflight_runtime_cas(runtime, request_id)?;
+                self.runtime_cas(runtime, &receipt, request_id)?;
+            }
+            return Ok(receipt);
+        }
+        self.preflight_runtime_cas(runtime, request_id)?;
+        // Check the current durable revision before an external private-state mutation.
+        self.persist(store).await?;
+        let receipt = store
+            .compare_exchange(&self.record)
+            .await
+            .map_err(|_| Error::Persistence)?;
+        require(receipt.identity == self.record.identity, Error::Identity)?;
+        let mut model = self.model()?;
+        let id = &receipt.identity;
+        let event = if receipt.committed {
+            Event::CasCommitted {
+                transaction_id: id.transaction_id.clone(),
+                attempt_id: id.attempt_id.clone(),
+                base_revision: id.base_revision.clone(),
+                revision: receipt.revision.clone(),
+            }
+        } else {
+            Event::CasConflict {
+                transaction_id: id.transaction_id.clone(),
+                attempt_id: id.attempt_id.clone(),
+                base_revision: id.base_revision.clone(),
+                revision: receipt.revision.clone(),
+            }
+        };
+        model.apply(event).map_err(|_| Error::Identity)?;
+        self.record.phase = if receipt.committed {
+            DurablePhase::Committed
+        } else {
+            DurablePhase::Conflicted
+        };
+        self.record.cas = Some(receipt.clone());
+        // The store's CAS atomically retains its idempotency receipt with private writes.
+        // Retain that validated receipt durably before the fallible runtime acknowledgement.
+        self.persist(store).await?;
+        self.runtime_cas(runtime, &receipt, request_id)?;
+        Ok(receipt)
+    }
+    fn check_runtime_identity(&self, runtime: &host::Runtime) -> Result<()> {
+        let id = &self.record.identity;
+        require(
+            runtime.matches_journal(
+                &id.attempt_id,
+                &id.transaction_id,
+                &id.base_revision,
+                &self.record.bound.contract_address,
+                &id.journal_digest,
+            ),
+            Error::Identity,
+        )
+    }
+    fn preflight_runtime_cas(&self, runtime: &mut host::Runtime, request_id: u64) -> Result<()> {
+        self.check_runtime_identity(runtime)?;
+        require(
+            runtime.public_status()["phase"] == "awaiting_cas",
+            Error::State,
+        )?;
+        require(
+            runtime.private_journal().map_err(|_| Error::State)?
+                == serde_json::from_slice::<serde_json::Value>(&self.record.journal)
+                    .map_err(|_| Error::Identity)?,
+            Error::Identity,
+        )?;
+        runtime.begin_cas(request_id).map_err(|_| Error::State)?;
+        let metadata = runtime.cas_metadata().ok_or(Error::State)?;
+        require(
+            metadata["id"].as_u64() == Some(request_id)
+                && metadata["operation"] == host::CAS
+                && metadata["schema"] == host::CAS_SCHEMA
+                && metadata["capability"].as_str().is_some(),
+            Error::Identity,
+        )
+    }
+    fn runtime_cas(
+        &self,
+        runtime: &mut host::Runtime,
+        receipt: &CasReceipt,
+        request_id: u64,
+    ) -> Result<()> {
+        let id = &receipt.identity;
+        runtime.begin_cas(request_id).map_err(|_| Error::State)?;
+        let metadata = runtime.cas_metadata().ok_or(Error::State)?;
+        require(metadata["id"].as_u64() == Some(request_id), Error::Identity)?;
+        runtime.finish_cas(request_id, Some(host::CAS), metadata["capability"].as_str(), Some(host::CAS_SCHEMA), serde_json::json!({"attemptId":id.attempt_id,"transactionId":id.transaction_id,"baseRevision":id.base_revision,"journalDigest":id.journal_digest,"revision":receipt.revision,"outcome":if receipt.committed {"committed"} else {"conflict"}})).map_err(|_| Error::Identity)
+    }
+    pub async fn cancel(
+        &mut self,
+        runtime: &mut host::Runtime,
+        store: &impl JournalStore,
+    ) -> Result<()> {
+        self.check_runtime_identity(runtime)?;
+        self.model()?
+            .apply(Event::Cancel)
+            .map_err(|_| Error::CancellationAfterBroadcast)?;
+        runtime.cancel().map_err(|_| Error::State)?;
+        self.record.phase = DurablePhase::Cancelled;
+        self.persist(store).await
+    }
+    pub async fn deadline(
+        &mut self,
+        runtime: &mut host::Runtime,
+        store: &impl JournalStore,
+    ) -> Result<()> {
+        self.check_runtime_identity(runtime)?;
+        match self.phase()? {
+            Phase::Prepared => {
+                self.cancel(runtime, store).await?;
+            }
+            Phase::Submitted | Phase::Uncertain => {
+                self.record.phase = DurablePhase::Uncertain;
+                self.notify(runtime, "uncertain")?;
+                self.persist(store).await?;
+            }
+            _ => {}
+        }
+        Err(Error::Deadline)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use base_crypto::{hash::HashOutput, time::Timestamp};
+    use futures::executor::block_on;
+    use ledger::structure::ContractDeploy;
+    use onchain_runtime::state::ContractState;
+    use rand::{Rng, SeedableRng, rngs::StdRng};
+    use std::{
+        cell::{Cell, RefCell},
+        collections::BTreeMap,
+    };
+    use storage::arena::Sp;
+
+    fn policy() -> NetworkPolicy {
+        NetworkPolicy {
+            network_id: "undeployed".into(),
+            genesis: "1".repeat(64),
+            spec_version: 2001100,
+            transaction_version: 4,
+            profile: crate::profile::NAME.into(),
+            max_dust: 10u128.pow(18),
+        }
+    }
+    fn chain_identity() -> ChainIdentity {
+        let p = policy();
+        ChainIdentity {
+            network_id: p.network_id,
+            genesis: p.genesis,
+            spec_version: p.spec_version,
+            transaction_version: p.transaction_version,
+            profile: p.profile,
+        }
+    }
+    // A real native deployment encoding supports lifecycle tests. Acceptance here is a
+    // controlled host report, supplemented by the opt-in real-node integration test.
+    fn bound() -> BoundTransaction {
+        let mut rng = StdRng::from_seed([7; 32]);
+        let deploy = ContractDeploy {
+            initial_state: ContractState::<Db>::default(),
+            nonce: HashOutput([3; 32]),
+        };
+        let address = hex::encode(deploy.address().0.0);
+        let contract: ProvedNativeIntent = Intent {
+            actions: vec![ContractAction::Deploy(Sp::new(deploy))].into(),
+            guaranteed_unshielded_offer: None,
+            fallible_unshielded_offer: None,
+            dust_actions: None,
+            binding_commitment: rng.r#gen(),
+            ttl: Timestamp::from_secs(2_000_000_000),
+        };
+        let sealed = crate::funding::one_intent("undeployed", CONTRACT_SEGMENT, contract).seal(rng);
+        let Transaction::Standard(stx) = &sealed else {
+            unreachable!()
+        };
+        let intent_id = hex::encode(
+            stx.intents
+                .get(&CONTRACT_SEGMENT)
+                .unwrap()
+                .erase_proofs()
+                .erase_signatures()
+                .intent_hash(CONTRACT_SEGMENT)
+                .0
+                .0,
+        );
+        BoundTransaction {
+            data: BoundData {
+                policy: policy(),
+                transaction_id: hex::encode(sealed.transaction_hash().0.0),
+                transaction: encode(&sealed).unwrap(),
+                intent_id,
+                contract_address: address,
+                event: ContractEvent::Deploy,
+                expected_state: vec![1, 2, 3],
+                after_height: 20,
+            },
+        }
+    }
+    fn runtime(attempt: char, address: &str, value: &str) -> host::Runtime {
+        let context = serde_json::from_value(serde_json::json!({"protocolVersion":1,"namespace":"test","baseRevision":"r0","attemptId":attempt.to_string().repeat(64),"capabilities":[{"id":"store","namespace":"test","keyPrefix":"claims/","operations":[host::STAGE,host::CAS]}],"operations":[],"providers":[],"commitCapability":"store"})).unwrap();
+        let mut runtime =
+            host::Runtime::new(context, &BTreeMap::new(), address.into(), "claim".into()).unwrap();
+        runtime
+            .stage(host::Stage {
+                abi_version: 1,
+                operation: host::STAGE.into(),
+                capability: "store".into(),
+                key: "claims/used".into(),
+                ty: "Native".into(),
+                value: serde_json::json!(value),
+            })
+            .unwrap();
+        runtime.execution_finished(true).unwrap();
+        runtime
+    }
+    struct FakeChain {
+        identity: RefCell<ChainIdentity>,
+        submission: Cell<Submission>,
+        sent: RefCell<Vec<Vec<u8>>>,
+    }
+    impl FakeChain {
+        fn new() -> Self {
+            Self {
+                identity: RefCell::new(chain_identity()),
+                submission: Cell::new(Submission::Uncertain),
+                sent: RefCell::new(Vec::new()),
+            }
+        }
+    }
+    fn receipt(tx: &BoundTransaction) -> FinalizedReceipt {
+        FinalizedReceipt {
+            chain: chain_identity(),
+            block_hash: "2".repeat(64),
+            height: 21,
+            finalized_hash: "3".repeat(64),
+            finalized_height: 22,
+            extrinsic_hash: "4".repeat(64),
+            extrinsic_index: 2,
+            transaction_id: tx.transaction_id().into(),
+            intent_id: tx.intent_id().into(),
+            contract_address: tx.contract_address().into(),
+            event: tx.event(),
+            contract_state: tx.expected_state().to_vec(),
+        }
+    }
+    impl ChainAdapter for FakeChain {
+        async fn snapshot(&self) -> std::result::Result<Snapshot, HostFailure> {
+            Ok(Snapshot {
+                chain: self.identity.borrow().clone(),
+                finalized_hash: "2".repeat(64),
+                height: 20,
+                state: LedgerState::new("undeployed"),
+                block: BlockContext::default(),
+            })
+        }
+        async fn submit(
+            &self,
+            tx: &BoundTransaction,
+        ) -> std::result::Result<Submission, HostFailure> {
+            self.sent.borrow_mut().push(tx.bytes().to_vec());
+            Ok(self.submission.get())
+        }
+        async fn observe(
+            &self,
+            tx: &BoundTransaction,
+        ) -> std::result::Result<Observation, HostFailure> {
+            Ok(Observation::Finalized(receipt(tx)))
+        }
+    }
+    #[derive(Default)]
+    struct MemoryStore {
+        bodies: RefCell<BTreeMap<String, String>>,
+        saved: RefCell<BTreeMap<String, Vec<u8>>>,
+        receipts: RefCell<BTreeMap<String, CasReceipt>>,
+        revision: Cell<u64>,
+        applies: Cell<usize>,
+        versions: RefCell<BTreeMap<String, u64>>,
+        hashes: RefCell<BTreeMap<String, String>>,
+        cas_calls: Cell<usize>,
+        fail_committed_persist: Cell<bool>,
+    }
+    impl JournalStore for MemoryStore {
+        async fn load(&self, attempt_id: &str) -> std::result::Result<StoredRecord, HostFailure> {
+            let saved = self.saved.borrow();
+            let bytes = saved.get(attempt_id).ok_or(HostFailure)?;
+            if self.hashes.borrow().get(attempt_id) != Some(&hash(bytes)) {
+                return Err(HostFailure);
+            }
+            Ok(StoredRecord {
+                private_bytes: Zeroizing::new(bytes.clone()),
+                revision: *self.versions.borrow().get(attempt_id).ok_or(HostFailure)?,
+            })
+        }
+        async fn persist(
+            &self,
+            record: &RecoveryRecord,
+            expected_revision: Option<u64>,
+        ) -> std::result::Result<StoreAcknowledgement, HostFailure> {
+            if record.phase == DurablePhase::Committed && self.fail_committed_persist.replace(false)
+            {
+                return Err(HostFailure);
+            }
+            let digest = record.immutable_digest().map_err(|_| HostFailure)?;
+            let bytes = record.private_bytes().map_err(|_| HostFailure)?;
+            let record_sha256 = hash(&bytes);
+            let previous = self
+                .versions
+                .borrow()
+                .get(&record.identity.attempt_id)
+                .copied();
+            if previous != expected_revision {
+                return Err(HostFailure);
+            }
+            let mut bodies = self.bodies.borrow_mut();
+            if let Some(old) = bodies.get(&record.identity.attempt_id) {
+                if old != &digest {
+                    return Err(HostFailure);
+                }
+            }
+            bodies.insert(record.identity.attempt_id.clone(), digest);
+            let unchanged =
+                self.hashes.borrow().get(&record.identity.attempt_id) == Some(&record_sha256);
+            let revision = if unchanged {
+                previous.ok_or(HostFailure)?
+            } else {
+                previous.unwrap_or(0).checked_add(1).ok_or(HostFailure)?
+            };
+            self.saved
+                .borrow_mut()
+                .insert(record.identity.attempt_id.clone(), bytes.to_vec());
+            self.versions
+                .borrow_mut()
+                .insert(record.identity.attempt_id.clone(), revision);
+            self.hashes
+                .borrow_mut()
+                .insert(record.identity.attempt_id.clone(), record_sha256.clone());
+            Ok(StoreAcknowledgement {
+                identity: record.identity.clone(),
+                record_sha256,
+                revision,
+            })
+        }
+        async fn compare_exchange(
+            &self,
+            record: &RecoveryRecord,
+        ) -> std::result::Result<CasReceipt, HostFailure> {
+            self.cas_calls.set(self.cas_calls.get() + 1);
+            if let Some(old) = self.receipts.borrow().get(&record.identity.attempt_id) {
+                if old.identity != record.identity {
+                    return Err(HostFailure);
+                }
+                return Ok(old.clone());
+            }
+            let committed = record.identity.base_revision == format!("r{}", self.revision.get());
+            if committed {
+                self.revision.set(self.revision.get() + 1);
+                self.applies.set(self.applies.get() + 1);
+            }
+            let receipt = CasReceipt {
+                identity: record.identity.clone(),
+                revision: format!("r{}", self.revision.get()),
+                committed,
+            };
+            self.receipts
+                .borrow_mut()
+                .insert(record.identity.attempt_id.clone(), receipt.clone());
+            Ok(receipt)
+        }
+    }
+    #[test]
+    fn receipt_identity_network_finality_and_exact_state_are_required() {
+        let tx = bound();
+        let good = receipt(&tx);
+        tx.check_receipt(&good).unwrap();
+        let mut wrong = good.clone();
+        wrong.chain.genesis = "f".repeat(64);
+        assert_eq!(tx.check_receipt(&wrong), Err(Error::Network));
+        let mut wrong = good.clone();
+        wrong.chain.profile = "other-profile".into();
+        assert_eq!(tx.check_receipt(&wrong), Err(Error::Network));
+        for mutate in [
+            |r: &mut FinalizedReceipt| r.transaction_id = "f".repeat(64),
+            |r: &mut FinalizedReceipt| r.intent_id = "f".repeat(64),
+            |r: &mut FinalizedReceipt| r.contract_address = "f".repeat(64),
+            |r: &mut FinalizedReceipt| r.event = ContractEvent::Call,
+            |r: &mut FinalizedReceipt| r.contract_state.push(0),
+            |r: &mut FinalizedReceipt| r.extrinsic_hash.clear(),
+        ] {
+            let mut wrong = good.clone();
+            mutate(&mut wrong);
+            assert_eq!(tx.check_receipt(&wrong), Err(Error::Receipt));
+        }
+        let mut wrong = good.clone();
+        wrong.height = 20;
+        assert_eq!(tx.check_receipt(&wrong), Err(Error::StaleReceipt));
+        let mut wrong = good;
+        wrong.finalized_height = 20;
+        assert_eq!(tx.check_receipt(&wrong), Err(Error::StaleReceipt));
+    }
+    #[test]
+    fn uncertain_restart_retries_exact_bytes_and_deduplicates_private_cas() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let chain = FakeChain::new();
+            let store = MemoryStore::default();
+            assert_eq!(
+                attempt
+                    .submit_once(&mut runtime, &chain, &store)
+                    .await
+                    .unwrap(),
+                Submission::Uncertain
+            );
+            assert_eq!(attempt.phase().unwrap(), Phase::Uncertain);
+            assert_eq!(
+                attempt.cancel(&mut runtime, &store).await,
+                Err(Error::CancellationAfterBroadcast)
+            );
+            assert_eq!(
+                attempt.deadline(&mut runtime, &store).await,
+                Err(Error::Deadline)
+            );
+            drop(attempt);
+            drop(runtime);
+            let mut recovered = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut restored = self::runtime('a', &address, "42");
+            recovered.restore_runtime(&mut restored).unwrap();
+            chain.submission.set(Submission::Broadcast);
+            recovered
+                .submit_once(&mut restored, &chain, &store)
+                .await
+                .unwrap();
+            assert_eq!(chain.sent.borrow().len(), 2);
+            assert_eq!(chain.sent.borrow()[0], chain.sent.borrow()[1]);
+            assert!(
+                recovered
+                    .observe_once(&mut restored, &chain, &store)
+                    .await
+                    .unwrap()
+                    .is_some()
+            );
+            assert_eq!(store.applies.get(), 0);
+            assert!(
+                recovered
+                    .commit_private(&mut restored, &store, 8)
+                    .await
+                    .unwrap()
+                    .committed
+            );
+            assert!(
+                recovered
+                    .commit_private(&mut restored, &store, 8)
+                    .await
+                    .unwrap()
+                    .committed
+            );
+            assert_eq!(store.applies.get(), 1);
+            let mut recovered = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut restored = self::runtime('a', &address, "42");
+            recovered.restore_runtime(&mut restored).unwrap();
+            assert_eq!(restored.public_status()["phase"], "awaiting_cas");
+            recovered
+                .observe_once(&mut restored, &chain, &store)
+                .await
+                .unwrap();
+            recovered
+                .commit_private(&mut restored, &store, 9)
+                .await
+                .unwrap();
+            assert_eq!(restored.public_status()["phase"], "committed");
+        });
+    }
+    #[test]
+    fn chain_acceptance_and_private_storage_conflict_stay_distinct() {
+        block_on(async {
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            chain.submission.set(Submission::Broadcast);
+            let first = bound();
+            let address = first.contract_address().to_owned();
+            let mut r1 = runtime('a', &address, "42");
+            let mut a = SubmissionAttempt::new(first, &"a".repeat(64), &mut r1).unwrap();
+            let mut r2 = runtime('b', &address, "43");
+            let mut b = SubmissionAttempt::new(bound(), &"b".repeat(64), &mut r2).unwrap();
+            for (attempt, runtime) in [(&mut a, &mut r1), (&mut b, &mut r2)] {
+                attempt.submit_once(runtime, &chain, &store).await.unwrap();
+                attempt.observe_once(runtime, &chain, &store).await.unwrap();
+            }
+            assert!(
+                a.commit_private(&mut r1, &store, 1)
+                    .await
+                    .unwrap()
+                    .committed
+            );
+            assert!(
+                !b.commit_private(&mut r2, &store, 1)
+                    .await
+                    .unwrap()
+                    .committed
+            );
+            assert_eq!(b.phase().unwrap(), Phase::Conflicted);
+            assert_eq!(r2.public_status()["acceptedHostEvidence"], true);
+            assert_eq!(store.applies.get(), 1);
+        });
+    }
+    #[test]
+    fn changed_journal_or_transaction_cannot_reuse_a_durable_attempt() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let chain = FakeChain::new();
+            let store = MemoryStore::default();
+            attempt
+                .submit_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            let saved = attempt.record.private_bytes().unwrap();
+            let mut value: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+            let mut journal: serde_json::Value =
+                serde_json::from_slice(&attempt.record.journal).unwrap();
+            journal["writes"]["claims/used"]["value"] = "43".into();
+            value["journal"] = serde_json::to_value(serde_json::to_vec(&journal).unwrap()).unwrap();
+            assert_eq!(
+                SubmissionAttempt::decode_record(&serde_json::to_vec(&value).unwrap(), 1).err(),
+                Some(Error::Identity)
+            );
+            let mut value: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+            value["bound"]["transaction"][10] = 255.into();
+            assert!(
+                SubmissionAttempt::decode_record(&serde_json::to_vec(&value).unwrap(), 1).is_err()
+            );
+            let mut other_runtime = self::runtime('a', &address, "43");
+            let changed =
+                SubmissionAttempt::new(bound(), &"a".repeat(64), &mut other_runtime).unwrap();
+            assert!(store.persist(changed.record(), None).await.is_err());
+            let mut restored = self::runtime('a', &address, "43");
+            assert_eq!(attempt.restore_runtime(&mut restored), Err(Error::Identity));
+        });
+    }
+    #[test]
+    fn recovery_authenticates_complete_current_record_and_requires_new_finality() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            attempt
+                .submit_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            let saved = store.saved.borrow()[&"a".repeat(64)].clone();
+            for field in ["phase", "expectedState", "afterHeight", "cas"] {
+                let mut value: serde_json::Value = serde_json::from_slice(&saved).unwrap();
+                match field {
+                    "phase" => value["phase"] = "Accepted".into(),
+                    "expectedState" => value["bound"]["expectedState"] = serde_json::json!([9]),
+                    "afterHeight" => value["bound"]["afterHeight"] = 0.into(),
+                    _ => {
+                        value["phase"] = "Committed".into();
+                        value["cas"] = serde_json::to_value(CasReceipt {
+                            identity: attempt.record.identity.clone(),
+                            revision: "r1".into(),
+                            committed: true,
+                        })
+                        .unwrap();
+                    }
+                }
+                store
+                    .saved
+                    .borrow_mut()
+                    .insert("a".repeat(64), serde_json::to_vec(&value).unwrap());
+                assert_eq!(
+                    SubmissionAttempt::recover(&store, &"a".repeat(64))
+                        .await
+                        .err(),
+                    Some(Error::Persistence)
+                );
+            }
+            store
+                .saved
+                .borrow_mut()
+                .insert("a".repeat(64), saved.clone());
+            attempt
+                .observe_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            let accepted = store.saved.borrow()[&"a".repeat(64)].clone();
+            store.saved.borrow_mut().insert("a".repeat(64), saved);
+            assert_eq!(
+                SubmissionAttempt::recover(&store, &"a".repeat(64))
+                    .await
+                    .err(),
+                Some(Error::Persistence)
+            );
+            store.saved.borrow_mut().insert("a".repeat(64), accepted);
+            let mut recovered = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut restored = self::runtime('a', &address, "42");
+            recovered.restore_runtime(&mut restored).unwrap();
+            assert_eq!(
+                recovered
+                    .commit_private(&mut restored, &store, 1)
+                    .await
+                    .err(),
+                Some(Error::Receipt)
+            );
+            assert_eq!(store.cas_calls.get(), 0);
+            recovered
+                .observe_once(&mut restored, &chain, &store)
+                .await
+                .unwrap();
+            recovered
+                .commit_private(&mut restored, &store, 1)
+                .await
+                .unwrap();
+            assert_eq!(store.applies.get(), 1);
+        });
+    }
+    #[test]
+    fn private_cas_preflights_runtime_journal_and_pending_request() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            attempt
+                .submit_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            attempt
+                .observe_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            for (letter, value) in [('b', "42"), ('a', "43")] {
+                let mut wrong = self::runtime(letter, &address, value);
+                for event in ["bind", "persisted", "submitted", "accepted"] {
+                    wrong
+                        .notify(host::Notice {
+                            abi_version: 1,
+                            event: event.into(),
+                            attempt_id: letter.to_string().repeat(64),
+                            transaction_id: attempt.record.identity.transaction_id.clone(),
+                        })
+                        .unwrap();
+                }
+                assert_eq!(
+                    attempt.commit_private(&mut wrong, &store, 1).await.err(),
+                    Some(Error::Identity)
+                );
+            }
+            let mut prepared = self::runtime('a', &address, "42");
+            prepared
+                .notify(host::Notice {
+                    abi_version: 1,
+                    event: "bind".into(),
+                    attempt_id: "a".repeat(64),
+                    transaction_id: attempt.record.identity.transaction_id.clone(),
+                })
+                .unwrap();
+            assert_eq!(
+                attempt.commit_private(&mut prepared, &store, 1).await.err(),
+                Some(Error::State)
+            );
+            runtime.begin_cas(77).unwrap();
+            assert_eq!(
+                attempt.commit_private(&mut runtime, &store, 78).await.err(),
+                Some(Error::Identity)
+            );
+            assert_eq!(store.cas_calls.get(), 0);
+            assert_eq!(store.applies.get(), 0);
+            attempt
+                .commit_private(&mut runtime, &store, 77)
+                .await
+                .unwrap();
+            assert_eq!(store.applies.get(), 1);
+        });
+    }
+    #[test]
+    fn stale_recovery_cannot_overwrite_terminal_record_or_rebroadcast() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            attempt
+                .submit_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            let mut a = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut b = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut ra = self::runtime('a', &address, "42");
+            let mut rb = self::runtime('a', &address, "42");
+            a.restore_runtime(&mut ra).unwrap();
+            b.restore_runtime(&mut rb).unwrap();
+            a.observe_once(&mut ra, &chain, &store).await.unwrap();
+            a.commit_private(&mut ra, &store, 1).await.unwrap();
+            let sent = chain.sent.borrow().len();
+            assert_eq!(
+                b.submit_once(&mut rb, &chain, &store).await.err(),
+                Some(Error::Persistence)
+            );
+            assert_eq!(chain.sent.borrow().len(), sent);
+            let latest = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            assert_eq!(latest.phase().unwrap(), Phase::Committed);
+            assert_eq!(store.applies.get(), 1);
+        });
+    }
+    #[test]
+    fn restart_reconciles_private_cas_before_runtime_ack_without_second_apply() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            attempt
+                .submit_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            attempt
+                .observe_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            store.fail_committed_persist.set(true);
+            assert_eq!(
+                attempt.commit_private(&mut runtime, &store, 1).await.err(),
+                Some(Error::Persistence)
+            );
+            assert_eq!(runtime.public_status()["phase"], "awaiting_cas");
+            assert_eq!(store.applies.get(), 1);
+            let mut recovered = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut restored = self::runtime('a', &address, "42");
+            recovered.restore_runtime(&mut restored).unwrap();
+            recovered
+                .observe_once(&mut restored, &chain, &store)
+                .await
+                .unwrap();
+            recovered
+                .commit_private(&mut restored, &store, 1)
+                .await
+                .unwrap();
+            assert_eq!(store.applies.get(), 1);
+            assert_eq!(restored.public_status()["phase"], "committed");
+        });
+    }
+    #[test]
+    fn live_retry_persists_terminal_cas_receipt_before_runtime_ack() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            attempt
+                .submit_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            attempt
+                .observe_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap();
+            store.fail_committed_persist.set(true);
+            assert_eq!(
+                attempt.commit_private(&mut runtime, &store, 1).await.err(),
+                Some(Error::Persistence)
+            );
+            assert_eq!(runtime.public_status()["phase"], "awaiting_cas");
+            assert_eq!(store.applies.get(), 1);
+            attempt
+                .commit_private(&mut runtime, &store, 1)
+                .await
+                .unwrap();
+            let stored = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            assert_eq!(stored.phase().unwrap(), Phase::Committed);
+            assert_eq!(runtime.public_status()["phase"], "committed");
+            assert_eq!(store.applies.get(), 1);
+            assert_eq!(store.cas_calls.get(), 1);
+        });
+    }
+    #[cfg(feature = "localnet")]
+    #[test]
+    fn directory_journal_restart_stale_writer_conflict_and_private_permissions() {
+        use crate::localnet::journal::DirectoryJournal;
+        use std::time::Duration;
+        let root = std::env::temp_dir().join(format!(
+            "nightlean-journal-test-{}-{}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
+        block_on(async {
+            let store = DirectoryJournal::new(&root, Duration::from_millis(100)).unwrap();
+            let other = DirectoryJournal::new(&root, Duration::from_millis(100)).unwrap();
+            let chain = FakeChain::new();
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut ra = runtime('a', &address, "42");
+            let mut a = SubmissionAttempt::new(tx, &"a".repeat(64), &mut ra).unwrap();
+            a.submit_once(&mut ra, &chain, &store).await.unwrap();
+            let mut stale = SubmissionAttempt::recover(&other, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut rs = runtime('a', &address, "42");
+            stale.restore_runtime(&mut rs).unwrap();
+            a.observe_once(&mut ra, &chain, &store).await.unwrap();
+            let cas = a.commit_private(&mut ra, &store, 1).await.unwrap();
+            assert!(cas.committed);
+            assert_eq!(other.revision("test").unwrap(), "r1");
+            assert_eq!(
+                other.private_value("test", "claims/used").unwrap().unwrap()["value"],
+                "42"
+            );
+            let sent = chain.sent.borrow().len();
+            assert_eq!(
+                stale.submit_once(&mut rs, &chain, &other).await.err(),
+                Some(Error::Persistence)
+            );
+            assert_eq!(chain.sent.borrow().len(), sent);
+            drop((store, other));
+            let store = DirectoryJournal::new(&root, Duration::from_millis(100)).unwrap();
+            let mut a = SubmissionAttempt::recover(&store, &"a".repeat(64))
+                .await
+                .unwrap();
+            let mut ra = runtime('a', &address, "42");
+            a.restore_runtime(&mut ra).unwrap();
+            assert_eq!(
+                a.commit_private(&mut ra, &store, 2).await.err(),
+                Some(Error::Receipt)
+            );
+            a.observe_once(&mut ra, &chain, &store).await.unwrap();
+            assert!(
+                a.commit_private(&mut ra, &store, 2)
+                    .await
+                    .unwrap()
+                    .committed
+            );
+            assert_eq!(store.revision("test").unwrap(), "r1");
+            let mut rb = runtime('b', &address, "43");
+            let mut b = SubmissionAttempt::new(bound(), &"b".repeat(64), &mut rb).unwrap();
+            b.submit_once(&mut rb, &chain, &store).await.unwrap();
+            b.observe_once(&mut rb, &chain, &store).await.unwrap();
+            assert!(
+                !b.commit_private(&mut rb, &store, 3)
+                    .await
+                    .unwrap()
+                    .committed
+            );
+            assert_eq!(
+                store.private_value("test", "claims/used").unwrap().unwrap()["value"],
+                "42"
+            );
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                assert_eq!(
+                    std::fs::metadata(&root).unwrap().permissions().mode() & 0o777,
+                    0o700
+                );
+                assert_eq!(
+                    std::fs::metadata(root.join("state.json"))
+                        .unwrap()
+                        .permissions()
+                        .mode()
+                        & 0o777,
+                    0o600
+                );
+            }
+            // The host directory authenticates the current record. Corruption is rejected,
+            // without treating a self-hash from imported caller bytes as authentication.
+            let mut state: serde_json::Value =
+                serde_json::from_slice(&std::fs::read(root.join("state.json")).unwrap()).unwrap();
+            state["attempts"][&"a".repeat(64)]["bytes"][0] = serde_json::json!(0);
+            std::fs::write(root.join("state.json"), serde_json::to_vec(&state).unwrap()).unwrap();
+            assert_eq!(
+                SubmissionAttempt::recover(&store, &"a".repeat(64))
+                    .await
+                    .err(),
+                Some(Error::Persistence)
+            );
+        });
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn lost_acknowledgement_then_unfinalized_pool_refusal_retains_journal() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut runtime = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &"a".repeat(64), &mut runtime).unwrap();
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            assert_eq!(
+                attempt
+                    .submit_once(&mut runtime, &chain, &store)
+                    .await
+                    .unwrap(),
+                Submission::Uncertain
+            );
+            // The first transaction may already be included at an unfinalized best head.
+            // A subsequent stale/banned/replaced pool response is still uncertain.
+            assert_eq!(
+                attempt
+                    .submit_once(&mut runtime, &chain, &store)
+                    .await
+                    .unwrap(),
+                Submission::Uncertain
+            );
+            assert_eq!(attempt.phase().unwrap(), Phase::Uncertain);
+            assert_eq!(
+                runtime.private_journal().unwrap()["writes"]["claims/used"]["value"],
+                "42"
+            );
+            assert!(
+                attempt
+                    .commit_private(&mut runtime, &store, 1)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(store.cas_calls.get(), 0);
+            assert_eq!(store.applies.get(), 0);
+            assert_eq!(
+                attempt.cancel(&mut runtime, &store).await,
+                Err(Error::CancellationAfterBroadcast)
+            );
+            attempt
+                .observe_once(&mut runtime, &chain, &store)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                attempt
+                    .commit_private(&mut runtime, &store, 1)
+                    .await
+                    .unwrap()
+                    .committed
+            );
+            assert_eq!(store.applies.get(), 1);
+        });
+    }
+    #[test]
+    fn unrelated_runtime_never_loses_writes_or_broadcasts_on_cancel_or_deadline() {
+        block_on(async {
+            let tx = bound();
+            let address = tx.contract_address().to_owned();
+            let mut ra = runtime('a', &address, "42");
+            let mut a = SubmissionAttempt::new(tx, &"a".repeat(64), &mut ra).unwrap();
+            let mut rb = runtime('b', &address, "43");
+            let _b = SubmissionAttempt::new(bound(), &"b".repeat(64), &mut rb).unwrap();
+            let store = MemoryStore::default();
+            let chain = FakeChain::new();
+            assert_eq!(a.cancel(&mut rb, &store).await, Err(Error::Identity));
+            assert_eq!(a.deadline(&mut rb, &store).await, Err(Error::Identity));
+            assert_eq!(
+                a.submit_once(&mut rb, &chain, &store).await.err(),
+                Some(Error::Identity)
+            );
+            assert_eq!(
+                a.observe_once(&mut rb, &chain, &store).await.err(),
+                Some(Error::Identity)
+            );
+            assert_eq!(
+                rb.private_journal().unwrap()["writes"]["claims/used"]["value"],
+                "43"
+            );
+            assert_eq!(rb.public_status()["phase"], "prepared");
+            assert!(store.saved.borrow().is_empty());
+            assert!(chain.sent.borrow().is_empty());
+            a.cancel(&mut ra, &store).await.unwrap();
+            assert_eq!(ra.public_status()["phase"], "cancelled");
+            assert_eq!(rb.public_status()["phase"], "prepared");
+        });
+    }
+}

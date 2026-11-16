@@ -12,6 +12,7 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 default = ["zkir-320"]
 zkir-320 = ["dep:zkir-320"]
 zkir-321 = ["dep:zkir-321"]
+localnet = ["dep:reqwest", "dep:bip32", "dep:frame-metadata", "dep:scale-info", "dep:parity-scale-codec", "dep:scale-value", "dep:blake2", "dep:libc"]
 
 [dependencies]
 anyhow = "1.0.102"
@@ -25,6 +26,15 @@ rand = "0.8"
 futures = "0.3"
 midnight-proofs = "=0.8.3"
 midnight-zk-stdlib = "=2.4.0"
+builtin-zkir = { package = "midnight-zkir", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
+reqwest = { version = "0.13.5", default-features = false, features = ["blocking", "json", "rustls"], optional = true }
+bip32 = { version = "0.5.3", optional = true }
+frame-metadata = { version = "23", optional = true }
+scale-info = { version = "2.11", optional = true }
+parity-scale-codec = { version = "3.7", optional = true }
+scale-value = { version = "0.18", optional = true }
+blake2 = { version = "0.10.6", optional = true }
+libc = { version = "0.2", optional = true }
 ledger = { package = "midnight-ledger-v9", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 onchain-runtime = { package = "midnight-onchain-runtime", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 base-crypto = { package = "midnight-base-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
@@ -43,3 +53,7 @@ midnight-storage-core = { git = "https://github.com/midnightntwrk/midnight-ledge
 
 [profile.dev]
 opt-level = 1
+
+[[example]]
+name = "native_client"
+required-features = ["localnet"]
