@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-16",
+  "scope": "DF00 scalar source policy and authorized standalone native relation; no ledger transaction or full noninterference claim",
+  "source": "examples/Disclosure.lean",
+  "sourceSha256": "15fac27ee9c0e6e74f1f083d34d9c653f273f40c6a079fcd3de5d36ec7feb2d2",
+  "circuitSha256": "32aeeeddc2e01475a0fba8b2a8d908c76a1bd9fcd8d041eccf0da04bbf82de16",
+  "proverKeySha256": "034f98bb331c0c2f85c72d24c8cde4de0f33425779ad54bc2042729c54d7e4d4",
+  "verifierKeySha256": "1c402cac98943ffb94eec86315dc6bc53397975cd926235276c583ec643187fa",
+  "proofBytes": 3468,
+  "proofSha256": "1c601af917dcb2e2cf24fd48bd653c680b72fc586fbd43473ae678c1246924f8",
+  "parametersSha256": "0a1c9229f315fc1868ff25f668fb83aec4d09f4f23a706b5197c692c619d72c6",
+  "nativeZkir": {
+    "version": "3.2.0",
+    "revision": "446c7fecc6bd41dab99ebe89ab404e9d077d11a9",
+    "k": 5,
+    "rows": 13
+  },
+  "proofServer": "9.0.0",
+  "rawWitnessCases": {
+    "file": "tests/disclosure/constraint-cases.json",
+    "count": 8,
+    "checkerVersions": [
+      "3.2.0",
+      "3.2.1"
+    ],
+    "runtimeValidationBypassed": true
+  },
+  "nativeVerifier": {
+    "test": "runtime/tests/disclosure_verification.rs",
+    "validProofAccepted": true,
+    "changedBindingRejected": true,
+    "changedPublicInputRejected": true,
+    "changedReleasedOutputRejected": true,
+    "changedProofBytesRejected": true,
+    "nodeInvoked": false
+  },
+  "compilerPolicy": {
+    "privateDataAndSelectPredicatePropagation": true,
+    "explicitValueScopedDisclose": true,
+    "controlOriginsSeparate": true,
+    "independentReview": "approved within stated scalar scope",
+    "priorScalarArtifactsByteIdentical": 17
+  },
+  "ledgerTransactionSubmitted": false,
+  "unverified": [
+    "structured guarded effects",
+    "composite/function propagation",
+    "timing/failure channels",
+    "whole-program noninterference",
+    "end-to-end source-to-native preservation"
+  ]
+}

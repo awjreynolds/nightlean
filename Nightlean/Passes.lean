@@ -20,6 +20,7 @@ theorem prune_validation (caps : Capabilities) (env : TypeEnv) (span : SourceSpa
     | eq a b => simp only [pruneTrue, validateConstraints, ih]
     | select condition a b => simp only [pruneTrue, validateConstraints, ih]
     | cast target value => simp only [pruneTrue, validateConstraints, ih]
+    | disclose span value => simp only [pruneTrue, validateConstraints, ih]
 
 theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
     (conditions : List (Expr .bool)) :
@@ -33,10 +34,31 @@ theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
     | eq a b => simp only [pruneTrue, runConstraints, ih]
     | select condition a b => simp only [pruneTrue, runConstraints, ih]
     | cast target value => simp only [pruneTrue, runConstraints, ih]
+    | disclose span value => simp only [pruneTrue, runConstraints, ih]
 
 theorem pruneCircuit_validate (caps : Capabilities) (c : Circuit) :
     (pruneCircuit c).validate caps = c.validate caps := by
   simp only [Circuit.validate, pruneCircuit, prune_validation]
+  rfl
+
+theorem prune_disclosure_constraints (env : Disclosure.Environment) (span : SourceSpan)
+    (conditions : List (Expr .bool)) :
+    Disclosure.checkConstraints env span (pruneTrue conditions) =
+      Disclosure.checkConstraints env span conditions := by
+  induction conditions with
+  | nil => rfl
+  | cons condition rest ih =>
+    cases condition with
+    | bool b => cases b <;> simp [pruneTrue, Disclosure.checkConstraints_literal, ih]
+    | ref name => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | eq a b => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | select condition a b => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | cast target value => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | disclose span value => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+
+theorem pruneCircuit_disclosure (c : Circuit) (control : Disclosure.Origins) :
+    Disclosure.circuit (pruneCircuit c) control = Disclosure.circuit c control := by
+  simp only [Disclosure.circuit, pruneCircuit, prune_disclosure_constraints]
   rfl
 
 /-- Complete executable semantics equality includes input validation, exact errors,
@@ -52,6 +74,13 @@ theorem pruneCircuit_run (ctx : EvalContext) (env : EvalEnv) (c : Circuit) :
 def pruneEntrypoint (entry : Entrypoint) : Entrypoint :=
   {entry with circuit := pruneCircuit entry.circuit}
 
+theorem pruneEntrypoint_disclosure (entry : Entrypoint) (control : Disclosure.Origins) :
+    Disclosure.entrypoint (pruneEntrypoint entry) control = Disclosure.entrypoint entry control := by
+  unfold Disclosure.entrypoint
+  dsimp only [pruneEntrypoint]
+  rw [pruneCircuit_disclosure]
+  rfl
+
 theorem pruneEntrypoint_validate (caps : Capabilities) (state : List StateDecl) (entry : Entrypoint) :
     (pruneEntrypoint entry).validate caps state = entry.validate caps state := by
   unfold Entrypoint.validate
@@ -63,8 +92,8 @@ theorem pruneEntrypoint_run (ctx : EvalContext) (env : EvalEnv)
     (state : LedgerState) (entry : Entrypoint) :
     (pruneEntrypoint entry).run ctx env state = entry.run ctx env state := by
   unfold Entrypoint.run
+  rw [pruneEntrypoint_disclosure]
   dsimp only [pruneEntrypoint]
   rw [pruneCircuit_run]
-  rfl
 
 end Nightlean.Passes

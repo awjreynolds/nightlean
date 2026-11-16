@@ -27,6 +27,7 @@ private def expressionJson : Expr ty → Json
   | .umul a b => Json.mkObj [("umul", toJson [expressionJson a, expressionJson b])]
   | .cast target value => Json.mkObj [("cast", Json.mkObj [
       ("type", toJson (typeName target)), ("value", expressionJson value)])]
+  | .disclose _ value => expressionJson value
   | .eq a b => Json.mkObj [("eq", toJson [expressionJson a, expressionJson b])]
   | .select c a b => Json.mkObj [("select", toJson [expressionJson c, expressionJson a, expressionJson b])]
   | .poseidon2 domain a b => Json.mkObj [("poseidon2", Json.mkObj [
@@ -48,6 +49,7 @@ private def nativeExpressionJson : Expr ty → Json
   | .umul (m := m) (n := n) a b => unsigned "umul" (m * n) (nativeExpressionJson a) (nativeExpressionJson b)
   | .cast target value => Json.mkObj [("tag", toJson ("cast" : String)),
       ("type", toJson (typeName target)), ("value", nativeExpressionJson value)]
+  | .disclose _ value => nativeExpressionJson value
   | .eq a b => binary "eq" (nativeExpressionJson a) (nativeExpressionJson b)
   | .select c a b => Json.mkObj [("tag", toJson ("select" : String)),
       ("condition", nativeExpressionJson c), ("yes", nativeExpressionJson a), ("no", nativeExpressionJson b)]
@@ -116,7 +118,10 @@ private unsafe def registeredCircuits : CommandElabM (Array (Name × Circuit)) :
       let circuit ← evalConstCheck Circuit ``Circuit info.declName
       match circuit.validate sourceCapabilities with
       | .error d => failDiagnostic d
-      | .ok _ => circuits := circuits.push (info.declName, circuit)
+      | .ok _ =>
+        match Disclosure.circuit circuit with
+        | .error d => failDiagnostic d
+        | .ok _ => circuits := circuits.push (info.declName, circuit)
   return circuits
 
 private unsafe def registeredContracts : CommandElabM (Array (Name × Contract)) := do
@@ -127,7 +132,10 @@ private unsafe def registeredContracts : CommandElabM (Array (Name × Contract))
       let contract ← evalConstCheck Contract ``Contract name
       match contract.validate sourceCapabilities with
       | .error d => failDiagnostic d
-      | .ok _ => contracts := contracts.push (name, contract)
+      | .ok _ =>
+        match Disclosure.contract contract with
+        | .error d => failDiagnostic d
+        | .ok _ => contracts := contracts.push (name, contract)
   return contracts
 
 private def artifactName (name : Name) : String := name.toString

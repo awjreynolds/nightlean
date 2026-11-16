@@ -1,4 +1,4 @@
-import Nightlean.IR
+import Nightlean.Disclosure
 
 namespace Nightlean
 
@@ -89,6 +89,7 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     scalarCast ctx (.uint m) (a - b)
   | .cast (source := source) target value => do
     scalarCast ctx target (scalarNumber source (← value.eval ctx env))
+  | .disclose _ value => value.eval ctx env
   | .eq (ty := ty) a b => do
     pure (sameValue ty (← a.eval ctx env) (← b.eval ctx env))
   | .select c a b => do
@@ -110,6 +111,9 @@ def runConstraints (ctx : EvalContext) (env : EvalEnv) : List (Expr .bool) → E
     | .error message => .error message
     | .ok false => .error "circuit constraint failed"
     | .ok true => runConstraints ctx env rest
+
+theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSpan) (value : Expr ty) :
+    (Expr.disclose span value).eval ctx env = value.eval ctx env := by rfl
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
   match c.validate {nativeModulus := ctx.modulus, poseidon2 := true} with
@@ -178,10 +182,11 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
 /-- This is a specification evaluator, not a substitute for ledger proof checks. -/
 def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
     (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
+  match Disclosure.entrypoint entry with
+  | .error diagnostic => throw diagnostic.message
+  | .ok _ => pure ()
   let outputs ← entry.circuit.run ctx env
-  let publicNames := (entry.circuit.inputs.filter (·.visibility == .«public»)).map (·.name)
-  let publicEnv := env.filter fun item => publicNames.contains item.1
-  let next ← runEffects ctx entry.effects (outputs ++ publicEnv) state
+  let next ← runEffects ctx entry.effects (outputs ++ env) state
   pure (outputs, next)
 
 /-- A small optimization whose correctness does not depend on the backend or hash. -/
@@ -205,6 +210,7 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
     | eq a b => simp [pruneTrue, ConstraintsHold, ih]
     | select condition a b => simp [pruneTrue, ConstraintsHold, ih]
     | cast target value => simp [pruneTrue, ConstraintsHold, ih]
+    | disclose span value => simp [pruneTrue, ConstraintsHold, ih]
 
 theorem unsigned_addition_no_wrap (a b m n : Nat) (ha : a ≤ m) (hb : b ≤ n)
     (hbound : m + n ≤ ScalarPolicy.maxUint) : (a + b) % Field.modulus = a + b :=

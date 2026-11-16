@@ -1,6 +1,7 @@
 import Nightlean.IR
 import Nightlean.Field
 import Nightlean.Semantics
+import Nightlean.Disclosure
 
 namespace Nightlean.Backend.Impact
 
@@ -71,6 +72,7 @@ Native field alignment. Membership results use the VM's byte-aligned boolean.
 The plan is not deployable until its fields are bound by the relation producer. -/
 def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan := do
   entry.validate {poseidon2 := true, stateCells := true, stateMaps := true} state
+  Disclosure.entrypoint entry
   let result : Except String Plan := do
     let mut plan : Plan := {}
     let sourceNames := entry.circuit.inputs.map (·.name) ++ entry.circuit.outputs.map (·.name) ++

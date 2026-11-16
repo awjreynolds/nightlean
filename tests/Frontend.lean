@@ -43,12 +43,10 @@ nightlean_circuit duplicateInput where
   private same : Native
 end
 
-/-- error: unknown Nightlean value 'secret' -/
-#guard_msgs in
-nightlean_contract PrivateLeak where
+nightlean_contract PrivateRelease where
   cell value : Native
   entry leak uses arithmeticRelation where
-    write value := secret
+    write value := disclose(secret)
   end
 end
 

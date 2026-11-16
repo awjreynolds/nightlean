@@ -12,7 +12,8 @@ def lowererFixture : Circuit := {
   constraints := [.eq
     (.poseidon2 256 (.select (.ref "direction") (.ref "secret") (.native 7)) (.native 0))
     (.ref "root")]
-  outputs := [{name := "nullifier", ty := .native, value := .poseidon2 2 (.ref "secret") (.native 0)}]
+  outputs := [{name := "nullifier", ty := .native, value :=
+    (.disclose {file := "tests/Zkir.lean", line := 16} (.poseidon2 2 (.ref "secret") (.native 0)))}]
 }
 
 def main : IO Unit := do

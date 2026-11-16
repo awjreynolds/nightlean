@@ -35,7 +35,7 @@ private def contract : Contract := {
 -- Direct private witness access from a state write is forbidden.
 private def leakingEntry : Entrypoint := {entry with effects := [
   .writeMap "spent" .native .bool (.ref "secret") (.bool true)]}
-#guard match leakingEntry.validate caps contract.state with | .error _ => true | _ => false
+#guard match Disclosure.entrypoint leakingEntry with | .error _ => true | _ => false
 -- Public output binding must not shadow an input.
 #guard match ({entry with circuit := {circuit with outputs := [
   ⟨"root", .native, .native 3, {}⟩]}} : Entrypoint).validate caps contract.state with

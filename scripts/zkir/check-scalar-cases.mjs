@@ -4,10 +4,10 @@ import {readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 
-const [directory,checkerPath,...extra]=process.argv.slice(2);
-if(!directory||extra.length)throw Error('Usage: node scripts/zkir/check-scalar-cases.mjs EMITTED_DIRECTORY [OFFICIAL_CHECKER_MODULE]');
+const [directory,checkerPath,casesPath,...extra]=process.argv.slice(2);
+if(!directory||extra.length)throw Error('Usage: node scripts/zkir/check-scalar-cases.mjs EMITTED_DIRECTORY [OFFICIAL_CHECKER_MODULE [CASES_JSON]]');
 const {Zkir,check}=checkerPath?await import(pathToFileURL(resolve(checkerPath)).href):await import('@midnightntwrk/zkir-v3');
-const cases=JSON.parse(await readFile(new URL('../../tests/scalars/constraint-cases.json',import.meta.url),'utf8'));
+const cases=JSON.parse(await readFile(casesPath?resolve(casesPath):new URL('../../tests/scalars/constraint-cases.json',import.meta.url),'utf8'));
 const modulus=52435875175126190479447740508185965837690552500527637822603658699938581184513n;
 function scaleCompact(value){
  let n=BigInt(value);

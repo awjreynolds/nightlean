@@ -22,6 +22,10 @@ inductive Visibility where
   | «public» | «private»
   deriving Repr, BEq, DecidableEq, Inhabited
 
+inductive PrivateOriginKind where
+  | parameter | provider | privateState
+  deriving Repr, BEq, DecidableEq
+
 /-- Every expression carries its result type, independently of a backend. -/
 inductive Expr : Ty → Type where
   | native (value : Nat) : Expr .native
@@ -35,6 +39,7 @@ inductive Expr : Ty → Type where
   | usub (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint m)
   | umul (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint (m * n))
   | cast (target : Ty) (value : Expr source) : Expr target
+  | disclose (span : SourceSpan) (value : Expr ty) : Expr ty
   | eq (a b : Expr ty) : Expr .bool
   | select (condition : Expr .bool) (yes no : Expr ty) : Expr ty
   | poseidon2 (domain : Nat) (a b : Expr .native) : Expr .native
@@ -60,6 +65,9 @@ structure Circuit where
   outputs : List Output := []
   constraints : List (Expr .bool) := []
   span : SourceSpan := {}
+  /-- Private provenance labels for declared provider/private-state input fixtures.
+  These strengthen visibility and never authorize disclosure. -/
+  privateOrigins : List (String × PrivateOriginKind) := []
   deriving Repr
 
 inductive StateKind where
@@ -90,6 +98,7 @@ structure Entrypoint where
   circuit : Circuit
   effects : List Effect := []
   span : SourceSpan := {}
+  effectSpans : List SourceSpan := []
   deriving Repr
 
 structure Contract where
@@ -145,6 +154,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .cast target value => do
     target.validate caps
     value.validate caps env
+  | .disclose _ value => value.validate caps env
   | .eq a b => do
     if !caps.equality then throw "target lacks equality"
     a.validate caps env
@@ -208,7 +218,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
-  let mut env := (e.circuit.inputs.filter (·.visibility == .«public»)).map fun i => (i.name, i.ty)
+  -- Typing permits private operands. Mandatory disclosure analysis decides
+  -- whether their value/control dependence is authorized at a public sink.
+  let mut env := e.circuit.inputs.map fun i => (i.name, i.ty)
   for output in e.circuit.outputs do
     if (e.circuit.inputs.find? (·.name == output.name)).isSome then
       throw {span := output.span, message := s!"output '{output.name}' shadows a circuit input"}

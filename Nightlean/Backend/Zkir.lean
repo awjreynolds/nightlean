@@ -21,6 +21,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .add a b | .mul a b | .sub a b | .eq a b
   | .uadd a b | .usub a b | .umul a b => do checkConstants a; checkConstants b
   | .cast _ value => checkConstants value
+  | .disclose _ value => checkConstants value
   | .select c a b => do checkConstants c; checkConstants a; checkConstants b
   | .poseidon2 domain a b => do
     unless domain < nativeModulus do throw "noncanonical Poseidon domain tag"
@@ -125,6 +126,7 @@ private def lowerExpr : Expr ty → LowerM String
     | .uint maximum => do
       constrainUnsigned maximum output
       pure output
+  | .disclose _ value => lowerExpr value
   | .eq a b => do binary "test_eq" (← lowerExpr a) (← lowerExpr b)
   | .select condition yes no => do
     let bit ← lowerExpr condition
@@ -170,6 +172,7 @@ private def lowerBody (c : Circuit) : LowerM Unit := do
 Public values are explicitly bound with Impact. The surrounding contract must
 still bind this public-input sequence to its accepted ledger call transcript. -/
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
+  Disclosure.circuit c
   let c := Passes.pruneCircuit c
   c.validate { poseidon2 := true }
   for condition in c.constraints do

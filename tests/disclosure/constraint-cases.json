@@ -1,0 +1,10 @@
+[
+  {"id":"DISCLOSURE-RELEASE","circuit":"authorizedRelease","private":["42"],"publicInputs":["42","42"],"publicReads":["42"],"activityGroups":2,"accepted":true},
+  {"id":"DISCLOSURE-WRONG-PUBLIC-INPUT","circuit":"authorizedRelease","private":["42"],"publicInputs":["43","42"],"publicReads":["43"],"accepted":false},
+  {"id":"DISCLOSURE-CHANGED-RELEASE","circuit":"authorizedRelease","private":["42"],"publicInputs":["42","43"],"publicReads":["42"],"accepted":false},
+  {"id":"DISCLOSURE-RANGE-CHECK-RETAINED","circuit":"authorizedRelease","private":["256"],"publicInputs":["256","256"],"publicReads":["256"],"accepted":false},
+  {"id":"DISCLOSURE-PREDICATE-TRUE","circuit":"authorizedPredicate","private":["1"],"publicInputs":["1"],"publicReads":[],"activityGroups":1,"accepted":true},
+  {"id":"DISCLOSURE-PREDICATE-FALSE","circuit":"authorizedPredicate","private":["0"],"publicInputs":["0"],"publicReads":[],"activityGroups":1,"accepted":true},
+  {"id":"DISCLOSURE-CHANGED-PREDICATE-RESULT","circuit":"authorizedPredicate","private":["1"],"publicInputs":["0"],"publicReads":[],"accepted":false},
+  {"id":"DISCLOSURE-MALFORMED-PREDICATE","circuit":"authorizedPredicate","private":["2"],"publicInputs":["1"],"publicReads":[],"accepted":false}
+]

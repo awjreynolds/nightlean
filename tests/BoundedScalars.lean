@@ -10,28 +10,28 @@ nightlean_circuit unsignedSum where
   private right : UInt 8
   let sum : UIntRange 511 := add(left, right)
   assert eq(sum, expected)
-  output result : UIntRange 511 := sum
+  output result : UIntRange 511 := disclose(sum)
 end
 
 nightlean_circuit unsignedProduct where
   private left : UInt 8
   private right : UInt 8
-  output result : UIntRange 65026 := mul(left, right)
+  output result : UIntRange 65026 := disclose(mul(left, right))
 end
 
 nightlean_circuit unsignedDifference where
   private left : UInt 8
   private right : UInt 8
-  output result : UInt 8 := sub(left, right)
+  output result : UInt 8 := disclose(sub(left, right))
 end
 
 nightlean_circuit scalarCasts where
   private field : Native
   private flag : Bool
-  output narrowed : UInt 8 := cast(UInt 8, field)
-  output truthy : Bool := cast(Bool, field)
-  output bit : UInt 1 := cast(UInt 1, flag)
-  output widened : Native := cast(Native, cast(UInt 8, field))
+  output narrowed : UInt 8 := disclose(cast(UInt 8, field))
+  output truthy : Bool := disclose(cast(Bool, field))
+  output bit : UInt 1 := disclose(cast(UInt 1, flag))
+  output widened : Native := disclose(cast(Native, cast(UInt 8, field)))
 end
 
 nightlean_circuit scalarDefaults where
@@ -48,56 +48,56 @@ nightlean_circuit unusedUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : UInt 8 := sub(left, right)
-  output value : UInt 8 := left
+  output value : UInt 8 := disclose(left)
 end
 
 nightlean_circuit unusedNarrowing where
   private field : Native
   let ignored : Native := cast(Native, cast(UInt 8, field))
-  output value : Native := field
+  output value : Native := disclose(field)
 end
 
 nightlean_circuit unusedBooleanUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Bool := eq(sub(left, right), uint(0))
-  output value : UInt 8 := left
+  output value : UInt 8 := disclose(left)
 end
 
 nightlean_circuit unusedNativeUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Native := add(sub(left, right), 0)
-  output value : UInt 8 := left
+  output value : UInt 8 := disclose(left)
 end
 
 nightlean_circuit unusedHashUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Native := poseidon2(1, sub(left, right), 0)
-  output value : UInt 8 := left
+  output value : UInt 8 := disclose(left)
 end
 
 nightlean_circuit unusedSelectionUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Bool := select(false, eq(sub(left, right), uint(0)), false)
-  output value : UInt 8 := left
+  output value : UInt 8 := disclose(left)
 end
 
 nightlean_circuit zeroBound where
   private zero : UInt 0
-  output value : UInt 0 := zero
+  output value : UInt 0 := disclose(zero)
 end
 
 nightlean_circuit zeroNarrowing where
   private flag : Bool
-  output zero : UInt 0 := cast(UInt 0, flag)
+  output zero : UInt 0 := disclose(cast(UInt 0, flag))
 end
 
 nightlean_circuit topWidth where
   private value : UInt 248
-  output result : UInt 248 := value
+  output result : UInt 248 := disclose(value)
 end
 
 nightlean_contract UnsignedLedger where

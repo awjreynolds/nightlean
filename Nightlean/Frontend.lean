@@ -1,4 +1,4 @@
-import Nightlean.IR
+import Nightlean.Disclosure
 import Lean
 
 namespace Nightlean
@@ -40,6 +40,7 @@ scoped syntax "sub(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "uint(" num ")" : nlexpr
 scoped syntax "cast(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "default(" nltype ")" : nlexpr
+scoped syntax "disclose(" nlexpr ")" : nlexpr
 scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
@@ -125,6 +126,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   match stx with
   | `(nlexpr| cast($_:nltype, $_:nlexpr)) => Bool.true
   | `(nlexpr| sub($_:nlexpr, $_:nlexpr)) => Bool.true
+  | `(nlexpr| disclose($value)) => hasPartialScalar value
   | `(nlexpr| add($a, $b)) | `(nlexpr| mul($a, $b))
   | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
@@ -156,6 +158,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .native => pure (.native, ← `(Nightlean.Expr.native 0))
     | .bool => pure (.bool, ← `(Nightlean.Expr.bool Bool.false))
     | .uint maximum => pure (target, ← `(Nightlean.Expr.uint $(natTerm maximum) 0))
+  | `(nlexpr| disclose($value)) =>
+    let (ty, value) ← expression env value
+    pure (ty, ← `(Nightlean.Expr.disclose $(← spanTerm stx) $value))
   | `(nlexpr| add($a, $b)) =>
     arithmetic env stx .add a b
   | `(nlexpr| mul($a, $b)) =>
@@ -227,6 +232,22 @@ private def ensureFresh (env : Bindings) (id : TSyntax `ident) : CommandElabM Un
   if env.any (fun p => p.1 == id.getId.toString) then
     throwErrorAt id "duplicate Nightlean value '{id.getId}'"
 
+private def failDisclosure (diagnostic : Diagnostic) : CommandElabM Unit :=
+  throwError "{diagnostic.span.file}:{diagnostic.span.line}:{diagnostic.span.column}: {diagnostic.message}"
+
+/-- Evaluate only the typed AST definitions constructed by these elaborators. -/
+private unsafe def checkGeneratedCircuit (name : Name) : CommandElabM Unit := do
+  let value ← evalConstCheck Circuit ``Circuit name
+  match Disclosure.circuit value with
+  | .ok _ => pure ()
+  | .error diagnostic => failDisclosure diagnostic
+
+private unsafe def checkGeneratedContract (name : Name) : CommandElabM Unit := do
+  let value ← evalConstCheck Contract ``Contract name
+  match Disclosure.contract value with
+  | .ok _ => pure ()
+  | .error diagnostic => failDisclosure diagnostic
+
 @[command_elab circuitCommand] def elabCircuit : CommandElab := fun stx => do
   match stx with
   | `(nightlean_circuit $name:ident where $stmts:nlcstmt* end) =>
@@ -276,6 +297,7 @@ private def ensureFresh (env : Bindings) (id : TSyntax `ident) : CommandElabM Un
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId
     elabCommand (← `(def $name : Nightlean.Circuit := { name := $(stringTerm fullName.toString), inputs := [$inputs,*], outputs := [$outputs,*], constraints := [$constraints,*], span := $span }))
+    unsafe checkGeneratedCircuit fullName
     modifyEnv fun e => circuitRegistry.addEntry e {declName := fullName, inputs := inputInfo, publicInputs := publicInputInfo, outputs := outputInfo}
   | _ => throwUnsupportedSyntax
 
@@ -315,9 +337,11 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
         let fullName := (← getCurrNamespace) ++ circuit.getId
         let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
           | throwErrorAt circuit "entrypoint requires a registered Nightlean circuit"
-        let mut env ← addReferences [] (info.publicInputs ++ info.outputs)
+        let mut env ← addReferences [] (info.inputs ++ info.outputs)
         let mut effectTerms : Array (TSyntax `term) := #[]
+        let mut effectSpans : Array (TSyntax `term) := #[]
         for effect in effects do
+          effectSpans := effectSpans.push (← spanTerm effect)
           match effect with
           | `(nleffect| require $value:nlexpr) =>
             effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
@@ -346,11 +370,12 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
               $(← checkedExpression env key kt) $(← checkedExpression env value vt)))
           | _ => throwErrorAt effect "unsupported Nightlean state effect"
         let circuitTerm := mkIdent info.declName
-        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$effectTerms,*], span := $(← spanTerm entryStx) : Nightlean.Entrypoint }))
+        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$effectTerms,*], span := $(← spanTerm entryStx), effectSpans := [$effectSpans,*] : Nightlean.Entrypoint }))
       | _ => throwErrorAt entryStx "unsupported Nightlean entrypoint"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId
     elabCommand (← `(def $name : Nightlean.Contract := {name := $(stringTerm fullName.toString), state := [$stateTerms,*], entrypoints := [$entryTerms,*], span := $span }))
+    unsafe checkGeneratedContract fullName
     modifyEnv fun e => contractRegistry.addEntry e fullName
   | _ => throwUnsupportedSyntax
 
