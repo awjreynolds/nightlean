@@ -1,0 +1,4297 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16",
+  "purpose": "Research baseline, not a parity or release certification",
+  "coverage": "Initial language families plus complete headings from pinned ledger ADT and standard library API references. Not exhaustive semantic-case coverage.",
+  "baseline": {
+    "featureToolchain": "0.36.1",
+    "language": "0.28.0",
+    "compactRuntimeReferenceOnly": "0.21.0",
+    "sourceRepository": "LFDT-Minokawa/compact",
+    "sourceCommit": "7fa3a117c5e7efe9d2c51da04263e5f0b3509144",
+    "sourceTag": "compactc-v0.36.1",
+    "publishedAt": "2026-11-11T18:34:57Z",
+    "emittedZkir": "3.1",
+    "bundledZkir": "3.2.1",
+    "bundledZkirCommit": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "networkMatrixToolchain": "0.36.0",
+    "ledger": "9.1.0.1",
+    "ledgerCommit": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+    "networkOnchainRuntime": "4.0.0",
+    "proofServer": "9.0.0",
+    "qualification": "Latest stable release and network matrix differ. Network qualification of 0.36.1 is not established by matrix."
+  },
+  "nightleanObservation": {
+    "commit": "da3ffa3b61b0948768ca370b2abc391575e1dbae",
+    "sourceInspected": true,
+    "testsRerun": false,
+    "compactDependencyAllowed": false,
+    "localPocZkir": "3.2.0",
+    "localProfileOnchainRuntime": "4.0.1",
+    "localPocOnly": true
+  },
+  "evidenceKinds": {
+    "SEM": "Positive and negative source/type/evaluator cases against pinned documented semantics and independent expected values.",
+    "ZK": "Native lowering plus official checker/prover/verifier, including adversarial witness/public-input cases.",
+    "LEDGER": "Isolated ledger finalized acceptance/rejection, exact state/events, atomicity and transaction binding.",
+    "ABI": "Canonical byte/value representation, bounds, argument/result schema and artifact metadata fixtures.",
+    "HOST": "Same portable artifact and vectors in at least two independent host-language runners.",
+    "PROVENANCE": "Pinned source/tool versions, hashes, build/dependency closure and reproducible artifact manifest."
+  },
+  "statusMeaning": {
+    "missing": "No corresponding supported frontend/native route found in inspected Nightlean source.",
+    "subset": "Some corresponding implementation exists, not full Compact feature equivalence.",
+    "related-subset": "Related example/primitive exists, semantic equivalence to named Compact API unverified."
+  },
+  "sources": {
+    "release": {
+      "url": "https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.36.1"
+    },
+    "matrix": {
+      "url": "https://docs.midnight.network/relnotes/support-matrix",
+      "retrieved": "2026-11-16",
+      "mutable": true
+    },
+    "reference": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/compact-reference.mdx",
+      "blob": "189c5647ec3040cf159765dcfe5a5a02197c6011"
+    },
+    "grammar": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/compact-grammar.mdx",
+      "blob": "39c81b769bcf1cfb6faca488ccfdbc5d0b5c4737"
+    },
+    "adt": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/ledger-adt.mdx",
+      "blob": "785797a1e757e0937648c7c26b173ae08a037897"
+    },
+    "stdlib": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/api/CompactStandardLibrary/exports.md",
+      "blob": "140bede3714fd1228b8dd65dc3903331fb4ce39c"
+    },
+    "stdlibSource": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/standard-library.compact",
+      "blob": "fb7c33bd830d77b2cf0bb223ca0c92103fcbfbac"
+    },
+    "v3Source": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-library.compact",
+      "blob": "9fcdaffbcc99028d811b7691cd2fd14e9c699aa2"
+    },
+    "natives": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/midnight-natives.ss",
+      "blob": "3f461c1fda793e3cadd68df7d8ffb9dca6ca3a7b"
+    },
+    "v3Natives": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-natives.ss",
+      "blob": "109a85cb210b935ede2f34a8838e7d01ba7949fe"
+    },
+    "events": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/midnight-events.ss",
+      "blob": "2e30b979a88f4f03c24f4dfcbf2f68563cb8cfb9"
+    },
+    "serialization": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/expand-serialize.ss",
+      "blob": "f6efd57ad8210dbbb50b2d7a9f61285c503198b9"
+    },
+    "disclosure": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/explicit-disclosure.mdx",
+      "blob": "94ddc8c56d8efd133535175dd1f0d4060612654b"
+    },
+    "ledger": {
+      "url": "https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger-wasm/src/contract.rs",
+      "blob": "c2e8961fd8343e462e7d4698b9f9db275f7fc5a8"
+    },
+    "release0360": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/release-notes/toolchain-0.36.0.md"
+    },
+    "patch": {
+      "url": "https://github.com/LFDT-Minokawa/compact/compare/compactc-v0.36.0...compactc-v0.36.1"
+    }
+  },
+  "features": [
+    {
+      "id": "C-LANG-BOOL",
+      "layer": "language",
+      "surface": "Boolean",
+      "nightleanStatus": "subset",
+      "notes": "Bool values, equality, constants and constraints exist. General Boolean operators and Compact conversion semantics are absent.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [
+        "Nightlean/IR.lean",
+        "Nightlean/Frontend.lean",
+        "tests/IR.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-FIELD",
+      "layer": "language",
+      "surface": "Field arithmetic",
+      "nightleanStatus": "subset",
+      "notes": "Native canonical field literals, add and mul exist. Subtraction, full conversions and mixed Uint arithmetic are absent.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [
+        "Nightlean/Field.lean",
+        "Nightlean/IR.lean",
+        "tests/Field.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-UINT",
+      "layer": "language",
+      "surface": "Uint<n> and Uint<0..n>",
+      "nightleanStatus": "missing",
+      "notes": "Bounds, widening addition/multiplication, rejecting negative subtraction, narrowing checks and implementation limits.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-BYTES",
+      "layer": "language",
+      "surface": "Bytes<n>",
+      "nightleanStatus": "missing",
+      "notes": "Byte literals, padding, conversion, canonical encoding and length bounds.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-VECTOR",
+      "layer": "language",
+      "surface": "Vector<n,T>",
+      "nightleanStatus": "missing",
+      "notes": "Fixed-size homogeneous arrays, indexing, slicing, spread and bounds.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-TUPLE",
+      "layer": "language",
+      "surface": "Tuple and unit []",
+      "nightleanStatus": "missing",
+      "notes": "Heterogeneous tuples, vector subtyping, destructuring, access, spread and unit returns.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-STRUCT",
+      "layer": "language",
+      "surface": "Struct",
+      "nightleanStatus": "missing",
+      "notes": "Named fields, defaults, construction, access, destructuring, spread and generic structs.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-ENUM",
+      "layer": "language",
+      "surface": "Enum",
+      "nightleanStatus": "missing",
+      "notes": "Member creation, comparisons, bounds, casts and defaults.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-ALIAS",
+      "layer": "language",
+      "surface": "Structural and nominal type aliases",
+      "nightleanStatus": "missing",
+      "notes": "Distinct nominal identity, arithmetic recasts and generic specialization.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-OPAQUE",
+      "layer": "language",
+      "surface": "Opaque string and Uint8Array",
+      "nightleanStatus": "missing",
+      "notes": "Host-only values and restrictions on circuit usage/serialization must be explicit.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-SUBTYPE",
+      "layer": "language",
+      "surface": "Subtyping and least upper bounds",
+      "nightleanStatus": "missing",
+      "notes": "Compact value semantics need a Lean surface design rather than copied syntax.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-CAST",
+      "layer": "language",
+      "surface": "Type conversions",
+      "nightleanStatus": "missing",
+      "notes": "Each permitted and rejected source/target pair, range failures, byte order and foreign-field restrictions.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-DEFAULT",
+      "layer": "language",
+      "surface": "Type defaults",
+      "nightleanStatus": "missing",
+      "notes": "Defaults for every supported type, including inactive Maybe/Either payloads.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-SELECT",
+      "layer": "language",
+      "surface": "Conditional expressions and branches",
+      "nightleanStatus": "subset",
+      "notes": "select evaluates both arms in Nightlean. This does not establish Compact branch/short-circuit equivalence.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [
+        "Nightlean/Semantics.lean",
+        "scripts/zkir/native-runtime.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-CONTROL",
+      "layer": "language",
+      "surface": "if, short-circuit logic, return, sequencing",
+      "nightleanStatus": "missing",
+      "notes": "Guard witness calls, failed assertions, state effects and event effects correctly.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-LOOP",
+      "layer": "language",
+      "surface": "Statically bounded for loops",
+      "nightleanStatus": "missing",
+      "notes": "Range endpoints constant or nat parameters, or fixed-size vectors/tuples/bytes. Return within loop rejected.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-MAPFOLD",
+      "layer": "language",
+      "surface": "map, fold and anonymous circuits",
+      "nightleanStatus": "missing",
+      "notes": "Do not confuse expression map with ledger Map.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-FUNCTION",
+      "layer": "language",
+      "surface": "Named circuits and circuit calls",
+      "nightleanStatus": "missing",
+      "notes": "Parameters, arity, results, helper calls and recursive-call rejection.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-PURITY",
+      "layer": "language",
+      "surface": "Pure/impure analysis",
+      "nightleanStatus": "missing",
+      "notes": "Pure circuits exclude ledger operations, events and witness calls.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-GENERICS",
+      "layer": "language",
+      "surface": "Type and natural-number generic parameters",
+      "nightleanStatus": "missing",
+      "notes": "Specialization and invalid/recursive instantiation cases.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-MODULE",
+      "layer": "language",
+      "surface": "Modules, imports, exports, includes",
+      "nightleanStatus": "missing",
+      "notes": "Namespace and visibility behavior, top-level exports, generic modules.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-SCOPE",
+      "layer": "language",
+      "surface": "Bindings, patterns and lexical scope",
+      "nightleanStatus": "missing",
+      "notes": "const binding, shadowing, destructuring and left-to-right expression evaluation.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-PRAGMA",
+      "layer": "language",
+      "surface": "Version pragmas and compatibility declarations",
+      "nightleanStatus": "missing",
+      "notes": "Equivalent explicit Nightlean compatibility target, without Compact syntax or toolchain dependency.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-LANG-ASSERT",
+      "layer": "language",
+      "surface": "Assertions",
+      "nightleanStatus": "subset",
+      "notes": "Boolean constraints exist. Failure attribution and unit-valued assertions need equivalence cases.",
+      "source": [
+        "reference",
+        "release0360"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [
+        "Nightlean/IR.lean",
+        "tests/IR.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-PRIVATE-INPUT",
+      "layer": "private-runtime",
+      "surface": "Private inputs and public outputs",
+      "nightleanStatus": "subset",
+      "notes": "Current explicit input visibility supports a fixed claim. No full exported-argument disclosure policy.",
+      "source": [
+        "reference",
+        "disclosure"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "HOST"
+      ],
+      "observedEvidence": [
+        "Nightlean/Frontend.lean",
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-PRIVATE-WITNESS",
+      "layer": "private-runtime",
+      "surface": "Witness declarations and callbacks",
+      "nightleanStatus": "missing",
+      "notes": "General call signatures, context, private-state return, ordering and failure behavior need host-neutral ABI.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-PRIVATE-STATE",
+      "layer": "private-runtime",
+      "surface": "Private-state initialization and evolution",
+      "nightleanStatus": "missing",
+      "notes": "State ownership, persistence and failure/commit boundaries are host responsibilities with shared semantics.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-PRIVATE-DISCLOSURE",
+      "layer": "language",
+      "surface": "Explicit and indirect disclosure analysis",
+      "nightleanStatus": "missing",
+      "notes": "Track private values through data/control flow, outputs, ledger writes, events, cross-calls and declassifying commitments.",
+      "source": [
+        "disclosure",
+        "release0360"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STATE-CONSTRUCTOR",
+      "layer": "language-ledger",
+      "surface": "Contract constructor",
+      "nightleanStatus": "subset",
+      "notes": "Native runtime config initializes scalar cells and explicitly empty maps. No general constructor language or witness initialization.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [
+        "scripts/zkir/native-runtime.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STATE-SEALED",
+      "layer": "language-ledger",
+      "surface": "Sealed ledger fields",
+      "nightleanStatus": "missing",
+      "notes": "Reject mutations reachable from exported circuits, including helper calls.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STATE-NESTED",
+      "layer": "language-ledger",
+      "surface": "Nested ledger ADTs",
+      "nightleanStatus": "missing",
+      "notes": "Map value nesting and typed ledger paths need explicit layout and operation semantics.",
+      "source": [
+        "reference",
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-CONTRACT-INTERFACE",
+      "layer": "language-ledger",
+      "surface": "Contract types and implements",
+      "nightleanStatus": "missing",
+      "notes": "Non-generic provable signatures. Pure interface circuits rejected in 0.36.x.",
+      "source": [
+        "reference",
+        "release0360"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-CONTRACT-CALL",
+      "layer": "language-ledger",
+      "surface": "Cross-contract execution",
+      "nightleanStatus": "missing",
+      "notes": "Bind address, entry-point hash, arguments/results and communication commitment. Enforce conformance, key agreement, no re-entry, witness restrictions.",
+      "source": [
+        "reference",
+        "release0360"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-EVENT-EMIT",
+      "layer": "language-ledger",
+      "surface": "Standard event emission",
+      "nightleanStatus": "missing",
+      "notes": "Only standard event types, ordered VersionedLogItem v1 encoding. Constructor emission rejected. General custom event declarations are not assumed.",
+      "source": [
+        "reference",
+        "events"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ARTIFACT-ZKIR",
+      "layer": "artifact",
+      "surface": "ZKIR and proof/key artifacts",
+      "nightleanStatus": "subset",
+      "notes": "Native .zkir/key generation and one local ledger claim proven. Latest 0.36.1 reference bundles ZKIR 3.2.1, local POC used 3.2.0.",
+      "source": [
+        "reference",
+        "release",
+        "patch"
+      ],
+      "requiredEvidence": [
+        "ZK",
+        "LEDGER",
+        "PROVENANCE"
+      ],
+      "observedEvidence": [
+        "docs/development/native-localnet.md",
+        "scripts/zkir/bootstrap-native.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ARTIFACT-MANIFEST",
+      "layer": "artifact",
+      "surface": "Contract metadata, manifests and source provenance",
+      "nightleanStatus": "subset",
+      "notes": "Native plan/profile hashes and receipts exist. Full exported-type/interface ABI, manifest and artifact validation contract is absent.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "PROVENANCE"
+      ],
+      "observedEvidence": [
+        "Nightlean/Target.lean",
+        "docs/development/native-localnet-receipts.json"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ARTIFACT-HOST",
+      "layer": "artifact-runtime",
+      "surface": "Portable execution and value ABI",
+      "nightleanStatus": "subset",
+      "notes": "Node ESM evaluator exists for Native/Bool and symbolic Impact plan. No second-language implementation or full canonical ABI.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "HOST",
+        "ZK"
+      ],
+      "observedEvidence": [
+        "scripts/zkir/native-runtime.mjs",
+        "scripts/zkir/native-contract.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ARTIFACT-LEDGER",
+      "layer": "artifact-ledger",
+      "surface": "State/transcript/communication binding",
+      "nightleanStatus": "subset",
+      "notes": "One native private claim finalized with exact state match. Multi-call, checkpoints, coins, all ADTs and malicious transcript variations unqualified.",
+      "source": [
+        "ledger"
+      ],
+      "requiredEvidence": [
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-DIAGNOSTIC",
+      "layer": "tooling",
+      "surface": "Static and dynamic diagnostics",
+      "nightleanStatus": "subset",
+      "notes": "Source spans, type/capability errors exist. Need stable error categories and negative corpus, not identical Compact wording.",
+      "source": [
+        "reference"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Nightlean/IR.lean",
+        "Nightlean/Frontend.lean"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-SDK-MAINTENANCE",
+      "layer": "ledger-sdk",
+      "surface": "Authority replacement and verifier-key/IR maintenance",
+      "nightleanStatus": "missing",
+      "notes": "Exposed by ledger SDK, not a Compact language primitive. Include deployment lifecycle tests as a separate compatibility track.",
+      "source": [
+        "ledger",
+        "release0360"
+      ],
+      "requiredEvidence": [
+        "LEDGER",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-SDK-INTEGRATION",
+      "layer": "ledger-sdk",
+      "surface": "Wallet, funding, proof, deployment and indexer integration",
+      "nightleanStatus": "subset",
+      "notes": "Isolated localnet deployment/funding exists for claim. SDK replacement is outside language parity, portable adapters still need qualification.",
+      "source": [
+        "matrix",
+        "ledger"
+      ],
+      "requiredEvidence": [
+        "LEDGER",
+        "HOST"
+      ],
+      "observedEvidence": [
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-NATIVE-POSEIDON",
+      "layer": "nightlean-extension",
+      "surface": "Domain-tagged two-input Poseidon primitive",
+      "nightleanStatus": "subset",
+      "notes": "Native primitive and claim proved. No inference of equivalence to generic transientHash, Merkle leaf hashing or Compact serialization.",
+      "source": [
+        "stdlib",
+        "natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK"
+      ],
+      "observedEvidence": [
+        "Nightlean/IR.lean",
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-BALANCE",
+      "layer": "language-ledger",
+      "surface": "Kernel.balance",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-BALANCEGREATERTHAN",
+      "layer": "language-ledger",
+      "surface": "Kernel.balanceGreaterThan",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-BALANCELESSTHAN",
+      "layer": "language-ledger",
+      "surface": "Kernel.balanceLessThan",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-BLOCKTIMEGREATERTHAN",
+      "layer": "language-ledger",
+      "surface": "Kernel.blockTimeGreaterThan",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-BLOCKTIMELESSTHAN",
+      "layer": "language-ledger",
+      "surface": "Kernel.blockTimeLessThan",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-CALLER",
+      "layer": "language-ledger",
+      "surface": "Kernel.caller",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-CHECKPOINT",
+      "layer": "language-ledger",
+      "surface": "Kernel.checkpoint",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-CLAIMCONTRACTCALL",
+      "layer": "language-ledger",
+      "surface": "Kernel.claimContractCall",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-CLAIMUNSHIELDEDCOINSPEND",
+      "layer": "language-ledger",
+      "surface": "Kernel.claimUnshieldedCoinSpend",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-CLAIMZSWAPCOINRECEIVE",
+      "layer": "language-ledger",
+      "surface": "Kernel.claimZswapCoinReceive",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-CLAIMZSWAPCOINSPEND",
+      "layer": "language-ledger",
+      "surface": "Kernel.claimZswapCoinSpend",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-CLAIMZSWAPNULLIFIER",
+      "layer": "language-ledger",
+      "surface": "Kernel.claimZswapNullifier",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-INCUNSHIELDEDINPUTS",
+      "layer": "language-ledger",
+      "surface": "Kernel.incUnshieldedInputs",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-INCUNSHIELDEDOUTPUTS",
+      "layer": "language-ledger",
+      "surface": "Kernel.incUnshieldedOutputs",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-MINTSHIELDED",
+      "layer": "language-ledger",
+      "surface": "Kernel.mintShielded",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-MINTUNSHIELDED",
+      "layer": "language-ledger",
+      "surface": "Kernel.mintUnshielded",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-KERNEL-SELF",
+      "layer": "language-ledger",
+      "surface": "Kernel.self",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-CELL-READ",
+      "layer": "language-ledger",
+      "surface": "Cell.read",
+      "nightleanStatus": "subset",
+      "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [
+        "Nightlean/IR.lean",
+        "Nightlean/Backend/Impact.lean",
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-CELL-RESETTODEFAULT",
+      "layer": "language-ledger",
+      "surface": "Cell.resetToDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-CELL-WRITE",
+      "layer": "language-ledger",
+      "surface": "Cell.write",
+      "nightleanStatus": "subset",
+      "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [
+        "Nightlean/IR.lean",
+        "Nightlean/Backend/Impact.lean",
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-CELL-WRITECOIN",
+      "layer": "language-ledger",
+      "surface": "Cell.writeCoin",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-COUNTER-DECREMENT",
+      "layer": "language-ledger",
+      "surface": "Counter.decrement",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-COUNTER-INCREMENT",
+      "layer": "language-ledger",
+      "surface": "Counter.increment",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-COUNTER-LESSTHAN",
+      "layer": "language-ledger",
+      "surface": "Counter.lessThan",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-COUNTER-READ",
+      "layer": "language-ledger",
+      "surface": "Counter.read",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-COUNTER-RESETTODEFAULT",
+      "layer": "language-ledger",
+      "surface": "Counter.resetToDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-INSERT",
+      "layer": "language-ledger",
+      "surface": "Set.insert",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-INSERTCOIN",
+      "layer": "language-ledger",
+      "surface": "Set.insertCoin",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-ISEMPTY",
+      "layer": "language-ledger",
+      "surface": "Set.isEmpty",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-MEMBER",
+      "layer": "language-ledger",
+      "surface": "Set.member",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-REMOVE",
+      "layer": "language-ledger",
+      "surface": "Set.remove",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-RESETTODEFAULT",
+      "layer": "language-ledger",
+      "surface": "Set.resetToDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-SIZE",
+      "layer": "language-ledger",
+      "surface": "Set.size",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-SET-ITERATOR",
+      "layer": "host-ledger-view",
+      "surface": "Set.[Symbol.iterator]",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-INSERT",
+      "layer": "language-ledger",
+      "surface": "Map.insert",
+      "nightleanStatus": "subset",
+      "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [
+        "Nightlean/IR.lean",
+        "Nightlean/Backend/Impact.lean",
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-INSERTCOIN",
+      "layer": "language-ledger",
+      "surface": "Map.insertCoin",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-INSERTDEFAULT",
+      "layer": "language-ledger",
+      "surface": "Map.insertDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-ISEMPTY",
+      "layer": "language-ledger",
+      "surface": "Map.isEmpty",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-LOOKUP",
+      "layer": "language-ledger",
+      "surface": "Map.lookup",
+      "nightleanStatus": "missing",
+      "notes": "IR has readMap, but native lowerer explicitly rejects map value reads.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-MEMBER",
+      "layer": "language-ledger",
+      "surface": "Map.member",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-REMOVE",
+      "layer": "language-ledger",
+      "surface": "Map.remove",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-RESETTODEFAULT",
+      "layer": "language-ledger",
+      "surface": "Map.resetToDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-SIZE",
+      "layer": "language-ledger",
+      "surface": "Map.size",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MAP-ITERATOR",
+      "layer": "host-ledger-view",
+      "surface": "Map.[Symbol.iterator]",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-HEAD",
+      "layer": "language-ledger",
+      "surface": "List.head",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-ISEMPTY",
+      "layer": "language-ledger",
+      "surface": "List.isEmpty",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-LENGTH",
+      "layer": "language-ledger",
+      "surface": "List.length",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-POPFRONT",
+      "layer": "language-ledger",
+      "surface": "List.popFront",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-PUSHFRONT",
+      "layer": "language-ledger",
+      "surface": "List.pushFront",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-PUSHFRONTCOIN",
+      "layer": "language-ledger",
+      "surface": "List.pushFrontCoin",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-RESETTODEFAULT",
+      "layer": "language-ledger",
+      "surface": "List.resetToDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-LIST-ITERATOR",
+      "layer": "host-ledger-view",
+      "surface": "List.[Symbol.iterator]",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-CHECKROOT",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.checkRoot",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-INSERT",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.insert",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-INSERTHASH",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.insertHash",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-INSERTHASHINDEX",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.insertHashIndex",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-INSERTINDEX",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.insertIndex",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-INSERTINDEXDEFAULT",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.insertIndexDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-ISFULL",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.isFull",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-RESETTODEFAULT",
+      "layer": "language-ledger",
+      "surface": "MerkleTree.resetToDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-FINDPATHFORLEAF",
+      "layer": "host-ledger-view",
+      "surface": "MerkleTree.findPathForLeaf",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-FIRSTFREE",
+      "layer": "host-ledger-view",
+      "surface": "MerkleTree.firstFree",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-PATHFORLEAF",
+      "layer": "host-ledger-view",
+      "surface": "MerkleTree.pathForLeaf",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-MERKLETREE-ROOT",
+      "layer": "host-ledger-view",
+      "surface": "MerkleTree.root",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-CHECKROOT",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.checkRoot",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-INSERT",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.insert",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-INSERTHASH",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.insertHash",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-INSERTHASHINDEX",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.insertHashIndex",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEX",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.insertIndex",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEXDEFAULT",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.insertIndexDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-ISFULL",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.isFull",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-RESETHISTORY",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.resetHistory",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-RESETTODEFAULT",
+      "layer": "language-ledger",
+      "surface": "HistoricMerkleTree.resetToDefault",
+      "nightleanStatus": "missing",
+      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-FINDPATHFORLEAF",
+      "layer": "host-ledger-view",
+      "surface": "HistoricMerkleTree.findPathForLeaf",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-FIRSTFREE",
+      "layer": "host-ledger-view",
+      "surface": "HistoricMerkleTree.firstFree",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-HISTORY",
+      "layer": "host-ledger-view",
+      "surface": "HistoricMerkleTree.history",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-PATHFORLEAF",
+      "layer": "host-ledger-view",
+      "surface": "HistoricMerkleTree.pathForLeaf",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-ADT-HISTORICMERKLETREE-ROOT",
+      "layer": "host-ledger-view",
+      "surface": "HistoricMerkleTree.root",
+      "nightleanStatus": "missing",
+      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "source": [
+        "adt"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "HOST"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MAYBE",
+      "layer": "standard-library",
+      "surface": "Maybe",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-EITHER",
+      "layer": "standard-library",
+      "surface": "Either",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-JUBJUBSCHNORRSIGNATURE",
+      "layer": "standard-library",
+      "surface": "JubjubSchnorrSignature",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1ECDSASIGNATURE",
+      "layer": "standard-library",
+      "surface": "Secp256k1EcdsaSignature",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1ECDSASIGNATURE",
+      "layer": "standard-library",
+      "surface": "Secp256r1EcdsaSignature",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ED25519SIGNATURE",
+      "layer": "standard-library",
+      "surface": "Ed25519Signature",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEDIGEST",
+      "layer": "standard-library",
+      "surface": "MerkleTreeDigest",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATHENTRY",
+      "layer": "standard-library",
+      "surface": "MerkleTreePathEntry",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATH",
+      "layer": "standard-library",
+      "surface": "MerkleTreePath",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CONTRACTADDRESS",
+      "layer": "standard-library",
+      "surface": "ContractAddress",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHIELDEDCOININFO",
+      "layer": "standard-library",
+      "surface": "ShieldedCoinInfo",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-QUALIFIEDSHIELDEDCOININFO",
+      "layer": "standard-library",
+      "surface": "QualifiedShieldedCoinInfo",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ZSWAPCOINPUBLICKEY",
+      "layer": "standard-library",
+      "surface": "ZswapCoinPublicKey",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHIELDEDSENDRESULT",
+      "layer": "standard-library",
+      "surface": "ShieldedSendResult",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-USERADDRESS",
+      "layer": "standard-library",
+      "surface": "UserAddress",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-PUBLICADDRESS",
+      "layer": "standard-library",
+      "surface": "PublicAddress",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-KERNEL",
+      "layer": "language-ledger",
+      "surface": "kernel",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHIELDEDSPEND",
+      "layer": "language-ledger",
+      "surface": "ShieldedSpend",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHIELDEDRECEIVE",
+      "layer": "language-ledger",
+      "surface": "ShieldedReceive",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHIELDEDMINT",
+      "layer": "language-ledger",
+      "surface": "ShieldedMint",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHIELDEDBURN",
+      "layer": "language-ledger",
+      "surface": "ShieldedBurn",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDSPEND",
+      "layer": "language-ledger",
+      "surface": "UnshieldedSpend",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDRECEIVE",
+      "layer": "language-ledger",
+      "surface": "UnshieldedReceive",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDMINT",
+      "layer": "language-ledger",
+      "surface": "UnshieldedMint",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDBURN",
+      "layer": "language-ledger",
+      "surface": "UnshieldedBurn",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-PAUSED",
+      "layer": "language-ledger",
+      "surface": "Paused",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNPAUSED",
+      "layer": "language-ledger",
+      "surface": "Unpaused",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MISC",
+      "layer": "language-ledger",
+      "surface": "Misc",
+      "nightleanStatus": "missing",
+      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "source": [
+        "stdlib",
+        "events",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "ABI",
+        "ZK",
+        "LEDGER"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SOME",
+      "layer": "standard-library",
+      "surface": "some",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-NONE",
+      "layer": "standard-library",
+      "surface": "none",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-LEFT",
+      "layer": "standard-library",
+      "surface": "left",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-RIGHT",
+      "layer": "standard-library",
+      "surface": "right",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-TRANSIENTHASH",
+      "layer": "standard-library",
+      "surface": "transientHash",
+      "nightleanStatus": "related-subset",
+      "notes": "Nightlean poseidon2 exists, generic input alignment and exact Compact hash domain/padding unverified.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-TRANSIENTCOMMIT",
+      "layer": "standard-library",
+      "surface": "transientCommit",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-PERSISTENTHASH",
+      "layer": "standard-library",
+      "surface": "persistentHash",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-PERSISTENTCOMMIT",
+      "layer": "standard-library",
+      "surface": "persistentCommit",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-DEGRADETOTRANSIENT",
+      "layer": "standard-library",
+      "surface": "degradeToTransient",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UPGRADEFROMTRANSIENT",
+      "layer": "standard-library",
+      "surface": "upgradeFromTransient",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-KECCAK256",
+      "layer": "standard-library",
+      "surface": "keccak256",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHA512",
+      "layer": "standard-library",
+      "surface": "sha512",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-JUBJUBPOINT",
+      "layer": "standard-library",
+      "surface": "JubjubPoint",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-JUBJUBSCALAR",
+      "layer": "standard-library",
+      "surface": "JubjubScalar",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CONSTRUCTJUBJUBPOINT",
+      "layer": "standard-library",
+      "surface": "constructJubjubPoint",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-JUBJUBPOINTX",
+      "layer": "standard-library",
+      "surface": "jubjubPointX",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-JUBJUBPOINTY",
+      "layer": "standard-library",
+      "surface": "jubjubPointY",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1POINT",
+      "layer": "standard-library",
+      "surface": "Secp256k1Point",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1BASE",
+      "layer": "standard-library",
+      "surface": "Secp256k1Base",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1SCALAR",
+      "layer": "standard-library",
+      "surface": "Secp256k1Scalar",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1POINTX",
+      "layer": "standard-library",
+      "surface": "secp256k1PointX",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1POINTY",
+      "layer": "standard-library",
+      "surface": "secp256k1PointY",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1POINT",
+      "layer": "standard-library",
+      "surface": "Secp256r1Point",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1BASE",
+      "layer": "standard-library",
+      "surface": "Secp256r1Base",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1SCALAR",
+      "layer": "standard-library",
+      "surface": "Secp256r1Scalar",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1POINTX",
+      "layer": "standard-library",
+      "surface": "secp256r1PointX",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1POINTY",
+      "layer": "standard-library",
+      "surface": "secp256r1PointY",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CURVE25519POINT",
+      "layer": "standard-library",
+      "surface": "Curve25519Point",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CURVE25519BASE",
+      "layer": "standard-library",
+      "surface": "Curve25519Base",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CURVE25519SCALAR",
+      "layer": "standard-library",
+      "surface": "Curve25519Scalar",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CURVE25519POINTX",
+      "layer": "standard-library",
+      "surface": "curve25519PointX",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CURVE25519POINTY",
+      "layer": "standard-library",
+      "surface": "curve25519PointY",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ECADD",
+      "layer": "standard-library",
+      "surface": "ecAdd",
+      "nightleanStatus": "missing",
+      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ECNEG",
+      "layer": "standard-library",
+      "surface": "ecNeg",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ECMUL",
+      "layer": "standard-library",
+      "surface": "ecMul",
+      "nightleanStatus": "missing",
+      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ECMULGENERATOR",
+      "layer": "standard-library",
+      "surface": "ecMulGenerator",
+      "nightleanStatus": "missing",
+      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-NEG",
+      "layer": "standard-library",
+      "surface": "neg",
+      "nightleanStatus": "missing",
+      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-INV",
+      "layer": "standard-library",
+      "surface": "inv",
+      "nightleanStatus": "missing",
+      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-HASHTOCURVE",
+      "layer": "standard-library",
+      "surface": "hashToCurve",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-JUBJUBSCHNORRVERIFY",
+      "layer": "standard-library",
+      "surface": "jubjubSchnorrVerify",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1ECDSAVERIFY",
+      "layer": "standard-library",
+      "surface": "secp256k1EcdsaVerify",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256K1ETHEREUMADDRESS",
+      "layer": "standard-library",
+      "surface": "secp256k1EthereumAddress",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SECP256R1ECDSAVERIFY",
+      "layer": "standard-library",
+      "surface": "secp256r1EcdsaVerify",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-ED25519VERIFY",
+      "layer": "standard-library",
+      "surface": "ed25519Verify",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATHROOT",
+      "layer": "standard-library",
+      "surface": "merkleTreePathRoot",
+      "nightleanStatus": "related-subset",
+      "notes": "Claim example computes a selected fixed-depth path, not this generic library API or standard leaf hash.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATHROOTNOLEAFHASH",
+      "layer": "standard-library",
+      "surface": "merkleTreePathRootNoLeafHash",
+      "nightleanStatus": "related-subset",
+      "notes": "Claim example computes a selected fixed-depth path, not this generic library API or standard leaf hash.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "docs/development/native-localnet.md"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-NATIVETOKEN",
+      "layer": "standard-library",
+      "surface": "nativeToken",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-TOKENTYPE",
+      "layer": "standard-library",
+      "surface": "tokenType",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MINTSHIELDEDTOKEN",
+      "layer": "standard-library",
+      "surface": "mintShieldedToken",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-EVOLVENONCE",
+      "layer": "standard-library",
+      "surface": "evolveNonce",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SHIELDEDBURNADDRESS",
+      "layer": "standard-library",
+      "surface": "shieldedBurnAddress",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-RECEIVESHIELDED",
+      "layer": "standard-library",
+      "surface": "receiveShielded",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SENDSHIELDED",
+      "layer": "standard-library",
+      "surface": "sendShielded",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SENDIMMEDIATESHIELDED",
+      "layer": "standard-library",
+      "surface": "sendImmediateShielded",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERGECOIN",
+      "layer": "standard-library",
+      "surface": "mergeCoin",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERGECOINIMMEDIATE",
+      "layer": "standard-library",
+      "surface": "mergeCoinImmediate",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-OWNPUBLICKEY",
+      "layer": "standard-library",
+      "surface": "ownPublicKey",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CREATEZSWAPINPUT",
+      "layer": "standard-library",
+      "surface": "createZswapInput",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-CREATEZSWAPOUTPUT",
+      "layer": "standard-library",
+      "surface": "createZswapOutput",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MINTUNSHIELDEDTOKEN",
+      "layer": "standard-library",
+      "surface": "mintUnshieldedToken",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SENDUNSHIELDED",
+      "layer": "standard-library",
+      "surface": "sendUnshielded",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-RECEIVEUNSHIELDED",
+      "layer": "standard-library",
+      "surface": "receiveUnshielded",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDBALANCE",
+      "layer": "standard-library",
+      "surface": "unshieldedBalance",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDBALANCELT",
+      "layer": "standard-library",
+      "surface": "unshieldedBalanceLt",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDBALANCEGTE",
+      "layer": "standard-library",
+      "surface": "unshieldedBalanceGte",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDBALANCEGT",
+      "layer": "standard-library",
+      "surface": "unshieldedBalanceGt",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-UNSHIELDEDBALANCELTE",
+      "layer": "standard-library",
+      "surface": "unshieldedBalanceLte",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-BLOCKTIMELT",
+      "layer": "standard-library",
+      "surface": "blockTimeLt",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-BLOCKTIMEGTE",
+      "layer": "standard-library",
+      "surface": "blockTimeGte",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-BLOCKTIMEGT",
+      "layer": "standard-library",
+      "surface": "blockTimeGt",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-BLOCKTIMELTE",
+      "layer": "standard-library",
+      "surface": "blockTimeLte",
+      "nightleanStatus": "missing",
+      "notes": "Inventory by exported name, not full semantic coverage.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-SERIALIZE",
+      "layer": "standard-library",
+      "surface": "serialize",
+      "nightleanStatus": "missing",
+      "notes": "Pinned API prose says event-only, but compiler source and 0.36.1 regression support ordinary serializable values. Use expand-serialize.ss, reject unsupported point/contract/ADT/opaque cases.",
+      "source": [
+        "stdlib",
+        "serialization",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-DESERIALIZE",
+      "layer": "standard-library",
+      "surface": "deserialize",
+      "nightleanStatus": "missing",
+      "notes": "Pinned API prose says event-only, but compiler source and 0.36.1 regression support ordinary serializable values. Use expand-serialize.ss, reject unsupported point/contract/ADT/opaque cases.",
+      "source": [
+        "stdlib",
+        "serialization",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [],
+      "equivalence": "unverified"
+    }
+  ]
+}

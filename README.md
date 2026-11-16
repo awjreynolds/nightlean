@@ -2,6 +2,8 @@
 
 Nightlean is a Lean 4 compiler project for Midnight contracts. Its source elaboration, typed intermediate representation, reference semantics, and ZKIR relation lowering are implemented in Lean.
 
+The active goal is [verified feature equivalence](docs/compatibility/GOAL.md) with a pinned Compact capability baseline, through Lean-to-ZKIR and native ledger execution. The current implementation is a private-claim POC. A host-neutral runtime, broader language coverage and full equivalence evidence are in progress.
+
 The compilation path is Lean source → typed circuit and contract IR → ZKIR v3 and native Impact runtime plans → Midnight proving and ledger libraries. The compiler emits standalone circuit relations, native entrypoint relations, and typed runtime metadata. The selected POC target is an isolated ledger 9 localnet.
 
 The actual private-claim source completed native deployment at finalized block 398 and a valid claim at block 401. Wrong secret, path, direction, root, and nullifier are rejected. Replay leaves state unchanged. [Native receipts and provenance](docs/development/native-localnet.md) record the tested source, independent ZKIR toolchain, keys, and transactions.
