@@ -8,7 +8,7 @@ Qualification status: the immutable published-source authority/candidate qualifi
 
 The receipt describes that exact published commit. Later documentation or unrelated working-tree changes do not enter the qualified source snapshot. `tests/private-claim-artifacts-evidence.json` retains the results, digests and explicit scope.
 
-Key/deployed-operation identity remains issue 57. Native implementation, parser and cryptographic assumptions remain explicit. No unqualified verified-contract label follows from this package. `compiledContractVerified` stays false.
+The separate [deployment audit](private-claim-deployment-audit.md) now joins this source authority to qualified native keys and a finalized claim operation. Native implementation, parser and cryptographic assumptions remain explicit. No unqualified verified-contract label follows from this package. `compiledContractVerified` stays false.
 
 ## Exact byte semantics
 
@@ -141,4 +141,4 @@ The report retains an honest business-specification review flag. Technical kerne
 
 The trusted bootstrap includes the selected Lean kernel/checker binaries, toolchain/object integrity, Python/filesystem/hash/process operations, host OS/linker/SDK behavior, Git/source identity and authenticity of the external authority pins. Native parser/VM/hash/proof-system agreement remains separate. None of these implementation assumptions is converted into a new global Lean axiom or a false claim of verified bootstrap.
 
-Issue 57 still needs to join this bundle to authenticated key generation and the actual deployed network/address/entrypoint/verification operation. This package certifies no deployed ledger identity and grants no blanket confidentiality or whole-compiler assurance.
+The separate [deployment audit](private-claim-deployment-audit.md) joins this bundle to authenticated key generation and the observed network/address/entrypoint/verification operation. This byte-certificate package retains its own scope. The joined deployment result grants no blanket confidentiality or whole-compiler assurance.

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1160" viewBox="0 0 1600 1160" role="img" aria-labelledby="title description">
   <title id="title">Noctium project goals: the full native Midnight capability map</title>
-  <desc id="description">Research preview. Six project goals cover full native ZKIR v3, the Lean contract language, ledger capabilities and composition, private execution and disclosure, native/web/mobile SDKs, and proof-to-deployment assurance. These are target capabilities, not a list of delivered features. Current evidence covers claim-specific correctness and scoped privacy, exact byte/build certificates, native Rust client localnet qualification and C/C++ runtime execution. Generic compiler preservation, deployed key binding, broader capabilities and web/mobile SDKs remain open.</desc>
+  <desc id="description">Research preview. Six project goals cover full native ZKIR v3, the Lean contract language, ledger capabilities and composition, private execution and disclosure, native/web/mobile SDKs, and proof-to-deployment assurance. These are target capabilities, not a list of delivered features. Current evidence covers claim-specific correctness and scoped privacy, exact byte/build certificates, native Rust client localnet qualification and C/C++ runtime execution. Generic compiler preservation, broader capabilities and web/mobile SDKs remain open. The selected claim has qualified deployed identity.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#101D30"/>
@@ -85,12 +85,12 @@
     <path d="M60 925H1540" stroke="#293A52"/>
     <text x="60" y="962" fill="#70E6CF" font-size="16" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
     <text x="60" y="998" fill="#E3EBF5" font-size="21">Claim-specific correctness + scoped native privacy</text>
-    <text x="60" y="1029" fill="#AEBFD5" font-size="21">Exact byte/build certificates · finalized localnet transactions</text>
-    <text x="60" y="1060" fill="#AEBFD5" font-size="21">Rust client on both profiles · C/C++ runtime subset</text>
+    <text x="60" y="1029" fill="#AEBFD5" font-size="21">Exact byte/build certificates · claim deployment identity</text>
+    <text x="60" y="1060" fill="#AEBFD5" font-size="21">Finalized localnet · Rust client · C/C++ runtime subset</text>
 
     <path d="M800 952V1064" stroke="#293A52"/>
     <text x="840" y="962" fill="#CFB58A" font-size="16" font-weight="700" letter-spacing="1.8">OPEN ASSURANCE + COVERAGE</text>
-    <text x="840" y="998" fill="#E3EBF5" font-size="21">Generic compiler preservation · deployed verifier binding</text>
+    <text x="840" y="998" fill="#E3EBF5" font-size="21">Generic compiler preservation and completeness</text>
     <text x="840" y="1029" fill="#AEBFD5" font-size="21">Broader language, ZKIR and ledger feature qualification</text>
     <text x="840" y="1060" fill="#AEBFD5" font-size="21">TypeScript/WASM, Kotlin and Swift SDKs</text>
 

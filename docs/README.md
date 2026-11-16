@@ -37,7 +37,7 @@ These layers establish different properties. Contract theorems describe intended
 | Source transition to native VM and transcript | [State, framing, replay and public transcript preservation](development/private-claim-native-state-proofs.md) |
 | Source privacy to native observations | [Successful-run native privacy and its excluded observables](development/private-claim-native-privacy-proofs.md) |
 | Exact bytes and build provenance | [Qualified immutable builds and exact retained-byte certificates](development/private-claim-artifact-certificates.md), with functional/privacy composition |
-| Deployed identity | Open [key/deployment binding](https://github.com/awjreynolds/noctium/issues/57) |
+| Deployed claim identity | [Qualified source/key/deployment join](development/private-claim-deployment-audit.md), with public-only verification and explicit trusted-node assumptions |
 | Generic compiler preservation | Open [scalar compiler proof work](https://github.com/awjreynolds/noctium/issues/64), followed by broader feature coverage |
 
 The [assurance report](development/assurance.md) documents the proved pruning pass and external boundaries. The [proof audit chain research](research/lean-proof-audit-chain.md) explains the required release chain. Claim-specific proofs do not establish correctness for every source program.

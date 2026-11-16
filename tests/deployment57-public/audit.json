@@ -1,0 +1,78 @@
+{
+  "address": "d1a8d4c7866ef9f670232ae4f084a42e7555d7c98677b373550ba3c5e69c7092",
+  "assumptions": [
+    "qualified native key generation and selected Rust/parser/prover implementations",
+    "SRS provenance and ceremony relations",
+    "host toolchain and durable-store policy for execution",
+    "trusted node canonical history and finality, not a consensus light client",
+    "public initialization is caller-specified, not an unconditional business specification"
+  ],
+  "auditorRustHelperSha256": "b10d0d3070d03c19c76c548f65382795fc490e1f8e84db3dbcaa026ac54ce6d3",
+  "businessSpecificationReviewed": false,
+  "consensusLightClient": false,
+  "currentFinalizedHash": "231bce54531a3f41480836b92196ca844f748778fd0e8c26c83a7411ae8f6ea9",
+  "currentFinalizedHeight": 5851,
+  "currentOperationRevisionMatched": true,
+  "guaranteeVersion": "PrivateClaimDeploymentIdentity/v1",
+  "nativeKeygenAndImplementationAssumptionsRequired": true,
+  "observations": [
+    {
+      "blockHash": "43f8f8e285f46f99707edb534b8dfd1a25884ecbe2e635e4819247bcea5ca0f7",
+      "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+      "event": "Deploy",
+      "extrinsicHash": "6800e63c0e43f8e71b972d94fd6d289451df7eff727e37f4c75681d803cb101a",
+      "extrinsicIndex": 4,
+      "height": 5764,
+      "transactionId": "76eef236718b449f4e252c19c59e981afb85f912d2d6fcd33df8dbbaed28d145"
+    },
+    {
+      "blockHash": "110815920b16437b5d6ce393d0bf1475bfe224978627058d48c280267a5e7153",
+      "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+      "event": "Call",
+      "extrinsicHash": "410c2d0630bf82170789c900c1a4c2358912fb936cccb14bd20a0921cf4c3a40",
+      "extrinsicIndex": 4,
+      "height": 5767,
+      "transactionId": "23d9483cd74c9659a536235cd4a0a4d003d48d7f2463b156e4f2fec31a347ed8"
+    }
+  ],
+  "publicOnly": true,
+  "sourceAndKeyDeploymentJoinChecked": true,
+  "sourceAudit": {
+    "axioms": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "bootstrapVerified": false,
+    "compiledContractVerified": false,
+    "concreteByteFunctionalPreservationChecked": true,
+    "concreteBytePrivacyCompositionChecked": true,
+    "deployedIdentityAuthenticated": false,
+    "eligibleSourceCompletenessChecked": true,
+    "exactArtifactByteBuildBindingVerified": true,
+    "externalAuthorityKernelMatched": true,
+    "externalAuthoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+    "finalBindingImplementationAgreementRequired": true,
+    "hashAndNativeImplementationAgreementRequired": true,
+    "nativePrivacyChecked": true,
+    "observer": "successfulClaimPublicTranscriptV1",
+    "privateInvocationInputsConsumed": false,
+    "proofByteZeroKnowledgeProved": false,
+    "remainingRequiredBridge": "issue57 key/deployment identity",
+    "reproduciblePublicBuildChecked": true,
+    "retainedBytesKernelMatched": true,
+    "scope": "actual PrivateClaim 27-instruction scalar / 55-instruction call / 21-operation state plan",
+    "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+    "sourceFunctionalChecked": true,
+    "sourcePrivacyChecked": true,
+    "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+    "specificationReviewVerified": false,
+    "status": "exact-retained-artifact-bytes-and-scoped-privacy-checked",
+    "successfulValidExecutionsOnly": true,
+    "toolchainSha256": "86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e"
+  },
+  "sourceAuthoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+  "status": "selected-private-claim-deployment-identity-qualified",
+  "trustedNodeFinalityRequired": true,
+  "universalCompilerVerified": false
+}

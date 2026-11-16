@@ -1,0 +1,29 @@
+{
+  "authoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+  "entrypoint": "claim",
+  "guaranteeVersion": "PrivateClaimDeploymentIdentity/v1",
+  "initialization": {
+    "acceptedRoot": "28399696706114328615841781920356350076672934126225635254148383513591039775413",
+    "campaignId": "9",
+    "spent": []
+  },
+  "ledgerParametersBlockHash": "7df8d599767bc405fd9824c723165fed1b9384298df3dee281b3a431eebd06e3",
+  "ledgerParametersHeight": 5308,
+  "ledgerParametersSha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
+  "ledgerPricePolicy": "adaptive-fee-prices-v1",
+  "metadataSha256": "0ac5917f03f657e594e7c6c6544a37440fbce7f19e58d07a7773c50fc1461713",
+  "nativeToolchainSha256": "61360c9c8c3e79b13c53b338ae4f978601d5a6aa4ce44d1ae95a3f518ed6a497",
+  "policy": {
+    "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+    "maxDust": 10000000000000000000000,
+    "networkId": "undeployed",
+    "profile": "midnight-ledger-9-zkir-3.2.1",
+    "specVersion": 2001100,
+    "transactionVersion": 4
+  },
+  "runtimeCodeHash": "110283b44ab3f1ce35165efc00cc24ef4bf6ca5aefab6c97652a0c9e68c30fb6",
+  "schemaVersion": 1,
+  "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+  "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+  "srsSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd"
+}

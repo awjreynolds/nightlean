@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/midnightntwrk/midnight-zkir",
+  "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+  "rust": "1.100.0",
+  "host": "darwin-arm64",
+  "requestedVersion": "3.2.1",
+  "releaseLabel": "3.2.1",
+  "expectedCliVersion": "3.2.0",
+  "version": "midnight-zkir 3.2.0",
+  "binary": "/private/tmp/nightlean-native-zkir-321/bin/zkir",
+  "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+  "cargoLockSha256": "f6044eb43d4d8e6f2ed3dab33cb8f70fe1a59784fcc987e18aef4dab46a16c6b",
+  "command": "cargo +1.100.0 build --release --locked --package midnight-zkir --features binary"
+}

@@ -95,9 +95,94 @@ Private invocation request files are temporary and private. Public outputs conta
 
 The selected adapter deliberately targets an explicit loopback development node. A production host requires its own qualified endpoint/finality policy and wallet adapter. The controller does not deploy to production.
 
+## Published public fixture
+
+[tests/deployment57-public/manifest.json](../../tests/deployment57-public/manifest.json) inventories seven public files, totaling 1,327,014 bytes. They retain the exact specification, sealed transaction/deployment record, original source authority, original native tool manifest, historical parameter bytes and the parent's separate public audit. The manifest lists each payload's size and SHA-256. Its digest is recorded separately in the evidence receipt. Downloaded manifests do not supply their own trust authority.
+
+These files contain public transaction/proof/state bytes and build identities. They exclude private invocation configuration, witnesses, wallet seeds, private journals, executable snapshots, generated key copies, SRS files and caches. The original authority and native manifests preserve their historical paths and bytes. Those paths describe the qualified host. They do not refer to files distributed in this fixture.
+
+The source authority includes its reviewed public trust input. Recover those exact bytes and check the independently published pins before preparing a fresh authority:
+
+```sh
+PUBLIC=/absolute/path/to/noctium/tests/deployment57-public
+WORK=$(mktemp -d)
+python3 - "$PUBLIC" "$WORK" <<'PY'
+import hashlib, json, pathlib, sys
+public, work = map(pathlib.Path, sys.argv[1:])
+data = (public / "source-authority.json").read_bytes()
+assert hashlib.sha256(data).hexdigest() == "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb"
+authority = json.loads(data)
+trust = (json.dumps(authority["trustInput"], sort_keys=True,
+                   separators=(",", ":"), ensure_ascii=True) + "\n").encode()
+assert hashlib.sha256(trust).hexdigest() == "5d7e11b0948e6e1f86de23b3d4d13a112a66d43cc4df6f76fe6edf7334684e4b"
+(work / "reviewed-trust-input.json").write_bytes(trust)
+PY
+git worktree add --detach "$WORK/source" 925164d0e17d994038d77d3b2b71c410619557d3
+python3 "$WORK/source/scripts/proofs/check-private-claim-artifacts.py" prepare-authority \
+  --trust-input "$WORK/reviewed-trust-input.json" \
+  --trust-input-sha256 5d7e11b0948e6e1f86de23b3d4d13a112a66d43cc4df6f76fe6edf7334684e4b \
+  --output-dir "$WORK/authority"
+shasum -a 256 "$WORK/authority/authority.json"
+python3 "$WORK/source/scripts/proofs/check-private-claim-artifacts.py" build-candidate \
+  --authority "$WORK/authority/authority.json" \
+  --authority-sha256 5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb \
+  --bundle "$WORK/candidate"
+```
+
+The reconstructed authority must match `5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb`. The retained Lean 4.35.0 closure and native CLI build target Darwin ARM64. Exact product reproduction requires that pinned compatible toolchain environment, including the authority's measured toolchain root. A different toolchain requires a separately reviewed authority rather than editing this historical record.
+
+Build the auditor helper from its separate SDK revision, then measure and approve that local executable through the auditor's host policy:
+
+```sh
+git worktree add --detach "$WORK/sdk" c48fc4b7aa1a06926c15fb83026fb51ce80c203c
+CARGO_TARGET_DIR="$WORK/rust-target" cargo +1.100.0 build \
+  --manifest-path "$WORK/sdk/runtime/Cargo.toml" --locked \
+  --no-default-features --features zkir-321,localnet \
+  --example audit_claim_deployment
+HELPER="$WORK/rust-target/debug/examples/audit_claim_deployment"
+shasum -a 256 "$HELPER"
+```
+
+The original helper digest `b10d0d3070d03c19c76c548f65382795fc490e1f8e84db3dbcaa026ac54ce6d3` identifies the qualified retained host binary. Another host builds, measures and independently approves its own helper from the same reviewed source. That local digest becomes `APPROVED_HELPER_SHA` below. This does not claim universal executable-byte reproducibility. The native CLI remains subject to its original, stricter executable/source/lockfile pin in `native-toolchain.json`. Obtain its exact qualified build and the public `bls_midnight_2p9` SRS, SHA-256 `b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd`, from the qualified provider. Neither executable nor SRS is redistributed here.
+
+Set `NATIVE_CLI`, `SRS` and `APPROVED_HELPER_SHA` to those independently checked local inputs. Reconstruct public material without private invocation inputs:
+
+```sh
+controller() {
+  audit_mode="$1"
+  shift
+  python3 "$WORK/sdk/scripts/proofs/check-private-claim-deployment.py" "$audit_mode" \
+    --authority "$WORK/authority/authority.json" \
+    --authority-sha256 5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb \
+    --audit-bundle "$WORK/candidate" \
+    --specification "$PUBLIC/specification.json" \
+    --specification-sha256 17cae31f6a73eec24a729a6ef74187ccf11264a96c8bc1355f18672f94db1d1e \
+    --native-toolchain "$PUBLIC/native-toolchain.json" --native-cli "$NATIVE_CLI" \
+    --srs "$SRS" --rust-helper "$HELPER" --rust-helper-sha256 "$APPROVED_HELPER_SHA" \
+    "$@"
+}
+controller build --output "$WORK/public-material" --ledger-parameters "$PUBLIC/ledger.params"
+```
+
+Both regenerated serialized keys and the native bundle manifest must match `manifest.json`'s `publicMaterialReconstruction` hashes. The outer public manifest records the producer helper digest, so another approved helper digest changes that outer manifest. Exact repetition on the original qualified helper also reproduces the original outer manifest.
+
+Full public verification needs a trusted loopback endpoint retaining the recorded development genesis and finalized history. A newly started chain does not supply those historical receipts. Set `RPC_ENDPOINT` to that qualified endpoint:
+
+```sh
+controller verify --output "$WORK/public-audit" \
+  --deployment-bundle "$WORK/public-material" --endpoint "$RPC_ENDPOINT" \
+  --record "$PUBLIC/deployment.json" \
+  --record-sha256 803bd8ce488ef79be65b7b3f466d4827b4441070ea9074cd24c0afdde6eb819c \
+  --expected-address d1a8d4c7866ef9f670232ae4f084a42e7555d7c98677b373550ba3c5e69c7092
+```
+
+The retained `audit.json` records the parent's completed replay against that history. Public source/key reconstruction requires no node or private input. Historical receipts, quotes, state and current revision require the trusted-node reads described above. The fixture is a reproducible public audit input set and development deployment reference, with no consensus light-client proof.
+
 ## Evidence and assumptions
 
 [tests/private-claim-deployment-evidence.json](../../tests/private-claim-deployment-evidence.json) records the source authority, guarantee/specification version, native and SRS identities, actual public deployment reference, observed initial V3 key/state, valid call, full quotes, public-only verification and negative results. Random deployment nonces and chain timing produce a new address/reference on a fresh run. The source and key-generation checks remain reproducible from the pinned public inputs.
+
+The implementation qualification uses published commit `c48fc4b7aa1a06926c15fb83026fb51ce80c203c`, tree `2f8a7feea3382eeb6ec74d8a7ce9d1faaf373ee3`. A fresh Git archive matched all 308 tracked blobs and file modes, then built the separately pinned Rust helper. That snapshot passed public bundle construction, funded native deployment and claim, a separate public-only verification, 15 material/revision negatives and seven file-replacement guards. Ordinary suites passed 111 tests for 3.2.0 and 115 for 3.2.1. The selected deployment and claim finalized at blocks 5764 and 5767. The evidence retains their complete public references and per-funding parameter quotes. This SDK implementation revision is separate from the source authority `925164d` above.
 
 The guarantee assumes qualified native key generation, the selected parser/VM/prover/verifier implementations and their cryptographic assumptions. SRS ceremony provenance and pairing relations remain externally trusted. The host supplies trusted toolchain and durable-store capabilities. Finality, canonical history, parameter/state reads and runtime-code identity rely on the selected trusted node; this adapter supplies no consensus light-client proof.
 

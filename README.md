@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/noctium-social.png" alt="Noctium research preview. Prove contract behavior in Lean and compile for Midnight. Published evidence covers the private claim's correctness, scoped privacy and exact artifacts. Generic compiler preservation and deployed verifier binding remain open." width="100%">
+  <img src="docs/assets/noctium-social.png" alt="Noctium research preview. Prove contract behavior in Lean and compile for Midnight. Published evidence covers the private claim's correctness, scoped privacy and exact artifacts. The selected claim has deployed verifier binding. Generic compiler preservation and broader capability coverage remain open." width="100%">
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@ Noctium is a Lean 4 compiler and proof framework for Midnight private contracts.
 
 The compiler and primary lowering are written in Lean. Contract execution uses a finite supported subset. Proof authoring uses Lean's full theorem language. The Rust application path needs no Node, and Noctium has no Compact compiler or runtime dependency.
 
-**Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. These are claim-specific guarantees. Generic compiler preservation and deployed verifier binding remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
+**Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. These are claim-specific guarantees. The selected claim has deployed verifier binding. Generic compiler preservation and broader capability coverage remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
 
 ## Try the compiler
 
@@ -73,6 +73,7 @@ Lean theorems establish specified contract properties. Runtime zero-knowledge pr
 | [Native relation](docs/development/private-claim-lowering-proofs.md) and [state](docs/development/private-claim-native-state-proofs.md) | Claim-specific soundness for arbitrary satisfying assignments and checked VM traces, source completeness and transcript preservation. |
 | [Scoped privacy](docs/development/private-claim-native-privacy-proofs.md) | Equal public native observations for successful claim executions under explicit assumptions. Proof bytes, failures, logs and timing are excluded. |
 | [Exact artifacts](docs/development/private-claim-artifact-certificates.md) | Independent immutable-source builds and kernel checks bind the claim's functional/privacy proofs to retained raw bytes. |
+| [Deployed claim identity](docs/development/private-claim-deployment-audit.md) | Public-only auditing joins the pinned source certificate, native key generation, initialized state and finalized operation under explicit trusted-node assumptions. |
 | [Native integration tests](docs/development/native-client.md#retained-qualification) | Real ZK proofs, funded transactions, finalized state checks and recovery on both 3.2.0 and 3.2.1 profiles. [Bounded scalar tests](docs/development/unsigned-localnet.md) add 34 adversarial witness cases. |
 
 Native cryptography, parser/VM agreement, host behavior and authenticated authority inputs remain [trusted boundaries](docs/designs/architecture.md#assurance-boundaries). Localnet receipts provide integration evidence. They do not establish generic compiler correctness or production readiness.

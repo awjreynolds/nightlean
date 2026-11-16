@@ -26,16 +26,17 @@ The published contract-to-artifact guarantees apply to the actual private-claim 
 | --- | --- | --- |
 | [Source properties](../development/private-claim-proofs.md) | Eligibility equations, exact updates, invariants, framing, replay rejection and scoped source privacy | Correctness of the intended business specification and stated hash assumptions |
 | [Proof audit](../development/proof-registration.md) | Typed obligation matching, pinned model comparison, fresh-kernel replay and transitive axiom checks | Business-specification review and authenticity of external authority pins |
-| [Native relation](../development/private-claim-lowering-proofs.md) and [state](../development/private-claim-native-state-proofs.md) | Claim-specific soundness, completeness, state/transcript preservation and JSON-tree certificates | Native implementation agreement, real admission limits and deployed identity |
+| [Native relation](../development/private-claim-lowering-proofs.md) and [state](../development/private-claim-native-state-proofs.md) | Claim-specific soundness, completeness, state/transcript preservation and JSON-tree certificates | Native implementation agreement and real admission limits |
 | [Native privacy](../development/private-claim-native-privacy-proofs.md) | Equal declared public observations for successful runs with coupled host context | Proof-byte zero knowledge, failure channels, timing, logs and provider observations |
-| [Exact artifacts](../development/private-claim-artifact-certificates.md) | Independent immutable builds and kernel checks bind the claim proofs to exact retained bytes | Trusted bootstrap, authenticated authority inputs and deployed key/operation identity |
+| [Exact artifacts](../development/private-claim-artifact-certificates.md) | Independent immutable builds and kernel checks bind the claim proofs to exact retained bytes | Trusted bootstrap and authenticated authority inputs |
+| [Deployed claim identity](../development/private-claim-deployment-audit.md) | Exact source authority, independently regenerated native keys, initial state and finalized operation matched by a public-only audit | Native cryptography, SRS provenance, host pins and trusted-node history/finality |
 | [Native integration](../development/native-client.md#retained-qualification) | Real proofs, finalized localnet execution, state comparison and recovery tests | General feature coverage, public-network qualification and independent security review |
 
 Fresh-kernel audits admit only the pinned foundational axioms `propext`, `Classical.choice` and `Quot.sound`. User axioms, admitted proofs and native-computation axioms reject. The checker enforces this policy over transitive dependencies and matches exact theorem statements.
 
 The kernel checks the modeled propositions. Native parser, hash, VM, proof-system and host implementations retain explicit agreement assumptions. The scoped privacy theorem does not prove cryptographic secrecy of proof bytes or hide success versus failure. Functional correctness supplies no automatic confidentiality guarantee.
 
-Two links remain open: [deployed key and operation binding](https://github.com/awjreynolds/noctium/issues/57) and [generic scalar compiler preservation](https://github.com/awjreynolds/noctium/issues/64). Broader native features need their own preservation evidence. `compiledContractVerified` stays false until the required chain is established.
+The selected claim now has a [qualified source/key/deployment identity join](../development/private-claim-deployment-audit.md). [Generic scalar compiler preservation](https://github.com/awjreynolds/noctium/issues/64) remains open. Broader native features need their own preservation evidence. Historical source-audit flags retain their original scope, including `compiledContractVerified: false`. The deployment audit adds its separate `PrivateClaimDeploymentIdentity/v1` guarantee without granting universal compiler or unconditional business-specification verification.
 
 ## Scope and growth
 
