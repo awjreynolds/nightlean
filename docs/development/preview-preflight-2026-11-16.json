@@ -1,0 +1,17 @@
+{
+  "network": "preview",
+  "readOnly": true,
+  "submissionReady": false,
+  "blockers": [
+    "Preview wallet has no confirmed NIGHT funding",
+    "Preview wallet has no available DUST for fees",
+    "Preview transaction build, fee estimate, submission, and receipt checks still required"
+  ],
+  "rpc": {"ok": true, "specName": "midnight", "specVersion": 2001100},
+  "indexer": {"ok": true},
+  "proofServer": {"ok": true, "url": "http://127.0.0.1:16300/", "scope": "health only, no proving request"},
+  "artifacts": {"ok": true, "contractName": null, "proverBytes": 447015, "verifierBytes": 1353, "scope": "presence only, Preview deployment unqualified"},
+  "identity": {"ok": true, "address": "mn_addr_preview1m0x976xuj0quyg73vnnkq6rguzwe2eqy8txy5g7e60sssu05qxyqg0v48z"},
+  "toolkitIdentity": {"ok": true, "addressMatchesSdk": true, "image": "midnightntwrk/midnight-node-toolkit@sha256:904f824f3350530bc2fb03448906cc5f9f200b98e98bd9fbb274a1cc25b9f89c"},
+  "wallet": {"ok": true, "synced": true, "protocolVersion": "2001100", "balances": {}, "dust": "0", "unregisteredNightUtxos": 0}
+}

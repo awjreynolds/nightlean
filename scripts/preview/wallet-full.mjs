@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 import { loadPreviewIdentity } from './wallet.mjs';
 import { WebSocket } from 'ws';
 
-export function localProofServerUrl(value = process.env.NIGHTLEAN_PROOF_SERVER ?? 'http://127.0.0.1:6300') {
+export function localProofServerUrl(value = process.env.NIGHTLEAN_PROOF_SERVER ?? 'http://127.0.0.1:16300') {
   const url = new URL(value);
   if (!['http:', 'https:'].includes(url.protocol) || !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname) || url.username || url.password) {
     throw new Error('Proof server must use loopback HTTP(S). Remote proving needs explicit authorization.');
