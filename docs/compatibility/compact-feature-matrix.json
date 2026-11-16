@@ -701,13 +701,24 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Native typed, capability-scoped scalar provider transport is implemented in Rust and linked C/C++. General source witness-function declarations, signatures and effects remain unsupported. Provider transport alone does not establish witness-language equivalence.",
+        "evidence": [
+          "runtime/src/host.rs",
+          "runtime/tests/host_protocol.rs",
+          "runtime/tests/cpp_host_smoke.cpp",
+          "docs/designs/private-state-lifecycle.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-PRIVATE-STATE",
       "layer": "private-runtime",
       "surface": "Private-state initialization and evolution",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "State ownership, persistence and failure/commit boundaries are host responsibilities with shared semantics.",
       "source": [
         "reference"
@@ -718,13 +729,25 @@
         "LEDGER"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Native host-policy writes have private-only journals, immutable attempt/transaction/target/base binding, persistence ordering and correlated compare-and-swap. Rust/C++ cover conflicts, crossed replies, retries and failure paths. Durable storage and truthful ledger acceptance remain host assumptions. Source witness-generated private-state semantics and authenticated recovery remain open.",
+        "evidence": [
+          "runtime/src/host.rs",
+          "runtime/src/lifecycle.rs",
+          "runtime/tests/host_protocol.rs",
+          "runtime/tests/cpp_host_smoke.cpp",
+          "docs/designs/private-state-lifecycle.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-PRIVATE-DISCLOSURE",
       "layer": "language",
       "surface": "Explicit and indirect disclosure analysis",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Track private values through data/control flow, outputs, ledger writes, events, cross-calls and declassifying commitments.",
       "source": [
         "disclosure",
@@ -735,7 +758,19 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Mandatory scalar source/native-entrypoint gates track private value and control origins at current public outputs, state writes and query paths. Explicit releases preserve control dependencies. Native authorized-release proofs bind public fields. Structured lazy control, composites/helpers and all native descriptors remain open. Failure/timing/provider/proof-byte privacy is separate from scalar flow checking.",
+        "evidence": [
+          "Nightlean/Disclosure.lean",
+          "tests/Disclosure.lean",
+          "tests/disclosure-cli.sh",
+          "tests/disclosure/native-evidence.json",
+          "docs/development/disclosure.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-STATE-CONSTRUCTOR",
@@ -916,12 +951,14 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Native Rust execution, linked C/C++ resumable scalar inputs and canonical Native/Bool/UInt encodings are tested without Node execution. Rust assembles real intents and a local ledger accepted one. General providers/private-state journals, native proof/submission SDK APIs, mobile and WASM remain open.",
+        "scope": "Native Rust execution, linked C/C++ resumable scalar inputs, scoped typed provider transport and private transaction-bound journals are tested without Node execution. Rust assembles real intents and a local ledger accepted one. General source witness functions, durable host adapters, native proof/submission SDK APIs, mobile and WASM remain open.",
         "evidence": [
           "docs/development/native-runtime-abi.md",
           "docs/development/native-assembler.md",
           "docs/development/unsigned-localnet.md",
-          "runtime/tests/cpp_smoke.cpp"
+          "runtime/tests/cpp_smoke.cpp",
+          "runtime/tests/cpp_host_smoke.cpp",
+          "docs/designs/private-state-lifecycle.md"
         ],
         "fullEquivalence": "unverified"
       }
@@ -4477,6 +4514,8 @@
     "reference": "docs/compatibility/zkir-feature-matrix.json",
     "compactIsMinimumComparison": true,
     "compilerDisclosurePolicyRequired": true,
-    "fullGoal": "docs/compatibility/GOAL.md"
+    "fullGoal": "docs/compatibility/GOAL.md",
+    "contractProofAndAuditChainRequired": true,
+    "separateScopedPrivacyObligationRequired": true
   }
 }
