@@ -1033,7 +1033,7 @@
         {
           "id": "ZKIR-OP-ASSERT-N",
           "polarity": "negative",
-          "expected": "Reject Native 0 and malicious Native 2 even when bypassing honest preprocessing."
+          "expected": "Safe Nightlean producer rejects an unconstrained/non-bit assertion, including Native 2. Raw native preprocessing requires one, whereas the circuit assertion constrains nonzero. A raw Assert alone does not establish Booleanity."
         }
       ],
       "evidence": {
@@ -4615,5 +4615,43 @@
     "../research/midnight-zkir-capability-matrix.md",
     "../research/compact-equivalence-baseline.md",
     "../development/zkir-3.2.1-qualification.md"
+  ],
+  "publishedImplementationUpdates": [
+    {
+      "issue": 39,
+      "commit": "da87c56",
+      "scope": "Internal canonical composite identity/layout only, with leaf/logical-expanded/retained counts linked to the returned layout. Public aggregate source/native support remains unqualified.",
+      "refs": [
+        "../development/composite-types.md",
+        "../../tests/CompositeTypes.lean"
+      ]
+    },
+    {
+      "issue": 49,
+      "commit": "7045a3d",
+      "scope": "Mandatory current Native-scalar producer gate, typed Bool plan repair and explicit evidence/blocker map for all 22 safety requirements. No general native preservation theorem or complete overload qualification.",
+      "refs": [
+        "../development/native-producer-safety.md",
+        "../../tests/native-producer-evidence.json"
+      ]
+    },
+    {
+      "issue": 51,
+      "commit": "754e82a",
+      "scope": "Exact selected 3.2.1 source identity integrated across compiler/runtime/bundles, with mixed-profile rejection and independently checked exact-41482a1 localnet receipts. Historical seed counts above remain the original inventory observations.",
+      "refs": [
+        "../development/zkir-3.2.1-integrated.md",
+        "../../tests/zkir321/integrated-profile-evidence.json"
+      ]
+    },
+    {
+      "issue": 54,
+      "commit": "e96beaa",
+      "scope": "Actual standalone claim native scalar relation soundness for arbitrary satisfying assignments, source completeness and checked emitted JSON-tree identity. Output alone adds no public instance. Final Impact binds this return. Raw byte parser/build authentication, ledger state preservation and deployed identity remain open.",
+      "refs": [
+        "../development/private-claim-lowering-proofs.md",
+        "../../tests/private-claim-lowering-evidence.json"
+      ]
+    }
   ]
 }

@@ -157,7 +157,7 @@
       "layer": "language",
       "surface": "Field arithmetic",
       "nightleanStatus": "subset",
-      "notes": "Native canonical field literals, add and mul exist. Subtraction, full conversions and mixed Uint arithmetic are absent.",
+      "notes": "Native canonical field literals, add, subtract and multiply exist. Scalar Native/Bool/UInt conversions are implemented. Full operator/context and foreign-field equivalence remain unverified.",
       "source": [
         "reference"
       ],
@@ -170,7 +170,18 @@
         "Nightlean/IR.lean",
         "tests/Field.lean"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Published scalar semantics and native producer checks cover modular subtraction and mixed UInt/Native scalar conversions. This does not qualify every Compact field operation.",
+        "evidence": [
+          "Nightlean/Semantics.lean",
+          "Nightlean/ScalarPolicy.lean",
+          "tests/BoundedScalars.lean",
+          "docs/development/native-producer-safety.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-UINT",
@@ -305,7 +316,18 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "evidence": [
+          "Nightlean/Types/Composite.lean",
+          "tests/CompositeTypes.lean",
+          "tests/composite-types/manifest.json",
+          "docs/development/composite-types.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-VECTOR",
@@ -321,7 +343,18 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "evidence": [
+          "Nightlean/Types/Composite.lean",
+          "tests/CompositeTypes.lean",
+          "tests/composite-types/manifest.json",
+          "docs/development/composite-types.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-TUPLE",
@@ -337,7 +370,18 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "evidence": [
+          "Nightlean/Types/Composite.lean",
+          "tests/CompositeTypes.lean",
+          "tests/composite-types/manifest.json",
+          "docs/development/composite-types.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-STRUCT",
@@ -353,7 +397,18 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "evidence": [
+          "Nightlean/Types/Composite.lean",
+          "tests/CompositeTypes.lean",
+          "tests/composite-types/manifest.json",
+          "docs/development/composite-types.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-ENUM",
@@ -369,7 +424,18 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Published internal Lean type/layout foundation includes this logical shape, nominal identity where applicable, canonical descriptors and layout-linked resource bounds. Supported frontend/native aggregate execution is not established by this package. No language parity claim.",
+        "evidence": [
+          "Nightlean/Types/Composite.lean",
+          "tests/CompositeTypes.lean",
+          "tests/composite-types/manifest.json",
+          "docs/development/composite-types.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-ALIAS",
@@ -423,10 +489,12 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Scalar widening and Native embedding are implemented. Composite, nominal and function-argument subtyping remain open.",
+        "scope": "Scalar widening and Native embedding are implemented. Internal composite type rules preserve nominal identity and kernel-proved UInt widening. Public source composite/helper argument execution and full subtyping equivalence remain open.",
         "evidence": [
           "tests/BoundedScalars.lean",
-          "Nightlean/Frontend.lean"
+          "Nightlean/Frontend.lean",
+          "Nightlean/Types/Composite.lean",
+          "tests/CompositeTypes.lean"
         ],
         "fullEquivalence": "unverified"
       }
@@ -884,7 +952,7 @@
       "layer": "artifact",
       "surface": "ZKIR and proof/key artifacts",
       "nightleanStatus": "subset",
-      "notes": "Native .zkir/key generation and one local ledger claim proven. Latest 0.36.1 reference bundles ZKIR 3.2.1, local POC used 3.2.0.",
+      "notes": "Native key generation and local ledger execution exist for private claim and bounded scalars. Selected 3.2.1 compiler/runtime profiles now carry exact native revision and reject mixed profiles. Default remains 3.2.0. Full instruction/type and artifact equivalence remain unverified.",
       "source": [
         "reference",
         "release",
@@ -899,14 +967,26 @@
         "docs/development/native-localnet.md",
         "scripts/zkir/bootstrap-native.mjs"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-16",
+        "scope": "Isolated compiler/runtime commit 41482a1 produced authenticated retained 3.2.1 bundles and accepted claim deployment/call at blocks 2876/2879 and scalar deployment/call at 2902/2930. Producer checks cover the current Native representation subset. Standalone claim scalar relation soundness/completeness and an emitted JSON-tree certificate are kernel checked. Raw byte parsing, general state preservation, key/build/deployment proof correspondence and full native feature qualification remain separate.",
+        "evidence": [
+          "tests/zkir321/integrated-profile-evidence.json",
+          "docs/development/zkir-3.2.1-integrated.md",
+          "tests/native-producer-evidence.json",
+          "tests/private-claim-lowering-evidence.json",
+          "docs/development/private-claim-lowering-proofs.md"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ARTIFACT-MANIFEST",
       "layer": "artifact",
       "surface": "Contract metadata, manifests and source provenance",
       "nightleanStatus": "subset",
-      "notes": "Native plan/profile hashes and receipts exist. Full exported-type/interface ABI, manifest and artifact validation contract is absent.",
+      "notes": "Canonical native public bundle assembler/verifier retains authenticated bytes with selected profile and provenance. Complete exported interfaces, signed releases and proof-to-deployment correspondence remain open.",
       "source": [
         "reference"
       ],
@@ -921,7 +1001,7 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
-        "scope": "Native public entrypoint bundle assembler/verifier records canonical hashes, sizes and provenance. Trusted external manifest digest is optional. Consumer integration, signed releases and semantic/deployed-key correspondence remain open.",
+        "scope": "Native public entrypoint bundles record canonical hashes, sizes and provenance. Existing consumers support a trusted external manifest digest and retain verified bytes through native assembly. Integrity-only verification is a separate weaker mode. Signed releases and semantic/deployed-key correspondence remain open.",
         "evidence": [
           "runtime/src/artifacts.rs",
           "runtime/tests/artifacts.rs",
@@ -935,7 +1015,7 @@
       "layer": "artifact-runtime",
       "surface": "Portable execution and value ABI",
       "nightleanStatus": "subset",
-      "notes": "Node ESM evaluator exists for Native/Bool and symbolic Impact plan. No second-language implementation or full canonical ABI.",
+      "notes": "Native Rust and linked C/C++ execution cover scalar input/provider/journal subsets without Node. Complete source witness functions, portable mobile/WASM and native transaction SDK qualification remain open.",
       "source": [
         "reference"
       ],
@@ -4517,5 +4597,10 @@
     "fullGoal": "docs/compatibility/GOAL.md",
     "contractProofAndAuditChainRequired": true,
     "separateScopedPrivacyObligationRequired": true
+  },
+  "publishedImplementationObservation": {
+    "commit": "9377f61",
+    "checkedOn": "2026-11-16",
+    "scope": "Incremental published implementation evidence supplements the original immutable POC observation. Full equivalence stays unverified. Unpublished aggregate/helper/SDK work receives no completion credit."
   }
 }
