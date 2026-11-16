@@ -1,0 +1,27 @@
+{"witnesses": [],
+ "schemaVersion": 1,
+ "name": "unitPrivateBranches",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [{"visibility": "private", "type": "Bool", "name": "flag"}],
+ "functions":
+ [{"resultType": "Unit",
+   "parameters": [{"type": "Bool", "name": "flag"}],
+   "name": "unitPrivateBranches",
+   "id": "s0d0",
+   "body":
+   [{"yes":
+     [{"value": null,
+       "tag": "return",
+       "span": {"line": 1, "file": "", "column": 1}}],
+     "tag": "if",
+     "span": {"line": 1, "file": "", "column": 1},
+     "no":
+     [{"value": null,
+       "tag": "return",
+       "span": {"line": 1, "file": "", "column": 1}}],
+     "condition":
+     {"tag": "reference",
+      "span": {"line": 1, "file": "", "column": 1},
+      "name": "flag"}}]}],
+ "entry": "s0d0"}

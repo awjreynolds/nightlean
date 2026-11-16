@@ -1,0 +1,33 @@
+{"witnesses":
+ [{"type": "Native", "name": "left"}, {"type": "Native", "name": "right"}],
+ "schemaVersion": 1,
+ "name": "order",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Native",
+   "parameters": [],
+   "name": "order",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"value":
+      {"tag": "binary",
+       "span": {"line": 1, "file": "", "column": 1},
+       "right":
+       {"type": "Native",
+        "tag": "witness",
+        "span": {"line": 1, "file": "", "column": 1},
+        "name": "right"},
+       "operation": "add",
+       "left":
+       {"type": "Native",
+        "tag": "witness",
+        "span": {"line": 1, "file": "", "column": 1},
+        "name": "left"}},
+      "tag": "disclose",
+      "span": {"line": 1, "file": "", "column": 1}},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0"}

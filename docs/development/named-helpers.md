@@ -124,6 +124,12 @@ callee path. Defaults cap expanded nodes at 65,536 and depth at 256.
 These checks run before constructing inlined expressions. They include syntax
 after a return and therefore sometimes reject more than a runtime-only count.
 
+Metadata also receives fixed preflight caps: names, labels and span filenames
+use at most 1,024 UTF-8 bytes, scope/ordinal identities fit unsigned 64-bit
+integers, and source line/column numbers stay at or below 1,000,000,000. The
+checks precede repeated string conversion or diagnostic formatting. Rejected
+metadata is not echoed. These are local implementation caps.
+
 Lowering and trace evaluation each receive a separate shared budget of 131,072
 steps. Every term, body continuation, call and parameter consumes fuel before
 execution or construction. Call-resolution and public raw-program entrypoints

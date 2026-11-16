@@ -1,0 +1,24 @@
+{"witnesses": [],
+ "schemaVersion": 1,
+ "name": "unitConditional",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Unit",
+   "parameters": [],
+   "name": "unitConditional",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"yes": {"tag": "unit", "span": {"line": 1, "file": "", "column": 1}},
+      "tag": "if",
+      "span": {"line": 1, "file": "", "column": 1},
+      "no": {"tag": "unit", "span": {"line": 1, "file": "", "column": 1}},
+      "condition":
+      {"value": true,
+       "tag": "bool",
+       "span": {"line": 1, "file": "", "column": 1}}},
+     "tag": "evaluate",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0"}

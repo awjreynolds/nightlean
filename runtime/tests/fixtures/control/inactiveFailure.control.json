@@ -1,0 +1,43 @@
+{"witnesses": [],
+ "schemaVersion": 1,
+ "name": "inactive",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Native",
+   "parameters": [],
+   "name": "inactive",
+   "id": "s0d0",
+   "body":
+   [{"yes":
+     [{"tag": "assert",
+       "span": {"line": 1, "file": "", "column": 1},
+       "condition":
+       {"value": false,
+        "tag": "bool",
+        "span": {"line": 1, "file": "", "column": 1}}},
+      {"value":
+       {"value":
+        {"value": "1",
+         "tag": "constant",
+         "span": {"line": 1, "file": "", "column": 1}},
+        "type": "UIntRange<1>",
+        "tag": "cast",
+        "span": {"line": 1, "file": "", "column": 1}},
+       "tag": "evaluate",
+       "span": {"line": 1, "file": "", "column": 1}}],
+     "tag": "if",
+     "span": {"line": 1, "file": "", "column": 1},
+     "no": [],
+     "condition":
+     {"value": false,
+      "tag": "bool",
+      "span": {"line": 1, "file": "", "column": 1}}},
+    {"value":
+     {"value": "9",
+      "tag": "constant",
+      "span": {"line": 1, "file": "", "column": 1}},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0"}

@@ -1,0 +1,57 @@
+{"witnesses":
+ [{"type": "Native", "name": "andSkipped"},
+  {"type": "Native", "name": "orSkipped"}],
+ "schemaVersion": 1,
+ "name": "shortCircuit",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Bool",
+   "parameters": [],
+   "name": "shortCircuit",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "and",
+      "span": {"line": 1, "file": "", "column": 1},
+      "right":
+      {"tag": "eq",
+       "span": {"line": 1, "file": "", "column": 1},
+       "right":
+       {"value": "0",
+        "tag": "constant",
+        "span": {"line": 1, "file": "", "column": 1}},
+       "left":
+       {"type": "Native",
+        "tag": "witness",
+        "span": {"line": 1, "file": "", "column": 1},
+        "name": "andSkipped"}},
+      "left":
+      {"value": false,
+       "tag": "bool",
+       "span": {"line": 1, "file": "", "column": 1}}},
+     "tag": "evaluate",
+     "span": {"line": 1, "file": "", "column": 1}},
+    {"value":
+     {"tag": "or",
+      "span": {"line": 1, "file": "", "column": 1},
+      "right":
+      {"tag": "eq",
+       "span": {"line": 1, "file": "", "column": 1},
+       "right":
+       {"value": "0",
+        "tag": "constant",
+        "span": {"line": 1, "file": "", "column": 1}},
+       "left":
+       {"type": "Native",
+        "tag": "witness",
+        "span": {"line": 1, "file": "", "column": 1},
+        "name": "orSkipped"}},
+      "left":
+      {"value": true,
+       "tag": "bool",
+       "span": {"line": 1, "file": "", "column": 1}}},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0"}

@@ -1,5 +1,6 @@
 import Nightlean.Disclosure
 import Nightlean.Helpers
+import Nightlean.Control
 import Lean
 
 namespace Nightlean
@@ -19,6 +20,12 @@ initialize circuitRegistry : SimplePersistentEnvExtension CircuitInfo (Array Cir
     addEntryFn := Array.push
   }
 initialize contractRegistry : SimplePersistentEnvExtension Name (Array Name) ←
+  registerSimplePersistentEnvExtension {
+    addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
+    addEntryFn := Array.push
+  }
+
+initialize controlRegistry : SimplePersistentEnvExtension Name (Array Name) ←
   registerSimplePersistentEnvExtension {
     addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
     addEntryFn := Array.push
@@ -409,6 +416,30 @@ open scoped Nightlean
       publicInputs := (value.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty)
       outputs := value.outputs.map fun item => (item.name, item.ty)
     }
+  | _ => throwUnsupportedSyntax
+
+/-- Portable host-only execution plans never enter the native circuit registry. -/
+scoped syntax (name := controlPlanCommand) "nightlean_control" ident
+  "from" ident "entry" str : command
+
+open scoped Nightlean
+
+@[command_elab controlPlanCommand] unsafe def elabControlPlan : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_control $name:ident from $source:ident entry $exportName:str) =>
+    let namespaceName := (← getCurrNamespace) ++ source.getId
+    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+    let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+    match Control.compile program exportName.getString with
+    | .error diagnostic => throwErrorAt stx diagnostic.message
+    | .ok _ => pure ()
+    let sourceTerm := mkIdent sourceName
+    elabCommand (← `(def $name : Lean.Json :=
+      match Nightlean.Control.compile $sourceTerm $exportName with
+      | .ok value => value
+      | .error _ => Lean.Json.null))
+    let fullName := (← getCurrNamespace) ++ name.getId
+    modifyEnv fun env => controlRegistry.addEntry env fullName
   | _ => throwUnsupportedSyntax
 
 end Nightlean

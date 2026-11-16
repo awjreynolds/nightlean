@@ -1,0 +1,48 @@
+{"witnesses": [],
+ "schemaVersion": 1,
+ "name": "constantInactiveReturn",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [{"visibility": "private", "type": "Bool", "name": "flag"}],
+ "functions":
+ [{"resultType": "Native",
+   "parameters": [{"type": "Bool", "name": "flag"}],
+   "name": "constantInactiveReturn",
+   "id": "s0d0",
+   "body":
+   [{"yes":
+     [{"yes":
+       [{"value":
+         {"value": "1",
+          "tag": "constant",
+          "span": {"line": 1, "file": "", "column": 1}},
+         "tag": "return",
+         "span": {"line": 1, "file": "", "column": 1}}],
+       "tag": "if",
+       "span": {"line": 1, "file": "", "column": 1},
+       "no": [],
+       "condition":
+       {"tag": "eq",
+        "span": {"line": 1, "file": "", "column": 1},
+        "right":
+        {"value": "1",
+         "tag": "constant",
+         "span": {"line": 1, "file": "", "column": 1}},
+        "left":
+        {"value": "0",
+         "tag": "constant",
+         "span": {"line": 1, "file": "", "column": 1}}}}],
+     "tag": "if",
+     "span": {"line": 1, "file": "", "column": 1},
+     "no": [],
+     "condition":
+     {"tag": "reference",
+      "span": {"line": 1, "file": "", "column": 1},
+      "name": "flag"}},
+    {"value":
+     {"value": "2",
+      "tag": "constant",
+      "span": {"line": 1, "file": "", "column": 1}},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0"}

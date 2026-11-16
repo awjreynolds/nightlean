@@ -1,0 +1,35 @@
+{"witnesses": [],
+ "schemaVersion": 1,
+ "name": "lazyExpression",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "UIntRange<8>",
+   "parameters": [],
+   "name": "lazyExpression",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"yes":
+      {"value": "2",
+       "tag": "uint",
+       "span": {"line": 1, "file": "", "column": 1},
+       "maximum": "3"},
+      "tag": "if",
+      "span": {"line": 1, "file": "", "column": 1},
+      "no":
+      {"value":
+       {"value": "99",
+        "tag": "constant",
+        "span": {"line": 1, "file": "", "column": 1}},
+       "type": "UIntRange<8>",
+       "tag": "cast",
+       "span": {"line": 1, "file": "", "column": 1}},
+      "condition":
+      {"value": true,
+       "tag": "bool",
+       "span": {"line": 1, "file": "", "column": 1}}},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0"}

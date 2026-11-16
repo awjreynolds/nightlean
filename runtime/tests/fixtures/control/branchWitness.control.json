@@ -1,0 +1,46 @@
+{"witnesses": [{"type": "Native", "name": "chosen"}],
+ "schemaVersion": 1,
+ "name": "branchWitness",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [{"visibility": "public", "type": "Bool", "name": "active"}],
+ "functions":
+ [{"resultType": "Native",
+   "parameters": [{"type": "Bool", "name": "active"}],
+   "name": "branchWitness",
+   "id": "s0d0",
+   "body":
+   [{"yes":
+     [{"value":
+       {"value": "1",
+        "tag": "constant",
+        "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1}},
+       "type": "Native",
+       "tag": "stage",
+       "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1},
+       "key": "counter/value",
+       "capability": "store"},
+      {"value":
+       {"value":
+        {"type": "Native",
+         "tag": "witness",
+         "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1},
+         "name": "chosen"},
+        "tag": "disclose",
+        "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1}},
+       "tag": "return",
+       "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1}}],
+     "tag": "if",
+     "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1},
+     "no":
+     [{"value":
+       {"value": "7",
+        "tag": "constant",
+        "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1}},
+       "tag": "return",
+       "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1}}],
+     "condition":
+     {"tag": "reference",
+      "span": {"line": 7, "file": "tests/ControlSource.lean", "column": 1},
+      "name": "active"}}]}],
+ "entry": "s0d0"}

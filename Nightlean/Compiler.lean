@@ -165,7 +165,10 @@ private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Nam
     throwError "cannot export Nightlean artifacts after source elaboration errors"
   let circuits ← registeredCircuits
   let contracts ← registeredContracts
-  if circuits.isEmpty then throwError "source contains no Nightlean circuit declarations"
+  let sourceEnv ← getEnv
+  let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
+  if circuits.isEmpty && controls.isEmpty then throwError "source contains no Nightlean circuit declarations"
+  for name in controls do validateArtifactName name
   for (name, _) in circuits do validateArtifactName name
   for (name, contract) in contracts do
     validateArtifactName name
@@ -196,6 +199,12 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
   let (circuits, contracts) ← unsafe inspect
   -- Lower everything before creating output files. Unsupported circuits cannot leave partial output.
   let mut lowered := #[]
+  let sourceEnv ← getEnv
+  let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
+  for name in controls do
+    validateArtifactName name
+    let plan ← unsafe evalConstCheck Json ``Lean.Json name
+    lowered := lowered.push (artifactName name ++ ".control.json", plan.pretty)
   for (name, circuit) in circuits do
     match Backend.Zkir.lowerCircuit circuit with
     | .error d => failDiagnostic d
@@ -234,20 +243,27 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
       ("nativePlanFile", toJson (nativePlanFile name ep)),
       ("nativeCircuitQualified", toJson Bool.false),
       ("effects", toJson (ep.effects.map effectJson))]))]
-  let metadata := Json.mkObj [
+  let controlFields := if controls.isEmpty then [] else [
+    ("hostControlPlans", toJson (controls.toList.map fun name => Json.mkObj [
+      ("name", toJson name.toString), ("file", toJson (artifactName name ++ ".control.json")),
+      ("nativeGuardQualified", toJson Bool.false)]))]
+  let metadata := Json.mkObj ([
     ("schemaVersion", toJson (1 : Nat)), ("target", toJson profile.name),
     ("targetProfile", toJson profile),
     ("qualification", toJson ("unqualified-relation-and-state-description" : String)),
     ("deployable", toJson Bool.false),
     ("contracts", Json.arr contractMetadata),
-    ("circuits", toJson (circuits.map fun (name, circuit) => circuitSchemaJson name circuit))]
+    ("circuits", toJson (circuits.map fun (name, circuit) => circuitSchemaJson name circuit))] ++ controlFields)
   let path : System.FilePath := directory
   liftIO <| IO.FS.createDirAll path
   for (name, content) in lowered do
     liftIO <| IO.FS.writeFile (path / name) (content ++ "\n")
   liftIO <| IO.FS.writeFile (path / "nightlean.json") (metadata.pretty ++ "\n")
   let nativeCount : Nat := contracts.foldl (fun total (_, contract) => total + contract.entrypoints.length) 0
-  logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {path}; not a deployable contract bundle"
+  if controls.isEmpty then
+    logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {path}; not a deployable contract bundle"
+  else
+    logInfo m!"emitted {controls.size} host-only control plan(s), {circuits.size} circuit relation(s), and {nativeCount} native entrypoint relation(s) to {path}; structured native guards unavailable"
 
 elab "#nightlean_compile" directory:str : command =>
   compileArtifacts directory.getString TargetProfile.sourceBaseline

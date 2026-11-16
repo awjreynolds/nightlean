@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "source": "tests/ControlSource.lean",
+  "sourceSha256": "c66b913a4323b50e7c6079cc73c1969311005069ef19cca4891477905efb4da7",
+  "emissionCommand": "lake exe nightlean compile tests/ControlSource.lean --output /private/tmp/nightlean-control-source",
+  "scope": "Host control semantics only. No native guard qualification or persistent commit claim.",
+  "fixtures": {
+    "activeFailure.control.json": "a4c14e28576055939aa60641341aede8510c6f63fd1c97fd47f61ba91c3b4266",
+    "branchWitness.control.json": "4d4bc2289c5c7c1fbafc0bc9981e6ab16c6f502f708d97b9f0909efea67e4a5a",
+    "conditionalProviders.control.json": "111b2de89c0732b0ea19b5329dc1574e3df760d877c1fadfa23b95a6cb09fdac",
+    "constantInactiveReturn.control.json": "85f3fbf558d68f8ecc206cf6e41889a76df28d56472ab027cfc4d23a002e5598",
+    "inactiveFailure.control.json": "94dde5010c6623e58c2a8ce2d6c171f35d05f0a9550ac5b6ae9c44ae0f4c05e0",
+    "lazyExpression.control.json": "f30513fc15a78edee42eb52cffca23d412f14d2910402550c5f9e2758a16c916",
+    "lazyReturn.control.json": "460699b47a9d72aa3cf9790bde7ce568b47de7ac6001b492e7fc7c3319c750b8",
+    "shortCircuit.control.json": "01d1df3c0830d3268098bcac9a949061c9e4a3d6f877ee8ebec3fd0ceca2ed77",
+    "unitConditional.control.json": "3e1c337619f95a6390035b371979407edbac07608d560946d787b7f24064ec7d",
+    "unitPrivateBranches.control.json": "d5af6073f340ba4274411422b1b33c4db02d204172356cbe9ef2e3ffd317412a",
+    "witnessOrder.control.json": "86ccd8c20f78d2feb741fb4f13f1a93b5ed9710b1976560e6a62be81f907545f"
+  }
+}

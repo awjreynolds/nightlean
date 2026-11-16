@@ -1,0 +1,25 @@
+{"witnesses": [],
+ "schemaVersion": 1,
+ "name": "activeFailure",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Native",
+   "parameters": [],
+   "name": "activeFailure",
+   "id": "s0d0",
+   "body":
+   [{"tag": "assert",
+     "span": {"line": 1, "file": "", "column": 1},
+     "condition":
+     {"value": false,
+      "tag": "bool",
+      "span": {"line": 1, "file": "", "column": 1}}},
+    {"value":
+     {"value": "0",
+      "tag": "constant",
+      "span": {"line": 1, "file": "", "column": 1}},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0"}
