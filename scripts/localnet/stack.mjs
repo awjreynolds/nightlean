@@ -1,12 +1,14 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { access } from 'node:fs/promises';
+import { access, cp, mkdir, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const exec = promisify(execFile);
 const name = 'nightlean-dev';
 const label = 'org.nightlean.localnet';
-const params = process.env.NIGHTLEAN_PROOF_CACHE ?? '/private/tmp/authzk-compact036-params';
+const params = resolve(process.env.NIGHTLEAN_PROOF_CACHE ?? '/private/tmp/nightlean-proof-params');
 const images = {
   node: 'midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a',
   relay: 'midnightntwrk/midnight-node-toolkit@sha256:edcfc892eafc850c60db58045e6f2575d600cd84dc30a73e35bf9f5086dcc24f',
@@ -40,6 +42,21 @@ async function waitFor(check, title) {
   }
   throw new Error(`Timed out waiting for ${title}`);
 }
+async function prepareProofCache() {
+  await mkdir(params, { recursive: true });
+  for (const source of [process.env.NIGHTLEAN_PROOF_CACHE_SOURCE, process.env.NIGHTLEAN_PROOF_CACHE_EXTRA_SOURCE].filter(Boolean)) {
+    if (resolve(source) === params) throw new Error('Proof cache source and destination must differ');
+    await cp(resolve(source), params, { recursive: true, force: false, dereference: true });
+  }
+  const k9 = await readFile(join(params, 'bls_midnight_2p9'));
+  if (createHash('sha256').update(k9).digest('hex') !== 'b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd') {
+    throw new Error('k9 SRS digest does not match the qualified official parameter');
+  }
+}
+async function startProof() {
+  await start('proof', ['--network', name, '--mount', `type=bind,source=${params},target=/params`, '--env', 'MIDNIGHT_PP=/params', '--env', 'MIDNIGHT_PROOF_SERVER_JOB_CAPACITY=2', images.proof]);
+  await waitFor(async () => (await fetch(`${endpoints.proof}/health`, { signal: AbortSignal.timeout(2000) })).ok, 'proof server');
+}
 if (process.argv[2] === 'down') {
   for (const role of ['relay', 'indexer', 'proof', 'node']) {
     const prior = await exists(`${name}-${role}`);
@@ -48,7 +65,15 @@ if (process.argv[2] === 'down') {
   const networks = await docker(['network', 'ls', '--filter', `label=${label}=${name}`, '--format', '{{.Name}}']);
   if (networks.split('\n').includes(name)) await docker(['network', 'rm', name]);
   console.log(JSON.stringify({ stopped: name }));
+} else if (process.argv[2] === 'restart-proof') {
+  await prepareProofCache();
+  const prior = await exists(`${name}-proof`);
+  if (prior && prior.Config.Labels?.[label] !== name) throw new Error('Proof container belongs to another owner');
+  if (prior) await docker(['rm', '-f', `${name}-proof`]);
+  await startProof();
+  console.log(JSON.stringify({ proof: endpoints.proof, cache: params, healthy: true }));
 } else if (process.argv[2] === 'up') {
+  await prepareProofCache();
   await access(params);
   for (const image of Object.values(images)) await docker(['image', 'inspect', image]);
   const networks = await docker(['network', 'ls', '--format', '{{.Name}}']);
@@ -60,7 +85,7 @@ if (process.argv[2] === 'down') {
   if (!relayInfo.NetworkSettings.Networks[name]) await docker(['network', 'connect', name, `${name}-relay`]);
   await waitFor(async () => Number.parseInt(await rpc('chain_getHeader').then((h) => h.number), 16) >= 1, 'development block one');
   if (await rpc('chain_getBlockHash', [0]) !== endpoints.genesis) throw new Error('Development genesis mismatch');
-  await start('proof', ['--network', name, '--mount', `type=bind,source=${params},target=/params,readonly`, '--env', 'MIDNIGHT_PP=/params', '--env', 'MIDNIGHT_PROOF_SERVER_JOB_CAPACITY=2', images.proof]);
+  await startProof();
   await start('indexer', ['--network', name, '--env', 'APP__INFRA__NODE__URL=ws://nightlean-dev-node:9944', '--env', 'APP__APPLICATION__NETWORK_ID=undeployed', '--env', `APP__INFRA__SECRET=${'1'.repeat(64)}`, '--env', 'APP__INFRA__SPO_NODE__URL=ws://nightlean-dev-node:9944', '--env', 'APP__INFRA__SPO_NODE__BLOCKFROST_ID=synthetic', images.indexer]);
   await waitFor(async () => (await fetch(`${endpoints.proof}/health`, { signal: AbortSignal.timeout(2000) })).ok, 'proof server');
   await waitFor(async () => {
@@ -69,6 +94,6 @@ if (process.argv[2] === 'down') {
   }, 'indexer');
   console.log(JSON.stringify({ ...endpoints, containers: name, runtime: await rpc('state_getRuntimeVersion'), images }, null, 2));
 } else {
-  console.error('Usage: node scripts/localnet/stack.mjs up|down');
+  console.error('Usage: node scripts/localnet/stack.mjs up|down|restart-proof');
   process.exitCode = 1;
 }

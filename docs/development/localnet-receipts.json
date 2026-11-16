@@ -1,0 +1,41 @@
+{
+  "checkedOn": "2026-11-16",
+  "observer": "scripts/localnet/receipt.mjs",
+  "network": "undeployed",
+  "genesis": "0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "runtimeVersion": 2001100,
+  "transactionVersion": 4,
+  "finalizedAnchor": "0x452af05b20a3a412a12a5382e10290a5c5177d622f9e6b1fac6dc0f091180f62",
+  "contractAddress": "0x20a022f70bdab7bd954dea06965c1c3c9bb164a39be132ebff8dba9cf2b915ab",
+  "receipts": [
+    {
+      "outcome": "applied",
+      "blockHash": "0x594486ca9ef319aa7b119a9cc015d76ae1f304dd7c1c56181aa127a7bfefe14f",
+      "height": "92",
+      "extrinsicIndex": 4,
+      "extrinsicHash": "0x379aa3be5100c3beba44ca91fe54ae00aa390552ae7f827881b7477b624b8ff0",
+      "txHash": "0xcfdd250ab451d26e7b01a4ad0534033da0b2149ad6d8d16c496ddb93ca73e230",
+      "contractEvent": "ContractDeploy",
+      "ledgerEvent": "TxApplied"
+    },
+    {
+      "outcome": "applied",
+      "blockHash": "0x09282cce44617c484269634b657336e101920b0617bed4bca7ca3c1095b877bb",
+      "height": "98",
+      "extrinsicIndex": 4,
+      "extrinsicHash": "0x69e5e20d873a5af6043530df9b90e02978a761c2813860ffa598a6d23234db2b",
+      "txHash": "0x13c1f6a9c1f3ca11e1d7d918748fddb0c5a79b8986d46a5e1bdb2420343661e2",
+      "contractEvent": "ContractCall",
+      "ledgerEvent": "TxApplied"
+    }
+  ],
+  "checks": [
+    "Block is canonical and no later than the observed finalized head",
+    "Exact ledger transaction hash has exactly one TxApplied outcome",
+    "TxPartialSuccess is rejected",
+    "Exact tagged contract address has one expected event in the same extrinsic",
+    "Contract event identifies the same exact ledger transaction hash",
+    "Extrinsic method is midnight.sendMnTransaction"
+  ],
+  "limits": "These receipts establish finalized local development-chain effects. They do not establish Preview acceptance or validate equivalence between a Compact adapter and Lean-native lowering."
+}

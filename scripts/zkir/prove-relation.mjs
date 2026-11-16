@@ -4,6 +4,13 @@ import { Zkir, check } from '@midnightntwrk/zkir-v3';
 import { maxField, createProvingPayload } from '@midnight-ntwrk/ledger-v9';
 import { createHash } from 'node:crypto';
 
+const proofServer = new URL(process.env.NIGHTLEAN_PROOF_SERVER ?? 'http://127.0.0.1:16300');
+if (!['http:', 'https:'].includes(proofServer.protocol) ||
+    !['127.0.0.1', 'localhost', '[::1]'].includes(proofServer.hostname) ||
+    proofServer.username || proofServer.password) {
+  throw new Error('Relation proving requires a loopback proof server');
+}
+
 function compact(value) {
   let n = BigInt(value);
   if (n < 0n) throw new Error('negative SCALE value');
@@ -51,7 +58,9 @@ if (args.length !== 5) {
     };
     await check(serialized, { lookupKey: async () => material });
     const payload = createProvingPayload(serialized, field(spec.bindingInput), material);
-    const response = await fetch('http://127.0.0.1:6300/prove', { method: 'POST', body: payload });
+    const response = await fetch(new URL('/prove', proofServer), {
+      method: 'POST', body: payload, redirect: 'error', signal: AbortSignal.timeout(120_000)
+    });
     const proof = Buffer.from(await response.arrayBuffer());
     if (!response.ok) throw new Error(`proof server ${response.status}: ${proof.toString()}`);
     await writeFile(args[4], proof, { mode: 0o600 });
