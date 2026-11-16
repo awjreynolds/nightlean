@@ -1,8 +1,8 @@
-# Native runtime ABI v1, first provider slice
+# Native runtime ABI v1
 
 The Rust runtime now exports an in-process C ABI. A linked C++ host supplies the accepted private claim's five private inputs, obtains the expected public nullifier, and runs the official native circuit checker. Neither execution nor the linked harness invokes Node. The compiler remains written in Lean.
 
-This is the first slice of issue 31. General source witness functions, application provider capabilities, private-state journals and commit/retry semantics remain outstanding. Kotlin, Swift, WASM and TypeScript bindings have not been built or qualified. This ABI produces a checked execution summary. It does not generate a cryptographic proof or submit a transaction.
+The original scalar-input slice now includes an optional versioned host-capability and private-journal protocol. General source witness functions, composite providers, durable host adapters and native receipt validation remain outstanding. Kotlin, Swift, WASM and TypeScript bindings have not been built or qualified. This ABI produces a checked execution summary and records host lifecycle evidence. It does not generate a cryptographic proof or submit a transaction.
 
 ## Version and representation
 
@@ -53,7 +53,21 @@ After all private inputs arrive, advance evaluates the plan, executes native Imp
 {"abiVersion":1,"status":"completed","result":{"publicOutputs":{},"operations":21,"activityGroups":21,"officialCircuitChecked":true,"proofGenerated":false,"transactionSubmitted":false,"privateStateJournal":null}}
 ```
 
-Circuit rejection produces `failed` with the fixed error code `execution_rejected`. Neither failure results nor numeric API errors echo private input values. Completion is repeatable until release. Cancellation yields `cancelled`, clears retained input strings and prevents resumption. Terminal completed/failed sessions reject cancellation. Releasing an incomplete session also discards retained inputs.
+Circuit rejection produces `failed` with the fixed error code `execution_rejected`. Neither failure results nor numeric API errors echo private input values. Completion is repeatable until release. Cancellation yields `cancelled`, clears retained input strings and prevents resumption. Legacy terminal completed/failed sessions reject cancellation. Opt-in host contexts permit cancellation after successful execution while the private journal is still prepared and unsubmitted. Releasing an incomplete session also discards retained inputs.
+
+## Optional capabilities and private journals
+
+Add `hostContext` to the begin envelope to declare protocol-version-1 capabilities, operation argument/result schemas, per-input provider bindings, namespace, base revision and attempt identity. Existing scalar sessions omit this field. The complete schema, transition contract and host assumptions are in [private-state-lifecycle.md](../designs/private-state-lifecycle.md).
+
+The concrete `private_state.read.v1` operation supplies a declared private scalar from host storage. Its normal request contains operation/capability/schema metadata and `hasPrivateArguments: true`. The host retrieves arguments with `nightlean_session_private_data(..., NIGHTLEAN_PRIVATE_REQUEST, ...)`. Resume must echo the operation, capability, schema and request ID. Canonical scalar checks still apply. Only one provider or CAS request is outstanding.
+
+`nightlean_session_stage_private` stages scoped, typed host-policy application updates. Success freezes the updates without placing them in public completion results. After execution, `nightlean_session_notify` binds the exact intended transaction ID. The prepared journal is then available through `NIGHTLEAN_PRIVATE_JOURNAL`. The host must durably persist this private journal before sending `persisted` and `submitted` notifications.
+
+`accepted` records host evidence and requests `private_state.compare_exchange.v1`. Acceptance alone does not acknowledge commit. Private CAS arguments include the base revision, immutable attempt/transaction/target identity, complete updates and a private digest binding those fields. The host applies an atomic, durable compare-and-swap with an idempotency receipt and echoes attempt ID, transaction ID, digest, base revision and resulting revision. Incorrect or crossed replies reject without consuming the pending request. A conflict, rejection or unresolved uncertainty never applies private updates inside the core.
+
+Private tokens use separate `nightlean_private_length/copy/free` functions. Normal result functions reject these tokens. Keys, values and digests stay out of ordinary result JSON and diagnostic errors. Each private token requires explicit release, independently from its session. Copy and ownership rules match normal results. The host owns confidentiality and erasure of copied or persisted material.
+
+The native model exposes explicit invariant hooks for audit/proof work. Commit acknowledgement requires successful execution, matching immutable identity, persistence/submission evidence, accepted-host-evidence and matching successful CAS. Host receipt truthfulness, durable CAS correctness and crash recovery remain external assumptions. These staged writes do not implement or prove general source witness-function effects.
 
 ## Ownership, limits and failures
 
@@ -93,3 +107,14 @@ env -i PATH=/usr/bin:/bin /tmp/nightlean-cpp-smoke /tmp/nightlean-abi-public.jso
 ```
 
 The C harness checks symbol linkage, version, null inputs and invalid tokens. The C++ harness checks real claim execution, the expected public nullifier, a rejected wrong secret, request ordering, repeat advance, wrong IDs, Native/Bool validation, duplicate or unsolicited resume, cancellation, short copy buffers, explicit release and stale-token rejection. The existing native CLI remains the state-byte, five-negative-case and replay qualification check.
+
+The host-protocol C++ harness uses the unsigned source fixture and shares the descriptor fixture with Rust tests:
+
+```sh
+python3 runtime/tests/prepare_abi_fixture.py "$QUALIFIED_ARTIFACTS" /tmp/nightlean-abi-unsigned.json --unsigned-fixture
+clang++ -std=c++17 -Wall -Wextra -Werror -I runtime/include runtime/tests/cpp_host_smoke.cpp \
+  -L "$RUNTIME_LIB" -lnightlean_runtime -Wl,-rpath,"$RUNTIME_LIB" -o /tmp/nightlean-cpp-host-smoke
+env -i PATH=/usr/bin:/bin /tmp/nightlean-cpp-host-smoke /tmp/nightlean-abi-unsigned.json runtime/tests/fixtures/private-state/context.json
+```
+
+This harness and `host_protocol.rs` test scoped storage reads, staged journals, persistence ordering, crossed replies, host-CAS concurrency, deduplicated and changed-payload retries, uncertainty, rejection, cancellation, execution failure, private buffers and quotas. The original linked claim harness remains the compatibility check for sessions without `hostContext`.

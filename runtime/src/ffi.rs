@@ -46,6 +46,8 @@ struct Begin {
     ledger_parameters_hex: String,
     address: String,
     circuit: Json,
+    #[serde(default)]
+    host_context: Option<crate::host::Context>,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -53,6 +55,12 @@ struct Response {
     abi_version: u32,
     request_id: u64,
     value: Json,
+    #[serde(default)]
+    operation: Option<String>,
+    #[serde(default)]
+    capability: Option<String>,
+    #[serde(default)]
+    schema: Option<String>,
 }
 #[derive(Clone)]
 enum Phase {
@@ -72,6 +80,7 @@ struct Session {
     circuit: Vec<u8>,
     phase: Phase,
     next_request: u64,
+    host: Option<crate::host::Runtime>,
 }
 fn wipe_json(value: &mut Json) {
     match value {
@@ -92,6 +101,7 @@ struct Registry {
     next: u64,
     sessions: BTreeMap<u64, Session>,
     results: BTreeMap<u64, Vec<u8>>,
+    private_results: BTreeMap<u64, Vec<u8>>,
 }
 static REGISTRY: OnceLock<Mutex<Registry>> = OnceLock::new();
 fn registry() -> std::sync::MutexGuard<'static, Registry> {
@@ -273,6 +283,25 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
     validate_circuit(&begin.circuit)?;
     let circuit = serde_json::to_vec(&begin.circuit).map_err(|_| INVALID_ARGUMENT)?;
     IrSource::load(circuit.as_slice()).map_err(|_| INVALID_ARGUMENT)?;
+    let private_inputs = plan
+        .circuit
+        .inputs
+        .iter()
+        .filter(|i| i.visibility == "private")
+        .map(|i| (i.name.clone(), i.ty.clone()))
+        .collect();
+    let host = begin
+        .host_context
+        .map(|context| {
+            crate::host::Runtime::new(
+                context,
+                &private_inputs,
+                hex::encode(address),
+                plan.entrypoint.clone(),
+            )
+            .map_err(host_error)
+        })
+        .transpose()?;
     Ok(Session {
         plan: begin.plan,
         inputs: begin.public_inputs,
@@ -282,6 +311,7 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
         circuit,
         phase: Phase::Ready,
         next_request: 0,
+        host,
     })
 }
 fn complete(session: &Session) -> Result<Json, ()> {
@@ -313,7 +343,18 @@ fn complete(session: &Session) -> Result<Json, ()> {
         json!({"abiVersion":ABI_VERSION,"status":"completed","result":{"publicOutputs":outputs,"operations":execution.program.len(),"activityGroups":active.len(),"officialCircuitChecked":true,"proofGenerated":false,"transactionSubmitted":false,"privateStateJournal":null}}),
     )
 }
+fn host_error(error: crate::host::Error) -> i32 {
+    match error {
+        crate::host::Error::Descriptor => INVALID_ARGUMENT,
+        crate::host::Error::Denied | crate::host::Error::Response => INVALID_RESPONSE,
+        crate::host::Error::State => INVALID_STATE,
+        crate::host::Error::Limit => LIMIT,
+    }
+}
 fn advance(session: &mut Session) -> Result<Json, i32> {
+    if let Some(request) = session.host.as_ref().and_then(|h| h.cas_metadata()) {
+        return Ok(json!({"abiVersion":1,"status":"need_host","request":request}));
+    }
     match &session.phase {
         Phase::Complete(result) => return Ok(result.clone()),
         Phase::Cancelled => return Ok(status("cancelled")),
@@ -342,8 +383,23 @@ fn advance(session: &mut Session) -> Result<Json, i32> {
             }),
     };
     if let Some((index, id)) = pending {
-        session.phase = Phase::Waiting { index, id };
         let input = &session.plan.circuit.inputs[index];
+        if !matches!(session.phase, Phase::Waiting { .. }) {
+            if let Some(host) = &mut session.host {
+                host.begin_input(&input.name, id).map_err(host_error)?;
+            }
+        }
+        session.phase = Phase::Waiting { index, id };
+        if let Some(request) = session
+            .host
+            .as_ref()
+            .map(|h| h.input_metadata())
+            .transpose()
+            .map_err(host_error)?
+            .flatten()
+        {
+            return Ok(json!({"abiVersion":1,"status":"need_host","request":request}));
+        }
         return Ok(
             json!({"abiVersion":ABI_VERSION,"status":"need_host","request":{"id":id,"operation":"witness.input","name":input.name,"type":input.ty,"visibility":"private"}}),
         );
@@ -351,11 +407,17 @@ fn advance(session: &mut Session) -> Result<Json, i32> {
     session.phase = Phase::Running;
     match complete(session) {
         Ok(result) => {
+            if let Some(host) = &mut session.host {
+                host.execution_finished(true).map_err(host_error)?;
+            }
             session.phase = Phase::Complete(result.clone());
             session.inputs.values_mut().for_each(wipe_json);
             Ok(result)
         }
         Err(()) => {
+            if let Some(host) = &mut session.host {
+                host.execution_finished(false).map_err(host_error)?;
+            }
             session.phase = Phase::Failed;
             session.inputs.values_mut().for_each(wipe_json);
             Ok(
@@ -435,6 +497,28 @@ pub unsafe extern "C" fn nightlean_session_resume(
             return Err(LIMIT);
         }
         let state = registry.sessions.get_mut(&session).ok_or(INVALID_HANDLE)?;
+        if state
+            .host
+            .as_ref()
+            .is_some_and(|h| h.cas_metadata().is_some())
+        {
+            if response.abi_version != ABI_VERSION {
+                return Err(INVALID_RESPONSE);
+            }
+            let host = state.host.as_mut().ok_or(INVALID_STATE)?;
+            host.finish_cas(
+                response.request_id,
+                response.operation.as_deref(),
+                response.capability.as_deref(),
+                response.schema.as_deref(),
+                response.value,
+            )
+            .map_err(host_error)?;
+            let value = host.public_status();
+            let result = registry.result(value)?;
+            unsafe { out_result.write(result) };
+            return Ok(());
+        }
         let Phase::Waiting { index, id } = state.phase else {
             return Err(INVALID_STATE);
         };
@@ -443,6 +527,22 @@ pub unsafe extern "C" fn nightlean_session_resume(
         }
         let input = &state.plan.circuit.inputs[index];
         input_value(&input.ty, &response.value).map_err(|_| INVALID_RESPONSE)?;
+        if let Some(host) = &mut state.host {
+            host.finish_input(
+                &input.name,
+                id,
+                response.operation.as_deref(),
+                response.capability.as_deref(),
+                response.schema.as_deref(),
+                &response.value,
+            )
+            .map_err(host_error)?;
+        } else if response.operation.is_some()
+            || response.capability.is_some()
+            || response.schema.is_some()
+        {
+            return Err(INVALID_RESPONSE);
+        }
         state.inputs.insert(input.name.clone(), response.value);
         state.phase = Phase::Ready;
         let result = registry.result(status("ready"))?;
@@ -461,7 +561,9 @@ pub unsafe extern "C" fn nightlean_session_cancel(session: u64, out_result: *mut
             return Err(LIMIT);
         }
         let state = registry.sessions.get_mut(&session).ok_or(INVALID_HANDLE)?;
-        if matches!(state.phase, Phase::Complete(_) | Phase::Failed) {
+        if let Some(host) = &mut state.host {
+            host.cancel().map_err(host_error)?;
+        } else if matches!(state.phase, Phase::Complete(_) | Phase::Failed) {
             return Err(INVALID_STATE);
         }
         state.phase = Phase::Cancelled;
@@ -598,4 +700,184 @@ mod tests {
             INVALID_HANDLE
         );
     }
+}
+
+pub const MAX_PRIVATE_RESULTS: usize = 64;
+pub const PRIVATE_REQUEST: u32 = 1;
+pub const PRIVATE_JOURNAL: u32 = 2;
+impl Registry {
+    fn private_result(&mut self, mut value: Json) -> Result<u64, i32> {
+        if self.private_results.len() >= MAX_PRIVATE_RESULTS {
+            wipe_json(&mut value);
+            return Err(LIMIT);
+        }
+        let encoded = serde_json::to_vec(&value).map_err(|_| INTERNAL);
+        wipe_json(&mut value);
+        let mut encoded = encoded?;
+        if encoded.len() > crate::host::MAX_PRIVATE_BYTES {
+            encoded.zeroize();
+            return Err(LIMIT);
+        }
+        let token = match self.token() {
+            Ok(token) => token,
+            Err(error) => {
+                encoded.zeroize();
+                return Err(error);
+            }
+        };
+        self.private_results.insert(token, encoded);
+        Ok(token)
+    }
+}
+/// # Safety
+/// bytes/length and out_result must satisfy the C header's memory contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_session_stage_private(
+    session: u64,
+    bytes: *const u8,
+    length: usize,
+    out_result: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_result)? };
+        let stage: crate::host::Stage = serde_json::from_slice(unsafe { input(bytes, length)? })
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let mut registry = registry();
+        if registry.results.len() >= MAX_RESULTS {
+            return Err(LIMIT);
+        }
+        let state = registry.sessions.get_mut(&session).ok_or(INVALID_HANDLE)?;
+        state
+            .host
+            .as_mut()
+            .ok_or(INVALID_STATE)?
+            .stage(stage)
+            .map_err(host_error)?;
+        let result = registry.result(status("staged"))?;
+        unsafe { out_result.write(result) };
+        Ok(())
+    })
+}
+/// # Safety
+/// bytes/length and out_result must satisfy the C header's memory contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_session_notify(
+    session: u64,
+    bytes: *const u8,
+    length: usize,
+    out_result: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_result)? };
+        let notice: crate::host::Notice = serde_json::from_slice(unsafe { input(bytes, length)? })
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let mut registry = registry();
+        if registry.results.len() >= MAX_RESULTS {
+            return Err(LIMIT);
+        }
+        let state = registry.sessions.get_mut(&session).ok_or(INVALID_HANDLE)?;
+        if !matches!(state.phase, Phase::Complete(_)) {
+            return Err(INVALID_STATE);
+        }
+        let host = state.host.as_mut().ok_or(INVALID_STATE)?;
+        if host.notify(notice).map_err(host_error)? && host.cas_metadata().is_none() {
+            state.next_request = state.next_request.checked_add(1).ok_or(LIMIT)?;
+            host.begin_cas(state.next_request).map_err(host_error)?;
+        }
+        let value = match host.cas_metadata() {
+            Some(request) => json!({"abiVersion":1,"status":"need_host","request":request}),
+            None => host.public_status(),
+        };
+        let result = registry.result(value)?;
+        unsafe { out_result.write(result) };
+        Ok(())
+    })
+}
+/// Return a separately owned PRIVATE buffer token, never a normal result token.
+/// # Safety
+/// out_private must address writable storage for one uint64_t.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_session_private_data(
+    session: u64,
+    kind: u32,
+    out_private: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_private)? };
+        let mut registry = registry();
+        if registry.private_results.len() >= MAX_PRIVATE_RESULTS {
+            return Err(LIMIT);
+        }
+        let host = registry
+            .sessions
+            .get(&session)
+            .ok_or(INVALID_HANDLE)?
+            .host
+            .as_ref()
+            .ok_or(INVALID_STATE)?;
+        let value = match kind {
+            PRIVATE_REQUEST => host.private_arguments(),
+            PRIVATE_JOURNAL => host.private_journal(),
+            _ => return Err(INVALID_ARGUMENT),
+        }
+        .map_err(host_error)?;
+        let token = registry.private_result(value)?;
+        unsafe { out_private.write(token) };
+        Ok(())
+    })
+}
+/// # Safety
+/// out_length must address writable storage for one size_t.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_private_length(token: u64, out_length: *mut usize) -> i32 {
+    guard(|| {
+        if out_length.is_null() {
+            return Err(INVALID_ARGUMENT);
+        }
+        unsafe { out_length.write(0) };
+        let registry = registry();
+        let value = registry.private_results.get(&token).ok_or(INVALID_HANDLE)?;
+        unsafe { out_length.write(value.len()) };
+        Ok(())
+    })
+}
+/// # Safety
+/// destination and out_written follow the C header's writable-memory contract.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_private_copy(
+    token: u64,
+    destination: *mut u8,
+    capacity: usize,
+    out_written: *mut usize,
+) -> i32 {
+    guard(|| {
+        if out_written.is_null() {
+            return Err(INVALID_ARGUMENT);
+        }
+        unsafe { out_written.write(0) };
+        let registry = registry();
+        let value = registry.private_results.get(&token).ok_or(INVALID_HANDLE)?;
+        if capacity < value.len() {
+            return Err(BUFFER_TOO_SMALL);
+        }
+        if destination.is_null() {
+            return Err(INVALID_ARGUMENT);
+        }
+        unsafe {
+            ptr::copy_nonoverlapping(value.as_ptr(), destination, value.len());
+            out_written.write(value.len())
+        };
+        Ok(())
+    })
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn nightlean_private_free(token: u64) -> i32 {
+    guard(|| {
+        let mut value = registry()
+            .private_results
+            .remove(&token)
+            .ok_or(INVALID_HANDLE)?;
+        value.zeroize();
+        Ok(())
+    })
 }

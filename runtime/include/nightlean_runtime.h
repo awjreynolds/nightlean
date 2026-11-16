@@ -11,6 +11,10 @@ extern "C" {
 #define NIGHTLEAN_MAX_INPUT_BYTES 1048576u
 #define NIGHTLEAN_MAX_SESSIONS 64u
 #define NIGHTLEAN_MAX_RESULTS 256u
+#define NIGHTLEAN_HOST_PROTOCOL_VERSION 1u
+#define NIGHTLEAN_MAX_PRIVATE_RESULTS 64u
+#define NIGHTLEAN_PRIVATE_REQUEST 1u
+#define NIGHTLEAN_PRIVATE_JOURNAL 2u
 
 enum nightlean_status {
   NIGHTLEAN_OK = 0,
@@ -59,6 +63,36 @@ int32_t nightlean_session_resume(uint64_t session, const uint8_t *json,
                                 size_t length, uint64_t *out_result);
 int32_t nightlean_session_cancel(uint64_t session, uint64_t *out_result);
 int32_t nightlean_session_free(uint64_t session);
+/* Optional hostContext grants versioned provider operations and scopes. Legacy
+ * scalar input sessions need no hostContext. New private-state operations never
+ * perform host I/O. Staged updates are application policy, outside circuit proof.
+ *
+ * stage_private takes abiVersion, operation=private_state.stage.v1, capability,
+ * key, type, value. notify takes abiVersion, event, attemptId, transactionId.
+ * Events are bind, persisted, submitted, accepted, rejected, uncertain.
+ * Persist the private journal before reporting submitted. Accepted is HOST
+ * evidence and yields a private_state.compare_exchange.v1 request. Only an
+ * affirmative, matching host CAS response acknowledges commit. The reply echoes
+ * attemptId, transactionId, private journalDigest, baseRevision and new revision.
+ * Rejection and
+ * uncertainty never imply commit. No cancellation after submission.
+ *
+ * private_data returns a PRIVATE token in a separate buffer namespace. Kind 1
+ * retrieves pending request arguments, kind 2 a prepared transaction-bound
+ * journal. Never log or publish these bytes. Public result APIs reject private
+ * tokens, and private APIs reject public tokens. Each private token requires
+ * private_free. Free wipes retained bytes best effort, not caller copies.
+ */
+int32_t nightlean_session_stage_private(uint64_t session, const uint8_t *json,
+                                       size_t length, uint64_t *out_result);
+int32_t nightlean_session_notify(uint64_t session, const uint8_t *json,
+                                size_t length, uint64_t *out_result);
+int32_t nightlean_session_private_data(uint64_t session, uint32_t kind,
+                                      uint64_t *out_private);
+int32_t nightlean_private_length(uint64_t token, size_t *out_length);
+int32_t nightlean_private_copy(uint64_t token, uint8_t *destination,
+                               size_t capacity, size_t *out_written);
+int32_t nightlean_private_free(uint64_t token);
 int32_t nightlean_result_length(uint64_t result, size_t *out_length);
 /* No partial copies. out_written is zero on failure. A successful copy
  * writes exactly result_length bytes, without a trailing NUL. */

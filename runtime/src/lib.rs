@@ -639,3 +639,8 @@ pub mod artifacts;
 
 /// Native private transaction artifact assembly.
 pub mod assembly;
+
+/// Scoped host providers and private journal transport.
+pub mod host;
+/// Pure private-state lifecycle model.
+pub mod lifecycle;
