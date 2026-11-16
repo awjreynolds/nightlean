@@ -1,6 +1,8 @@
 import Nightlean.IR
 import Nightlean.Backend.Impact
 import Nightlean.Passes
+import Nightlean.Backend.NativeExpected
+import Nightlean.Backend.NativeProducer
 
 namespace Nightlean.Backend.Zkir
 
@@ -8,6 +10,12 @@ open Lean
 
 /-- Initial relation producer. Ledger transcript/state integration is separate. -/
 private def nativeType : Json := toJson ("Scalar<BLS12-381>" : String)
+
+private def validateProduced (span : SourceSpan) (expected : Native.Expected) (program : Json) :
+    Except Diagnostic Json :=
+  match Native.validate expected program with
+  | .ok _ => .ok program
+  | .error message => .error {span, message := "native producer invariant: " ++ message}
 
 def nativeModulus : Nat :=
   52435875175126190479447740508185965837690552500527637822603658699938581184513
@@ -184,12 +192,13 @@ def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()
   let (_, result) := (lowerBody c).run {}
-  return Json.mkObj [
+  let program := Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
     ("inputs", Json.arr #[]),
     ("outputs", Json.arr (c.outputs.toArray.map fun _ => nativeType)),
     ("do_communications_commitment", toJson false),
     ("instructions", Json.arr result.instructions)]
+  validateProduced c.span (← Native.expectedCircuit c) program
 
 private def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
   for input in entry.circuit.inputs do
@@ -226,12 +235,13 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagn
   let entry := Passes.pruneEntrypoint entry
   let plan ← Impact.lower state entry
   let (_, result) := (lowerEntrypointBody entry plan).run {}
-  return Json.mkObj [
+  let program := Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
     ("inputs", Json.arr #[]), ("outputs", Json.arr #[]),
     -- Ledger ContractCall.public_inputs always includes the commitment after
     -- binding input. Standalone relations above deliberately keep it disabled.
     ("do_communications_commitment", toJson true),
     ("instructions", Json.arr result.instructions)]
+  validateProduced entry.span (← Native.expectedEntrypoint state entry) program
 
 end Nightlean.Backend.Zkir

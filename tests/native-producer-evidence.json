@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "checkedAt": "2026-11-16T18:41:38Z",
+  "scope": "Current Native-scalar producer validation and upstream checker/keygen observations, not full native soundness or feature equivalence",
+  "inventory": {
+    "sourceRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "instructionEntries": 47,
+    "valueTypeEntries": 15,
+    "enabledInstructionDescriptors": 16,
+    "enabledNativeValueTypes": 1,
+    "producerGuardCases": 65,
+    "countsMeaning": "Registry and executable test counts only"
+  },
+  "nativeTool": {
+    "releaseLabel": "3.2.1",
+    "reportedVersion": "midnight-zkir 3.2.0",
+    "sourceRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40"
+  },
+  "officialChecker": {
+    "releaseLabel": "3.2.1",
+    "releaseAssetSha256": "f2f4d6c1aaa85e2d9cec1c9f204f4f47ae5c7650ef170a68b1675441ea037133"
+  },
+  "upstreamObservations": [
+    {"id": "NATIVE-ASSERT-ONE", "checkerAccepted": true},
+    {"id": "NATIVE-ASSERT-TWO-CHECKER", "checkerAccepted": false, "nativeKeygenSucceeded": true},
+    {"id": "NATIVE-DUPLICATE-OUTPUT-UPSTREAM", "checkerAccepted": true, "nativeKeygenSucceeded": true},
+    {"id": "NATIVE-OUTPUT-DOES-NOT-TERMINATE", "checkerAccepted": false},
+    {"id": "NATIVE-INACTIVE-INPUT-DOES-NOT-SKIP-INVERSION", "checkerAccepted": false},
+    {"id": "NATIVE-LESS-THAN-UNBOUNDED-OUTSIDE-CONTRACT", "checkerAccepted": false, "scope": "Undefined input combination, observation only"},
+    {"id": "NATIVE-LESS-THAN-RANGED-REJECTS-BAD-WITNESS", "checkerAccepted": false},
+    {"id": "SOURCE-PUBLIC-BOOL-FALSE", "checkerAccepted": true, "activityGroups": 2},
+    {"id": "SOURCE-PUBLIC-BOOL-TRUE", "checkerAccepted": true, "activityGroups": 2},
+    {"id": "SOURCE-PUBLIC-BOOL-TWO-REJECT", "checkerAccepted": false},
+    {"id": "SOURCE-PUBLIC-BOOL-WRONG-RETURN-REJECT", "checkerAccepted": false}
+  ],
+  "goldens": {
+    "privateClaimZkirSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+    "scalarArtifactFilesUnchanged": 17,
+    "preChangeCompilerRevision": "41482a1602111ea7d3ede9db343439355c7b2935",
+    "publicBoolRoundTripZkirSha256": "64476443637f075dccd7c65f26c0b1cf5e2ff040f17eb26c16686ca7ccb2f9f2",
+    "publicBoolCellZkirSha256": "4be5727e7cf79209742afbd901ec8c9d10d07112eb1990a9d6754412ecdda781",
+    "publicBoolZkirMatchesPreChangeCompiler": true,
+    "boolPlanJsonIntentionallyChanged": "Typed Bool-to-Native cast repairs the prior materialization type error"
+  },
+  "notEstablished": [
+    "A satisfying witness or proof from native keygen success",
+    "Malicious internal-witness proving or full native verifier soundness",
+    "A new ledger transaction from the raw fixture observations",
+    "Full native instruction/type, alignment, composition or asset coverage",
+    "Whole-source or proving resource safety",
+    "A formal source-to-native preservation theorem for the abstract validator/normalizer"
+  ]
+}

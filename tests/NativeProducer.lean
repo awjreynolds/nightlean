@@ -1,0 +1,211 @@
+import Nightlean.Backend.Zkir
+import Nightlean.Claim
+
+open Lean Nightlean
+open Nightlean.Backend
+open Nightlean.Backend.Native
+
+private def op (name : String) (fields : List (String × Json) := []) : Json :=
+  Json.mkObj (("op", toJson name) :: fields)
+private def output : Json := op "output" [("vals", toJson ([] : List String))]
+private def input : Json := op "private_input" [("guard", Json.null),
+  ("type", toJson ("Scalar<BLS12-381>" : String)), ("output", toJson ("%x" : String))]
+private def expected : Expected := {
+  mode := .relation
+  inputs := [{identifier := "%x", visibility := .«private», ty := .native}]
+  groups := []
+  returns := []
+  assertions := []
+  bounds := []
+}
+private def program (instructions : List Json) : Json := Json.mkObj [
+  ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
+  ("inputs", Json.arr #[]), ("outputs", Json.arr #[]),
+  ("do_communications_commitment", toJson false), ("instructions", toJson instructions)]
+private def accepted (value : Except String α) : Bool := match value with | .ok _ => true | _ => false
+private def rejected (value : Except String α) : Bool := !accepted value
+private def check (body : List Json) : Except String Unit := Native.validate expected (program (input :: body ++ [output]))
+private def unary (name value result : String) : Json := op name [("a", toJson value), ("output", toJson result)]
+private def binary (name left right result : String) : Json := op name [
+  ("a", toJson left), ("b", toJson right), ("output", toJson result)]
+private def constrain (name value : String) : Json := op name [("val", toJson value)]
+private def assertion (value : String) : Json := op "assert" [("cond", toJson value)]
+private def bits (value : String) (count : Nat) : Json := op "constrain_bits" [("val", toJson value), ("bits", toJson count)]
+private def less (left right result : String) (count : Nat) : Json := op "less_than" [
+  ("a", toJson left), ("b", toJson right), ("bits", toJson count), ("output", toJson result)]
+private def replace (value : Json) (name : String) (replacement : Json) : Json :=
+  match value.getObj? with
+  | .error _ => value
+  | .ok object => Json.mkObj ((object.toList.filter (·.1 != name)) ++ [(name, replacement)])
+
+#guard instructionNames.length == 47
+#guard valueTypeNames.length == 15
+#guard instructionNames.eraseDups.length == 47
+#guard valueTypeNames.eraseDups.length == 15
+#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 16
+#guard rejected (requireInstruction "new_native_without_metadata")
+#guard rejected (requireInstruction "inv")
+#guard rejected (requireInstruction "copy")
+#guard match valueTypeSupport "Bool" with | .ok (.unsupported _) => true | _ => false
+#guard match valueTypeSupport "Bytes" with | .ok (.unsupported _) => true | _ => false
+
+-- A primitive cannot acquire default privacy/effect behavior silently.
+example : True := by
+  fail_if_success
+    have missingMetadata : Descriptor := {
+      operands := .nativeUnary
+      encoding := .canonicalNative
+      precondition := .canonicalNative
+      guards := .noGuard
+      binding := .none
+      fields := ["a", "output"]
+    }
+  trivial
+
+-- Canonical Native immediates use minimal little-endian bytes.
+#guard match immediate "0x0001" with | .ok 256 => true | _ => false
+#guard rejected (immediate "0x")
+#guard rejected (immediate "0x0")
+#guard rejected (immediate "0X01")
+#guard rejected (immediate "-0x01")
+#guard rejected (immediate "0x0000")
+#guard rejected (immediate "0xFF")
+#guard rejected (immediate (Zkir.fieldImmediate Field.modulus))
+#guard accepted (immediate (Zkir.fieldImmediate (Field.modulus - 1)))
+
+-- SSA, exact fields, type encodings and output structure fail closed.
+#guard accepted (check [])
+#guard rejected (check [binary "add" "%future" "0x00" "%v0"])
+#guard rejected (check [binary "add" "%x" "0x00" "%x"])
+#guard rejected (check [op "add" [("a", toJson ("%x" : String)), ("output", toJson ("%v0" : String))]])
+#guard rejected (check [replace (binary "add" "%x" "0x00" "%v0") "unknown" Json.null])
+#guard rejected (Native.validate expected (program [input]))
+#guard rejected (Native.validate expected (program [output]))
+#guard rejected (Native.validate expected (program [input, output, output]))
+#guard rejected (Native.validate expected (program [input, output, binary "add" "%x" "0x00" "%v0"]))
+#guard rejected (Native.validate expected (program [replace input "type" (toJson ("Boolean" : String)), output]))
+#guard rejected (Native.validate expected (program [replace input "output" (toJson ("x" : String)), output]))
+#guard rejected (Native.validate expected (replace (program [input, output]) "extra" Json.null))
+#guard rejected (Native.validate expected (replace (program [input, output]) "do_communications_commitment" (toJson true)))
+
+-- Native Assert is safe only after a genuine 0/1 fact. Nonzero is insufficient.
+#guard rejected (check [assertion "%x"])
+#guard rejected (check [assertion "0x02"])
+#guard accepted (check [constrain "constrain_to_boolean" "%x", assertion "%x"])
+#guard accepted (check [binary "test_eq" "%x" "0x00" "%b", assertion "%b"])
+#guard rejected (check [unary "not" "%x" "%b"])
+#guard rejected (check [op "cond_select" [("bit", toJson ("%x" : String)),
+  ("a", toJson ("0x01" : String)), ("b", toJson ("0x00" : String)), ("output", toJson ("%v0" : String))]])
+#guard rejected (check [assertion "%x", constrain "constrain_to_boolean" "%x"])
+
+-- LessThan requires both operands in range before its use, not later.
+#guard rejected (check [less "%x" "0xff" "%b" 8])
+#guard rejected (check [less "%x" "0xff" "%b" 8, bits "%x" 8])
+#guard rejected (check [bits "%x" 8, less "%x" "0x0001" "%b" 8])
+#guard accepted (check [bits "%x" 8, less "%x" "0xff" "%b" 8, assertion "%b"])
+#guard rejected (check [bits "%x" 0])
+#guard rejected (check [bits "%x" 249])
+#guard rejected (check [bits "0x0001" 8])
+#guard rejected (Native.validate {expected with inputs := [{identifier := "%x", visibility := .«private», ty := .bool}]}
+  (program [input, output]))
+#guard rejected (Native.validate {expected with inputs := [{identifier := "%x", visibility := .«private», ty := .uint 510}]}
+  (program [input, bits "%x" 9, output]))
+#guard accepted (Native.validate {expected with inputs := [{identifier := "%x", visibility := .«private», ty := .uint 510}]}
+  (program [input, bits "%x" 9, less "%x" "0xff01" "%bounded" 9, assertion "%bounded", output]))
+#guard rejected (check [op "inv" [("a", toJson ("0x00" : String)), ("output", toJson ("%inverse" : String))]])
+
+-- Input guards only alter preprocessing. They do not authorize partial
+-- operations, inactive source execution, disclosure, or public activation.
+#guard rejected (Native.validate expected (program [replace input "guard" (toJson ("0x00" : String)), output]))
+#guard rejected (Native.validate expected (program [replace input "guard" (toJson ("0x01" : String)), output]))
+#guard rejected (check [op "impact" [("guard", toJson ("%x" : String)), ("inputs", toJson ([] : List String))]])
+#guard rejected (check [op "impact" [("guard", toJson ("0x00" : String)), ("inputs", toJson ([] : List String))]])
+
+private def publicCircuit : Circuit := {
+  name := "public", inputs := [{name := "public", ty := .native, visibility := .«public»}],
+  constraints := [.eq (.ref "public" : Expr .native) (.native 7),
+    .eq (.ref "public" : Expr .native) (.native 8)],
+  outputs := [{name := "result", ty := .native, value := .native 7}]}
+
+private def checkMutation (change : List Json → List Json) : Except String Unit := do
+  let required ← (expectedCircuit publicCircuit).mapError (·.message)
+  let json ← (Zkir.lowerCircuit publicCircuit).mapError (·.message)
+  let instructions ← (← json.getObjVal? "instructions").getArr?
+  Native.validate required (replace json "instructions" (toJson (change instructions.toList)))
+
+#guard accepted (checkMutation id)
+#guard rejected (checkMutation (List.filter (fun value => (value.getObjValD "op").getStr?.toOption != some "impact")))
+#guard rejected (checkMutation (List.filter (fun value => (value.getObjValD "op").getStr?.toOption != some "assert")))
+#guard rejected (checkMutation (fun instructions =>
+  let assertions := instructions.filter (fun value => (value.getObjValD "op").getStr?.toOption == some "assert")
+  let outputs := instructions.filter (fun value => (value.getObjValD "op").getStr?.toOption == some "output")
+  let body := instructions.filter (fun value =>
+    (value.getObjValD "op").getStr?.toOption != some "assert" &&
+    (value.getObjValD "op").getStr?.toOption != some "output")
+  body ++ assertions.reverse ++ outputs))
+#guard rejected (checkMutation (fun instructions => instructions.map fun value =>
+  if (value.getObjValD "op").getStr?.toOption == some "impact" then
+    replace value "inputs" (toJson (["0x00"] : List String)) else value))
+#guard rejected (checkMutation (fun instructions => instructions.map fun value =>
+  if (value.getObjValD "op").getStr?.toOption == some "impact" then
+    replace value "inputs" (toJson (["%input_public", "%input_public"] : List String)) else value))
+#guard rejected (checkMutation (fun instructions => instructions.map fun value =>
+  if (value.getObjValD "op").getStr?.toOption == some "impact" then
+    let fields := (value.getObjValD "inputs").getArr?.toOption.getD #[]
+    replace value "inputs" (if fields == #[toJson ("%input_public" : String)] then
+      toJson (["0x07"] : List String) else toJson (["%input_public"] : List String))
+  else value))
+
+private def boolEntry : Entrypoint := {
+  name := "bool"
+  circuit := {name := "bool", inputs := [{name := "flag", ty := .bool, visibility := .«public»}]}
+  effects := [.readCell "enabled" "old" .bool,
+    .require (.eq (.ref "old" : Expr .bool) (.ref "flag")), .writeCell "enabled" .bool (.ref "flag")]
+}
+private def boolState : List StateDecl := [{name := "enabled", kind := .cell .bool}]
+
+-- Bool state/public input materialization must use a typed Native cast.
+#guard match Impact.lower boolState boolEntry with
+  | .error _ => false
+  | .ok plan => match plan.toJson {modulus := Field.modulus, poseidon2 := fun _ _ _ => .error "unused"}
+      [("flag", .bool false), ("old", .bool false)] with
+    | .ok _ => true | _ => false
+#guard match Impact.lower boolState boolEntry with
+  | .error _ => false
+  | .ok plan => match plan.toJson {modulus := Field.modulus, poseidon2 := fun _ _ _ => .error "unused"}
+      [("flag", .bool true), ("old", .bool true)] with
+    | .ok _ => true | _ => false
+#guard match Zkir.lowerEntrypoint boolState boolEntry with | .ok _ => true | _ => false
+#guard rejected (Impact.Plan.validate {
+  operations := [.push (.field (.ref "flag")) false]
+  reads := [{name := "flag", ty := .bool}]
+} boolEntry)
+
+example (fact : Fact) (value : Nat) (hmax : fact.maximum ≤ 1) (hvalue : value ≤ fact.maximum) :
+    value = 0 ∨ value = 1 := established_boolean_range fact value hmax hvalue
+
+example (instructions : List Json) : requireFinalOutput instructions = .ok () ↔
+    finalOutputShape instructions = true := final_output_required instructions
+
+def main : IO Unit := do
+  let path := "docs/compatibility/zkir-feature-matrix.json"
+  let matrix ← IO.ofExcept (Json.parse (← IO.FS.readFile path))
+  let target ← IO.ofExcept (matrix.getObjVal? "target")
+  let revision ← IO.ofExcept ((← IO.ofExcept (target.getObjVal? "zkirRevision")).getStr?)
+  unless revision == inventoryRevision do
+    throw (IO.userError "native descriptor source pin drifted from inventory")
+  let rows ← IO.ofExcept ((← IO.ofExcept (matrix.getObjVal? "entries")).getArr?)
+  let mut operations := []
+  let mut types := []
+  for row in rows do
+    let kind ← IO.ofExcept ((← IO.ofExcept (row.getObjVal? "kind")).getStr?)
+    if kind == "instruction" then
+      operations := operations ++ [← IO.ofExcept ((← IO.ofExcept (row.getObjVal? "jsonOpcode")).getStr?)]
+    else if kind == "value-type" then
+      types := types ++ [← IO.ofExcept ((← IO.ofExcept (row.getObjVal? "symbol")).getStr?)]
+  unless operations == instructionNames && types == valueTypeNames do
+    throw (IO.userError "native descriptor registry drifted from pinned 47/15 inventory")
+  let claim ← IO.ofExcept (Claim.contract {})
+  let some entry := claim.entrypoints.head? | throw (IO.userError "missing claim")
+  discard (IO.ofExcept ((Zkir.lowerEntrypoint claim.state entry).mapError (·.message)))
+  IO.println "Native producer inventory, malformed programs, typed bindings and Bool materialization passed"

@@ -51,6 +51,16 @@ structure Plan where
 
 def Plan.fields (plan : Plan) : List Scalar := plan.operations.flatMap Op.fields
 
+/-- Generated field expressions must retain the source/read types even though
+their native representation is uniformly a field. -/
+def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
+  let publicCount := (entry.circuit.inputs.filter (·.visibility == .«public»)).length
+  let env := entry.circuit.inputs.map (fun input => (input.name, input.ty)) ++
+    entry.circuit.outputs.map (fun output => (output.name, output.ty)) ++
+    (plan.reads.drop publicCount).map (fun read => (read.name, read.ty))
+  for field in plan.fields do field.validate {poseidon2 := true} env
+  for guard in plan.guards do guard.validate {poseidon2 := true} env
+
 private def nativeValue : (ty : Ty) → Expr ty → Scalar
   | .native, value => value
   | .bool, value => .select value (.native 1) (.native 0)
@@ -58,7 +68,8 @@ private def nativeValue : (ty : Ty) → Expr ty → Scalar
 
 private def nativeRead (ty : Ty) (name : String) : Scalar :=
   match ty with
-  | .native | .bool => .ref name
+  | .native => .ref name
+  | .bool => .cast .native (.ref name : Expr .bool)
   | .uint maximum => .cast .native (.ref name : Expr (.uint maximum))
 
 private def stateSlot (state : List StateDecl) (name : String) : Except String Nat :=
@@ -119,7 +130,10 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
       | .readMap .. => throw "map value reads are not supported by the initial native transcript plan"
     pure plan
   match result with
-  | .ok plan => pure plan
+  | .ok plan =>
+    match plan.validate entry with
+    | .ok _ => pure plan
+    | .error message => throw {span := entry.span, message}
   | .error message => throw {span := entry.span, message}
 
 private def bytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
