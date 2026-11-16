@@ -1,0 +1,1491 @@
+//! Canonical composite schema/value transport. Compiler layout construction remains Lean.
+use anyhow::{Result, anyhow, bail, ensure};
+use num_bigint::BigUint;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Mutex, OnceLock};
+use zeroize::Zeroize;
+
+pub const MAX_TRANSPORT_BYTES: usize = 1_048_576;
+pub const MAX_LEAVES: usize = 4096;
+pub const MAX_NODES: usize = 16384;
+pub const MAX_SEQUENCE: usize = 1024;
+pub const MAX_DECLARATIONS: usize = 1024;
+// Each checked layout/value node has fewer than sixteen JSON metadata nodes.
+// This bounds malformed syntax before semantic layout validation, without a depth cap.
+const MAX_JSON_NODES: usize = 16 * MAX_NODES + 16;
+pub const MAGIC: &[u8] = b"nightlean:aggregate:value:v1:";
+
+#[derive(Debug)]
+enum JsonNode {
+    Null,
+    Bool(bool),
+    Number(String),
+    String(String),
+    Array(Vec<usize>),
+    Object(Vec<(String, usize)>),
+}
+struct JsonTree {
+    nodes: Vec<JsonNode>,
+    root: usize,
+}
+impl Drop for JsonTree {
+    fn drop(&mut self) {
+        for node in &mut self.nodes {
+            match node {
+                JsonNode::Number(s) | JsonNode::String(s) => s.zeroize(),
+                JsonNode::Bool(b) => *b = false,
+                JsonNode::Object(fields) => {
+                    for (name, _) in fields {
+                        name.zeroize();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+}
+struct JsonFrame {
+    index: usize,
+    state: u8,
+    key: Option<String>,
+    keys: BTreeSet<String>,
+}
+struct Parser<'a> {
+    bytes: &'a [u8],
+    at: usize,
+    nodes: Vec<JsonNode>,
+}
+impl Parser<'_> {
+    fn ws(&mut self) {
+        while self.at < self.bytes.len()
+            && matches!(self.bytes[self.at], b' ' | b'\n' | b'\r' | b'\t')
+        {
+            self.at += 1;
+        }
+    }
+    fn string(&mut self) -> Result<String> {
+        ensure!(
+            self.bytes.get(self.at) == Some(&b'"'),
+            "expected JSON string"
+        );
+        let start = self.at;
+        self.at += 1;
+        loop {
+            match self.bytes.get(self.at).copied() {
+                Some(b'"') => {
+                    self.at += 1;
+                    return serde_json::from_slice(&self.bytes[start..self.at])
+                        .map_err(|_| anyhow!("invalid JSON string"));
+                }
+                Some(b'\\') => {
+                    self.at += 2;
+                }
+                Some(_) => {
+                    self.at += 1;
+                }
+                None => bail!("unterminated JSON string"),
+            }
+        }
+    }
+    fn value(&mut self) -> Result<(usize, bool)> {
+        self.ws();
+        let (node, compound) = match self.bytes.get(self.at).copied() {
+            Some(b'{') => {
+                self.at += 1;
+                (JsonNode::Object(vec![]), true)
+            }
+            Some(b'[') => {
+                self.at += 1;
+                (JsonNode::Array(vec![]), true)
+            }
+            Some(b'"') => (JsonNode::String(self.string()?), false),
+            Some(b't') if self.bytes.get(self.at..self.at + 4) == Some(b"true") => {
+                self.at += 4;
+                (JsonNode::Bool(true), false)
+            }
+            Some(b'f') if self.bytes.get(self.at..self.at + 5) == Some(b"false") => {
+                self.at += 5;
+                (JsonNode::Bool(false), false)
+            }
+            Some(b'n') if self.bytes.get(self.at..self.at + 4) == Some(b"null") => {
+                self.at += 4;
+                (JsonNode::Null, false)
+            }
+            Some(b'0'..=b'9') => {
+                let start = self.at;
+                while self.bytes.get(self.at).is_some_and(u8::is_ascii_digit) {
+                    self.at += 1;
+                }
+                let text = std::str::from_utf8(&self.bytes[start..self.at])
+                    .map_err(|_| anyhow!("invalid JSON integer"))?;
+                ensure!(
+                    text == "0" || !text.starts_with('0'),
+                    "noncanonical JSON integer"
+                );
+                (JsonNode::Number(text.into()), false)
+            }
+            _ => bail!("unsupported or malformed JSON value"),
+        };
+        ensure!(
+            self.nodes.len() < MAX_JSON_NODES,
+            "aggregate JSON syntax resource limit exceeded"
+        );
+        let index = self.nodes.len();
+        self.nodes.push(node);
+        Ok((index, compound))
+    }
+}
+impl JsonTree {
+    fn parse(bytes: &[u8]) -> Result<Self> {
+        ensure!(
+            !bytes.is_empty() && bytes.len() <= MAX_TRANSPORT_BYTES,
+            "aggregate transport limit exceeded"
+        );
+        let mut parser = Parser {
+            bytes,
+            at: 0,
+            nodes: vec![],
+        };
+        let (root, compound) = parser.value()?;
+        let mut stack = vec![];
+        if compound {
+            stack.push(JsonFrame {
+                index: root,
+                state: 0,
+                key: None,
+                keys: BTreeSet::new(),
+            });
+        }
+        while let Some(frame) = stack.last_mut() {
+            parser.ws();
+            let index = frame.index;
+            if matches!(parser.nodes[index], JsonNode::Array(_)) {
+                match frame.state {
+                    0 | 1 => {
+                        if frame.state == 0 && parser.bytes.get(parser.at) == Some(&b']') {
+                            parser.at += 1;
+                            stack.pop();
+                            continue;
+                        }
+                        let (child, compound) = parser.value()?;
+                        if let JsonNode::Array(items) = &mut parser.nodes[index] {
+                            items.push(child);
+                        }
+                        frame.state = 2;
+                        if compound {
+                            stack.push(JsonFrame {
+                                index: child,
+                                state: 0,
+                                key: None,
+                                keys: BTreeSet::new(),
+                            });
+                        }
+                    }
+                    2 => match parser.bytes.get(parser.at) {
+                        Some(b',') => {
+                            parser.at += 1;
+                            frame.state = 1;
+                        }
+                        Some(b']') => {
+                            parser.at += 1;
+                            stack.pop();
+                        }
+                        _ => bail!("malformed JSON array"),
+                    },
+                    _ => unreachable!(),
+                }
+            } else {
+                match frame.state {
+                    0 | 1 => {
+                        if frame.state == 0 && parser.bytes.get(parser.at) == Some(&b'}') {
+                            parser.at += 1;
+                            stack.pop();
+                            continue;
+                        }
+                        let key = parser.string()?;
+                        ensure!(frame.keys.insert(key.clone()), "duplicate JSON field");
+                        frame.key = Some(key);
+                        frame.state = 2;
+                    }
+                    2 => {
+                        ensure!(
+                            parser.bytes.get(parser.at) == Some(&b':'),
+                            "malformed JSON object"
+                        );
+                        parser.at += 1;
+                        frame.state = 3;
+                    }
+                    3 => {
+                        let (child, compound) = parser.value()?;
+                        if let JsonNode::Object(fields) = &mut parser.nodes[index] {
+                            fields.push((
+                                frame
+                                    .key
+                                    .take()
+                                    .ok_or_else(|| anyhow!("missing JSON key"))?,
+                                child,
+                            ));
+                        }
+                        frame.state = 4;
+                        if compound {
+                            stack.push(JsonFrame {
+                                index: child,
+                                state: 0,
+                                key: None,
+                                keys: BTreeSet::new(),
+                            });
+                        }
+                    }
+                    4 => match parser.bytes.get(parser.at) {
+                        Some(b',') => {
+                            parser.at += 1;
+                            frame.state = 1;
+                        }
+                        Some(b'}') => {
+                            parser.at += 1;
+                            stack.pop();
+                        }
+                        _ => bail!("malformed JSON object"),
+                    },
+                    _ => unreachable!(),
+                }
+            }
+        }
+        parser.ws();
+        ensure!(parser.at == bytes.len(), "trailing JSON data");
+        Ok(Self {
+            nodes: parser.nodes,
+            root,
+        })
+    }
+    fn object(&self, index: usize) -> Result<&[(String, usize)]> {
+        match self.nodes.get(index) {
+            Some(JsonNode::Object(fields)) => Ok(fields),
+            _ => bail!("expected aggregate object"),
+        }
+    }
+    fn exact(&self, index: usize, expected: &[&str]) -> Result<()> {
+        let fields = self.object(index)?;
+        ensure!(
+            fields.len() == expected.len()
+                && fields
+                    .iter()
+                    .all(|(name, _)| expected.contains(&name.as_str())),
+            "unknown or missing aggregate field"
+        );
+        Ok(())
+    }
+    fn field(&self, index: usize, name: &str) -> Result<usize> {
+        self.object(index)?
+            .iter()
+            .find_map(|(key, value)| (key == name).then_some(*value))
+            .ok_or_else(|| anyhow!("missing aggregate field"))
+    }
+    fn string(&self, index: usize) -> Result<&str> {
+        match self.nodes.get(index) {
+            Some(JsonNode::String(value)) => Ok(value),
+            _ => bail!("expected aggregate string"),
+        }
+    }
+    fn text(&self, index: usize, name: &str) -> Result<&str> {
+        self.string(self.field(index, name)?)
+    }
+    fn array(&self, index: usize) -> Result<&[usize]> {
+        match self.nodes.get(index) {
+            Some(JsonNode::Array(items)) => Ok(items),
+            _ => bail!("expected aggregate array"),
+        }
+    }
+    fn items(&self, index: usize, name: &str) -> Result<&[usize]> {
+        self.array(self.field(index, name)?)
+    }
+    fn number(&self, index: usize) -> Result<usize> {
+        match self.nodes.get(index) {
+            Some(JsonNode::Number(value)) => value
+                .parse()
+                .map_err(|_| anyhow!("aggregate integer outside supported size")),
+            _ => bail!("expected aggregate natural number"),
+        }
+    }
+    fn natural(&self, index: usize, name: &str) -> Result<usize> {
+        self.number(self.field(index, name)?)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Counts {
+    pub leaves: usize,
+    pub expanded_nodes: usize,
+    pub layout_nodes: usize,
+}
+impl Counts {
+    fn check(self) -> Result<Self> {
+        ensure!(
+            self.leaves <= MAX_LEAVES
+                && self.expanded_nodes <= MAX_NODES
+                && self.layout_nodes <= MAX_NODES,
+            "aggregate checked-layout resource limit exceeded"
+        );
+        Ok(self)
+    }
+}
+#[derive(Clone, Debug)]
+enum Leaf {
+    Native,
+    Bool,
+    UInt(BigUint),
+}
+#[derive(Clone, Debug)]
+struct Field {
+    name: String,
+    layout: usize,
+}
+#[derive(Clone, Debug)]
+struct Variant {
+    name: String,
+    fields: Vec<Field>,
+    leaves: usize,
+}
+#[derive(Debug)]
+enum LayoutNode {
+    Unit,
+    Scalar(Leaf),
+    Tuple(Vec<usize>),
+    Struct {
+        id: String,
+        fields: Vec<Field>,
+    },
+    Vector {
+        length: usize,
+        element: usize,
+    },
+    Bytes {
+        length: usize,
+    },
+    Enum {
+        id: String,
+        variants: Vec<Variant>,
+        payload: usize,
+    },
+}
+#[derive(Debug)]
+struct Declaration {
+    is_enum: bool,
+    encoding: String,
+    references: BTreeSet<String>,
+}
+
+#[derive(Debug)]
+pub struct Schema {
+    nodes: Vec<LayoutNode>,
+    measures: Vec<Counts>,
+    root: usize,
+    fingerprint: String,
+}
+fn valid_segment(name: &str) -> bool {
+    let mut chars = name.bytes();
+    chars
+        .next()
+        .is_some_and(|c| c.is_ascii_alphabetic() || c == b'_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == b'_')
+}
+fn valid_id(name: &str) -> bool {
+    name.split('.').all(valid_segment)
+}
+fn decimal(text: &str) -> Result<BigUint> {
+    ensure!(
+        !text.is_empty()
+            && text.len() <= crate::MODULUS.len()
+            && text.bytes().all(|b| b.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "expected canonical aggregate scalar decimal"
+    );
+    BigUint::parse_bytes(text.as_bytes(), 10)
+        .ok_or_else(|| anyhow!("invalid aggregate scalar decimal"))
+}
+fn scalar_maximum(leaf: &Leaf) -> BigUint {
+    match leaf {
+        Leaf::Native => decimal(crate::MODULUS).expect("fixed modulus") - 1u8,
+        Leaf::Bool => 1u8.into(),
+        Leaf::UInt(max) => max.clone(),
+    }
+}
+fn encoded_text(text: &str) -> String {
+    format!("{}:{}", text.len(), text)
+}
+fn add(a: usize, b: usize) -> Result<usize> {
+    a.checked_add(b)
+        .ok_or_else(|| anyhow!("aggregate count overflow"))
+}
+fn mul(a: usize, b: usize) -> Result<usize> {
+    a.checked_mul(b)
+        .ok_or_else(|| anyhow!("aggregate count overflow"))
+}
+fn counts_fields(fields: &[Field], counts: &[Counts]) -> Result<Counts> {
+    let mut result = Counts {
+        leaves: 0,
+        expanded_nodes: 0,
+        layout_nodes: 0,
+    };
+    for field in fields {
+        let c = counts[field.layout];
+        result.leaves = add(result.leaves, c.leaves)?;
+        result.expanded_nodes = add(result.expanded_nodes, c.expanded_nodes)?;
+        result.layout_nodes = add(result.layout_nodes, c.layout_nodes)?;
+    }
+    Ok(result)
+}
+fn fields_raw(tree: &JsonTree, parent: usize) -> Result<Vec<(String, usize)>> {
+    let mut names = BTreeSet::new();
+    tree.items(parent, "fields")?
+        .iter()
+        .map(|index| {
+            tree.exact(*index, &["name", "layout"])?;
+            let name = tree.text(*index, "name")?;
+            ensure!(
+                valid_segment(name) && names.insert(name.to_string()),
+                "invalid or duplicate aggregate field name"
+            );
+            Ok((name.into(), tree.field(*index, "layout")?))
+        })
+        .collect()
+}
+fn layout_children(tree: &JsonTree, index: usize) -> Result<Vec<usize>> {
+    Ok(match tree.text(index, "kind")? {
+        "unit" => {
+            tree.exact(index, &["kind"])?;
+            vec![]
+        }
+        "scalar" => {
+            tree.exact(index, &["kind", "leaf"])?;
+            vec![]
+        }
+        "tuple" => {
+            tree.exact(index, &["kind", "items"])?;
+            tree.items(index, "items")?.to_vec()
+        }
+        "struct" => {
+            tree.exact(index, &["kind", "id", "fields"])?;
+            fields_raw(tree, index)?
+                .into_iter()
+                .map(|(_, child)| child)
+                .collect()
+        }
+        "vector" => {
+            tree.exact(index, &["kind", "length", "element"])?;
+            vec![tree.field(index, "element")?]
+        }
+        "bytes" => {
+            tree.exact(index, &["kind", "length"])?;
+            vec![]
+        }
+        "enum" => {
+            tree.exact(index, &["kind", "id", "variants"])?;
+            let mut names = BTreeSet::new();
+            let variants = tree.items(index, "variants")?;
+            ensure!(!variants.is_empty(), "empty aggregate enum");
+            let mut children = vec![];
+            for variant in variants {
+                tree.exact(*variant, &["name", "fields"])?;
+                let name = tree.text(*variant, "name")?;
+                ensure!(
+                    valid_segment(name) && names.insert(name.to_string()),
+                    "invalid or duplicate aggregate variant name"
+                );
+                children.extend(
+                    fields_raw(tree, *variant)?
+                        .into_iter()
+                        .map(|(_, child)| child),
+                );
+            }
+            children
+        }
+        _ => bail!("unsupported aggregate layout kind"),
+    })
+}
+fn mapped_fields(
+    tree: &JsonTree,
+    parent: usize,
+    mapping: &BTreeMap<usize, usize>,
+) -> Result<Vec<Field>> {
+    fields_raw(tree, parent)?
+        .into_iter()
+        .map(|(name, raw)| {
+            Ok(Field {
+                name,
+                layout: *mapping
+                    .get(&raw)
+                    .ok_or_else(|| anyhow!("missing aggregate child layout"))?,
+            })
+        })
+        .collect()
+}
+fn type_encoding(nodes: &[LayoutNode], root: usize) -> Result<String> {
+    enum Task {
+        Node(usize),
+        Text(String),
+    }
+    let mut stack = vec![Task::Node(root)];
+    let mut output = String::new();
+    while let Some(task) = stack.pop() {
+        match task {
+            Task::Text(text) => output.push_str(&text),
+            Task::Node(index) => match &nodes[index] {
+                LayoutNode::Unit => output.push('u'),
+                LayoutNode::Scalar(Leaf::Native) => output.push_str("sN"),
+                LayoutNode::Scalar(Leaf::Bool) => output.push_str("sB"),
+                LayoutNode::Scalar(Leaf::UInt(max)) => {
+                    output.push_str(&format!("sU{};", max.to_str_radix(10)))
+                }
+                LayoutNode::Struct { id, .. } => output.push_str(&format!("r{}", encoded_text(id))),
+                LayoutNode::Enum { id, .. } => output.push_str(&format!("e{}", encoded_text(id))),
+                LayoutNode::Vector { length, element } => {
+                    output.push_str(&format!("v{length};"));
+                    stack.push(Task::Node(*element));
+                }
+                LayoutNode::Bytes { length } => output.push_str(&format!("b{length};")),
+                LayoutNode::Tuple(items) => {
+                    output.push_str(&format!("t{};[", items.len()));
+                    stack.push(Task::Text("]".into()));
+                    stack.extend(items.iter().rev().map(|child| Task::Node(*child)));
+                }
+            },
+        }
+        ensure!(
+            output.len() <= MAX_TRANSPORT_BYTES,
+            "aggregate fingerprint transport limit exceeded"
+        );
+    }
+    Ok(output)
+}
+fn type_references(
+    nodes: &[LayoutNode],
+    roots: impl IntoIterator<Item = usize>,
+) -> BTreeSet<String> {
+    let mut pending: Vec<_> = roots.into_iter().collect();
+    let mut ids = BTreeSet::new();
+    while let Some(index) = pending.pop() {
+        match &nodes[index] {
+            LayoutNode::Struct { id, .. } | LayoutNode::Enum { id, .. } => {
+                ids.insert(id.clone());
+            }
+            LayoutNode::Vector { element, .. } => pending.push(*element),
+            LayoutNode::Tuple(items) => pending.extend(items),
+            _ => {}
+        }
+    }
+    ids
+}
+fn encode_fields(nodes: &[LayoutNode], fields: &[Field]) -> Result<String> {
+    let mut output = String::new();
+    for field in fields {
+        output.push_str(&format!(
+            "f{}{}",
+            encoded_text(&field.name),
+            type_encoding(nodes, field.layout)?
+        ));
+        ensure!(
+            output.len() <= MAX_TRANSPORT_BYTES,
+            "aggregate fingerprint transport limit exceeded"
+        );
+    }
+    Ok(output)
+}
+fn register_declaration(
+    nodes: &[LayoutNode],
+    index: usize,
+    declarations: &mut BTreeMap<String, Declaration>,
+) -> Result<()> {
+    let entry = match &nodes[index] {
+        LayoutNode::Struct { id, fields } => Some((
+            id,
+            Declaration {
+                is_enum: false,
+                encoding: format!(
+                    "R{}{};{}",
+                    encoded_text(id),
+                    fields.len(),
+                    encode_fields(nodes, fields)?
+                ),
+                references: type_references(nodes, fields.iter().map(|field| field.layout)),
+            },
+        )),
+        LayoutNode::Enum { id, variants, .. } => {
+            let mut encoding = format!("E{}{};", encoded_text(id), variants.len());
+            for variant in variants {
+                encoding.push_str(&format!(
+                    "V{}{};{}",
+                    encoded_text(&variant.name),
+                    variant.fields.len(),
+                    encode_fields(nodes, &variant.fields)?
+                ));
+            }
+            Some((
+                id,
+                Declaration {
+                    is_enum: true,
+                    encoding,
+                    references: type_references(
+                        nodes,
+                        variants
+                            .iter()
+                            .flat_map(|v| v.fields.iter().map(|f| f.layout)),
+                    ),
+                },
+            ))
+        }
+        _ => None,
+    };
+    if let Some((id, declaration)) = entry {
+        if let Some(previous) = declarations.get(id) {
+            ensure!(
+                previous.is_enum == declaration.is_enum
+                    && previous.encoding == declaration.encoding,
+                "conflicting nominal aggregate definitions"
+            );
+        } else {
+            ensure!(
+                declarations.len() < MAX_DECLARATIONS,
+                "aggregate declaration limit exceeded"
+            );
+            declarations.insert(id.clone(), declaration);
+        }
+    }
+    Ok(())
+}
+impl Schema {
+    pub fn from_json(bytes: &[u8]) -> Result<Self> {
+        let tree = JsonTree::parse(bytes)?;
+        tree.exact(
+            tree.root,
+            &["schemaVersion", "typeFingerprint", "layout", "counts"],
+        )?;
+        ensure!(
+            tree.natural(tree.root, "schemaVersion")? == 1,
+            "unsupported aggregate schema version"
+        );
+        let raw_root = tree.field(tree.root, "layout")?;
+        let mut pending = vec![(raw_root, false)];
+        let mut mapping = BTreeMap::new();
+        let mut nodes = vec![];
+        let mut measures: Vec<Counts> = vec![];
+        let mut declarations = BTreeMap::new();
+        while let Some((raw, visited)) = pending.pop() {
+            if !visited {
+                ensure!(
+                    pending.len() <= MAX_NODES * 2 && nodes.len() < MAX_NODES,
+                    "aggregate retained layout limit exceeded"
+                );
+                let children = layout_children(&tree, raw)?;
+                ensure!(
+                    children.len() <= MAX_NODES,
+                    "aggregate retained layout limit exceeded"
+                );
+                pending.push((raw, true));
+                pending.extend(children.into_iter().rev().map(|child| (child, false)));
+                continue;
+            }
+            let (node, counts) = match tree.text(raw, "kind")? {
+                "unit" => (
+                    LayoutNode::Unit,
+                    Counts {
+                        leaves: 0,
+                        expanded_nodes: 1,
+                        layout_nodes: 1,
+                    },
+                ),
+                "scalar" => {
+                    let leaf = tree.field(raw, "leaf")?;
+                    let leaf = match tree.text(leaf, "kind")? {
+                        "native" => {
+                            tree.exact(leaf, &["kind"])?;
+                            Leaf::Native
+                        }
+                        "bool" => {
+                            tree.exact(leaf, &["kind"])?;
+                            Leaf::Bool
+                        }
+                        "uint" => {
+                            tree.exact(leaf, &["kind", "maximum"])?;
+                            let maximum = decimal(tree.text(leaf, "maximum")?)?;
+                            ensure!(
+                                maximum <= crate::max_uint(),
+                                "aggregate unsigned type exceeds target maximum"
+                            );
+                            Leaf::UInt(maximum)
+                        }
+                        _ => bail!("unsupported aggregate scalar leaf"),
+                    };
+                    (
+                        LayoutNode::Scalar(leaf),
+                        Counts {
+                            leaves: 1,
+                            expanded_nodes: 1,
+                            layout_nodes: 1,
+                        },
+                    )
+                }
+                "tuple" => {
+                    let children: Vec<_> = tree
+                        .items(raw, "items")?
+                        .iter()
+                        .map(|child| mapping[child])
+                        .collect();
+                    let fields: Vec<_> = children
+                        .iter()
+                        .map(|child| Field {
+                            name: String::new(),
+                            layout: *child,
+                        })
+                        .collect();
+                    let count = counts_fields(&fields, &measures)?;
+                    (
+                        LayoutNode::Tuple(children),
+                        Counts {
+                            leaves: count.leaves,
+                            expanded_nodes: add(1, count.expanded_nodes)?,
+                            layout_nodes: add(1, count.layout_nodes)?,
+                        },
+                    )
+                }
+                "struct" => {
+                    let id = tree.text(raw, "id")?.to_string();
+                    ensure!(valid_id(&id), "invalid aggregate nominal identity");
+                    let fields = mapped_fields(&tree, raw, &mapping)?;
+                    let count = counts_fields(&fields, &measures)?;
+                    (
+                        LayoutNode::Struct { id, fields },
+                        Counts {
+                            leaves: count.leaves,
+                            expanded_nodes: add(1, count.expanded_nodes)?,
+                            layout_nodes: add(1, count.layout_nodes)?,
+                        },
+                    )
+                }
+                "vector" => {
+                    let length = tree.natural(raw, "length")?;
+                    ensure!(
+                        length <= MAX_SEQUENCE,
+                        "aggregate vector length exceeds target limit"
+                    );
+                    let element = mapping[&tree.field(raw, "element")?];
+                    let child = measures[element];
+                    (
+                        LayoutNode::Vector { length, element },
+                        Counts {
+                            leaves: mul(length, child.leaves)?,
+                            expanded_nodes: add(1, mul(length, child.expanded_nodes)?)?,
+                            layout_nodes: add(1, child.layout_nodes)?,
+                        },
+                    )
+                }
+                "bytes" => {
+                    let length = tree.natural(raw, "length")?;
+                    ensure!(
+                        length <= MAX_SEQUENCE,
+                        "aggregate byte length exceeds target limit"
+                    );
+                    (
+                        LayoutNode::Bytes { length },
+                        Counts {
+                            leaves: length,
+                            expanded_nodes: add(1, length)?,
+                            layout_nodes: 1,
+                        },
+                    )
+                }
+                "enum" => {
+                    let id = tree.text(raw, "id")?.to_string();
+                    ensure!(valid_id(&id), "invalid aggregate nominal identity");
+                    let mut variants = vec![];
+                    let mut payload = 0;
+                    let mut expanded = 1;
+                    let mut retained = 1;
+                    for variant in tree.items(raw, "variants")? {
+                        let fields = mapped_fields(&tree, *variant, &mapping)?;
+                        let count = counts_fields(&fields, &measures)?;
+                        payload = payload.max(count.leaves);
+                        expanded = add(expanded, add(1, count.expanded_nodes)?)?;
+                        retained = add(retained, add(1, count.layout_nodes)?)?;
+                        variants.push(Variant {
+                            name: tree.text(*variant, "name")?.into(),
+                            fields,
+                            leaves: count.leaves,
+                        });
+                    }
+                    (
+                        LayoutNode::Enum {
+                            id,
+                            variants,
+                            payload,
+                        },
+                        Counts {
+                            leaves: add(1, payload)?,
+                            expanded_nodes: expanded,
+                            layout_nodes: retained,
+                        },
+                    )
+                }
+                _ => bail!("unsupported aggregate layout kind"),
+            };
+            ensure!(
+                nodes.len() < MAX_NODES,
+                "aggregate retained layout limit exceeded"
+            );
+            let index = nodes.len();
+            nodes.push(node);
+            measures.push(counts.check()?);
+            register_declaration(&nodes, index, &mut declarations)?;
+            mapping.insert(raw, index);
+        }
+        let root = mapping[&raw_root];
+        let count_index = tree.field(tree.root, "counts")?;
+        tree.exact(count_index, &["leaves", "expandedNodes", "layoutNodes"])?;
+        let claimed = Counts {
+            leaves: tree.natural(count_index, "leaves")?,
+            expanded_nodes: tree.natural(count_index, "expandedNodes")?,
+            layout_nodes: tree.natural(count_index, "layoutNodes")?,
+        };
+        ensure!(
+            claimed == measures[root],
+            "aggregate checked-layout count mismatch"
+        );
+        // Validate nominal references/cycles independently of expanded-tree order.
+        for start in declarations.keys() {
+            let mut seen = BTreeSet::new();
+            let mut work: Vec<_> = declarations[start].references.iter().cloned().collect();
+            while let Some(id) = work.pop() {
+                ensure!(id != *start, "recursive aggregate nominal definition");
+                if !seen.insert(id.clone()) {
+                    continue;
+                }
+                let declaration = declarations
+                    .get(&id)
+                    .ok_or_else(|| anyhow!("undefined aggregate nominal reference"))?;
+                work.extend(declaration.references.iter().cloned());
+            }
+        }
+        let mut fingerprint = format!(
+            "NightleanCompositeTypeV1;{}NightleanCompositeLayoutV1;{};",
+            type_encoding(&nodes, root)?,
+            declarations.values().filter(|d| !d.is_enum).count()
+        );
+        for declaration in declarations.values().filter(|d| !d.is_enum) {
+            fingerprint.push_str(&declaration.encoding);
+        }
+        fingerprint.push_str(&format!(
+            "{};",
+            declarations.values().filter(|d| d.is_enum).count()
+        ));
+        for declaration in declarations.values().filter(|d| d.is_enum) {
+            fingerprint.push_str(&declaration.encoding);
+        }
+        ensure!(
+            fingerprint.len() <= MAX_TRANSPORT_BYTES
+                && fingerprint == tree.text(tree.root, "typeFingerprint")?,
+            "aggregate type fingerprint mismatch"
+        );
+        Ok(Self {
+            nodes,
+            measures,
+            root,
+            fingerprint,
+        })
+    }
+    pub fn fingerprint(&self) -> &str {
+        &self.fingerprint
+    }
+    pub fn counts(&self) -> Counts {
+        self.measures[self.root]
+    }
+    fn flatten_value(&self, json: &[u8]) -> Result<Vec<BigUint>> {
+        let tree = JsonTree::parse(json)?;
+        enum Task {
+            Visit(usize, usize),
+            Pad(usize),
+        }
+        let mut pending = vec![Task::Visit(self.root, tree.root)];
+        let mut leaves = vec![];
+        while let Some(task) = pending.pop() {
+            match task {
+                Task::Pad(count) => leaves.extend((0..count).map(|_| BigUint::from(0u8))),
+                Task::Visit(layout, raw) => match &self.nodes[layout] {
+                    LayoutNode::Unit => {
+                        tree.exact(raw, &["kind"])?;
+                        ensure!(
+                            tree.text(raw, "kind")? == "unit",
+                            "aggregate value kind mismatch"
+                        );
+                    }
+                    LayoutNode::Scalar(leaf) => {
+                        let number = match leaf {
+                            Leaf::Native => {
+                                tree.exact(raw, &["kind", "value"])?;
+                                ensure!(
+                                    tree.text(raw, "kind")? == "native",
+                                    "aggregate scalar kind mismatch"
+                                );
+                                decimal(tree.text(raw, "value")?)?
+                            }
+                            Leaf::Bool => {
+                                tree.exact(raw, &["kind", "value"])?;
+                                ensure!(
+                                    tree.text(raw, "kind")? == "bool",
+                                    "aggregate scalar kind mismatch"
+                                );
+                                match tree.nodes.get(tree.field(raw, "value")?) {
+                                    Some(JsonNode::Bool(value)) => BigUint::from(u8::from(*value)),
+                                    _ => bail!("aggregate Boolean is not a JSON boolean"),
+                                }
+                            }
+                            Leaf::UInt(maximum) => {
+                                tree.exact(raw, &["kind", "maximum", "value"])?;
+                                ensure!(
+                                    tree.text(raw, "kind")? == "uint"
+                                        && decimal(tree.text(raw, "maximum")?)? == *maximum,
+                                    "aggregate unsigned type mismatch"
+                                );
+                                decimal(tree.text(raw, "value")?)?
+                            }
+                        };
+                        ensure!(
+                            number <= scalar_maximum(leaf),
+                            "aggregate scalar outside declared range"
+                        );
+                        leaves.push(number);
+                    }
+                    LayoutNode::Tuple(items) => {
+                        tree.exact(raw, &["kind", "items"])?;
+                        ensure!(
+                            tree.text(raw, "kind")? == "tuple",
+                            "aggregate value kind mismatch"
+                        );
+                        let values = tree.items(raw, "items")?;
+                        ensure!(
+                            values.len() == items.len(),
+                            "aggregate tuple arity mismatch"
+                        );
+                        pending.extend(
+                            items
+                                .iter()
+                                .zip(values)
+                                .rev()
+                                .map(|(layout, value)| Task::Visit(*layout, *value)),
+                        );
+                    }
+                    LayoutNode::Struct { id, fields } => {
+                        tree.exact(raw, &["kind", "id", "fields"])?;
+                        ensure!(
+                            tree.text(raw, "kind")? == "struct" && tree.text(raw, "id")? == id,
+                            "aggregate nominal type mismatch"
+                        );
+                        let values = value_fields(&tree, raw, fields)?;
+                        pending.extend(
+                            fields
+                                .iter()
+                                .zip(values)
+                                .rev()
+                                .map(|(field, value)| Task::Visit(field.layout, value)),
+                        );
+                    }
+                    LayoutNode::Vector { length, element } => {
+                        tree.exact(raw, &["kind", "items"])?;
+                        ensure!(
+                            tree.text(raw, "kind")? == "vector",
+                            "aggregate value kind mismatch"
+                        );
+                        let values = tree.items(raw, "items")?;
+                        ensure!(values.len() == *length, "aggregate vector length mismatch");
+                        pending.extend(
+                            values
+                                .iter()
+                                .rev()
+                                .map(|value| Task::Visit(*element, *value)),
+                        );
+                    }
+                    LayoutNode::Bytes { length } => {
+                        tree.exact(raw, &["kind", "values"])?;
+                        ensure!(
+                            tree.text(raw, "kind")? == "bytes",
+                            "aggregate value kind mismatch"
+                        );
+                        let values = tree.items(raw, "values")?;
+                        ensure!(values.len() == *length, "aggregate byte length mismatch");
+                        for value in values {
+                            let value = tree.number(*value)?;
+                            ensure!(value <= 255, "aggregate byte out of range");
+                            leaves.push(value.into());
+                        }
+                    }
+                    LayoutNode::Enum {
+                        id,
+                        variants,
+                        payload,
+                    } => {
+                        tree.exact(raw, &["kind", "id", "variant", "fields"])?;
+                        ensure!(
+                            tree.text(raw, "kind")? == "enum" && tree.text(raw, "id")? == id,
+                            "aggregate nominal type mismatch"
+                        );
+                        let tag = variants
+                            .iter()
+                            .position(|variant| {
+                                variant.name == tree.text(raw, "variant").unwrap_or("")
+                            })
+                            .ok_or_else(|| anyhow!("unknown aggregate enum variant"))?;
+                        let variant = &variants[tag];
+                        let values = value_fields(&tree, raw, &variant.fields)?;
+                        leaves.push(tag.into());
+                        pending.push(Task::Pad(payload - variant.leaves));
+                        pending.extend(
+                            variant
+                                .fields
+                                .iter()
+                                .zip(values)
+                                .rev()
+                                .map(|(field, value)| Task::Visit(field.layout, value)),
+                        );
+                    }
+                },
+            }
+            ensure!(
+                leaves.len() <= self.counts().leaves,
+                "aggregate flattening count mismatch"
+            );
+        }
+        ensure!(
+            leaves.len() == self.counts().leaves,
+            "aggregate flattening count mismatch"
+        );
+        Ok(leaves)
+    }
+    pub fn encode_json_value(&self, json: &[u8]) -> Result<Vec<u8>> {
+        let leaves = self.flatten_value(json)?;
+        let mut output =
+            Vec::with_capacity(MAGIC.len() + 8 + self.fingerprint.len() + leaves.len() * 32);
+        output.extend_from_slice(MAGIC);
+        output.extend_from_slice(&(self.fingerprint.len() as u32).to_le_bytes());
+        output.extend_from_slice(self.fingerprint.as_bytes());
+        output.extend_from_slice(&(leaves.len() as u32).to_le_bytes());
+        for leaf in leaves {
+            let mut bytes = leaf.to_bytes_le();
+            bytes.resize(32, 0);
+            output.extend_from_slice(&bytes);
+            bytes.zeroize();
+        }
+        ensure!(
+            output.len() <= MAX_TRANSPORT_BYTES,
+            "aggregate wire transport limit exceeded"
+        );
+        Ok(output)
+    }
+    pub fn decode_wire(&self, wire: &[u8]) -> Result<Vec<u8>> {
+        ensure!(
+            wire.len() <= MAX_TRANSPORT_BYTES && wire.starts_with(MAGIC),
+            "invalid aggregate wire header"
+        );
+        let mut at = MAGIC.len();
+        let fingerprint_length = read_u32(wire, &mut at)?;
+        let end = at
+            .checked_add(fingerprint_length)
+            .ok_or_else(|| anyhow!("aggregate wire length overflow"))?;
+        ensure!(
+            wire.get(at..end) == Some(self.fingerprint.as_bytes()),
+            "aggregate wire type fingerprint mismatch"
+        );
+        at = end;
+        let count = read_u32(wire, &mut at)?;
+        ensure!(
+            count == self.counts().leaves && count <= MAX_LEAVES,
+            "aggregate wire leaf count mismatch"
+        );
+        ensure!(
+            wire.len() == add(at, mul(count, 32)?)?,
+            "truncated or trailing aggregate wire data"
+        );
+        let modulus = decimal(crate::MODULUS)?;
+        let mut leaves = Vec::with_capacity(count);
+        for chunk in wire[at..].chunks_exact(32) {
+            let number = BigUint::from_bytes_le(chunk);
+            ensure!(number < modulus, "noncanonical aggregate field bytes");
+            leaves.push(number);
+        }
+        self.render_value(&leaves)
+    }
+    fn render_value(&self, leaves: &[BigUint]) -> Result<Vec<u8>> {
+        enum Task {
+            Visit(usize),
+            Text(String),
+            Pad(usize),
+        }
+        let mut pending = vec![Task::Visit(self.root)];
+        let mut output = Vec::new();
+        let mut cursor = 0;
+        while let Some(task) = pending.pop() {
+            match task {
+                Task::Text(text) => output.extend_from_slice(text.as_bytes()),
+                Task::Pad(count) => {
+                    let end = add(cursor, count)?;
+                    ensure!(
+                        leaves.get(cursor..end).is_some_and(|values| values
+                            .iter()
+                            .all(|value| *value == BigUint::from(0u8))),
+                        "nonzero inactive aggregate enum padding"
+                    );
+                    cursor = end;
+                }
+                Task::Visit(layout) => match &self.nodes[layout] {
+                    LayoutNode::Unit => output.extend_from_slice(b"{\"kind\":\"unit\"}"),
+                    LayoutNode::Scalar(leaf) => {
+                        let number = leaves
+                            .get(cursor)
+                            .ok_or_else(|| anyhow!("truncated aggregate leaves"))?;
+                        cursor += 1;
+                        ensure!(
+                            *number <= scalar_maximum(leaf),
+                            "aggregate scalar outside declared range"
+                        );
+                        let text = match leaf {
+                            Leaf::Native => format!(
+                                "{{\"kind\":\"native\",\"value\":\"{}\"}}",
+                                number.to_str_radix(10)
+                            ),
+                            Leaf::Bool => format!(
+                                "{{\"kind\":\"bool\",\"value\":{}}}",
+                                *number == BigUint::from(1u8)
+                            ),
+                            Leaf::UInt(maximum) => format!(
+                                "{{\"kind\":\"uint\",\"maximum\":\"{}\",\"value\":\"{}\"}}",
+                                maximum.to_str_radix(10),
+                                number.to_str_radix(10)
+                            ),
+                        };
+                        output.extend_from_slice(text.as_bytes());
+                    }
+                    LayoutNode::Tuple(items) => {
+                        output.extend_from_slice(b"{\"kind\":\"tuple\",\"items\":[");
+                        pending.push(Task::Text("]}".into()));
+                        for (index, child) in items.iter().enumerate().rev() {
+                            pending.push(Task::Visit(*child));
+                            if index != 0 {
+                                pending.push(Task::Text(",".into()));
+                            }
+                        }
+                    }
+                    LayoutNode::Struct { id, fields } => {
+                        output.extend_from_slice(
+                            format!("{{\"kind\":\"struct\",\"id\":{},\"fields\":[", quoted(id)?)
+                                .as_bytes(),
+                        );
+                        push_fields(
+                            &mut pending,
+                            fields,
+                            |text| Task::Text(text),
+                            |layout| Task::Visit(layout),
+                        )?;
+                    }
+                    LayoutNode::Vector { length, element } => {
+                        output.extend_from_slice(b"{\"kind\":\"vector\",\"items\":[");
+                        pending.push(Task::Text("]}".into()));
+                        for index in (0..*length).rev() {
+                            pending.push(Task::Visit(*element));
+                            if index != 0 {
+                                pending.push(Task::Text(",".into()));
+                            }
+                        }
+                    }
+                    LayoutNode::Bytes { length } => {
+                        output.extend_from_slice(b"{\"kind\":\"bytes\",\"values\":[");
+                        for index in 0..*length {
+                            if index != 0 {
+                                output.push(b',');
+                            }
+                            let number = leaves
+                                .get(cursor)
+                                .ok_or_else(|| anyhow!("truncated aggregate byte leaves"))?;
+                            ensure!(
+                                *number <= BigUint::from(255u16),
+                                "aggregate byte out of range"
+                            );
+                            cursor += 1;
+                            output.extend_from_slice(number.to_str_radix(10).as_bytes());
+                        }
+                        output.extend_from_slice(b"]}");
+                    }
+                    LayoutNode::Enum {
+                        id,
+                        variants,
+                        payload,
+                    } => {
+                        let number = leaves
+                            .get(cursor)
+                            .ok_or_else(|| anyhow!("missing aggregate enum tag"))?;
+                        cursor += 1;
+                        let tag = number.to_u64_digits();
+                        ensure!(tag.len() <= 1, "aggregate enum tag out of range");
+                        let tag = tag.first().copied().unwrap_or(0);
+                        let variant = variants
+                            .get(
+                                usize::try_from(tag)
+                                    .map_err(|_| anyhow!("aggregate enum tag out of range"))?,
+                            )
+                            .ok_or_else(|| anyhow!("aggregate enum tag out of range"))?;
+                        output.extend_from_slice(
+                            format!(
+                                "{{\"kind\":\"enum\",\"id\":{},\"variant\":{},\"fields\":[",
+                                quoted(id)?,
+                                quoted(&variant.name)?
+                            )
+                            .as_bytes(),
+                        );
+                        pending.push(Task::Pad(payload - variant.leaves));
+                        push_fields(
+                            &mut pending,
+                            &variant.fields,
+                            |text| Task::Text(text),
+                            |layout| Task::Visit(layout),
+                        )?;
+                    }
+                },
+            }
+            ensure!(
+                output.len() <= MAX_TRANSPORT_BYTES,
+                "aggregate JSON output transport limit exceeded"
+            );
+        }
+        ensure!(
+            cursor == leaves.len(),
+            "aggregate decoded leaf count mismatch"
+        );
+        Ok(output)
+    }
+}
+fn value_fields(tree: &JsonTree, raw: usize, fields: &[Field]) -> Result<Vec<usize>> {
+    let values = tree.items(raw, "fields")?;
+    ensure!(
+        values.len() == fields.len(),
+        "aggregate field arity mismatch"
+    );
+    values
+        .iter()
+        .zip(fields)
+        .map(|(value, field)| {
+            tree.exact(*value, &["name", "value"])?;
+            ensure!(
+                tree.text(*value, "name")? == field.name,
+                "aggregate field name/order mismatch"
+            );
+            tree.field(*value, "value")
+        })
+        .collect()
+}
+fn quoted(value: &str) -> Result<String> {
+    serde_json::to_string(value).map_err(|_| anyhow!("aggregate string encoding failed"))
+}
+fn push_fields<T>(
+    pending: &mut Vec<T>,
+    fields: &[Field],
+    text: impl Fn(String) -> T,
+    visit: impl Fn(usize) -> T,
+) -> Result<()> {
+    pending.push(text("]}".into()));
+    for (index, field) in fields.iter().enumerate().rev() {
+        pending.push(text("}".into()));
+        pending.push(visit(field.layout));
+        pending.push(text(format!(
+            "{{\"name\":{},\"value\":",
+            quoted(&field.name)?
+        )));
+        if index != 0 {
+            pending.push(text(",".into()));
+        }
+    }
+    Ok(())
+}
+fn read_u32(bytes: &[u8], at: &mut usize) -> Result<usize> {
+    let end = add(*at, 4)?;
+    let part: [u8; 4] = bytes
+        .get(*at..end)
+        .ok_or_else(|| anyhow!("truncated aggregate wire header"))?
+        .try_into()
+        .map_err(|_| anyhow!("truncated aggregate wire header"))?;
+    *at = end;
+    Ok(u32::from_le_bytes(part) as usize)
+}
+
+// This buffer namespace is independent from session/public/private runtime tokens.
+// Returned bytes contain caller values and must not be logged or published.
+const OK: i32 = 0;
+const INVALID_ARGUMENT: i32 = 1;
+const INVALID_HANDLE: i32 = 2;
+const LIMIT: i32 = 5;
+const INTERNAL: i32 = 6;
+const BUFFER_TOO_SMALL: i32 = 7;
+const MAX_BUFFERS: usize = 64;
+struct Buffers {
+    next: u64,
+    data: BTreeMap<u64, Vec<u8>>,
+}
+static BUFFERS: OnceLock<Mutex<Buffers>> = OnceLock::new();
+fn buffers() -> std::sync::MutexGuard<'static, Buffers> {
+    BUFFERS
+        .get_or_init(|| {
+            Mutex::new(Buffers {
+                next: 0x4147_0000_0000_0001,
+                data: BTreeMap::new(),
+            })
+        })
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+}
+fn guard(operation: impl FnOnce() -> std::result::Result<(), i32>) -> i32 {
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(operation)) {
+        Ok(Ok(())) => OK,
+        Ok(Err(code)) => code,
+        Err(_) => INTERNAL,
+    }
+}
+unsafe fn bytes<'a>(pointer: *const u8, length: usize) -> std::result::Result<&'a [u8], i32> {
+    if pointer.is_null() || length == 0 {
+        return Err(INVALID_ARGUMENT);
+    }
+    if length > MAX_TRANSPORT_BYTES {
+        return Err(LIMIT);
+    }
+    Ok(unsafe { std::slice::from_raw_parts(pointer, length) })
+}
+unsafe fn clear<T: Default>(pointer: *mut T) -> std::result::Result<(), i32> {
+    if pointer.is_null() {
+        return Err(INVALID_ARGUMENT);
+    }
+    unsafe {
+        pointer.write(T::default());
+    }
+    Ok(())
+}
+fn store(mut value: Vec<u8>) -> std::result::Result<u64, i32> {
+    let mut registry = buffers();
+    if registry.data.len() >= MAX_BUFFERS {
+        value.zeroize();
+        return Err(LIMIT);
+    }
+    let token = registry.next;
+    let Some(next) = registry.next.checked_add(1) else {
+        value.zeroize();
+        return Err(LIMIT);
+    };
+    registry.next = next;
+    registry.data.insert(token, value);
+    Ok(token)
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn nightlean_aggregate_abi_version() -> u32 {
+    1
+}
+/// # Safety
+/// Borrowed inputs must be readable and output must be aligned writable storage, without overlap.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_aggregate_encode(
+    schema: *const u8,
+    schema_length: usize,
+    value: *const u8,
+    value_length: usize,
+    out_buffer: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            clear(out_buffer)?;
+        }
+        let schema = Schema::from_json(unsafe { bytes(schema, schema_length)? })
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let wire = schema
+            .encode_json_value(unsafe { bytes(value, value_length)? })
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let token = store(wire)?;
+        unsafe {
+            out_buffer.write(token);
+        }
+        Ok(())
+    })
+}
+/// # Safety
+/// Borrowed inputs must be readable and output must be aligned writable storage, without overlap.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_aggregate_decode(
+    schema: *const u8,
+    schema_length: usize,
+    wire: *const u8,
+    wire_length: usize,
+    out_buffer: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            clear(out_buffer)?;
+        }
+        let schema = Schema::from_json(unsafe { bytes(schema, schema_length)? })
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let json = schema
+            .decode_wire(unsafe { bytes(wire, wire_length)? })
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let token = store(json)?;
+        unsafe {
+            out_buffer.write(token);
+        }
+        Ok(())
+    })
+}
+/// # Safety
+/// out_length must be aligned writable storage for one size_t.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_aggregate_buffer_length(
+    token: u64,
+    out_length: *mut usize,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            clear(out_length)?;
+        }
+        let registry = buffers();
+        let value = registry.data.get(&token).ok_or(INVALID_HANDLE)?;
+        unsafe {
+            out_length.write(value.len());
+        }
+        Ok(())
+    })
+}
+/// # Safety
+/// Output storage must be writable, aligned and nonoverlapping. No partial copies are performed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_aggregate_buffer_copy(
+    token: u64,
+    destination: *mut u8,
+    capacity: usize,
+    out_written: *mut usize,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            clear(out_written)?;
+        }
+        let registry = buffers();
+        let value = registry.data.get(&token).ok_or(INVALID_HANDLE)?;
+        if capacity < value.len() {
+            return Err(BUFFER_TOO_SMALL);
+        }
+        if destination.is_null() {
+            return Err(INVALID_ARGUMENT);
+        }
+        unsafe {
+            std::ptr::copy_nonoverlapping(value.as_ptr(), destination, value.len());
+            out_written.write(value.len());
+        }
+        Ok(())
+    })
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn nightlean_aggregate_buffer_free(token: u64) -> i32 {
+    guard(|| {
+        let mut value = buffers().data.remove(&token).ok_or(INVALID_HANDLE)?;
+        value.zeroize();
+        Ok(())
+    })
+}

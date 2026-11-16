@@ -1,6 +1,6 @@
 # Canonical composite types and source layouts
 
-`Nightlean.Types.Composite` defines the Lean-owned type/layout foundation for unit, scalar leaves, structural tuples, nominal structs, nominal enums, fixed vectors and fixed byte sequences. It leaves the existing scalar IR and source elaborator unchanged. Aggregate value construction, scalar flattening, native encoding and ledger acceptance belong to the next package.
+`Nightlean.Types.Composite` defines the Lean-owned type/layout foundation for unit, scalar leaves, structural tuples, nominal structs, nominal enums, fixed vectors and fixed byte sequences. [Checked composite values](composite-values.md) adds construction, flattening, native relation constraints and a Rust/C++ value codec. Source aggregate effects and ledger acceptance remain separate work.
 
 ## Identity and ordering
 

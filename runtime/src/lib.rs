@@ -662,3 +662,4 @@ pub use zkir_320 as zkir;
 #[cfg(all(feature = "zkir-321", not(feature = "zkir-320")))]
 pub use zkir_321 as zkir;
 pub mod profile;
+pub mod aggregates;

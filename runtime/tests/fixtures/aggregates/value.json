@@ -1,0 +1,22 @@
+{"kind": "tuple",
+ "items":
+ [{"kind": "struct",
+   "id": "Demo.Note",
+   "fields":
+   [{"value": {"value": "200", "maximum": "255", "kind": "uint"},
+     "name": "amount"},
+    {"value": {"value": true, "kind": "bool"}, "name": "flag"}]},
+  {"kind": "vector",
+   "items":
+   [{"value": "3", "maximum": "255", "kind": "uint"},
+    {"value": "4", "maximum": "255", "kind": "uint"}]},
+  {"variant": "Full",
+   "kind": "enum",
+   "id": "Demo.Choice",
+   "fields":
+   [{"value": {"value": true, "kind": "bool"}, "name": "flag"},
+    {"value": {"value": "7", "maximum": "15", "kind": "uint"},
+     "name": "amount"}]},
+  {"values": [255, 0], "kind": "bytes"},
+  {"kind": "unit"},
+  {"kind": "vector", "items": []}]}

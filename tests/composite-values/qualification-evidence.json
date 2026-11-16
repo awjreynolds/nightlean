@@ -1,0 +1,98 @@
+{
+  "scope": "typed backend standalone aggregate relation; source aggregate effects gated on DF-01; no ledger acceptance",
+  "nativeVersion": "3.2.1",
+  "checkerWasmSha256": "3568fafaf225469dbbd038b0236d1b6b76e0da19da565caba33efe2ceb682cfc",
+  "k": 8,
+  "sourceSha256": "e40887e27c4ca5b091379564ca4c2933426b582e3fb549ba8a01c999ec62497c",
+  "binarySha256": "94c7c26d5e2377dda42e293763289fab059599d2fc59852a3975287cee84d067",
+  "schemaSha256": "329f94d59b3322bc87020f8fe784b5428ab64e67f934b5fec4998ef03e984d62",
+  "hostSchemaAndLeafOrderMatch": true,
+  "cases": [
+    {
+      "id": "TYV-NESTED",
+      "accepted": true
+    },
+    {
+      "id": "TYV-NATIVE-MIXED-ENUM",
+      "accepted": true
+    },
+    {
+      "id": "TYV-EMPTY-ENUM",
+      "accepted": true
+    },
+    {
+      "id": "TYV-CHANGED-PUBLIC-LEAF",
+      "accepted": false
+    },
+    {
+      "id": "TYV-INVALID-TAG",
+      "accepted": false
+    },
+    {
+      "id": "TYV-ACTIVE-BOOL",
+      "accepted": false
+    },
+    {
+      "id": "TYV-ACTIVE-UINT",
+      "accepted": false
+    },
+    {
+      "id": "TYV-INACTIVE-PADDING",
+      "accepted": false
+    },
+    {
+      "id": "TYV-EMPTY-PADDING",
+      "accepted": false
+    },
+    {
+      "id": "TYV-INDEX-BOUNDS",
+      "accepted": false
+    },
+    {
+      "id": "TYV-SELECTED-LEAF",
+      "accepted": false
+    },
+    {
+      "id": "TYV-SCALAR-BOUND",
+      "accepted": false
+    },
+    {
+      "id": "TYV-BYTE-BOUND",
+      "accepted": false
+    },
+    {
+      "id": "TYV-CHANGED-BOUND-OUTPUT",
+      "accepted": false
+    }
+  ],
+  "proof": {
+    "bytes": 3468,
+    "sha256": "5509f8fb76268a5fce9175dccebae6e46d274aa3158c1f795459c4b32e03621d",
+    "nativeServerSelfVerified": true
+  },
+  "qualifiedAt": "2026-11-16",
+  "nativeCompiler": {
+    "repository": "https://github.com/midnightntwrk/midnight-zkir",
+    "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "rust": "1.100.0",
+    "requestedVersion": "3.2.1",
+    "releaseLabel": "3.2.1",
+    "expectedCliVersion": "3.2.0",
+    "version": "midnight-zkir 3.2.0",
+    "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "cargoLockSha256": "f6044eb43d4d8e6f2ed3dab33cb8f70fe1a59784fcc987e18aef4dab46a16c6b",
+    "rows": 184
+  },
+  "proofServerImage": "midnightntwrk/proof-server@sha256:5617e26aa76d06c44f4bee667c37eb71ccf02fefe0e5848100fa84001282d515",
+  "hostCodec": {
+    "rustTests": 12,
+    "cppSmokePassed": true,
+    "wireBytes": 549,
+    "wireSha256": "81bb117cfd66e4ccd0a24651692a2c9d1783cc26bce2e5138e5ee9e57859e1c3"
+  },
+  "chainedSelectionRegression": {
+    "unitAndUInt255RejectedInvalidFirstIndex": true,
+    "validChainsAccepted": true,
+    "priorFailureReproduced": true
+  }
+}

@@ -1,0 +1,35 @@
+{"typeFingerprint":
+ "NightleanCompositeTypeV1;t6;[r9:Demo.Notev2;sU255;e11:Demo.Choiceb2;uv0;sB]NightleanCompositeLayoutV1;1;R9:Demo.Note2;f6:amountsU255;f4:flagsB1;E11:Demo.Choice3;V4:Full2;f4:flagsBf6:amountsU15;V6:Native1;f5:valuesNV5:Empty0;",
+ "schemaVersion": 1,
+ "layout":
+ {"kind": "tuple",
+  "items":
+  [{"kind": "struct",
+    "id": "Demo.Note",
+    "fields":
+    [{"name": "amount",
+      "layout": {"leaf": {"maximum": "255", "kind": "uint"}, "kind": "scalar"}},
+     {"name": "flag", "layout": {"leaf": {"kind": "bool"}, "kind": "scalar"}}]},
+   {"length": 2,
+    "kind": "vector",
+    "element": {"leaf": {"maximum": "255", "kind": "uint"}, "kind": "scalar"}},
+   {"variants":
+    [{"name": "Full",
+      "fields":
+      [{"name": "flag", "layout": {"leaf": {"kind": "bool"}, "kind": "scalar"}},
+       {"name": "amount",
+        "layout":
+        {"leaf": {"maximum": "15", "kind": "uint"}, "kind": "scalar"}}]},
+     {"name": "Native",
+      "fields":
+      [{"name": "value",
+        "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+     {"name": "Empty", "fields": []}],
+    "kind": "enum",
+    "id": "Demo.Choice"},
+   {"length": 2, "kind": "bytes"},
+   {"kind": "unit"},
+   {"length": 0,
+    "kind": "vector",
+    "element": {"leaf": {"kind": "bool"}, "kind": "scalar"}}]},
+ "counts": {"leaves": 9, "layoutNodes": 17, "expandedNodes": 19}}
