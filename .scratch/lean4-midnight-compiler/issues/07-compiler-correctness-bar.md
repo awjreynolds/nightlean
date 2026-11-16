@@ -1,4 +1,4 @@
-# 06: Set the compiler correctness bar
+# 07: Set the compiler correctness bar
 
 Type: grilling
 
@@ -8,6 +8,6 @@ What correctness and assurance evidence must v1 provide before developers use ge
 
 ## Blocked by
 
-03: Set the v1 Compact and ZKIR boundary.
-04: Choose the first contract workloads.
-05: Choose the Lean source surface.
+04: Assess Moriarty and Midnight backend paths.
+05: Choose the first contract workloads.
+06: Choose the Lean source surface.

@@ -4,9 +4,9 @@ Research checked on 2026-11-16 against official Midnight documentation and repos
 
 ## Recommendation
 
-Define the compiler's first supported feature set by the current, documented Compact toolchain and its matching runtime, with an explicit target for the deployed ledger era. Treat lower-level Impact VM and proof-system capabilities as possible future backend extensions, not automatic language features.
+Compact is one available source and artifact path, not the definition of Nightlean's language or feature set. Derive supported circuit operations from the selected Midnight ledger and proving interfaces, then validate a complete artifact and deployment route separately.
 
-For the current public networks, the compatibility target is ledger 9: Compact toolchain 0.36.0, Compact language 0.28.0, Compact runtime 0.21.0, on-chain runtime 4.0.0, and proof server 9.0.0. The toolchain generates ZKIR version 3, specifically ZKIR 3.1. Its bundled `zkir-v3` binary comes from `midnight-zkir` 3.2.0-rc.2. Those are different version facts. [Compatibility matrix](https://docs.midnight.network/relnotes/support-matrix) [Compact toolchain 0.36.0 release notes](https://docs.midnight.network/relnotes/compact/toolchain-0.36.0)
+For the current public networks, the compatibility target is ledger 9. Midnight's compatibility matrix identifies Compact toolchain 0.36.0, Compact language 0.28.0, Compact runtime 0.21.0, on-chain runtime 4.0.0, and proof server 9.0.0. Compact toolchain 0.36.0 generates ZKIR version 3, specifically ZKIR 3.1. Its bundled `zkir-v3` binary comes from `midnight-zkir` 3.2.0-rc.2. Those facts describe a documented integration path, not Nightlean's source-language boundary. [Compatibility matrix](https://docs.midnight.network/relnotes/support-matrix) [Compact toolchain 0.36.0 release notes](https://docs.midnight.network/relnotes/compact/toolchain-0.36.0)
 
 ## Evidence
 
@@ -21,4 +21,4 @@ The official term is “ZKIR version 3,” not “zkR3.” Compact toolchain 0.3
 
 ## Scope implication
 
-The first compiler should promise support only for Lean constructs that lower to the documented Compact 0.28 contract and circuit model and whose generated artifacts work with the ledger 9 toolchain. A future feature that exists in the VM or proving stack but lacks a documented Compact-level contract, proof, and runtime interface should remain outside the supported subset until that interface is pinned down. This is a recommendation inferred from Midnight's published version matrix and compatibility constraints.
+V1's feature boundary follows the ledger 9 contract, circuit, and proving interfaces Nightlean chooses to support. Compact 0.28 is one documented route through those interfaces. A capability available lower in the ledger or proving stack still needs a complete, tested source-to-deployment path before Nightlean promises it. This recommendation separates feature scope from backend integration evidence.

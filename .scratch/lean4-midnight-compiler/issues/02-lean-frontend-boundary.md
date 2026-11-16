@@ -14,4 +14,4 @@ None.
 
 ## Answer
 
-A dedicated circuit declaration and elaborator provide the clearest restricted frontend. Lean's documented elaborators support custom syntax, environment-aware checking, and source-positioned diagnostics. Consuming ordinary Lean definitions remains possible, but requires a strict whitelist over elaborated core expressions and version pinning. See [lean4-frontend-boundary.md](../../../docs/research/lean4-frontend-boundary.md).
+Lean's documented elaborators support custom syntax, environment-aware checking, and source-positioned diagnostics. Consuming ordinary Lean definitions requires a strict whitelist over elaborated core expressions and version pinning. A dedicated circuit declaration is a recommendation, not a user-approved source-interface decision. See [lean4-frontend-boundary.md](../../../docs/research/lean4-frontend-boundary.md).

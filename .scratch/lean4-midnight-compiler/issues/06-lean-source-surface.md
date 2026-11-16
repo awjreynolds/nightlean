@@ -1,4 +1,4 @@
-# 05: Choose the Lean source surface
+# 06: Choose the Lean source surface
 
 Type: grilling
 
@@ -8,4 +8,4 @@ Should v1 accept a dedicated circuit declaration checked by a Lean elaborator, o
 
 ## Blocked by
 
-04: Choose the first contract workloads.
+05: Choose the first contract workloads.

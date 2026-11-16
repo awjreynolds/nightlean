@@ -1,4 +1,4 @@
-# 04: Choose the first contract workloads
+# 05: Choose the first contract workloads
 
 Type: grilling
 
@@ -8,4 +8,4 @@ Which end-to-end contract workloads should the first compiler release support? N
 
 ## Blocked by
 
-03: Set the v1 Compact and ZKIR boundary.
+04: Assess Moriarty and Midnight backend paths.

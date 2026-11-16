@@ -14,4 +14,4 @@ None.
 
 ## Answer
 
-For v1, generate Compact source from the Lean subset and invoke the pinned official Compact toolchain. Official documentation describes the full build and deployment artifact path. The ZKIR repository documents circuit compilation into keys, but the reviewed sources do not document a complete direct-ZKIR route that also produces the contract bindings and deployment bundle. See [midnight-backend-boundary.md](../../../docs/research/midnight-backend-boundary.md).
+Midnight documents a complete build and deployment path starting from Compact source. The ZKIR repository documents compilation of `.zkir` files into prover and verifier keys, but reviewed sources do not document a complete direct-ZKIR path that also produces contract bindings and the deployment bundle. The Compact-source route is a recommendation, not a user-approved implementation decision. See [midnight-backend-boundary.md](../../../docs/research/midnight-backend-boundary.md).

@@ -12,8 +12,8 @@ Research checked on 2026-11-16 against official Midnight documentation and repos
 - ZKIR and the on-chain runtime are separate components. Midnight's ledger 9 notes list the on-chain runtime as version 4.0.0, while Compact 0.36's release notes describe ZKIR version 3 as its backend. [Ledger 9 upgrade](https://docs.midnight.network/relnotes/ledger-9) [Compact 0.36 release notes](https://docs.midnight.network/relnotes/compact/toolchain-0.36.0)
 - Contract artifacts are version-sensitive. Compact 0.36 changes verifier keys when recompiling contracts that used ZKIR v2. A deployed contract needs matching keys, supplied through its maintenance authority, or it needs redeployment. Compact 0.36 also requires Compact runtime 0.21.x. [Compact 0.36 release notes](https://docs.midnight.network/relnotes/compact/toolchain-0.36.0)
 
-## Recommendation
+## What this evidence establishes
 
-For v1, generate Compact source from the supported Lean subset and pass it to the pinned official Compact toolchain. This reuses the documented route for producing circuits, keys, generated contract bindings, and compiler metadata. Treat this as a source-generation integration, not as an official third-party frontend API. Keep direct ZKIR or Impact VM output out of the v1 promise until an end-to-end artifact and deployment interface is documented and versioned.
+The official documented pipeline proves one complete route from Compact source to generated circuits, keys, bindings, and deployment inputs. The `midnight-zkir` repository documents compilation of `.zkir` files into prover and verifier keys. Reviewed official sources do not document a complete direct-ZKIR contract bundle. This evidence describes available routes. It does not require Nightlean to adopt Compact as its source semantics or backend.
 
-The main risk is semantic drift: the Lean frontend must preserve Compact's ledger, witness, disclosure, and circuit semantics. The output must pin the full compatible toolchain and runtime set, because matching only the ZKIR version does not identify all required contract artifacts.
+Any direct-ZKIR route needs a tested contract interface and deployment bundle. Moriarty's current direct ZKIR compiler is a relevant additional reference; see [Moriarty overlap research](moriarty-overlap.md).
