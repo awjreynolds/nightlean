@@ -1,6 +1,10 @@
 # Source-driven native contract workflow
 
-Nightlean's compiler is Lean. The runtime helpers consume its emitted symbolic plan and native ZKIR, supply witnesses, execute the native VM, assemble ledger contract artifacts, and call the official prover. They do not parse Lean source or invoke another source-language compiler.
+Nightlean's compiler is Lean. The [native Rust runtime](native-rust-runtime.md) executes its emitted plan and the [Rust assembler](native-assembler.md) constructs real native intents from retained authenticated bundle bytes. Neither execution nor assembly requires Node. The [C ABI](native-runtime-abi.md) exposes witness acquisition and private-state journals.
+
+The commands below reproduce the earlier JavaScript development harness. They use native ledger/proving formats, but their orchestration and one assembler are JavaScript. This is an optional development workflow, rather than a complete native client SDK. Rust library APIs for [proof construction](https://github.com/awjreynolds/nightlean/issues/59), [funding/signing/submission and receipt validation](https://github.com/awjreynolds/nightlean/issues/60), and [the full host-neutral transaction ABI](https://github.com/awjreynolds/nightlean/issues/61) remain required work. Native key generation currently uses the pinned independent ZKIR CLI.
+
+The helpers consume generated plans and ZKIR. They do not parse Lean source or invoke another source-language compiler. Use the linked Rust assembler workflow when embedding execution and assembly in a native application.
 
 ## Prepare the tools and chain
 
