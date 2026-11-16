@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "status": "source-layout-model-only",
+  "layoutProfile": "NightleanCompositeLayoutV1",
+  "localLimits": {
+    "maxDeclarations": 1024,
+    "maxVectorLength": 1024,
+    "maxExpandedLeaves": 4096,
+    "maxExpandedNodes": 16384,
+    "maxLayoutNodes": 16384
+  },
+  "enumLayoutProposal": {
+    "tag": "bounded UInt with inclusive maximum variantCount - 1",
+    "variantOrder": "declaration order",
+    "payloadArea": "maximum scalar-leaf count among variants",
+    "shortPayloadPolicy": "zero-pad trailing leaf slots",
+    "nativeAggregateEncodingQualified": false
+  },
+  "scalarLeaves": {
+    "native": {
+      "logicalType": "Nightlean.Ty.native",
+      "fieldSlots": 1,
+      "constraint": "canonical field element below pinned field modulus"
+    },
+    "bool": {
+      "logicalType": "Nightlean.Ty.bool",
+      "fieldSlots": 1,
+      "constraint": "field element is exactly 0 or 1"
+    },
+    "uint": {
+      "logicalType": "Nightlean.Ty.uint(maximum)",
+      "fieldSlots": 1,
+      "constraint": "field element is at most inclusive maximum"
+    },
+    "byte": {
+      "logicalType": "fixed byte",
+      "fieldSlots": 1,
+      "constraint": "field element is at most 255"
+    },
+    "enumTag": {
+      "logicalType": "bounded UInt(variantCount - 1)",
+      "fieldSlots": 1,
+      "constraint": "tag is in declaration-order variant range"
+    }
+  },
+  "cases": [
+    {"id": "TYC-IDENTITY", "fixture": "tests/CompositeTypes.lean", "status": "passing-source-case"},
+    {"id": "TYC-ORDER", "fixture": "tests/CompositeTypes.lean", "status": "passing-source-case"},
+    {"id": "TYC-LENGTH", "fixture": "tests/CompositeTypes.lean", "status": "passing-source-case"},
+    {"id": "TYC-CYCLE", "fixture": "tests/CompositeTypes.lean", "status": "passing-source-case"},
+    {"id": "TYC-SUBTYPE", "fixture": "tests/CompositeTypes.lean", "status": "passing-source-proof"}
+  ],
+  "nativeAggregateEncodingQualified": false
+}
