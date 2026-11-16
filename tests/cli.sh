@@ -80,4 +80,10 @@ LEAN
 expect_failure "$cli" check "$scratch/empty.lean"
 expect_failure "$cli" check "$scratch/missing.lean"
 expect_failure "$cli" check examples/PrivateClaim.lean --target "$scratch/missing.json"
+expect_failure "$cli" check examples/PrivateClaim.lean --adapter compact
+expect_failure "$cli" compile examples/PrivateClaim.lean --adapter unknown
+"$cli" compile examples/PrivateClaim.lean --adapter compact --output "$scratch/compact-adapter"
+test -f "$scratch/compact-adapter/claimRelation.zkir"
+test -f "$scratch/compact-adapter/PrivateClaim.compact"
+grep -F '"adapter": "compact-source"' "$scratch/compact-adapter/nightlean.json" > /dev/null
 echo "CLI conformance checks passed"

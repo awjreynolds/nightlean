@@ -1,4 +1,5 @@
 import Nightlean.IR
+import Nightlean.Backend.Impact
 
 namespace Nightlean.Backend.Zkir
 
@@ -39,6 +40,7 @@ structure LowerState where
   next : Nat := 0
   instructions : Array Json := #[]
   expressions : List (String × String) := []
+  aliases : List (String × String) := []
 
 private abbrev LowerM := StateM LowerState
 
@@ -62,7 +64,7 @@ private def binary (op a b : String) : LowerM String := do
 private def lowerExpr : Expr ty → LowerM String
   | .native n => pure (fieldImmediate n)
   | .bool b => pure (if b then "0x01" else "0x00")
-  | .ref name => pure ("%input_" ++ name)
+  | .ref name => do pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
   | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
   | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
   | .eq a b => do binary "test_eq" (← lowerExpr a) (← lowerExpr b)
@@ -125,6 +127,44 @@ def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
     ("inputs", Json.arr #[]),
     ("outputs", Json.arr (c.outputs.toArray.map fun _ => nativeType)),
+    ("do_communications_commitment", toJson false),
+    ("instructions", Json.arr result.instructions)]
+
+private def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
+  for input in entry.circuit.inputs do
+    let output := "%input_" ++ input.name
+    emit (if input.visibility == .«public» then "public_input" else "private_input")
+      [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+    if input.ty == .bool then emit "constrain_to_boolean" [("val", toJson output)]
+  for condition in entry.circuit.constraints do
+    emit "assert" [("cond", toJson (← lowerExpr condition))]
+  for output in entry.circuit.outputs do
+    let value ← lowerExpr output.value
+    modify fun s => {s with aliases := (output.name, value) :: s.aliases}
+  -- Public parameters were read above in declaration order. Remaining reads
+  -- come from ledger cells and the VM membership result in transcript order.
+  let publicCount := (entry.circuit.inputs.filter (·.visibility == .«public»)).length
+  for read in plan.reads.drop publicCount do
+    let output := "%input_" ++ read.name
+    emit "public_input" [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+    if read.ty == .bool then emit "constrain_to_boolean" [("val", toJson output)]
+  for condition in plan.guards do
+    emit "assert" [("cond", toJson (← lowerExpr condition))]
+  let fields ← plan.fields.mapM lowerExpr
+  bindPublic fields
+  -- Contract outputs are named values used in state effects. The transaction
+  -- call has empty explicit return value; all disclosed values are in transcript.
+  emit "output" [("vals", toJson ([] : List String))]
+
+/-- Compile a native ledger transcript relation. Public-input binding includes
+all opcode, alignment, key, read-result and write-value fields. The caller must
+execute the matching Impact plan, not the standalone circuit artifact. -/
+def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Json := do
+  let plan ← Impact.lower state entry
+  let (_, result) := (lowerEntrypointBody entry plan).run {}
+  return Json.mkObj [
+    ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
+    ("inputs", Json.arr #[]), ("outputs", Json.arr #[]),
     ("do_communications_commitment", toJson false),
     ("instructions", Json.arr result.instructions)]
 

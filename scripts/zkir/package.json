@@ -1,0 +1,13 @@
+{
+  "name": "nightlean-zkir-conformance",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "verify": "node verify.mjs"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/ledger-v9": "1.0.2",
+    "@midnightntwrk/zkir-v3": "https://github.com/midnightntwrk/midnight-zkir/releases/download/zkir-3.2.0/midnight-zkir-v3-3.2.0.tgz"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "nightlean-preview-wallet",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@midnightntwrk/wallet-sdk": "2.0.0",
+    "@midnightntwrk/wallet-sdk-abstractions": "3.0.0",
+    "rxjs": "7.8.2",
+    "ws": "8.23.0"
+  },
+  "scripts": { "wallet": "node wallet.mjs" }
+}

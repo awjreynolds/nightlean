@@ -8,7 +8,7 @@ def usage : String := "Nightlean " ++ version ++ "\n\
 Usage: nightlean --version\n\
        nightlean profiles\n\
        nightlean check <file> [--target <manifest>]\n\
-       nightlean compile <file> [--target <manifest>] [--output <directory>]\n\
+       nightlean compile <file> [--target <manifest>] [--output <directory>] [--adapter compact]\n\
 Default target: profiles/midnight-ledger-9.json\n\
 Target qualification: source baseline only; no deployable backend qualified."
 
@@ -16,6 +16,7 @@ structure Options where
   input : String
   target : String := "profiles/midnight-ledger-9.json"
   output : String := "build/nightlean"
+  compactAdapter : Bool := false
   deriving Repr
 
 private def parseOptions (input : String) (args : List String) (compiling : Bool) :
@@ -34,8 +35,14 @@ where
       else if hasOutput then .error "duplicate --output option"
       else if value.startsWith "--" then .error "--output requires a directory"
       else go { opts with output := value } rest hasTarget true
+    | "--adapter" :: value :: rest =>
+      if !compiling then .error "--adapter is only supported by compile"
+      else if opts.compactAdapter then .error "duplicate --adapter option"
+      else if value != "compact" then .error "unsupported adapter; expected compact"
+      else go { opts with compactAdapter := true } rest hasTarget hasOutput
     | ["--target"] => .error "--target requires a manifest path"
     | ["--output"] => .error "--output requires a directory"
+    | ["--adapter"] => .error "--adapter requires a name"
     | arg :: _ => .error s!"unexpected argument '{arg}'"
 
 private def error (message : String) : IO UInt32 := do
@@ -63,7 +70,8 @@ private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
     return result.exitCode
   -- A separate successful full frontend pass is required before a command may write artifacts.
   -- Lean reports asynchronous earlier errors only when the frontend finishes.
-  let command := "#nightlean_compile " ++ (Lean.toJson opts.output).compress
+  let command := (if opts.compactAdapter then "#nightlean_compile_compact " else "#nightlean_compile ") ++
+    (Lean.toJson opts.output).compress
   let compileInput := "import Nightlean.Compiler " ++ source ++ "\n" ++ command ++ "\n"
   let result ← try
     IO.Process.output {cmd := "lake", args := #["env", "lean", "-D", "Elab.async=false", "--stdin", opts.input]} (some compileInput)
