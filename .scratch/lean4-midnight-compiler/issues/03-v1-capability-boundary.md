@@ -2,6 +2,8 @@
 
 Type: grilling
 
+Status: claimed
+
 ## Question
 
 Should v1 expose a circuit-focused Lean subset that lowers through the documented Compact language and runtime for one pinned ledger era, aim for full Compact feature parity, or include lower-level ZKIR or Impact VM capabilities beyond Compact?
