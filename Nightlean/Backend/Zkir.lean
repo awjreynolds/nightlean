@@ -1,0 +1,131 @@
+import Nightlean.IR
+
+namespace Nightlean.Backend.Zkir
+
+open Lean
+
+/-- Initial relation producer. Ledger transcript/state integration is separate. -/
+private def nativeType : Json := toJson ("Scalar<BLS12-381>" : String)
+
+def nativeModulus : Nat :=
+  52435875175126190479447740508185965837690552500527637822603658699938581184513
+
+private def checkConstants : Expr ty → Except String Unit
+  | .native n => if n < nativeModulus then pure () else throw "noncanonical Native constant"
+  | .bool _ | .ref _ => pure ()
+  | .add a b | .mul a b | .eq a b => do checkConstants a; checkConstants b
+  | .select c a b => do checkConstants c; checkConstants a; checkConstants b
+  | .poseidon2 domain a b => do
+    unless domain < nativeModulus do throw "noncanonical Poseidon domain tag"
+    checkConstants a
+    checkConstants b
+
+private def instruction (op : String) (fields : List (String × Json)) : Json :=
+  Json.mkObj (("op", toJson op) :: fields)
+
+/-- ZKIR field immediates use little-endian bytes, including leading zero bytes. -/
+def fieldImmediate (n : Nat) : String :=
+  "0x" ++ go n (n.log2 / 8 + 1)
+where
+  go (n : Nat) : Nat → String
+    | 0 => ""
+    | fuel + 1 =>
+      let byte := n % 256
+      let digits := "0123456789abcdef".toList.toArray
+      String.singleton digits[byte / 16]! ++ String.singleton digits[byte % 16]! ++
+        go (n / 256) fuel
+
+structure LowerState where
+  next : Nat := 0
+  instructions : Array Json := #[]
+  expressions : List (String × String) := []
+
+private abbrev LowerM := StateM LowerState
+
+private def emit (op : String) (fields : List (String × Json)) : LowerM Unit :=
+  modify fun s => { s with instructions := s.instructions.push (instruction op fields) }
+
+private def fresh : LowerM String := do
+  let s ← get
+  set { s with next := s.next + 1 }
+  return s!"%v{s.next}"
+
+private def binary (op a b : String) : LowerM String := do
+  let key := reprStr (op, a, b)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit op [("a", toJson a), ("b", toJson b), ("output", toJson output)]
+  modify fun s => {s with expressions := (key, output) :: s.expressions}
+  return output
+
+/-- All bools use constrained Native 0/1 values, matching test_eq's result type. -/
+private def lowerExpr : Expr ty → LowerM String
+  | .native n => pure (fieldImmediate n)
+  | .bool b => pure (if b then "0x01" else "0x00")
+  | .ref name => pure ("%input_" ++ name)
+  | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
+  | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
+  | .eq a b => do binary "test_eq" (← lowerExpr a) (← lowerExpr b)
+  | .select condition yes no => do
+    let bit ← lowerExpr condition
+    let a ← lowerExpr yes
+    let b ← lowerExpr no
+    let key := reprStr ("cond_select", bit, a, b)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "cond_select" [("bit", toJson bit), ("a", toJson a),
+      ("b", toJson b), ("output", toJson output)]
+    modify fun s => {s with expressions := (key, output) :: s.expressions}
+    return output
+  | .poseidon2 domain a b => do
+    let a ← lowerExpr a
+    let b ← lowerExpr b
+    let key := reprStr ("transient_hash", domain, a, b)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "transient_hash" [("inputs", toJson [fieldImmediate domain, a, b]),
+      ("output", toJson output)]
+    modify fun s => {s with expressions := (key, output) :: s.expressions}
+    return output
+private def bindPublic (values : List String) : LowerM Unit :=
+  emit "impact" [("guard", toJson ("0x01" : String)), ("inputs", toJson values)]
+
+private def lowerBody (c : Circuit) : LowerM Unit := do
+  for input in c.inputs do
+    let output := "%input_" ++ input.name
+    emit (if input.visibility == .«public» then "public_input" else "private_input")
+      [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+    if input.ty == .bool then
+      emit "constrain_to_boolean" [("val", toJson output)]
+    if input.visibility == .«public» then bindPublic [output]
+  for condition in c.constraints do
+    let value ← lowerExpr condition
+    emit "assert" [("cond", toJson value)]
+  let mut outputs := []
+  for output in c.outputs do
+    outputs := outputs ++ [← lowerExpr output.value]
+  if !outputs.isEmpty then bindPublic outputs
+  emit "output" [("vals", toJson outputs)]
+
+/-- Produce a ZKIR v3.2 relation, not a deployable contract bundle.
+Public values are explicitly bound with Impact. The surrounding contract must
+still bind this public-input sequence to its accepted ledger call transcript. -/
+def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
+  c.validate { poseidon2 := true }
+  for condition in c.constraints do
+    match checkConstants condition with
+    | .error message => throw {span := c.span, message}
+    | .ok _ => pure ()
+  for output in c.outputs do
+    match checkConstants output.value with
+    | .error message => throw {span := output.span, message}
+    | .ok _ => pure ()
+  let (_, result) := (lowerBody c).run {}
+  return Json.mkObj [
+    ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
+    ("inputs", Json.arr #[]),
+    ("outputs", Json.arr (c.outputs.toArray.map fun _ => nativeType)),
+    ("do_communications_commitment", toJson false),
+    ("instructions", Json.arr result.instructions)]
+
+end Nightlean.Backend.Zkir

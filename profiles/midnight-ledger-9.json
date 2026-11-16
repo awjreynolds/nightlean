@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "name": "midnight-ledger-9",
+  "ledger": "9.1.0.1",
+  "zkir": "3.2.0",
+  "circuits": "7.3.0",
+  "zkStdlib": "2.4.0",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "qualification": "source-baseline-unqualified"
+}
