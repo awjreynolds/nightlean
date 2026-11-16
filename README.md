@@ -4,6 +4,8 @@ Nightlean is a Lean 4 compiler project for Midnight contracts. Its source elabor
 
 The active goal is [full native ZKIR v3 and ledger capability coverage](docs/compatibility/GOAL.md), with verified Compact feature equivalence as a minimum comparison. Compact supplies compiler engineering lessons and semantic reference cases. Its exposed features do not cap Nightlean's scope.
 
+Proof-backed functional correctness and auditability are core requirements. Authors should state contract specifications and prove their properties using ordinary Lean theorems, tactics and libraries. The verified product must connect those proofs to the compiled native artifacts and expose its remaining assumptions. Current scoped Lean proofs and localnet receipts do not yet establish that complete chain.
+
 The current source supports Native, Bool and bounded UInt scalars with a small expression/state effect set. Native Rust execution, linked C/C++ providers, public bundle verification and private intent assembly are implemented for this slice. General providers/private-state journals, compiler disclosure analysis, guarded execution, broader types and native composition remain open. The [native inventory](docs/compatibility/zkir-feature-matrix.json) records 47 instructions and 15 value types, with no full-family qualification claims.
 
 The compilation path is Lean source → typed circuit and contract IR → ZKIR v3 and native Impact runtime plans → Midnight proving and ledger libraries. The compiler emits standalone circuit relations, native entrypoint relations, and typed runtime metadata. The selected POC target is an isolated ledger 9 localnet.
