@@ -11,15 +11,17 @@ A deployable compiler for a defined subset of Lean 4 programs used to build Midn
 - The repo has no remote. Use the local Markdown tracker under `.scratch/`.
 - The user prefers an MIT license if a public repo becomes necessary. No public repo is needed for this map.
 - Current Midnight version research is in [midnight-compact-runtime-scope.md](../../docs/research/midnight-compact-runtime-scope.md).
+- Backend integration evidence is in [midnight-backend-boundary.md](../../docs/research/midnight-backend-boundary.md).
+- Lean frontend evidence is in [lean4-frontend-boundary.md](../../docs/research/lean4-frontend-boundary.md).
 
 ## Decisions so far
 
+- [Map the deployable Midnight backend boundary](issues/01-midnight-backend-boundary.md): V1 should generate Compact source and use the pinned official toolchain to produce deployable artifacts. See [the research report](../../docs/research/midnight-backend-boundary.md).
+- [Identify Lean 4 frontend constraints for a compiler subset](issues/02-lean-frontend-boundary.md): A dedicated circuit declaration and elaborator define a narrow checked source boundary with diagnostics. See [the research report](../../docs/research/lean4-frontend-boundary.md).
+
 ## Not yet specified
 
-- The Lean source boundary: embedded DSL, restricted elaborated Lean terms, or another interface.
-- Initial contract workloads and which private/public data, state, and circuit operations they require.
-- The correctness claim for compiled circuits and the evidence required before deployment.
-- Compiler packaging, user workflow, and how future ledger-era support will be versioned.
+- Compiler packaging, user workflow, and support for future ledger eras.
 
 ## Out of scope
 
