@@ -1,0 +1,163 @@
+{
+  "artifactMutantsRejected": [
+    "DirectPublicOutput",
+    "PrivateHashPublicPayload",
+    "PrivateActivityGuard",
+    "PrivateQueryKey"
+  ],
+  "axioms": [
+    "Classical.choice",
+    "Quot.sound",
+    "propext"
+  ],
+  "byteParserCorrespondenceProved": false,
+  "callSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+  "changedObserverRejected": true,
+  "compiledContractVerified": false,
+  "compilerBuildAuthenticated": false,
+  "deployedIdentityAuthenticated": false,
+  "developmentEvidenceDirectory": ".nightlean/audits/private-claim-privacy/",
+  "excludedObservables": [
+    "rejected outcomes",
+    "termination",
+    "timing and resources",
+    "proof bytes",
+    "host/provider access",
+    "host logs"
+  ],
+  "externalModelSupplied": false,
+  "hashAgreementRequired": true,
+  "hostPremise": "shared parent public context and communication randomness; real proof-phase binding agrees with the public binding view",
+  "issue58Complete": false,
+  "kernelReplayed": true,
+  "nativeImplementationAgreementRequired": true,
+  "nativeQualification": {
+    "actualConstructorPreimagesChecked": true,
+    "allActivityEqual": true,
+    "assemblyPath": "Intent.addCall",
+    "bothOfficialCheckerAccepted": true,
+    "byteParserCertificate": false,
+    "callSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+    "checkerModuleSha256": "a4ec641776c45bd06fe033f25b8d74fccca7900d5e97cc360468ddeacfa2424c",
+    "checkerWasmSha256": "3568fafaf225469dbbd038b0236d1b6b76e0da19da565caba33efe2ceb682cfc",
+    "compiledContractVerified": false,
+    "constructorBindingPlaceholder": "0",
+    "constructorBindingPlaceholdersEqual": true,
+    "coupledHostCoins": true,
+    "deploymentIdentity": false,
+    "deprecatedIntoCallRejected": true,
+    "differingPrivateDirection": true,
+    "emptyCommunicationCommitmentEqual": true,
+    "finalBindingImplementationAgreementRequired": true,
+    "finalProofPhaseBindingOverrideVerified": false,
+    "genuinePoseidon": true,
+    "ledgerAdapterModuleSha256": "b504acb16a4bae340479b09000ab8ce36d1e9049dd56ec01e3e194df10243de9",
+    "ledgerAdapterVersion": "1.0.2",
+    "nativeSuccessorEqual": true,
+    "nonzeroCommunicationRandomness": true,
+    "orderedOpcodePayloadsEqual": true,
+    "planSha256": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42",
+    "proofBytesZeroKnowledgeProved": false,
+    "publicFixture": {
+      "campaign": "9",
+      "directions": [
+        [
+          0,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "nullifier": "16533581147424469099777953019315187868248076859940057971562926865714239641352",
+      "root": "50694589486222070576504070152965593525157429401409942863215862779513529824734",
+      "secret": "42",
+      "sibling0": "1082518872019621331943973154275074015113783887089473624992784855177925755681",
+      "sibling1": "23"
+    },
+    "publicStatementSha256": "24a149829f1c70b1840dfbd819a844076a88f27f7a566617b6d4a6fc75a8d1df",
+    "queryPathsEqual": true,
+    "readValuesEqual": true,
+    "scope": "successful native public-call observation pair under shared host coins and parent binding",
+    "sharedParentIntent": true,
+    "symmetricPath": true,
+    "unpairedCoinsChangeObservation": true
+  },
+  "nativeSamplesChecked": true,
+  "observables": [
+    "declared public root/campaign/nullifier",
+    "return nullifier",
+    "public before/after state",
+    "six aligned reads",
+    "public read scalars",
+    "ordered opcode payloads and query paths",
+    "all-active mask",
+    "empty communication commitment",
+    "real bound proof statement under explicit binding agreement"
+  ],
+  "observer": "successfulClaimPublicTranscriptV1",
+  "planSha256": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42",
+  "policy": "Nightlean.PrivateClaimNativePrivacy.policy",
+  "policyMutantsRejected": [
+    "WrongScope",
+    "WrongRelease",
+    "FunctionalOnly"
+  ],
+  "privacyProof": "Nightlean.PrivateClaimNativePrivacy.privacy",
+  "proofByteZeroKnowledgeProved": false,
+  "proofExportSha256": "5142efdcb62dd8efbae14f18e81a6245bf7f036651ce44716e464e68e191cb73",
+  "remainingRequiredLinks": [
+    "issue56 exact UTF-8 bytes and authenticated build integration",
+    "issue57 deployed key/operation identity"
+  ],
+  "scope": "successful-valid-executions-only",
+  "snapshot": {
+    "base": "a3b61dc525291877dc094a4e247f22f01fe15211",
+    "overlayFiles": [
+      "Nightlean/Verification/NativePrivacy.lean",
+      "proofs/PrivateClaimNativePrivacy.lean",
+      "proofs/PrivateClaimPrivacyFixtures.lean",
+      "scripts/proofs/AuditNativePrivacyExport.lean",
+      "scripts/proofs/check-private-claim-privacy.py",
+      "tests/private-claim-privacy-checker.mjs",
+      "docs/development/private-claim-native-privacy-proofs.md"
+    ],
+    "overlaySha256": {
+      "Nightlean/Verification/NativePrivacy.lean": "2266ed16b67ffe03fafbc3f5ea6cd9da2688f7c8941743719a6757752b6fa0ea",
+      "docs/development/private-claim-native-privacy-proofs.md": "26e81d10ec5c1d2ad008b63a5d4b44536ca0c3e6fd0e3233e4934e77f0805710",
+      "proofs/PrivateClaimNativePrivacy.lean": "1b701490910919e75a9ea53e714f3f3b7e4105ac4dbf8db68062b4ccb278d769",
+      "proofs/PrivateClaimPrivacyFixtures.lean": "91d35b42f85583f12a909f1a5b5524d8493e6d18f3bb6df739eae0ef5ad7b9ee",
+      "scripts/proofs/AuditNativePrivacyExport.lean": "26618786705c551d6497faf7812e1e191c366e18bfb748855a4d07a0360c96b6",
+      "scripts/proofs/check-private-claim-privacy.py": "0354d3359e17be27c67b137c48a15da999ab61967ff8428154ae42eece200c84",
+      "tests/private-claim-privacy-checker.mjs": "00aaa3945fe5422dee776924461b086762cb95e0c8d5e888b51e02dd06e7c05e"
+    },
+    "worktreeUnpublishedNonPrivacyChangesIncluded": false
+  },
+  "sourcePolicy": "Nightlean.PrivateClaimVerification.policy",
+  "sourceSha256": "5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771",
+  "specificationReviewVerified": false,
+  "staleChangedSourceRejected": true,
+  "status": "formal-privacy-package-passed-exact-byte-build-integration-pending",
+  "symmetricPathDifferentPrivateWitnesses": true,
+  "trustedModelSha256": "c7b1d6b2c7c211502b6729b7ba30b28e93eaa30e6ed4277768831e2f4438a499",
+  "typedAudit": {
+    "axioms": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "compiledContractVerified": false,
+    "exactArtifactByteBuildBindingVerified": false,
+    "nativePrivacyChecked": true,
+    "observer": "successfulClaimPublicTranscriptV1",
+    "policy": "Nightlean.PrivateClaimNativePrivacy.policy",
+    "privacyProof": "Nightlean.PrivateClaimNativePrivacy.privacy",
+    "proofByteZeroKnowledgeProved": false,
+    "scope": "successful-valid-executions-only",
+    "sourceFunctionalChecked": true,
+    "sourcePolicy": "Nightlean.PrivateClaimVerification.policy",
+    "sourcePrivacyChecked": true,
+    "status": "native-scoped-privacy-checked"
+  }
+}
