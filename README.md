@@ -1,6 +1,6 @@
 # Nightlean
 
-Nightlean is a Lean 4 subset compiler targeting Midnight smart-contract circuits.
+Nightlean will be implemented in Lean 4 and will compile a defined Lean 4 subset to Midnight smart-contract circuits.
 
 The project is in architecture planning. No compiler implementation is in the repository yet. The accepted v1 focus is a circuit-focused Lean subset for current Midnight ledger 9. Compact does not define Nightlean's source semantics. The backend and deployable artifact path are still under review.
 
