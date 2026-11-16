@@ -59,6 +59,41 @@ Source coverage: [language reference](https://github.com/LFDT-Minokawa/compact/b
 
 Boundary cases matter. Compact Uint addition/multiplication widen result bounds, subtraction rejects negative results, and native field arithmetic wraps modulo the field order. Nominal numeric aliases recast results into their own bounds. The reference limits unsigned integers to 248 bits and fixed vectors/bytes to 2^24 elements. Loops use constant/natural-parameter ranges or fixed-size input collections. Unbounded local arrays and unrestricted while loops are not implied by ledger collections. [Numeric, loop and implementation-limit rules](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/compact-reference.mdx).
 
+### Uint result bounds: source/prose discrepancy
+
+For ordinary, non-nominal operands `Uint<0..m>` and `Uint<0..n>`, the pinned reference says addition produces exclusive bound `m+n` and multiplication produces exclusive bound `m*n`. The pinned compiler implements tighter bounds:
+
+| Operation | Internal inclusive result maximum | Equivalent exclusive result bound |
+| --- | --- | --- |
+| Addition | `(m-1)+(n-1)` | `m+n-1` |
+| Multiplication | `(m-1)*(n-1)` | `(m-1)*(n-1)+1` |
+| Subtraction | `m-1` | `m`, with a runtime nonnegative-result assertion |
+
+This discrepancy changes which programs type-check, including returns, typed const bindings, ledger writes and argument passing. Use the pinned compiler behavior for implementation parity. Do not silently replace these equations with the looser prose rules. This conclusion comes from source inspection, without executing Compact. Native conformance evidence is still required.
+
+The trace is explicit. `expand-modules-and-types.ss` converts `Uint<bits>` to maximum `2^bits-1`, and range `Uint<0..n>` to maximum `n-1`. `langs.ss` labels the normalized argument as the maximum value. In `infer-types.ss`, `condense` removes structural aliases and records nominal identities without adjusting integer bounds. `arithmetic-binop` adds or multiplies these maxima, checks the result against `max-unsigned`, and constructs the resulting unsigned type. `format-type` adds one when printing a range, and `subtype?` compares the inclusive maxima. The safe casts introduced for operands do not change the inferred result bound. [Normalization, lines 1306 onward](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/expand-modules-and-types.ss#L1306), [normalized type definition, line 627](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/langs.ss#L627), [formatter, subtyping and arithmetic inference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/infer-types.ss#L648).
+
+Numeric literals have a minimal prefix range, not singleton-refined types: literal `v` receives inclusive maximum `v`. Thus literal `0` has range `Uint<0..1>`. Explicitly typed variables use their declared type even when initialized from a smaller literal. Parameter-based cases below avoid confusing range inference with later constant folding. The frontend `expand-const` pass splits declarations, rather than folding arithmetic. The pass pipeline runs integer inference before circuit simplification. [Literal typing](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/infer-types.ss#L1195), [const expansion](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/frontend-passes/expand-const.ss), [analysis pass order](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes.ss), [compiler pipeline](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/passes.ss).
+
+Nominal aliases form a separate case. Both operands must have the same nominal identity and underlying type. The compiler returns the original nominal type and inserts a checked downcast when the computed maximum exceeds the original maximum. Structural aliases follow the ordinary equations. A preceding `max-unsigned` failure still rejects a nominal operation before the downcast path. [Nominal arithmetic path, lines 743 onward](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/infer-types.ss#L743).
+
+These `C-LANG-UINT` case IDs are source-derived expectations, not executed results:
+
+| Case ID | Operands and expression | Required result |
+| --- | --- | --- |
+| `UINT-ADD-EXCLUSIVE` | Parameters `x,y: Uint<8>`, expression `x+y` | Inferred maximum 510, range `Uint<0..511>`. Return/assignment to this range accepts. Range `Uint<0..510>` rejects. Values 255+255 produce 510 |
+| `UINT-MUL-EXCLUSIVE` | Parameters `x,y: Uint<8>`, expression `x*y` | Inferred maximum 65025, range `Uint<0..65026>`. This result type accepts. Range `Uint<0..65025>` rejects |
+| `UINT-ZERO-LITERAL` | Parameter `x: Uint<8>`, expression `x+0` | Result remains `Uint<8>`. Repeat with parameter `z: Uint<0..1>` in place of 0 |
+| `UINT-DECLARED-ZERO` | Parameter `x: Uint<8>`, binding `z: Uint<8> = 0`, expression `x+z` | Inference uses declared maximum 255 for z. Returning the sum as `Uint<8>` rejects without a cast |
+| `UINT-MAX-MUL-BIT` | Parameters `x: Uint<248>`, `b: Uint<1>`, expression `x*b` | Maximum `2^248-1`, accepted as `Uint<248>`. This differs from applying the prose's exclusive-bound multiplication |
+| `UINT-MAX-ADD-ZERO` | Parameters `x: Uint<248>`, `z: Uint<0..1>`, expression `x+z` | Maximum `2^248-1`, accepted as `Uint<248>` |
+| `UINT-MAX-ADD-BIT` | Parameters `x: Uint<248>`, `b: Uint<1>`, expression `x+b` | Maximum `2^248`, rejected at arithmetic inference, even before a narrower result annotation |
+| `UINT-SUB-UNDERFLOW` | Parameters `x,y: Uint<8>`, expression `x-y` | Inferred type remains `Uint<8>`. 0-1 fails, 255-0 succeeds |
+| `UINT-STRUCTURAL-ALIAS` | Structural alias for `Uint<8>`, two parameters | Same sum/product maxima and assignment decisions as the ordinary cases |
+| `UINT-NOMINAL-ALIAS` | Nominal alias for `Uint<8>`, two parameters | Result retains nominal identity. Sum 255+1 fails its downcast. Sum 1+1 succeeds. Different nominal identities reject statically |
+
+Each accepting assignment case should also be exercised as a circuit return, typed const, ledger write and function argument. Negative cases need stable failure categories. Runtime cases need native checker rejection as well as evaluator behavior. The JSON records the equations, source trace and these case IDs under `C-LANG-UINT`, with related notes on alias and subtyping entries.
+
 Nightlean's eager `select` evaluates both arms. This is useful source-subset evidence, but guarded Compact branches also affect witness invocation, assertions and ledger effects. An implementation must define and test those rules before claiming conditional-expression parity. The existing runtime deliberately rejects an unknown reference even in an unselected expression arm. [Native runtime](../../scripts/zkir/native-runtime.mjs), [existing rejection evidence](../development/native-localnet.md).
 
 ## Complete ledger ADT heading inventory
@@ -147,7 +182,7 @@ The following gaps constrain planning without invalidating the current inventory
 
 - The network matrix has not adopted 0.36.1. The release declares ledger 9 compatibility, but exact network acceptance of all affected key-generation paths needs a pinned qualification run.
 - The 221 entries do not exhaust grammar alternatives, native overloads, compiler options, malformed encodings, alias compatibility or interactions. Source-heading coverage is measurable. Semantic completeness is not yet established.
-- Source/docs disagree on serialization extent and contain stale cross-contract purity prose. The pinned implementation and patch tests resolve the identified cases. A systematic contradiction audit remains necessary.
+- Source/docs disagree on Uint result bounds and serialization extent, and contain stale cross-contract purity prose. The pinned implementation resolves the identified rules. Uint cases above remain source-derived expectations until native conformance tests execute. A systematic contradiction audit remains necessary.
 - Native ZKIR/ledger support for every foreign primitive, event, ADT and cross-call has not been qualified from Nightlean. Library exposure alone does not establish the compiler-to-ledger path.
 - The host-neutral runtime schema, independent language runners and private-state commit/failure rules need their own specification. This file does not preempt the separate portable-witness investigation.
 - Existing local receipts prove a development-ledger subset. Public-network deployment, production assurance, full transaction-atomicity coverage and whole-language equivalence are unverified.

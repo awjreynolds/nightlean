@@ -1,6 +1,6 @@
 # Portable runtime and witness execution
 
-Status: implementation direction for the feature-equivalence goal. The native Rust probe is in progress. No mobile SDK or portable WASM runtime is qualified yet.
+Status: implementation direction for the feature-equivalence goal. The native Rust probe and first in-process C/C++ scalar-input ABI pass the selected private-claim checks. General providers, private-state journals, proof/transaction execution through the ABI, mobile SDKs and portable WASM remain unqualified.
 
 ## Required boundary
 

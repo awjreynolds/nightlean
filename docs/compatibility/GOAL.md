@@ -4,7 +4,7 @@ The active goal is verified feature equivalence with the pinned Compact capabili
 
 ## Baseline
 
-The latest stable feature reference checked on 2026-11-16 is Compact toolchain 0.36.1, language 0.28.0, at source revision `7fa3a117c5e7efe9d2c51da04263e5f0b3509144`. The public-network matrix still lists 0.36.0. The newer source release bundles ZKIR 3.2.1; Nightlean's accepted local claim uses independently built ZKIR 3.2.0. These profiles must remain distinct until qualification establishes compatibility.
+The latest stable feature reference checked on 2026-11-16 is Compact toolchain 0.36.1, language 0.28.0, at source revision `7fa3a117c5e7efe9d2c51da04263e5f0b3509144`. The public-network matrix still lists 0.36.0. The newer source release bundles ZKIR 3.2.1. Nightlean preserves its accepted 3.2.0 default profile and separately records [experimental 3.2.1 qualification](../development/zkir-3.2.1-qualification.md), including finalized local deployment and claim. This selected-circuit evidence does not qualify every capability or a public network.
 
 The [baseline report](../research/compact-equivalence-baseline.md) and [machine inventory](compact-feature-matrix.json) contain the source register, version distinctions, observed implementation gaps, and acceptance requirements. The initial 221 entries are inventory records, not independent delivery units or a percentage-complete score. All equivalence results are unverified.
 
@@ -33,4 +33,6 @@ These tracks contain dependencies, not a delivery estimate. The public issue map
 
 ## Present evidence
 
-The [native private-claim POC](../development/native-localnet.md) demonstrates one source program through native ZKIR and finalized local ledger execution. It does not demonstrate feature parity, a Node-free application runtime, general witness callbacks, mobile SDKs, or complete formal verification. Those gaps are part of this active goal.
+The [native private-claim POC](../development/native-localnet.md) demonstrates one source program through native ZKIR and finalized local ledger execution. The [Rust runtime](../development/native-rust-runtime.md) reproduces its state and checker preimage without Node. The [first C ABI slice](../development/native-runtime-abi.md) also executes the claim in linked C++ and validates resumable scalar-input requests. Proof generation and transaction submission through that ABI, general providers, private-state journals, mobile/WASM SDKs, full feature parity and complete formal verification remain outstanding.
+
+The [scalar policy](../designs/scalar-types.md) records source-backed unsigned bounds, conversions and executable boundary checks. Bounded integers are not yet supported by the source DSL or native runtime.

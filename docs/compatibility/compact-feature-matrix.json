@@ -105,6 +105,30 @@
     },
     "patch": {
       "url": "https://github.com/LFDT-Minokawa/compact/compare/compactc-v0.36.0...compactc-v0.36.1"
+    },
+    "uintNormalization": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/expand-modules-and-types.ss",
+      "blob": "447795071957bb204e03a33b5f89d82baa119ac7"
+    },
+    "typeInference": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/infer-types.ss",
+      "blob": "4a77bf8db409d50d6b989c5a1837091db61b5fb8"
+    },
+    "irLanguages": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/langs.ss",
+      "blob": "b2af1bb9896a1aee7cc2a2781042edbef4333170"
+    },
+    "analysisPasses": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes.ss",
+      "blob": "677327064b156c3a902d77dfff9b9f336303017e"
+    },
+    "compilerPasses": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/passes.ss",
+      "blob": "0e939358da740b704f8de5b88fca1d53d3e3b197"
+    },
+    "constExpansion": {
+      "url": "https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/frontend-passes/expand-const.ss",
+      "blob": "f0e91e8970077b840ca81dcba291d5164152dcbc"
     }
   },
   "features": [
@@ -153,16 +177,107 @@
       "layer": "language",
       "surface": "Uint<n> and Uint<0..n>",
       "nightleanStatus": "missing",
-      "notes": "Bounds, widening addition/multiplication, rejecting negative subtraction, narrowing checks and implementation limits.",
+      "notes": "Pinned compiler uses inclusive maxima internally. For ordinary Uint<0..m> and Uint<0..n>, addition returns exclusive bound m+n-1 and multiplication returns (m-1)*(n-1)+1. This contradicts the looser reference prose. Subtraction retains the left maximum and asserts a nonnegative result. Follow pinned implementation parity, not prose equations. Nominal aliases have separate checked-result rules.",
       "source": [
-        "reference"
+        "reference",
+        "uintNormalization",
+        "typeInference",
+        "irLanguages",
+        "analysisPasses",
+        "compilerPasses",
+        "constExpansion"
       ],
       "requiredEvidence": [
         "SEM",
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "sourceDerivedRules": {
+        "evidenceStatus": "source-inspected-not-executed",
+        "appliesTo": "Ordinary Uint operands and structural aliases, excluding nominal numeric aliases",
+        "internalBound": "inclusive maximum",
+        "surfaceBound": "exclusive range endpoint",
+        "sizedNormalization": "Uint<bits> -> inclusiveMaximum = 2^bits - 1",
+        "rangeNormalization": "Uint<0..n> -> inclusiveMaximum = n - 1",
+        "additionExclusiveBound": "m + n - 1",
+        "multiplicationExclusiveBound": "(m - 1) * (n - 1) + 1",
+        "subtractionExclusiveBound": "m",
+        "maximumGuard": "result inclusive maximum <= 2^248 - 1, checked before nominal result downcast",
+        "literalTyping": "Literal v has minimal prefix range [0,v], not a singleton-refined type",
+        "declaredBinding": "Declared const/parameter type controls later variable-reference inference",
+        "condense": "Unwraps structural aliases and records nominal identities without shifting bounds",
+        "constantOptimization": "Parameter cases do not depend on folding. expand-const splits declarations, and arithmetic inference precedes circuit simplification",
+        "nominalAliases": "Same nominal identity and underlying type required. Result keeps original nominal type, with checked downcast when maximum grows"
+      },
+      "conformanceCases": [
+        {
+          "id": "UINT-ADD-EXCLUSIVE",
+          "input": "Parameters x,y: Uint<8>, expression x+y",
+          "expected": "Maximum 510. Uint<0..511> accepts, Uint<0..510> rejects. 255+255=510.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-MUL-EXCLUSIVE",
+          "input": "Parameters x,y: Uint<8>, expression x*y",
+          "expected": "Maximum 65025. Uint<0..65026> accepts, Uint<0..65025> rejects.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-ZERO-LITERAL",
+          "input": "Parameter x: Uint<8>, expression x+0; repeat with parameter z: Uint<0..1>",
+          "expected": "Result remains Uint<8>.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-DECLARED-ZERO",
+          "input": "Parameter x: Uint<8>, typed const z: Uint<8> = 0, expression x+z",
+          "expected": "Maximum 510. Returning as Uint<8> rejects without a cast.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-MAX-MUL-BIT",
+          "input": "Parameters x: Uint<248>, b: Uint<1>, expression x*b",
+          "expected": "Maximum 2^248-1. Accepted as Uint<248>.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-MAX-ADD-ZERO",
+          "input": "Parameters x: Uint<248>, z: Uint<0..1>, expression x+z",
+          "expected": "Maximum 2^248-1. Accepted as Uint<248>.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-MAX-ADD-BIT",
+          "input": "Parameters x: Uint<248>, b: Uint<1>, expression x+b",
+          "expected": "Maximum 2^248. Rejected by arithmetic inference before result annotation.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-SUB-UNDERFLOW",
+          "input": "Parameters x,y: Uint<8>, expression x-y",
+          "expected": "Result Uint<8>. 0-1 fails, 255-0 succeeds.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-STRUCTURAL-ALIAS",
+          "input": "Two parameters of a structural Uint<8> alias",
+          "expected": "Same maxima and assignment decisions as ordinary Uint<8> operands.",
+          "status": "source-derived-not-executed"
+        },
+        {
+          "id": "UINT-NOMINAL-ALIAS",
+          "input": "Two parameters of one nominal Uint<8> alias",
+          "expected": "Result retains alias. 255+1 fails downcast, 1+1 succeeds. Different nominal identities reject statically.",
+          "status": "source-derived-not-executed"
+        }
+      ],
+      "conformanceContexts": [
+        "circuit-return",
+        "typed-const",
+        "ledger-write",
+        "function-argument"
+      ]
     },
     {
       "id": "C-LANG-BYTES",
@@ -249,9 +364,10 @@
       "layer": "language",
       "surface": "Structural and nominal type aliases",
       "nightleanStatus": "missing",
-      "notes": "Distinct nominal identity, arithmetic recasts and generic specialization.",
+      "notes": "Structural Uint aliases use inclusive-maximum widening. Nominal numeric aliases require matching identities, retain their original type and downcast checked arithmetic results. The max-unsigned guard precedes nominal downcasting. See C-LANG-UINT conformance cases.",
       "source": [
-        "reference"
+        "reference",
+        "typeInference"
       ],
       "requiredEvidence": [
         "SEM",
@@ -281,9 +397,11 @@
       "layer": "language",
       "surface": "Subtyping and least upper bounds",
       "nightleanStatus": "missing",
-      "notes": "Compact value semantics need a Lean surface design rather than copied syntax.",
+      "notes": "Compare normalized inclusive Uint maxima. Source/prose result-bound discrepancy changes return, binding, ledger-write and argument acceptance. See C-LANG-UINT conformance cases. Compact value semantics need a Lean surface design rather than copied syntax.",
       "source": [
-        "reference"
+        "reference",
+        "typeInference",
+        "uintNormalization"
       ],
       "requiredEvidence": [
         "SEM",
