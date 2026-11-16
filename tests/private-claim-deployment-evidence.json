@@ -1,0 +1,447 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-16",
+  "product": "Noctium",
+  "scope": "Selected PrivateClaim 3.2.1 exact-source/native-key/finalized-deployment identity under explicit implementation, SRS, host and trusted-node assumptions. No unconditional business-specification, universal-compiler or consensus-light-client claim.",
+  "qualification": {
+    "kind": "reviewed-source-hashes",
+    "publishedImplementationCommitQualified": false,
+    "note": "Immutable implementation checkpoint and exact-published qualification follow final review."
+  },
+  "guaranteeVersion": "PrivateClaimDeploymentIdentity/v1",
+  "sourceAuthority": {
+    "sha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+    "path": "/private/tmp/nightlean-artifact-authority-925164d/authority.json",
+    "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+    "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+    "compilerProductSha256": "7c1234a04dcbb279ee2d2d7ed301ef46ec777e4a5e5869f23538b7e82256fde1",
+    "trustedModelSha256": "c04b41c999ed7fe42d1eeffacd447e6ae095be891709179cec4a3198bea8ff0e",
+    "theoremClosureSha256": "7b291d62a201525313519d2b646431b226ecf48b352433a4db6b633f0060e2ed",
+    "sourceClosureSha256": "082858c4c2bf3e172f633cda29dab97dd0822878e1c11fa3d34b8a57b7045014",
+    "toolchainSha256": "86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e",
+    "proofPolicies": {
+      "source": "Nightlean.PrivateClaimVerification.policy",
+      "native": "Nightlean.PrivateClaimNativePrivacy.policy",
+      "observer": "successfulClaimPublicTranscriptV1"
+    },
+    "exactByteAudit": {
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "bootstrapVerified": false,
+      "compiledContractVerified": false,
+      "concreteByteFunctionalPreservationChecked": true,
+      "concreteBytePrivacyCompositionChecked": true,
+      "deployedIdentityAuthenticated": false,
+      "eligibleSourceCompletenessChecked": true,
+      "exactArtifactByteBuildBindingVerified": true,
+      "externalAuthorityKernelMatched": true,
+      "externalAuthoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+      "finalBindingImplementationAgreementRequired": true,
+      "hashAndNativeImplementationAgreementRequired": true,
+      "nativePrivacyChecked": true,
+      "observer": "successfulClaimPublicTranscriptV1",
+      "privateInvocationInputsConsumed": false,
+      "proofByteZeroKnowledgeProved": false,
+      "remainingRequiredBridge": "issue57 key/deployment identity",
+      "reproduciblePublicBuildChecked": true,
+      "retainedBytesKernelMatched": true,
+      "scope": "actual PrivateClaim 27-instruction scalar / 55-instruction call / 21-operation state plan",
+      "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+      "sourceFunctionalChecked": true,
+      "sourcePrivacyChecked": true,
+      "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+      "specificationReviewVerified": false,
+      "status": "exact-retained-artifact-bytes-and-scoped-privacy-checked",
+      "successfulValidExecutionsOnly": true,
+      "toolchainSha256": "86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e"
+    }
+  },
+  "specification": {
+    "path": "/private/tmp/noctium-deployment57-qkjx_on5/specification.json",
+    "sha256": "17cae31f6a73eec24a729a6ef74187ccf11264a96c8bc1355f18672f94db1d1e",
+    "publicValue": {
+      "authoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+      "entrypoint": "claim",
+      "guaranteeVersion": "PrivateClaimDeploymentIdentity/v1",
+      "initialization": {
+        "acceptedRoot": "28399696706114328615841781920356350076672934126225635254148383513591039775413",
+        "campaignId": "9",
+        "spent": []
+      },
+      "ledgerParametersBlockHash": "7df8d599767bc405fd9824c723165fed1b9384298df3dee281b3a431eebd06e3",
+      "ledgerParametersHeight": 5308,
+      "ledgerParametersSha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
+      "ledgerPricePolicy": "adaptive-fee-prices-v1",
+      "metadataSha256": "0ac5917f03f657e594e7c6c6544a37440fbce7f19e58d07a7773c50fc1461713",
+      "nativeToolchainSha256": "61360c9c8c3e79b13c53b338ae4f978601d5a6aa4ce44d1ae95a3f518ed6a497",
+      "policy": {
+        "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+        "maxDust": 10000000000000000000000,
+        "networkId": "undeployed",
+        "profile": "midnight-ledger-9-zkir-3.2.1",
+        "specVersion": 2001100,
+        "transactionVersion": 4
+      },
+      "runtimeCodeHash": "110283b44ab3f1ce35165efc00cc24ef4bf6ca5aefab6c97652a0c9e68c30fb6",
+      "schemaVersion": 1,
+      "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+      "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+      "srsSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd"
+    }
+  },
+  "keyGeneration": {
+    "invocation": {
+      "inputCallSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+      "invocation": [
+        "zkir",
+        "compile",
+        "PrivateClaim.claim.zkir",
+        "claim.prover",
+        "claim.verifier"
+      ],
+      "operation": "native-cli-keygen",
+      "privateInvocationInputsConsumed": false,
+      "proverKeySha256": "b9b7e5dd38f01468aecf6b698a74905800227a41e3ca7d7ef302dc287fc64e55",
+      "retainedInputCallSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
+      "schemaVersion": 1,
+      "srsFile": "bls_midnight_2p9",
+      "srsSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+      "tool": {
+        "binary": "/private/tmp/nightlean-native-zkir-321/bin/zkir",
+        "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+        "cargoLockSha256": "f6044eb43d4d8e6f2ed3dab33cb8f70fe1a59784fcc987e18aef4dab46a16c6b",
+        "command": "cargo +1.100.0 build --release --locked --package midnight-zkir --features binary",
+        "expectedCliVersion": "3.2.0",
+        "host": "darwin-arm64",
+        "releaseLabel": "3.2.1",
+        "repository": "https://github.com/midnightntwrk/midnight-zkir",
+        "requestedVersion": "3.2.1",
+        "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+        "rust": "1.100.0",
+        "version": "midnight-zkir 3.2.0"
+      },
+      "toolchainManifestSha256": "61360c9c8c3e79b13c53b338ae4f978601d5a6aa4ce44d1ae95a3f518ed6a497",
+      "verifierKeySha256": "bc1e417d74922fee9a97778a0a00e7f9910e38f356cba94aa2dee0788b3fa536"
+    },
+    "publicManifestSha256": "de4f114c6d80ee35f4ff03135c4b20f427420a61f1732daac0d949e1129b6e67",
+    "nativeManifestSha256": "ff7ba60772571ba76c16915e84a066869e5f5089868b3c3b3a9829e1ba0a879b",
+    "independentRustSerializedKeyComparison": true,
+    "sourceCallInstructionCount": 55,
+    "standaloneRelationUsedForDeployedKey": false,
+    "privateInvocationInputsConsumed": false,
+    "artifactDirectory": "/private/tmp/noctium-deployment57-qkjx_on5/public-pinned"
+  },
+  "deployment": {
+    "record": "/private/tmp/noctium-deployment57-qkjx_on5/execution/deployment.json",
+    "recordSha256": "6da2446f4dd0e17b6162db8b4376b6d34e8cfd253536cefc19ee5447c0661be2",
+    "address": "cde02a748b5983bdb7fb21a17b73b0ffde4a8ccf401578af996644cd5a7ea99d",
+    "entrypoint": "claim",
+    "operationSlot": "ContractOperation.v3",
+    "legacyV2Absent": true,
+    "storedIrAbsent": true,
+    "completeInitialContractStateMatched": true,
+    "initialStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+    "initialization": {
+      "acceptedRoot": "28399696706114328615841781920356350076672934126225635254148383513591039775413",
+      "campaignId": "9",
+      "spent": []
+    },
+    "maintenanceAuthority": {
+      "committee": [],
+      "threshold": 1,
+      "counter": 0
+    },
+    "initialBalancesEmpty": true,
+    "transactions": [
+      {
+        "chain": {
+          "networkId": "undeployed",
+          "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+          "specVersion": 2001100,
+          "transactionVersion": 4,
+          "profile": "midnight-ledger-9-zkir-3.2.1"
+        },
+        "blockHash": "0cfe3efb2a593efa45021cd325a76c0f79e9e36afa8f77a07dd4b3ccd7d7864c",
+        "height": 5409,
+        "finalizedHash": "0cfe3efb2a593efa45021cd325a76c0f79e9e36afa8f77a07dd4b3ccd7d7864c",
+        "finalizedHeight": 5409,
+        "extrinsicHash": "e666b11c615f87ee63b6e1a8438941eae92781500a90ca828c02a579f244aeb2",
+        "extrinsicIndex": 4,
+        "transactionId": "309300f2ab732bcdd749e7a859a2face7ca76224588fbee4c9b43fce5db125c3",
+        "intentId": "fbe3ecc6cd89e2dda7294082fdf76ac186fe983e4c37a6bfb643a806a546ba2a",
+        "contractAddress": "cde02a748b5983bdb7fb21a17b73b0ffde4a8ccf401578af996644cd5a7ea99d",
+        "event": "Deploy",
+        "contractStateBytes": 1689,
+        "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+        "fundingQuote": {
+          "blockHash": "81eebd5e80dd4fc9d7b1437305126b0b8e97435e73a2fa2dde3afdce61d548e4",
+          "height": 5405,
+          "ledgerParametersHex": "6d69646e696768743a6c65646765722d706172616d65746572735b76385d3ac64a0600008e0a8c0072618b007eed60004ec66a008ef07200feaf7200f6d97c00a247090156426700c647eb00161f30005a1469008a7ab1005e5f74005298b100762490008abe8d008e4d7300d208840000466dba00e507fed717b0b25a040000163c060000da4f5000d2726f009e0e650066552a0015065ec12a000d068abc7700d27877000a1c10007ec71a00ba0cab000afb1800567e9300f200100052dd1a005e58ab00aa0f19007a1094005aee26001c624d060000824c9500763c8c000a4b7600e96df69ca80015660a5a81019d64004e4f2f0249c07212bd00004a586c0392ab6e175ee1200251c10241bd0000f2613903421045170a87e60012d65f009248a200b6e55b00664599022a1a01005aa30100b622240200b56bd2f661026e4d760385fa00fe75470259f5ed2366280c03fe61940286150100314a1e86fa01aa46010049209e8b6402d6606e0389fc00e2e21f029d4c3d427e550703e6704c0a0e910200ce3a140100b28587038a891f17226ffc05d6f96506ea8201003a2a43010082f361028aa450187e622b066e3f060002ff3217d54926142a420320c6305b034df61ec3f2051601aa90d15012f316001e3e791e82759d140076447102ea503eb0bae1912312eea6549608753602127a0002fd4314000284d71700000000000000000040000000000000000000000000000000000100000000000000000000000000000001000000000000000200400002127a000700d6117e030b00204aa9d1010b00204aa9d10102093d00420d030002c2eb0b00000000000000800000000000000000020080020700f2052a012d81302a000000000000000000000000000000000000000000000a00000000000000239872e67ebbb5d70000000000000000e86b929d08718cd900000000000000006ff382f4e919c0db0000000000000000850878878eb9fd720100000000000000007512000000000000000000000000000000000000000040000000000000000000000000000000006400000000000000d107a10f00000000000000000a00000000000000",
+          "ledgerParametersSha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679"
+        }
+      },
+      {
+        "chain": {
+          "networkId": "undeployed",
+          "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+          "specVersion": 2001100,
+          "transactionVersion": 4,
+          "profile": "midnight-ledger-9-zkir-3.2.1"
+        },
+        "blockHash": "5ba63cdefb4364163fa9b356903234f53ecea24637af04723ae05150f6b0bee4",
+        "height": 5412,
+        "finalizedHash": "5ba63cdefb4364163fa9b356903234f53ecea24637af04723ae05150f6b0bee4",
+        "finalizedHeight": 5412,
+        "extrinsicHash": "20b994360e5c3ece2a0022e419c1d59a0be7e068df666e86f6cf198912c497d7",
+        "extrinsicIndex": 4,
+        "transactionId": "28623b6276a681d89fe0d1e98c6a8116a4a893a66946dd56a2a984b866d89179",
+        "intentId": "6b95a5664da8bc147132400ec5050d9362a7e1e69d82652ebc163b5c2af043f6",
+        "contractAddress": "cde02a748b5983bdb7fb21a17b73b0ffde4a8ccf401578af996644cd5a7ea99d",
+        "event": "Call",
+        "contractStateBytes": 1874,
+        "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "fundingQuote": {
+          "blockHash": "0cfe3efb2a593efa45021cd325a76c0f79e9e36afa8f77a07dd4b3ccd7d7864c",
+          "height": 5409,
+          "ledgerParametersHex": "6d69646e696768743a6c65646765722d706172616d65746572735b76385d3ac64a0600008e0a8c0072618b007eed60004ec66a008ef07200feaf7200f6d97c00a247090156426700c647eb00161f30005a1469008a7ab1005e5f74005298b100762490008abe8d008e4d7300d208840000466dba00e507fed717b0b25a040000163c060000da4f5000d2726f009e0e650066552a0015065ec12a000d068abc7700d27877000a1c10007ec71a00ba0cab000afb1800567e9300f200100052dd1a005e58ab00aa0f19007a1094005aee26001c624d060000824c9500763c8c000a4b7600e96df69ca80015660a5a81019d64004e4f2f0249c07212bd00004a586c0392ab6e175ee1200251c10241bd0000f2613903421045170a87e60012d65f009248a200b6e55b00664599022a1a01005aa30100b622240200b56bd2f661026e4d760385fa00fe75470259f5ed2366280c03fe61940286150100314a1e86fa01aa46010049209e8b6402d6606e0389fc00e2e21f029d4c3d427e550703e6704c0a0e910200ce3a140100b28587038a891f17226ffc05d6f96506ea8201003a2a43010082f361028aa450187e622b066e3f060002ff3217d54926142a420320c6305b034df61ec3f2051601aa90d15012f316001e3e791e82759d140076447102ea503eb0bae1912312eea6549608753602127a0002fd4314000284d71700000000000000000040000000000000000000000000000000000100000000000000000000000000000001000000000000000200400002127a000700d6117e030b00204aa9d1010b00204aa9d10102093d00420d030002c2eb0b00000000000000800000000000000000020080020700f2052a012d81302a000000000000000000000000000000000000000000000a000000000000001269ec2a1afa2dd60000000000000000e335ed68c65801d800000000000000003cfc2e09fb0131da0000000000000000d064f76224ab9f770100000000000000007512000000000000000000000000000000000000000040000000000000000000000000000000006400000000000000d107a10f00000000000000000a00000000000000",
+          "ledgerParametersSha256": "d37056f09e196323724cc38f9153a6e9cff42f622e5ac3464454376472d4851a"
+        }
+      }
+    ],
+    "privateJournalReconciliation": "SDK60 committed each host Boolean integration write, separate from source-program private-effect assurance"
+  },
+  "publicVerification": {
+    "path": "/private/tmp/noctium-deployment57-qkjx_on5/public-audit-pinned/audit.json",
+    "sha256": "0633b537bd5449c43213c203a95d80b23566e0ed58d745d0193dfc79d079cdcc",
+    "result": {
+      "address": "cde02a748b5983bdb7fb21a17b73b0ffde4a8ccf401578af996644cd5a7ea99d",
+      "assumptions": [
+        "qualified native key generation and selected Rust/parser/prover implementations",
+        "SRS provenance and ceremony relations",
+        "host toolchain and durable-store policy for execution",
+        "trusted node canonical history and finality, not a consensus light client",
+        "public initialization is caller-specified, not an unconditional business specification"
+      ],
+      "auditorRustHelperSha256": "671b54711b1208691556138c7f426651a8fad70c881c7f510c0a60fb6d53cc63",
+      "businessSpecificationReviewed": false,
+      "consensusLightClient": false,
+      "currentFinalizedHash": "83a43d30d0996878b787591ff877df3df8b6473fb02d7e6d1a99fa80a671e6ca",
+      "currentFinalizedHeight": 5616,
+      "currentOperationRevisionMatched": true,
+      "guaranteeVersion": "PrivateClaimDeploymentIdentity/v1",
+      "nativeKeygenAndImplementationAssumptionsRequired": true,
+      "observations": [
+        {
+          "blockHash": "0cfe3efb2a593efa45021cd325a76c0f79e9e36afa8f77a07dd4b3ccd7d7864c",
+          "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+          "event": "Deploy",
+          "extrinsicHash": "e666b11c615f87ee63b6e1a8438941eae92781500a90ca828c02a579f244aeb2",
+          "extrinsicIndex": 4,
+          "height": 5409,
+          "transactionId": "309300f2ab732bcdd749e7a859a2face7ca76224588fbee4c9b43fce5db125c3"
+        },
+        {
+          "blockHash": "5ba63cdefb4364163fa9b356903234f53ecea24637af04723ae05150f6b0bee4",
+          "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+          "event": "Call",
+          "extrinsicHash": "20b994360e5c3ece2a0022e419c1d59a0be7e068df666e86f6cf198912c497d7",
+          "extrinsicIndex": 4,
+          "height": 5412,
+          "transactionId": "28623b6276a681d89fe0d1e98c6a8116a4a893a66946dd56a2a984b866d89179"
+        }
+      ],
+      "publicOnly": true,
+      "sourceAndKeyDeploymentJoinChecked": true,
+      "sourceAudit": {
+        "axioms": [
+          "propext",
+          "Classical.choice",
+          "Quot.sound"
+        ],
+        "bootstrapVerified": false,
+        "compiledContractVerified": false,
+        "concreteByteFunctionalPreservationChecked": true,
+        "concreteBytePrivacyCompositionChecked": true,
+        "deployedIdentityAuthenticated": false,
+        "eligibleSourceCompletenessChecked": true,
+        "exactArtifactByteBuildBindingVerified": true,
+        "externalAuthorityKernelMatched": true,
+        "externalAuthoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+        "finalBindingImplementationAgreementRequired": true,
+        "hashAndNativeImplementationAgreementRequired": true,
+        "nativePrivacyChecked": true,
+        "observer": "successfulClaimPublicTranscriptV1",
+        "privateInvocationInputsConsumed": false,
+        "proofByteZeroKnowledgeProved": false,
+        "remainingRequiredBridge": "issue57 key/deployment identity",
+        "reproduciblePublicBuildChecked": true,
+        "retainedBytesKernelMatched": true,
+        "scope": "actual PrivateClaim 27-instruction scalar / 55-instruction call / 21-operation state plan",
+        "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
+        "sourceFunctionalChecked": true,
+        "sourcePrivacyChecked": true,
+        "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
+        "specificationReviewVerified": false,
+        "status": "exact-retained-artifact-bytes-and-scoped-privacy-checked",
+        "successfulValidExecutionsOnly": true,
+        "toolchainSha256": "86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e"
+      },
+      "sourceAuthoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
+      "status": "selected-private-claim-deployment-identity-qualified",
+      "trustedNodeFinalityRequired": true,
+      "universalCompilerVerified": false
+    },
+    "witnessSeedOrJournalArguments": false,
+    "actualObservedCallProofVerifiedWithRegeneratedKey": true,
+    "currentOperationAndMaintenanceRevisionMatched": true,
+    "verifiedAfterExecutableAndJsonRetentionFixes": true
+  },
+  "parameterPolicy": {
+    "name": "adaptive-fee-prices-v1",
+    "historicalFullBytesSha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
+    "historicalBlockHash": "7df8d599767bc405fd9824c723165fed1b9384298df3dee281b3a431eebd06e3",
+    "historicalHeight": 5308,
+    "laterOnlyNativeFeePricesMayVary": true,
+    "byteOffsetMasking": false,
+    "historicalAndPerFundingQuotesAuthenticated": true
+  },
+  "negativeTests": {
+    "historicalParameterSha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
+    "laterNativePriceQuoteMatched": true,
+    "laterQuoteSha256": "526ee60f7a73bb767915c9b764a5672e63322a73504c7279ed560c08632da8ff",
+    "rejected": [
+      "wrong-key",
+      "wrong-source-revision",
+      "wrong-source-bytes",
+      "wrong-srs",
+      "wrong-ledger-parameters",
+      "wrong-authority",
+      "wrong-entrypoint",
+      "wrong-target",
+      "wrong-network",
+      "wrong-initialization",
+      "new-key-at-same-address",
+      "restored-key-after-maintenance",
+      "mutated-historical-fee-price",
+      "wrong-address",
+      "forged-live-quote-with-refreshed-hash"
+    ],
+    "scope": "public native join/revision regressions, no private inputs or live maintenance update"
+  },
+  "controllerPinRaceTests": {
+    "source": "tests/private-claim-deployment-controller.py",
+    "passed": 7,
+    "cases": [
+      "single bounded JSON read is hashed and parsed",
+      "replaced tool manifest and CLI rejected against original pin",
+      "CLI path replaced after read executes verified snapshot",
+      "Rust helper path replaced after read executes verified snapshot",
+      "replacement helper rejected before execution",
+      "CALL swapped to FIFO immediately before open rejects",
+      "special files and links reject"
+    ],
+    "logRetention": "filesystem log and tool transcript",
+    "log": "/private/tmp/noctium-deployment57-qkjx_on5/controller-pin-race-tests.log",
+    "logSha256": "9ec9e3c52e7908b746c625587944c7e1eb71f90fc834fbb4527d510523684dd2"
+  },
+  "ordinarySdkRegressions": [
+    {
+      "profile": "320",
+      "exitCode": 0,
+      "log": "/private/tmp/noctium-deployment57-qkjx_on5/regression-320.log",
+      "summaries": [
+        "test result: ok. 36 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.22s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s",
+        "test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.50s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ],
+      "passed": 111,
+      "failed": 0,
+      "ignored": 7
+    },
+    {
+      "profile": "321",
+      "exitCode": 0,
+      "log": "/private/tmp/noctium-deployment57-qkjx_on5/regression-321.log",
+      "summaries": [
+        "test result: ok. 39 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.23s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 2 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.68s",
+        "test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s"
+      ],
+      "passed": 115,
+      "failed": 0,
+      "ignored": 8
+    }
+  ],
+  "assumptions": [
+    "independently authenticated exact-byte source/model/toolchain authority and reviewed selected policy",
+    "qualified native CLI and selected Rust key-generation implementations, parsers, VM, prover and verifier",
+    "cryptographic soundness and SRS provenance/ceremony/pairing relations",
+    "explicit host approval, entropy and durable-store contract for execution",
+    "trusted node canonical history, runtime/state/parameter APIs and finality",
+    "caller-selected public initialization; business specification review remains external"
+  ],
+  "sourceSha256": {
+    "runtime/src/deployment_audit.rs": "29bd8f620dfca3266b6786d3e227c75cbe4310e3eef13a04495a8073a97b2ad6",
+    "runtime/src/client.rs": "fc74df2ea08a2b09e00b2d3a31e1c6ba7c43ce6d7ecf174300ec931f861ab996",
+    "runtime/src/localnet.rs": "3f54f5790b41f4f3ed38299525bcb039417a1ed41471f317be01c7b0994f95a6",
+    "runtime/src/lib.rs": "a67e5203efedcb5595c47b842730273b4b6aee6059ced4f5eb4f9f157738ed31",
+    "runtime/Cargo.toml": "8c73662ce8dff7aac48cd3d28fae59a023d9befcb26b8828818280c6b1fb0c9c",
+    "runtime/Cargo.lock": "0df66d3aa5162fa1826a8ec49180e02f5c8188e37e6a74fbfeb57e27d6b26153",
+    "runtime/examples/audit_claim_deployment.rs": "b771ef9c8d752c5a61c7c5f1947bdf064d30d99e85db4611badcc1b89d40a87e",
+    "runtime/tests/deployment_audit.rs": "2690f694a50428552e4495e91dd9d12a9d5733496b2b0ac7b7552350c0ee074f",
+    "scripts/proofs/check-private-claim-deployment.py": "f285e5f1f96ed1ae789e90738610920b65814c12b4c4419a54a62f93dbdf9335",
+    "tests/private-claim-deployment-controller.py": "b0654211fc3a618e5aa4ad8b85fd1fe9ce2eebab896ac4d42992e8562b061877",
+    "docs/development/private-claim-deployment-audit.md": "20b7f2a4d2b0825088aeaed83f0d073164829670417b317cd503f1dc808ffdc3"
+  },
+  "controllerBoundaryTests": [
+    {
+      "case": "optimized-python",
+      "exitCode": 1,
+      "log": "/private/tmp/noctium-deployment57-qkjx_on5/optimized-python.log",
+      "sha256": "7f6f85d13d865a25913ff1c73e8b05d6ac9211ee7ec1730c3a6ad0d49c584266"
+    },
+    {
+      "case": "private-config-on-public-verifier",
+      "exitCode": 2,
+      "log": "/private/tmp/noctium-deployment57-qkjx_on5/private-config-on-public-verifier.log",
+      "sha256": "a7fe5723dafa20e941288555c47238b4c4bb34269fcc535f367c7f910fdddbd2",
+      "allRequiredPublicArgumentsSupplied": true,
+      "outputDirectoryCreated": false
+    }
+  ]
+}

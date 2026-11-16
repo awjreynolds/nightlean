@@ -57,3 +57,7 @@ opt-level = 1
 [[example]]
 name = "native_client"
 required-features = ["localnet"]
+
+[[example]]
+name = "audit_claim_deployment"
+required-features = ["localnet", "zkir-321"]

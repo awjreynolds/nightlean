@@ -457,6 +457,121 @@ impl BoundTransaction {
     }
 }
 
+/// Read-only public correlation. This type never authorizes submission or private CAS.
+pub struct PublicTransactionReference {
+    data: BoundData,
+}
+impl PublicTransactionReference {
+    pub fn from_bytes(
+        policy: NetworkPolicy,
+        transaction: &[u8],
+        after_height: u64,
+        expected_state: &[u8],
+    ) -> Result<Self> {
+        policy.validate()?;
+        require(
+            !transaction.is_empty()
+                && transaction.len() <= MAX_TRANSACTION
+                && expected_state.len() <= MAX_STATE
+                && after_height < u64::MAX,
+            Error::InvalidTransaction,
+        )?;
+        let native: SealedTransaction =
+            tagged_deserialize(transaction).map_err(|_| Error::InvalidTransaction)?;
+        require(encode(&native)? == transaction, Error::InvalidTransaction)?;
+        let Transaction::Standard(stx) = &native else {
+            return Err(Error::InvalidTransaction);
+        };
+        require(stx.network_id == policy.network_id, Error::Network)?;
+        require(
+            stx.guaranteed_coins.is_none()
+                && stx.fallible_coins.is_empty()
+                && stx.intents.iter().take(3).count() <= 2,
+            Error::InvalidTransaction,
+        )?;
+        for item in stx.intents.iter() {
+            let segment = &item.0;
+            let intent = &item.1;
+            require(
+                intent.guaranteed_unshielded_offer.is_none()
+                    && intent.fallible_unshielded_offer.is_none(),
+                Error::InvalidTransaction,
+            )?;
+            if **segment == CONTRACT_SEGMENT {
+                require(intent.dust_actions.is_none(), Error::InvalidTransaction)?;
+            } else {
+                require(
+                    **segment == crate::funding::FUNDING_SEGMENT
+                        && intent.actions.is_empty()
+                        && intent
+                            .dust_actions
+                            .as_ref()
+                            .is_some_and(|dust| dust.registrations.is_empty()),
+                    Error::InvalidTransaction,
+                )?;
+            }
+        }
+        let intent = stx
+            .intents
+            .get(&CONTRACT_SEGMENT)
+            .ok_or(Error::InvalidTransaction)?;
+        require(intent.actions.len() == 1, Error::InvalidTransaction)?;
+        let (address, event) = match intent
+            .actions
+            .iter_deref()
+            .next()
+            .ok_or(Error::InvalidTransaction)?
+        {
+            ContractAction::Deploy(deploy) => {
+                require(
+                    encode(&deploy.initial_state)? == expected_state,
+                    Error::Receipt,
+                )?;
+                (deploy.address(), ContractEvent::Deploy)
+            }
+            ContractAction::Call(call) => (call.address, ContractEvent::Call),
+            _ => return Err(Error::InvalidTransaction),
+        };
+        let intent_id = hex::encode(
+            intent
+                .erase_proofs()
+                .erase_signatures()
+                .intent_hash(CONTRACT_SEGMENT)
+                .0
+                .0,
+        );
+        Ok(Self {
+            data: BoundData {
+                policy,
+                transaction: transaction.to_vec(),
+                transaction_id: hex::encode(native.transaction_hash().0.0),
+                intent_id,
+                contract_address: hex::encode(address.0.0),
+                event,
+                expected_state: expected_state.to_vec(),
+                after_height,
+            },
+        })
+    }
+    pub fn transaction_id(&self) -> &str {
+        &self.data.transaction_id
+    }
+    pub fn contract_address(&self) -> &str {
+        &self.data.contract_address
+    }
+    pub fn event(&self) -> ContractEvent {
+        self.data.event
+    }
+    pub fn check_receipt(&self, receipt: &FinalizedReceipt) -> Result<()> {
+        self.bound_view().check_receipt(receipt)
+    }
+    pub(crate) fn bound_view(&self) -> BoundTransaction {
+        BoundTransaction {
+            data: self.data.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct JournalIdentity {
@@ -1989,5 +2104,37 @@ mod tests {
             assert_eq!(ra.public_status()["phase"], "cancelled");
             assert_eq!(rb.public_status()["phase"], "prepared");
         });
+    }
+    #[test]
+    fn public_reference_derives_native_identity_and_checks_deployment_state() {
+        let bound = bound();
+        let native: SealedTransaction = tagged_deserialize(bound.bytes()).unwrap();
+        let Transaction::Standard(stx) = &native else {
+            panic!("standard")
+        };
+        let intent = stx.intents.get(&CONTRACT_SEGMENT).unwrap();
+        let Some(ContractAction::Deploy(deploy)) = intent.actions.iter_deref().next() else {
+            panic!("deploy")
+        };
+        let state = encode(&deploy.initial_state).unwrap();
+        let reference =
+            PublicTransactionReference::from_bytes(policy(), bound.bytes(), 20, &state).unwrap();
+        assert_eq!(reference.transaction_id(), bound.transaction_id());
+        assert_eq!(reference.contract_address(), bound.contract_address());
+        assert_eq!(reference.event(), ContractEvent::Deploy);
+        assert!(
+            PublicTransactionReference::from_bytes(policy(), bound.bytes(), 20, &[1, 2, 3])
+                .is_err()
+        );
+        let mut trailing = bound.bytes().to_vec();
+        trailing.push(0);
+        assert!(PublicTransactionReference::from_bytes(policy(), &trailing, 20, &state).is_err());
+        assert!(
+            PublicTransactionReference::from_bytes(policy(), bound.bytes(), u64::MAX, &state)
+                .is_err()
+        );
+        let mut wrong = policy();
+        wrong.network_id = "other".into();
+        assert!(PublicTransactionReference::from_bytes(wrong, bound.bytes(), 20, &state).is_err());
     }
 }

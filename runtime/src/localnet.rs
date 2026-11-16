@@ -515,6 +515,13 @@ pub struct Node {
     dust_secret: RefCell<Option<DustSecretKey>>,
     max_replay_blocks: u64,
 }
+pub struct FinalizedContractState {
+    pub chain: ChainIdentity,
+    pub block_hash: String,
+    pub height: u64,
+    pub bytes: Vec<u8>,
+}
+
 impl Node {
     pub fn connect(
         endpoint: &str,
@@ -562,6 +569,152 @@ impl Node {
             self.rpc.metadata(at)?.fingerprint == self.metadata.fingerprint,
             Error::Metadata,
         )
+    }
+    /// Public runtime identity, distinct from the selected contract compiler profile.
+    pub fn runtime_fingerprint(&self) -> (String, String) {
+        (
+            self.runtime_code.clone(),
+            hex::encode(&self.metadata.fingerprint),
+        )
+    }
+    /// Public auditing reuses receipt verification without creating a submitting attempt.
+    pub fn observe_public_reference(
+        &self,
+        reference: &crate::client::PublicTransactionReference,
+    ) -> Result<Option<crate::client::FinalizedReceipt>> {
+        self.receipt(&reference.bound_view())
+    }
+    pub fn finalized_contract_state(&self, address: &str) -> Result<FinalizedContractState> {
+        check(
+            address.len() == 64 && hex::decode(address).is_ok_and(|v| v.len() == 32),
+            Error::Policy,
+        )?;
+        let hash = hash_text(&self.rpc.call("chain_getFinalizedHead", json!([]))?)?;
+        let chain = self.rpc.chain_identity(&hash, &self.policy.profile)?;
+        self.policy.check(&chain).map_err(|_| Error::Network)?;
+        self.check_runtime(&hash)?;
+        let header = self
+            .rpc
+            .call("chain_getHeader", json!([format!("0x{hash}")]))?;
+        let height = u64::from_str_radix(
+            header["number"]
+                .as_str()
+                .ok_or(Error::Response)?
+                .trim_start_matches("0x"),
+            16,
+        )
+        .map_err(|_| Error::Response)?;
+        let bytes = hex_bytes(&self.rpc.call(
+            "midnight_contractState",
+            json!([address, format!("0x{hash}")]),
+        )?)?;
+        check(bytes.len() <= 1024 * 1024, Error::Limit)?;
+        let state: onchain_runtime::state::ContractState<Db> = native_decode(&bytes)?;
+        let mut canonical = Vec::new();
+        serialize::tagged_serialize(&state, &mut canonical).map_err(|_| Error::State)?;
+        check(bytes == canonical, Error::State)?;
+        Ok(FinalizedContractState {
+            chain,
+            block_hash: hash,
+            height,
+            bytes,
+        })
+    }
+    /// Read exact native parameters at a block linked to the captured finalized head.
+    pub fn finalized_ledger_parameters_at(&self, block_hash: &str, height: u64) -> Result<Vec<u8>> {
+        check(
+            block_hash.len() == 64 && hex::decode(block_hash).is_ok_and(|v| v.len() == 32),
+            Error::Policy,
+        )?;
+        let tip = hash_text(&self.rpc.call("chain_getFinalizedHead", json!([]))?)?;
+        let chain = self.rpc.chain_identity(&tip, &self.policy.profile)?;
+        self.policy.check(&chain).map_err(|_| Error::Network)?;
+        self.check_runtime(&tip)?;
+        let header = self
+            .rpc
+            .call("chain_getHeader", json!([format!("0x{tip}")]))?;
+        let tip_height = u64::from_str_radix(
+            header["number"]
+                .as_str()
+                .ok_or(Error::Response)?
+                .trim_start_matches("0x"),
+            16,
+        )
+        .map_err(|_| Error::Response)?;
+        check(
+            height <= tip_height && tip_height - height <= self.max_replay_blocks,
+            Error::Limit,
+        )?;
+        let mut previous = None;
+        for numbers in (height..=tip_height).collect::<Vec<_>>().chunks(40) {
+            let hashes = self
+                .rpc
+                .batch(
+                    &numbers
+                        .iter()
+                        .map(|n| ("chain_getBlockHash".into(), json!([n])))
+                        .collect::<Vec<_>>(),
+                )?
+                .iter()
+                .map(hash_text)
+                .collect::<Result<Vec<_>>>()?;
+            let rows = self.rpc.batch(
+                &hashes
+                    .iter()
+                    .flat_map(|h| {
+                        [
+                            ("chain_getHeader".into(), json!([format!("0x{h}")])),
+                            (
+                                "state_getStorageHash".into(),
+                                json!(["0x3a636f6465", format!("0x{h}")]),
+                            ),
+                        ]
+                    })
+                    .collect::<Vec<_>>(),
+            )?;
+            for (index, rows) in rows.chunks_exact(2).enumerate() {
+                if previous.is_none() {
+                    check(hashes[index] == block_hash, Error::Replay)?;
+                }
+                check(hash_text(&rows[1])? == self.runtime_code, Error::Metadata)?;
+                let number = u64::from_str_radix(
+                    rows[0]["number"]
+                        .as_str()
+                        .ok_or(Error::Response)?
+                        .trim_start_matches("0x"),
+                    16,
+                )
+                .map_err(|_| Error::Response)?;
+                check(number == numbers[index], Error::Replay)?;
+                validate_parent(previous.as_deref(), &hash_text(&rows[0]["parentHash"])?)?;
+                previous = Some(hashes[index].clone());
+            }
+        }
+        validate_finalized_tip(previous.as_deref(), &tip)?;
+        self.check_runtime(block_hash)?;
+        let bytes = hex_bytes(&self.rpc.call(
+            "state_call",
+            json!([
+                "MidnightRuntimeApi_get_ledger_parameters",
+                "0x",
+                format!("0x{block_hash}")
+            ]),
+        )?)?;
+        let mut reader = bytes.as_slice();
+        check(
+            u8::decode(&mut reader).map_err(|_| Error::State)? == 0,
+            Error::State,
+        )?;
+        let value = Vec::<u8>::decode(&mut reader).map_err(|_| Error::State)?;
+        check(
+            reader.is_empty() && value.len() <= 1024 * 1024,
+            Error::State,
+        )?;
+        let native: ledger::structure::LedgerParameters = native_decode(&value)?;
+        let mut canonical = Vec::new();
+        serialize::tagged_serialize(&native, &mut canonical).map_err(|_| Error::State)?;
+        check(canonical == value, Error::State)?;
+        Ok(value)
     }
     /// Attach only before the first sync. The seed never leaves this host adapter.
     pub fn attach_dust_seed(&self, root_seed: &[u8]) -> Result<()> {

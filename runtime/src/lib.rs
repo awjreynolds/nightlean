@@ -690,3 +690,5 @@ pub mod control;
 pub mod control_ffi;
 #[cfg(feature = "localnet")]
 pub mod localnet;
+#[cfg(all(feature = "localnet", feature = "zkir-321"))]
+pub mod deployment_audit;
