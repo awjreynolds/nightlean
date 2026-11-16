@@ -16,6 +16,8 @@ The actual private-claim source completed native deployment at finalized block 3
 
 The [bounded integer example](docs/development/unsigned-localnet.md) also finalized deployment at block 1304 and a call at 1308. Rust assembled its real intents, and the accepted state exactly matches its prediction. Thirty-four raw-witness scalar cases pass against the official 3.2.0 and 3.2.1 checkers. These selected programs do not establish full feature equivalence.
 
+The [selectable 3.2.1 profile](docs/development/zkir-3.2.1-integrated.md) now threads exact source identities through compilation, native runtime builds and authenticated retained bundles. An isolated compiler commit produced new finalized claim and scalar runs. The default 3.2.0 artifacts remain compatible. A mandatory [native producer gate](docs/development/native-producer-safety.md) checks current scalar invariants and rejects unsupported descriptors. [Canonical composite types and proof-bounded layouts](docs/development/composite-types.md) are implemented as the foundation for aggregate execution, which remains in progress.
+
 ```sh
 lake build
 lake exe nightlean check examples/PrivateClaim.lean
