@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "6ed853be65174e34b23a3b615e3517277043cc16",
+    "sourceCommit": "3888210ff1d27a5839fe4bd74c90256fb792387f",
     "meaning": "Registered source-producer opcode coverage for restricted Native-field operations and an internal typed Bytes32 persistent-hash/Encode path. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 18,
     "registeredOpcodes": [
@@ -4765,7 +4765,7 @@
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
     "remainingTokenDependencies": [
-      "domain-separated persistent hashing of vector/record preimages and computed-digest conversions",
+      "mixed aligned record hashing, computed-digest byte projections and scalar derivation",
       "Jubjub/ElGamal/ECDH source primitives",
       "mixed record values and memo lists",
       "complete Counter behavior",
@@ -4779,7 +4779,16 @@
     "persistentHashEvidence": {
       "source": "tests/Issue70PersistentHash.lean",
       "native": "runtime/tests/persistent_hash.rs",
-      "scope": "Untagged single-Bytes32 SHA-256 account IDs, exact byte-aligned map keys, two independent vectors, repeated insertion and preservation of another key; incorrect expected key and private-transcript mutation rejected. Source rejects missing disclosure. No keygen, proof or deployment for this slice."
+      "scope": "Untagged single-Bytes32 SHA-256 account IDs, exact byte-aligned map keys, two independent vectors, repeated insertion and preservation of another key; incorrect expected key and private-transcript mutation rejected. Source rejects missing disclosure. No keygen, proof or deployment for this slice.",
+      "preimageSource": "tests/Issue70HashPreimages.lean",
+      "preimageNative": "runtime/tests/hash_preimages.rs",
+      "preimageScope": "Ordered vectors of 1 to 32 Bytes32 values, right-padded UTF8 literal tags, nested digest values and one canonical Native field serialized as LE32. Two-secret independent vectors and exact ledger keys pass; reversed tag order and changed private count reject. Source rejects missing disclosure, malformed lengths and changed alignment. No keygen, proof or deployment for this slice."
+    },
+    "publicSourceApi": {
+      "module": "Noctium.Frontend",
+      "scope": "Noctium",
+      "declarations": "noctium_*",
+      "compatibility": "Legacy Nightlean modules, declarations, proof identities and ABI/artifact identifiers remain accepted."
     }
   }
 }
