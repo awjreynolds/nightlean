@@ -6,10 +6,11 @@ use crate::{
     assembly::NativeIntent,
     zkir::IrSource,
 };
+use base_crypto::cost_model::CostDuration;
 use futures::{Future, FutureExt, pin_mut, select_biased};
 use ledger::structure::{
-    ContractAction, Intent, LedgerParameters, ProofMarker, ProofPreimageVersioned, ProofVersioned,
-    Signature,
+    ContractAction, ContractCall, Intent, LedgerParameters, ProofMarker, ProofPreimageMarker,
+    ProofPreimageVersioned, ProofVersioned, Signature,
 };
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
 use midnight_zk_stdlib::{MidnightPK, Relation, ZkStdLib, ZkStdLibArch};
@@ -34,6 +35,131 @@ const MAX_RESPONSE: usize = 1_048_576;
 const MAX_PARAMETERS: usize = 134_217_728;
 const MAX_PRIVATE_CONFIG: usize = 1_048_576;
 const MAX_NATIVE_STATE: usize = 1_048_576;
+
+struct CallPreview {
+    call: ContractCall<ProofPreimageMarker, Db>,
+    statement: Vec<Fr>,
+}
+
+fn preview_transcript_activity(
+    old: &onchain_runtime::transcript::Transcript<Db>,
+    activity: &[Option<usize>],
+    cursor: &mut usize,
+    cost_model: &onchain_runtime::cost_model::CostModel,
+) -> Result<onchain_runtime::transcript::Transcript<Db>> {
+    let mut program = Vec::new();
+    for op in old.program.iter_deref() {
+        while let Some(Some(skip)) = activity.get(*cursor) {
+            let skip = u32::try_from(*skip).map_err(|_| Error::UnsupportedActivity)?;
+            program.push(onchain_runtime::ops::Op::Noop { n: skip });
+            *cursor = (*cursor).checked_add(1).ok_or(Error::UnsupportedActivity)?;
+        }
+        if !matches!(activity.get(*cursor), Some(None)) {
+            return Err(Error::UnsupportedActivity);
+        }
+        program.push((*op).clone());
+        *cursor = (*cursor).checked_add(1).ok_or(Error::UnsupportedActivity)?;
+    }
+    while let Some(Some(skip)) = activity.get(*cursor) {
+        let skip = u32::try_from(*skip).map_err(|_| Error::UnsupportedActivity)?;
+        program.push(onchain_runtime::ops::Op::Noop { n: skip });
+        *cursor = (*cursor).checked_add(1).ok_or(Error::UnsupportedActivity)?;
+    }
+
+    let mut merged = Vec::with_capacity(program.len());
+    let mut pending_noop = 0u32;
+    let mut added_gas = 0u64;
+    for op in program {
+        match op {
+            onchain_runtime::ops::Op::Noop { n } => {
+                pending_noop = pending_noop
+                    .checked_add(n)
+                    .ok_or(Error::UnsupportedActivity)?;
+            }
+            op => {
+                if pending_noop != 0 {
+                    added_gas = added_gas
+                        .checked_add(noop_gas(cost_model, pending_noop)?)
+                        .ok_or(Error::UnsupportedActivity)?;
+                    merged.push(onchain_runtime::ops::Op::Noop { n: pending_noop });
+                    pending_noop = 0;
+                }
+                merged.push(op);
+            }
+        }
+    }
+    if pending_noop != 0 {
+        added_gas = added_gas
+            .checked_add(noop_gas(cost_model, pending_noop)?)
+            .ok_or(Error::UnsupportedActivity)?;
+        merged.push(onchain_runtime::ops::Op::Noop { n: pending_noop });
+    }
+    let original_gas = old.gas.compute_time.into_picoseconds();
+    let compute_time = original_gas
+        .checked_add(added_gas)
+        .ok_or(Error::UnsupportedActivity)?;
+    let mut transcript = old.clone();
+    transcript.program = merged.into();
+    transcript.gas.compute_time = CostDuration::from_picoseconds(compute_time);
+    Ok(transcript)
+}
+
+fn noop_gas(cost_model: &onchain_runtime::cost_model::CostModel, count: u32) -> Result<u64> {
+    let linear = cost_model
+        .noop_coeff_arg
+        .into_picoseconds()
+        .checked_mul(u64::from(count))
+        .ok_or(Error::UnsupportedActivity)?;
+    cost_model
+        .noop_constant
+        .into_picoseconds()
+        .checked_add(linear)
+        .ok_or(Error::UnsupportedActivity)
+}
+
+fn preview_call_activity(
+    call: &ContractCall<ProofPreimageMarker, Db>,
+    activity: &[Option<usize>],
+    binding_commitment: Pedersen,
+    cost_model: &onchain_runtime::cost_model::CostModel,
+) -> Result<CallPreview> {
+    let op_count = call
+        .guaranteed_transcript
+        .iter()
+        .chain(call.fallible_transcript.iter())
+        .try_fold(0usize, |count, transcript| {
+            count.checked_add(transcript.program.len())
+        })
+        .ok_or(Error::UnsupportedActivity)?;
+    if activity.iter().filter(|entry| entry.is_none()).count() != op_count {
+        return Err(Error::UnsupportedActivity);
+    }
+    let mut call = call.clone();
+    let mut cursor = 0usize;
+    if let Some(old) = call.guaranteed_transcript.as_ref() {
+        call.guaranteed_transcript = Some(storage::arena::Sp::new(preview_transcript_activity(
+            old,
+            activity,
+            &mut cursor,
+            cost_model,
+        )?));
+    }
+    if let Some(old) = call.fallible_transcript.as_ref() {
+        call.fallible_transcript = Some(storage::arena::Sp::new(preview_transcript_activity(
+            old,
+            activity,
+            &mut cursor,
+            cost_model,
+        )?));
+    }
+    if cursor != activity.len() {
+        return Err(Error::UnsupportedActivity);
+    }
+    let statement = call
+        .public_inputs(binding_commitment)
+        .map_err(|_| Error::InvalidIntent)?;
+    Ok(CallPreview { call, statement })
+}
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -1098,18 +1224,13 @@ impl PreparedProof {
         let activity = preimage
             .check(&material.circuit)
             .map_err(|_| Error::InvalidIntent)?;
-        let op_count = call
-            .guaranteed_transcript
-            .iter()
-            .chain(call.fallible_transcript.iter())
-            .map(|t| t.program.len())
-            .sum::<usize>();
-        if activity.len() != op_count || activity.iter().any(Option::is_some) {
-            return Err(Error::UnsupportedActivity);
-        }
-        let statement = call
-            .public_inputs(intent.binding_commitment.into())
-            .map_err(|_| Error::InvalidIntent)?;
+        let preview = preview_call_activity(
+            call,
+            &activity,
+            intent.binding_commitment.into(),
+            &material.parameters.cost_model.runtime_cost_model,
+        )?;
+        let statement = preview.statement;
         if statement.get(1) != Some(&call.communication_commitment)
             || preimage
                 .communications_commitment
@@ -1148,6 +1269,18 @@ impl PreparedProof {
             .map_err(|_| Error::BindingMismatch)?;
         if activity != self.activity {
             return Err(Error::UnsupportedActivity);
+        }
+        let Some(ContractAction::Call(call)) = self.intent.actions.iter_deref().next() else {
+            return Err(Error::InvalidIntent);
+        };
+        let preview = preview_call_activity(
+            call,
+            &activity,
+            self.intent.binding_commitment.into(),
+            &self.material.parameters.cost_model.runtime_cost_model,
+        )?;
+        if preview.statement != self.statement {
+            return Err(Error::BindingMismatch);
         }
         Ok(())
     }
@@ -1204,6 +1337,7 @@ impl PreparedProof {
             parameters: params,
             max_response_bytes,
             expected_statement: &self.statement,
+            expected_activity: &self.activity,
         }
         .private_wire_payload()
     }
@@ -1425,6 +1559,7 @@ pub struct ProofRequest<'a> {
     pub parameters: &'a TrustedParameters,
     pub max_response_bytes: usize,
     expected_statement: &'a [Fr],
+    expected_activity: &'a [Option<usize>],
 }
 impl ProofRequest<'_> {
     /// Official /prove wire payload: (versioned preimage, retained keys+IR, no binding override).
@@ -1447,7 +1582,7 @@ impl ProofRequest<'_> {
             .prove(rng, self.parameters, self.prover.clone(), self.preimage)
             .await
             .map_err(|_| ServiceError)?;
-        if statement != self.expected_statement || activity.iter().any(Option::is_some) {
+        if statement != self.expected_statement || activity != self.expected_activity {
             return Err(ServiceError);
         }
         let response = encode(&ProofVersioned::V2(proof)).map_err(|_| ServiceError)?;
@@ -1543,6 +1678,7 @@ impl<S: ProofService> CheckedProvider<'_, S> {
                 parameters: self.params,
                 max_response_bytes: self.max_response_bytes,
                 expected_statement: &self.prepared.statement,
+                expected_activity: &self.prepared.activity,
             })
             .await
             .map_err(|_| Error::Service)?;
@@ -1556,6 +1692,17 @@ mod tests {
     use super::*;
     use futures::{executor::block_on, future::pending};
     use rand::rngs::OsRng;
+
+    #[cfg(feature = "zkir-321")]
+    fn issue43_fixture(name: &str) -> String {
+        std::env::var(format!("NIGHTLEAN_ISSUE43_{name}"))
+            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_ISSUE43_{name}"))
+    }
+
+    fn issue43_empty_activity_fixture(name: &str) -> String {
+        std::env::var(format!("NIGHTLEAN_ISSUE43_EMPTY_{name}"))
+            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_ISSUE43_EMPTY_{name}"))
+    }
 
     #[test]
     fn contract_state_binding_rejects_wrong_operation_and_successor() {
@@ -1585,6 +1732,205 @@ mod tests {
             binding
                 .admit_committed_state(&wrong_successor, &wrong_successor, &"aa".repeat(32), false,)
                 .is_err()
+        );
+    }
+
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    #[ignore = "requires authenticated conditional-write bundle, private config and trusted SRS"]
+    fn inactive_guarded_write_matches_native_noop_preview_and_binds_skipped_fields() {
+        let bundle_dir = issue43_fixture("BUNDLE");
+        let manifest_digest = issue43_fixture("MANIFEST_SHA256");
+        let bundle =
+            crate::artifacts::verify(std::path::Path::new(&bundle_dir), Some(&manifest_digest))
+                .unwrap();
+        let config_bytes = std::fs::read(issue43_fixture("PRIVATE_CONFIG")).unwrap();
+        let parameters_bytes = std::fs::read(issue43_fixture("PROOF_PARAMETERS")).unwrap();
+        let parameters_digest = issue43_fixture("PROOF_PARAMETERS_SHA256");
+        let ttl = 2_000_000_000;
+        let mut prepared =
+            PreparedProof::from_config(&bundle, &config_bytes, ttl, &mut OsRng).unwrap();
+        let parameters =
+            TrustedParameters::from_bytes(&parameters_bytes, prepared.k(), &parameters_digest)
+                .unwrap();
+        assert_eq!(
+            prepared.activity,
+            [
+                None,
+                None,
+                Some(5),
+                Some(5),
+                Some(1),
+                Some(4),
+                Some(5),
+                Some(5),
+                Some(1),
+            ]
+        );
+        let ContractAction::Call(source_call) =
+            prepared.intent.actions.iter_deref().next().unwrap()
+        else {
+            unreachable!()
+        };
+        let preview = preview_call_activity(
+            source_call,
+            &prepared.activity,
+            prepared.intent.binding_commitment.into(),
+            &prepared.material.parameters.cost_model.runtime_cost_model,
+        )
+        .unwrap();
+        assert_eq!(preview.statement, prepared.statement);
+
+        let proved = block_on(prepared.prove(
+            &LocalProver::new(OsRng),
+            &parameters,
+            MAX_RESPONSE,
+            pending(),
+        ))
+        .unwrap();
+        let ContractAction::Call(actual) = proved.native().actions.iter_deref().next().unwrap()
+        else {
+            unreachable!()
+        };
+        assert_eq!(
+            actual.guaranteed_transcript,
+            preview.call.guaranteed_transcript
+        );
+        assert_eq!(actual.fallible_transcript, preview.call.fallible_transcript);
+        assert_eq!(
+            actual
+                .public_inputs(proved.native().binding_commitment.into())
+                .unwrap(),
+            prepared.statement
+        );
+        let noop_fields = actual
+            .guaranteed_transcript
+            .iter()
+            .chain(actual.fallible_transcript.iter())
+            .flat_map(|transcript| transcript.program.iter_deref())
+            .filter_map(|op| match op {
+                onchain_runtime::ops::Op::Noop { n } => Some(*n),
+                _ => None,
+            })
+            .try_fold(0u32, u32::checked_add)
+            .unwrap();
+        assert_eq!(noop_fields, 26);
+
+        let ContractAction::Call(call) = proved.native().actions.iter_deref().next().unwrap()
+        else {
+            unreachable!()
+        };
+        let ProofVersioned::V3(proof) = &call.proof else {
+            unreachable!()
+        };
+        let response = encode(&ProofVersioned::V2(proof.clone())).unwrap();
+        assert_eq!(
+            prepared.verify_response(&parameters, &response, MAX_RESPONSE),
+            Ok(())
+        );
+        let skipped_field = prepared
+            .statement
+            .iter()
+            .enumerate()
+            .skip(2)
+            .find_map(|(index, field)| (*field == Fr::from(0u64)).then_some(index))
+            .expect("skipped Noop fields are public zero elements");
+        prepared.statement[skipped_field] = Fr::from(1u64);
+        assert_eq!(
+            prepared.verify_response(&parameters, &response, MAX_RESPONSE),
+            Err(Error::InvalidProof)
+        );
+
+        let bundle_dir = issue43_empty_activity_fixture("BUNDLE");
+        let manifest_digest = issue43_empty_activity_fixture("MANIFEST_SHA256");
+        let bundle =
+            crate::artifacts::verify(std::path::Path::new(&bundle_dir), Some(&manifest_digest))
+                .unwrap();
+        let config_bytes = std::fs::read(issue43_empty_activity_fixture("PRIVATE_CONFIG")).unwrap();
+        let parameters_bytes =
+            std::fs::read(issue43_empty_activity_fixture("PROOF_PARAMETERS")).unwrap();
+        let parameters_digest = issue43_empty_activity_fixture("PROOF_PARAMETERS_SHA256");
+        let empty_prepared =
+            PreparedProof::from_config(&bundle, &config_bytes, ttl, &mut OsRng).unwrap();
+        assert!(empty_prepared.activity.iter().all(Option::is_some));
+        assert_eq!(empty_prepared.activity.iter().flatten().sum::<usize>(), 26);
+        let ContractAction::Call(empty_source_call) =
+            empty_prepared.intent.actions.iter_deref().next().unwrap()
+        else {
+            unreachable!()
+        };
+        let empty_source_transcript = empty_source_call
+            .guaranteed_transcript
+            .as_ref()
+            .expect("all-inactive source retains an empty transcript container");
+        assert_eq!(empty_source_transcript.program.len(), 0);
+        assert!(empty_source_call.fallible_transcript.is_none());
+        let empty_preview = preview_call_activity(
+            empty_source_call,
+            &empty_prepared.activity,
+            empty_prepared.intent.binding_commitment.into(),
+            &empty_prepared
+                .material
+                .parameters
+                .cost_model
+                .runtime_cost_model,
+        )
+        .unwrap();
+        assert_eq!(empty_preview.statement, empty_prepared.statement);
+        let empty_parameters = TrustedParameters::from_bytes(
+            &parameters_bytes,
+            empty_prepared.k(),
+            &parameters_digest,
+        )
+        .unwrap();
+        let empty_proved = block_on(empty_prepared.prove(
+            &LocalProver::new(OsRng),
+            &empty_parameters,
+            MAX_RESPONSE,
+            pending(),
+        ))
+        .unwrap();
+        let ContractAction::Call(empty_actual) =
+            empty_proved.native().actions.iter_deref().next().unwrap()
+        else {
+            unreachable!()
+        };
+        assert_eq!(
+            empty_actual.guaranteed_transcript,
+            empty_preview.call.guaranteed_transcript
+        );
+        assert_eq!(
+            empty_actual.fallible_transcript,
+            empty_preview.call.fallible_transcript
+        );
+        assert_eq!(
+            empty_actual
+                .public_inputs(empty_proved.native().binding_commitment.into())
+                .unwrap(),
+            empty_prepared.statement
+        );
+        let empty_noop_fields = empty_actual
+            .guaranteed_transcript
+            .iter()
+            .chain(empty_actual.fallible_transcript.iter())
+            .flat_map(|transcript| transcript.program.iter_deref())
+            .filter_map(|op| match op {
+                onchain_runtime::ops::Op::Noop { n } => Some(*n),
+                _ => None,
+            })
+            .try_fold(0u32, u32::checked_add)
+            .unwrap();
+        assert_eq!(empty_noop_fields, 26);
+        assert_eq!(
+            empty_actual
+                .guaranteed_transcript
+                .as_ref()
+                .unwrap()
+                .program
+                .iter_deref()
+                .filter(|op| !matches!(op, onchain_runtime::ops::Op::Noop { .. }))
+                .count(),
+            0
         );
     }
 

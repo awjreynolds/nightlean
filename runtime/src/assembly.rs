@@ -16,7 +16,9 @@ use ledger::{
 };
 use onchain_runtime::{
     context::QueryContext,
+    result_mode::ResultModeVerify,
     state::{ContractOperation, ContractState, EntryPointBuf},
+    transcript::Transcript,
 };
 use rand::{CryptoRng, Rng, rngs::OsRng};
 use serde_json::{Value as Json, json};
@@ -317,9 +319,27 @@ fn build_for_deployment(
     )
     .map_err(|_| anyhow!("native transaction partition failed"))?;
     ensure!(partitions.len() == 1, "expected one call partition");
-    let (guaranteed, fallible) = partitions.pop().unwrap();
-    let mut after = context;
+    let (mut guaranteed, fallible) = partitions.pop().unwrap();
+    let mut after = context.clone();
     let cost = &parameters.cost_model.runtime_cost_model;
+    if evaluated.program.is_empty() && evaluated.activity_schedule.iter().any(Option::is_some) {
+        ensure!(
+            guaranteed.is_none() && fallible.is_none(),
+            "all-inactive source unexpectedly produced a native transcript"
+        );
+        // The upstream partitioner drops empty programs. Keep a native empty transcript
+        // so the proof attachment path has a segment for the skipped activity schedule.
+        let empty_query = context
+            .query::<ResultModeVerify>(&[], None, cost)
+            .map_err(|_| anyhow!("empty native transcript query rejected"))?;
+        after = empty_query.context.clone();
+        guaranteed = Some(Transcript {
+            gas: empty_query.gas_cost,
+            effects: empty_query.context.effects,
+            program: Vec::<onchain_runtime::ops::Op<ResultModeVerify, Db>>::new().into(),
+            version: Some(storage::arena::Sp::new(Transcript::<Db>::VERSION)),
+        });
+    }
     for transcript in guaranteed.iter().chain(fallible.iter()) {
         after = after
             .run_transcript(transcript, cost)
@@ -356,7 +376,7 @@ fn build_for_deployment(
         .check(circuit)
         .map_err(|_| anyhow!("constructor preimage rejected by official checker"))?;
     ensure!(
-        checked.len() == evaluated.program.len(),
+        checked.iter().filter(|activity| activity.is_none()).count() == evaluated.program.len(),
         "constructor activity metadata mismatch"
     );
     ensure!(

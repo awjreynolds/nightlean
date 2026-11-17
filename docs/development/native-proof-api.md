@@ -2,7 +2,7 @@
 
 The Rust library builds and proves the current source private claim in process. Applications do not need Node, Compact, a shell command or a toolkit subprocess for this proof stage. `nightlean_runtime::proof` uses the selected pinned native ZKIR implementation and the official ledger's typed proof attachment path.
 
-This Rust API covers one frozen contract call with no offers or dust actions. Inactive/skipped public transcript groups are rejected. The published C ABI provides a separate phase A native proof interface; it also stops before funding, signing, submission, receipt validation or journal persistence. Mobile/WASM SDKs remain unqualified. A locally verified proof establishes the retained verifier key's relation for the exact native statement. This is not a general theorem connecting Lean source, compiler output and generated keys. `compiled_verified` stays false. See [native proof ABI phase A](native-proof-abi.md) for the C ABI guide and qualification evidence.
+This Rust API covers one frozen contract call with no offers or dust actions. Source-bound skipped transcript groups use native Noop attachment and gas accounting. The selected-3.2.1 conditional-write case has real proof and attachment evidence. The published C ABI provides a separate phase A native proof interface; it also stops before funding, signing, submission, receipt validation or journal persistence. Mobile/WASM SDKs remain unqualified. A locally verified proof establishes the retained verifier key's relation for the exact native statement. This is not a general theorem connecting Lean source, compiler output and generated keys. `compiled_verified` stays false. See [native proof ABI phase A](native-proof-abi.md) for the C ABI guide and qualification evidence.
 
 ## Application sequence
 
@@ -35,11 +35,45 @@ This path has a selected-3.2.1/localnet-feature build and a focused
 operation/successor binding test. It has not yet completed the multi-operation
 localnet demonstration in issue 67. Recovery-loaded clients do not restore state
 tokens and fail closed. The token identifies a validated checkpoint, without a
-new latest-state RPC check. Guarded proof activity remains rejected.
+new latest-state RPC check. The single conditional-write proof case below does
+not establish a complete multi-operation lifecycle.
+Rejected or cancelled source invocations currently consume their state token.
+Recoverable pre-proof retries are tracked in [issue 71](https://github.com/awjreynolds/noctium/issues/71).
 
 ## Native phase and statement
 
-The pinned ledger's `Intent::prove` checks circuit activity, rewrites skipped transcript groups, derives binding from the resulting call and the parent intent commitment, then requests a proof with the exact binding override. Nightlean invokes this method instead of reproducing its private binding hash. This bounded API rejects skipped groups before invoking it. The adapter checks the supplied override against `ContractCall::public_inputs(parent_binding_commitment)` and replaces the proof preimage's binding input before handing the request to the host.
+The pinned ledger's `Intent::prove` checks circuit activity, rewrites skipped transcript groups, derives binding from the resulting call and the parent intent commitment, then requests a proof with the exact binding override. Noctium previews its Noop insertion/merging and added compute gas before freezing the expected statement. Checked arithmetic rejects invalid counts and overflow. The preview calls native `ContractCall::public_inputs(parent_binding_commitment)` for the binding calculation. Actual attachment still uses `Intent::prove`, and the adapter requires its binding override and final statement to match the frozen preview.
+
+One focused selected-3.2.1 test proves the inactive conditional-write source
+fixture. Its attached transcripts and gas match the preview, including 26 skipped
+fields. Changing one skipped zero statement field to 1 rejects the proof while
+all other statement fields stay fixed. This is proof/attachment evidence without
+a ledger deployment or a broader guarded-language claim.
+
+The same test proves the private-only `Issue43EmptyActivity` fixture with zero
+active VM operations. Assembly retains an empty guaranteed transcript from the
+native empty-query result, including its gas, effects, version and state. This
+gives the official attachment path a segment for its Noops without introducing
+a dummy source input or operation. The two fixtures use their own k7 and k6 keys
+and trusted parameters.
+
+The opt-in test is
+`proof::tests::inactive_guarded_write_matches_native_noop_preview_and_binds_skipped_fields`.
+Supply `NIGHTLEAN_ISSUE43_BUNDLE`, `NIGHTLEAN_ISSUE43_MANIFEST_SHA256`,
+`NIGHTLEAN_ISSUE43_PRIVATE_CONFIG`, `NIGHTLEAN_ISSUE43_PROOF_PARAMETERS`, and
+`NIGHTLEAN_ISSUE43_PROOF_PARAMETERS_SHA256`, then run:
+
+```sh
+cargo +1.100.0 test --manifest-path runtime/Cargo.toml \
+  --no-default-features --features zkir-321,localnet \
+  --lib proof::tests::inactive_guarded_write_matches_native_noop_preview_and_binds_skipped_fields \
+  -- --ignored --exact
+```
+
+Use the compiled `Issue43ConditionalWrites` fixture and matching independent
+native keys. Also supply the five corresponding `NIGHTLEAN_ISSUE43_EMPTY_*`
+variables for the compiled `Issue43EmptyActivity` fixture. Keep invocation
+configurations outside their public bundles.
 
 The expected statement includes the native binding input, communication commitment and both transcript parts' field representations. The wrapper verifies the actual returned proof with the retained verifier key and trusted verifier parameters against this exact vector. It repeats verification after typed attachment and rejects any changed statement or serialization.
 
