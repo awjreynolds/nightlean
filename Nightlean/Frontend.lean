@@ -124,6 +124,8 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
+scoped syntax "toBytes32(" nlexpr ")" : nlexpr
+scoped syntax "fromBytes32(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarToNative(" nlexpr ")" : nlexpr
@@ -281,6 +283,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| cast($_:nltype, $_:nlexpr)) => Bool.true
   | `(nlexpr| sub($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| inv($_:nlexpr)) => Bool.true
+  | `(nlexpr| fromBytes32($_:nltype, $_:nlexpr)) => Bool.true
   | `(nlexpr| assertThen($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| let $_:ident := $value:nlexpr in $body:nlexpr) =>
     hasPartialScalar value || hasPartialScalar body
@@ -295,6 +298,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
+  | `(nlexpr| toBytes32($value)) => hasPartialScalar value
   | `(nlexpr| degradeToNative($value)) => hasPartialScalar value
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
@@ -363,6 +367,17 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless ty == .native || ty == .jubjubScalar do
       throwErrorAt stx "inv accepts only Native and JubjubScalar values"
     pure (ty, ← `(Nightlean.Expr.inv $value))
+  | `(nlexpr| toBytes32($value)) => do
+    let (source, value) ← expression env value
+    unless source == .native || source == .jubjubScalar || source == .jubjubPoint do
+      throwErrorAt stx "toBytes32 accepts only Native, JubjubScalar or JubjubPoint"
+    pure (.bytes 32, ← `(Nightlean.Expr.toBytes32 $value))
+  | `(nlexpr| fromBytes32($target:nltype, $value)) => do
+    let target ← readTy target
+    unless target == .native || target == .jubjubScalar || target == .jubjubPoint do
+      throwErrorAt stx "fromBytes32 supports only Native, JubjubScalar or JubjubPoint"
+    let value ← expected env value (.bytes 32)
+    pure (target, ← `(Nightlean.Expr.fromBytes32 (target := $(← tyTerm target)) $value))
   | `(nlexpr| eq($a, $b)) =>
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b
@@ -386,7 +401,6 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let c ← expected env c .bool
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b
-    if ta.isBytes || tb.isBytes then throwErrorAt stx "Bytes32 selection is not supported"
     let ty ← commonType stx ta tb
     let a ← coerceExpression stx ta ty a
     let b ← coerceExpression stx tb ty b
@@ -1158,6 +1172,7 @@ private def moduleCapabilities : Capabilities := {
   persistentHash32 := Bool.true
   persistentHashVector32 := Bool.true
   persistentHashNative := Bool.true
+  bytes32Conversions := Bool.true
   jubjub := Bool.true
   stateCells := Bool.true
   stateMaps := Bool.true}

@@ -30,16 +30,35 @@ pub(crate) fn point(x: Fr, y: Fr) -> Result<EmbeddedGroupAffine> {
     encoded[31] = (encoded[31] & 0x7f) | ((x_bytes[0] & 1) << 7);
 
     // Decode through the subgroup-checked encoding boundary.
-    let mut reader = Cursor::new(encoded.as_slice());
-    let point = EmbeddedGroupAffine::deserialize(&mut reader, 0)
-        .map_err(|_| anyhow!("invalid Jubjub point"))?;
-    ensure!(
-        reader.position() == encoded.len() as u64,
-        "invalid Jubjub point"
-    );
+    let point = from_bytes(&encoded)?;
     ensure!(
         coordinates(point)? == expected,
         "Jubjub coordinates do not round trip"
+    );
+    Ok(point)
+}
+
+pub(crate) fn to_bytes(point: EmbeddedGroupAffine) -> Result<[u8; 32]> {
+    let [x, y] = coordinates(point)?;
+    let mut encoded: [u8; 32] = y
+        .as_le_bytes()
+        .try_into()
+        .map_err(|_| anyhow!("invalid Jubjub coordinate encoding"))?;
+    encoded[31] = (encoded[31] & 0x7f) | ((x.as_le_bytes()[0] & 1) << 7);
+    Ok(encoded)
+}
+
+pub(crate) fn from_bytes(encoded: &[u8]) -> Result<EmbeddedGroupAffine> {
+    ensure!(
+        encoded.len() == 32,
+        "Jubjub point encoding requires 32 bytes"
+    );
+    let mut reader = Cursor::new(encoded);
+    let point = EmbeddedGroupAffine::deserialize(&mut reader, 0)
+        .map_err(|_| anyhow!("invalid Jubjub point"))?;
+    ensure!(
+        reader.position() == 32 && to_bytes(point)?.as_slice() == encoded,
+        "noncanonical Jubjub point encoding"
     );
     Ok(point)
 }

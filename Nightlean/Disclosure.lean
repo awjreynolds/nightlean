@@ -51,6 +51,8 @@ def origins (env : Environment) : Expr ty → Except String Origins
     let mut result : Origins := []
     for value in values do result := merge result (← origins env value)
     pure result
+  | .toBytes32 value => origins env value
+  | .fromBytes32 value => origins env value
   | .jubjubScalarFromNative value | .jubjubMulGenerator value => origins env value
   | .jubjubScalarToNative value | .jubjubNeg value => origins env value
   | .jubjubCoordinate value _ => origins env value

@@ -118,22 +118,33 @@ private def bytesFieldTerms (terms : List Term) (index : Nat) : Except String (L
   | 1 => pure (terms.take 31)
   | _ => throw "Bytes32 field chunk index is out of range"
 
-private def persistentHashDigest : Term → Bool
+private def opaqueBytes32Value : Term → Bool
   | .unary opcode _ => opcode == "persistent_hash32" || opcode == "persistent_hash_native" ||
-      opcode.startsWith "persistent_hash_vector32:" || opcode.startsWith "persistent_hash_native_vector:"
+      opcode.startsWith "persistent_hash_vector32:" || opcode.startsWith "persistent_hash_native_vector:" ||
+      opcode.startsWith "to_bytes32_" || opcode.startsWith "from_bytes32_" ||
+      opcode == "bytes32_from_chunks"
   | _ => false
 
-private def alignedBytes32Fields (value : Normalized) : Except String (Term × Term) := do
-  match value.term with
+private def splitBytes32Fields : Term → Except String (Term × Term)
   | .bytes terms => do
     unless terms.length == 32 do throw "Bytes32 source term has wrong byte count"
     let some highByte := terms[31]? | throw "Bytes32 source term has no high byte"
     let low31 ← bytesFieldTerms terms 1
     pure (highByte, packByteTerms low31)
+  | .select condition yes no => do
+    let (yesHigh, yesLow) ← splitBytes32Fields yes
+    let (noHigh, noLow) ← splitBytes32Fields no
+    pure (.select condition yesHigh noHigh, .select condition yesLow noLow)
   | term =>
-    if persistentHashDigest term then
+    if opaqueBytes32Value term then
       pure (encodedHashChunkTerm term 1, encodedHashChunkTerm term 0)
-    else throw "Bytes32 normalization lost byte identity"
+    else .error "Bytes32 normalization lost byte identity"
+
+private def alignedBytes32Fields (value : Normalized) : Except String (Term × Term) := do
+  splitBytes32Fields value.term
+
+private def bytes32FromChunksTerm (low31 highByte : Term) : Term :=
+  .unary "bytes32_from_chunks" (.hash [low31, highByte])
 
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
   {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
@@ -167,30 +178,18 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .bytes32Literal values => pure {term := .bytes (values.map Term.constant)}
   | .bytesField value index => do
     let normalized ← normalize env value
-    match normalized.term with
-    | term =>
-      if persistentHashDigest term then
-        match index with
-        | 0 =>
-          let chunk := encodedHashChunkTerm normalized.term 1
-          pure {term := chunk, bounds := normalized.bounds, assertions := normalized.assertions}
-        | 1 =>
-          let chunk := encodedHashChunkTerm normalized.term 0
-          pure {term := chunk, bounds := normalized.bounds, assertions := normalized.assertions}
-        | _ => throw "Bytes32 field chunk index is out of range"
-      else
-        match term with
-        | .bytes terms => do
-          let chunk ← bytesFieldTerms terms index
-          let term := packByteTerms chunk
-          pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
-        | _ => throw "Bytes32 normalization lost byte identity"
+    let (highByte, low31) ← splitBytes32Fields normalized.term
+    let term ← match index with
+      | 0 => pure highByte
+      | 1 => pure low31
+      | _ => throw "Bytes32 field chunk index is out of range"
+    pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
   | .bytesAt value index => do
     let normalized ← normalize env value
     match normalized.term with
     | term =>
-      if persistentHashDigest term then
-        throw "byteAt on a computed persistent-hash digest is unsupported"
+      if opaqueBytes32Value term then
+        throw "byteAt on computed Bytes32 expressions is unsupported"
       else
         match term with
         | .bytes terms => do
@@ -220,6 +219,35 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let term := persistentHashNativeVectorTerm (normalized.map (·.term))
     let bounds := (normalized.map (fun item => item.bounds)).flatten
     let assertions := (normalized.map (fun item => item.assertions)).flatten
+    pure {term, bounds, assertions}
+  | .toBytes32 (source := source) value => do
+    let normalized ← normalize env value
+    let opcode := match source with
+      | .native => "to_bytes32_native"
+      | .jubjubScalar => "to_bytes32_jubjub_scalar"
+      | .jubjubPoint => "to_bytes32_jubjub_point"
+      | _ => "to_bytes32_unsupported"
+    pure (Normalized.mk (.unary opcode normalized.term) normalized.bounds normalized.assertions)
+  | .fromBytes32 (target := target) value => do
+    let normalized ← normalize env value
+    let (highByte, low31) ← alignedBytes32Fields normalized
+    let rawBytes := bytes32FromChunksTerm low31 highByte
+    let (opcode, maximum?, assertions) ← match target with
+      | .native => pure ("from_bytes32_native", some (Field.modulus - 1),
+          normalized.assertions)
+      | .jubjubScalar => pure ("from_bytes32_jubjub_scalar", some (Jubjub.scalarOrder - 1),
+          normalized.assertions)
+      | .jubjubPoint => do
+        let point := Term.unary "from_bytes32_jubjub_point" rawBytes
+        let encoded := Term.unary "to_bytes32_jubjub_point" point
+        let (encodedHigh, encodedLow) ← splitBytes32Fields encoded
+        pure ("from_bytes32_jubjub_point", none,
+          normalized.assertions ++ [
+            .binary "test_eq" highByte encodedHigh,
+            .binary "test_eq" low31 encodedLow])
+      | _ => throw "fromBytes32 supports only Native, JubjubScalar and JubjubPoint"
+    let term := .unary opcode rawBytes
+    let bounds := normalized.bounds ++ (maximum?.toList.map fun maximum => (term, maximum))
     pure {term, bounds, assertions}
   | .jubjubScalarFromNative value => do
     let normalized ← normalize env value

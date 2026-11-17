@@ -71,6 +71,12 @@ structure EvalContext where
   persistentHash32 : List Nat → Except String (List Nat) :=
     fun _ => .error "qualified Bytes32 persistent-hash oracle is unavailable"
   jubjub : JubjubOracle := {}
+  /-- Pinned native serialization of validated Jubjub affine points. -/
+  jubjubToBytes32 : (Nat × Nat) → Except String (List Nat) :=
+    fun _ => .error "qualified Jubjub byte-serialization oracle is unavailable"
+  /-- Pinned strict compressed Jubjub decoder, including subgroup checks. -/
+  jubjubFromBytes32 : List Nat → Except String (Nat × Nat) :=
+    fun _ => .error "qualified Jubjub byte-decoding oracle is unavailable"
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
@@ -153,6 +159,11 @@ private def evaluatePersistentHash (ctx : EvalContext) (preimage : List Nat) :
     throw "persistent-hash oracle returned a malformed Bytes32 digest"
   pure result
 
+private def bytes32IntegerLE (values : List Nat) : Nat := Id.run do
+  let mut result := 0
+  for (value, index) in values.zipIdx do result := result + value * 256 ^ index
+  return result
+
 private def checkedPrimeFieldInverse (value modulus : Nat) : Except String Nat := do
   if modulus ≤ 2 then throw "invalid prime-field modulus for inverse"
   if value == 0 then throw "inverse of zero is undefined"
@@ -221,6 +232,33 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     for value in values do
       preimage := preimage ++ nativeFieldBytesLE (← value.eval ctx env)
     evaluatePersistentHash ctx preimage
+  | .toBytes32 (source := .native) value => do
+    pure (nativeFieldBytesLE (← value.eval ctx env))
+  | .toBytes32 (source := .jubjubScalar) value => do
+    pure (nativeFieldBytesLE (← value.eval ctx env))
+  | .toBytes32 (source := .jubjubPoint) value => do
+    let point ← value.eval ctx env
+    let _ ← checkedJubjubPoint ctx point
+    let bytes ← ctx.jubjubToBytes32 point
+    if bytes.length != 32 || !bytes.all (· ≤ 255) then
+      throw "Jubjub byte-serialization oracle returned malformed Bytes32"
+    pure bytes
+  | .toBytes32 _ => .error "toBytes32 supports only Native, JubjubScalar and JubjubPoint"
+  | .fromBytes32 (target := .native) value => do
+    let bytes ← value.eval ctx env
+    if ctx.modulus == 0 then throw "invalid zero Native modulus for Bytes32 decoding"
+    pure (bytes32IntegerLE bytes % ctx.modulus)
+  | .fromBytes32 (target := .jubjubScalar) value => do
+    let bytes ← value.eval ctx env
+    pure (bytes32IntegerLE bytes % Jubjub.scalarOrder)
+  | .fromBytes32 (target := .jubjubPoint) value => do
+    let bytes ← value.eval ctx env
+    let point ← ctx.jubjubFromBytes32 bytes
+    let _ ← checkedJubjubPoint ctx point
+    let encoded ← ctx.jubjubToBytes32 point
+    if encoded != bytes then throw "noncanonical Jubjub Bytes32 point encoding"
+    pure point
+  | .fromBytes32 _ => .error "fromBytes32 supports only Native, JubjubScalar and JubjubPoint"
   | .inv (ty := .native) value => do
     checkedPrimeFieldInverse (← value.eval ctx env) ctx.modulus
   | .inv (ty := .jubjubScalar) value => do
@@ -290,7 +328,8 @@ theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSp
 
 private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, poseidon2 := true, persistentHash32 := true,
-    persistentHashVector32 := true, persistentHashNative := true, jubjub := true}
+    persistentHashVector32 := true, persistentHashNative := true,
+    bytes32Conversions := true, jubjub := true}
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
   match c.validate (evaluationCapabilities ctx) with
@@ -627,6 +666,7 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
     | assertE condition body => simp [pruneTrue, ConstraintsHold, ih]
     | disclose span value => simp [pruneTrue, ConstraintsHold, ih]
     | inv value => simp [pruneTrue, ConstraintsHold, ih]
+    | fromBytes32 value => simp [pruneTrue, ConstraintsHold, Expr.eval, ih]
 
 theorem unsigned_addition_no_wrap (a b m n : Nat) (ha : a ≤ m) (hb : b ≤ n)
     (hbound : m + n ≤ ScalarPolicy.maxUint) : (a + b) % Field.modulus = a + b :=

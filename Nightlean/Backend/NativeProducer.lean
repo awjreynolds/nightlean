@@ -170,6 +170,26 @@ private def nativeFieldAtom : Json := Json.mkObj [
   ("tag", toJson ("atom" : String)),
   ("value", Json.mkObj [("tag", toJson ("field" : String))])]
 
+private def bytes32FromChunksTerm (low31 highByte : Term) : Term :=
+  .unary "bytes32_from_chunks" (.hash [low31, highByte])
+
+private def toBytes32Term (valueType : NativeValueType) (value : Term) : Except String Term := do
+  match valueType with
+  | .native => pure (.unary "to_bytes32_native" value)
+  | .jubjubScalar => pure (.unary "to_bytes32_jubjub_scalar" value)
+  | .jubjubPoint => pure (.unary "to_bytes32_jubjub_point" value)
+  | _ => throw "to_bytes requires Native, JubjubScalar or JubjubPoint"
+
+private def fromBytes32Term (typeName : String) (value : Term) : Except String (NativeValueType × Term × Nat) := do
+  match typeName with
+  | "Scalar<BLS12-381>" =>
+    pure (.native, .unary "from_bytes32_native" value, Field.modulus - 1)
+  | "Scalar<Jubjub>" =>
+    pure (.jubjubScalar, .unary "from_bytes32_jubjub_scalar" value, Jubjub.scalarOrder - 1)
+  | "Point<Jubjub>" =>
+    pure (.jubjubPoint, .unary "from_bytes32_jubjub_point" value, Field.modulus - 1)
+  | _ => throw "from_bytes has an unsupported output type"
+
 private def alignedBytes32Pairs : List Fact → Except String (List (Term × Term))
   | [] => pure []
   | highByte :: low31 :: rest => do
@@ -361,7 +381,30 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       let fact ← combine (Term.unary "jubjub_scalar_to_native" input.term)
         (Jubjub.scalarOrder - 1) [input]
       define state output fact
-    else throw "encode accepts only qualified Bytes32 hashes or Jubjub scalars"
+    else throw "encode accepts only typed Bytes32 values or Jubjub scalars"
+  | "to_bytes" => do
+    let input ← argument state instruction "input"
+    let term ← toBytes32Term input.valueType input.term
+    let fact ← combine term 0 [input]
+    defineResult state instruction {fact with valueType := .bytes32}
+  | "bytes_from_natives" => do
+    let values ← nativeArguments state instruction "inputs"
+    ensure ((← natField instruction "len") == 32)
+      "bytes_from_natives supports only Bytes32"
+    match values with
+    | [low31, highByte] => do
+      ensure (low31.maximum ≤ 2 ^ (31 * 8) - 1 && highByte.maximum ≤ 255)
+        "bytes_from_natives operands lack canonical low31/highByte bounds"
+      let fact ← combine (bytes32FromChunksTerm low31.term highByte.term) 0 values
+      defineResult state instruction {fact with valueType := .bytes32}
+    | _ => throw "bytes_from_natives requires [low31, highByte]"
+  | "from_bytes" => do
+    let bytes ← argument state instruction "bytes"
+    ensure (bytes.valueType == .bytes32) "from_bytes requires a typed Bytes32 operand"
+    let typeName ← stringField instruction "type"
+    let (valueType, term, maximum) ← fromBytes32Term typeName bytes.term
+    let fact ← combine term maximum [bytes]
+    defineResult state instruction {fact with valueType}
   | "jubjub_scalar_from_native" => do
     let value ← nativeArgument state instruction "native"
     let term := Term.unary "jubjub_scalar_from_native" value.term

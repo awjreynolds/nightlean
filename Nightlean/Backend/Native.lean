@@ -8,12 +8,14 @@ inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeBytes32
+  | bytes32Conversion
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
   | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
+  | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -27,6 +29,7 @@ inductive EffectRule where
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input
+  | typedBytes32Conversion
   | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
 
@@ -38,6 +41,7 @@ inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
   | sourceHashTerm | encodedHashChunks | canonicalScalarInput | exactCoordinateRoundtrip
   | typedInverseResult
+  | typedBytes32Conversion
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -165,6 +169,18 @@ def instructionSupport (opcode : String) : Except String Support :=
   | "encode" => .supported <|
     scalar .encodeBytes32 .propagateAll .pure .typedBytes32Input .noGuard .encodedHashChunks
       ["input", "outputs"]
+  | "to_bytes" => .supported <|
+    let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
+      .noGuard .typedBytes32Conversion ["input", "output"]
+    {descriptor with encoding := .bytes32NativeSerialization}
+  | "from_bytes" => .supported <|
+    let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
+      .noGuard .typedBytes32Conversion ["bytes", "type", "output"]
+    {descriptor with encoding := .bytes32NativeDecoding}
+  | "bytes_from_natives" => .supported <|
+    let descriptor := scalar .bytes32Conversion .propagateAll .pure .alignedBytes32
+      .noGuard .typedBytes32Conversion ["inputs", "len", "output"]
+    {descriptor with encoding := .bytes32NativeChunks}
   | "jubjub_scalar_from_native" => .supported <|
     let descriptor := scalar .jubjubScalarBridge .propagateAll .pure .reducedJubjubScalar
       .noGuard .canonicalScalarInput ["native", "output"]

@@ -33,6 +33,10 @@ inductive Expr : Ty → Type where
   | persistentHashNative (value : Expr .native) : Expr (.bytes 32)
   /-- SHA-256 over an ordered vector of canonical Native field encodings. -/
   | persistentHashNativeVector (values : List (Expr .native)) : Expr (.bytes 32)
+  /-- Serialize a typed field or Jubjub value using the pinned ZKIR byte codec. -/
+  | toBytes32 (value : Expr source) : Expr (.bytes 32)
+  /-- Decode a Bytes32 value into one of the explicitly supported typed values. -/
+  | fromBytes32 (value : Expr (.bytes 32)) : Expr target
   /-- Explicitly reduce a Native field into the Jubjub scalar field. -/
   | jubjubScalarFromNative (value : Expr .native) : Expr .jubjubScalar
   /-- Losslessly expose a canonical Jubjub scalar as its Native limb. -/
@@ -235,6 +239,7 @@ structure Capabilities where
   persistentHash32 : Bool := false
   persistentHashVector32 : Bool := false
   persistentHashNative : Bool := false
+  bytes32Conversions : Bool := false
   jubjub : Bool := false
   stateCells : Bool := false
   stateMaps : Bool := false
@@ -290,6 +295,16 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless values.length ≥ 1 && values.length ≤ 32 do
       throw "Native persistent-hash vector must contain 1 to 32 fields"
     for value in values do value.validate caps env
+  | .toBytes32 (source := source) value => do
+    unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
+    unless source == .native || source == .jubjubScalar || source == .jubjubPoint do
+      throw "toBytes32 supports only Native, JubjubScalar and JubjubPoint"
+    value.validate caps env
+  | .fromBytes32 (target := target) value => do
+    unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
+    unless target == .native || target == .jubjubScalar || target == .jubjubPoint do
+      throw "fromBytes32 supports only Native, JubjubScalar and JubjubPoint"
+    value.validate caps env
   | .jubjubScalarFromNative value => do
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
     value.validate caps env
@@ -360,7 +375,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     a.validate caps env
     b.validate caps env
   | .select c a b => do
-    if ty.isBytes || ty.isJubjub then
+    if ty.isJubjub || (ty.isBytes && !(ty == .bytes 32 && caps.bytes32Conversions)) then
       throw "byte string and Jubjub selection is not supported by this source surface"
     if !caps.select then throw "target lacks conditional selection"
     c.validate caps env

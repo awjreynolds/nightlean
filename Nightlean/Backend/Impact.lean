@@ -9,11 +9,12 @@ namespace Nightlean.Backend.Impact
 
 private def expressionCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, jubjub := true}
 
 private def ledgerCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, jubjub := true, stateCells := true, stateMaps := true}
+    persistentHashNative := true, bytes32Conversions := true, jubjub := true,
+    stateCells := true, stateMaps := true}
 
 /-- Symbols in the ledger public-input sequence are source expressions, not
 free transcript values. Each symbol must be computed or publicly read by ZKIR. -/
@@ -228,6 +229,7 @@ private def expressionNames : Expr ty → List String
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
   | .persistentHashNativeVector values => values.flatMap expressionNames
+  | .toBytes32 value | .fromBytes32 value => expressionNames value
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
   | .jubjubCoordinate value _ => expressionNames value
@@ -288,6 +290,11 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalizeUnder guard))
   | .persistentHashNative value => .persistentHashNative (totalizeUnder guard value)
   | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalizeUnder guard))
+  | .toBytes32 value => .toBytes32 (totalizeUnder guard value)
+  | .fromBytes32 (target := .jubjubPoint) value =>
+    let identity : Expr (.bytes 32) := .bytes32Literal (1 :: List.replicate 31 0)
+    .fromBytes32 (.select guard (totalizeUnder guard value) identity)
+  | .fromBytes32 value => .fromBytes32 (totalizeUnder guard value)
   | .jubjubScalarFromNative value => .jubjubScalarFromNative (totalizeUnder guard value)
   | .jubjubScalarToNative value => .jubjubScalarToNative (totalizeUnder guard value)
   | .jubjubMulGenerator scalar => .jubjubMulGenerator (totalizeUnder guard scalar)

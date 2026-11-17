@@ -40,6 +40,8 @@ private def checkConstants : Expr ty → Except String Unit
     if maximum ≤ ScalarPolicy.maxUint && value ≤ maximum then pure ()
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
+  | .toBytes32 value => checkConstants value
+  | .fromBytes32 value => checkConstants value
   | .inv value => checkConstants value
   | .persistentHash32 value => checkConstants value
   | .bytes32Literal _ => pure ()
@@ -254,6 +256,78 @@ private def lowerPersistentHash (preimageKind : String) (alignment : Json)
       (lowKey, low) :: (highKey, high) :: state.expressions}
     pure [low, high]
 
+private def encodeBytes32 (bytes : String) : LowerM (String × String) := do
+  let lowKey : ExpressionKey := ("encode_bytes32", [bytes], some 0)
+  let highKey : ExpressionKey := ("encode_bytes32", [bytes], some 1)
+  match ((← get).expressions.lookup lowKey, (← get).expressions.lookup highKey) with
+  | (some low, some high) => pure (low, high)
+  | _ => do
+    let low ← fresh
+    let high ← fresh
+    emit "encode" [("input", toJson bytes), ("outputs", toJson [low, high])]
+    modify fun state => {state with expressions :=
+      (lowKey, low) :: (highKey, high) :: state.expressions}
+    pure (low, high)
+
+private def lowerToBytes32 (value : String) : LowerM (String × String) := do
+  let bytesKey : ExpressionKey := ("to_bytes", [value], none)
+  let bytes ← match (← get).expressions.lookup bytesKey with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "to_bytes" [("input", toJson value), ("output", toJson output)]
+      modify fun state => {state with expressions := (bytesKey, output) :: state.expressions}
+      pure output
+  encodeBytes32 bytes
+
+private def bytes32Chunks (values : List String) : LowerM (String × String) := do
+  match values.length with
+  | 2 => pure (values[0]!, values[1]!)
+  | 32 => pure (← packBytes (values.take 31), values[31]!)
+  | _ => do
+    rejectLowering "Bytes32 source has wrong aligned encoding"
+    pure ("0x00", "0x00")
+
+private def lowerBytesFromChunks (low31 highByte : String) : LowerM String := do
+  let key : ExpressionKey := ("bytes_from_natives", [low31, highByte], some 32)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "bytes_from_natives" [
+    ("inputs", toJson [low31, highByte]),
+    ("len", toJson (32 : Nat)),
+    ("output", toJson output)]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
+private def nativeTypeName : Ty → String
+  | .native => "Scalar<BLS12-381>"
+  | .jubjubScalar => "Scalar<Jubjub>"
+  | .jubjubPoint => "Point<Jubjub>"
+  | _ => "Unsupported"
+
+private def lowerFromBytes32 (target : Ty) (values : List String) : LowerM String := do
+  let (low31, highByte) ← bytes32Chunks values
+  let bytes ← lowerBytesFromChunks low31 highByte
+  let typeName := nativeTypeName target
+  let key : ExpressionKey := ("from_bytes:" ++ typeName, [bytes], none)
+  let output ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "from_bytes" [
+        ("bytes", toJson bytes),
+        ("type", toJson typeName),
+        ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  if target == .jubjubPoint then do
+    let (roundtripLow, roundtripHigh) ← lowerToBytes32 output
+    let highEq ← binary "test_eq" highByte roundtripHigh
+    emit "assert" [("cond", toJson highEq)]
+    let lowEq ← binary "test_eq" low31 roundtripLow
+    emit "assert" [("cond", toJson lowEq)]
+  pure output
+
 private def alignedBytes32Fields (values : List String) : LowerM (String × String) := do
   match values.length with
   | 32 =>
@@ -326,6 +400,21 @@ private def lowerBytes : Expr (.bytes length) → LowerM (List String)
     else
       lowerPersistentHash ("native-field-vector:" ++ toString values.length)
         (nativeFieldVectorAlignment values.length) operands
+  | .toBytes32 value => do
+    let input ← lowerExpr value
+    let (low, high) ← lowerToBytes32 input
+    pure [low, high]
+  | .select condition yes no => do
+    let condition ← lowerExpr condition
+    let (yesLow, yesHigh) ← bytes32Chunks (← lowerBytes yes)
+    let (noLow, noHigh) ← bytes32Chunks (← lowerBytes no)
+    let low ← fresh
+    emit "cond_select" [("bit", toJson condition), ("a", toJson yesLow),
+      ("b", toJson noLow), ("output", toJson low)]
+    let high ← fresh
+    emit "cond_select" [("bit", toJson condition), ("a", toJson yesHigh),
+      ("b", toJson noHigh), ("output", toJson high)]
+    pure [low, high]
   | @Expr.letE (.bytes _) _ name value body => do
     let values ← lowerBytes value
     let aliases := (← get).byteAliases
@@ -439,6 +528,9 @@ def lowerExpr : Expr ty → LowerM String
       pure "0x00"
   | .jubjubFromCoordinates x y => do
     lowerPointFromCoordinates (← lowerExpr x) (← lowerExpr y)
+  | .fromBytes32 value => do
+    let values ← lowerBytes value
+    lowerFromBytes32 ty values
   | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
   | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
   | .sub a b => do binary "add" (← lowerExpr a) (← unary "neg" (← lowerExpr b))
@@ -516,7 +608,7 @@ def lowerExpr : Expr ty → LowerM String
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
-  | .persistentHashNative _ | .persistentHashNativeVector _ => do
+  | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ => do
     rejectLowering "Bytes32 expressions must be consumed with their typed FAB alignment"
     pure "0x00"
 termination_by value => sizeOf value
@@ -548,7 +640,8 @@ Public values are explicitly bound with Impact. The surrounding contract must
 still bind this public-input sequence to its accepted ledger call transcript. -/
 private def loweringCapabilities : Capabilities :=
   { poseidon2 := true, persistentHash32 := true,
-    persistentHashVector32 := true, persistentHashNative := true, jubjub := true }
+    persistentHashVector32 := true, persistentHashNative := true,
+    bytes32Conversions := true, jubjub := true }
 
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c

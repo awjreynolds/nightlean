@@ -159,6 +159,16 @@ pub enum Expr {
     Inv {
         value: Box<Expr>,
     },
+    #[serde(rename = "toBytes32")]
+    ToBytes32 {
+        value: Box<Expr>,
+    },
+    #[serde(rename = "fromBytes32")]
+    FromBytes32 {
+        #[serde(rename = "type")]
+        ty: String,
+        value: Box<Expr>,
+    },
     Cast {
         #[serde(rename = "type")]
         ty: String,
@@ -406,6 +416,34 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             }
             _ => bail!("inverse requires Native or JubjubScalar"),
         },
+        Expr::ToBytes32 { value } => Value::Bytes(match evaluate(value, env)? {
+            Value::Native(value) => value.as_le_bytes(),
+            Value::JubjubScalar(value) => value.as_le_bytes(),
+            Value::JubjubPoint(value) => jubjub::to_bytes(value)?.to_vec(),
+            _ => bail!("toBytes32 requires Native, JubjubScalar or JubjubPoint"),
+        }),
+        Expr::FromBytes32 { ty, value } => {
+            let Value::Bytes(bytes) = evaluate(value, env)? else {
+                bail!("fromBytes32 requires Bytes32")
+            };
+            ensure!(bytes.len() == 32, "fromBytes32 requires 32 bytes");
+            match ScalarType::parse(ty)? {
+                ScalarType::Native => {
+                    let number = BigUint::from_bytes_le(&bytes)
+                        % BigUint::parse_bytes(MODULUS.as_bytes(), 10).unwrap();
+                    Value::Native(
+                        Fr::from_le_bytes(&number.to_bytes_le())
+                            .ok_or_else(|| anyhow!("invalid reduced Native encoding"))?,
+                    )
+                }
+                ScalarType::JubjubScalar => Value::JubjubScalar(
+                    EmbeddedFr::from_le_bytes_wide(&bytes)
+                        .ok_or_else(|| anyhow!("invalid reduced Jubjub scalar encoding"))?,
+                ),
+                ScalarType::JubjubPoint => Value::JubjubPoint(jubjub::from_bytes(&bytes)?),
+                _ => bail!("fromBytes32 requires Native, JubjubScalar or JubjubPoint"),
+            }
+        }
         Expr::JubjubScalarToNative { value } => Value::Native(jubjub::scalar_native(
             evaluate(value, env)?.jubjub_scalar()?,
         )?),

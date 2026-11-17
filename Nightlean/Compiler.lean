@@ -9,6 +9,7 @@ open Lean Elab Command
 private def sourceCapabilities : Capabilities :=
   { poseidon2 := Bool.true, persistentHash32 := Bool.true,
     persistentHashVector32 := Bool.true, persistentHashNative := Bool.true,
+    bytes32Conversions := Bool.true,
     jubjub := Bool.true, stateCells := Bool.true, stateMaps := Bool.true }
 
 private def typeName : Ty → String
@@ -38,6 +39,10 @@ private def expressionJson : Expr ty → Json
       ("value", expressionJson value)]
   | .persistentHashNativeVector values => Json.mkObj [("tag", toJson ("persistentHashNativeVector" : String)),
       ("values", toJson (values.map expressionJson))]
+  | .toBytes32 value => Json.mkObj [("tag", toJson ("toBytes32" : String)),
+      ("value", expressionJson value)]
+  | .fromBytes32 (target := target) value => Json.mkObj [("tag", toJson ("fromBytes32" : String)),
+      ("type", toJson (typeName target)), ("value", expressionJson value)]
   | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
       ("value", expressionJson value)]
   | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),
@@ -94,6 +99,10 @@ private def nativeExpressionJson : Expr ty → Json
       ("value", nativeExpressionJson value)]
   | .persistentHashNativeVector values => Json.mkObj [("tag", toJson ("persistentHashNativeVector" : String)),
       ("values", toJson (values.map nativeExpressionJson))]
+  | .toBytes32 value => Json.mkObj [("tag", toJson ("toBytes32" : String)),
+      ("value", nativeExpressionJson value)]
+  | .fromBytes32 (target := target) value => Json.mkObj [("tag", toJson ("fromBytes32" : String)),
+      ("type", toJson (typeName target)), ("value", nativeExpressionJson value)]
   | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
       ("value", nativeExpressionJson value)]
   | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),

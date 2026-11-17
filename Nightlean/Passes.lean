@@ -24,6 +24,7 @@ theorem prune_validation (caps : Capabilities) (env : TypeEnv) (span : SourceSpa
     | assertE condition body => simp only [pruneTrue, validateConstraints, ih]
     | disclose span value => simp only [pruneTrue, validateConstraints, ih]
     | inv value => simp only [pruneTrue, validateConstraints, ih]
+    | fromBytes32 value => simp only [pruneTrue, validateConstraints, ih]
 
 theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
     (conditions : List (Expr .bool)) :
@@ -41,6 +42,7 @@ theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
     | assertE condition body => simp only [pruneTrue, runConstraints, ih]
     | disclose span value => simp only [pruneTrue, runConstraints, ih]
     | inv value => simp only [pruneTrue, runConstraints, ih]
+    | fromBytes32 value => simp only [pruneTrue, runConstraints, ih]
 
 theorem pruneCircuit_validate (caps : Capabilities) (c : Circuit) :
     (pruneCircuit c).validate caps = c.validate caps := by
@@ -64,6 +66,7 @@ theorem prune_disclosure_constraints (env : Disclosure.Environment) (span : Sour
     | assertE condition body => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | disclose span value => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | inv value => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | fromBytes32 value => simp only [pruneTrue, Disclosure.checkConstraints, ih]
 
 theorem pruneCircuit_disclosure (c : Circuit) (control : Disclosure.Origins) :
     Disclosure.circuit (pruneCircuit c) control = Disclosure.circuit c control := by
