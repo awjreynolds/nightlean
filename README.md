@@ -83,7 +83,7 @@ Native cryptography, parser/VM agreement, host behavior and authenticated author
 
 The destination is [full native ZKIR v3 and Midnight ledger capability coverage](docs/compatibility/GOAL.md). Compact feature equivalence is a minimum comparison, not the scope limit.
 
-SDK goals cover native Rust/C/C++, TypeScript with WASM for web dapps, Kotlin for Android and Swift for iOS. Rust and C/C++ have qualified private-claim proof, transaction and recovery evidence on localnet. Web/mobile packages and general source witness execution remain goals.
+SDK goals cover native Rust/C/C++, TypeScript with WASM for web dapps, Kotlin for Android and Swift for iOS. Rust and C/C++ have qualified private-claim and [typed source-witness](docs/development/typed-witness-qualification.md) proof, transaction and private-state evidence on localnet. Web/mobile packages and full witness-language coverage remain goals.
 
 Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, [bounded type and natural specialization](docs/development/generics.md), scalar and component disclosure checks, and lazy host control. Checked composite layouts and codecs are present. [Source helper outputs](docs/development/component-disclosure.md) flatten checked composite results into native circuit leaves. Aggregate ledger effects, native guarded execution and broader composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
 

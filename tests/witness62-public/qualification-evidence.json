@@ -1,0 +1,328 @@
+{
+  "schemaVersion": 1,
+  "scope": "Qualified finite typed source-witness subset on isolated Midnight localnet. Scalar ledger lifecycle, Pair runtime/checker/key/bundle evidence, Unit and empty-result source/runtime evidence.",
+  "source": {
+    "revision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+    "tree": "c8569dd55f441cbed7bade7394b304cb038e175c",
+    "authenticatedGitFiles": 477,
+    "independentlyTestedRuntimeFilesMatched": 152,
+    "reviewedFormalFilesMatched": 32,
+    "compilerSha256": "fa4893b3ad06bb99d1699e7163722da59cb2bfc982f3b8bab905b377939954e2"
+  },
+  "ci": {
+    "url": "https://github.com/awjreynolds/noctium/actions/runs/44050223080",
+    "conclusion": "success",
+    "revision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299"
+  },
+  "toolchains": {
+    "lean": "4.35.0",
+    "rust": "1.100.0",
+    "zkir320Revision": "446c7fecc6bd41dab99ebe89ab404e9d077d11a9",
+    "zkir321Revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74"
+  },
+  "sourceChecks": {
+    "check-lean": {
+      "exitCode": 0,
+      "seconds": 118.96360404207371,
+      "logSha256": "12170e80015277ca800cbc4103120c47dc3b375db045ed84b5793243c57bfec8"
+    },
+    "module-cli": {
+      "exitCode": 0,
+      "seconds": 5.808828458888456,
+      "logSha256": "62a1eaa3ea881b973a62ce2bfa8ca7583615df1f59bba6bf1af0d1e06d9898d2"
+    },
+    "scalar-audit": {
+      "exitCode": 0,
+      "seconds": 332.5464948331937,
+      "logSha256": "36ffba15ef439ae9314d4e901231257c0662fba80c3c1d8067ba138676886273"
+    }
+  },
+  "libraryModulesBuilt": 62,
+  "standaloneLeanTests": 45,
+  "freshArtifactByteMatches": 50,
+  "formal": {
+    "semanticsSha256": "2af408f529ed0bd8059671e9873003aa3e2614ba45107483b9f0aede812d654f",
+    "publicRoots": [
+      "eraseProgram_evaluator_successSim",
+      "eraseProgram_evaluator_failureSim",
+      "validateCompleteInputMap_preserves_bindings",
+      "recordInvocation_replayInvocation_matches"
+    ],
+    "namespace": "Nightlean.Witness.Semantics",
+    "axioms": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "independentAstraReview": "approved core, input binding, direct trace examples and final invocation/docs delta",
+    "directBoundaryGuards": 21,
+    "failureAdmission": "Actual initial/final empty source boundary rejection trace. Rejected source-only stage checks and malformed/contradictory callbacks excluded, accepted terminal provider failure included.",
+    "nativeCallbackRetries": "Separately tested runtime suspension/retry behavior, outside the one-shot source model"
+  },
+  "retainedScalarAudit": {
+    "modelBytes": 71177434,
+    "modelSha256": "6e9b4da95bc6bdf305b5a8e32be7585e62ed74efc6942287ff8c38d7828c98d9",
+    "freshCurrentExportMatchesReviewedModel": true,
+    "bothRoleTypesAndAxiomsChecked": true,
+    "rejectedCases": [
+      "swapped",
+      "missing",
+      "weakened",
+      "forbiddenAxiom",
+      "wrongPin",
+      "oversized",
+      "fifo"
+    ],
+    "wholeCompilerVerified": false
+  },
+  "runtimeRegressions": [
+    {
+      "profile": "zkir-320",
+      "ordinaryTests": {
+        "passed": 149,
+        "failed": 0,
+        "ignored": 8,
+        "measured": 0,
+        "filtered": 0
+      },
+      "logSha256": "4f6b3e9123de05eedb0cd141eaefe90cfbea411ce6dfef4d712d2b31cc1dcbb6",
+      "postHostPrivateLeafMutations": 12
+    },
+    {
+      "profile": "zkir-321",
+      "ordinaryTests": {
+        "passed": 150,
+        "failed": 0,
+        "ignored": 8,
+        "measured": 0,
+        "filtered": 0
+      },
+      "logSha256": "d9d85e6e530144d97d671a95a2dd9f299f12ac15c668ec81e96ac00949da0f87",
+      "postHostPrivateLeafMutations": 12
+    }
+  ],
+  "bundles": [
+    {
+      "profile": "320",
+      "workload": "scalar",
+      "file": "bundles/320-scalar.manifest.json",
+      "sha256": "0c4d452a35969e2f89bc15dc0f0de11165b04ad74c5ad3a80039f8b453afe95e",
+      "compilerRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+      "verifiedPayloads": 12
+    },
+    {
+      "profile": "320",
+      "workload": "pair",
+      "file": "bundles/320-pair.manifest.json",
+      "sha256": "ef0be1e59beb042de5ede43bf06b303bca42f3c34c461601ffdc6a635cc3f505",
+      "compilerRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+      "verifiedPayloads": 12
+    },
+    {
+      "profile": "321",
+      "workload": "scalar",
+      "file": "bundles/321-scalar.manifest.json",
+      "sha256": "8281374014c8a1901a6399be5fb792d03acf1350fd7483233594fd7b81a1fb73",
+      "compilerRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+      "verifiedPayloads": 12
+    },
+    {
+      "profile": "321",
+      "workload": "pair",
+      "file": "bundles/321-pair.manifest.json",
+      "sha256": "b1a5699e824eeefd223ecfd167052519a9f7ca606aeb5ae3a05880a9ddd0434c",
+      "compilerRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+      "verifiedPayloads": 12
+    }
+  ],
+  "provingParameters": {
+    "degree": 7,
+    "sha256": "e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d"
+  },
+  "profiles": [
+    {
+      "profile": "320",
+      "contractAddress": "96978b3d73bb2ff0d372cd541a2aaebddd63258dc11129721587c3f32304a7a1",
+      "deployment": {
+        "blockHash": "6d75af0aa67a4c349c4229389f4f1a122a4551524c8c72ff3ac1721fa4d15126",
+        "contractAddress": "96978b3d73bb2ff0d372cd541a2aaebddd63258dc11129721587c3f32304a7a1",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "affbcd6f2b192893bb0d5b777a01446dffdb097b48af27f5aa0f2539a9cbfd4e",
+        "event": "Deploy",
+        "extrinsicHash": "a2feb7d8892593f68aca5eabab47d6af7dc462c29b38c22ddc31296f99692999",
+        "extrinsicIndex": 4,
+        "finalizedHash": "6d75af0aa67a4c349c4229389f4f1a122a4551524c8c72ff3ac1721fa4d15126",
+        "finalizedHeight": "11285",
+        "height": "11285",
+        "intentId": "3f1cfb85c1618d970370fca0f43bb7735068f51cf736106d634f8cb10e02d64d",
+        "transactionId": "366251cb5baad75dc07f7672117d73932d55d4ff8d12c69f4c5d65c71a3a6746"
+      },
+      "call": {
+        "blockHash": "7335239b977a4e843db2e0c7c3b3bb836a84b73d9346a9256cec18b95902a084",
+        "contractAddress": "96978b3d73bb2ff0d372cd541a2aaebddd63258dc11129721587c3f32304a7a1",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "f9b24f4480110e62fe9333e5c3be687073922bd24b0935fbd62c0eb1b699c600",
+        "event": "Call",
+        "extrinsicHash": "300a4df2621cfbf9988895cfe9f320f3c7b949e0309c454b8b2b477616813f4a",
+        "extrinsicIndex": 4,
+        "finalizedHash": "7335239b977a4e843db2e0c7c3b3bb836a84b73d9346a9256cec18b95902a084",
+        "finalizedHeight": "11288",
+        "height": "11288",
+        "intentId": "bb1147841c0ea2c6dc9975ca2a68e0419223b818beab152ef2e56266f5e97e08",
+        "transactionId": "56a04342c4d67f6f3aecf16bb02f00c36c2a07b7a3344c4f97e593c785410232"
+      },
+      "sourceProviderCalls": 5,
+      "sourceJournalCasAndValueCheckPassed": true,
+      "publicRustOwnedProofClient": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "actualLocalProvingAndVerification": true,
+        "ledgerAcceptanceClaim": false,
+        "logSha256": "77a0f306d761c42cc3400c2356f86dc8c421900af5e707bbb873b1b91aa57058",
+        "testExecutableSha256": "69ade6083c0ad32b450ac04cb7c86b79fdf085e00dc17cbae5dde6e55ecd1d52"
+      },
+      "cpp": {
+        "binarySha256": "2423c958d20a30246aa213ed2e3359c8d3eb34cb771c7f1289730ea2603edaf8",
+        "sourceSha256": "8b3eaf7dc22e4475dd51279ece1d01c32ec45ad62cc3eb238201804e9bebb77b",
+        "librarySha256": "7951a635c7ef4148b583b8a9f7143b73ff2d590a4b3c2dc8c88e753bf1dc0899",
+        "beforeAfterHashesMatched": true,
+        "logSha256": "8abe2343987a14e8d86effd224117424cfe47ad7e2929f7bd668cb25c535964d"
+      },
+      "independentObservation": {
+        "profile": "320",
+        "observerSha256": "c46e325a4853a7cf10f6313479a7afe2882a7c0724eba76ae9a4c9f38d709f40",
+        "exactStatesMatched": true,
+        "heights": [
+          "11285",
+          "11288"
+        ],
+        "actualLinkedLibrarySha256": "7951a635c7ef4148b583b8a9f7143b73ff2d590a4b3c2dc8c88e753bf1dc0899",
+        "linkedLibraryMatchesRecordedBeforeAfter": true
+      }
+    },
+    {
+      "profile": "321",
+      "contractAddress": "9b6f61451ca60d14f8eed8f38b4f1ef1c48c616122d743a79f4f6b121cfcab91",
+      "deployment": {
+        "blockHash": "99f5609319e85d331865758923f201862c4690553b5ac0a35058f8b8e6acfaa7",
+        "contractAddress": "9b6f61451ca60d14f8eed8f38b4f1ef1c48c616122d743a79f4f6b121cfcab91",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "affbcd6f2b192893bb0d5b777a01446dffdb097b48af27f5aa0f2539a9cbfd4e",
+        "event": "Deploy",
+        "extrinsicHash": "bf56ab9b3b3c8735e293cb173d6cd8a6536654fb7cf2d036e5252a3e82d97f1c",
+        "extrinsicIndex": 4,
+        "finalizedHash": "99f5609319e85d331865758923f201862c4690553b5ac0a35058f8b8e6acfaa7",
+        "finalizedHeight": "11302",
+        "height": "11302",
+        "intentId": "1452b223eee388dcc81d0b359a8f4abf3c211721c3c825ed8d658be7e9ca855d",
+        "transactionId": "5bdc21bc23374ce53e7dec66077ae7bcc3cd86ba3909883f31a8f8bd5bd0cd03"
+      },
+      "call": {
+        "blockHash": "434fe960ca1acb54779ffb93d193d6975820b9d777a1ce7fb207607641165e49",
+        "contractAddress": "9b6f61451ca60d14f8eed8f38b4f1ef1c48c616122d743a79f4f6b121cfcab91",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "f9b24f4480110e62fe9333e5c3be687073922bd24b0935fbd62c0eb1b699c600",
+        "event": "Call",
+        "extrinsicHash": "33123cc9a31ed8962506b84f14dc459d98ae06f0e09ba448efbb2078dff4a462",
+        "extrinsicIndex": 4,
+        "finalizedHash": "434fe960ca1acb54779ffb93d193d6975820b9d777a1ce7fb207607641165e49",
+        "finalizedHeight": "11305",
+        "height": "11305",
+        "intentId": "7a9d330cf1b55facd2ea056827f2c14eef327acf1c6fc5f8935444238dafac8a",
+        "transactionId": "dbc1aebdbebc9e3edfa18d07619721391dfbfc5b312b72f4664fec04ba29f9c7"
+      },
+      "sourceProviderCalls": 5,
+      "sourceJournalCasAndValueCheckPassed": true,
+      "publicRustOwnedProofClient": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "actualLocalProvingAndVerification": true,
+        "ledgerAcceptanceClaim": false,
+        "logSha256": "cb40ca1e8e7f891d5a7acaa355feb4ce534509cf4988079df8b370f4874862d4",
+        "testExecutableSha256": "9ce942920e71867434e717d5c32be3783a41ac4652a583f523b3cd70b9841e41"
+      },
+      "cpp": {
+        "binarySha256": "8b08422bd0dd4355caea268a483e8372e407fe744b68b1db643d1c2e516f0ac1",
+        "sourceSha256": "8b3eaf7dc22e4475dd51279ece1d01c32ec45ad62cc3eb238201804e9bebb77b",
+        "librarySha256": "1855aeaa512fed4774b23fee06a8e56b2705ec3873bf049153ace42ccc6f9682",
+        "beforeAfterHashesMatched": true,
+        "logSha256": "9a1f6a364a3b819df0380ab22e1e4921dac583625e6ca70ee17a436edab07a42"
+      },
+      "independentObservation": {
+        "profile": "321",
+        "observerSha256": "d81b4ebff6a3dfb4fc2fa1160160373eaf1c35fc38d8f3e62c01f1e10349b3d9",
+        "exactStatesMatched": true,
+        "heights": [
+          "11302",
+          "11305"
+        ],
+        "actualLinkedLibrarySha256": "1855aeaa512fed4774b23fee06a8e56b2705ec3873bf049153ace42ccc6f9682",
+        "linkedLibraryMatchesRecordedBeforeAfter": true
+      }
+    }
+  ],
+  "publicStateFiles": [
+    {
+      "profile": "320",
+      "event": "Deploy",
+      "file": "states/320-deploy.bin",
+      "bytes": 1482,
+      "sha256": "affbcd6f2b192893bb0d5b777a01446dffdb097b48af27f5aa0f2539a9cbfd4e",
+      "height": 11285,
+      "blockHash": "6d75af0aa67a4c349c4229389f4f1a122a4551524c8c72ff3ac1721fa4d15126",
+      "contractAddress": "96978b3d73bb2ff0d372cd541a2aaebddd63258dc11129721587c3f32304a7a1"
+    },
+    {
+      "profile": "320",
+      "event": "Call",
+      "file": "states/320-call.bin",
+      "bytes": 1482,
+      "sha256": "f9b24f4480110e62fe9333e5c3be687073922bd24b0935fbd62c0eb1b699c600",
+      "height": 11288,
+      "blockHash": "7335239b977a4e843db2e0c7c3b3bb836a84b73d9346a9256cec18b95902a084",
+      "contractAddress": "96978b3d73bb2ff0d372cd541a2aaebddd63258dc11129721587c3f32304a7a1"
+    },
+    {
+      "profile": "321",
+      "event": "Deploy",
+      "file": "states/321-deploy.bin",
+      "bytes": 1482,
+      "sha256": "affbcd6f2b192893bb0d5b777a01446dffdb097b48af27f5aa0f2539a9cbfd4e",
+      "height": 11302,
+      "blockHash": "99f5609319e85d331865758923f201862c4690553b5ac0a35058f8b8e6acfaa7",
+      "contractAddress": "9b6f61451ca60d14f8eed8f38b4f1ef1c48c616122d743a79f4f6b121cfcab91"
+    },
+    {
+      "profile": "321",
+      "event": "Call",
+      "file": "states/321-call.bin",
+      "bytes": 1482,
+      "sha256": "f9b24f4480110e62fe9333e5c3be687073922bd24b0935fbd62c0eb1b699c600",
+      "height": 11305,
+      "blockHash": "434fe960ca1acb54779ffb93d193d6975820b9d777a1ce7fb207607641165e49",
+      "contractAddress": "9b6f61451ca60d14f8eed8f38b4f1ef1c48c616122d743a79f4f6b121cfcab91"
+    }
+  ],
+  "trustedBoundaries": [
+    "Native proving/verifying and ledger implementation agreement",
+    "Isolated node receipt/canonical-state reporting",
+    "Host private storage persistence and compare-and-swap service"
+  ],
+  "excludedClaims": [
+    "Whole compiler or frontend preservation",
+    "General Helpers-to-circuit preservation",
+    "Verified Rust/FFI correspondence",
+    "Circuit-proved private storage",
+    "Full confidentiality or noninterference",
+    "Full ZKIR v3 or G1-G6 completion",
+    "Native guarded branches",
+    "Multi-entrypoint/existing-state SDK context (issue67)",
+    "Web/mobile/WASM packaging",
+    "Public-network qualification",
+    "Pair ledger deployment"
+  ],
+  "historicalClaimSourceAuthority": "925164d0e17d994038d77d3b2b71c410619557d3"
+}

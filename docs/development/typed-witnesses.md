@@ -1,5 +1,7 @@
 # Typed source witnesses
 
+The exact source revision and qualification scope are recorded in [typed-witness qualification](typed-witness-qualification.md), including bounded native evidence for profiles 3.2.0 and 3.2.1.
+
 Noctium compiles finite Lean helper programs into a native circuit and an ordered private execution plan. Rust executes the plan. A C++ application drives the same interpreter through the C ABI. Neither path requires Node.
 
 Witness providers supply untrusted values through explicit operation and capability declarations. A returned value grants no circuit truth, disclosure permission or ledger authority. Circuit constraints still check the resulting private inputs.

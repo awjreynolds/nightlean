@@ -839,8 +839,8 @@
       "id": "C-PRIVATE-WITNESS",
       "layer": "private-runtime",
       "surface": "Witness declarations and callbacks",
-      "nightleanStatus": "missing",
-      "notes": "General call signatures, context, private-state return, ordering and failure behavior need host-neutral ABI.",
+      "nightleanStatus": "subset",
+      "notes": "Finite scalar/composite typed source calls now use the native resumable Rust/C++ runtime. Broader witness-language coverage remains open.",
       "source": [
         "reference"
       ],
@@ -849,16 +849,20 @@
         "HOST",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/typed-witnesses.md",
+        "docs/development/typed-witness-qualification.md",
+        "tests/witness62-public/qualification-evidence.json"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Native typed, capability-scoped scalar provider transport is implemented in Rust and linked C/C++. General source witness-function declarations, signatures and effects remain unsupported. Provider transport alone does not establish witness-language equivalence.",
+        "checkedOn": "2026-11-17",
+        "sourceRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+        "scope": "Typed source declarations and scalar, nominal composite, Unit and empty results execute through shared emitted artifacts without Node. Actual successful and admitted failed source replay, exact input bindings and invocation framing are kernel-checked. Scalar source-driven proof/deployment/CALL/private-CAS is qualified on both localnet profiles. Pair has runtime/checker, key and bundle evidence, without ledger deployment. General Helpers lowering and complete privacy remain separate.",
         "evidence": [
-          "runtime/src/host.rs",
-          "runtime/tests/host_protocol.rs",
-          "runtime/tests/cpp_host_smoke.cpp",
-          "docs/designs/private-state-lifecycle.md"
+          "docs/development/typed-witnesses.md",
+          "docs/development/typed-witness-qualification.md",
+          "tests/witness62-public/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -868,7 +872,7 @@
       "layer": "private-runtime",
       "surface": "Private-state initialization and evolution",
       "nightleanStatus": "subset",
-      "notes": "State ownership, persistence and failure/commit boundaries are host responsibilities with shared semantics.",
+      "notes": "Source scalar private stages and transactional native journals are qualified subsets. Storage truth and persistence remain host assumptions.",
       "source": [
         "reference"
       ],
@@ -877,17 +881,20 @@
         "HOST",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/typed-witnesses.md",
+        "docs/development/typed-witness-qualification.md",
+        "tests/witness62-public/qualification-evidence.json"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Native host-policy writes have private-only journals, immutable attempt/transaction/target/base binding, persistence ordering and correlated compare-and-swap. Rust/C++ cover conflicts, crossed replies, retries and failure paths. Durable storage and truthful ledger acceptance remain host assumptions. Source witness-generated private-state semantics and authenticated recovery remain open.",
+        "checkedOn": "2026-11-17",
+        "sourceRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+        "scope": "Source scalar stage statements drive tentative private journals and matching staged READs. An owned invocation flows through source execution, proof/client handoff, finalized acceptance and correlated compare-and-swap on both localnet profiles. Malformed replies retain native suspension for corrected retry. Whole-composite source staging and general private-state language coverage remain open. Private writes are not circuit-proved state transitions.",
         "evidence": [
-          "runtime/src/host.rs",
-          "runtime/src/lifecycle.rs",
-          "runtime/tests/host_protocol.rs",
-          "runtime/tests/cpp_host_smoke.cpp",
-          "docs/designs/private-state-lifecycle.md"
+          "docs/development/typed-witnesses.md",
+          "docs/development/typed-witness-qualification.md",
+          "tests/witness62-public/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -1096,7 +1103,7 @@
       "layer": "artifact-runtime",
       "surface": "Portable execution and value ABI",
       "nightleanStatus": "subset",
-      "notes": "Native Rust and linked C/C++ execution cover scalar input/provider/journal subsets without Node. Complete source witness functions, portable mobile/WASM and native transaction SDK qualification remain open.",
+      "notes": "Qualified Rust and linked C/C++ source-witness/proof/client subsets run without Node. Web/mobile/WASM packages and full ABI equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -1107,22 +1114,20 @@
       ],
       "observedEvidence": [
         "scripts/zkir/native-runtime.mjs",
-        "scripts/zkir/native-contract.mjs"
+        "scripts/zkir/native-contract.mjs",
+        "docs/development/typed-witnesses.md",
+        "docs/development/typed-witness-qualification.md",
+        "tests/witness62-public/qualification-evidence.json"
       ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Native Rust execution, linked C/C++ scalar providers/private journals and aggregate codecs are tested without Node application execution. Rust assembles real intents and constructs, locally verifies and attaches proofs on both profiles. Source witness functions, native funding/signing/submission/finality, complete C ABI, mobile and WASM remain open.",
+        "checkedOn": "2026-11-17",
+        "sourceRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+        "scope": "Authenticated witness binding/control roles retain exact source schemas, fresh leaf identities and native target bindings. Rust and C/C++ use consuming source/proof/client ownership, explicit cancellation, proof verification and finalized ledger acceptance before private commit. Both localnet profiles have immutable-source evidence. Multi-entrypoint/existing-state contexts and web/mobile/WASM packaging remain separate capabilities.",
         "evidence": [
-          "docs/development/native-runtime-abi.md",
-          "docs/development/native-assembler.md",
-          "docs/development/unsigned-localnet.md",
-          "runtime/tests/cpp_smoke.cpp",
-          "runtime/tests/cpp_host_smoke.cpp",
-          "docs/designs/private-state-lifecycle.md",
-          "docs/development/native-proof-api.md",
-          "tests/native-proof-evidence.json",
-          "docs/development/composite-values.md"
+          "docs/development/typed-witnesses.md",
+          "docs/development/typed-witness-qualification.md",
+          "tests/witness62-public/qualification-evidence.json"
         ],
         "fullEquivalence": "unverified"
       }
@@ -4692,7 +4697,7 @@
     "separateScopedPrivacyObligationRequired": true
   },
   "publishedImplementationObservation": {
-    "commit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba",
+    "commit": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
     "checkedOn": "2026-11-17",
     "scope": "Incremental source-bound implementation evidence supplements the original immutable POC observation. Feature updates identify qualified subsets and excluded capabilities. Full comparison equivalence stays unverified."
   }
