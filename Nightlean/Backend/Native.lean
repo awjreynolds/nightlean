@@ -7,13 +7,14 @@ def inventoryRevision : String := "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
 inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
-  | persistentHash32 | persistentHashPreimage | encodeBytes32
+  | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
   | bytes32Conversion
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
+  | bytes32ByteExtraction | nativeLimbs
   | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
   | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks
   deriving Repr, BEq, DecidableEq
@@ -28,7 +29,8 @@ inductive EffectRule where
 
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
-  | alignedBytes32 | alignedHashPreimage | typedBytes32Input
+  | alignedBytes32 | alignedHashPreimage | typedBytes32Input | typedEncodeInput
+  | typedBytes32Index
   | typedBytes32Conversion
   | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
@@ -40,8 +42,7 @@ inductive GuardRule where
 inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
   | sourceHashTerm | encodedHashChunks | canonicalScalarInput | exactCoordinateRoundtrip
-  | typedInverseResult
-  | typedBytes32Conversion
+  | typedInverseResult | typedBytes32Conversion | bytes32ByteIndex | typedEncoding
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -167,8 +168,13 @@ def instructionSupport (opcode : String) : Except String Support :=
       ["alignment", "inputs", "output"]
     {descriptor with encoding := .fabAlignedHashPreimage}
   | "encode" => .supported <|
-    scalar .encodeBytes32 .propagateAll .pure .typedBytes32Input .noGuard .encodedHashChunks
-      ["input", "outputs"]
+    let descriptor := scalar .encodeValue .propagateAll .pure .typedEncodeInput
+      .noGuard .typedEncoding ["input", "outputs"]
+    {descriptor with encoding := .nativeLimbs}
+  | "nth" => .supported <|
+    let descriptor := scalar .bytes32ByteIndex .propagateAll .pure .typedBytes32Index
+      .noGuard .bytes32ByteIndex ["bytes", "index", "output"]
+    {descriptor with encoding := .bytes32ByteExtraction}
   | "to_bytes" => .supported <|
     let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
       .noGuard .typedBytes32Conversion ["input", "output"]

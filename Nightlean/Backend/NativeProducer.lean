@@ -65,7 +65,7 @@ private def validIdentifier (name : String) : Bool :=
   name.startsWith "%" && name.length > 1 && name.utf8ByteSize ≤ 1024
 
 inductive NativeValueType where
-  | native | bytes32 | jubjubScalar | jubjubPoint
+  | native | byte | bytes32 | jubjubScalar | jubjubPoint
   deriving Repr, BEq, DecidableEq
 
 structure Fact where
@@ -364,6 +364,13 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let fact ← combine term (Field.modulus - 1) values
     let output ← stringField instruction "output"
     define state output {fact with valueType := .bytes32}
+  | "nth" => do
+    let bytes ← argument state instruction "bytes"
+    ensure (bytes.valueType == .bytes32) "nth requires a typed Bytes32 value"
+    let index ← natField instruction "index"
+    ensure (index < 32) "nth Bytes32 byte index is out of range"
+    let fact ← combine (bytes32ByteAtTerm bytes.term index) 255 [bytes]
+    defineResult state instruction {fact with valueType := .byte}
   | "encode" => do
     let input ← argument state instruction "input"
     let outputs ← arrayField instruction "outputs"
@@ -381,7 +388,12 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       let fact ← combine (Term.unary "jubjub_scalar_to_native" input.term)
         (Jubjub.scalarOrder - 1) [input]
       define state output fact
-    else throw "encode accepts only typed Bytes32 values or Jubjub scalars"
+    else if input.valueType == .byte then do
+      ensure (outputs.size == 1) "Byte encode requires exactly one Native output"
+      ensure (input.maximum ≤ 255) "Byte encode operand lacks its byte range precondition"
+      let output ← outputs[0]!.getStr?
+      define state output {input with valueType := .native}
+    else throw "encode accepts only typed Bytes32 values, Byte values or Jubjub scalars"
   | "to_bytes" => do
     let input ← argument state instruction "input"
     let term ← toBytes32Term input.valueType input.term

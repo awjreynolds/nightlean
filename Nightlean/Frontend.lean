@@ -126,6 +126,7 @@ scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
 scoped syntax "fromBytes32(" nltype "," nlexpr ")" : nlexpr
+scoped syntax "byteAt(" nlexpr "," num ")" : nlexpr
 scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarToNative(" nlexpr ")" : nlexpr
@@ -299,6 +300,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
   | `(nlexpr| toBytes32($value)) => hasPartialScalar value
+  | `(nlexpr| byteAt($value, $_:num)) => hasPartialScalar value
   | `(nlexpr| degradeToNative($value)) => hasPartialScalar value
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
@@ -378,6 +380,10 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       throwErrorAt stx "fromBytes32 supports only Native, JubjubScalar or JubjubPoint"
     let value ← expected env value (.bytes 32)
     pure (target, ← `(Nightlean.Expr.fromBytes32 (target := $(← tyTerm target)) $value))
+  | `(nlexpr| byteAt($value, $index:num)) => do
+    unless index.getNat < 32 do throwErrorAt index "Bytes32 byte index must be between 0 and 31"
+    let value ← expected env value (.bytes 32)
+    pure (.uint 255, ← `(Nightlean.Expr.bytesAt $value $(natTerm index.getNat)))
   | `(nlexpr| eq($a, $b)) =>
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b

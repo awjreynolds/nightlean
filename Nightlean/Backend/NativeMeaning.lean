@@ -146,6 +146,10 @@ private def alignedBytes32Fields (value : Normalized) : Except String (Term × T
 private def bytes32FromChunksTerm (low31 highByte : Term) : Term :=
   .unary "bytes32_from_chunks" (.hash [low31, highByte])
 
+/-- A fixed byte projection after reconstructing canonical Bytes32 chunks. -/
+def bytes32ByteAtTerm (bytes : Term) (index : Nat) : Term :=
+  .unary s!"bytes32_byte_at:{index}" bytes
+
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
   {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
 
@@ -192,15 +196,14 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .bytesAt value index => do
     let normalized ← normalize env value
     match normalized.term with
-    | term =>
-      if opaqueBytes32Value term then
-        throw "byteAt on computed Bytes32 expressions is unsupported"
-      else
-        match term with
-        | .bytes terms => do
-          let some term := terms[index]? | throw "Bytes32 byte index is out of range"
-          pure {term := term, bounds := normalized.bounds ++ [(term, 255)], assertions := normalized.assertions}
-        | _ => throw "Bytes32 normalization lost byte identity"
+    | .bytes terms => do
+      let some term := terms[index]? | throw "Bytes32 byte index is out of range"
+      pure {term := term, bounds := normalized.bounds ++ [(term, 255)], assertions := normalized.assertions}
+    | term => do
+      let (highByte, low31) ← splitBytes32Fields term
+      let reconstructed := bytes32FromChunksTerm low31 highByte
+      let byte := bytes32ByteAtTerm reconstructed index
+      pure {term := byte, bounds := normalized.bounds ++ [(byte, 255)], assertions := normalized.assertions}
   | .persistentHash32 value => do
     let normalized ← normalize env value
     let (highByte, low31) ← alignedBytes32Fields normalized

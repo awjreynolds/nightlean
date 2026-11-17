@@ -269,6 +269,14 @@ private def encodeBytes32 (bytes : String) : LowerM (String × String) := do
       (lowKey, low) :: (highKey, high) :: state.expressions}
     pure (low, high)
 
+private def encodeByte (byte : String) : LowerM String := do
+  let key : ExpressionKey := ("encode_byte", [byte], none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "encode" [("input", toJson byte), ("outputs", toJson [output])]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
 private def lowerToBytes32 (value : String) : LowerM (String × String) := do
   let bytesKey : ExpressionKey := ("to_bytes", [value], none)
   let bytes ← match (← get).expressions.lookup bytesKey with
@@ -298,6 +306,23 @@ private def lowerBytesFromChunks (low31 highByte : String) : LowerM String := do
     ("output", toJson output)]
   modify fun state => {state with expressions := (key, output) :: state.expressions}
   pure output
+
+private def lowerComputedBytes32ByteAt (values : List String) (index : Nat) : LowerM String := do
+  if index ≥ 32 then do
+    rejectLowering "Bytes32 byte index is out of range"
+    pure "0x00"
+  else do
+    let (low31, highByte) ← bytes32Chunks values
+    let bytes ← lowerBytesFromChunks low31 highByte
+    let key : ExpressionKey := ("nth", [bytes], some index)
+    let byte ← match (← get).expressions.lookup key with
+      | some existing => pure existing
+      | none => do
+        let output ← fresh
+        emit "nth" [("bytes", toJson bytes), ("index", toJson index), ("output", toJson output)]
+        modify fun state => {state with expressions := (key, output) :: state.expressions}
+        pure output
+    encodeByte byte
 
 private def nativeTypeName : Ty → String
   | .native => "Scalar<BLS12-381>"
@@ -482,8 +507,7 @@ def lowerExpr : Expr ty → LowerM String
   | .bytesAt value index => do
     let values ← lowerBytes value
     if values.length == 2 then
-      rejectLowering "byteAt on a computed persistentHash32 digest is unsupported"
-      pure "0x00"
+      lowerComputedBytes32ByteAt values index
     else if values.length != 32 then
       rejectLowering "Bytes32 source has wrong byte count"
       pure "0x00"
