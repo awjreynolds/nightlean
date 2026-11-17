@@ -22,6 +22,8 @@ Noctium is a Lean 4 compiler and proof framework for Midnight private contracts.
 
 The compiler and primary lowering are written in Lean. Contract execution uses a finite supported subset. Proof authoring uses Lean's full theorem language. The Rust and C/C++ application paths need no Node, and Noctium has no Compact compiler or runtime dependency.
 
+A private circuit input supplies a witness value for one call. Persisted private state lives in the application's wallet, and ledger cells and maps are public. Using a secret in arithmetic does not publish the result. `disclose(result)` authorizes public release, while an accepted proof also reveals its declared predicate. See the [example guide](examples/README.md) and [privacy authoring review](docs/research/human-readable-privacy-authoring.md) for the current behavior, Compact's bounds and the proposed readable private-state syntax.
+
 **Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. These are claim-specific guarantees. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
 
 ## Try the compiler
@@ -60,7 +62,7 @@ noctium_circuit boundedRelation where
 end
 ```
 
-The full example writes the result to a ledger cell. [`PrivateClaim.lean`](examples/PrivateClaim.lean) adds a private Merkle path, a public nullifier and state updates which reject reuse. Its [proofs import the actual source](docs/development/private-claim-proofs.md).
+The full example writes the result to a ledger cell. The current [private claim example](examples/NoctiumPrivateClaim.lean) adds private witness calculations, explicit root/nullifier release and a public replay-prevention map. The separate [historical qualified source](examples/PrivateClaim.lean) stays byte-pinned for its [actual-source proofs](docs/development/private-claim-proofs.md). The teaching copy has no inherited proof receipts. See the [example guide](examples/README.md) for the private-input and private-state distinction.
 
 ## What is proved
 

@@ -16,7 +16,12 @@ open Nightlean
 open scoped Nightlean
 
 export Nightlean (Ty Expr Circuit Contract Entrypoint Input Output Visibility SourceSpan
-  Capabilities StateDecl StateKind LedgerValueType PathKey Effect Value EvalContext)
+  Capabilities StateDecl StateKind LedgerValueType PathKey Effect Value EvalContext
+  LedgerState LedgerValue)
+
+namespace Field
+export Nightlean.Field (modulus)
+end Field
 
 scoped macro "noctium_circuit" name:ident "where" stmts:nlcstmt* "end" : command =>
   `(nightlean_circuit $name where $stmts* end)

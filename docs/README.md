@@ -6,7 +6,7 @@ Write a contract, prove its specified behavior in Lean, and compile for Midnight
 
 | Your task | Start here |
 | --- | --- |
-| Write and compile a contract | [Private claim source](../examples/PrivateClaim.lean), [bounded scalars](../examples/BoundedScalars.lean), [named helpers](development/named-helpers.md), [compile-time generics](development/generics.md) |
+| Write and compile a contract | [Current private claim example](../examples/NoctiumPrivateClaim.lean), [example guide](../examples/README.md), [bounded scalars](../examples/BoundedScalars.lean), [named helpers](development/named-helpers.md), [compile-time generics](development/generics.md) |
 | Understand private and public data | [Scalar disclosure](development/disclosure.md), [structured host control](development/structured-control.md), [private-state lifecycle](designs/private-state-lifecycle.md) |
 | Embed native execution | [Rust runtime](development/native-rust-runtime.md), [C/C++ ABI](development/native-runtime-abi.md) |
 | Build a native application | [Rust client](development/native-client.md), [C/C++ client ABI](development/native-client-abi.md), [proof API](development/native-proof-api.md), [native assembler](development/native-assembler.md) |
@@ -45,6 +45,8 @@ These layers establish different properties. Contract theorems describe intended
 The [assurance report](development/assurance.md) documents the proved pruning pass and external boundaries. The [proof audit chain research](research/lean-proof-audit-chain.md) explains the required release chain. Claim-specific proofs do not establish correctness for every source program.
 
 ## Language and capability references
+
+- [Private/public state, witnesses and readable privacy authoring](research/human-readable-privacy-authoring.md), including Compact's bounds, current guarantees and proposed source syntax. The [example guide](../examples/README.md) separates current Noctium examples from historical qualified source.
 
 - [Scalar design](designs/scalar-types.md), [native unsigned lowering](development/native-unsigned-scalars.md) and [producer safety gate](development/native-producer-safety.md).
 - [Sequential native cell reads](development/sequential-state.md), with source-generated read-after-write fixtures on both runtime profiles. Generic state preservation remains separate proof work.

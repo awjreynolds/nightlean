@@ -36,6 +36,8 @@ jobs:
         run: |
           lake env lean examples/PrivateClaim.lean
           lake env lean examples/BoundedScalars.lean
+          lake env lean examples/Disclosure.lean
+          lake env lean examples/NoctiumPrivateClaim.lean
           lake env lean tests/Issue68MapReads.lean
           lake env lean tests/Issue69Bytes32Map.lean
           lake env lean tests/Issue69NestedCounter.lean

@@ -2,20 +2,20 @@
 -- Copyright (c) 2025 Zeppelin Group Ltd
 -- Adapted from OpenZeppelin Compact Contracts, ConfidentialFungibleTokenPublicSupply.
 -- Reference: f85f1a23685c6bbedfc8c2589ae3aa128aff7c46.
-import Nightlean.Frontend
-import Nightlean.Semantics
+import Noctium.Frontend
 
-open scoped Nightlean
+open scoped Noctium
 
 namespace OpenZeppelinPort
 
-nightlean_circuit supplyDelta where
+noctium_circuit supplyDelta where
   private amount : UInt 128
 end
 
 -- These accounting blocks must be paired with the token's encrypted mint/burn.
 -- They are an ungated benchmark component, not an issuance policy.
-nightlean_contract PublicSupply where
+-- totalSupply is public ledger state, so its changes reveal each amount.
+noctium_contract PublicSupply where
   cell totalSupply : UInt 128
   entry addSupply uses supplyDelta where
     read totalSupply as previous
@@ -28,11 +28,11 @@ nightlean_contract PublicSupply where
 end
 
 private def supplyTransition (name : String) (total amount : Nat) :
-    Except String Nightlean.LedgerState := do
+    Except String Noctium.LedgerState := do
   let some ep := PublicSupply.entrypoints.find? (·.name == name)
     | throw "missing entrypoint"
   let (_, next) ← ep.run {
-    modulus := Nightlean.Field.modulus
+    modulus := Noctium.Field.modulus
     poseidon2 := fun _ _ _ => .error "unused"
   } [("amount", .uint (2 ^ 128 - 1) amount)] {
     cells := [("totalSupply", .uint (2 ^ 128 - 1) total)]
