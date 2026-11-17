@@ -36,6 +36,8 @@ private def expressionJson : Expr ty → Json
       ("values", toJson (values.map expressionJson))]
   | .persistentHashNative value => Json.mkObj [("tag", toJson ("persistentHashNative" : String)),
       ("value", expressionJson value)]
+  | .persistentHashNativeVector values => Json.mkObj [("tag", toJson ("persistentHashNativeVector" : String)),
+      ("values", toJson (values.map expressionJson))]
   | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
       ("value", expressionJson value)]
   | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),
@@ -89,6 +91,8 @@ private def nativeExpressionJson : Expr ty → Json
       ("values", toJson (values.map nativeExpressionJson))]
   | .persistentHashNative value => Json.mkObj [("tag", toJson ("persistentHashNative" : String)),
       ("value", nativeExpressionJson value)]
+  | .persistentHashNativeVector values => Json.mkObj [("tag", toJson ("persistentHashNativeVector" : String)),
+      ("values", toJson (values.map nativeExpressionJson))]
   | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
       ("value", nativeExpressionJson value)]
   | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),

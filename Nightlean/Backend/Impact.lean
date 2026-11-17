@@ -227,6 +227,7 @@ private def expressionNames : Expr ty → List String
   | .bytes32Literal _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
+  | .persistentHashNativeVector values => values.flatMap expressionNames
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
   | .jubjubCoordinate value _ => expressionNames value
@@ -285,6 +286,7 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .bytes32Literal values => .bytes32Literal values
   | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalizeUnder guard))
   | .persistentHashNative value => .persistentHashNative (totalizeUnder guard value)
+  | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalizeUnder guard))
   | .jubjubScalarFromNative value => .jubjubScalarFromNative (totalizeUnder guard value)
   | .jubjubScalarToNative value => .jubjubScalarToNative (totalizeUnder guard value)
   | .jubjubMulGenerator scalar => .jubjubMulGenerator (totalizeUnder guard scalar)

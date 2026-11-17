@@ -100,6 +100,13 @@ def persistentHashVector32Term (fields : List (Term × Term)) : Term :=
 def persistentHashNativeTerm (value : Term) : Term :=
   .unary "persistent_hash_native" value
 
+/-- Singleton Native vectors share the existing single-field term. Larger
+vectors retain their arity and ordered field terms in the source relation. -/
+def persistentHashNativeVectorTerm (values : List Term) : Term :=
+  match values with
+  | [value] => persistentHashNativeTerm value
+  | _ => .unary s!"persistent_hash_native_vector:{values.length}" (.hash values)
+
 /-- Modern Encode output chunk terms. Index 0 is low31 and index 1 is highByte. -/
 def encodedHashChunkTerm (digest : Term) (index : Nat) : Term :=
   .unary (if index == 0 then "encode_bytes32_low31" else "encode_bytes32_highByte") digest
@@ -113,7 +120,7 @@ private def bytesFieldTerms (terms : List Term) (index : Nat) : Except String (L
 
 private def persistentHashDigest : Term → Bool
   | .unary opcode _ => opcode == "persistent_hash32" || opcode == "persistent_hash_native" ||
-      opcode.startsWith "persistent_hash_vector32:"
+      opcode.startsWith "persistent_hash_vector32:" || opcode.startsWith "persistent_hash_native_vector:"
   | _ => false
 
 private def alignedBytes32Fields (value : Normalized) : Except String (Term × Term) := do
@@ -206,6 +213,14 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let normalized ← normalize env value
     let term := persistentHashNativeTerm normalized.term
     pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .persistentHashNativeVector values => do
+    unless values.length ≥ 1 && values.length ≤ 32 do
+      throw "Native persistent-hash vector must contain 1 to 32 fields"
+    let normalized ← values.mapM (normalize env)
+    let term := persistentHashNativeVectorTerm (normalized.map (·.term))
+    let bounds := (normalized.map (fun item => item.bounds)).flatten
+    let assertions := (normalized.map (fun item => item.assertions)).flatten
+    pure {term, bounds, assertions}
   | .jubjubScalarFromNative value => do
     let normalized ← normalize env value
     let term : Term := .unary "jubjub_scalar_from_native" normalized.term

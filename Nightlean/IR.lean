@@ -31,6 +31,8 @@ inductive Expr : Ty → Type where
   | persistentHashVector32 (values : List (Expr (.bytes 32))) : Expr (.bytes 32)
   /-- SHA-256 over the canonical 32-byte little-endian Native field encoding. -/
   | persistentHashNative (value : Expr .native) : Expr (.bytes 32)
+  /-- SHA-256 over an ordered vector of canonical Native field encodings. -/
+  | persistentHashNativeVector (values : List (Expr .native)) : Expr (.bytes 32)
   /-- Explicitly reduce a Native field into the Jubjub scalar field. -/
   | jubjubScalarFromNative (value : Expr .native) : Expr .jubjubScalar
   /-- Losslessly expose a canonical Jubjub scalar as its Native limb. -/
@@ -281,6 +283,11 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .persistentHashNative value => do
     unless caps.persistentHashNative do throw "target lacks qualified Native persistent-hash support"
     value.validate caps env
+  | .persistentHashNativeVector values => do
+    unless caps.persistentHashNative do throw "target lacks qualified Native persistent-hash support"
+    unless values.length ≥ 1 && values.length ≤ 32 do
+      throw "Native persistent-hash vector must contain 1 to 32 fields"
+    for value in values do value.validate caps env
   | .jubjubScalarFromNative value => do
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
     value.validate caps env

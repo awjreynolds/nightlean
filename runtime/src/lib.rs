@@ -190,6 +190,10 @@ pub enum Expr {
     PersistentHashNative {
         value: Box<Expr>,
     },
+    #[serde(rename = "persistentHashNativeVector")]
+    PersistentHashNativeVector {
+        values: Vec<Expr>,
+    },
     #[serde(rename = "jubjubScalarFromNative")]
     JubjubScalarFromNative {
         value: Box<Expr>,
@@ -373,6 +377,17 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         }
         Expr::PersistentHashNative { value } => {
             persistent_hash(field_value(evaluate(value, env)?.field()?))?
+        }
+        Expr::PersistentHashNativeVector { values } => {
+            ensure!(
+                (1..=32).contains(&values.len()),
+                "Native persistent hash vector must contain 1 to 32 fields"
+            );
+            let parts = values
+                .iter()
+                .map(|value| Ok(field_value(evaluate(value, env)?.field()?)))
+                .collect::<Result<Vec<_>>>()?;
+            persistent_hash(AlignedValue::concat(&parts))?
         }
         Expr::JubjubScalarFromNative { value } => {
             Value::JubjubScalar(jubjub::reduce_scalar(evaluate(value, env)?.field()?)?)

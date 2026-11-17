@@ -32,6 +32,7 @@ private theorem bind_ok (first : Except ε α) (next : α → Except ε β) (val
 def nativeModulus : Nat :=
   52435875175126190479447740508185965837690552500527637822603658699938581184513
 
+mutual
 private def checkConstants : Expr ty → Except String Unit
   | .native n => if n < nativeModulus then pure () else throw "noncanonical Native constant"
   | .bool _ | .ref _ => pure ()
@@ -43,6 +44,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
+  | .persistentHashNativeVector values => checkNativeConstants values
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
   | .jubjubCoordinate value _ => checkConstants value
@@ -63,6 +65,17 @@ private def checkConstants : Expr ty → Except String Unit
     unless domain < nativeModulus do throw "noncanonical Poseidon domain tag"
     checkConstants a
     checkConstants b
+termination_by value => sizeOf value
+decreasing_by all_goals simp_wf <;> omega
+
+private def checkNativeConstants : List (Expr .native) → Except String Unit
+  | [] => pure ()
+  | value :: rest => do
+    checkConstants value
+    checkNativeConstants rest
+termination_by values => sizeOf values
+decreasing_by all_goals simp_wf <;> omega
+end
 
 def instruction (op : String) (fields : List (String × Json)) : Json :=
   Json.mkObj (("op", toJson op) :: fields)
@@ -203,9 +216,14 @@ private def bytes32Atom : Json := Json.mkObj [
 private def bytes32VectorAlignment (length : Nat) : Json :=
   Json.arr ((List.replicate length bytes32Atom).toArray)
 
-private def nativeFieldAlignment : Json := Json.arr #[Json.mkObj [
+private def nativeFieldAtom : Json := Json.mkObj [
   ("tag", toJson ("atom" : String)),
-  ("value", Json.mkObj [("tag", toJson ("field" : String))])]]
+  ("value", Json.mkObj [("tag", toJson ("field" : String))])]
+
+private def nativeFieldAlignment : Json := Json.arr #[nativeFieldAtom]
+
+private def nativeFieldVectorAlignment (length : Nat) : Json :=
+  Json.arr ((List.replicate length nativeFieldAtom).toArray)
 
 /-- Emit/reuse one typed aligned SHA-256 operation and its modern Encode outputs.
 The key includes the preimage kind, so identical field strings under different
@@ -300,6 +318,13 @@ private def lowerBytes : Expr (.bytes length) → LowerM (List String)
   | .persistentHashNative value => do
     let native ← lowerExpr value
     lowerPersistentHash "native-field" nativeFieldAlignment [native]
+  | .persistentHashNativeVector values => do
+    let operands ← lowerNativeVectorFields values
+    if values.length == 1 then
+      lowerPersistentHash "native-field" nativeFieldAlignment operands
+    else
+      lowerPersistentHash ("native-field-vector:" ++ toString values.length)
+        (nativeFieldVectorAlignment values.length) operands
   | @Expr.letE (.bytes _) _ name value body => do
     let values ← lowerBytes value
     let aliases := (← get).byteAliases
@@ -324,6 +349,15 @@ private def lowerBytes32VectorFields : List (Expr (.bytes 32)) → LowerM (List 
     let bytes ← lowerBytes value
     let (highByte, low31) ← alignedBytes32Fields bytes
     pure ([highByte, low31] ++ (← lowerBytes32VectorFields rest))
+termination_by values => sizeOf values
+decreasing_by
+  all_goals simp_wf <;> omega
+
+private def lowerNativeVectorFields : List (Expr .native) → LowerM (List String)
+  | [] => pure []
+  | value :: rest => do
+    let first ← lowerExpr value
+    pure (first :: (← lowerNativeVectorFields rest))
 termination_by values => sizeOf values
 decreasing_by
   all_goals simp_wf <;> omega
@@ -468,7 +502,8 @@ def lowerExpr : Expr ty → LowerM String
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
-  | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _ | .persistentHashNative _ => do
+  | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
+  | .persistentHashNative _ | .persistentHashNativeVector _ => do
     rejectLowering "Bytes32 expressions must be consumed with their typed FAB alignment"
     pure "0x00"
 termination_by value => sizeOf value

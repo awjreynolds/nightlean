@@ -166,6 +166,10 @@ private def nativeFieldAlignment : Json := Json.arr #[Json.mkObj [
   ("tag", toJson ("atom" : String)),
   ("value", Json.mkObj [("tag", toJson ("field" : String))])]]
 
+private def nativeFieldAtom : Json := Json.mkObj [
+  ("tag", toJson ("atom" : String)),
+  ("value", Json.mkObj [("tag", toJson ("field" : String))])]
+
 private def alignedBytes32Pairs : List Fact → Except String (List (Term × Term))
   | [] => pure []
   | highByte :: low31 :: rest => do
@@ -316,12 +320,17 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
         | _ => throw "Native persistent_hash requires exactly one field operand"
       else do
         let atoms ← alignment.getArr?
-        ensure (atoms.size ≥ 1 && atoms.size ≤ 32 && atoms.all (· == bytes32Atom))
-          "persistent_hash supports only a bounded vector of Bytes32 FAB values"
-        ensure (values.length == atoms.size * 2)
-          "Bytes32 vector persistent_hash requires two fields per aligned value"
-        let pairs ← alignedBytes32Pairs values
-        pure (persistentHashVector32Term pairs)
+        if atoms.size ≥ 1 && atoms.size ≤ 32 && atoms.all (· == nativeFieldAtom) then do
+          ensure (values.length == atoms.size)
+            "Native vector persistent_hash field count differs from its alignment"
+          pure (persistentHashNativeVectorTerm (values.map (·.term)))
+        else do
+          ensure (atoms.size ≥ 1 && atoms.size ≤ 32 && atoms.all (· == bytes32Atom))
+            "persistent_hash supports only bounded Bytes32 or Native field vectors"
+          ensure (values.length == atoms.size * 2)
+            "Bytes32 vector persistent_hash requires two fields per aligned value"
+          let pairs ← alignedBytes32Pairs values
+          pure (persistentHashVector32Term pairs)
     let fact ← combine term (Field.modulus - 1) values
     let output ← stringField instruction "output"
     define state output {fact with valueType := .bytes32}

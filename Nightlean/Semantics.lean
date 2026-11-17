@@ -204,6 +204,13 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
   | .persistentHashNative value => do
     let field ← value.eval ctx env
     evaluatePersistentHash ctx (nativeFieldBytesLE field)
+  | .persistentHashNativeVector values => do
+    if values.isEmpty || values.length > 32 then
+      throw "Native persistent-hash vector must contain 1 to 32 fields"
+    let mut preimage := []
+    for value in values do
+      preimage := preimage ++ nativeFieldBytesLE (← value.eval ctx env)
+    evaluatePersistentHash ctx preimage
   | .ref name => do
     let some raw := env.lookup name | throw s!"missing value '{name}'"
     let some value := raw.as ty | throw s!"value type mismatch for '{name}'"

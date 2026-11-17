@@ -121,6 +121,8 @@ scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
 scoped syntax "bytes32(" str ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
+scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarToNative(" nlexpr ")" : nlexpr
@@ -288,6 +290,9 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
+  | `(nlexpr| persistentHashNativeVector([$values,*])) =>
+    values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
   | `(nlexpr| degradeToNative($value)) => hasPartialScalar value
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
@@ -354,11 +359,22 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| eq($a, $b)) =>
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b
-    if ta.isBytes || tb.isBytes then throwErrorAt stx "Bytes32 equality is not supported"
-    let ty ← commonType stx ta tb
-    let a ← coerceExpression stx ta ty a
-    let b ← coerceExpression stx tb ty b
-    pure (.bool, ← `(Nightlean.Expr.eq $a $b))
+    if ta.isBytes || tb.isBytes then do
+      unless ta == .bytes 32 && tb == .bytes 32 do
+        throwErrorAt stx "Bytes32 equality requires two Bytes32 expressions"
+      let aHigh ← `(Nightlean.Expr.bytesField $a 0)
+      let bHigh ← `(Nightlean.Expr.bytesField $b 0)
+      let aLow ← `(Nightlean.Expr.bytesField $a 1)
+      let bLow ← `(Nightlean.Expr.bytesField $b 1)
+      let highEqual ← `(Nightlean.Expr.eq $aHigh $bHigh)
+      let lowEqual ← `(Nightlean.Expr.eq $aLow $bLow)
+      let falseValue ← `(Nightlean.Expr.bool Bool.false)
+      pure (.bool, ← `(Nightlean.Expr.select $highEqual $lowEqual $falseValue))
+    else do
+      let ty ← commonType stx ta tb
+      let a ← coerceExpression stx ta ty a
+      let b ← coerceExpression stx tb ty b
+      pure (.bool, ← `(Nightlean.Expr.eq $a $b))
   | `(nlexpr| select($c, $a, $b)) =>
     let c ← expected env c .bool
     let (ta, a) ← expression env a
@@ -398,6 +414,22 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless valueTy == .native do
       throwErrorAt stx "persistentHashNative requires a Native field expression"
     pure (.bytes 32, ← `(Nightlean.Expr.persistentHashNative $value))
+  | `(nlexpr| persistentHashNativeVector([$values,*])) => do
+    let expressions ← values.getElems.toList.mapM fun value => do
+      let (valueTy, value) ← expression env value
+      unless valueTy == .native do
+        throwErrorAt value "persistentHashNativeVector accepts only Native fields"
+      pure value
+    unless expressions.length ≥ 1 && expressions.length ≤ 32 do
+      throwErrorAt stx "persistentHashNativeVector requires 1 to 32 Native fields"
+    let valueList ← nativeExprListTerm expressions
+    pure (.bytes 32, ← `(Nightlean.Expr.persistentHashNativeVector $valueList))
+  | `(nlexpr| persistentHashPoint($point)) => do
+    let point ← expected env point .jubjubPoint
+    let x ← `(Nightlean.Expr.jubjubCoordinate $point 0)
+    let y ← `(Nightlean.Expr.jubjubCoordinate $point 1)
+    let valueList ← nativeExprListTerm [x, y]
+    pure (.bytes 32, ← `(Nightlean.Expr.persistentHashNativeVector $valueList))
   | `(nlexpr| degradeToNative($value)) => do
     let (valueTy, value) ← expression env value
     unless valueTy == .bytes 32 do
