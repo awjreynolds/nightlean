@@ -154,6 +154,8 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   | .bytes32 expression => [("alignment", toJson ("bytes32" : String)), ("expression", nativeExpressionJson expression)]
   | .nativeFields expressions => [("alignment", toJson ("nativeFields" : String)),
       ("expressions", toJson (expressions.map nativeExpressionJson))]
+  | .counter expression => [("alignment", toJson ("u64" : String)),
+      ("expression", nativeExpressionJson expression)]
 
 private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   match value with
@@ -162,6 +164,7 @@ private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   | .bitExpr expression => nativeExpressionJson expression
   | .bytes32 expression => nativeExpressionJson expression
   | .nativeFields expressions => toJson (expressions.map nativeExpressionJson)
+  | .counter expression => nativeExpressionJson expression
 
 private def operationJsonBare : Backend.Impact.Op → Json
   | .dup => Json.mkObj [("op", toJson ("dup" : String))]
@@ -185,6 +188,8 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("expressions", toJson (expressions.map nativeExpressionJson)), ("schema", schema)]
   | .member => Json.mkObj [("op", toJson ("member" : String))]
   | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
+  | .addImmediate amount => Json.mkObj [("op", toJson ("addImmediate" : String)), ("amount", toJson amount)]
+  | .subImmediate amount => Json.mkObj [("op", toJson ("subImmediate" : String)), ("amount", toJson amount)]
 
 private def operationJson (activityGuard : Option (Expr .bool))
     (operation : Backend.Impact.Op) : Json :=
@@ -220,6 +225,20 @@ private def effectJson : Effect → Json
   | .memberPath state destination keys => Json.mkObj [
       ("op", toJson ("memberPath" : String)), ("state", toJson state),
       ("destination", toJson destination),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .counterRead state destination keys => Json.mkObj [
+      ("op", toJson ("counterRead" : String)), ("state", toJson state),
+      ("destination", toJson destination),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .counterAdjust state keys subtract amount => Json.mkObj [
+      ("op", toJson ("counterAdjust" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value)),
+      ("subtract", toJson subtract), ("amount", toJson amount)]
+  | .counterReset state keys => Json.mkObj [
+      ("op", toJson ("counterReset" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value))]
   | .insertPath state keys _ value => Json.mkObj [
@@ -263,6 +282,7 @@ private def stateJson (state : StateDecl) : Json :=
     | .scalar ty => Json.mkObj [("scalar", toJson (typeName ty))]
     | .map keyTy value => Json.mkObj [("map", toJson [toJson (typeName keyTy), treeJson value])]
     | .composite environment type => Json.mkObj [("composite", compositeSchema environment type)]
+    | .counter => Json.mkObj [("counter", toJson Bool.true)]
   let kind := match state.kind with
     | .cell ty => Json.mkObj [("cell", toJson (typeName ty))]
     | .map kt vt => Json.mkObj [("map", toJson [typeName kt, typeName vt])]

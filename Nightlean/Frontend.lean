@@ -149,10 +149,13 @@ scoped syntax (name := circuitCommand) "nightlean_circuit" ident "where" nlcstmt
 declare_syntax_cat nlstate
 scoped syntax "cell" ident ":" nltype : nlstate
 scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
+scoped syntax "counter" ident : nlstate
 declare_syntax_cat nlcompositefield
 scoped syntax ident ":" nltype : nlcompositefield
 scoped syntax "tree" ident ":" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "Counter" : nlstate
+scoped syntax "tree" ident ":" nltype "=>" "Counter" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 
 declare_syntax_cat nlleaves
@@ -162,6 +165,15 @@ declare_syntax_cat nleffect
 scoped syntax "read" ident "as" ident : nleffect
 scoped syntax "read" ident "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "read" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
+scoped syntax "increment" ident "by" num : nleffect
+scoped syntax "increment" ident "[" nlexpr "]" "by" num : nleffect
+scoped syntax "increment" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
+scoped syntax "decrement" ident "by" num : nleffect
+scoped syntax "decrement" ident "[" nlexpr "]" "by" num : nleffect
+scoped syntax "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
+scoped syntax "reset" ident : nleffect
+scoped syntax "reset" ident "[" nlexpr "]" : nleffect
+scoped syntax "reset" ident "[" nlexpr "]" "[" nlexpr "]" : nleffect
 scoped syntax "member" ident "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "member" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "require" nlexpr : nleffect
@@ -181,6 +193,15 @@ scoped syntax "when" nlexpr "require" nlexpr : nleffect
 scoped syntax "when" nlexpr "read" ident "as" ident : nleffect
 scoped syntax "when" nlexpr "read" ident "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "when" nlexpr "read" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
+scoped syntax "when" nlexpr "increment" ident "by" num : nleffect
+scoped syntax "when" nlexpr "increment" ident "[" nlexpr "]" "by" num : nleffect
+scoped syntax "when" nlexpr "increment" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
+scoped syntax "when" nlexpr "decrement" ident "by" num : nleffect
+scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "by" num : nleffect
+scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
+scoped syntax "when" nlexpr "reset" ident : nleffect
+scoped syntax "when" nlexpr "reset" ident "[" nlexpr "]" : nleffect
+scoped syntax "when" nlexpr "reset" ident "[" nlexpr "]" "[" nlexpr "]" : nleffect
 scoped syntax "when" nlexpr "member" ident "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "when" nlexpr "member" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
 
@@ -547,6 +568,7 @@ private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
   match schema, keys with
   | value, [] => pure ([], value)
   | .scalar _, _ :: _ => throwError "nested map path continues through a scalar value"
+  | .counter, _ :: _ => throwError "nested map path continues through a Counter value"
   | .composite .., _ :: _ => throwError "nested map path continues through a composite value"
   | .map keyTy child, key :: rest => do
     let lowered ← checkedExpression env key keyTy
@@ -562,6 +584,12 @@ private def treeStateSchema (schema : List (String × StateKind)) (storage : TSy
   match schema.lookup storage.getId.toString with
   | some (.tree value) => pure value
   | _ => throwErrorAt storage "nested path requires a declared recursive tree state"
+
+private def counterPathTerm (env : Bindings) (schema : LedgerValueType)
+    (keys : List (TSyntax `nlexpr)) : CommandElabM (TSyntax `term) := do
+  let (path, result) ← lowerTreePath env schema keys
+  let .counter := result | throwError "Counter operation path must select a Counter value"
+  pathKeysTerm path
 
 private def ensureFresh (env : Bindings) (id : TSyntax `ident) : CommandElabM Unit := do
   if env.any (fun p => p.1 == id.getId.toString) then
@@ -665,6 +693,15 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr read $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr member $_state:ident [ $_key:nlexpr ] as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr member $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr increment $_state:ident by $_amount:num) => some condition
+  | `(nleffect| when $condition:nlexpr increment $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
+  | `(nleffect| when $condition:nlexpr increment $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] by $_amount:num) => some condition
+  | `(nleffect| when $condition:nlexpr decrement $_state:ident by $_amount:num) => some condition
+  | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
+  | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] by $_amount:num) => some condition
+  | `(nleffect| when $condition:nlexpr reset $_state:ident) => some condition
+  | `(nleffect| when $condition:nlexpr reset $_state:ident [ $_key:nlexpr ]) => some condition
+  | `(nleffect| when $condition:nlexpr reset $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ]) => some condition
   | _ => none
 
 private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
@@ -746,6 +783,35 @@ private def elaborateTreeRead (storage destination : TSyntax `ident)
     pure {updated with terms := updated.terms.push term}
   | .composite .. => throwErrorAt destination "native composite ledger reads require a named structure"
   | .map .. => throwErrorAt destination "nested map read must select a scalar or composite value"
+  | .counter => do
+    let (readName, updated) ← freshReadName depth state destination
+    let pathTerm ← pathKeysTerm path
+    let ty := Ty.uint (2 ^ 64 - 1)
+    let term ← `(Nightlean.Effect.counterRead
+      $(stringTerm storage.getId.toString) $(stringTerm readName) $pathTerm)
+    let updated := {updated with terms := updated.terms.push term}
+    bindReadName updated destination.getId.toString readName ty
+
+private def elaborateCounterAdjust (schema : List (String × StateKind))
+    (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
+    (subtract : _root_.Bool) (amount : TSyntax `num) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let value := amount.getNat
+  unless value ≤ 2 ^ 32 - 1 do
+    throwErrorAt amount "Counter adjustment exceeds the native u32 immediate"
+  let treeSchema ← treeStateSchema schema storage
+  let path ← counterPathTerm state.env treeSchema keys
+  let direction ← if subtract then `(Bool.true) else `(Bool.false)
+  let term ← `(Nightlean.Effect.counterAdjust
+    $(stringTerm storage.getId.toString) $path $direction $(natTerm value))
+  pure {state with terms := state.terms.push term}
+
+private def elaborateCounterReset (schema : List (String × StateKind))
+    (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
+    (state : EntryEffects) : CommandElabM EntryEffects := do
+  let treeSchema ← treeStateSchema schema storage
+  let path ← counterPathTerm state.env treeSchema keys
+  let term ← `(Nightlean.Effect.counterReset $(stringTerm storage.getId.toString) $path)
+  pure {state with terms := state.terms.push term}
 
 private def elaborateCompositePathWrite (schema : List (String × StateKind))
     (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
@@ -793,13 +859,16 @@ private def elaborateEffect (schema : List (String × StateKind))
     state := {state with terms := state.terms.push term}
   | `(nleffect| when $_:nlexpr read $storage:ident as $destination:ident)
   | `(nleffect| read $storage:ident as $destination:ident) => do
-    let some (.cell ty) := schema.lookup storage.getId.toString
-      | throwErrorAt storage "read requires a declared state cell"
-    let (readName, updated) ← freshReadName depth state destination
-    let term ← `(Nightlean.Effect.readCell
-      $(stringTerm storage.getId.toString) $(stringTerm readName) $(← tyTerm ty))
-    state := {updated with terms := updated.terms.push term}
-    state ← bindReadName state destination.getId.toString readName ty
+    match schema.lookup storage.getId.toString with
+    | some (.cell ty) =>
+      let (readName, updated) ← freshReadName depth state destination
+      let term ← `(Nightlean.Effect.readCell
+        $(stringTerm storage.getId.toString) $(stringTerm readName) $(← tyTerm ty))
+      state := {updated with terms := updated.terms.push term}
+      state ← bindReadName state destination.getId.toString readName ty
+    | some (.tree .counter) =>
+      state ← elaborateTreeRead storage destination [] .counter depth state
+    | _ => throwErrorAt storage "read requires a declared state cell or standalone Counter"
   | `(nleffect| when $_:nlexpr read $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident)
   | `(nleffect| read $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident) => do
     let schema ← treeStateSchema schema storage
@@ -890,6 +959,33 @@ private def elaborateEffect (schema : List (String × StateKind))
       `(Nightlean.Effect.insertPath $(stringTerm storage.getId.toString) $keys $(← tyTerm ty) $loweredValue)
       else `(Nightlean.Effect.writePath $(stringTerm storage.getId.toString) $keys $(← tyTerm ty) $loweredValue)
     state := {state with terms := state.terms.push term}
+  | `(nleffect| increment $storage:ident by $amount:num)
+  | `(nleffect| when $_:nlexpr increment $storage:ident by $amount:num) =>
+    state := ← elaborateCounterAdjust schema storage [] Bool.false amount state
+  | `(nleffect| increment $storage:ident [ $key:nlexpr ] by $amount:num)
+  | `(nleffect| when $_:nlexpr increment $storage:ident [ $key:nlexpr ] by $amount:num) =>
+    state := ← elaborateCounterAdjust schema storage [key] Bool.false amount state
+  | `(nleffect| increment $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num)
+  | `(nleffect| when $_:nlexpr increment $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num) =>
+    state := ← elaborateCounterAdjust schema storage [owner, spender] Bool.false amount state
+  | `(nleffect| decrement $storage:ident by $amount:num)
+  | `(nleffect| when $_:nlexpr decrement $storage:ident by $amount:num) =>
+    state := ← elaborateCounterAdjust schema storage [] Bool.true amount state
+  | `(nleffect| decrement $storage:ident [ $key:nlexpr ] by $amount:num)
+  | `(nleffect| when $_:nlexpr decrement $storage:ident [ $key:nlexpr ] by $amount:num) =>
+    state := ← elaborateCounterAdjust schema storage [key] Bool.true amount state
+  | `(nleffect| decrement $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num)
+  | `(nleffect| when $_:nlexpr decrement $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num) =>
+    state := ← elaborateCounterAdjust schema storage [owner, spender] Bool.true amount state
+  | `(nleffect| reset $storage:ident)
+  | `(nleffect| when $_:nlexpr reset $storage:ident) =>
+    state := ← elaborateCounterReset schema storage [] state
+  | `(nleffect| reset $storage:ident [ $key:nlexpr ])
+  | `(nleffect| when $_:nlexpr reset $storage:ident [ $key:nlexpr ]) =>
+    state := ← elaborateCounterReset schema storage [key] state
+  | `(nleffect| reset $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ])
+  | `(nleffect| when $_:nlexpr reset $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ]) =>
+    state := ← elaborateCounterReset schema storage [owner, spender] state
   | `(nleffect| absent $storage:ident [ $key:nlexpr ]) => do
     if depth > 0 then throwErrorAt effect "absent queries inside if/else blocks are unsupported"
     let some (.map keyTy _) := schema.lookup storage.getId.toString
@@ -945,6 +1041,23 @@ private partial def elaborateStatements (schema : List (String × StateKind))
           let k ← readTy key
           let v ← readTy value
           pure (id, StateKind.map k v, ← `(Nightlean.StateKind.map $(← tyTerm k) $(← tyTerm v)))
+        | `(nlstate| counter $id:ident) =>
+          pure (id, StateKind.tree .counter, ← `(Nightlean.StateKind.tree Nightlean.LedgerValueType.counter))
+        | `(nlstate| tree $id:ident : $key:nltype => Counter) => do
+          let keyTy ← readTy key
+          let keyTerm ← tyTerm keyTy
+          let valueSchema := LedgerValueType.map keyTy .counter
+          pure (id, StateKind.tree valueSchema, ← `(Nightlean.StateKind.tree
+            (Nightlean.LedgerValueType.map $keyTerm Nightlean.LedgerValueType.counter)))
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => Counter) => do
+          let outerTy ← readTy outer
+          let innerTy ← readTy inner
+          let outerTerm ← tyTerm outerTy
+          let innerTerm ← tyTerm innerTy
+          let valueSchema := LedgerValueType.map outerTy (.map innerTy .counter)
+          pure (id, StateKind.tree valueSchema, ← `(Nightlean.StateKind.tree
+            (Nightlean.LedgerValueType.map $outerTerm
+              (Nightlean.LedgerValueType.map $innerTerm Nightlean.LedgerValueType.counter))))
         | `(nlstate| tree $id:ident : $key:nltype => struct $record:ident { $recordFields:nlcompositefield* }) => do
           let keyTy ← readTy key
           let contractName := (← getCurrNamespace) ++ name.getId

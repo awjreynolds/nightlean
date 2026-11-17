@@ -104,6 +104,7 @@ inductive LedgerValueType where
   | scalar (ty : Ty)
   | map (keyTy : Ty) (value : LedgerValueType)
   | composite (environment : Types.CompositeEnv) (type : Types.CompositeType)
+  | counter
   deriving Repr, BEq, DecidableEq
 
 /-- A typed dynamic key in a nested ledger path. -/
@@ -121,10 +122,20 @@ def LedgerValueType.resolvePath (schema : LedgerValueType) : List PathKey →
   | .mk keyTy _ :: rest => do
     match schema with
     | .scalar _ => throw "nested map path continues through a scalar value"
+    | .counter => throw "nested map path continues through a Counter value"
     | .map expected value =>
       unless keyTy == expected do throw "nested map key type mismatch"
       value.resolvePath rest
     | .composite .. => throw "nested map path continues through a composite value"
+
+def LedgerValueType.counterPath (schema : LedgerValueType) (keys : List PathKey) :
+    Except String Unit := do
+  if keys.length > 14 then throw "counter path exceeds the native insertion depth"
+  if keys.isEmpty then
+    unless schema == .counter do throw "counter operation requires a Counter value"
+  else
+    let .counter ← schema.resolvePath keys
+      | throw "counter path must select a Counter value"
 
 private def checkedNativeRecord (environment : Types.CompositeEnv)
     (type : Types.CompositeType) : Except String (Types.CheckedLayout Types.defaultLimits) := do
@@ -200,6 +211,9 @@ inductive Effect where
   | requireAbsent (state : String) (keyTy : Ty) (key : Expr keyTy)
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
+  | counterRead (state destination : String) (keys : List PathKey)
+  | counterAdjust (state : String) (keys : List PathKey) (subtract : Bool) (amount : Nat)
+  | counterReset (state : String) (keys : List PathKey)
   | insertPath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
   | writePath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
   | readCompositePath (state destination : String) (keys : List PathKey)
@@ -397,6 +411,7 @@ def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except 
   | .mk _ value => value.validate caps env
 
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
+  | .counter => pure ()
   | .scalar (.bytes _) => throw "Bytes32 state values are not supported"
   | .scalar .jubjubScalar | .scalar .jubjubPoint =>
     throw "Jubjub values require a qualified ledger schema"
@@ -415,6 +430,14 @@ private def resolveTreeState (decls : List StateDecl) (state : String)
   if keys.isEmpty then throw "nested map path must contain at least one key"
   if keys.length > 14 then throw "nested map path exceeds the native insertion depth"
   schema.resolvePath keys
+
+private def validateCounterEffect (decls : List StateDecl) (state : String)
+    (keys : List PathKey) (amount? : Option Nat := none) : Except String Unit := do
+  let some decl := decls.find? (·.name == state) | throw s!"unknown tree state '{state}'"
+  let .tree schema := decl.kind | throw s!"state '{state}' is not a recursive tree"
+  schema.counterPath keys
+  if let some amount := amount? then
+    if amount > 2 ^ 32 - 1 then throw "counter adjustment exceeds the native u32 immediate"
 
 def uniqueNames (names : List String) : Bool := names.eraseDups.length == names.length
 
@@ -502,7 +525,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
-          .readCompositePath .. | .writeCompositePath .. => pure ()
+          .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
+          .counterAdjust .. | .counterReset .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on scalar reads, writes, and require effects"}
@@ -557,6 +581,21 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         for key in keys do key.validate caps env
         discard (resolveTreeState decls state keys)
         pure [(destination, .bool)]
+      | .counterRead state destination keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        validateCounterEffect decls state keys
+        pure [(destination, .uint (2 ^ 64 - 1))]
+      | .counterAdjust state keys _ amount => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        validateCounterEffect decls state keys (some amount)
+        pure []
+      | .counterReset state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        validateCounterEffect decls state keys
+        pure []
       | .insertPath state keys valueTy value
       | .writePath state keys valueTy value => do
         if !caps.stateMaps then throw "target lacks state maps"

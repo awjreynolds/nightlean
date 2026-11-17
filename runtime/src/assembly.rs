@@ -1074,7 +1074,8 @@ mod tests {
                 &QueryContext::new(predicted.data.clone(), deployment.address()),
                 1,
                 &[],
-                "UIntRange<511>"
+                "UIntRange<511>",
+                "field"
             )
             .unwrap(),
             crate::input_value("UIntRange<511>", &json!("7")).unwrap()

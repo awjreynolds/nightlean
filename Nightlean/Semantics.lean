@@ -395,6 +395,25 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
         let next ← treeSet child rest value
         pure (.map (updateAssoc key next entries))
 
+private def counterValueAt (ctx : EvalContext) (root : LedgerValue)
+    (keys : List Value) : Except String Nat := do
+  let maximum := 2 ^ 64 - 1
+  let some (.scalar raw) := treeLookup root keys
+    | throw "missing nested Counter value"
+  let some value := raw.as (.uint maximum)
+    | throw "nested Counter value type mismatch"
+  if !canonical ctx (.uint maximum) value then throw "noncanonical nested Counter value"
+  pure value
+
+private def adjustCounter (current amount : Nat) (subtract : Bool) : Except String Nat := do
+  let maximum := 2 ^ 64 - 1
+  if subtract then
+    if current < amount then throw "Counter subtraction underflow"
+    pure (current - amount)
+  else
+    if current > maximum - amount then throw "Counter addition overflow"
+    pure (current + amount)
+
 /-- Execute ordered effects against a private tentative state. Returning an error
 never exposes that tentative state, expressing atomic failure in the reference model. -/
 def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
@@ -464,6 +483,25 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       let evaluated ← evaluatePath ctx env keys
       let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
       env := (destination, .bool (← treeMember root evaluated)) :: env
+    | .counterRead name destination keys => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
+      let value ← counterValueAt ctx root evaluated
+      env := (destination, .uint (2 ^ 64 - 1) value) :: env
+    | .counterAdjust name keys subtract amount => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
+      let current ← counterValueAt ctx root evaluated
+      let value ← adjustCounter current amount subtract
+      let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) value))
+        | throw s!"nested Counter parent is missing or not a map '{name}'"
+      next := {next with trees := updateAssoc name updated next.trees}
+    | .counterReset name keys => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
+      let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) 0))
+        | throw s!"nested Counter parent is missing or not a map '{name}'"
+      next := {next with trees := updateAssoc name updated next.trees}
     | .insertPath name keys ty value | .writePath name keys ty value => do
       let evaluated ← evaluatePath ctx env keys
       let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -504,7 +542,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
         match effect with
         | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
-            .writePath .. | .writeCompositePath .. | .emptyMapPath .. => pure ()
+            .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
+            .counterAdjust .. | .counterReset .. => pure ()
         | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -572,6 +611,25 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
           let evaluated ← evaluatePath ctx env keys
           let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
           env := (destination, .bool (← treeMember root evaluated)) :: env
+        | .counterRead name destination keys => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
+          let value ← counterValueAt ctx root evaluated
+          env := (destination, .uint (2 ^ 64 - 1) value) :: env
+        | .counterAdjust name keys subtract amount => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
+          let current ← counterValueAt ctx root evaluated
+          let value ← adjustCounter current amount subtract
+          let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) value))
+            | throw s!"nested Counter parent is missing or not a map '{name}'"
+          next := {next with trees := updateAssoc name updated next.trees}
+        | .counterReset name keys => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
+          let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) 0))
+            | throw s!"nested Counter parent is missing or not a map '{name}'"
+          next := {next with trees := updateAssoc name updated next.trees}
         | .insertPath name keys ty value | .writePath name keys ty value => do
           let evaluated ← evaluatePath ctx env keys
           let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -628,6 +686,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
         | .readCompositePath _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
+        | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
+        | .counterAdjust .. | .counterReset .. => pure ()
         | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
     pure next
 

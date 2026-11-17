@@ -121,6 +121,18 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
                 alignment: Alignment::singleton(AlignmentAtom::Bytes { length: 32 }),
             })
         }
+        "u64" => {
+            let Value::UInt { number, maximum } = value else {
+                bail!("counter alignment requires UInt64")
+            };
+            ensure!(
+                *maximum == BigUint::from(u64::MAX),
+                "counter alignment requires UInt64"
+            );
+            let number =
+                u64::try_from(number.clone()).map_err(|_| anyhow!("counter value exceeds u64"))?;
+            Ok(number.into())
+        }
         _ => bail!("unsupported alignment"),
     }
 }
@@ -615,6 +627,14 @@ pub enum Instruction {
     Insert {
         n: u8,
     },
+    #[serde(rename = "addImmediate")]
+    AddImmediate {
+        amount: u32,
+    },
+    #[serde(rename = "subImmediate")]
+    SubImmediate {
+        amount: u32,
+    },
 }
 
 /// Number of transcript fields in one statically scheduled Impact group.
@@ -622,12 +642,13 @@ pub enum Instruction {
 fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     let value_fields = |alignment: &str| -> Result<usize> {
         match alignment {
-            "field" | "bit" => Ok(1),
+            "field" | "bit" | "u64" => Ok(1),
             "bytes32" => Ok(2),
             _ => bail!("unsupported alignment"),
         }
     };
     Ok(match instruction {
+        Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
         Instruction::Index {
@@ -728,6 +749,9 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         .as_object()
         .ok_or_else(|| anyhow!("invalid state tree schema"))?;
     ensure!(fields.len() == 1, "invalid state tree schema");
+    if fields.get("counter") == Some(&Json::Bool(true)) {
+        return Ok(());
+    }
     if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
         ensure!(
             ScalarType::parse(ty)? != ScalarType::Bytes32,
@@ -1002,7 +1026,12 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
             values.push(StateValue::Map(Default::default()));
         } else if let Some(schema) = d.kind.get("tree") {
             validate_tree_schema(schema, 0)?;
-            if let Some(ty) = schema.get("scalar").and_then(Json::as_str) {
+            if schema.get("counter") == Some(&Json::Bool(true)) {
+                values.push(StateValue::Cell(Sp::new(aligned(
+                    &input_value("UIntRange<18446744073709551616>", value)?,
+                    "u64",
+                )?)));
+            } else if let Some(ty) = schema.get("scalar").and_then(Json::as_str) {
                 values.push(StateValue::Cell(Sp::new(aligned(
                     &input_value(ty, value)?,
                     "field",
@@ -1068,12 +1097,13 @@ fn read_state_cell(
     slot: u32,
     keys: &[AlignedValue],
     ty: &str,
+    alignment: &str,
 ) -> Result<Value> {
     let value = read_state_aligned(context, slot, keys)?;
     let mut fields = Vec::new();
     value.value_only_field_repr(&mut fields);
     ensure!(fields.len() == 1, "expected scalar state cell");
-    match ScalarType::parse(ty)? {
+    let decoded = match ScalarType::parse(ty)? {
         ScalarType::Native => Ok(Value::Native(fields[0])),
         ScalarType::Bool => Ok(Value::Bool(
             bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
@@ -1083,10 +1113,15 @@ fn read_state_cell(
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
             bail!("Jubjub ledger values require typed coordinate records")
         }
-    }
+    }?;
+    ensure!(
+        value == aligned(&decoded, alignment)?,
+        "state cell alignment or encoding mismatch"
+    );
+    Ok(decoded)
 }
 
-fn record_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
+fn tree_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
     let mut schema = plan
         .state
         .get(slot as usize)
@@ -1101,7 +1136,11 @@ fn record_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> 
             .and_then(|parts| parts.get(1))
             .ok_or_else(|| anyhow!("record path exceeds declared schema"))?;
     }
-    schema
+    Ok(schema)
+}
+
+fn record_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
+    tree_schema_at_path(plan, slot, depth)?
         .get("composite")
         .ok_or_else(|| anyhow!("path does not select a record"))
 }
@@ -1260,6 +1299,8 @@ pub fn prepare(
                             | Instruction::New
                             | Instruction::PushFields { .. }
                             | Instruction::PopeqFields { .. }
+                            | Instruction::AddImmediate { .. }
+                            | Instruction::SubImmediate { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -1296,7 +1337,7 @@ pub fn prepare(
                             "inactive read result differs from the source read schema"
                         );
                         ensure!(
-                            matches!(alignment.as_str(), "field" | "bit"),
+                            matches!(alignment.as_str(), "field" | "bit" | "u64"),
                             "unsupported inactive read alignment"
                         );
                         read_index += 1;
@@ -1460,7 +1501,14 @@ pub fn prepare(
                             let (slot, keys) = previous_index
                                 .as_ref()
                                 .ok_or_else(|| anyhow!("unsupported state-read shape"))?;
-                            read_state_cell(read_context, *slot, keys, &read.ty)?
+                            if alignment == "u64" {
+                                ensure!(
+                                    tree_schema_at_path(plan, *slot, keys.len())?.get("counter")
+                                        == Some(&Json::Bool(true)),
+                                    "counter read path schema mismatch"
+                                );
+                            }
+                            read_state_cell(read_context, *slot, keys, &read.ty, alignment)?
                         };
                         env.insert(name.clone(), value);
                     }
@@ -1532,6 +1580,42 @@ pub fn prepare(
                 }
             }
             Instruction::Member => Op::Member,
+            Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {
+                let (slot, keys) = previous_index
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("counter adjustment requires a complete index path"))?;
+                ensure!(
+                    tree_schema_at_path(plan, *slot, keys.len())?.get("counter")
+                        == Some(&Json::Bool(true)),
+                    "counter adjustment path schema mismatch"
+                );
+                if has_written {
+                    advance_native_state_prefix(
+                        &mut prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                read_state_cell(
+                    read_context,
+                    *slot,
+                    keys,
+                    "UIntRange<18446744073709551616>",
+                    "u64",
+                )?;
+                if matches!(instruction, Instruction::AddImmediate { .. }) {
+                    Op::Addi { immediate: *amount }
+                } else {
+                    Op::Subi { immediate: *amount }
+                }
+            }
             Instruction::Insert { n } => {
                 has_written = true;
                 ensure!(*n > 0 && *n < 16, "unsupported insertion depth");

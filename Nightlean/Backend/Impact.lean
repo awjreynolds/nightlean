@@ -26,6 +26,7 @@ inductive Aligned where
   | bitExpr (value : Expr .bool)
   | bytes32 (value : Expr (.bytes 32))
   | nativeFields (values : List Scalar)
+  | counter (value : Expr (.uint (2 ^ 64 - 1)))
   deriving Repr
 
 inductive Op where
@@ -40,6 +41,8 @@ inductive Op where
   | popeqFields (schema : Lean.Json) (values : List Scalar)
   | member
   | insert (levels : Nat)
+  | addImmediate (amount : Nat)
+  | subImmediate (amount : Nat)
 
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
@@ -52,6 +55,7 @@ def Aligned.fields : Aligned → List Scalar
       .bytesField value 0, .bytesField value 1]
   | .nativeFields values => [.native values.length] ++
       List.replicate values.length (.native (Field.modulus - 2)) ++ values
+  | .counter value => [.native 1, .native 8, .cast .native value]
 
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
@@ -71,6 +75,8 @@ def Op.fields : Op → List Scalar
   | .popeqFields _ values => [.native 0x0c] ++ (Aligned.nativeFields values).fields
   | .member => [.native 0x18]
   | .insert levels => [.native (0x90 + levels)]
+  | .addImmediate amount => [.native 0x0e, .native amount]
+  | .subImmediate amount => [.native 0x0f, .native amount]
 
 structure Read where
   name : String
@@ -221,6 +227,12 @@ private def resolveTreeState (state : List StateDecl) (name : String)
   let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
   schema.resolvePath keys
 
+private def resolveCounterState (state : List StateDecl) (name : String)
+    (keys : List PathKey) : Except String Unit := do
+  let some declaration := state.find? (·.name == name) | throw s!"unknown Counter state '{name}'"
+  let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
+  schema.counterPath keys
+
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ => []
   | .bytesField value _ | .bytesAt value _ => expressionNames value
@@ -265,6 +277,7 @@ private def zeroValue : (ty : Ty) → Option (Expr ty)
   | .native => some (.native 0)
   | .bool => some (.bool false)
   | .uint maximum => some (.uint maximum 0)
+  | .bytes 32 => some (.bytes32Literal (List.replicate 32 0))
   | .bytes _ => none
   | .jubjubScalar => some (.jubjubScalarFromNative (.native 0))
   | .jubjubPoint => some (.jubjubFromCoordinates (.native 0) (.native 1))
@@ -350,7 +363,29 @@ private def totalizeActivityValue (guard : Expr .bool) (avoid : List String)
 private def totalizePathKeys (condition : Expr .bool) (keys : List PathKey) : List PathKey :=
   let avoid := pathExpressionNames keys
   keys.map fun key => match key with
-    | .mk ty value => .mk ty (totalizeActivityValue condition avoid value)
+    | .mk .native value =>
+      let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
+      let guardedValue := totalizeUnder (.ref guardName) value
+      .mk .native (.letE guardName condition
+        (.select (.ref guardName) guardedValue (.native 0)))
+    | .mk .bool value =>
+      let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
+      let guardedValue := totalizeUnder (.ref guardName) value
+      .mk .bool (.letE guardName condition
+        (.select (.ref guardName) guardedValue (.bool false)))
+    | .mk (.uint maximum) value =>
+      let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
+      let guardedValue := totalizeUnder (.ref guardName) value
+      .mk (.uint maximum) (.letE guardName condition
+        (.select (.ref guardName) guardedValue (.uint maximum 0)))
+    | .mk (.bytes 32) value =>
+      let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
+      let guardedValue := totalizeUnder (.ref guardName) value
+      .mk (.bytes 32) (.letE guardName condition (.select (.ref guardName) guardedValue
+        (.bytes32Literal (List.replicate 32 0))))
+    | .mk ty value =>
+      let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
+      .mk ty (.letE guardName condition (totalizeUnder (.ref guardName) value))
 
 private def totalizeActivityCondition (guard condition : Expr .bool) : Expr .bool :=
   let name := freshActivityName (expressionNames guard ++ expressionNames condition)
@@ -423,6 +458,14 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}]}
+  | .counterRead name destination keys => do
+    let slot ← stateSlot state name
+    resolveCounterState state name keys
+    let keys ← nativePathKeys keys
+    let value : Expr (.uint (2 ^ 64 - 1)) := .ref destination
+    pure {plan with
+      operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.counter value)]
+      reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
   | .readCompositePath name destination keys type destinations => do
     let slot ← stateSlot state name
     let .composite environment foundType ← resolveTreeState state name keys
@@ -464,6 +507,25 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let schema ← compositeSchema environment type
     let operations ← pathWriteCompositeOps slot alignedKeys schema values
     pure {plan with operations := plan.operations ++ operations}
+  | .counterAdjust name keys subtract amount => do
+    let slot ← stateSlot state name
+    resolveCounterState state name keys
+    let alignedKeys ← nativePathKeys keys
+    let operation := if subtract then Op.subImmediate amount else Op.addImmediate amount
+    pure {plan with operations := plan.operations ++ [
+      .indexPath slot true alignedKeys, operation, .insert (keys.length + 1)]}
+  | .counterReset name keys => do
+    let slot ← stateSlot state name
+    resolveCounterState state name keys
+    if keys.isEmpty then
+      let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
+      pure {plan with operations := plan.operations ++ [
+        .push (.field (.native slot)), .push (.counter value) true, .insert 1]}
+    else
+      let alignedKeys ← nativePathKeys keys
+      let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
+      let operations ← pathWriteOps slot alignedKeys (.counter value) false
+      pure {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
@@ -499,6 +561,12 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.readCompositePath name destination (totalizePathKeys condition keys) type destinations)
     | some condition, .memberPath name destination keys =>
       pure (.memberPath name destination (totalizePathKeys condition keys))
+    | some condition, .counterRead name destination keys =>
+      pure (.counterRead name destination (totalizePathKeys condition keys))
+    | some condition, .counterAdjust name keys subtract amount =>
+      pure (.counterAdjust name (totalizePathKeys condition keys) subtract amount)
+    | some condition, .counterReset name keys =>
+      pure (.counterReset name (totalizePathKeys condition keys))
     | some condition, .insertPath name keys ty value =>
       let avoid := pathExpressionNames keys ++ expressionNames value
       pure (.insertPath name (totalizePathKeys condition keys) ty
@@ -532,7 +600,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       reads := reads
       activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .readPath .. | some condition, .readCompositePath .. |
-      some condition, .memberPath .. =>
+      some condition, .memberPath .. | some condition, .counterRead .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -546,7 +614,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .insertPath .. | some condition, .writePath .. |
-      some condition, .writeCompositePath .. | some condition, .emptyMapPath .. =>
+      some condition, .writeCompositePath .. | some condition, .emptyMapPath .. |
+      some condition, .counterAdjust .. | some condition, .counterReset .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -703,6 +772,14 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}]}
+  | .counterRead name destination keys => do
+    let slot ← stateSlot state name
+    resolveCounterState state name keys
+    let keys ← nativePathKeys keys
+    let value : Expr (.uint (2 ^ 64 - 1)) := .ref destination
+    plan := {plan with
+      operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.counter value)]
+      reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
   | .readCompositePath name destination keys type destinations => do
     let slot ← stateSlot state name
     let .composite environment foundType ← resolveTreeState state name keys
@@ -744,6 +821,25 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let schema ← compositeSchema environment type
     let operations ← pathWriteCompositeOps slot alignedKeys schema values
     plan := {plan with operations := plan.operations ++ operations}
+  | .counterAdjust name keys subtract amount => do
+    let slot ← stateSlot state name
+    resolveCounterState state name keys
+    let alignedKeys ← nativePathKeys keys
+    let operation := if subtract then Op.subImmediate amount else Op.addImmediate amount
+    plan := {plan with operations := plan.operations ++ [
+      .indexPath slot true alignedKeys, operation, .insert (keys.length + 1)]}
+  | .counterReset name keys => do
+    let slot ← stateSlot state name
+    resolveCounterState state name keys
+    if keys.isEmpty then
+      let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
+      plan := {plan with operations := plan.operations ++ [
+        .push (.field (.native slot)), .push (.counter value) true, .insert 1]}
+    else
+      let alignedKeys ← nativePathKeys keys
+      let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
+      let operations ← pathWriteOps slot alignedKeys (.counter value) false
+      plan := {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
@@ -810,7 +906,7 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
       entry.effects.flatMap (fun effect => match effect with
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
-            .memberPath _ destination .. => [destination]
+            .memberPath _ destination .. | .counterRead _ destination .. => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
         | _ => [])
     if sourceNames.any (·.startsWith "_nightlean_") then
@@ -843,6 +939,10 @@ def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Excep
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)),
           ("length", Lean.toJson (32 : Nat))])
     | .nativeFields _ => throw "grouped Native fields serialize through pushFields/popeqFields"
+    | .counter expression => do
+      let value ← expression.eval ctx env
+      pure (Lean.toJson [bytes value], Lean.Json.mkObj [
+        ("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (8 : Nat))])
   pure (Lean.Json.mkObj [("value", atoms),
     ("alignment", Lean.Json.arr #[Lean.Json.mkObj [
       ("tag", Lean.toJson ("atom" : String)), ("value", alignment)]])])
@@ -889,6 +989,10 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .member => pure (Lean.toJson ("member" : String))
   | .insert levels => pure (Lean.Json.mkObj [("ins", Lean.Json.mkObj [
       ("cached", Lean.toJson false), ("n", Lean.toJson levels)])])
+  | .addImmediate amount => pure (Lean.Json.mkObj [("addi", Lean.Json.mkObj [
+      ("immediate", Lean.toJson amount)])])
+  | .subImmediate amount => pure (Lean.Json.mkObj [("subi", Lean.Json.mkObj [
+      ("immediate", Lean.toJson amount)])])
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do
   pure (Lean.Json.arr (← plan.operations.mapM (Op.toJson ctx env)).toArray)

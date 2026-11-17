@@ -159,7 +159,8 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .insertPath .. | some condition, .writePath ..
       | some condition, .readCompositePath .. | some condition, .writeCompositePath ..
-      | some condition, .emptyMapPath .. =>
+      | some condition, .emptyMapPath .. | some condition, .counterRead ..
+      | some condition, .counterAdjust .. | some condition, .counterReset .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
@@ -215,6 +216,15 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       checkSink {description := s!"public nested map membership path '{state}'", span}
         (← pathExpression env span keys) activeControl
       env := env ++ [(destination, [])]
+    | .counterRead state destination keys =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public Counter read guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public Counter read path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ [(destination, [])]
+    | .counterAdjust state keys .. | .counterReset state keys =>
+      checkSink {description := s!"public Counter mutation path '{state}'", span}
+        (← pathExpression env span keys) activeControl
     | .insertPath state keys _ payload | .writePath state keys _ payload =>
       checkSink {description := s!"public nested map write path '{state}'", span}
         (← pathExpression env span keys) activeControl
