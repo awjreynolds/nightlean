@@ -1,0 +1,209 @@
+{
+  "schemaVersion": 1,
+  "scope": "Generic preservation for actual accepted scalar cell/map ledger lowering and strict decoding. Independent immutable-source two-role model/type/axiom audit plus finite upstream checker conformance.",
+  "source": {
+    "revision": "675ac782161d61af501dea04c4e214643e091014",
+    "tree": "e881b160b0d63b2b6e2fc02a9d97eeaa8f440663",
+    "authenticatedGitFiles": 592,
+    "libraryModules": 148,
+    "standaloneLeanTests": 48,
+    "compilerSourceUnchangedDuringQualification": true
+  },
+  "ci": {
+    "url": "https://github.com/awjreynolds/noctium/actions/runs/44059916928",
+    "revision": "675ac782161d61af501dea04c4e214643e091014",
+    "conclusion": "success"
+  },
+  "sourceSuite": {
+    "command": "bash scripts/check-lean.sh",
+    "exitCode": 0,
+    "seconds": 126.15870887506753,
+    "logSha256": "50d73540227450c8f778e7e554a73a62e1387b46ab80815f8aa9dec2123920e6"
+  },
+  "reviewedModel": {
+    "module": "Nightlean.Verification.GenericStateProofRoles",
+    "soundnessRole": "Nightlean.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound",
+    "completenessRole": "Nightlean.Verification.GenericStateConverseCompleteness.accepted_entrypoint_run_complete",
+    "bytes": 90414390,
+    "sha256": "28c25f37d4a5def604466d61252929139a87279cf0de302707dc59de66bab02a",
+    "independentlyExportedFromExactReviewedSource": true,
+    "exporterStderrEmpty": true,
+    "exportSeconds": 3.4445384999271482,
+    "exportPeakChildRssBytes": 1787871232,
+    "axioms": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "review": "Astra approved semantic construction, explicit source-read/witness provenance strengthening and adversarial audit driver. Two whitespace-only fixes preceded immutable commit."
+  },
+  "audit": {
+    "externalReviewedModelProvided": true,
+    "freshKernelReplay": true,
+    "statementComparison": "kernel definitional equality to externally pinned model roles",
+    "proofExportSha256": "689855103269386b1a86618d1849ba272f46b08dd49b669ad5554c5658b6ef7d",
+    "driverSeconds": 549.6226810419466,
+    "driverLogSha256": "fd4a0158d3c2d91974b0398689017f09f1262117a7ca7d93c500f402039803a5",
+    "rejections": {
+      "fifo": {
+        "status": "rejected",
+        "error": "export_not_regular_file"
+      },
+      "forgedAxiom": {
+        "status": "rejected",
+        "error": "forbidden_axiom: GenericStateAuditFixtures.forbiddenAxiom"
+      },
+      "malformedPrefix": {
+        "status": "rejected",
+        "error": "missing_trusted_model_root: propext"
+      },
+      "missing": {
+        "status": "rejected",
+        "error": "missing_proof: completeness"
+      },
+      "modelMismatch": {
+        "status": "rejected",
+        "error": "model_declaration_mismatch: Nightlean.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound"
+      },
+      "oversized": {
+        "status": "rejected",
+        "error": "export_limit"
+      },
+      "swapped": {
+        "status": "rejected",
+        "error": "wrong_statement: soundness"
+      },
+      "symlink": {
+        "status": "rejected",
+        "error": "symbolic link rejected by O_NOFOLLOW"
+      },
+      "weakened": {
+        "status": "rejected",
+        "error": "wrong_statement: soundness"
+      },
+      "wrong": {
+        "status": "rejected",
+        "error": "wrong_statement: soundness"
+      },
+      "wrongPin": {
+        "status": "rejected",
+        "error": "model_pin_mismatch"
+      }
+    },
+    "perExportLimitBytes": 134217728,
+    "perReplayTimeoutSeconds": 300,
+    "hardMemoryLimit": false,
+    "wholeCompilerVerified": false,
+    "compilerBuildAuthenticatedByAuditTool": false,
+    "nativeImplementationVerified": false,
+    "rawArtifactAuthenticatedByAuditTool": false,
+    "chainAcceptanceVerified": false
+  },
+  "finiteSourceNativeEvidence": {
+    "freshCliArtifactIdentities": 8,
+    "files": [
+      {
+        "profile": "320",
+        "file": "Issue66MixedState.apply.impact.json",
+        "sha256": "77784d3bad3387b72c0a8309f2e7b65cf44e49a852bb8525e1699b528ed8342c",
+        "bytes": 5768
+      },
+      {
+        "profile": "320",
+        "file": "Issue66MixedState.apply.zkir",
+        "sha256": "0a4a4eebd7f35e7cb5d40da8c0fef64ec281418e0534a6fb433d12122f0fe5ca",
+        "bytes": 8266
+      },
+      {
+        "profile": "320",
+        "file": "Issue66OutputState.apply.impact.json",
+        "sha256": "bedfb524125280acf750b6c5550b8753881f50f0afc20fc3a658aa42946b07c2",
+        "bytes": 1524
+      },
+      {
+        "profile": "320",
+        "file": "Issue66OutputState.apply.zkir",
+        "sha256": "4bf0f7b99c6ce11117a48ccd7f984d00a74248335c13ca97ed98f6a788795570",
+        "bytes": 1720
+      },
+      {
+        "profile": "321",
+        "file": "Issue66MixedState.apply.impact.json",
+        "sha256": "c0c29009c4863f64204c38af39819d8ad31fbb199755c559a823729136a8cd7b",
+        "bytes": 6345
+      },
+      {
+        "profile": "321",
+        "file": "Issue66MixedState.apply.zkir",
+        "sha256": "0a4a4eebd7f35e7cb5d40da8c0fef64ec281418e0534a6fb433d12122f0fe5ca",
+        "bytes": 8266
+      },
+      {
+        "profile": "321",
+        "file": "Issue66OutputState.apply.impact.json",
+        "sha256": "916b45b253bd75c9e1a939e2399529397ff7dfecf86b45309689692979a630c7",
+        "bytes": 2101
+      },
+      {
+        "profile": "321",
+        "file": "Issue66OutputState.apply.zkir",
+        "sha256": "4bf0f7b99c6ce11117a48ccd7f984d00a74248335c13ca97ed98f6a788795570",
+        "bytes": 1720
+      }
+    ],
+    "nativeChecker": {
+      "revision": "675ac782161d61af501dea04c4e214643e091014",
+      "scope": "Exact immutable runtime source and fixtures, actual upstream native checker. No real proof generation or ledger acceptance.",
+      "results": [
+        {
+          "profile": "320",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 22.848561958875507,
+          "logSha256": "620e3f40dc418cea2f2bdd7d434e40c5faf87b7b50b1c40721ea04527f67906b"
+        },
+        {
+          "profile": "321",
+          "passed": 5,
+          "failed": 0,
+          "ignored": 0,
+          "seconds": 22.628141124965623,
+          "logSha256": "5b60fe6fe478f820132f551201edc56b99a279c551c965790b961a245c87ea1d"
+        }
+      ],
+      "negativeBindings": 8,
+      "proofGenerated": false,
+      "ledgerSubmitted": false
+    }
+  },
+  "currentScalarCompanion": {
+    "modelBytes": 71177434,
+    "modelSha256": "932c7eced5658b2b8e1055ce4636e855b568333cbed96ffa509466cfd5cf3754",
+    "freshKernelReplay": true,
+    "exactRoleAndAxiomChecksPassed": true,
+    "seconds": 63.332048791926354,
+    "sourceReason": "Four existing scalar proof helpers became public for the generic ledger proof. The current scalar export has a separate reviewed-source pin. Historical scalar64 source/model authority remains unchanged.",
+    "historicalModelSha256": "6e9b4da95bc6bdf305b5a8e32be7585e62ed74efc6942287ff8c38d7828c98d9",
+    "historicalPinRejectsChangedCurrentDeclarations": true,
+    "historicalPinWasNotModified": true
+  },
+  "includedSemantics": [
+    "Actual original source entrypoint evaluation",
+    "Actual accepted Zkir.lowerEntrypoint and strict relation decoding",
+    "Arbitrary satisfying witness soundness with independent checked VM trace",
+    "Constructed source-complete SSA witness and authenticated native groups",
+    "Actual sourceReadInputs trace and exact sourceWitness = assign inputs entries",
+    "Exact encoded source successor and declared original input preservation"
+  ],
+  "excludedClaims": [
+    "Raw byte/parser/pretty-printer/file I/O agreement",
+    "Compiler frontend or general Helpers lowering preservation",
+    "Native Rust/prover/verifier implementation verification",
+    "Cryptographic security or consensus light-client validation",
+    "Map-value reads, general native guarded branches and aggregate ledger effects",
+    "Full ZKIR v3, whole compiler or G1-G6 completion",
+    "New native proof generation, ledger deployment or public-network qualification for these two fixtures"
+  ],
+  "historicalClaimSourceAuthority": "925164d0e17d994038d77d3b2b71c410619557d3"
+}
