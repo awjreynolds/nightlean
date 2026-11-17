@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "4c4efe26f8035598437947cd60e2e4148d4f07dc",
+    "sourceCommit": "668da8bb9077b8cef6b957359a4f40cb95402e52",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4757,7 +4757,8 @@
       "bounded UInt through 248 bits",
       "Bytes32 as constrained byte leaves with native byte-aligned map keys",
       "JubjubScalar inputs as canonical Native leaves with mandatory reduce/Encode equality bridges",
-      "JubjubPoint inputs as Native x/y leaves with exact coordinate roundtrip constraints"
+      "JubjubPoint inputs as Native x/y leaves with exact coordinate roundtrip constraints",
+      "Bytes32 private witness/state values remain one logical host value and expand to 32 range-checked Native inputs"
     ],
     "ledgerSourceSlices": [
       "scalar cells/maps",
@@ -4770,7 +4771,7 @@
     "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
     "remainingTokenDependencies": [
       "mixed aligned record hashing and general byte-string operations",
-      "curve composite schemas, additional helper cryptography and integration of derived ElGamal/ECDH helpers into token operations",
+      "curve composite schemas, remaining helper inverses and byte conversions/indexing and integration of derived ElGamal/ECDH helpers into token operations",
       "mixed record values and memo lists",
       "complete Counter behavior",
       "native typed contract-call arguments/returns and composition",
@@ -4847,6 +4848,12 @@
       ],
       "scope": "Readable witness-backed helper/control curve expressions reuse existing typed Expr lowering and the pinned Rust evaluator. Private callbacks supply key, randomness and UInt128 plaintext. Constraints check key ownership, nonzero reduced key/randomness and decryption, then four explicit releases publish computed ciphertext coordinates through checked multiple-output records. One selected-3.2.1 source/host/native example checks ciphertext11G/80G and rejects key8 for recipient7G. The old scalar diagnostic trace rejects curve expressions explicitly. No new opcode names, keys, proofs, deployments or broad regression campaign. Typed native CALL returns, composite curve schemas, curve private-state cells, additional helper cryptography and complete token integration remain open.",
       "implementationCommit": "4c4efe26f8035598437947cd60e2e4148d4f07dc"
+    },
+    "byteWitnessEvidence": {
+      "source": "tests/HashWitness.lean",
+      "native": "runtime/tests/witness_control.rs",
+      "implementationCommit": "668da8bb9077b8cef6b957359a4f40cb95402e52",
+      "scope": "Logical Bytes32 callback parameters/results and private-state reads/staging, typed hash/degrade helpers, full-width byte equality and ordered byte/non-byte let bindings. One selected-3.2.1 source/host/native example reads two wallet byte cells, derives account/key/balance/memo hashes, checks ElGamal and ECDH memo recovery, publishes seven Native fields, and stages a private seed. Independent SHA256/group output values pass; an altered account high byte rejects. Every expanded byte input retains its octet bounds. Private seed staging is tentative, and deterministic fixture seeds do not establish freshness. No new native opcode names, keys, proofs, deployments or broad regression campaign. General byte lengths, public byte returns, typed native CALL ABI, mixed ledger schemas and full token integration remain open."
     }
   }
 }

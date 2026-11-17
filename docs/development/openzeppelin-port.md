@@ -19,7 +19,7 @@ Different instruction sequences and constraint counts are acceptable.
 | Ledger-backed getter returns | totalSupply, balanceOf and isRegistered | Entrypoint returns are currently empty. Typed outputs checked after ledger effects and actual native CALL return binding remain in [issue 50](https://github.com/awjreynolds/noctium/issues/50). Public transcript reads supply state evidence, not returned function values. |
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Mixed records, lists and the full Counter ADT remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
-| Jubjub and cryptographic source operations | ElGamal balances, key registration, memos and account identifiers | Typed curve operations, byte-derived keys/randomness, affine point hashing, ElGamal binding and ECDH memo recovery have source/native examples. Bytes32 equality checks both field chunks. Typed scalar and point callbacks now use the existing private host protocol. Curve helper calculations now run through the same private host protocol. Curve ledger schemas, helper/control byte operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
+| Jubjub and cryptographic source operations | ElGamal balances, key registration, memos and account identifiers | Typed curve operations, byte-derived keys/randomness, affine point hashing, ElGamal binding and ECDH memo recovery have source/native examples. Bytes32 equality checks both field chunks. Typed scalar and point callbacks now use the existing private host protocol. Curve helper calculations now run through the same private host protocol. Curve ledger schemas, further helper byte operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
@@ -128,6 +128,14 @@ key/randomness and decryption before releasing four ciphertext coordinates.
 Checked multiple-output records carry these fields into ledger writes. One
 focused source/host/native check accepts the expected ciphertext and rejects a
 wrong key. This does not yet integrate encrypted balances, memos or token state.
+
+[`tests/HashWitness.lean`](../../tests/HashWitness.lean) joins the existing
+account/key derivation, ElGamal and ECDH memo operations to private wallet reads
+and a Bytes32 seed callback. The source checks all 256 account bits, keeps key
+and seed hashes private, and discloses seven ciphertext/memo fields. Private seed
+staging uses the existing tentative journal. One focused source/host/native case
+matches independent preimages and output fields and rejects an altered account
+high byte. Complete token ledger state and lifecycle integration remain open.
 
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).

@@ -14,8 +14,8 @@ same Rust execution plan described below. `prove` creates circuit constraints,
 not Lean theorems. A private read or calculation needs no `disclose`. A public
 result derived from either needs explicit release.
 
-This source form supports Native, Bool and bounded UInt values, with Unit callback
-results. Typed callbacks also accept and return JubjubScalar and JubjubPoint values. Its `.observations.json` records authored proof conditions separately
+This source form supports Native, Bool, bounded UInt and Bytes32 values, with Unit
+callback results. Typed callbacks also accept and return JubjubScalar and JubjubPoint values. Its `.observations.json` records authored proof conditions separately
 from generated validity checks. The summary is source review material and is
 not yet a verified bundle artifact. Composite curve schemas, curve private-state cells and structured source branches remain separate work.
 Private reads within one plan currently share one scalar result type because
@@ -110,6 +110,33 @@ randomness remains a wallet obligation. The old scalar diagnostic trace evaluato
 rejects curve expressions explicitly. The native control runtime executes them.
 This slice generates no keys, proofs or deployments and extends no historical
 witness preservation theorem.
+
+[`tests/HashWitness.lean`](../../tests/HashWitness.lean) keeps account and
+encryption secrets in Bytes32 private cells. A private seed callback supplies the
+invocation randomness, and the source stages the seed in the wallet journal.
+Bytes32 is one logical host value with exactly 32 octets. Native binding expands
+it into 32 range-checked field inputs. The checked aggregate bytes codec remains
+a separate type representation.
+
+Readable witness helpers support Bytes32 literals, persistent hashing of one
+Bytes32 value or a bounded vector, Native field hashing, affine point hashing and
+explicit degradation to the low 31 bytes as a Native field. Hashing and degradation
+retain private origins. Bytes32 equality checks all 256 bits. Public circuit and
+native CALL byte returns, general byte lengths and additional byte operations
+remain separate work.
+
+The example checks the account ID, derives the encryption key and separate balance
+and memo randomness, verifies ElGamal decryption and recovers an ECDH memo. Seven
+explicitly disclosed Native outputs publish ciphertext and memo fields. The
+public account comparison intentionally makes the match observable through
+acceptance. The staged seed stays on the private channel and remains tentative
+until the existing journal lifecycle commits it.
+
+One selected-3.2.1 source/host/native example checks independent hash preimages,
+ciphertext and memo values, reads two private byte cells, stages one update and
+rejects a changed account high byte. Deterministic test seeds establish no
+production freshness property. The scalar diagnostic trace still rejects byte
+and curve expressions explicitly. No new keys, proofs or deployments were run.
 
 Selected-entrypoint bundles retain optional `witnessBinding` and `witnessControl` roles together. The verifier rejects a missing member, unreferenced role, different entrypoint, changed relation, changed schema or incomplete input map. Existing bundles without witness roles keep their canonical format. An externally trusted manifest digest authenticates retained bytes. A self-hash alone supplies no source authority.
 
