@@ -4692,9 +4692,9 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "213e51e18aef56c27ddab087699a938036fc81b8",
-    "meaning": "Registered source-producer opcode coverage for restricted Native-field overloads. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 16,
+    "sourceCommit": "6ed853be65174e34b23a3b615e3517277043cc16",
+    "meaning": "Registered source-producer opcode coverage for restricted Native-field operations and an internal typed Bytes32 persistent-hash/Encode path. This is not complete overload, proof or ledger qualification.",
+    "registeredOpcodeCount": 18,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4711,11 +4711,12 @@
       "public_input",
       "private_input",
       "impact",
-      "output"
+      "output",
+      "persistent_hash",
+      "encode"
     ],
-    "notExposedOpcodeCount": 31,
+    "notExposedOpcodeCount": 29,
     "notExposedOpcodes": [
-      "encode",
       "copy",
       "ec_mul",
       "ec_mul_generator",
@@ -4729,7 +4730,6 @@
       "bytes32_from_low_high",
       "div_mod_power_of_two",
       "reconstitute_field",
-      "persistent_hash",
       "keccak256",
       "inv",
       "jubjub_scalar_from_native",
@@ -4765,13 +4765,21 @@
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
     "remainingTokenDependencies": [
-      "persistent hashing and domain/byte alignment",
+      "domain-separated persistent hashing of vector/record preimages and computed-digest conversions",
       "Jubjub/ElGamal/ECDH source primitives",
       "mixed record values and memo lists",
       "complete Counter behavior",
       "native typed inputs/returns and composition",
       "integrated token localnet lifecycle"
     ],
-    "minimumChecksPolicy": "One focused source/native example per feature group and one completed-token localnet demonstration. Deeper assurance remains tracked separately."
+    "minimumChecksPolicy": "One focused source/native example per feature group and one completed-token localnet demonstration. Deeper assurance remains tracked separately.",
+    "restrictedInternalValueTypes": [
+      "Bytes32 result from persistent_hash, consumed through modern encode; general Bytes(n) support remains unqualified"
+    ],
+    "persistentHashEvidence": {
+      "source": "tests/Issue70PersistentHash.lean",
+      "native": "runtime/tests/persistent_hash.rs",
+      "scope": "Untagged single-Bytes32 SHA-256 account IDs, exact byte-aligned map keys, two independent vectors, repeated insertion and preservation of another key; incorrect expected key and private-transcript mutation rejected. Source rejects missing disclosure. No keygen, proof or deployment for this slice."
+    }
   }
 }
