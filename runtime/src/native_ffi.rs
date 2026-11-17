@@ -1,5 +1,5 @@
-//! Native proof ABI phase A. Owned tokens only, no retained foreign callback or future.
-//! Funding, signing, submission and durable journals are outside this interface.
+//! Native proof ABI phase A plus explicit owned client tasks for phase B.
+//! No foreign callback, stack frame or borrowed buffer survives an ABI call.
 use crate::{
     artifacts,
     proof::{PreparedProof, TrustedParameters},
@@ -73,6 +73,8 @@ struct Session {
     phase: Phase,
     local_started: bool,
     proved: Option<crate::proof::ProvedIntent>,
+    deployment: Option<crate::proof::ProvedNativeIntent>,
+    client_started: [bool; 2],
 }
 struct Private {
     bytes: Zeroizing<Vec<u8>>,
@@ -84,6 +86,9 @@ struct Registry {
     results: BTreeMap<u64, Vec<u8>>,
     private: BTreeMap<u64, Private>,
     active_work: usize,
+    clients: BTreeMap<u64, Option<crate::native_client::Driver>>,
+    requests: BTreeMap<u64, ServiceRequest>,
+    replies: BTreeMap<u64, ServiceResponse>,
 }
 impl Default for Registry {
     fn default() -> Self {
@@ -93,6 +98,9 @@ impl Default for Registry {
             results: BTreeMap::new(),
             private: BTreeMap::new(),
             active_work: 0,
+            clients: BTreeMap::new(),
+            requests: BTreeMap::new(),
+            replies: BTreeMap::new(),
         }
     }
 }
@@ -126,9 +134,9 @@ impl Registry {
     }
 }
 // Work outlives cancellation of its session. Its resource slot ends only when the call returns.
-struct Work;
+pub(crate) struct Work;
 impl Work {
-    fn reserve() -> Result<Self, i32> {
+    pub(crate) fn reserve() -> Result<Self, i32> {
         registry(|r| {
             if r.active_work >= MAX_WORK {
                 return Err(LIMIT);
@@ -146,14 +154,14 @@ impl Drop for Work {
         });
     }
 }
-fn guard(f: impl FnOnce() -> Result<(), i32>) -> i32 {
+pub(crate) fn guard(f: impl FnOnce() -> Result<(), i32>) -> i32 {
     match catch_unwind(AssertUnwindSafe(f)) {
         Ok(Ok(())) => OK,
         Ok(Err(code)) => code,
         Err(_) => INTERNAL,
     }
 }
-unsafe fn output(pointer: *mut u64) -> Result<(), i32> {
+pub(crate) unsafe fn output(pointer: *mut u64) -> Result<(), i32> {
     if pointer.is_null() {
         return Err(INVALID_ARGUMENT);
     }
@@ -162,7 +170,11 @@ unsafe fn output(pointer: *mut u64) -> Result<(), i32> {
     }
     Ok(())
 }
-unsafe fn input<'a>(pointer: *const u8, length: usize, max: usize) -> Result<&'a [u8], i32> {
+pub(crate) unsafe fn input<'a>(
+    pointer: *const u8,
+    length: usize,
+    max: usize,
+) -> Result<&'a [u8], i32> {
     if pointer.is_null() || length == 0 {
         return Err(INVALID_ARGUMENT);
     }
@@ -171,7 +183,7 @@ unsafe fn input<'a>(pointer: *const u8, length: usize, max: usize) -> Result<&'a
     }
     Ok(unsafe { std::slice::from_raw_parts(pointer, length) })
 }
-unsafe fn entropy(pointer: *const u8, length: usize) -> Result<StdRng, i32> {
+pub(crate) unsafe fn entropy(pointer: *const u8, length: usize) -> Result<StdRng, i32> {
     if length != 32 {
         return Err(INVALID_ARGUMENT);
     }
@@ -230,7 +242,7 @@ pub unsafe extern "C" fn nightlean_native_begin(
         }
         let _work = Work::reserve()?;
         registry(|r| {
-            if r.sessions.len() >= MAX_SESSIONS {
+            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
                 Err(LIMIT)
             } else {
                 Ok(())
@@ -273,8 +285,19 @@ pub unsafe extern "C" fn nightlean_native_begin(
         if payload.len() > MAX_BYTES {
             return Err(LIMIT);
         }
+        let public_parameters: ledger::structure::LedgerParameters = serialize::tagged_deserialize(
+            bundle
+                .file(crate::artifacts::Role::LedgerParameters)
+                .map_err(|_| INVALID_ARGUMENT)?,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let deployment = prepared
+            .deployment_intent()
+            .map(|intent| crate::native_client::prove_deployment(intent, &public_parameters))
+            .transpose()
+            .map_err(|_| INVALID_ARGUMENT)?;
         registry(|r| {
-            if r.sessions.len() >= MAX_SESSIONS {
+            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let token = r.token()?;
@@ -292,6 +315,8 @@ pub unsafe extern "C" fn nightlean_native_begin(
                     phase: Phase::Pending,
                     local_started: false,
                     proved: None,
+                    deployment,
+                    client_started: [false; 2],
                 },
             );
             unsafe {
@@ -636,6 +661,8 @@ mod tests {
                         phase: Phase::Pending,
                         local_started: true,
                         proved: None,
+                        deployment: None,
+                        client_started: [false; 2],
                     },
                 );
             }
@@ -653,4 +680,497 @@ mod tests {
         drop(replacement);
         assert_eq!(registry(|r| Ok(r.active_work)), Ok(0));
     }
+}
+
+// Phase-B tokens carry typed Rust service objects, never caller-claimed receipt fields.
+#[derive(Clone)]
+pub(crate) struct ServiceRequest {
+    pub owner: u64,
+    pub request: Arc<crate::native_client::Request>,
+}
+struct ServiceResponse {
+    owner: u64,
+    request_id: u64,
+    value: crate::native_client::ServiceReply,
+}
+const MAX_SERVICES: usize = 16;
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ClientReply {
+    abi_version: u32,
+    request_id: String,
+    operation: String,
+    capability: String,
+    schema: String,
+    profile: String,
+}
+fn client_revoke(r: &mut Registry, owner: u64) {
+    r.requests.retain(|_, q| q.owner != owner);
+    r.replies.retain(|_, q| q.owner != owner);
+    r.revoke_private(owner);
+}
+struct ClientLease {
+    token: u64,
+    driver: Option<crate::native_client::Driver>,
+}
+impl ClientLease {
+    fn take(token: u64) -> Result<Self, i32> {
+        registry(|r| {
+            let slot = r.clients.get_mut(&token).ok_or(INVALID_HANDLE)?;
+            let driver = slot.take().ok_or(INVALID_STATE)?;
+            Ok(Self {
+                token,
+                driver: Some(driver),
+            })
+        })
+    }
+    fn driver(&mut self) -> Result<&mut crate::native_client::Driver, i32> {
+        self.driver.as_mut().ok_or(INTERNAL)
+    }
+}
+impl Drop for ClientLease {
+    fn drop(&mut self) {
+        let value = self.driver.take();
+        let _ = registry(|r| {
+            let slot = r.clients.get_mut(&self.token).ok_or(INTERNAL)?;
+            *slot = value;
+            Ok(())
+        });
+    }
+}
+fn client_poll(token: u64) -> Result<serde_json::Value, i32> {
+    let _work = Work::reserve()?;
+    let mut lease = ClientLease::take(token)?;
+    lease.driver()?.poll().map_err(|_| INVALID_STATE)?;
+    let status = lease.driver()?.status();
+    drop(lease);
+    registry(|r| {
+        if r.clients
+            .get(&token)
+            .and_then(Option::as_ref)
+            .and_then(|d| d.request())
+            .is_none()
+        {
+            client_revoke(r, token)
+        }
+        Ok(())
+    })?;
+    Ok(status)
+}
+fn client_result(value: serde_json::Value, out: *mut u64) -> Result<(), i32> {
+    let bytes = encoded(value)?;
+    registry(|r| {
+        let token = r.result(bytes)?;
+        unsafe { out.write(token) }
+        Ok(())
+    })
+}
+pub(crate) fn service_request(token: u64) -> Result<ServiceRequest, i32> {
+    registry(|r| {
+        if r.replies.len() >= MAX_SERVICES {
+            return Err(LIMIT);
+        }
+        let q = r.requests.get(&token).ok_or(INVALID_HANDLE)?;
+        let current = r
+            .clients
+            .get(&q.owner)
+            .and_then(Option::as_ref)
+            .and_then(|d| d.request())
+            .ok_or(INVALID_STATE)?;
+        if current.id != q.request.id {
+            return Err(INVALID_STATE);
+        }
+        Ok(q.clone())
+    })
+}
+pub(crate) fn service_reply(
+    token: u64,
+    value: crate::native_client::ServiceReply,
+) -> Result<u64, i32> {
+    registry(|r| {
+        if r.replies.len() >= MAX_SERVICES {
+            return Err(LIMIT);
+        }
+        let q = r.requests.get(&token).ok_or(INVALID_HANDLE)?;
+        let current = r
+            .clients
+            .get(&q.owner)
+            .and_then(Option::as_ref)
+            .and_then(|d| d.request())
+            .ok_or(INVALID_STATE)?;
+        if current.id != q.request.id || !current.accepts(&value) {
+            return Err(INVALID_RESPONSE);
+        }
+        let owner = q.owner;
+        let request_id = q.request.id;
+        let token = r.token()?;
+        r.replies.insert(
+            token,
+            ServiceResponse {
+                owner,
+                request_id,
+                value,
+            },
+        );
+        Ok(token)
+    })
+}
+/// # Safety
+/// All input/output pointers must remain valid until return. Setup is a separate private channel.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_start(
+    source: u64,
+    kind: u32,
+    descriptor: *const u8,
+    descriptor_len: usize,
+    setup: *const u8,
+    setup_len: usize,
+    out_client: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_client)? };
+        if kind > 1 {
+            return Err(INVALID_ARGUMENT);
+        }
+        let descriptor: crate::native_client::Descriptor =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        let setup = unsafe { input(setup, setup_len, MAX_BYTES)? };
+        let _work = Work::reserve()?;
+        registry(|r| {
+            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let s = r.sessions.get(&source).ok_or(INVALID_HANDLE)?;
+            if !matches!(s.phase, Phase::Complete(_)) || s.client_started[kind as usize] {
+                return Err(INVALID_STATE);
+            }
+            let proved = s.proved.as_ref().ok_or(INVALID_STATE)?;
+            let Some(ledger::structure::ContractAction::Call(call)) =
+                proved.native().actions.iter_deref().next()
+            else {
+                return Err(INTERNAL);
+            };
+            let contract = if kind == 0 {
+                let deploy = s.deployment.as_ref().ok_or(INVALID_STATE)?;
+                let Some(ledger::structure::ContractAction::Deploy(d)) =
+                    deploy.actions.iter_deref().next()
+                else {
+                    return Err(INTERNAL);
+                };
+                if d.address() != call.address {
+                    return Err(INTERNAL);
+                }
+                crate::native_client::Contract::Deployment {
+                    intent: deploy.clone(),
+                    entrypoint: String::from_utf8(call.entry_point.0.clone())
+                        .map_err(|_| INTERNAL)?,
+                }
+            } else {
+                crate::native_client::Contract::Proved(proved.native().clone())
+            };
+            let driver = crate::native_client::Driver::start(descriptor, setup, contract)
+                .map_err(|_| INVALID_ARGUMENT)?;
+            let token = r.token()?;
+            r.clients.insert(token, Some(driver));
+            r.sessions.get_mut(&source).ok_or(INTERNAL)?.client_started[kind as usize] = true;
+            unsafe { out_client.write(token) }
+            Ok(())
+        })
+    })
+}
+/// # Safety
+/// Descriptor/context and writable output token must remain valid until return. No private witness is required.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_recover(
+    descriptor: *const u8,
+    descriptor_len: usize,
+    context: *const u8,
+    context_len: usize,
+    out_client: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_client)? };
+        let d =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        let context = unsafe { input(context, context_len, MAX_BYTES)? };
+        let driver =
+            crate::native_client::Driver::recover(d, context).map_err(|_| INVALID_ARGUMENT)?;
+        registry(|r| {
+            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let token = r.token()?;
+            r.clients.insert(token, Some(driver));
+            unsafe { out_client.write(token) }
+            Ok(())
+        })
+    })
+}
+/// # Safety
+/// command bytes and writable output token must remain valid until return.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_command(
+    client: u64,
+    command: *const u8,
+    command_len: usize,
+    out_result: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_result)? };
+        let command = std::str::from_utf8(unsafe { input(command, command_len, 32)? })
+            .ok()
+            .and_then(crate::native_client::Command::parse)
+            .ok_or(INVALID_ARGUMENT)?;
+        {
+            let mut lease = ClientLease::take(client)?;
+            lease
+                .driver()?
+                .command(command)
+                .map_err(|_| INVALID_STATE)?;
+        }
+        client_result(client_poll(client)?, out_result)
+    })
+}
+/// # Safety
+/// out_result must reference a writable token.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_advance(client: u64, out_result: *mut u64) -> i32 {
+    guard(|| {
+        unsafe { output(out_result)? };
+        client_result(client_poll(client)?, out_result)
+    })
+}
+/// # Safety
+/// out_request must reference a writable opaque service token.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_request(client: u64, out_request: *mut u64) -> i32 {
+    guard(|| {
+        unsafe { output(out_request)? };
+        registry(|r| {
+            if r.requests.len() >= MAX_SERVICES {
+                return Err(LIMIT);
+            }
+            let request = r
+                .clients
+                .get(&client)
+                .ok_or(INVALID_HANDLE)?
+                .as_ref()
+                .ok_or(INVALID_STATE)?
+                .request()
+                .ok_or(INVALID_STATE)?;
+            let token = r.token()?;
+            r.requests.insert(
+                token,
+                ServiceRequest {
+                    owner: client,
+                    request,
+                },
+            );
+            unsafe { out_request.write(token) }
+            Ok(())
+        })
+    })
+}
+/// # Safety
+/// Reply correlation metadata/output token must remain valid until return. Reply payload is a checked Rust token.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_resume(
+    client: u64,
+    metadata: *const u8,
+    metadata_len: usize,
+    reply: u64,
+    out_result: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_result)? };
+        let m: ClientReply =
+            serde_json::from_slice(unsafe { input(metadata, metadata_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_RESPONSE)?;
+        let id = m
+            .request_id
+            .parse::<u64>()
+            .ok()
+            .filter(|v| v.to_string() == m.request_id && *v > 0)
+            .ok_or(INVALID_RESPONSE)?;
+        registry(|r| {
+            let d = r
+                .clients
+                .get(&client)
+                .ok_or(INVALID_HANDLE)?
+                .as_ref()
+                .ok_or(INVALID_STATE)?;
+            let q = d.request().ok_or(INVALID_STATE)?;
+            let response = r.replies.get(&reply).ok_or(INVALID_HANDLE)?;
+            if m.abi_version != 1
+                || m.profile != crate::profile::NAME
+                || m.operation != q.operation
+                || m.capability != q.capability
+                || m.schema != q.schema
+                || id != q.id
+                || response.owner != client
+                || response.request_id != id
+                || !q.accepts(&response.value)
+            {
+                return Err(INVALID_RESPONSE);
+            }
+            let value = r.replies.remove(&reply).ok_or(INTERNAL)?.value;
+            r.clients
+                .get(&client)
+                .and_then(Option::as_ref)
+                .ok_or(INVALID_STATE)?
+                .complete(id, value)
+                .map_err(|_| INVALID_RESPONSE)?;
+            client_revoke(r, client);
+            Ok(())
+        })?;
+        client_result(client_poll(client)?, out_result)
+    })
+}
+/// # Safety
+/// out_reply must reference writable memory. This explicitly reports a host service failure, never rejection evidence.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_service_failure(
+    request: u64,
+    out_reply: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_reply)? };
+        let token = service_reply(request, crate::native_client::ServiceReply::Failure)?;
+        unsafe { out_reply.write(token) }
+        Ok(())
+    })
+}
+/// # Safety
+/// out_payload must reference writable memory. This separate token contains private native bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_private_request(
+    request: u64,
+    out_payload: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_payload)? };
+        let _work = Work::reserve()?;
+        let q = service_request(request)?;
+        let bytes = q.request.private_bytes().map_err(|_| INVALID_STATE)?;
+        if bytes.len() > 32 * 1024 * 1024 {
+            return Err(LIMIT);
+        }
+        registry(|r| {
+            if r.private.len() >= MAX_PRIVATE {
+                return Err(LIMIT);
+            }
+            let current = r
+                .clients
+                .get(&q.owner)
+                .and_then(Option::as_ref)
+                .and_then(|d| d.request())
+                .ok_or(INVALID_STATE)?;
+            if current.id != q.request.id {
+                return Err(INVALID_STATE);
+            }
+            let token = r.token()?;
+            r.private.insert(
+                token,
+                Private {
+                    bytes,
+                    owner: q.owner,
+                },
+            );
+            unsafe { out_payload.write(token) }
+            Ok(())
+        })
+    })
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn nightlean_client_service_free(token: u64) -> i32 {
+    guard(|| {
+        registry(|r| {
+            if r.requests.remove(&token).is_none() && r.replies.remove(&token).is_none() {
+                return Err(INVALID_HANDLE);
+            }
+            Ok(())
+        })
+    })
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn nightlean_client_detach(client: u64) -> i32 {
+    guard(|| {
+        registry(|r| {
+            let d = r
+                .clients
+                .get(&client)
+                .ok_or(INVALID_HANDLE)?
+                .as_ref()
+                .ok_or(INVALID_STATE)?;
+            if !d.detachable() {
+                return Err(INVALID_STATE);
+            }
+            r.clients.remove(&client);
+            client_revoke(r, client);
+            Ok(())
+        })
+    })
+}
+unsafe fn client_bytes(client: u64, out: *mut u64, state: bool) -> i32 {
+    guard(|| {
+        unsafe { output(out)? };
+        let lease = ClientLease::take(client)?;
+        let d = lease.driver.as_ref().ok_or(INTERNAL)?;
+        let bytes = if state {
+            d.receipt_state()
+        } else {
+            d.transaction()
+        }
+        .map_err(|_| INVALID_STATE)?;
+        if bytes.len() > if state { MAX_BYTES } else { 4 * MAX_BYTES } {
+            return Err(LIMIT);
+        }
+        drop(lease);
+        registry(|r| {
+            if r.results.len() >= MAX_RESULTS {
+                return Err(LIMIT);
+            }
+            let token = r.token()?;
+            r.results.insert(token, bytes);
+            unsafe { out.write(token) }
+            Ok(())
+        })
+    })
+}
+/// # Safety
+/// out_result must reference writable memory. Returns only sealed public native transaction bytes.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_transaction(client: u64, out_result: *mut u64) -> i32 {
+    unsafe { client_bytes(client, out_result, false) }
+}
+/// # Safety
+/// out_result must reference writable memory. Returns full checked finalized public contract state.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_receipt_state(client: u64, out_result: *mut u64) -> i32 {
+    unsafe { client_bytes(client, out_result, true) }
+}
+
+#[cfg(feature = "localnet")]
+pub(crate) fn service_public_bytes(bytes: Vec<u8>) -> Result<u64, i32> {
+    registry(|r| r.result(bytes))
+}
+#[cfg(feature = "localnet")]
+pub(crate) fn service_private_bytes(owner: u64, bytes: Zeroizing<Vec<u8>>) -> Result<u64, i32> {
+    registry(|r| {
+        if bytes.len() > MAX_BYTES || r.private.len() >= MAX_PRIVATE {
+            return Err(LIMIT);
+        }
+        let token = r.token()?;
+        r.private.insert(token, Private { bytes, owner });
+        Ok(token)
+    })
+}
+#[cfg(feature = "localnet")]
+pub(crate) fn service_private_revoke(owner: u64) {
+    let _ = registry(|r| {
+        r.revoke_private(owner);
+        Ok(())
+    });
 }

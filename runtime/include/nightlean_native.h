@@ -50,7 +50,7 @@ extern "C" {
    synchronously, once per session, returning a raw V2 response result token. The
    host then calls resume. External service adapters instead read private bytes
    and supply their raw response to resume. No callback, foreign pointer, stack
-   frame or asynchronous future survives an ABI call.
+   frame or asynchronous future from these phase-A proof functions survives an ABI call.
 
    cancel revokes pending payload tokens and rejects subsequent resume. Completion
    rejects later cancellation. Free revokes private tokens. Already copied host
@@ -93,6 +93,95 @@ int32_t nightlean_native_result_free(uint64_t);
 int32_t nightlean_native_private_length(uint64_t,size_t*);
 int32_t nightlean_native_private_copy(uint64_t,uint8_t*,size_t,size_t*);
 int32_t nightlean_native_private_free(uint64_t);
+/* Phase B: explicit pull/resume SDK60 client extension. Existing phase-A calls
+   above keep their original behavior. Only Rust-owned futures/objects survive
+   calls. No foreign callback, stack frame or buffer is retained.
+
+   start accepts source proof session, kind 0=exact retained deployment or 1=call,
+   public descriptor, and separate private setup. Each source kind starts once.
+   Descriptor: {"abiVersion":1,"policy":{"networkId":"undeployed",
+     "genesis":"<independent genesis>","specVersion":2001100,
+     "transactionVersion":4,"profile":"<selected profile>",
+     "maxDust":"10000000000000000000000"},
+     "capabilities":{"chain":"dev.chain","funding":"dev.wallet",
+                     "signing":"dev.approval","journal":"dev.store"}}
+   New u64 identities and u128 budgets use canonical decimal JSON strings or
+   opaque uint64_t handles. Phase A numeric requestId remains unchanged.
+   Private setup: {"hostContext":<existing host protocol context>,
+                   "stages":[<existing private_state.stage.v1 records>]}
+   Target address/entrypoint derive from the retained typed native objects.
+   Stages are host integration state, with no new source-effect proof claim.
+
+   command is prepare, submit, observe, commit, cancel, deadline or reload.
+   advance/resume return need_host metadata or an owned step result. Every host
+   request binds requestId (string), operation, capability, schema and profile.
+   request returns a typed opaque request token. Checked service replies come
+   from an explicit Rust host adapter; arbitrary claimed receipt JSON is never
+   accepted. resume accepts the exact metadata fields plus that reply token.
+   Wrong/stale/crossed/duplicate/class-mismatched replies reject before mutation.
+   service_failure reports a host failure, never finalized rejection evidence.
+   Funding/signing remain explicit host approvals/capabilities. SDK60 validates
+   the unchanged contract intent, native proof, fees, sealed transaction, applied
+   state, receipt and journal correlation inside the library.
+
+   recover takes the public descriptor and private hostContext only. It loads
+   the authenticated current full record/revision through journal.load.v1.
+   It never imports an unchecked BoundTransaction or rebuilds a funded identity.
+   Recovery requires finalized re-observation before private CAS. reload repeats
+   that trusted recovery path for a live attempt after lost acknowledgements.
+   Durable storage/version-CAS/idempotency truth is the host store capability.
+
+   Preparing/funding/signing supports cancellation. Once submit starts, do not
+   drop unresolved persist/broadcast/CAS work: finish the current method through
+   its host replies or explicit failure, then use SDK60 deadline/recovery.
+   Cancellation after submission rejects. Unknown broadcast stays Uncertain.
+   detach refuses live work or a bound record lacking a current durable ack.
+   A failed cancellation/deadline persist retains Cancelled but undurable state.
+   Retry the same cancel/deadline to obtain its durable acknowledgement. No
+   rebroadcast is permitted from Cancelled. CAS completion requires durable
+   terminal receipt before runtime acknowledgement.
+   Service work stays counted after source/session cancellation until its call
+   returns. Hard CPU/transport stop remains host worker/deadline policy.
+
+   Phase-B private_request returns a separate zeroized buffer of native private
+   bytes (up to SDK60's 32MiB recovery-record bound). Ordinary token functions
+   reject private buffers. transaction returns sealed public bytes (max4MiB).
+   receipt_state returns full checked public state (max1MiB). Step metadata is
+   private host transport, not a contract observation. Free service/result tokens.
+   No blanket native-allocation zeroization is promised. */
+int32_t nightlean_client_start(uint64_t,uint32_t,const uint8_t*,size_t,const uint8_t*,size_t,uint64_t*);
+int32_t nightlean_client_recover(const uint8_t*,size_t,const uint8_t*,size_t,uint64_t*);
+int32_t nightlean_client_command(uint64_t,const uint8_t*,size_t,uint64_t*);
+int32_t nightlean_client_advance(uint64_t,uint64_t*);
+int32_t nightlean_client_request(uint64_t,uint64_t*);
+int32_t nightlean_client_resume(uint64_t,const uint8_t*,size_t,uint64_t,uint64_t*);
+int32_t nightlean_client_service_failure(uint64_t,uint64_t*);
+int32_t nightlean_client_private_request(uint64_t,uint64_t*);
+int32_t nightlean_client_service_free(uint64_t);
+int32_t nightlean_client_detach(uint64_t);
+int32_t nightlean_client_transaction(uint64_t,uint64_t*);
+int32_t nightlean_client_receipt_state(uint64_t,uint64_t*);
+
+/* Explicit qualification helper, linked only with feature localnet. It restricts
+   execution to the qualified isolated development genesis and loopback endpoint.
+   Config includes abiVersion, policy/capabilities above, endpoint, timeoutMillis,
+   maxResponseBytes, maxReplayBlocks (string), journalDirectory, parameterCache,
+   parameterSource, dustSrsSha256 and publicDevelopmentGenesis=true. Cache/source/
+   SRS fields are null for recovery-only use. No cache fetch fallback is enabled.
+   open authenticates network/metadata and public proof material before reading
+   separate seed bytes. Seed is optional for recovery. This helper selects no
+   production wallet or endpoint. resolve dispatches the typed request through
+   existing Node, DevelopmentFunding, ExplicitSeal and DirectoryJournal code.
+   approve=1 explicitly authorizes signing; funding/signing require fresh32-byte
+   host entropy. Native checked replies preserve receipt ancestry/extrinsic/event/
+   state validation. context returns public finalized time/reference for TTL.
+   At most two adapters exist; blocking jobs share the two live-work slots. */
+int32_t nightlean_localnet_open(const uint8_t*,size_t,const uint8_t*,size_t,uint64_t*);
+int32_t nightlean_localnet_context(uint64_t,uint64_t*);
+int32_t nightlean_localnet_resolve(uint64_t,uint64_t,uint32_t,const uint8_t*,size_t,uint64_t*);
+int32_t nightlean_localnet_free(uint64_t);
+/* Explicit host-store inspection for qualification. Returns a private token. */
+int32_t nightlean_localnet_private_value(uint64_t,const uint8_t*,size_t,uint64_t*);
 #ifdef __cplusplus
 }
 #endif

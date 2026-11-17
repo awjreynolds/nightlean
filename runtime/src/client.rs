@@ -248,6 +248,7 @@ struct BoundData {
     after_height: u64,
 }
 /// Exact signed native bytes and expected execution state. No mutation or private key access.
+#[derive(Clone)]
 pub struct BoundTransaction {
     data: BoundData,
 }
@@ -1227,7 +1228,7 @@ impl SubmissionAttempt {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use base_crypto::{hash::HashOutput, time::Timestamp};
     use futures::executor::block_on;
@@ -1320,6 +1321,12 @@ mod tests {
             .unwrap();
         runtime.execution_finished(true).unwrap();
         runtime
+    }
+    pub(crate) fn prepared_driver_fixture() -> (SubmissionAttempt, host::Runtime) {
+        let bound = bound();
+        let mut runtime = runtime('a', bound.contract_address(), "11");
+        let attempt = SubmissionAttempt::new(bound, &"a".repeat(64), &mut runtime).unwrap();
+        (attempt, runtime)
     }
     struct FakeChain {
         identity: RefCell<ChainIdentity>,

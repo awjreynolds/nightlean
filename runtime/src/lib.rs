@@ -685,6 +685,11 @@ pub mod aggregates;
 pub mod profile;
 pub mod proof;
 pub mod native_ffi;
+// Reply constructors live in explicitly selected native host adapters.
+#[cfg_attr(not(feature = "localnet"), allow(dead_code))]
+mod native_client;
+#[cfg(feature = "localnet")]
+pub mod localnet_ffi;
 pub mod funding;
 pub mod client;
 pub mod control;
