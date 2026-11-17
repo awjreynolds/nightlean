@@ -8,6 +8,7 @@ use ledger::{
     structure::LedgerParameters,
 };
 use num_bigint::BigUint;
+use onchain_runtime::result_mode::{GatherEvent, ResultModeGather};
 use onchain_runtime::{
     context::QueryContext,
     ops::{Key, Op},
@@ -533,6 +534,50 @@ fn advance_native_state_prefix(
     *materialized = boundary;
     Ok(())
 }
+
+/// Gather the native VM's actual Bool result for a Member opcode. The gather
+/// query replays only the current ordered prefix against the state after prior
+/// writes, then appends a read to expose Member's result.
+fn native_member_result(
+    context: &QueryContext<Db>,
+    program: &[Op<ResultModeVerify, Db>],
+    cost: &onchain_runtime::cost_model::CostModel,
+) -> Result<bool> {
+    ensure!(
+        matches!(program.last(), Some(Op::Member)),
+        "membership read lacks a native Member opcode"
+    );
+    let mut gather_program: Vec<Op<ResultModeGather, Db>> = program
+        .iter()
+        .cloned()
+        .map(|operation| operation.translate::<ResultModeGather, _>(|_| ()))
+        .collect();
+    gather_program.push(Op::Popeq {
+        cached: false,
+        result: (),
+    });
+    let result = context
+        .query(&gather_program, None, cost)
+        .map_err(|_| anyhow!("native map membership query rejected"))?
+        .events
+        .into_iter()
+        .rev()
+        .find_map(|event| match event {
+            GatherEvent::Read(value) => Some(value),
+            GatherEvent::Log(_) => None,
+        })
+        .ok_or_else(|| anyhow!("native map membership query returned no Bool"))?;
+    let absent = aligned(&Value::Bool(false), "bit")?;
+    let present = aligned(&Value::Bool(true), "bit")?;
+    if result == absent {
+        Ok(false)
+    } else if result == present {
+        Ok(true)
+    } else {
+        bail!("native Member returned a noncanonical Bool")
+    }
+}
+
 pub struct Execution {
     pub program: Program,
     /// Exact source schedule returned by the checked native Impact groups.
@@ -558,6 +603,7 @@ pub fn prepare(
     let mut program: Program = Vec::new();
     let mut read_index = 0usize;
     let mut previous_index = None;
+    let mut member_result_pending = false;
     let mut has_written = false;
     let mut activity_schedule = Vec::with_capacity(plan.operations.len());
     for i in &plan.operations {
@@ -647,6 +693,10 @@ pub fn prepare(
                 };
                 if let Some(name) = read_reference {
                     if !env.contains_key(name) {
+                        let member_read = member_result_pending
+                            && read.ty == "Bool"
+                            && alignment == "bit"
+                            && name == &read.name;
                         if has_written {
                             advance_native_state_prefix(
                                 &mut prefix_context,
@@ -656,12 +706,24 @@ pub fn prepare(
                                 cost,
                             )?;
                         }
-                        let (slot, key) = previous_index
-                            .ok_or_else(|| anyhow!("unsupported state-read shape"))?;
-                        let read_context = if has_written { &prefix_context } else { &context };
-                        let value = match key {
-                            Some(key) => read_map_cell(read_context, slot, key, &read.ty)?,
-                            None => read_cell(read_context, slot, &read.ty)?,
+                        let read_context = if has_written {
+                            &prefix_context
+                        } else {
+                            &context
+                        };
+                        let value = if member_read {
+                            Value::Bool(native_member_result(
+                                read_context,
+                                &program[materialized_prefix..],
+                                cost,
+                            )?)
+                        } else {
+                            let (slot, key) = previous_index
+                                .ok_or_else(|| anyhow!("unsupported state-read shape"))?;
+                            match key {
+                                Some(key) => read_map_cell(read_context, slot, key, &read.ty)?,
+                                None => read_cell(read_context, slot, &read.ty)?,
+                            }
                         };
                         env.insert(name.clone(), value);
                     }
@@ -687,6 +749,7 @@ pub fn prepare(
         };
         previous_index = current_index;
         program.push(op);
+        member_result_pending = matches!(instruction, Instruction::Member);
         if matches!(instruction, Instruction::Insert { .. }) {
             mutation_boundary = program.len();
         }

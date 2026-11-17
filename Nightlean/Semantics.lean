@@ -172,6 +172,15 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       let some value := raw.as valueTy | throw s!"state map value type mismatch '{name}'"
       if !canonical ctx valueTy value then throw s!"noncanonical state map value '{name}'"
       env := (destination, Value.pack valueTy value) :: env
+    | .readMember name destination keyTy valueTy key =>
+      let key := Value.pack keyTy (← key.eval ctx env)
+      let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
+      for (oldKey, oldValue) in entries do
+        let some keyValue := oldKey.as keyTy | throw s!"state map key type mismatch '{name}'"
+        let some value := oldValue.as valueTy | throw s!"state map value type mismatch '{name}'"
+        if !canonical ctx keyTy keyValue || !canonical ctx valueTy value then
+          throw s!"noncanonical state map entry '{name}'"
+      env := (destination, Value.bool (entries.lookup key).isSome) :: env
     | .require condition =>
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .writeCell name ty value =>
@@ -205,8 +214,13 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
     let mut env := env
     let mut next := state
     for (effect, index) in effects.zipIdx do
-      let active ← match guards[index]? with
-        | some (some condition) => condition.eval ctx env
+      let guard := guards[index]?.getD none
+      if guard.isSome then
+        match effect with
+        | .writeCell .. | .writeMap .. => pure ()
+        | _ => throw "native guards are supported only on cell and map writes"
+      let active ← match guard with
+        | some condition => condition.eval ctx env
         | _ => pure true
       if active then
         match effect with
@@ -222,6 +236,15 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
           let some value := raw.as valueTy | throw s!"state map value type mismatch '{name}'"
           if !canonical ctx valueTy value then throw s!"noncanonical state map value '{name}'"
           env := (destination, Value.pack valueTy value) :: env
+        | .readMember name destination keyTy valueTy key =>
+          let key := Value.pack keyTy (← key.eval ctx env)
+          let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
+          for (oldKey, oldValue) in entries do
+            let some keyValue := oldKey.as keyTy | throw s!"state map key type mismatch '{name}'"
+            let some value := oldValue.as valueTy | throw s!"state map value type mismatch '{name}'"
+            if !canonical ctx keyTy keyValue || !canonical ctx valueTy value then
+              throw s!"noncanonical state map entry '{name}'"
+          env := (destination, Value.bool (entries.lookup key).isSome) :: env
         | .require condition =>
           if !(← condition.eval ctx env) then throw "state transition guard failed"
         | .writeCell name ty value =>

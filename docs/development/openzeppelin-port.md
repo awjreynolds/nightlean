@@ -14,9 +14,9 @@ Different instruction sequences and constraint counts are acceptable.
 
 | Needed capability | Immediate use | Current boundary |
 | --- | --- | --- |
-| Dynamic map-value reads | Balances, registered keys and allowances | Scalar reads compile from Lean to native two-part index paths. A focused 3.2.1 example passes read-after-write and rejects a tampered read. Missing keys fail. |
+| Dynamic map-value and membership reads | Balances, registered keys and allowances | Scalar value reads use native two-part index paths. Membership binds a Bool from the native VM, including after writes. Focused 3.2.1 cases pass and reject forged reads. Missing value keys fail; membership returns false. |
 | Multi-entrypoint calls on current state | Registration, transfer and supply calls on one deployed contract | Bundle collection, retained deployment and source/proof/client handoff are implemented. A selected-3.2.1 build and focused binding test pass; integrated multi-operation execution remains open in issue 67. |
-| Guarded native execution | Missing accounts, balance checks and conditional updates | Conditional scalar cell/map writes pass the selected-3.2.1 native checker. Guarded proof attachment, lazy reads and partial-expression totalization remain open in issue 43. |
+| Guarded native execution | Missing accounts, balance checks and conditional updates | Conditional scalar cell/map writes pass the selected-3.2.1 checker and real proof/attachment cases, including all-inactive private-only input, with native Noop/gas agreement. Lazy reads, general branches and partial-expression totalization remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Checked composite values exist; native ledger ADTs are tracked in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
 | Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | Typed bytes, persistent hashes and curve source operations are tracked in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
@@ -70,6 +70,8 @@ duplicate deployments stay in the assurance backlog.
 
 Historical formal qualification remains attached to its recorded source commit.
 New POC features do not inherit those proof claims automatically.
+This also applies to conditional writes, membership reads and their SDK proof
+integration. Their native checks and proof tests are separate evidence.
 The map-read extension needs corresponding changes in `GenericStateOps.lean`,
 `GenericStateEffectStep.lean` and `GenericStateConverseEffectStep.lean` before
 the generic-state proof suite covers the extended compiler. That work belongs

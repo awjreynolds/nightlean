@@ -24,18 +24,35 @@ transcript. The selected ZKIR 3.2.1 native checker accepts both active and
 inactive cases and checks the full activity vector. The Rust materializer skips
 inactive payload evaluation and state changes.
 
-This slice supports guarded scalar cell and map writes only. Guarded reads and
-guarded `require` effects fail validation. Guarded payloads with potentially
-partial evaluation, including unsigned underflow, `assertThen`, and unsafe
-narrowing casts, also fail validation until their native constraints use the
-same activity guard. The selected-321 check lives in
-`tests/Issue43ConditionalWrites.lean` and
-`runtime/tests/conditional_writes.rs`.
+This slice supports guarded scalar cell and map writes, plus unguarded scalar
+map membership reads that bind the native Bool result:
 
-Proof creation remains gated. The proof SDK still rejects skipped activity
-groups until it binds post-proof `Noop` attachment, statement inputs, and gas
-accounting to the checked schedule. This checker result does not close issue 43,
-qualify a proof path, or cover general structured branches.
+```lean
+member balances[account] as present
+when disclose(eq(present, false)) insert balances[account] := amount
+```
+
+The materializer gathers the result from the native `Member` opcode after the
+ordered write prefix. ZKIR binds the byte-aligned Bool read into the public
+transcript, so a forged membership result fails the relation check. Guarded
+reads and guarded `require` effects fail validation. Guarded payloads with
+potentially partial evaluation, including unsigned underflow, `assertThen`,
+and unsafe narrowing casts, also fail validation until their native
+constraints use the same activity guard. The selected-321 checks live in
+`tests/Issue43ConditionalWrites.lean` and
+`runtime/tests/conditional_writes.rs`, and in
+`tests/Issue43MapMembership.lean` and `runtime/tests/map_membership.rs`.
+
+The selected-3.2.1 inactive conditional-write fixture also passes real native
+proof construction and verified attachment. The SDK freezes a preview of native
+Noop insertion/merging and gas, then checks actual attachment against that exact
+statement. One changed skipped statement field rejects the proof. See the
+[native proof API](native-proof-api.md#native-phase-and-statement).
+The private-only, all-inactive source case also proves and attaches with zero
+original VM operations. Its skipped fields use an empty native transcript
+container, without a dummy source input.
+General structured branches, guarded reads and partial-expression totalization
+remain open in issue 43. This evidence includes no ledger deployment.
 
 ## Authoring and compilation
 

@@ -126,6 +126,10 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       checkSink {description := s!"public map read path '{state}'", span}
         (← expression env span key) control
       env := env ++ [(destination, [])]
+    | .readMember state destination _ _ key =>
+      checkSink {description := s!"public map membership path '{state}'", span}
+        (← expression env span key) control
+      env := env ++ [(destination, [])]
     | .require condition => discard (expression env span condition)
     | .writeCell state _ payload =>
       checkSink {description := s!"public cell write '{state}'", span}

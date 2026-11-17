@@ -73,6 +73,7 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   match value with
   | .field expression => [("alignment", toJson ("field" : String)), ("expression", nativeExpressionJson expression)]
   | .bit b => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson (.bool b))]
+  | .bitExpr expression => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson expression)]
 
 private def operationJsonBare : Backend.Impact.Op → Json
   | .dup => Json.mkObj [("op", toJson ("dup" : String))]
@@ -102,6 +103,9 @@ private def effectJson : Effect → Json
   | .readMap state destination _ ty key => Json.mkObj [("op", toJson ("readMap" : String)),
       ("state", toJson state), ("destination", toJson destination), ("type", toJson (typeName ty)),
       ("key", expressionJson key)]
+  | .readMember state destination _ _ key => Json.mkObj [("op", toJson ("readMember" : String)),
+      ("state", toJson state), ("destination", toJson destination),
+      ("type", toJson (typeName .bool)), ("key", expressionJson key)]
   | .require condition => Json.mkObj [("op", toJson ("require" : String)), ("condition", expressionJson condition)]
   | .writeCell state _ value => Json.mkObj [("op", toJson ("writeCell" : String)),
       ("state", toJson state), ("value", expressionJson value)]

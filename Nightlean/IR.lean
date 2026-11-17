@@ -109,6 +109,7 @@ by an entrypoint. The backend must bind these values into the accepted transcrip
 inductive Effect where
   | readCell (state destination : String) (ty : Ty)
   | readMap (state destination : String) (keyTy valueTy : Ty) (key : Expr keyTy)
+  | readMember (state destination : String) (keyTy valueTy : Ty) (key : Expr keyTy)
   | require (condition : Expr .bool)
   | writeCell (state : String) (ty : Ty) (value : Expr ty)
   | writeMap (state : String) (keyTy valueTy : Ty) (key : Expr keyTy) (value : Expr valueTy)
@@ -287,6 +288,11 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         requireState decls state (.map keyTy valueTy)
         key.validate caps env
         pure (some (destination, valueTy))
+      | .readMember state destination keyTy valueTy key =>
+        if !caps.stateMaps then throw "target lacks state maps"
+        requireState decls state (.map keyTy valueTy)
+        key.validate caps env
+        pure (some (destination, .bool))
       | .require condition =>
         condition.validate caps env
         pure none

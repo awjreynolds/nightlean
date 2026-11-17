@@ -12,6 +12,7 @@ abbrev Scalar := Expr .native
 inductive Aligned where
   | field (value : Scalar)
   | bit (value : Bool)
+  | bitExpr (value : Expr .bool)
   deriving Repr
 
 inductive Op where
@@ -29,6 +30,8 @@ transient-crypto/src/fab.rs. Index keys use Native field alignment. -/
 def Aligned.fields : Aligned → List Scalar
   | .field value => [.native 1, .native (Field.modulus - 2), value]
   | .bit value => [.native 1, .native 1, .native (if value then 1 else 0)]
+  | .bitExpr value => [.native 1, .native 1,
+      .select value (.native 1) (.native 0)]
 
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
@@ -123,6 +126,13 @@ def appendEffect (state : List StateDecl) (effect : Effect)
         .dup, .mapIndex slot (nativeValue _ key),
         .popeq (.field (nativeRead ty destination))]
       reads := plan.reads ++ [{name := destination, ty}] }
+  | .readMember name destination _ _ key => do
+    let slot ← stateSlot state name
+    pure { plan with
+      operations := plan.operations ++ [
+        .dup, .index slot, .push (.field (nativeValue _ key)), .member,
+        .popeq (.bitExpr (.ref destination))]
+      reads := plan.reads ++ [{name := destination, ty := .bool}] }
 
 def appendEffects (state : List StateDecl) (effects : List Effect)
     (initial : Plan) : Except String Plan :=
@@ -135,8 +145,10 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
   let before := plan.operations.length
   let result ← appendEffect state effect plan
   let added := result.operations.length - before
-  if guard.isSome && added == 0 then
-    throw "native guards are supported only on cell and map writes"
+  if guard.isSome then
+    match effect with
+    | .writeCell .. | .writeMap .. => pure ()
+    | _ => throw "native guards are supported only on cell and map writes"
   if guard.isNone && plan.activityGuards.isEmpty then
     pure result
   else
@@ -230,6 +242,13 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
         .dup, .mapIndex slot (nativeValue _ key),
         .popeq (.field (nativeRead ty destination))]
       reads := plan.reads ++ [{name := destination, ty}] }
+  | .readMember name destination _ _ key => do
+    let slot ← stateSlot state name
+    plan := { plan with
+      operations := plan.operations ++ [
+        .dup, .index slot, .push (.field (nativeValue _ key)), .member,
+        .popeq (.bitExpr (.ref destination))]
+      reads := plan.reads ++ [{name := destination, ty := .bool}] }
   pure plan
 
 private def previousEffectLoop (state : List StateDecl) (effects : List Effect)
@@ -289,7 +308,8 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
     let mut plan : Plan := {}
     let sourceNames := entry.circuit.inputs.map (·.name) ++ entry.circuit.outputs.map (·.name) ++
       entry.effects.filterMap (fun effect => match effect with
-        | .readCell _ destination _ | .readMap _ destination .. => some destination
+        | .readCell _ destination _ | .readMap _ destination .. |
+            .readMember _ destination .. => some destination
         | _ => none)
     if sourceNames.any (·.startsWith "_nightlean_") then
       throw "source names beginning '_nightlean_' are reserved by the native transcript producer"
@@ -311,6 +331,8 @@ def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Excep
     | .field expression => do pure (← expression.eval ctx env,
         Lean.Json.mkObj [("tag", Lean.toJson ("field" : String))])
     | .bit b => pure ((if b then 1 else 0),
+        Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (1 : Nat))])
+    | .bitExpr expression => pure ((if ← expression.eval ctx env then 1 else 0),
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (1 : Nat))])
   pure (Lean.Json.mkObj [("value", Lean.toJson [bytes number]),
     ("alignment", Lean.Json.arr #[Lean.Json.mkObj [

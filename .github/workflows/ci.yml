@@ -36,4 +36,6 @@ jobs:
         run: |
           lake env lean tests/Issue68MapReads.lean
           lake env lean tests/Issue43ConditionalWrites.lean
+          lake env lean tests/Issue43EmptyActivity.lean
+          lake env lean tests/Issue43MapMembership.lean
           lake env lean examples/openzeppelin/PublicSupply.lean
