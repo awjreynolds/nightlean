@@ -855,6 +855,15 @@ fn raw_preflight(value: &Json) -> Result<()> {
     Ok(())
 }
 
+fn matching_native_input_type(declared: &str, semantic: &str) -> bool {
+    declared == semantic
+        || (declared == "Native"
+            && matches!(
+                ScalarType::parse(semantic),
+                Ok(ScalarType::Bool | ScalarType::UInt(_))
+            ))
+}
+
 fn validate_relation_inputs(
     relation: &Json,
     circuit_inputs: &BTreeMap<String, (String, String)>,
@@ -867,6 +876,28 @@ fn validate_relation_inputs(
         "invalid native relation version"
     );
     let instructions = list(relation, "instructions")?;
+    let mut physical_inputs = BTreeMap::new();
+    let mut physical_order = Vec::new();
+    for (name, visibility) in input_order {
+        let (token, _) = circuit_inputs
+            .get(name)
+            .ok_or_else(|| anyhow!("unknown native circuit input"))?;
+        let names = if token == "JubjubPoint" {
+            vec![format!("{name}_x"), format!("{name}_y")]
+        } else {
+            vec![name.clone()]
+        };
+        for name in names {
+            ensure!(
+                physical_inputs
+                    .insert(name.clone(), visibility.clone())
+                    .is_none(),
+                "colliding native input coordinates"
+            );
+            physical_order.push((name, visibility.clone()));
+        }
+    }
+    ensure!(physical_inputs.len() <= 4096, "native relation input limit");
     let mut declared = BTreeMap::new();
     let mut declared_order = Vec::new();
     let mut bit_constraints = BTreeMap::<String, Vec<u64>>::new();
@@ -930,18 +961,11 @@ fn validate_relation_inputs(
         }
     }
     ensure!(
-        declared.len() == circuit_inputs.len()
-            && declared.iter().all(|(name, visibility)| {
-                circuit_inputs
-                    .get(name)
-                    .is_some_and(|(ty, expected_visibility)| {
-                        expected_visibility == visibility && ScalarType::parse(ty).is_ok()
-                    })
-            }),
+        declared == physical_inputs,
         "native relation input map differs from witness binding"
     );
     ensure!(
-        declared_order.as_slice() == input_order,
+        declared_order == physical_order,
         "native relation input order differs from witness binding"
     );
     for (name, (type_token, _)) in circuit_inputs {
@@ -950,9 +974,7 @@ fn validate_relation_inputs(
             ScalarType::Bool => Some(1),
             ScalarType::UInt(maximum) => Some(maximum.bits().max(1)),
             ScalarType::Bytes32 => bail!("native byte witness binding is unsupported"),
-            ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
-                bail!("native Jubjub provider binding is unsupported")
-            }
+            ScalarType::JubjubScalar | ScalarType::JubjubPoint => None,
         };
         if let Some(bits) = required_bits {
             ensure!(
@@ -962,7 +984,59 @@ fn validate_relation_inputs(
                 "native relation does not constrain the declared witness input width"
             );
         }
+        if matches!(type_token.as_str(), "JubjubScalar" | "JubjubPoint") {
+            validate_curve_input_bridge(instructions, name, type_token)?;
+        }
     }
+    Ok(())
+}
+
+fn validate_curve_input_bridge(instructions: &[Json], name: &str, token: &str) -> Result<()> {
+    let equal = |a: &str, b: &str| {
+        instructions.iter().any(|instruction| {
+            instruction["op"] == "constrain_eq"
+                && ((instruction["a"] == a && instruction["b"] == b)
+                    || (instruction["a"] == b && instruction["b"] == a))
+        })
+    };
+    let input = format!("%input_{name}");
+    let valid = if token == "JubjubScalar" {
+        instructions.iter().any(|conversion| {
+            conversion["op"] == "jubjub_scalar_from_native"
+                && conversion["native"] == input
+                && conversion["output"].as_str().is_some_and(|scalar| {
+                    instructions.iter().any(|encoding| {
+                        encoding["op"] == "encode"
+                            && encoding["input"] == scalar
+                            && encoding["outputs"].as_array().is_some_and(|outputs| {
+                                outputs.len() == 1
+                                    && outputs[0]
+                                        .as_str()
+                                        .is_some_and(|value| equal(&input, value))
+                            })
+                    })
+                })
+        })
+    } else {
+        let x = format!("{input}_x");
+        let y = format!("{input}_y");
+        instructions.iter().any(|conversion| {
+            conversion["op"] == "from_coordinates"
+                && conversion["inputs"] == json!([x, y])
+                && conversion["output"].as_str().is_some_and(|point| {
+                    instructions.iter().any(|projection| {
+                        projection["op"] == "into_coordinates"
+                            && projection["point"] == point
+                            && projection["outputs"].as_array().is_some_and(|outputs| {
+                                outputs.len() == 2
+                                    && outputs[0].as_str().is_some_and(|value| equal(&x, value))
+                                    && outputs[1].as_str().is_some_and(|value| equal(&y, value))
+                            })
+                    })
+                })
+        })
+    };
+    ensure!(valid, "native curve input lacks canonical roundtrip bridge");
     Ok(())
 }
 
@@ -1170,7 +1244,7 @@ fn validate_native_binding(
                 bail!("unknown native source circuit input")
             };
             ensure!(
-                (actual_type == &leaf_type || actual_type == "Native")
+                matching_native_input_type(actual_type, &leaf_type)
                     && visibility == if *is_private { "private" } else { "public" },
                 "native source leaf does not match its circuit input"
             );
@@ -1255,7 +1329,7 @@ fn validate_native_binding(
                 bail!("unknown native witness circuit input")
             };
             ensure!(
-                (actual_type == &leaf_type || actual_type == "Native") && visibility == "private",
+                matching_native_input_type(actual_type, &leaf_type) && visibility == "private",
                 "native witness leaf is not a matching private circuit input"
             );
         }
@@ -1283,7 +1357,7 @@ fn validate_native_binding(
                     circuit_inputs
                         .get(name)
                         .is_some_and(|(declared_type, declared_visibility)| {
-                            (declared_type == semantic_type || declared_type == "Native")
+                            matching_native_input_type(declared_type, semantic_type)
                                 && declared_visibility == visibility
                         })
                 }),

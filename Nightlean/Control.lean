@@ -212,8 +212,6 @@ is visible to the controller. Callback arguments/traces/journals use private cha
 private def checkPreparedDisclosure (limits : Helpers.Limits) (checked : Helpers.Prepared) (entryName : String) : Except Diagnostic Unit := do
   let program := checked.program
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown control entrypoint"
-  if entry.inputs.any fun input => input.ty == .jubjubScalar || input.ty == .jubjubPoint then
-    fail entry.span "Jubjub inputs are not supported by provider control plans"
   if !entry.compositeInputs.isEmpty || program.declarations.any fun declaration =>
       (match declaration.result with | .composite _ => true | _ => false) ||
         !declaration.compositeParameters.isEmpty then

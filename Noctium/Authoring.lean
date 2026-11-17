@@ -163,8 +163,8 @@ private def readScalarTy (stx : TSyntax `nltype) : CommandElabM Ty := do
     | .error message => throwErrorAt stx message
     | _ => throwErrorAt stx "invalid unsigned range"
   | `(nltype| Bytes32) => throwErrorAt stx "Bytes32 is not supported by readable witness source yet"
-  | `(nltype| JubjubScalar) => throwErrorAt stx "Jubjub witness routes are not supported by readable witness source yet"
-  | `(nltype| JubjubPoint) => throwErrorAt stx "Jubjub witness routes are not supported by readable witness source yet"
+  | `(nltype| JubjubScalar) => pure .jubjubScalar
+  | `(nltype| JubjubPoint) => pure .jubjubPoint
   | _ => throwErrorAt stx "unsupported readable witness scalar type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
@@ -433,14 +433,14 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let signatureName := signature.name
     validIdentity function signatureName
     unless signature.parameters.all (fun p => match p.type with
-      | .scalar ty => ty.isJubjub == _root_.Bool.false && ty.isBytes == _root_.Bool.false
+      | .scalar ty => ty.isBytes == _root_.Bool.false
       | _ => _root_.Bool.false) do
-      throwErrorAt function "witness callback parameters must use Native, Bool, or UInt scalar types"
+      throwErrorAt function "witness callback parameters must use supported scalar types"
     unless match signature.result with
-      | .scalar ty => !ty.isJubjub && !ty.isBytes
+      | .scalar ty => !ty.isBytes
       | .unit => _root_.Bool.true
       | .composite _ => _root_.Bool.false do
-      throwErrorAt function "witness callback results support only Unit, Native, Bool, or UInt"
+      throwErrorAt function "witness callback results require Unit or a supported scalar type"
     unless args.getElems.size == signature.parameters.length do
       throwErrorAt stx s!"witness '{function.getId}' argument count does not match its declaration"
     let mut loweredArgs := []
@@ -576,6 +576,8 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
       match fieldStx with
       | `(noctium_private_field| cell $field:ident : $type:nltype) => do
         let ty ← readScalarTy type
+        if ty.isJubjub then
+          throwErrorAt type "Jubjub private-state cells are not supported by this witness path"
         let key := "noctium/" ++ schemaName ++ "/" ++ field.getId.toString
         let capability := "private_state:" ++ schemaName
         let signatureName := "private_state.read." ++ schemaName ++ "." ++ field.getId.toString ++ ".v1"

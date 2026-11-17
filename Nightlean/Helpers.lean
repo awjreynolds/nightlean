@@ -361,7 +361,7 @@ private def validateResultType (program : Program) (span : SourceSpan) : ResultT
   | .unit => pure ()
   | .scalar type => do
     if type.isBytes then fail span "byte helpers require a composite bytes type"
-    liftError span (type.validate {poseidon2 := true})
+    liftError span (type.validate {poseidon2 := true, jubjub := true})
   | .composite type => discard (checkedComposite program span type)
 
 partial def sourceLeafTypes : Types.Layout → List Ty
@@ -1032,7 +1032,7 @@ def analyzeWithLimits (limits : Limits) (program : Program) : Except Diagnostic 
     let scalarNames := entry.inputs.map (·.name)
     if entry.compositeInputs.any (fun input => scalarNames.contains input.name) then
       fail entry.span "duplicate helper entrypoint input"
-    for input in entry.inputs do liftError input.span (input.ty.validate {poseidon2 := true})
+    for input in entry.inputs do liftError input.span (input.ty.validate {poseidon2 := true, jubjub := true})
     for input in entry.compositeInputs do discard (checkedComposite program input.span input.type)
     let mut scalarInputs := entry.inputs
     let mut aggregateInputs := entry.compositeInputs
@@ -1583,7 +1583,7 @@ def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : S
     constraints := inputConstraints ++ body.constraints ++ outputConstraints ++
       (if declaration.result == .unit then [.letE "$unit" body.scalar.value (.bool true)] else [])
   }
-  circuit.validate {poseidon2 := true}
+  circuit.validate {poseidon2 := true, jubjub := true}
   Disclosure.circuit circuit
   pure {circuit, calls := lowering.witnessCalls}
 

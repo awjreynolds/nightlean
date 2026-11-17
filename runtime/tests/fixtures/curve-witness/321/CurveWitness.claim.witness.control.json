@@ -1,0 +1,105 @@
+{"witnesses":
+ [{"resultType": "JubjubScalar",
+   "privateKey": null,
+   "parameters": [{"type": "JubjubScalar", "name": "value"}],
+   "operation": "noctium.witness.echoScalar.v1",
+   "name": "echoScalar",
+   "capability": "echoScalar"},
+  {"resultType": "JubjubPoint",
+   "privateKey": null,
+   "parameters": [{"type": "JubjubPoint", "name": "value"}],
+   "operation": "noctium.witness.echoPoint.v1",
+   "name": "echoPoint",
+   "capability": "echoPoint"}],
+ "types": [],
+ "schemaVersion": 2,
+ "name": "noctium.witness-circuit.curveCheck.v1",
+ "mode": "native",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs":
+ [{"visibility": "private", "type": "JubjubScalar", "name": "scalar"},
+  {"visibility": "private", "type": "JubjubPoint", "name": "point"},
+  {"visibility": "private", "type": "JubjubScalar", "name": "expectedScalar"},
+  {"visibility": "private", "type": "JubjubPoint", "name": "expectedPoint"}],
+ "functions":
+ [{"resultType": "Bool",
+   "parameters":
+   [{"type": "JubjubScalar", "name": "scalar"},
+    {"type": "JubjubPoint", "name": "point"},
+    {"type": "JubjubScalar", "name": "expectedScalar"},
+    {"type": "JubjubPoint", "name": "expectedPoint"}],
+   "name": "curveCheck",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span": {"line": 13, "file": "tests/CurveWitness.lean", "column": 3},
+      "site": "curveCheck.call.s4.0",
+      "name": "echoScalar",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 13, "file": "tests/CurveWitness.lean", "column": 3},
+        "name": "scalar"}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span": {"line": 8, "file": "tests/CurveWitness.lean", "column": 1},
+     "name": "returnedScalar"},
+    {"value":
+     {"tag": "witnessCall",
+      "span": {"line": 14, "file": "tests/CurveWitness.lean", "column": 3},
+      "site": "curveCheck.call.s5.0",
+      "name": "echoPoint",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 14, "file": "tests/CurveWitness.lean", "column": 3},
+        "name": "point"}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span": {"line": 8, "file": "tests/CurveWitness.lean", "column": 1},
+     "name": "returnedPoint"},
+    {"tag": "assert",
+     "span": {"line": 8, "file": "tests/CurveWitness.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 15, "file": "tests/CurveWitness.lean", "column": 3},
+      "right":
+      {"tag": "reference",
+       "span": {"line": 15, "file": "tests/CurveWitness.lean", "column": 3},
+       "name": "expectedScalar"},
+      "left":
+      {"tag": "reference",
+       "span": {"line": 15, "file": "tests/CurveWitness.lean", "column": 3},
+       "name": "returnedScalar"}}},
+    {"tag": "assert",
+     "span": {"line": 8, "file": "tests/CurveWitness.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 16, "file": "tests/CurveWitness.lean", "column": 3},
+      "right":
+      {"tag": "reference",
+       "span": {"line": 16, "file": "tests/CurveWitness.lean", "column": 3},
+       "name": "expectedPoint"},
+      "left":
+      {"tag": "reference",
+       "span": {"line": 16, "file": "tests/CurveWitness.lean", "column": 3},
+       "name": "returnedPoint"}}},
+    {"value":
+     {"value":
+      {"tag": "eq",
+       "span": {"line": 17, "file": "tests/CurveWitness.lean", "column": 3},
+       "right":
+       {"tag": "reference",
+        "span": {"line": 17, "file": "tests/CurveWitness.lean", "column": 3},
+        "name": "expectedScalar"},
+       "left":
+       {"tag": "reference",
+        "span": {"line": 17, "file": "tests/CurveWitness.lean", "column": 3},
+        "name": "returnedScalar"}},
+      "tag": "disclose",
+      "span": {"line": 17, "file": "tests/CurveWitness.lean", "column": 3}},
+     "tag": "return",
+     "span": {"line": 8, "file": "tests/CurveWitness.lean", "column": 1}}]}],
+ "entry": "s0d0",
+ "binding":
+ "{\"calls\":[{\"inputs\":[\"$helper5\"],\"name\":\"echoScalar\",\"ordinal\":\"0\",\"path\":[\"s0d0\"],\"resultType\":\"JubjubScalar\",\"site\":\"curveCheck.call.s4.0\"},{\"inputs\":[\"$helper8\"],\"name\":\"echoPoint\",\"ordinal\":\"1\",\"path\":[\"s0d0\"],\"resultType\":\"JubjubPoint\",\"site\":\"curveCheck.call.s5.0\"}],\"circuitInputs\":[{\"name\":\"scalar\",\"type\":\"JubjubScalar\",\"visibility\":\"private\"},{\"name\":\"point\",\"type\":\"JubjubPoint\",\"visibility\":\"private\"},{\"name\":\"expectedScalar\",\"type\":\"JubjubScalar\",\"visibility\":\"private\"},{\"name\":\"expectedPoint\",\"type\":\"JubjubPoint\",\"visibility\":\"private\"},{\"name\":\"$helper5\",\"type\":\"JubjubScalar\",\"visibility\":\"private\"},{\"name\":\"$helper8\",\"type\":\"JubjubPoint\",\"visibility\":\"private\"}],\"circuitName\":\"curveCheck\",\"circuitOutputs\":[{\"name\":\"scalarMatches\",\"type\":\"Bool\"}],\"inputBindings\":[{\"inputs\":[\"scalar\"],\"name\":\"scalar\",\"type\":\"JubjubScalar\"},{\"inputs\":[\"point\"],\"name\":\"point\",\"type\":\"JubjubPoint\"},{\"inputs\":[\"expectedScalar\"],\"name\":\"expectedScalar\",\"type\":\"JubjubScalar\"},{\"inputs\":[\"expectedPoint\"],\"name\":\"expectedPoint\",\"type\":\"JubjubPoint\"}],\"kind\":\"typed-witness-bindings\",\"nativeRelation\":{\"do_communications_commitment\":true,\"inputs\":[],\"instructions\":[{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_scalar\",\"type\":\"Scalar<BLS12-381>\"},{\"native\":\"%input_scalar\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v0\"},{\"input\":\"%v0\",\"op\":\"encode\",\"outputs\":[\"%v1\"]},{\"a\":\"%input_scalar\",\"b\":\"%v1\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_point_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_point_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_point_x\",\"%input_point_y\"],\"op\":\"from_coordinates\",\"output\":\"%v2\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v3\",\"%v4\"],\"point\":\"%v2\"},{\"a\":\"%input_point_x\",\"b\":\"%v3\",\"op\":\"constrain_eq\"},{\"a\":\"%input_point_y\",\"b\":\"%v4\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_expectedScalar\",\"type\":\"Scalar<BLS12-381>\"},{\"native\":\"%input_expectedScalar\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v5\"},{\"input\":\"%v5\",\"op\":\"encode\",\"outputs\":[\"%v6\"]},{\"a\":\"%input_expectedScalar\",\"b\":\"%v6\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_expectedPoint_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_expectedPoint_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_expectedPoint_x\",\"%input_expectedPoint_y\"],\"op\":\"from_coordinates\",\"output\":\"%v7\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v8\",\"%v9\"],\"point\":\"%v7\"},{\"a\":\"%input_expectedPoint_x\",\"b\":\"%v8\",\"op\":\"constrain_eq\"},{\"a\":\"%input_expectedPoint_y\",\"b\":\"%v9\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper5\",\"type\":\"Scalar<BLS12-381>\"},{\"native\":\"%input_$helper5\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v10\"},{\"input\":\"%v10\",\"op\":\"encode\",\"outputs\":[\"%v11\"]},{\"a\":\"%input_$helper5\",\"b\":\"%v11\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper8_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper8_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_$helper8_x\",\"%input_$helper8_y\"],\"op\":\"from_coordinates\",\"output\":\"%v12\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v13\",\"%v14\"],\"point\":\"%v12\"},{\"a\":\"%input_$helper8_x\",\"b\":\"%v13\",\"op\":\"constrain_eq\"},{\"a\":\"%input_$helper8_y\",\"b\":\"%v14\",\"op\":\"constrain_eq\"},{\"a\":\"%v10\",\"b\":\"%v5\",\"op\":\"test_eq\",\"output\":\"%v15\"},{\"cond\":\"%v15\",\"op\":\"assert\"},{\"a\":\"%v12\",\"b\":\"%v7\",\"op\":\"test_eq\",\"output\":\"%v16\"},{\"cond\":\"%v16\",\"op\":\"assert\"},{\"a\":\"%v15\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v17\"},{\"cond\":\"%v17\",\"op\":\"assert\"},{\"op\":\"output\",\"vals\":[]}],\"outputs\":[],\"version\":{\"major\":3,\"minor\":2}},\"schemaVersion\":1,\"signatures\":[{\"capability\":\"echoScalar\",\"name\":\"echoScalar\",\"operation\":\"noctium.witness.echoScalar.v1\",\"parameters\":[{\"name\":\"value\",\"type\":\"JubjubScalar\"}],\"privateKey\":null,\"resultType\":\"JubjubScalar\"},{\"capability\":\"echoPoint\",\"name\":\"echoPoint\",\"operation\":\"noctium.witness.echoPoint.v1\",\"parameters\":[{\"name\":\"value\",\"type\":\"JubjubPoint\"}],\"privateKey\":null,\"resultType\":\"JubjubPoint\"}],\"sourceExport\":\"noctium.witness-circuit.curveCheck.v1\",\"target\":{\"contractName\":\"CurveWitness\",\"entrypoint\":\"claim\",\"kind\":\"entrypoint\",\"nativeCircuitFile\":\"CurveWitness.claim.zkir\",\"targetProfile\":\"midnight-ledger-9-zkir-3.2.1\"},\"types\":[]}\n"}

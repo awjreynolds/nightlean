@@ -1,0 +1,91 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [],
+ "schemaVersion": 1,
+ "reads": [],
+ "operations": [],
+ "nativeCircuitFile": "CurveWitness.claim.zkir",
+ "guards":
+ [{"tag": "eq",
+   "right": {"value": true, "tag": "bool"},
+   "left": {"tag": "reference", "name": "scalarMatches"}}],
+ "entrypoint": "claim",
+ "contractName": "CurveWitness",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Bool",
+    "name": "scalarMatches",
+    "expression":
+    {"value": {"tag": "reference", "name": "scalar"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "point"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "expectedScalar"},
+       "tag": "let",
+       "name": "$helper2",
+       "body":
+       {"value": {"tag": "reference", "name": "expectedPoint"},
+        "tag": "let",
+        "name": "$helper3",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper0"},
+          "tag": "let",
+          "name": "$helper4",
+          "body": {"tag": "reference", "name": "$helper5"}},
+         "tag": "let",
+         "name": "$helper6",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper1"},
+           "tag": "let",
+           "name": "$helper7",
+           "body": {"tag": "reference", "name": "$helper8"}},
+          "tag": "let",
+          "name": "$helper9",
+          "body":
+          {"tag": "assertThen",
+           "condition":
+           {"tag": "eq",
+            "right": {"tag": "reference", "name": "$helper2"},
+            "left": {"tag": "reference", "name": "$helper6"}},
+           "body":
+           {"tag": "assertThen",
+            "condition":
+            {"tag": "eq",
+             "right": {"tag": "reference", "name": "$helper3"},
+             "left": {"tag": "reference", "name": "$helper9"}},
+            "body":
+            {"tag": "eq",
+             "right": {"tag": "reference", "name": "$helper2"},
+             "left": {"tag": "reference", "name": "$helper6"}}}}}}}}}}}],
+  "name": "curveCheck",
+  "inputs":
+  [{"visibility": "private", "type": "JubjubScalar", "name": "scalar"},
+   {"visibility": "private", "type": "JubjubPoint", "name": "point"},
+   {"visibility": "private", "type": "JubjubScalar", "name": "expectedScalar"},
+   {"visibility": "private", "type": "JubjubPoint", "name": "expectedPoint"},
+   {"visibility": "private", "type": "JubjubScalar", "name": "$helper5"},
+   {"visibility": "private", "type": "JubjubPoint", "name": "$helper8"}],
+  "file": "curveCheck.zkir",
+  "constraints": []}}

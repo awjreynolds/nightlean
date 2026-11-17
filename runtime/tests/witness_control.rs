@@ -7,6 +7,101 @@ use serde_json::{Value as Json, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 
+#[cfg(feature = "zkir-321")]
+#[test]
+fn typed_curve_witnesses_keep_private_values_and_feed_the_native_relation() {
+    use nightlean_runtime::{Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
+    use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine};
+
+    let source = include_str!("fixtures/curve-witness/321/CurveWitness.claim.witness.control.json");
+    let plan: Json = serde_json::from_str(source).unwrap();
+    let scalar = json!({"kind":"jubjubScalar","value":"7"});
+    let p = EmbeddedGroupAffine::generator() * EmbeddedFr::from(7u64);
+    let point = json!({"kind":"jubjubPoint", "x":field_decimal(p.x().unwrap()), "y":field_decimal(p.y().unwrap())});
+    let inputs = plan["inputs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|input| {
+            let value = match input["type"].as_str().unwrap() {
+                "JubjubScalar" => scalar.clone(),
+                "JubjubPoint" => point.clone(),
+                other => panic!("unexpected source type {other}"),
+            };
+            (input["name"].as_str().unwrap().to_owned(), value)
+        })
+        .collect();
+    let attempt = "c".repeat(64);
+    let (mut session, _) = bound_session(source, inputs, &attempt);
+    let mut seen = BTreeSet::new();
+    loop {
+        let status = session.advance().unwrap();
+        if status["status"] == "completed" {
+            assert_eq!(status["result"], true);
+            break;
+        }
+        assert_eq!(status["status"], "need_host");
+        let request = &status["request"];
+        let schema = request["schema"].as_str().unwrap();
+        seen.insert(schema.to_owned());
+        let value = match schema {
+            "JubjubScalar" => scalar.clone(),
+            "JubjubPoint" => {
+                let invalid = json!({"kind":"jubjubPoint","x":"0","y":"0"});
+                assert!(
+                    session
+                        .resume_typed(reply(request, &attempt, "value", Some(invalid)))
+                        .is_err()
+                );
+                point.clone()
+            }
+            other => panic!("unexpected provider result {other}"),
+        };
+        let private = session.private_request().unwrap();
+        assert_eq!(
+            private["arguments"]
+                .as_object()
+                .unwrap()
+                .values()
+                .next()
+                .unwrap(),
+            &value
+        );
+        session
+            .resume_typed(reply(request, &attempt, "value", Some(value)))
+            .unwrap();
+    }
+    assert_eq!(
+        seen,
+        BTreeSet::from(["JubjubScalar".into(), "JubjubPoint".into()])
+    );
+    let relation = binding(&plan)["nativeRelation"].clone();
+    let completion = session.private_completion(&relation).unwrap();
+    let native_inputs = completion["inputs"]
+        .as_object()
+        .unwrap()
+        .iter()
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    let native_plan: Plan = serde_json::from_str(include_str!(
+        "fixtures/curve-witness/321/CurveWitness.claim.impact.json"
+    ))
+    .unwrap();
+    let initial = create_state(&native_plan, &BTreeMap::new()).unwrap();
+    let execution = prepare(
+        &native_plan,
+        &native_inputs,
+        &initial,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .unwrap();
+    let circuit =
+        IrSource::load(&include_bytes!("fixtures/curve-witness/321/CurveWitness.claim.zkir")[..])
+            .unwrap();
+    check(&execution, &circuit).unwrap();
+}
+
 #[cfg(feature = "zkir-320")]
 const SCALAR_PLAN: &str =
     include_str!("fixtures/witness/320/TypedWitness.ScalarWitness.claim.witness.control.json");

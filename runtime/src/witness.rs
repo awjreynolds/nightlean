@@ -69,10 +69,6 @@ impl Type {
             ty != ScalarType::Bytes32,
             "byte witnesses require an aggregate schema"
         );
-        ensure!(
-            !matches!(ty, ScalarType::JubjubScalar | ScalarType::JubjubPoint),
-            "Jubjub provider bindings require a typed curve schema"
-        );
         Ok(Self::Scalar(ty))
     }
 
@@ -139,7 +135,8 @@ fn validate_scalar(ty: &ScalarType, value: &Json) -> Result<()> {
         }
         ScalarType::Bytes32 => bail!("byte witnesses require an aggregate schema"),
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
-            bail!("Jubjub provider bindings require a typed curve schema")
+            let token = Type::Scalar(ty.clone()).token();
+            crate::input_value(&token, value)?;
         }
     }
     Ok(())
