@@ -4692,8 +4692,8 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "39715de3419b0f459eab74915b44a2d3fccb142e",
-    "meaning": "Registered source-producer opcode coverage for restricted Native-field operations and an internal typed Bytes32 persistent-hash/Encode path. This is not complete overload, proof or ledger qualification.",
+    "sourceCommit": "7f0a25455d768e68cd9be1e35cc2396564ce6a36",
+    "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 persistent-hash/Encode paths and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 23,
     "registeredOpcodes": [
       "add",
@@ -4769,7 +4769,7 @@
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
     "remainingTokenDependencies": [
-      "mixed aligned record hashing, computed-digest byte projections and scalar derivation",
+      "mixed aligned record hashing, computed-digest byte projections and derived-key integration",
       "remaining Jubjub/ElGamal/ECDH KDF and memo integration",
       "mixed record values and memo lists",
       "complete Counter behavior",
