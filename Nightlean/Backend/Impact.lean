@@ -9,11 +9,11 @@ namespace Nightlean.Backend.Impact
 
 private def expressionCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true}
+    persistentHashNative := true, jubjub := true}
 
 private def ledgerCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, stateCells := true, stateMaps := true}
+    persistentHashNative := true, jubjub := true, stateCells := true, stateMaps := true}
 
 /-- Symbols in the ledger public-input sequence are source expressions, not
 free transcript values. Each symbol must be computed or publicly read by ZKIR. -/
@@ -82,7 +82,7 @@ structure Read where
 def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   if !read.components.isEmpty then none else
   match read.ty, read.guard with
-  | .bytes _, _ | _, none => none
+  | .bytes _, _ | .jubjubScalar, _ | .jubjubPoint, _ | _, none => none
   | .native, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.native 0)))
   | .bool, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.bool false)))
   | .uint maximum, some guard => some (.eq (.ref read.name)
@@ -100,7 +100,7 @@ def Read.inactiveDefaultConstraints (read : Read) : List (Expr .bool) :=
       | .native => some (.eq (.ref name) (.select guard (.ref name) (.native 0)))
       | .bool => some (.eq (.ref name) (.select guard (.ref name) (.bool false)))
       | .uint maximum => some (.eq (.ref name) (.select guard (.ref name) (.uint maximum 0)))
-      | .bytes _ => none
+      | .bytes _ | .jubjubScalar | .jubjubPoint => none
 
 structure Plan where
   operations : List Op := []
@@ -117,11 +117,18 @@ field-aligned UInt8 projection per source byte. -/
 def byteProjectionName (input : String) (index : Nat) : String :=
   s!"_nightlean_bytes_{input}_{index}"
 
+def jubjubScalarProjectionName (input : String) : String :=
+  s!"_nightlean_jubjub_scalar_{input}"
+
+def jubjubPointProjectionName (input : String) (index : Nat) : String :=
+  s!"_nightlean_jubjub_point_{input}_{index}"
+
 def publicInputReadCount (inputs : List Input) : Nat :=
   inputs.foldl (fun count input =>
     if input.visibility != .«public» then count
     else count + match input.ty with
       | .bytes length => length
+      | .jubjubPoint => 2
       | _ => 1) 0
 
 /-- Generated field expressions must retain the source/read types even though
@@ -152,6 +159,7 @@ private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
   | .bool, value => pure (.select value (.native 1) (.native 0))
   | .uint _, value => pure (.cast .native value)
   | .bytes _, _ => throw "Bytes32 requires byte alignment, not scalar conversion"
+  | .jubjubScalar, _ | .jubjubPoint, _ => throw "Jubjub values require explicit curve projections"
 
 private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .native, value => pure (.field value)
@@ -159,6 +167,7 @@ private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .uint _, value => pure (.field (.cast .native value))
   | .bytes 32, value => pure (.bytes32 value)
   | .bytes _, _ => throw "unsupported byte alignment"
+  | .jubjubScalar, _ | .jubjubPoint, _ => throw "Jubjub values require explicit curve projections"
 
 private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   match ty with
@@ -166,6 +175,7 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   | .bool => pure (.cast .native (.ref name : Expr .bool))
   | .uint maximum => pure (.cast .native (.ref name : Expr (.uint maximum)))
   | .bytes _ => throw "Bytes32 is read through byte alignment"
+  | .jubjubScalar | .jubjubPoint => throw "Jubjub inputs use reserved Native projections"
 
 private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) :=
   keys.mapM fun key => match key with
@@ -217,6 +227,12 @@ private def expressionNames : Expr ty → List String
   | .bytes32Literal _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
+  | .jubjubScalarFromNative value | .jubjubScalarToNative value
+  | .jubjubMulGenerator value | .jubjubNeg value
+  | .jubjubCoordinate value _ => expressionNames value
+  | .jubjubMul point scalar | .jubjubAdd point scalar =>
+    expressionNames point ++ expressionNames scalar
+  | .jubjubFromCoordinates x y => expressionNames x ++ expressionNames y
   | .ref name => [name]
   | .add left right => expressionNames left ++ expressionNames right
   | .mul left right => expressionNames left ++ expressionNames right
@@ -246,6 +262,8 @@ private def zeroValue : (ty : Ty) → Option (Expr ty)
   | .bool => some (.bool false)
   | .uint maximum => some (.uint maximum 0)
   | .bytes _ => none
+  | .jubjubScalar => some (.jubjubScalarFromNative (.native 0))
+  | .jubjubPoint => some (.jubjubFromCoordinates (.native 0) (.native 1))
 
 private def castMayFail (target source : Ty) : Bool :=
   match target, source with
@@ -267,6 +285,18 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .bytes32Literal values => .bytes32Literal values
   | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalizeUnder guard))
   | .persistentHashNative value => .persistentHashNative (totalizeUnder guard value)
+  | .jubjubScalarFromNative value => .jubjubScalarFromNative (totalizeUnder guard value)
+  | .jubjubScalarToNative value => .jubjubScalarToNative (totalizeUnder guard value)
+  | .jubjubMulGenerator scalar => .jubjubMulGenerator (totalizeUnder guard scalar)
+  | .jubjubMul point scalar =>
+    .jubjubMul (totalizeUnder guard point) (totalizeUnder guard scalar)
+  | .jubjubAdd left right =>
+    .jubjubAdd (totalizeUnder guard left) (totalizeUnder guard right)
+  | .jubjubNeg point => .jubjubNeg (totalizeUnder guard point)
+  | .jubjubCoordinate point index => .jubjubCoordinate (totalizeUnder guard point) index
+  | .jubjubFromCoordinates x y => .jubjubFromCoordinates
+      (.select guard (totalizeUnder guard x) (.native 0))
+      (.select guard (totalizeUnder guard y) (.native 1))
   | .ref name => .ref name
   | .add left right => .add (totalizeUnder guard left) (totalizeUnder guard right)
   | .mul left right => .mul (totalizeUnder guard left) (totalizeUnder guard right)
@@ -535,6 +565,23 @@ private def publicInputStep (input : Input) (plan : Plan) : Except String Plan :
       result := { result with
         operations := result.operations ++ [.push value, .popeq value]
         reads := result.reads ++ [{name, ty := .uint 255}] }
+    pure result
+  | .jubjubScalar => do
+    let scalar : Expr .jubjubScalar := .ref input.name
+    let value := Aligned.field (.jubjubScalarToNative scalar)
+    let name := input.publicProjectionIdentifiers[0]!
+    pure {plan with
+      operations := plan.operations ++ [.push value, .popeq value]
+      reads := plan.reads ++ [{name, ty := .native}]}
+  | .jubjubPoint => do
+    let point : Expr .jubjubPoint := .ref input.name
+    let mut result := plan
+    for index in [0, 1] do
+      let value := Aligned.field (.jubjubCoordinate point index)
+      let name := input.publicProjectionIdentifiers[index]!
+      result := {result with
+        operations := result.operations ++ [.push value, .popeq value]
+        reads := result.reads ++ [{name, ty := .native}]}
     pure result
   | .native | .bool | .uint _ => do
     let value := Aligned.field (← nativeRead input.ty input.name)

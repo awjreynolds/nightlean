@@ -38,6 +38,8 @@ pub enum ScalarType {
     Bool,
     UInt(BigUint),
     Bytes32,
+    JubjubScalar,
+    JubjubPoint,
 }
 impl ScalarType {
     pub fn parse(text: &str) -> Result<Self> {
@@ -45,6 +47,8 @@ impl ScalarType {
             "Native" => Ok(Self::Native),
             "Bool" => Ok(Self::Bool),
             "Bytes<32>" => Ok(Self::Bytes32),
+            "JubjubScalar" => Ok(Self::JubjubScalar),
+            "JubjubPoint" => Ok(Self::JubjubPoint),
             _ => {
                 let bound = text
                     .strip_prefix("UIntRange<")
@@ -76,6 +80,8 @@ impl Value {
             Self::Bool(_) => ScalarType::Bool,
             Self::UInt { maximum, .. } => ScalarType::UInt(maximum.clone()),
             Self::Bytes(_) => ScalarType::Bytes32,
+            Self::JubjubScalar(_) => ScalarType::JubjubScalar,
+            Self::JubjubPoint(_) => ScalarType::JubjubPoint,
         }
     }
     pub fn validate(&self) -> Result<()> {
@@ -94,15 +100,21 @@ impl Value {
             Self::Bool(b) => BigUint::from(u8::from(*b)),
             Self::UInt { number, .. } => number.clone(),
             Self::Bytes(_) => bail!("bytes have no numeric scalar encoding"),
+            Self::JubjubScalar(_) | Self::JubjubPoint(_) => {
+                bail!("Jubjub values require explicit typed conversions")
+            }
         })
     }
     pub fn cast(&self, target: &ScalarType) -> Result<Self> {
         self.validate()?;
         target.validate()?;
-        if let Self::Bytes(_) = self {
+        if matches!(
+            self,
+            Self::Bytes(_) | Self::JubjubScalar(_) | Self::JubjubPoint(_)
+        ) {
             ensure!(
-                *target == ScalarType::Bytes32,
-                "bytes cannot be cast to a scalar"
+                *target == self.scalar_type(),
+                "opaque values require an explicit typed conversion"
             );
             return Ok(self.clone());
         }
@@ -115,6 +127,9 @@ impl Value {
                 maximum: maximum.clone(),
             },
             ScalarType::Bytes32 => bail!("scalars cannot be cast to bytes"),
+            ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+                bail!("scalars cannot be cast to Jubjub values")
+            }
         };
         result.validate()?;
         Ok(result)
@@ -129,6 +144,17 @@ impl Value {
             Self::Bool(b) => serde_json::Value::Bool(*b),
             Self::UInt { number, .. } => serde_json::Value::String(number.to_str_radix(10)),
             Self::Bytes(bytes) => serde_json::json!({"kind":"bytes","values":bytes}),
+            Self::JubjubScalar(value) => serde_json::json!({
+                "kind":"jubjubScalar",
+                "value":BigUint::from_bytes_le(&value.as_le_bytes()).to_str_radix(10)
+            }),
+            Self::JubjubPoint(value) => {
+                let [x, y] = crate::jubjub::coordinates(*value)
+                    .expect("validated Jubjub point has affine coordinates");
+                serde_json::json!({
+                    "kind":"jubjubPoint", "x":crate::field_decimal(x), "y":crate::field_decimal(y)
+                })
+            }
         }
     }
 }

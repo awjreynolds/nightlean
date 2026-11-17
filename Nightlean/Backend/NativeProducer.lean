@@ -65,7 +65,7 @@ private def validIdentifier (name : String) : Bool :=
   name.startsWith "%" && name.length > 1 && name.utf8ByteSize ≤ 1024
 
 inductive NativeValueType where
-  | native | bytes32
+  | native | bytes32 | jubjubScalar | jubjubPoint
   deriving Repr, BEq, DecidableEq
 
 structure Fact where
@@ -82,6 +82,9 @@ structure State where
   inputCount : Nat := 0
   groupCount : Nat := 0
   assertionCount : Nat := 0
+  canonicalScalarInputs : List String := []
+  requiredCoordinateEqualities : List (Term × Term) := []
+  establishedCoordinateEqualities : List (Term × Term) := []
 
 def combine (term : Term) (maximum : Nat) (children : List Fact) : Except String Fact := do
   let nodes := 1 + (children.map (·.nodes)).sum
@@ -171,6 +174,18 @@ private def alignedBytes32Pairs : List Fact → Except String (List (Term × Ter
     pure ((highByte.term, low31.term) :: (← alignedBytes32Pairs rest))
   | _ => throw "Bytes32 persistent_hash requires two fields per aligned value"
 
+private def equalityPairMatches (left right : Term) (pair : Term × Term) : Bool :=
+  (left == pair.1 && right == pair.2) || (left == pair.2 && right == pair.1)
+
+private def canonicalScalarInputMatches (expected : Expected) (left right : Term) : List String :=
+  expected.inputs.filterMap fun input =>
+    if !input.canonicalJubjubScalar then none else
+    let raw := Term.input input.identifier
+    let reduced := Term.unary "jubjub_scalar_from_native" raw
+    let encoded := Term.unary "jubjub_scalar_to_native" reduced
+    if (left == raw && right == encoded) || (left == encoded && right == raw) then
+      some input.identifier else none
+
 def validateInstruction (expected : Expected) (state : State) (instruction : Json) : Except String State := do
   let opcode ← stringField instruction "op"
   let descriptor ← requireInstruction opcode
@@ -196,18 +211,44 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       "native transcript input schema/order mismatch"
     let state ← define state output {term := .input output, maximum := Field.modulus - 1}
     pure {state with inputCount := state.inputCount + 1}
-  | "add" | "mul" | "test_eq" =>
+  | "mul" =>
     let left ← nativeArgument state instruction "a"
     let right ← nativeArgument state instruction "b"
-    let maximum := if opcode == "test_eq" then 1 else
-      let bound := if opcode == "add" then left.maximum + right.maximum else left.maximum * right.maximum
-      if bound < Field.modulus then bound else Field.modulus - 1
+    let bound := left.maximum * right.maximum
+    let maximum := if bound < Field.modulus then bound else Field.modulus - 1
     defineResult state instruction (← combine (.binary opcode left.term right.term) maximum [left, right])
-  | "neg" | "not" =>
-    let value ← nativeArgument state instruction "a"
-    if opcode == "not" then requireBoolean value
-    let maximum := if opcode == "not" then 1 else if value.maximum == 0 then 0 else Field.modulus - 1
-    defineResult state instruction (← combine (.unary opcode value.term) maximum [value])
+  | "add" | "test_eq" => do
+    let left ← argument state instruction "a"
+    let right ← argument state instruction "b"
+    ensure (left.valueType == right.valueType)
+      "native equality/add operands have different typed values"
+    if opcode == "test_eq" then do
+      ensure (left.valueType != .bytes32) "Bytes32 equality is unsupported by this source surface"
+      let fact ← combine (.binary "test_eq" left.term right.term) 1 [left, right]
+      defineResult state instruction fact
+    else if left.valueType == .jubjubPoint then do
+      let fact ← combine (.binary "add_jubjub_point" left.term right.term)
+        (Field.modulus - 1) [left, right]
+      defineResult state instruction {fact with valueType := .jubjubPoint}
+    else do
+      requireNative left
+      requireNative right
+      let bound := left.maximum + right.maximum
+      let maximum := if bound < Field.modulus then bound else Field.modulus - 1
+      defineResult state instruction (← combine (.binary "add" left.term right.term) maximum [left, right])
+  | "neg" | "not" => do
+    let value ← argument state instruction "a"
+    if opcode == "not" then do
+      requireNative value
+      requireBoolean value
+      defineResult state instruction (← combine (.unary "not" value.term) 1 [value])
+    else if value.valueType == .jubjubPoint then do
+      let fact ← combine (.unary "neg_jubjub_point" value.term) (Field.modulus - 1) [value]
+      defineResult state instruction {fact with valueType := .jubjubPoint}
+    else do
+      requireNative value
+      let maximum := if value.maximum == 0 then 0 else Field.modulus - 1
+      defineResult state instruction (← combine (.unary "neg" value.term) maximum [value])
   | "cond_select" =>
     let condition ← nativeArgument state instruction "bit"
     requireBoolean condition
@@ -221,11 +262,25 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
   | "constrain_eq" =>
     let leftText ← stringField instruction "a"
     let rightText ← stringField instruction "b"
-    let left ← nativeOperand state leftText
-    let right ← nativeOperand state rightText
-    let maximum := min left.maximum right.maximum
-    let state ← refine state leftText maximum
-    refine state rightText maximum
+    let left ← operand state leftText
+    let right ← operand state rightText
+    ensure (left.valueType == right.valueType)
+      "constrain_eq operands have different native types"
+    if left.valueType == .native then do
+      let maximum := min left.maximum right.maximum
+      let state ← refine state leftText maximum
+      let state ← refine state rightText maximum
+      let canonical := canonicalScalarInputMatches expected left.term right.term
+      let coordinatePairs := state.requiredCoordinateEqualities.filter fun pair =>
+        equalityPairMatches left.term right.term pair
+      pure {state with
+        canonicalScalarInputs := (state.canonicalScalarInputs ++ canonical).eraseDups
+        establishedCoordinateEqualities :=
+          (state.establishedCoordinateEqualities ++ coordinatePairs).eraseDups}
+    else
+      ensure (left.valueType == .jubjubScalar || left.valueType == .jubjubPoint)
+        "constrain_eq supports only Native and qualified Jubjub values"
+      pure state
   | "less_than" =>
     let leftText ← stringField instruction "a"
     let left ← nativeOperand state leftText
@@ -272,16 +327,65 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     define state output {fact with valueType := .bytes32}
   | "encode" => do
     let input ← argument state instruction "input"
-    ensure (input.valueType == .bytes32)
-      "encode in this source package accepts only a typed persistent_hash Bytes32 result"
     let outputs ← arrayField instruction "outputs"
-    ensure (outputs.size == 2) "Bytes32 encode requires exactly two native outputs"
-    let lowName ← outputs[0]!.getStr?
-    let highName ← outputs[1]!.getStr?
-    let low ← combine (encodedHashChunkTerm input.term 0) (2 ^ (31 * 8) - 1) [input]
-    let state ← define state lowName low
-    let high ← combine (encodedHashChunkTerm input.term 1) 255 [input]
-    define state highName high
+    if input.valueType == .bytes32 then do
+      ensure (outputs.size == 2) "Bytes32 encode requires exactly two native outputs"
+      let lowName ← outputs[0]!.getStr?
+      let highName ← outputs[1]!.getStr?
+      let low ← combine (encodedHashChunkTerm input.term 0) (2 ^ (31 * 8) - 1) [input]
+      let state ← define state lowName low
+      let high ← combine (encodedHashChunkTerm input.term 1) 255 [input]
+      define state highName high
+    else if input.valueType == .jubjubScalar then do
+      ensure (outputs.size == 1) "JubjubScalar encode requires exactly one Native output"
+      let output ← outputs[0]!.getStr?
+      let fact ← combine (Term.unary "jubjub_scalar_to_native" input.term)
+        (Jubjub.scalarOrder - 1) [input]
+      define state output fact
+    else throw "encode accepts only qualified Bytes32 hashes or Jubjub scalars"
+  | "jubjub_scalar_from_native" => do
+    let value ← nativeArgument state instruction "native"
+    let term := Term.unary "jubjub_scalar_from_native" value.term
+    let fact ← combine term (Jubjub.scalarOrder - 1) [value]
+    defineResult state instruction {fact with valueType := .jubjubScalar}
+  | "ec_mul_generator" => do
+    let scalar ← argument state instruction "scalar"
+    ensure (scalar.valueType == .jubjubScalar) "ec_mul_generator requires a JubjubScalar"
+    let term := Term.unary "ec_mul_generator_jubjub" scalar.term
+    let fact ← combine term (Field.modulus - 1) [scalar]
+    defineResult state instruction {fact with valueType := .jubjubPoint}
+  | "ec_mul" => do
+    let point ← argument state instruction "a"
+    let scalar ← argument state instruction "scalar"
+    ensure (point.valueType == .jubjubPoint && scalar.valueType == .jubjubScalar)
+      "ec_mul requires a JubjubPoint and JubjubScalar"
+    let term := Term.binary "ec_mul_jubjub" point.term scalar.term
+    let fact ← combine term (Field.modulus - 1) [point, scalar]
+    defineResult state instruction {fact with valueType := .jubjubPoint}
+  | "from_coordinates" => do
+    let inputs ← arrayField instruction "inputs"
+    ensure (inputs.size == 2) "Jubjub from_coordinates requires two Native inputs"
+    let x ← nativeOperand state (← inputs[0]!.getStr?)
+    let y ← nativeOperand state (← inputs[1]!.getStr?)
+    let pointTerm := Term.binary "from_coordinates_jubjub" x.term y.term
+    let fact ← combine pointTerm (Field.modulus - 1) [x, y]
+    let state ← defineResult state instruction {fact with valueType := .jubjubPoint}
+    let required := [
+      (x.term, Term.unary "jubjub_x" pointTerm),
+      (y.term, Term.unary "jubjub_y" pointTerm)]
+    pure {state with requiredCoordinateEqualities :=
+      (state.requiredCoordinateEqualities ++ required).eraseDups}
+  | "into_coordinates" => do
+    let point ← argument state instruction "point"
+    ensure (point.valueType == .jubjubPoint) "into_coordinates requires a JubjubPoint"
+    let outputs ← arrayField instruction "outputs"
+    ensure (outputs.size == 2) "Jubjub into_coordinates requires exactly two outputs"
+    let xName ← outputs[0]!.getStr?
+    let yName ← outputs[1]!.getStr?
+    let x ← combine (Term.unary "jubjub_x" point.term) (Field.modulus - 1) [point]
+    let state ← define state xName x
+    let y ← combine (Term.unary "jubjub_y" point.term) (Field.modulus - 1) [point]
+    define state yName y
   | "transient_hash" =>
     let values ← nativeArguments state instruction "inputs"
     ensure (!values.isEmpty) "empty native transient hash is unsupported by this producer"
@@ -323,6 +427,8 @@ def sourceMaximum : Ty → Nat
   | .bool => 1
   | .uint maximum => maximum
   | .bytes _ => 0
+  | .jubjubScalar => Jubjub.scalarOrder - 1
+  | .jubjubPoint => 0
 
 def checkBound (state : State) (term : Term) (maximum : Nat) : Except String Unit := do
   let bounded := match term with
@@ -362,7 +468,15 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   ensure (state.assertionCount == expected.assertions.length) "missing or reordered typed source assertion"
   for input in expected.inputs do
     ensure (!input.ty.isBytes) "Bytes32 must be expanded into UInt8 native inputs"
-    checkBound state (.input input.identifier) (sourceMaximum input.ty)
+    let maximum := if input.canonicalJubjubScalar then Jubjub.scalarOrder - 1
+      else sourceMaximum input.ty
+    checkBound state (.input input.identifier) maximum
+    if input.canonicalJubjubScalar then
+      ensure (state.canonicalScalarInputs.contains input.identifier)
+        "typed JubjubScalar input lacks its canonical reduce/encode equality bridge"
+  for pair in state.requiredCoordinateEqualities do
+    ensure (state.establishedCoordinateEqualities.contains pair)
+      "Jubjub FromCoordinates lacks exact Native x/y roundtrip constraints"
   for (term, maximum) in expected.bounds do checkBound state term maximum
 
 theorem final_output_required (instructions : List Json) :

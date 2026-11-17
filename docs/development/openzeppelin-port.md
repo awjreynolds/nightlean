@@ -19,7 +19,7 @@ Different instruction sequences and constraint counts are acceptable.
 | Ledger-backed getter returns | totalSupply, balanceOf and isRegistered | Entrypoint returns are currently empty. Typed outputs checked after ledger effects and actual native CALL return binding remain in [issue 50](https://github.com/awjreynolds/noctium/issues/50). Public transcript reads supply state evidence, not returned function values. |
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Mixed records, lists and the full Counter ADT remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
-| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | The issue70 source surface keeps `persistentHash32(Bytes32) -> Bytes32` and adds `bytes32("tag")`, ordered `persistentHashVector32` preimages (1 to 32 values), and `persistentHashNative(Native)`. Each hash result needs explicit disclosure at a ledger-key sink. Lowering uses native `persistent_hash` and modern `encode` with pinned FAB alignment. Byte projections from a computed digest, curve operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
+| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | The source path has typed Jubjub scalar and point inputs, scalar reduction and lossless Native conversion, generator multiplication, point multiplication/addition/negation, coordinate conversion and equality. The source fixture builds and checks an ElGamal relation and stores four disclosed Native coordinates in one checked record cell. Curve-valued provider/control inputs, curve ledger schemas, computed-digest byte projections and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
@@ -49,6 +49,29 @@ undisclosed vector and Native hashes, malformed lengths and changed alignment.
 The fixture releases test digests to exercise ledger binding. Token encryption
 key derivation must keep its secret hash private and disclose only the public
 key. This slice generates no keys, proofs or deployment.
+
+`tests/Issue70Jubjub.lean` uses private Jubjub scalars for the encryption secret,
+randomness and plaintext, with public typed recipient and delta inputs. It checks
+scalar and recipient-key nonzero conditions, computes `c1 = rG` and
+`c2 = (m + delta)G + r·pk`, then checks decryption returns `(m + delta)G`.
+Typed scalar inputs retain their original Native leaf and must equal the
+modern-Encode representation of their reduced scalar. Typed point coordinates
+must roundtrip exactly through the checked native point constructor. The four
+coordinates enter the ledger as one existing checked Native-field record. The
+record itself carries no point-validity claim. Native curve inputs also remain
+outside provider/control witness schemas.
+
+The selected-3.2.1 native test `runtime/tests/jubjub.rs` passes exact ciphertext
+coordinates for two accounts and a full-range public scalar `q - 1`. It rejects
+wrong keys, identity keys, zero randomness, changed plaintext, and a private
+scalar changed to `q + 7` while retaining the public statement. Typed input
+decoding rejects malformed, off-curve and non-subgroup points and noncanonical
+scalars. Source producer checks reject removed scalar and coordinate equality
+bridges. The source compiler and Rust evaluator also expose `degradeToNative`:
+the first 31 digest bytes interpreted little-endian, matching the pinned native
+`degrade_to_transient` builtin. Hashing and degradation retain private origins.
+This slice generates no keys, proofs or deployment. It does not extend the
+claim-specific or generic scalar preservation theorems to curve operations.
 
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).

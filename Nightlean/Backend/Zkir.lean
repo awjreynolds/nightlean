@@ -43,6 +43,15 @@ private def checkConstants : Expr ty → Except String Unit
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
+  | .jubjubScalarFromNative value | .jubjubScalarToNative value
+  | .jubjubMulGenerator value | .jubjubNeg value
+  | .jubjubCoordinate value _ => checkConstants value
+  | .jubjubMul point scalar | .jubjubAdd point scalar => do
+    checkConstants point
+    checkConstants scalar
+  | .jubjubFromCoordinates x y => do
+    checkConstants x
+    checkConstants y
   | .add a b | .mul a b | .sub a b | .eq a b
   | .uadd a b | .usub a b | .umul a b => do checkConstants a; checkConstants b
   | .cast _ value => checkConstants value
@@ -80,6 +89,7 @@ structure LowerState where
   expressions : List (ExpressionKey × String) := []
   aliases : List (String × String) := []
   byteAliases : List (String × List String) := []
+  pointCoordinates : List (String × (String × String)) := []
 
 private abbrev LowerM := StateM LowerState
 
@@ -133,6 +143,47 @@ def constrainType (ty : Ty) (value : String) : LowerM Unit :=
   | .bool => emit "constrain_to_boolean" [("val", toJson value)]
   | .uint maximum => constrainUnsigned maximum value
   | .bytes _ => rejectLowering "Bytes32 must be expanded into byte inputs"
+  | .jubjubScalar | .jubjubPoint => rejectLowering "Jubjub values require their typed input bridge"
+
+private def lowerJubjubScalarFromNative (native : String) : LowerM String := do
+  let key : ExpressionKey := ("jubjub_scalar_from_native", [native], none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "jubjub_scalar_from_native" [("native", toJson native), ("output", toJson output)]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
+private def lowerJubjubScalarToNative (scalar : String) : LowerM String := do
+  let key : ExpressionKey := ("encode_jubjub_scalar", [scalar], none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "encode" [("input", toJson scalar), ("outputs", toJson [output])]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
+private def lowerPointCoordinates (point : String) : LowerM (String × String) := do
+  if let some outputs := (← get).pointCoordinates.lookup point then return outputs
+  let x ← fresh
+  let y ← fresh
+  emit "into_coordinates" [("point", toJson point), ("outputs", toJson [x, y])]
+  modify fun state => {state with pointCoordinates := (point, (x, y)) :: state.pointCoordinates}
+  pure (x, y)
+
+/-- Every coordinate reconstruction checks both affine limbs after the pinned
+FromCoordinates operation. This closes the source/native x roundtrip gap. -/
+private def lowerPointFromCoordinates (x y : String) : LowerM String := do
+  let key : ExpressionKey := ("from_coordinates_jubjub", [x, y], none)
+  let point ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "from_coordinates" [("inputs", toJson [x, y]), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  let (actualX, actualY) ← lowerPointCoordinates point
+  emit "constrain_eq" [("a", toJson x), ("b", toJson actualX)]
+  emit "constrain_eq" [("a", toJson y), ("b", toJson actualY)]
+  pure point
 
 private def packBytes : List String → LowerM String
   | [] => pure "0x00"
@@ -203,6 +254,22 @@ private def lowerByteInput (input : Input) : LowerM Unit := do
         [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
       constrainUnsigned 255 output
     modify fun state => {state with byteAliases := (input.name, identifiers) :: state.byteAliases}
+  | .jubjubScalar => do
+    let native := input.nativeIdentifiers.head!
+    emit (if input.visibility == .«public» then "public_input" else "private_input")
+      [("guard", Json.null), ("type", nativeType), ("output", toJson native)]
+    let scalar ← lowerJubjubScalarFromNative native
+    let encoded ← lowerJubjubScalarToNative scalar
+    emit "constrain_eq" [("a", toJson native), ("b", toJson encoded)]
+    modify fun state => {state with aliases := (input.name, scalar) :: state.aliases}
+  | .jubjubPoint => do
+    let x := input.nativeIdentifiers[0]!
+    let y := input.nativeIdentifiers[1]!
+    for identifier in [x, y] do
+      emit (if input.visibility == .«public» then "public_input" else "private_input")
+        [("guard", Json.null), ("type", nativeType), ("output", toJson identifier)]
+    let point ← lowerPointFromCoordinates x y
+    modify fun state => {state with aliases := (input.name, point) :: state.aliases}
   | _ =>
     let output := input.nativeIdentifiers.head!
     emit (if input.visibility == .«public» then "public_input" else "private_input")
@@ -271,6 +338,12 @@ def lowerExpr : Expr ty → LowerM String
     | .bytes _ => do
       rejectLowering "Bytes32 cannot be used as a scalar expression"
       pure "0x00"
+    | .jubjubScalar | .jubjubPoint =>
+      match (← get).aliases.lookup name with
+      | some value => pure value
+      | none => do
+        rejectLowering "unbound typed Jubjub source symbol"
+        pure "0x00"
     | _ => pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
   | .bytesField value index => do
     let values ← lowerBytes value
@@ -296,6 +369,41 @@ def lowerExpr : Expr ty → LowerM String
       | none =>
         rejectLowering "Bytes32 byte index is out of range"
         pure "0x00"
+  | .jubjubScalarFromNative value => do
+    lowerJubjubScalarFromNative (← lowerExpr value)
+  | .jubjubScalarToNative value => do
+    lowerJubjubScalarToNative (← lowerExpr value)
+  | .jubjubMulGenerator scalar => do
+    let scalar ← lowerExpr scalar
+    let key : ExpressionKey := ("ec_mul_generator", [scalar], none)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "ec_mul_generator" [("scalar", toJson scalar), ("output", toJson output)]
+    modify fun state => {state with expressions := (key, output) :: state.expressions}
+    pure output
+  | .jubjubMul point scalar => do
+    let point ← lowerExpr point
+    let scalar ← lowerExpr scalar
+    let key : ExpressionKey := ("ec_mul", [point, scalar], none)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "ec_mul" [("a", toJson point), ("scalar", toJson scalar), ("output", toJson output)]
+    modify fun state => {state with expressions := (key, output) :: state.expressions}
+    pure output
+  | .jubjubAdd left right => do
+    binary "add" (← lowerExpr left) (← lowerExpr right)
+  | .jubjubNeg point => do unary "neg" (← lowerExpr point)
+  | .jubjubCoordinate point index => do
+    let point ← lowerExpr point
+    let (x, y) ← lowerPointCoordinates point
+    match index with
+    | 0 => pure x
+    | 1 => pure y
+    | _ => do
+      rejectLowering "Jubjub coordinate index must be 0 or 1"
+      pure "0x00"
+  | .jubjubFromCoordinates x y => do
+    lowerPointFromCoordinates (← lowerExpr x) (← lowerExpr y)
   | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
   | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
   | .sub a b => do binary "add" (← lowerExpr a) (← unary "neg" (← lowerExpr b))
@@ -323,6 +431,9 @@ def lowerExpr : Expr ty → LowerM String
       pure output
     | .bytes _ => do
       rejectLowering "byte strings do not support scalar casts"
+      pure "0x00"
+    | .jubjubScalar | .jubjubPoint => do
+      rejectLowering "Jubjub values do not support generic scalar casts"
       pure "0x00"
   | .letE name value body => do
     let value ← lowerExpr value
@@ -389,7 +500,7 @@ Public values are explicitly bound with Impact. The surrounding contract must
 still bind this public-input sequence to its accepted ledger call transcript. -/
 private def loweringCapabilities : Capabilities :=
   { poseidon2 := true, persistentHash32 := true,
-    persistentHashVector32 := true, persistentHashNative := true }
+    persistentHashVector32 := true, persistentHashNative := true, jubjub := true }
 
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c

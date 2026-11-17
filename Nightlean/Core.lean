@@ -2,6 +2,14 @@ import Nightlean.ScalarPolicy
 
 namespace Nightlean
 
+namespace Jubjub
+
+/-- Scalar order from the pinned `midnight-curves` Jubjub field. -/
+def scalarOrder : Nat :=
+  6554484396890773809930967563523245729705921265872317281365359162392183254199
+
+end Jubjub
+
 structure SourceSpan where
   file : String := ""
   line : Nat := 1
@@ -12,6 +20,7 @@ inductive Ty where
   | native | bool
   | uint (maximum : Nat)
   | bytes (length : Nat)
+  | jubjubScalar | jubjubPoint
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def Ty.scalarKind : Ty → ScalarPolicy.Kind
@@ -19,9 +28,23 @@ def Ty.scalarKind : Ty → ScalarPolicy.Kind
   | .bool => .bool
   | .uint maximum => .uint maximum
   | .bytes length => .bytes length
+  | .jubjubScalar => .jubjubScalar
+  | .jubjubPoint => .jubjubPoint
 
 def Ty.isBytes : Ty → Bool
   | .bytes _ => true
+  | _ => false
+
+def Ty.isJubjub : Ty → Bool
+  | .jubjubScalar | .jubjubPoint => true
+  | _ => false
+
+def Ty.isJubjubScalar : Ty → Bool
+  | .jubjubScalar => true
+  | _ => false
+
+def Ty.isJubjubPoint : Ty → Bool
+  | .jubjubPoint => true
   | _ => false
 
 end Nightlean

@@ -26,6 +26,7 @@ private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
 
 private def fromKind : ScalarPolicy.Kind → Ty
   | .native => .native | .bool => .bool | .uint m => .uint m | .bytes length => .bytes length
+  | .jubjubScalar => .jubjubScalar | .jubjubPoint => .jubjubPoint
 
 private def declaration (program : Program) (id : DeclarationId) (span : SourceSpan) : Except Diagnostic Helpers.Declaration :=
   match program.declarations.find? (·.id == id) with
@@ -211,6 +212,8 @@ is visible to the controller. Callback arguments/traces/journals use private cha
 private def checkPreparedDisclosure (limits : Helpers.Limits) (checked : Helpers.Prepared) (entryName : String) : Except Diagnostic Unit := do
   let program := checked.program
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown control entrypoint"
+  if entry.inputs.any fun input => input.ty == .jubjubScalar || input.ty == .jubjubPoint then
+    fail entry.span "Jubjub inputs are not supported by provider control plans"
   if !entry.compositeInputs.isEmpty || program.declarations.any fun declaration =>
       (match declaration.result with | .composite _ => true | _ => false) ||
         !declaration.compositeParameters.isEmpty then
@@ -238,6 +241,8 @@ private def typeName : ResultType → String
   | .scalar .bool => "Bool"
   | .scalar (.uint maximum) => s!"UIntRange<{maximum + 1}>"
   | .scalar (.bytes length) => s!"Bytes<{length}>"
+  | .scalar .jubjubScalar => "JubjubScalar"
+  | .scalar .jubjubPoint => "JubjubPoint"
   | .composite _ => "Aggregate"
 
 private def idName (id : DeclarationId) : String := s!"s{id.scope}d{id.ordinal}"

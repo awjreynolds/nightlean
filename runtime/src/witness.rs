@@ -1,6 +1,6 @@
 //! Canonical value types shared by typed witness requests and fixed composites.
-use crate::{aggregates, canonical_field, canonical_unsigned, ScalarType};
-use anyhow::{anyhow, bail, ensure, Result};
+use crate::{ScalarType, aggregates, canonical_field, canonical_unsigned};
+use anyhow::{Result, anyhow, bail, ensure};
 use num_bigint::BigUint;
 use serde_json::Value as Json;
 use std::{collections::BTreeMap, ops::Range, sync::Arc};
@@ -65,7 +65,14 @@ impl Type {
             return Ok(Self::Aggregate(token.to_owned()));
         }
         let ty = ScalarType::parse(token)?;
-        ensure!(ty != ScalarType::Bytes32, "byte witnesses require an aggregate schema");
+        ensure!(
+            ty != ScalarType::Bytes32,
+            "byte witnesses require an aggregate schema"
+        );
+        ensure!(
+            !matches!(ty, ScalarType::JubjubScalar | ScalarType::JubjubPoint),
+            "Jubjub provider bindings require a typed curve schema"
+        );
         Ok(Self::Scalar(ty))
     }
 
@@ -75,6 +82,8 @@ impl Type {
             Self::Scalar(ScalarType::Native) => "Native".to_owned(),
             Self::Scalar(ScalarType::Bool) => "Bool".to_owned(),
             Self::Scalar(ScalarType::Bytes32) => "Bytes<32>".to_owned(),
+            Self::Scalar(ScalarType::JubjubScalar) => "JubjubScalar".to_owned(),
+            Self::Scalar(ScalarType::JubjubPoint) => "JubjubPoint".to_owned(),
             Self::Scalar(ScalarType::UInt(maximum)) => {
                 format!("UIntRange<{}>", maximum + BigUint::from(1u8))
             }
@@ -97,6 +106,8 @@ fn scalar_type_key(ty: &ScalarType) -> String {
         ScalarType::Native => "sN".to_owned(),
         ScalarType::Bool => "sB".to_owned(),
         ScalarType::Bytes32 => "bytes32".to_owned(),
+        ScalarType::JubjubScalar => "jubjubScalar".to_owned(),
+        ScalarType::JubjubPoint => "jubjubPoint".to_owned(),
         ScalarType::UInt(maximum) => format!("sU{};", maximum.to_str_radix(10)),
     }
 }
@@ -127,6 +138,9 @@ fn validate_scalar(ty: &ScalarType, value: &Json) -> Result<()> {
             canonical_unsigned(text, maximum)?;
         }
         ScalarType::Bytes32 => bail!("byte witnesses require an aggregate schema"),
+        ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+            bail!("Jubjub provider bindings require a typed curve schema")
+        }
     }
     Ok(())
 }
@@ -355,6 +369,9 @@ impl Registry {
                 ScalarType::Bool => "bool",
                 ScalarType::UInt(_) => "uint",
                 ScalarType::Bytes32 => bail!("byte projections require an aggregate schema"),
+                ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+                    bail!("Jubjub projections require a typed curve schema")
+                }
             };
             ensure!(
                 projected_value.get("kind").and_then(Json::as_str) == Some(expected_kind),
@@ -383,6 +400,9 @@ impl Registry {
                         .ok_or_else(|| anyhow!("aggregate projection Boolean value missing"))?,
                 ),
                 ScalarType::Bytes32 => bail!("byte projections require an aggregate schema"),
+                ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+                    bail!("Jubjub projections require a typed curve schema")
+                }
             };
             wipe_json(&mut projected_value);
             projected_value = canonical;

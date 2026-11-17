@@ -8,10 +8,12 @@ inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeBytes32
+  | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
+  | jubjubSubgroupScalar | jubjubAffinePoint
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -25,6 +27,7 @@ inductive EffectRule where
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input
+  | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates
   deriving Repr, BEq, DecidableEq
 
 inductive GuardRule where
@@ -33,7 +36,7 @@ inductive GuardRule where
 
 inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
-  | sourceHashTerm | encodedHashChunks
+  | sourceHashTerm | encodedHashChunks | canonicalScalarInput | exactCoordinateRoundtrip
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -128,10 +131,12 @@ private def scalar (operands : OperandRule) (privacy : PrivacyRule) (effects : E
 def instructionSupport (opcode : String) : Except String Support :=
   if !instructionNames.contains opcode then .error s!"unknown native instruction '{opcode}'"
   else .ok <| match opcode with
-  | "add" | "mul" | "test_eq" => .supported <|
+  | "add" | "mul" => .supported <|
     scalar .nativeBinary .propagateAll .pure .canonicalNative .noGuard .none ["a", "b", "output"]
+  | "test_eq" => .supported <|
+    scalar .nativeBinary .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "b", "output"]
   | "neg" => .supported <|
-    scalar .nativeUnary .propagateAll .pure .canonicalNative .noGuard .none ["a", "output"]
+    scalar .nativeUnary .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "output"]
   | "not" => .supported <|
     scalar .nativeUnary .propagateAll .pure .nativeBoolean .noGuard .none ["a", "output"]
   | "assert" => .supported <|
@@ -153,9 +158,28 @@ def instructionSupport (opcode : String) : Except String Support :=
       ["alignment", "inputs", "output"]
     {descriptor with encoding := .fabAlignedHashPreimage}
   | "encode" => .supported <|
-    let descriptor := scalar .encodeBytes32 .propagateAll .pure .typedBytes32Input .noGuard .encodedHashChunks
+    scalar .encodeBytes32 .propagateAll .pure .typedBytes32Input .noGuard .encodedHashChunks
       ["input", "outputs"]
-    {descriptor with encoding := .bytes32EncodingChunks}
+  | "jubjub_scalar_from_native" => .supported <|
+    let descriptor := scalar .jubjubScalarBridge .propagateAll .pure .reducedJubjubScalar
+      .noGuard .canonicalScalarInput ["native", "output"]
+    {descriptor with encoding := .jubjubSubgroupScalar}
+  | "ec_mul" => .supported <|
+    let descriptor := scalar .jubjubPointArithmetic .propagateAll .pure .validJubjubPoint
+      .noGuard .sourceHashTerm ["a", "scalar", "output"]
+    {descriptor with encoding := .jubjubAffinePoint}
+  | "ec_mul_generator" => .supported <|
+    let descriptor := scalar .jubjubPointArithmetic .propagateAll .pure .reducedJubjubScalar
+      .noGuard .sourceHashTerm ["scalar", "output"]
+    {descriptor with encoding := .jubjubAffinePoint}
+  | "from_coordinates" => .supported <|
+    let descriptor := scalar .jubjubCoordinates .propagateAll .pure .exactJubjubCoordinates
+      .noGuard .exactCoordinateRoundtrip ["inputs", "output"]
+    {descriptor with encoding := .jubjubAffinePoint}
+  | "into_coordinates" => .supported <|
+    let descriptor := scalar .jubjubCoordinates .propagateAll .pure .validJubjubPoint
+      .noGuard .sourceHashTerm ["point", "outputs"]
+    {descriptor with encoding := .jubjubAffinePoint}
   | "public_input" => .supported <|
     scalar .nativeInput .declaredInputOrigin .transcriptInput .matchingNativeSignature .sourceBoundPublicRead
       .expectedInputSchema ["guard", "type", "output"]
@@ -174,6 +198,12 @@ def valueTypeSupport (name : String) : Except String Support :=
   if !valueTypeNames.contains name then .error s!"unknown native value type '{name}'"
   else if name == "Native" then
     .ok (.supported (scalar .nativeUnary .propagateAll .pure .canonicalNative .noGuard .none []))
+  else if name == "JubjubScalar" then
+    .ok (.supported (scalar .jubjubScalarBridge .propagateAll .pure .reducedJubjubScalar
+      .noGuard .canonicalScalarInput []))
+  else if name == "JubjubPoint" then
+    .ok (.supported (scalar .jubjubPointArithmetic .propagateAll .pure .validJubjubPoint
+      .noGuard .exactCoordinateRoundtrip []))
   else .ok (.unsupported "Native typed Bool, bytes and foreign-curve layouts require their own source/ABI/native conformance package")
 
 def requireInstruction (opcode : String) : Except String Descriptor := do

@@ -1,0 +1,213 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "schemaVersion": 1,
+ "qualification": "unqualified-relation-and-state-description",
+ "deployable": false,
+ "contracts":
+ [{"state":
+   [{"name": "ciphertexts",
+     "kind":
+     {"tree":
+      {"map":
+       ["Bytes<32>",
+        {"composite":
+         {"typeFingerprint":
+          "NightleanCompositeTypeV1;r25:Issue70Jubjub.Ciphertext4NightleanCompositeLayoutV1;1;R25:Issue70Jubjub.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+          "schemaVersion": 1,
+          "layout":
+          {"kind": "struct",
+           "id": "Issue70Jubjub.Ciphertext4",
+           "fields":
+           [{"name": "c1x",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "c1y",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "c2x",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "c2y",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+          "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}}}]}}}],
+   "name": "Issue70Jubjub",
+   "entrypoints":
+   [{"nativePlanFile": "Issue70Jubjub.encrypt.impact.json",
+     "nativeCircuitQualified": false,
+     "nativeCircuitFile": "Issue70Jubjub.encrypt.zkir",
+     "name": "encrypt",
+     "effects":
+     [{"values":
+       [{"ref": "c1x"}, {"ref": "c1y"}, {"ref": "c2x"}, {"ref": "c2y"}],
+       "state": "ciphertexts",
+       "op": "writeCompositePath",
+       "keys": [{"ref": "account"}]},
+      {"state": "ciphertexts",
+       "op": "readCompositePath",
+       "keys": [{"ref": "account"}],
+       "destinations":
+       ["observed_c1x", "observed_c1y", "observed_c2x", "observed_c2y"],
+       "destination": "observed"},
+      {"op": "require",
+       "condition": {"eq": [{"ref": "observed_c1x"}, {"ref": "c1x"}]}},
+      {"op": "require",
+       "condition": {"eq": [{"ref": "observed_c1y"}, {"ref": "c1y"}]}},
+      {"op": "require",
+       "condition": {"eq": [{"ref": "observed_c2x"}, {"ref": "c2x"}]}},
+      {"op": "require",
+       "condition": {"eq": [{"ref": "observed_c2y"}, {"ref": "c2y"}]}}],
+     "circuit": "issue70Jubjub"}]}],
+ "circuits":
+ [{"outputs":
+   [{"visibility": "public",
+     "type": "Native",
+     "name": "c1x",
+     "expression":
+     {"tag": "jubjubCoordinate",
+      "point":
+      {"tag": "jubjubMulGenerator",
+       "scalar": {"tag": "reference", "name": "r"}},
+      "index": 0}},
+    {"visibility": "public",
+     "type": "Native",
+     "name": "c1y",
+     "expression":
+     {"tag": "jubjubCoordinate",
+      "point":
+      {"tag": "jubjubMulGenerator",
+       "scalar": {"tag": "reference", "name": "r"}},
+      "index": 1}},
+    {"visibility": "public",
+     "type": "Native",
+     "name": "c2x",
+     "expression":
+     {"tag": "jubjubCoordinate",
+      "point":
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMul",
+        "scalar": {"tag": "reference", "name": "r"},
+        "point": {"tag": "reference", "name": "pk"}},
+       "left":
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubMulGenerator",
+         "scalar": {"tag": "reference", "name": "publicScalar"}},
+        "left":
+        {"tag": "jubjubMulGenerator",
+         "scalar": {"tag": "reference", "name": "message"}}}},
+      "index": 0}},
+    {"visibility": "public",
+     "type": "Native",
+     "name": "c2y",
+     "expression":
+     {"tag": "jubjubCoordinate",
+      "point":
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMul",
+        "scalar": {"tag": "reference", "name": "r"},
+        "point": {"tag": "reference", "name": "pk"}},
+       "left":
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubMulGenerator",
+         "scalar": {"tag": "reference", "name": "publicScalar"}},
+        "left":
+        {"tag": "jubjubMulGenerator",
+         "scalar": {"tag": "reference", "name": "message"}}}},
+      "index": 1}}],
+   "name": "issue70Jubjub",
+   "inputs":
+   [{"visibility": "private", "type": "JubjubScalar", "name": "sk"},
+    {"visibility": "private", "type": "JubjubScalar", "name": "r"},
+    {"visibility": "private", "type": "JubjubScalar", "name": "message"},
+    {"visibility": "public", "type": "JubjubPoint", "name": "pk"},
+    {"visibility": "public", "type": "Bytes<32>", "name": "account"},
+    {"visibility": "public", "type": "JubjubScalar", "name": "publicScalar"}],
+   "file": "issue70Jubjub.zkir",
+   "constraints":
+   [{"tag": "eq",
+     "right":
+     {"y": {"value": "1", "tag": "constant"},
+      "x": {"value": "0", "tag": "constant"},
+      "tag": "jubjubFromCoordinates"},
+     "left":
+     {"y": {"value": "1", "tag": "constant"},
+      "x": {"value": "0", "tag": "constant"},
+      "tag": "jubjubFromCoordinates"}},
+    {"tag": "eq",
+     "right":
+     {"tag": "jubjubMulGenerator",
+      "scalar": {"tag": "reference", "name": "sk"}},
+     "left": {"tag": "reference", "name": "pk"}},
+    {"tag": "eq",
+     "right": {"value": false, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"value": "0", "tag": "constant"},
+      "left":
+      {"value": {"tag": "reference", "name": "sk"},
+       "tag": "jubjubScalarToNative"}}},
+    {"tag": "eq",
+     "right": {"value": false, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"value": "0", "tag": "constant"},
+      "left":
+      {"value": {"tag": "reference", "name": "r"},
+       "tag": "jubjubScalarToNative"}}},
+    {"tag": "eq",
+     "right": {"value": false, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right":
+      {"y": {"value": "1", "tag": "constant"},
+       "x": {"value": "0", "tag": "constant"},
+       "tag": "jubjubFromCoordinates"},
+      "left": {"tag": "reference", "name": "pk"}}},
+    {"tag": "eq",
+     "right":
+     {"tag": "jubjubAdd",
+      "right":
+      {"tag": "jubjubMulGenerator",
+       "scalar": {"tag": "reference", "name": "publicScalar"}},
+      "left":
+      {"tag": "jubjubMulGenerator",
+       "scalar": {"tag": "reference", "name": "message"}}},
+     "left":
+     {"tag": "jubjubAdd",
+      "right":
+      {"tag": "jubjubNeg",
+       "point":
+       {"tag": "jubjubMul",
+        "scalar": {"tag": "reference", "name": "sk"},
+        "point":
+        {"tag": "jubjubMulGenerator",
+         "scalar": {"tag": "reference", "name": "r"}}}},
+      "left":
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMul",
+        "scalar": {"tag": "reference", "name": "r"},
+        "point": {"tag": "reference", "name": "pk"}},
+       "left":
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubMulGenerator",
+         "scalar": {"tag": "reference", "name": "publicScalar"}},
+        "left":
+        {"tag": "jubjubMulGenerator",
+         "scalar": {"tag": "reference", "name": "message"}}}}}}]}]}

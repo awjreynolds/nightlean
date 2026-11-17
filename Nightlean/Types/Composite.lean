@@ -269,9 +269,11 @@ def scalarLeaf : Ty → Except String ScalarLeaf
   | .bool => pure .booleanField
   | .uint maximum => pure (.boundedUnsignedField maximum)
   | .bytes _ => .error "byte strings require a composite bytes layout"
+  | .jubjubScalar | .jubjubPoint => .error "Jubjub values require a qualified curve schema"
 
 private def validateScalarLayoutTy (ty : Ty) : Except String Unit := do
   if ty.isBytes then throw "byte strings require a composite bytes layout"
+  if ty.isJubjub then throw "Jubjub values require a qualified curve schema"
   ScalarPolicy.validate ty.scalarKind
 
 mutual
@@ -661,6 +663,8 @@ private def encodeScalar : Ty → String
   | .bool => "B"
   | .uint maximum => "U" ++ encodeNat maximum
   | .bytes length => "X" ++ encodeNat length
+  | .jubjubScalar => "JS"
+  | .jubjubPoint => "JP"
 
 mutual
   private def encodeType : CompositeType → String

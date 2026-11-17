@@ -9,13 +9,15 @@ open Lean Elab Command
 private def sourceCapabilities : Capabilities :=
   { poseidon2 := Bool.true, persistentHash32 := Bool.true,
     persistentHashVector32 := Bool.true, persistentHashNative := Bool.true,
-    stateCells := Bool.true, stateMaps := Bool.true }
+    jubjub := Bool.true, stateCells := Bool.true, stateMaps := Bool.true }
 
 private def typeName : Ty → String
   | .native => "Native"
   | .bool => "Bool"
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
   | .bytes length => s!"Bytes<{length}>"
+  | .jubjubScalar => "JubjubScalar"
+  | .jubjubPoint => "JubjubPoint"
 
 private def expressionJson : Expr ty → Json
   | .native n => Json.mkObj [("native", toJson (toString n))]
@@ -34,6 +36,22 @@ private def expressionJson : Expr ty → Json
       ("values", toJson (values.map expressionJson))]
   | .persistentHashNative value => Json.mkObj [("tag", toJson ("persistentHashNative" : String)),
       ("value", expressionJson value)]
+  | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
+      ("value", expressionJson value)]
+  | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),
+      ("value", expressionJson value)]
+  | .jubjubMulGenerator scalar => Json.mkObj [("tag", toJson ("jubjubMulGenerator" : String)),
+      ("scalar", expressionJson scalar)]
+  | .jubjubMul point scalar => Json.mkObj [("tag", toJson ("jubjubMul" : String)),
+      ("point", expressionJson point), ("scalar", expressionJson scalar)]
+  | .jubjubAdd left right => Json.mkObj [("tag", toJson ("jubjubAdd" : String)),
+      ("left", expressionJson left), ("right", expressionJson right)]
+  | .jubjubNeg point => Json.mkObj [("tag", toJson ("jubjubNeg" : String)),
+      ("point", expressionJson point)]
+  | .jubjubCoordinate point index => Json.mkObj [("tag", toJson ("jubjubCoordinate" : String)),
+      ("point", expressionJson point), ("index", toJson index)]
+  | .jubjubFromCoordinates x y => Json.mkObj [("tag", toJson ("jubjubFromCoordinates" : String)),
+      ("x", expressionJson x), ("y", expressionJson y)]
   | .ref name => Json.mkObj [("ref", toJson name)]
   | .add a b => Json.mkObj [("add", toJson [expressionJson a, expressionJson b])]
   | .mul a b => Json.mkObj [("mul", toJson [expressionJson a, expressionJson b])]
@@ -71,6 +89,22 @@ private def nativeExpressionJson : Expr ty → Json
       ("values", toJson (values.map nativeExpressionJson))]
   | .persistentHashNative value => Json.mkObj [("tag", toJson ("persistentHashNative" : String)),
       ("value", nativeExpressionJson value)]
+  | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
+      ("value", nativeExpressionJson value)]
+  | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),
+      ("value", nativeExpressionJson value)]
+  | .jubjubMulGenerator scalar => Json.mkObj [("tag", toJson ("jubjubMulGenerator" : String)),
+      ("scalar", nativeExpressionJson scalar)]
+  | .jubjubMul point scalar => Json.mkObj [("tag", toJson ("jubjubMul" : String)),
+      ("point", nativeExpressionJson point), ("scalar", nativeExpressionJson scalar)]
+  | .jubjubAdd left right => Json.mkObj [("tag", toJson ("jubjubAdd" : String)),
+      ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
+  | .jubjubNeg point => Json.mkObj [("tag", toJson ("jubjubNeg" : String)),
+      ("point", nativeExpressionJson point)]
+  | .jubjubCoordinate point index => Json.mkObj [("tag", toJson ("jubjubCoordinate" : String)),
+      ("point", nativeExpressionJson point), ("index", toJson index)]
+  | .jubjubFromCoordinates x y => Json.mkObj [("tag", toJson ("jubjubFromCoordinates" : String)),
+      ("x", nativeExpressionJson x), ("y", nativeExpressionJson y)]
   | .ref name => Json.mkObj [("tag", toJson ("reference" : String)), ("name", toJson name)]
   | .add a b => binary "add" (nativeExpressionJson a) (nativeExpressionJson b)
   | .mul a b => binary "mul" (nativeExpressionJson a) (nativeExpressionJson b)

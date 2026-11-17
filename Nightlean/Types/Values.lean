@@ -13,6 +13,7 @@ private def encodedTextSize (value : String) : Nat :=
 private def typeEncodingSize : CompositeType → Nat
   | .unit => 1
   | .scalar .native | .scalar .bool => 2
+  | .scalar .jubjubScalar | .scalar .jubjubPoint => 3
   | .scalar (.uint maximum) => 2 + encodedNatSize maximum
   | .scalar (.bytes length) => 2 + encodedNatSize length
   | .tuple items => 3 + encodedNatSize items.length + (items.map typeEncodingSize).sum
@@ -105,6 +106,8 @@ private def leafType : ScalarLeaf → Except String Ty
   | _ => throw "invalid standalone aggregate scalar layout"
 
 private def scalarValid (type : Ty) (number : Nat) : Except String Unit := do
+  if type.isJubjub then throw "Jubjub values require a qualified curve schema"
+  if type.isBytes then throw "byte strings require an aggregate bytes value"
   ScalarPolicy.validate type.scalarKind
   unless ScalarPolicy.accepts type.scalarKind number do throw "aggregate scalar is outside its type"
 

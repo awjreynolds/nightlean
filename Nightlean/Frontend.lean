@@ -95,6 +95,8 @@ scoped syntax "Bool" : nltype
 scoped syntax "UInt" num : nltype
 scoped syntax "UIntRange" num : nltype
 scoped syntax "Bytes32" : nltype
+scoped syntax "JubjubScalar" : nltype
+scoped syntax "JubjubPoint" : nltype
 
 declare_syntax_cat nlexpr
 scoped syntax ident : nlexpr
@@ -117,6 +119,16 @@ scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
 scoped syntax "bytes32(" str ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
+scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
+scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
+scoped syntax "jubjubScalarToNative(" nlexpr ")" : nlexpr
+scoped syntax "jubjubMulGenerator(" nlexpr ")" : nlexpr
+scoped syntax "jubjubMul(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "jubjubAdd(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "jubjubNeg(" nlexpr ")" : nlexpr
+scoped syntax "jubjubX(" nlexpr ")" : nlexpr
+scoped syntax "jubjubY(" nlexpr ")" : nlexpr
+scoped syntax "jubjubFromCoordinates(" nlexpr "," nlexpr ")" : nlexpr
 
 declare_syntax_cat nlcstmt
 scoped syntax "public" ident ":" nltype : nlcstmt
@@ -186,6 +198,8 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
     | .error message => throwErrorAt stx message
     | _ => throwErrorAt stx "invalid unsigned range"
   | `(nltype| Bytes32) => pure (.bytes 32)
+  | `(nltype| JubjubScalar) => pure .jubjubScalar
+  | `(nltype| JubjubPoint) => pure .jubjubPoint
   | _ => throwErrorAt stx "unsupported Noctium type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
@@ -193,6 +207,8 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .bool => `(Nightlean.Ty.bool)
   | .uint maximum => `(Nightlean.Ty.uint $(⟨Syntax.mkNumLit (toString maximum)⟩))
   | .bytes length => `(Nightlean.Ty.bytes $(⟨Syntax.mkNumLit (toString length)⟩))
+  | .jubjubScalar => `(Nightlean.Ty.jubjubScalar)
+  | .jubjubPoint => `(Nightlean.Ty.jubjubPoint)
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
@@ -270,6 +286,17 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
+  | `(nlexpr| degradeToNative($value)) => hasPartialScalar value
+  | `(nlexpr| jubjubScalarFromNative($value))
+  | `(nlexpr| jubjubScalarToNative($value))
+  | `(nlexpr| jubjubMulGenerator($value))
+  | `(nlexpr| jubjubNeg($value))
+  | `(nlexpr| jubjubX($value))
+  | `(nlexpr| jubjubY($value)) => hasPartialScalar value
+  | `(nlexpr| jubjubMul($point, $scalar))
+  | `(nlexpr| jubjubAdd($point, $scalar)) =>
+    hasPartialScalar point || hasPartialScalar scalar
+  | `(nlexpr| jubjubFromCoordinates($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| select($c, $a, $b)) =>
     hasPartialScalar c || hasPartialScalar a || hasPartialScalar b
   | _ => Bool.false
@@ -301,7 +328,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .ok _ => pure (.uint n.getNat, ← `(Nightlean.Expr.uint $n $n))
   | `(nlexpr| cast($target:nltype, $value:nlexpr)) =>
     let target ← readTy target
-    let (_, value) ← expression env value
+    let (source, value) ← expression env value
+    if target.isJubjub || source.isJubjub then
+      throwErrorAt stx "Jubjub values require explicit Jubjub conversions"
     pure (target, ← `(Nightlean.Expr.cast $(← tyTerm target) $value))
   | `(nlexpr| default($target:nltype)) =>
     let target ← readTy target
@@ -310,6 +339,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .bool => pure (.bool, ← `(Nightlean.Expr.bool Bool.false))
     | .uint maximum => pure (target, ← `(Nightlean.Expr.uint $(natTerm maximum) 0))
     | .bytes _ => throwErrorAt stx "Bytes32 has no scalar default expression"
+    | .jubjubScalar | .jubjubPoint => throwErrorAt stx "Jubjub values have no generic default expression"
   | `(nlexpr| disclose($value)) =>
     let (ty, value) ← expression env value
     pure (ty, ← `(Nightlean.Expr.disclose $(← spanTerm stx) $value))
@@ -366,6 +396,42 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless valueTy == .native do
       throwErrorAt stx "persistentHashNative requires a Native field expression"
     pure (.bytes 32, ← `(Nightlean.Expr.persistentHashNative $value))
+  | `(nlexpr| degradeToNative($value)) => do
+    let (valueTy, value) ← expression env value
+    unless valueTy == .bytes 32 do
+      throwErrorAt stx "degradeToNative requires a Bytes32 expression"
+    -- Match the ledger's transient-crypto degradation, which takes field_vec()[1].
+    pure (.native, ← `(Nightlean.Expr.bytesField $value 1))
+  | `(nlexpr| jubjubScalarFromNative($value)) => do
+    let value ← expected env value .native
+    pure (.jubjubScalar, ← `(Nightlean.Expr.jubjubScalarFromNative $value))
+  | `(nlexpr| jubjubScalarToNative($value)) => do
+    let value ← expected env value .jubjubScalar
+    pure (.native, ← `(Nightlean.Expr.jubjubScalarToNative $value))
+  | `(nlexpr| jubjubMulGenerator($scalar)) => do
+    let scalar ← expected env scalar .jubjubScalar
+    pure (.jubjubPoint, ← `(Nightlean.Expr.jubjubMulGenerator $scalar))
+  | `(nlexpr| jubjubMul($point, $scalar)) => do
+    let point ← expected env point .jubjubPoint
+    let scalar ← expected env scalar .jubjubScalar
+    pure (.jubjubPoint, ← `(Nightlean.Expr.jubjubMul $point $scalar))
+  | `(nlexpr| jubjubAdd($left, $right)) => do
+    let left ← expected env left .jubjubPoint
+    let right ← expected env right .jubjubPoint
+    pure (.jubjubPoint, ← `(Nightlean.Expr.jubjubAdd $left $right))
+  | `(nlexpr| jubjubNeg($point)) => do
+    let point ← expected env point .jubjubPoint
+    pure (.jubjubPoint, ← `(Nightlean.Expr.jubjubNeg $point))
+  | `(nlexpr| jubjubX($point)) => do
+    let point ← expected env point .jubjubPoint
+    pure (.native, ← `(Nightlean.Expr.jubjubCoordinate $point 0))
+  | `(nlexpr| jubjubY($point)) => do
+    let point ← expected env point .jubjubPoint
+    pure (.native, ← `(Nightlean.Expr.jubjubCoordinate $point 1))
+  | `(nlexpr| jubjubFromCoordinates($x, $y)) => do
+    let x ← expected env x .native
+    let y ← expected env y .native
+    pure (.jubjubPoint, ← `(Nightlean.Expr.jubjubFromCoordinates $x $y))
   | _ => throwErrorAt stx "unsupported Noctium expression"
 where
   expected (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) : CommandElabM (TSyntax `term) := do
@@ -399,6 +465,8 @@ where
       pure (.uint maximum, term)
     | .bool => throwErrorAt stx "invalid arithmetic result type"
     | .bytes _ => throwErrorAt stx "Bytes32 does not support arithmetic"
+    | .jubjubScalar | .jubjubPoint =>
+      throwErrorAt stx "Jubjub values do not support scalar arithmetic"
 
 private def checkedExpression (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) :
     CommandElabM (TSyntax `term) := do
@@ -1040,6 +1108,7 @@ private def moduleCapabilities : Capabilities := {
   persistentHash32 := Bool.true
   persistentHashVector32 := Bool.true
   persistentHashNative := Bool.true
+  jubjub := Bool.true
   stateCells := Bool.true
   stateMaps := Bool.true}
 

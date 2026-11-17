@@ -300,6 +300,8 @@ private partial def canonicalTypeSize (fuel : Nat) (value : Types.CompositeType)
     | .scalar .bool => some 3
     | .scalar (.uint maximum) => some (2 + natSize maximum)
     | .scalar (.bytes length) => some (2 + natSize length)
+    | .scalar .jubjubScalar => some 3
+    | .scalar .jubjubPoint => some 3
     | .tuple items => do
       let sizes ← items.mapM (canonicalTypeSize fuel)
       pure (3 + natSize items.length + sizes.foldl (· + ·) 0)
@@ -330,6 +332,8 @@ private partial def consumeTypeNodes (span : SourceSpan) (remaining : Nat)
     if maximum > ScalarPolicy.maxUint then resource span "module unsigned type bound"
     pure remaining
   | .scalar (.bytes _) => fail span "module byte types require a composite bytes layout"
+  | .scalar .jubjubScalar | .scalar .jubjubPoint =>
+    fail span "Jubjub types are not supported by module type parameters"
   | .scalar .native | .scalar .bool | .unit => pure remaining
 
 private def encodeType : Types.CompositeType → String
@@ -338,6 +342,8 @@ private def encodeType : Types.CompositeType → String
   | .scalar .bool => "sb;"
   | .scalar (.uint maximum) => "su" ++ encodeNat maximum
   | .scalar (.bytes length) => "sx" ++ encodeNat length
+  | .scalar .jubjubScalar => "sj;"
+  | .scalar .jubjubPoint => "sp;"
   | .tuple items => "t" ++ encodeNat items.length ++ "[" ++ String.join (items.map encodeType) ++ "]"
   | .structure id => "r" ++ encodeText id
   | .enumeration id => "e" ++ encodeText id
@@ -627,6 +633,8 @@ private def resolveStateScalar (limits : Limits) (span : SourceSpan)
         | .ok _ => pure (.uint maximum)
         | .error message => fail span message
       | .bytes _ => fail span "module byte state parameters require a composite bytes type"
+      | .jubjubScalar | .jubjubPoint =>
+        fail span "Jubjub state parameters are not supported by module specialization"
     | _ => fail span s!"Noctium ledger state parameter '{name}' must specialize to a scalar; aggregate ledger state is not supported"
 
 private def resolveModuleStateKind (limits : Limits) (span : SourceSpan)
@@ -1037,21 +1045,24 @@ def Expansion.contractPlan (expansion : Expansion) (root : ModuleKey) :
     circuits := circuits ++ [{identity, outputName, source, kind := identity.kind}]
   pure {root, state := states, entrypoints := resolvedEntrypoints, circuits}
 
-private partial def genericTypeOfConcrete : Types.CompositeType → GenericType
-  | .unit => .unit
-  | .scalar .native => .native
-  | .scalar .bool => .bool
-  | .scalar (.uint maximum) => .uint (.literal maximum)
-  | .scalar (.bytes length) => .bytes (.literal length)
-  | .tuple items => .tuple (items.map genericTypeOfConcrete)
-  | .structure id => .structure id []
-  | .enumeration id => .enumeration id
-  | .vector length element => .vector (.literal length) (genericTypeOfConcrete element)
-  | .bytes length => .bytes (.literal length)
+private partial def genericTypeOfConcrete : Types.CompositeType → Except String GenericType
+  | .unit => pure .unit
+  | .scalar .native => pure .native
+  | .scalar .bool => pure .bool
+  | .scalar (.uint maximum) => pure (.uint (.literal maximum))
+  | .scalar (.bytes _) => throw "scalar byte types cannot enter module specialization"
+  | .scalar .jubjubScalar | .scalar .jubjubPoint =>
+    throw "Jubjub types are not supported by module specialization"
+  | .tuple items => .tuple <$> items.mapM genericTypeOfConcrete
+  | .structure id => pure (.structure id [])
+  | .enumeration id => pure (.enumeration id)
+  | .vector length element => do
+    pure (.vector (.literal length) (← genericTypeOfConcrete element))
+  | .bytes length => pure (.bytes (.literal length))
 
-private def genericArgumentOfConcrete : SpecializationArgument → Argument
-  | .type value => .type (genericTypeOfConcrete value)
-  | .natural value => .natural (.literal value)
+private def genericArgumentOfConcrete : SpecializationArgument → Except String Argument
+  | .type value => .type <$> genericTypeOfConcrete value
+  | .natural value => pure (.natural (.literal value))
 
 /-- Group specialized circuit requests by exact source program identity. Each
 member gets its canonical declaration-derived output name, never an import or
@@ -1060,10 +1071,12 @@ def ModuleContractPlan.specializationGroups (plan : ModuleContractPlan) :
     Except Diagnostic (List ModuleSpecializationGroup) := do
   let mut groups : List ModuleSpecializationGroup := []
   for circuit in plan.circuits do
+    let arguments ← (circuit.source.arguments.mapM genericArgumentOfConcrete).mapError fun message =>
+      {span := circuit.source.span, message}
     let request : ExportRequest := {
       sourceExport := circuit.source.exportName
       outputName := circuit.outputName
-      arguments := circuit.source.arguments.map genericArgumentOfConcrete
+      arguments
       span := circuit.source.span}
     if let some prior := groups.find? (·.sourceProgram == circuit.source.program) then
       if prior.requests.any (·.outputName == request.outputName) then

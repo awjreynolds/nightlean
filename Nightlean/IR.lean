@@ -31,6 +31,16 @@ inductive Expr : Ty → Type where
   | persistentHashVector32 (values : List (Expr (.bytes 32))) : Expr (.bytes 32)
   /-- SHA-256 over the canonical 32-byte little-endian Native field encoding. -/
   | persistentHashNative (value : Expr .native) : Expr (.bytes 32)
+  /-- Explicitly reduce a Native field into the Jubjub scalar field. -/
+  | jubjubScalarFromNative (value : Expr .native) : Expr .jubjubScalar
+  /-- Losslessly expose a canonical Jubjub scalar as its Native limb. -/
+  | jubjubScalarToNative (value : Expr .jubjubScalar) : Expr .native
+  | jubjubMulGenerator (scalar : Expr .jubjubScalar) : Expr .jubjubPoint
+  | jubjubMul (point : Expr .jubjubPoint) (scalar : Expr .jubjubScalar) : Expr .jubjubPoint
+  | jubjubAdd (left right : Expr .jubjubPoint) : Expr .jubjubPoint
+  | jubjubNeg (point : Expr .jubjubPoint) : Expr .jubjubPoint
+  | jubjubCoordinate (point : Expr .jubjubPoint) (index : Nat) : Expr .native
+  | jubjubFromCoordinates (x y : Expr .native) : Expr .jubjubPoint
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -60,7 +70,18 @@ def Input.nativeIdentifiers (input : Input) : List String :=
   match input.ty with
   | .bytes length => (List.range length).map fun index =>
       s!"%input_{input.name}_byte_{index}"
+  | .jubjubPoint => [s!"%input_{input.name}_x", s!"%input_{input.name}_y"]
   | _ => ["%input_" ++ input.name]
+
+/-- Reserved Native projections used by the public transcript prologue for
+opaque Jubjub inputs. These names never replace the typed source alias. -/
+def Input.publicProjectionIdentifiers (input : Input) : List String :=
+  if input.visibility != .«public» then [] else
+  match input.ty with
+  | .jubjubScalar => [s!"_nightlean_jubjub_scalar_{input.name}"]
+  | .jubjubPoint => [s!"_nightlean_jubjub_point_{input.name}_0",
+      s!"_nightlean_jubjub_point_{input.name}_1"]
+  | _ => []
 
 structure Output where
   name : String
@@ -210,6 +231,7 @@ structure Capabilities where
   persistentHash32 : Bool := false
   persistentHashVector32 : Bool := false
   persistentHashNative : Bool := false
+  jubjub : Bool := false
   stateCells : Bool := false
   stateMaps : Bool := false
   deriving Repr
@@ -225,6 +247,8 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
   match ty with
   | .bytes length =>
     unless length == 32 do throw "only Bytes32 is supported by this source surface"
+  | .jubjubScalar | .jubjubPoint =>
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
   | .native | .bool => ScalarPolicy.validate ty.scalarKind
   | .uint maximum =>
     ScalarPolicy.validate ty.scalarKind
@@ -257,6 +281,34 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .persistentHashNative value => do
     unless caps.persistentHashNative do throw "target lacks qualified Native persistent-hash support"
     value.validate caps env
+  | .jubjubScalarFromNative value => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    value.validate caps env
+  | .jubjubScalarToNative value => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    value.validate caps env
+  | .jubjubMulGenerator scalar => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    scalar.validate caps env
+  | .jubjubMul point scalar => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    point.validate caps env
+    scalar.validate caps env
+  | .jubjubAdd left right => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    left.validate caps env
+    right.validate caps env
+  | .jubjubNeg point => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    point.validate caps env
+  | .jubjubCoordinate point index => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    point.validate caps env
+    unless index < 2 do throw "Jubjub coordinate index must be 0 or 1"
+  | .jubjubFromCoordinates x y => do
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    x.validate caps env
+    y.validate caps env
   | .ref name => do
     ty.validate caps
     match env.lookup name with
@@ -272,7 +324,8 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     a.validate caps env
     b.validate caps env
   | .cast target (source := source) value => do
-    if target.isBytes || source.isBytes then throw "byte strings do not support scalar casts"
+    if target.isBytes || source.isBytes || target.isJubjub || source.isJubjub then
+      throw "byte strings and Jubjub values do not support scalar casts"
     target.validate caps
     value.validate caps env
   | .letE (source := source) name value body => do
@@ -288,7 +341,8 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     a.validate caps env
     b.validate caps env
   | .select c a b => do
-    if ty.isBytes then throw "byte string selection is not supported by this source surface"
+    if ty.isBytes || ty.isJubjub then
+      throw "byte string and Jubjub selection is not supported by this source surface"
     if !caps.select then throw "target lacks conditional selection"
     c.validate caps env
     a.validate caps env
@@ -304,6 +358,8 @@ def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except 
 
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
   | .scalar (.bytes _) => throw "Bytes32 state values are not supported"
+  | .scalar .jubjubScalar | .scalar .jubjubPoint =>
+    throw "Jubjub values require a qualified ledger schema"
   | .scalar ty => ty.validate caps
   | .map keyTy value => do
     keyTy.validate caps
@@ -336,6 +392,10 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     throw {span := c.span, message := "duplicate circuit input"}
   if !uniqueNames (c.inputs.flatMap Input.nativeIdentifiers) then
     throw {span := c.span, message := "input names collide after native byte expansion"}
+  let projections := c.inputs.flatMap Input.publicProjectionIdentifiers
+  if !uniqueNames projections || projections.any (fun name =>
+      c.inputs.any (fun input => input.name == name)) then
+    throw {span := c.span, message := "input names collide with generated Jubjub public projections"}
   if !uniqueNames (c.outputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit output"}
   let env := c.inputs.map fun i => (i.name, i.ty)
@@ -345,8 +405,8 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     | .ok _ => pure ()
   validateConstraints caps env c.span c.constraints
   for output in c.outputs do
-    if output.ty.isBytes then
-      throw {span := output.span, message := "Bytes32 circuit outputs are not supported"}
+    if output.ty.isBytes || output.ty.isJubjub then
+      throw {span := output.span, message := "Bytes32 and Jubjub circuit outputs are not supported"}
     match output.ty.validate caps with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()
@@ -367,6 +427,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
     match decl.kind with
     | .cell (.bytes _) | .map _ (.bytes _) =>
       throw {span := decl.span, message := "Bytes32 state values are not supported"}
+    | .cell .jubjubScalar | .cell .jubjubPoint
+    | .map _ .jubjubScalar | .map _ .jubjubPoint =>
+      throw {span := decl.span, message := "Jubjub ledger state requires a qualified point/scalar schema"}
     | .tree schema =>
       match schema.validate caps with
       | .error message => throw {span := decl.span, message}

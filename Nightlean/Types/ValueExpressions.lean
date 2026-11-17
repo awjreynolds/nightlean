@@ -14,6 +14,8 @@ def ScalarExpression.native (value : ScalarExpression) : Except String (Expr .na
   | ⟨.bool, value⟩ => pure (.cast .native value)
   | ⟨.uint _, value⟩ => pure (.cast .native value)
   | ⟨.bytes _, _⟩ => throw "byte strings require an aggregate bytes expression"
+  | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
+    throw "Jubjub values require a qualified curve expression"
 
 inductive AggregateExpression where
   | unit
@@ -33,6 +35,7 @@ private def scalarExpression (type : Ty) (number : Nat) : Except String ScalarEx
   | .bool => pure ⟨.bool, .bool (number == 1)⟩
   | .uint maximum => pure ⟨.uint maximum, .uint maximum number⟩
   | .bytes _ => throw "byte strings require an aggregate bytes expression"
+  | .jubjubScalar | .jubjubPoint => throw "Jubjub values require a qualified curve expression"
 
 private def literalAux : Nat → AggregateValue → Except String AggregateExpression
   | 0, _ => throw "aggregate literal traversal exhausted checked fuel"
@@ -115,6 +118,8 @@ private def evalAux (context : EvalContext) (environment : EvalEnv) : Nat → Ag
         | ⟨.bool, value⟩ => pure (if ← value.eval context environment then 1 else 0)
         | ⟨.uint maximum, expression⟩ => @Nightlean.Expr.eval (.uint maximum) context environment expression
         | ⟨.bytes _, _⟩ => throw "byte strings require an aggregate bytes expression"
+        | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
+          throw "Jubjub values require a qualified curve expression"
       pure (.scalar value.type number)
     | .tuple values => pure (.tuple (← values.mapM (evalAux context environment fuel)))
     | .structure id fields => pure (.structure id (← fields.mapM fun (name, value) => do pure (name, ← evalAux context environment fuel value)))

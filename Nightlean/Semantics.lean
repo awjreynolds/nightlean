@@ -7,12 +7,16 @@ abbrev Ty.Denote : Ty → Type
   | .bool => Bool
   | .uint _ => Nat
   | .bytes _ => List Nat
+  | .jubjubScalar => Nat
+  | .jubjubPoint => Nat × Nat
 
 inductive Value where
   | native (value : Nat)
   | bool (value : Bool)
   | uint (maximum value : Nat)
   | bytes (length : Nat) (value : List Nat)
+  | jubjubScalar (value : Nat)
+  | jubjubPoint (x y : Nat)
   deriving Repr, BEq, DecidableEq
 
 def Value.as : (ty : Ty) → Value → Option ty.Denote
@@ -21,6 +25,8 @@ def Value.as : (ty : Ty) → Value → Option ty.Denote
   | .uint maximum, .uint found n => if maximum == found then some n else none
   | .bytes length, .bytes found values =>
     if length == found && values.length == length && values.all (· ≤ 255) then some values else none
+  | .jubjubScalar, .jubjubScalar scalar => some scalar
+  | .jubjubPoint, .jubjubPoint x y => some (x, y)
   | _, _ => none
 
 def Value.pack : (ty : Ty) → ty.Denote → Value
@@ -28,6 +34,8 @@ def Value.pack : (ty : Ty) → ty.Denote → Value
   | .bool, b => .bool b
   | .uint maximum, n => .uint maximum n
   | .bytes length, values => .bytes length values
+  | .jubjubScalar, scalar => .jubjubScalar scalar
+  | .jubjubPoint, (x, y) => .jubjubPoint x y
 
 /-- Recursive semantic form used by the nested-map source effects. -/
 inductive LedgerValue where
@@ -38,8 +46,22 @@ inductive LedgerValue where
 
 abbrev EvalEnv := List (String × Value)
 
-/-- The hash oracle must be the qualified target implementation. No placeholder
-hash is supplied by the reference semantics. -/
+structure JubjubOracle where
+  pointValid : Nat × Nat → Except String Unit :=
+    fun _ => .error "qualified Jubjub point-validation oracle is unavailable"
+  fromCoordinates : Nat → Nat → Except String (Nat × Nat) :=
+    fun _ _ => .error "qualified Jubjub coordinate oracle is unavailable"
+  mulGenerator : Nat → Except String (Nat × Nat) :=
+    fun _ => .error "qualified Jubjub generator-multiplication oracle is unavailable"
+  mul : (Nat × Nat) → Nat → Except String (Nat × Nat) :=
+    fun _ _ => .error "qualified Jubjub multiplication oracle is unavailable"
+  add : (Nat × Nat) → (Nat × Nat) → Except String (Nat × Nat) :=
+    fun _ _ => .error "qualified Jubjub addition oracle is unavailable"
+  neg : (Nat × Nat) → Except String (Nat × Nat) :=
+    fun _ => .error "qualified Jubjub negation oracle is unavailable"
+
+/-- The crypto oracles have fail-closed defaults. A backend must supply pinned
+Jubjub operations before semantic evaluation can execute curve expressions. -/
 structure EvalContext where
   modulus : Nat
   poseidon2 : Nat → Nat → Nat → Except String Nat
@@ -47,12 +69,15 @@ structure EvalContext where
   The default rejects, so evaluation never substitutes a placeholder hash. -/
   persistentHash32 : List Nat → Except String (List Nat) :=
     fun _ => .error "qualified Bytes32 persistent-hash oracle is unavailable"
+  jubjub : JubjubOracle := {}
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
   | .bool, a, b => a == b
   | .uint _, a, b => a == b
   | .bytes _, a, b => a == b
+  | .jubjubScalar, a, b => a == b
+  | .jubjubPoint, a, b => a == b
 
 private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   match ty with
@@ -60,6 +85,9 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .bool => true
   | .uint maximum => maximum ≤ ScalarPolicy.maxUint && v ≤ maximum && v < ctx.modulus
   | .bytes length => v.length == length && v.all (· ≤ 255)
+  | .jubjubScalar => v < Jubjub.scalarOrder
+  | .jubjubPoint => v.1 < ctx.modulus && v.2 < ctx.modulus &&
+      (ctx.jubjub.pointValid v).isOk
 
 /-- Public reduction equation for input-admission and preservation proofs. -/
 theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
@@ -67,12 +95,17 @@ theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
       | .native => value < ctx.modulus
       | .bool => true
       | .uint maximum => maximum ≤ ScalarPolicy.maxUint && value ≤ maximum && value < ctx.modulus
-      | .bytes length => value.length == length && value.all (· ≤ 255) := rfl
+      | .bytes length => value.length == length && value.all (· ≤ 255)
+      | .jubjubScalar => value < Jubjub.scalarOrder
+      | .jubjubPoint => value.1 < ctx.modulus && value.2 < ctx.modulus &&
+          (ctx.jubjub.pointValid value).isOk := rfl
 
-private def scalarNumber : (ty : Ty) → ty.Denote → Nat
-  | .native, n | .uint _, n => n
-  | .bool, b => if b then 1 else 0
-  | .bytes _, _ => 0
+private def scalarNumber : (ty : Ty) → ty.Denote → Except String Nat
+  | .native, n | .uint _, n => pure n
+  | .bool, b => pure (if b then 1 else 0)
+  | .bytes _, _ => .error "byte strings do not support scalar conversion"
+  | .jubjubScalar, _ => .error "Jubjub scalars do not support scalar conversion"
+  | .jubjubPoint, _ => .error "Jubjub points do not support scalar conversion"
 
 private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except String target.Denote :=
   match target with
@@ -82,6 +115,14 @@ private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except
     if maximum ≤ ScalarPolicy.maxUint && number ≤ maximum && number < ctx.modulus then pure number
     else .error "scalar conversion exceeds unsigned bound"
   | .bytes _ => .error "byte strings do not support scalar conversion"
+  | .jubjubScalar | .jubjubPoint => .error "Jubjub values do not support scalar conversion"
+
+private def checkedJubjubPoint (ctx : EvalContext) (point : Nat × Nat) :
+    Except String (Nat × Nat) := do
+  if point.1 >= ctx.modulus || point.2 >= ctx.modulus then
+    throw "noncanonical Jubjub coordinate"
+  ctx.jubjub.pointValid point
+  pure point
 
 /-- Pinned native Bytes field packing: little-endian bytes within each
 FR_BYTES_STORED-sized chunk, with the chunk sequence reversed. For Bytes32 the
@@ -125,6 +166,27 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
   | .bytes32Literal values =>
     if values.length == 32 && values.all (· ≤ 255) then pure values
     else .error "Bytes32 literal must contain exactly 32 byte values"
+  | .jubjubScalarFromNative value => do
+    pure ((← value.eval ctx env) % Jubjub.scalarOrder)
+  | .jubjubScalarToNative value => do
+    let scalar ← value.eval ctx env
+    if scalar < ctx.modulus then pure scalar else .error "Jubjub scalar does not fit Native"
+  | .jubjubMulGenerator scalar => do
+    checkedJubjubPoint ctx (← ctx.jubjub.mulGenerator (← scalar.eval ctx env))
+  | .jubjubMul point scalar => do
+    checkedJubjubPoint ctx (← ctx.jubjub.mul (← point.eval ctx env) (← scalar.eval ctx env))
+  | .jubjubAdd left right => do
+    checkedJubjubPoint ctx (← ctx.jubjub.add (← left.eval ctx env) (← right.eval ctx env))
+  | .jubjubNeg point => do
+    checkedJubjubPoint ctx (← ctx.jubjub.neg (← point.eval ctx env))
+  | .jubjubCoordinate point index => do
+    let (x, y) ← point.eval ctx env
+    match index with
+    | 0 => pure x
+    | 1 => pure y
+    | _ => throw "Jubjub coordinate index must be 0 or 1"
+  | .jubjubFromCoordinates x y => do
+    checkedJubjubPoint ctx (← ctx.jubjub.fromCoordinates (← x.eval ctx env) (← y.eval ctx env))
   | .bytesAt value index => do
     let values ← value.eval ctx env
     match values[index]? with
@@ -168,8 +230,9 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if a < b then throw "unsigned subtraction underflow"
     scalarCast ctx (.uint m) (a - b)
   | .cast (source := source) target value => do
-    if target.isBytes || source.isBytes then throw "byte strings do not support scalar conversion"
-    scalarCast ctx target (scalarNumber source (← value.eval ctx env))
+    if target.isBytes || source.isBytes || target.isJubjub || source.isJubjub then
+      throw "byte strings and Jubjub values do not support scalar conversion"
+    scalarCast ctx target (← scalarNumber source (← value.eval ctx env))
   | .letE (source := source) name value body => do
     let value ← value.eval ctx env
     body.eval ctx ((name, Value.pack source value) :: env)
@@ -201,11 +264,11 @@ def runConstraints (ctx : EvalContext) (env : EvalEnv) : List (Expr .bool) → E
 
 theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSpan) (value : Expr ty) :
     (Expr.disclose span value).eval ctx env = value.eval ctx env := by
-  rw [Expr.eval.eq_20]
+  simp [Expr.eval]
 
 private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, poseidon2 := true, persistentHash32 := true,
-    persistentHashVector32 := true, persistentHashNative := true}
+    persistentHashVector32 := true, persistentHashNative := true, jubjub := true}
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
   match c.validate (evaluationCapabilities ctx) with
@@ -476,6 +539,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
             | .bool => false
             | .uint _ => 0
             | .bytes length => List.replicate length 0
+            | .jubjubScalar => 0
+            | .jubjubPoint => (0, 1)
           env := (destination, Value.pack ty zero) :: env
         | .readMap _ destination _ ty _ =>
           let zero : ty.Denote := match ty with
@@ -483,6 +548,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
             | .bool => false
             | .uint _ => 0
             | .bytes length => List.replicate length 0
+            | .jubjubScalar => 0
+            | .jubjubPoint => (0, 1)
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
@@ -494,6 +561,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
             | .bool => false
             | .uint _ => 0
             | .bytes length => List.replicate length 0
+            | .jubjubScalar => 0
+            | .jubjubPoint => (0, 1)
           env := (destination, Value.pack ty zero) :: env
         | .readCompositePath _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)

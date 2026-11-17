@@ -244,6 +244,8 @@ private def canonicalType : Types.CompositeType → String
   | .scalar .bool => "bool"
   | .scalar (.uint maximum) => s!"uint({maximum})"
   | .scalar (.bytes length) => s!"scalar-bytes({length})"
+  | .scalar .jubjubScalar => "scalar-jubjub-scalar"
+  | .scalar .jubjubPoint => "scalar-jubjub-point"
   | .tuple items => s!"tuple({String.intercalate "," (items.map canonicalType)})"
   | .structure id => s!"struct({id})"
   | .enumeration id => s!"enum({id})"
@@ -256,6 +258,8 @@ private def canonicalTypeSize : Types.CompositeType → Nat
   | .scalar .bool => 4
   | .scalar (.uint maximum) => 6 + (toString maximum).length
   | .scalar (.bytes length) => 14 + (toString length).length
+  | .scalar .jubjubScalar => 20
+  | .scalar .jubjubPoint => 19
   | .tuple items => 7 + (if items.isEmpty then 0 else items.length - 1) +
       items.foldl (fun size item => size + canonicalTypeSize item) 0
   | .structure id => 8 + id.utf8ByteSize
@@ -1015,6 +1019,8 @@ inductive SignatureType where
   | enumeration (id : String)
   | vector (length : String) (element : SignatureType)
   | bytes (length : String)
+  | jubjubScalar
+  | jubjubPoint
   deriving Repr, BEq, Inhabited, Lean.FromJson, Lean.ToJson
 
 inductive SignatureArgument where
@@ -1051,6 +1057,8 @@ private def signatureType : Types.CompositeType → SignatureType
   | .scalar .bool => .bool
   | .scalar (.uint maximum) => .uint (toString maximum)
   | .scalar (.bytes length) => .bytes (toString length)
+  | .scalar .jubjubScalar => .jubjubScalar
+  | .scalar .jubjubPoint => .jubjubPoint
   | .tuple items => .tuple (items.map signatureType)
   | .structure id => .structure id
   | .enumeration id => .enumeration id
@@ -1063,6 +1071,8 @@ private def signatureResult : Helpers.ResultType → SignatureType
   | .scalar .bool => .bool
   | .scalar (.uint maximum) => .uint (toString maximum)
   | .scalar (.bytes length) => .bytes (toString length)
+  | .scalar .jubjubScalar => .jubjubScalar
+  | .scalar .jubjubPoint => .jubjubPoint
   | .composite value => signatureType value
 
 private def signatureArgument : SpecializationArgument → SignatureArgument
@@ -1142,6 +1152,8 @@ private partial def validateSignatureType (fuel : Nat) (value : SignatureType) :
   | 0 => throw "signature type nesting exceeds the parser limit"
   | fuel + 1 => match value with
     | .unit | .native | .bool => pure ()
+    | .jubjubScalar | .jubjubPoint =>
+      throw "Jubjub helper signatures are not supported by specialization"
     | .uint maximum => do
       let maximum ← canonicalDecimal maximum
       unless maximum ≤ ScalarPolicy.maxUint do throw "unsigned signature exceeds target maximum"

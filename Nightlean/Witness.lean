@@ -25,6 +25,8 @@ private def scalarName : Ty → String
   | .bool => "Bool"
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
   | .bytes length => s!"Bytes<{length}>"
+  | .jubjubScalar => "JubjubScalar"
+  | .jubjubPoint => "JubjubPoint"
 
 private def idName (id : DeclarationId) : String := s!"s{id.scope}d{id.ordinal}"
 

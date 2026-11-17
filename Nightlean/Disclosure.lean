@@ -47,6 +47,15 @@ def origins (env : Environment) : Expr ty → Except String Origins
     for value in values do result := merge result (← origins env value)
     pure result
   | .persistentHashNative value => origins env value
+  | .jubjubScalarFromNative value | .jubjubMulGenerator value => origins env value
+  | .jubjubScalarToNative value | .jubjubNeg value => origins env value
+  | .jubjubCoordinate value _ => origins env value
+  | .jubjubMul point scalar => do
+    pure (merge (← origins env point) (← origins env scalar))
+  | .jubjubAdd left right => do
+    pure (merge (← origins env left) (← origins env right))
+  | .jubjubFromCoordinates x y => do
+    pure (merge (← origins env x) (← origins env y))
   | .ref name => match env.lookup name with
     | some result => pure result
     | none => .error s!"missing disclosure origin rule for reference '{name}'"

@@ -1,0 +1,953 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "ciphertexts",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"composite":
+       {"typeFingerprint":
+        "NightleanCompositeTypeV1;r25:Issue70Jubjub.Ciphertext4NightleanCompositeLayoutV1;1;R25:Issue70Jubjub.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+        "schemaVersion": 1,
+        "layout":
+        {"kind": "struct",
+         "id": "Issue70Jubjub.Ciphertext4",
+         "fields":
+         [{"name": "c1x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c1y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+        "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}}}]}}}],
+ "schemaVersion": 1,
+ "reads":
+ [{"type": "Native", "name": "_nightlean_jubjub_point_pk_0"},
+  {"type": "Native", "name": "_nightlean_jubjub_point_pk_1"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_0"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_1"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_2"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_3"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_4"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_5"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_6"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_7"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_8"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_9"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_10"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_11"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_12"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_13"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_14"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_15"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_16"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_17"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_18"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_19"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_20"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_21"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_22"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_23"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_24"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_25"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_26"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_27"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_28"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_29"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_30"},
+  {"type": "UIntRange<256>", "name": "_nightlean_bytes_account_31"},
+  {"type": "Native", "name": "_nightlean_jubjub_scalar_publicScalar"},
+  {"type": "Composite",
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r25:Issue70Jubjub.Ciphertext4NightleanCompositeLayoutV1;1;R25:Issue70Jubjub.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "Issue70Jubjub.Ciphertext4",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "name": "observed",
+   "components":
+   [{"type": "Native", "name": "observed_c1x"},
+    {"type": "Native", "name": "observed_c1y"},
+    {"type": "Native", "name": "observed_c2x"},
+    {"type": "Native", "name": "observed_c2y"}]}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"tag": "jubjubCoordinate",
+    "point": {"tag": "reference", "name": "pk"},
+    "index": 0},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"tag": "jubjubCoordinate",
+    "point": {"tag": "reference", "name": "pk"},
+    "index": 0},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"tag": "jubjubCoordinate",
+    "point": {"tag": "reference", "name": "pk"},
+    "index": 1},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"tag": "jubjubCoordinate",
+    "point": {"tag": "reference", "name": "pk"},
+    "index": 1},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 0},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 0},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 1},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 1},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 2},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 2},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 3},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 3},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 4},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 4},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 5},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 5},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 6},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 6},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 7},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 7},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 8},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 8},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 9},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 9},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 10},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 10},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 11},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 11},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 12},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 12},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 13},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 13},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 14},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 14},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 15},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 15},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 16},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 16},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 17},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 17},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 18},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 18},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 19},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 19},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 20},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 20},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 21},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 21},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 22},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 22},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 23},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 23},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 24},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 24},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 25},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 25},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 26},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 26},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 27},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 27},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 28},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 28},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 29},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 29},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 30},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 30},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 31},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "account"},
+     "tag": "byteAt",
+     "index": 31},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "publicScalar"},
+    "tag": "jubjubScalarToNative"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "publicScalar"},
+    "tag": "jubjubScalarToNative"},
+   "alignment": "field"},
+  {"slot": 0, "pushPath": true, "op": "indexPath", "keys": []},
+  {"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "account"},
+   "alignment": "bytes32"},
+  {"storage": true,
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r25:Issue70Jubjub.Ciphertext4NightleanCompositeLayoutV1;1;R25:Issue70Jubjub.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "Issue70Jubjub.Ciphertext4",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "op": "pushFields",
+   "expressions":
+   [{"tag": "reference", "name": "c1x"},
+    {"tag": "reference", "name": "c1y"},
+    {"tag": "reference", "name": "c2x"},
+    {"tag": "reference", "name": "c2y"}]},
+  {"op": "insert", "n": 2},
+  {"op": "dup"},
+  {"slot": 0,
+   "pushPath": false,
+   "op": "indexPath",
+   "keys":
+   [{"expression": {"tag": "reference", "name": "account"},
+     "alignment": "bytes32"}]},
+  {"schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r25:Issue70Jubjub.Ciphertext4NightleanCompositeLayoutV1;1;R25:Issue70Jubjub.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "Issue70Jubjub.Ciphertext4",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "op": "popeqFields",
+   "expressions":
+   [{"tag": "reference", "name": "observed_c1x"},
+    {"tag": "reference", "name": "observed_c1y"},
+    {"tag": "reference", "name": "observed_c2x"},
+    {"tag": "reference", "name": "observed_c2y"}]}],
+ "nativeCircuitFile": "Issue70Jubjub.encrypt.zkir",
+ "guards":
+ [{"tag": "eq",
+   "right": {"tag": "reference", "name": "c1x"},
+   "left": {"tag": "reference", "name": "observed_c1x"}},
+  {"tag": "eq",
+   "right": {"tag": "reference", "name": "c1y"},
+   "left": {"tag": "reference", "name": "observed_c1y"}},
+  {"tag": "eq",
+   "right": {"tag": "reference", "name": "c2x"},
+   "left": {"tag": "reference", "name": "observed_c2x"}},
+  {"tag": "eq",
+   "right": {"tag": "reference", "name": "c2y"},
+   "left": {"tag": "reference", "name": "observed_c2y"}}],
+ "entrypoint": "encrypt",
+ "contractName": "Issue70Jubjub",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Native",
+    "name": "c1x",
+    "expression":
+    {"tag": "jubjubCoordinate",
+     "point":
+     {"tag": "jubjubMulGenerator", "scalar": {"tag": "reference", "name": "r"}},
+     "index": 0}},
+   {"visibility": "public",
+    "type": "Native",
+    "name": "c1y",
+    "expression":
+    {"tag": "jubjubCoordinate",
+     "point":
+     {"tag": "jubjubMulGenerator", "scalar": {"tag": "reference", "name": "r"}},
+     "index": 1}},
+   {"visibility": "public",
+    "type": "Native",
+    "name": "c2x",
+    "expression":
+    {"tag": "jubjubCoordinate",
+     "point":
+     {"tag": "jubjubAdd",
+      "right":
+      {"tag": "jubjubMul",
+       "scalar": {"tag": "reference", "name": "r"},
+       "point": {"tag": "reference", "name": "pk"}},
+      "left":
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "publicScalar"}},
+       "left":
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "message"}}}},
+     "index": 0}},
+   {"visibility": "public",
+    "type": "Native",
+    "name": "c2y",
+    "expression":
+    {"tag": "jubjubCoordinate",
+     "point":
+     {"tag": "jubjubAdd",
+      "right":
+      {"tag": "jubjubMul",
+       "scalar": {"tag": "reference", "name": "r"},
+       "point": {"tag": "reference", "name": "pk"}},
+      "left":
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "publicScalar"}},
+       "left":
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "message"}}}},
+     "index": 1}}],
+  "name": "issue70Jubjub",
+  "inputs":
+  [{"visibility": "private", "type": "JubjubScalar", "name": "sk"},
+   {"visibility": "private", "type": "JubjubScalar", "name": "r"},
+   {"visibility": "private", "type": "JubjubScalar", "name": "message"},
+   {"visibility": "public", "type": "JubjubPoint", "name": "pk"},
+   {"visibility": "public", "type": "Bytes<32>", "name": "account"},
+   {"visibility": "public", "type": "JubjubScalar", "name": "publicScalar"}],
+  "file": "issue70Jubjub.zkir",
+  "constraints":
+  [{"tag": "eq",
+    "right":
+    {"y": {"value": "1", "tag": "constant"},
+     "x": {"value": "0", "tag": "constant"},
+     "tag": "jubjubFromCoordinates"},
+    "left":
+    {"y": {"value": "1", "tag": "constant"},
+     "x": {"value": "0", "tag": "constant"},
+     "tag": "jubjubFromCoordinates"}},
+   {"tag": "eq",
+    "right":
+    {"tag": "jubjubMulGenerator", "scalar": {"tag": "reference", "name": "sk"}},
+    "left": {"tag": "reference", "name": "pk"}},
+   {"tag": "eq",
+    "right": {"value": false, "tag": "bool"},
+    "left":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left":
+     {"value": {"tag": "reference", "name": "sk"},
+      "tag": "jubjubScalarToNative"}}},
+   {"tag": "eq",
+    "right": {"value": false, "tag": "bool"},
+    "left":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left":
+     {"value": {"tag": "reference", "name": "r"},
+      "tag": "jubjubScalarToNative"}}},
+   {"tag": "eq",
+    "right": {"value": false, "tag": "bool"},
+    "left":
+    {"tag": "eq",
+     "right":
+     {"y": {"value": "1", "tag": "constant"},
+      "x": {"value": "0", "tag": "constant"},
+      "tag": "jubjubFromCoordinates"},
+     "left": {"tag": "reference", "name": "pk"}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "jubjubAdd",
+     "right":
+     {"tag": "jubjubMulGenerator",
+      "scalar": {"tag": "reference", "name": "publicScalar"}},
+     "left":
+     {"tag": "jubjubMulGenerator",
+      "scalar": {"tag": "reference", "name": "message"}}},
+    "left":
+    {"tag": "jubjubAdd",
+     "right":
+     {"tag": "jubjubNeg",
+      "point":
+      {"tag": "jubjubMul",
+       "scalar": {"tag": "reference", "name": "sk"},
+       "point":
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "r"}}}},
+     "left":
+     {"tag": "jubjubAdd",
+      "right":
+      {"tag": "jubjubMul",
+       "scalar": {"tag": "reference", "name": "r"},
+       "point": {"tag": "reference", "name": "pk"}},
+      "left":
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "publicScalar"}},
+       "left":
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "message"}}}}}}]}}

@@ -77,7 +77,7 @@ private def requireSourceType (ty : Ty) (term : Term) (bounds : List (Term × Na
     | .native => bounds
     | .bool => bounds ++ [(term, 1)]
     | .uint maximum => bounds ++ [(term, maximum)]
-    | .bytes _ => bounds}
+    | .bytes _ | .jubjubScalar | .jubjubPoint => bounds}
 
 def packByteTerms : List Term → Term
   | [] => .constant 0
@@ -141,7 +141,7 @@ theorem requireSourceType_eq (ty : Ty) (term : Term) (bounds : List (Term × Nat
         | .native => bounds
         | .bool => bounds ++ [(term, 1)]
         | .uint maximum => bounds ++ [(term, maximum)]
-        | .bytes _ => bounds} := rfl
+        | .bytes _ | .jubjubScalar | .jubjubPoint => bounds} := rfl
 
 theorem arithmetic_eq (ty : Ty) (opcode : String) (left right : Normalized) :
     arithmetic ty opcode left right =
@@ -206,6 +206,43 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let normalized ← normalize env value
     let term := persistentHashNativeTerm normalized.term
     pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .jubjubScalarFromNative value => do
+    let normalized ← normalize env value
+    let term : Term := .unary "jubjub_scalar_from_native" normalized.term
+    pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .jubjubScalarToNative value => do
+    let normalized ← normalize env value
+    let term : Term := .unary "jubjub_scalar_to_native" normalized.term
+    pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .jubjubMulGenerator scalar => do
+    let normalized ← normalize env scalar
+    let term : Term := .unary "ec_mul_generator_jubjub" normalized.term
+    pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .jubjubMul point scalar => do
+    let point ← normalize env point
+    let scalar ← normalize env scalar
+    let term : Term := .binary "ec_mul_jubjub" point.term scalar.term
+    pure (Normalized.mk term (point.bounds ++ scalar.bounds)
+      (point.assertions ++ scalar.assertions))
+  | .jubjubAdd left right => do
+    let left ← normalize env left
+    let right ← normalize env right
+    let term : Term := .binary "add_jubjub_point" left.term right.term
+    pure (Normalized.mk term (left.bounds ++ right.bounds)
+      (left.assertions ++ right.assertions))
+  | .jubjubNeg point => do
+    let point ← normalize env point
+    let term : Term := .unary "neg_jubjub_point" point.term
+    pure {term, bounds := point.bounds, assertions := point.assertions}
+  | .jubjubCoordinate point index => do
+    let point ← normalize env point
+    let term : Term := .unary (if index == 0 then "jubjub_x" else "jubjub_y") point.term
+    pure {term, bounds := point.bounds, assertions := point.assertions}
+  | .jubjubFromCoordinates x y => do
+    let x ← normalize env x
+    let y ← normalize env y
+    let term : Term := .binary "from_coordinates_jubjub" x.term y.term
+    pure (Normalized.mk term (x.bounds ++ y.bounds) (x.assertions ++ y.assertions))
   | .ref name => do
     let some term := env.lookup name | throw s!"unbound native source symbol '{name}'"
     pure (requireSourceType ty term [])
@@ -249,6 +286,9 @@ structure InputRequirement where
   identifier : String
   visibility : Visibility
   ty : Ty
+  /-- This raw Native input also represents a typed JubjubScalar parameter and
+  must pass the source scalar's canonical reduce/encode equality bridge. -/
+  canonicalJubjubScalar : Bool := false
   /-- Conditional transcript consumption is allowed only for source-bound public reads. -/
   activityGuard : Option Term := none
   deriving Repr
@@ -256,14 +296,24 @@ structure InputRequirement where
 def InputRequirement.byte (input : Input) (index : Nat) : InputRequirement :=
   {identifier := input.nativeIdentifiers[index]!, visibility := input.visibility, ty := .uint 255}
 
+private def jubjubScalarInputRequirement (input : Input) : InputRequirement :=
+  {identifier := "%input_" ++ input.name, visibility := input.visibility,
+    ty := .native, canonicalJubjubScalar := true}
+
 def Input.requirements (input : Input) : List InputRequirement :=
   match input.ty with
   | .bytes length => (List.range length).map (InputRequirement.byte input)
+  | .jubjubScalar => [jubjubScalarInputRequirement input]
+  | .jubjubPoint => input.nativeIdentifiers.map fun identifier =>
+      {identifier, visibility := input.visibility, ty := .native}
   | _ => [{identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}]
 
 def Input.sourceTerm (input : Input) : Term :=
   match input.ty with
   | .bytes _ => .bytes (input.nativeIdentifiers.map Term.input)
+  | .jubjubScalar => .unary "jubjub_scalar_from_native" (.input ("%input_" ++ input.name))
+  | .jubjubPoint => .binary "from_coordinates_jubjub"
+      (.input input.nativeIdentifiers[0]!) (.input input.nativeIdentifiers[1]!)
   | _ => .input ("%input_" ++ input.name)
 
 inductive ProducerMode where
@@ -283,9 +333,5 @@ structure Expected where
   assertions : List Term
   bounds : List (Term × Nat)
   deriving Repr
-
-theorem normalize_disclosure_erasure (env : AliasEnvironment) (span : SourceSpan) (value : Expr ty) :
-    normalize env (.disclose span value) = normalize env value := by
-  rw [normalize.eq_21]
 
 end Nightlean.Backend.Native

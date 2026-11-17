@@ -26,7 +26,7 @@ use std::{
 };
 use storage::{arena::Sp, db::InMemoryDB};
 use transient_crypto::{
-    curve::Fr,
+    curve::{EmbeddedFr, EmbeddedGroupAffine, Fr},
     fab::{AlignedValueExt, AlignmentExt, ValueReprAlignedValue},
     hash::transient_hash,
     proofs::{KeyLocation, ProofPreimage},
@@ -46,6 +46,8 @@ pub enum Value {
     Bool(bool),
     UInt { number: BigUint, maximum: BigUint },
     Bytes(Vec<u8>),
+    JubjubScalar(EmbeddedFr),
+    JubjubPoint(EmbeddedGroupAffine),
 }
 impl Value {
     fn field(&self) -> Result<Fr> {
@@ -58,6 +60,18 @@ impl Value {
         match self {
             Self::Bool(b) => Ok(*b),
             _ => bail!("expected Bool value"),
+        }
+    }
+    fn jubjub_scalar(&self) -> Result<EmbeddedFr> {
+        match self {
+            Self::JubjubScalar(value) => Ok(*value),
+            _ => bail!("expected JubjubScalar value"),
+        }
+    }
+    fn jubjub_point(&self) -> Result<EmbeddedGroupAffine> {
+        match self {
+            Self::JubjubPoint(value) => Ok(*value),
+            _ => bail!("expected JubjubPoint value"),
         }
     }
 }
@@ -155,6 +169,11 @@ pub enum Expr {
         value: Box<Expr>,
         index: usize,
     },
+    #[serde(rename = "bytesField")]
+    BytesField {
+        value: Box<Expr>,
+        index: usize,
+    },
     #[serde(rename = "persistentHash32")]
     PersistentHash32 {
         value: Box<Expr>,
@@ -170,6 +189,42 @@ pub enum Expr {
     #[serde(rename = "persistentHashNative")]
     PersistentHashNative {
         value: Box<Expr>,
+    },
+    #[serde(rename = "jubjubScalarFromNative")]
+    JubjubScalarFromNative {
+        value: Box<Expr>,
+    },
+    #[serde(rename = "jubjubScalarToNative")]
+    JubjubScalarToNative {
+        value: Box<Expr>,
+    },
+    #[serde(rename = "jubjubMulGenerator")]
+    JubjubMulGenerator {
+        scalar: Box<Expr>,
+    },
+    #[serde(rename = "jubjubMul")]
+    JubjubMul {
+        point: Box<Expr>,
+        scalar: Box<Expr>,
+    },
+    #[serde(rename = "jubjubAdd")]
+    JubjubAdd {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    #[serde(rename = "jubjubNeg")]
+    JubjubNeg {
+        point: Box<Expr>,
+    },
+    #[serde(rename = "jubjubCoordinate")]
+    JubjubCoordinate {
+        point: Box<Expr>,
+        index: usize,
+    },
+    #[serde(rename = "jubjubFromCoordinates")]
+    JubjubFromCoordinates {
+        x: Box<Expr>,
+        y: Box<Expr>,
     },
     Let {
         name: String,
@@ -285,6 +340,16 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 maximum: BigUint::from(255u16),
             }
         }
+        Expr::BytesField { value, index } => {
+            let value = aligned(&evaluate(value, env)?, "bytes32")?;
+            let mut fields = Vec::new();
+            value.value_only_field_repr(&mut fields);
+            Value::Native(
+                *fields
+                    .get(*index)
+                    .ok_or_else(|| anyhow!("Bytes32 field index must be 0 or 1"))?,
+            )
+        }
         Expr::Bytes32Literal { values } => {
             ensure!(
                 values.len() == 32,
@@ -309,6 +374,34 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         Expr::PersistentHashNative { value } => {
             persistent_hash(field_value(evaluate(value, env)?.field()?))?
         }
+        Expr::JubjubScalarFromNative { value } => {
+            Value::JubjubScalar(jubjub::reduce_scalar(evaluate(value, env)?.field()?)?)
+        }
+        Expr::JubjubScalarToNative { value } => Value::Native(jubjub::scalar_native(
+            evaluate(value, env)?.jubjub_scalar()?,
+        )?),
+        Expr::JubjubMulGenerator { scalar } => Value::JubjubPoint(
+            EmbeddedGroupAffine::generator() * evaluate(scalar, env)?.jubjub_scalar()?,
+        ),
+        Expr::JubjubMul { point, scalar } => Value::JubjubPoint(
+            evaluate(point, env)?.jubjub_point()? * evaluate(scalar, env)?.jubjub_scalar()?,
+        ),
+        Expr::JubjubAdd { left, right } => Value::JubjubPoint(
+            evaluate(left, env)?.jubjub_point()? + evaluate(right, env)?.jubjub_point()?,
+        ),
+        Expr::JubjubNeg { point } => Value::JubjubPoint(-evaluate(point, env)?.jubjub_point()?),
+        Expr::JubjubCoordinate { point, index } => {
+            let coordinates = jubjub::coordinates(evaluate(point, env)?.jubjub_point()?)?;
+            Value::Native(
+                *coordinates
+                    .get(*index)
+                    .ok_or_else(|| anyhow!("Jubjub coordinate index out of range"))?,
+            )
+        }
+        Expr::JubjubFromCoordinates { x, y } => Value::JubjubPoint(jubjub::point(
+            evaluate(x, env)?.field()?,
+            evaluate(y, env)?.field()?,
+        )?),
         Expr::Add { left, right } => {
             Value::Native(evaluate(left, env)?.field()? + evaluate(right, env)?.field()?)
         }
@@ -662,6 +755,9 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
             maximum,
         },
         ScalarType::Bytes32 => Value::Bytes(vec![0; 32]),
+        ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+            bail!("Jubjub ledger reads require typed coordinate records")
+        }
     })
 }
 #[derive(Clone, Deserialize)]
@@ -727,6 +823,44 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(Value::Bytes(bytes))
+        }
+        ScalarType::JubjubScalar => {
+            let object = json
+                .as_object()
+                .ok_or_else(|| anyhow!("expected JubjubScalar object"))?;
+            ensure!(
+                object.len() == 2
+                    && object.get("kind").and_then(Json::as_str) == Some("jubjubScalar"),
+                "invalid JubjubScalar object"
+            );
+            let value = object
+                .get("value")
+                .and_then(Json::as_str)
+                .ok_or_else(|| anyhow!("JubjubScalar requires canonical decimal value"))?;
+            Ok(Value::JubjubScalar(jubjub::scalar(value)?))
+        }
+        ScalarType::JubjubPoint => {
+            let object = json
+                .as_object()
+                .ok_or_else(|| anyhow!("expected JubjubPoint object"))?;
+            ensure!(
+                object.len() == 3
+                    && object.get("kind").and_then(Json::as_str) == Some("jubjubPoint"),
+                "invalid JubjubPoint object"
+            );
+            let x = canonical_field(
+                object
+                    .get("x")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| anyhow!("JubjubPoint requires canonical x coordinate"))?,
+            )?;
+            let y = canonical_field(
+                object
+                    .get("y")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| anyhow!("JubjubPoint requires canonical y coordinate"))?,
+            )?;
+            Ok(Value::JubjubPoint(jubjub::point(x, y)?))
         }
     }
 }
@@ -879,6 +1013,9 @@ fn read_state_cell(
         )),
         ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
         ScalarType::Bytes32 => bail!("bytes ledger values are unsupported"),
+        ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+            bail!("Jubjub ledger values require typed coordinate records")
+        }
     }
 }
 
@@ -1407,6 +1544,8 @@ pub fn prepare(
             Value::Bytes(bytes) => {
                 private_transcript.extend(bytes.iter().map(|byte| Fr::from(*byte as u64)))
             }
+            Value::JubjubScalar(value) => private_transcript.push(jubjub::scalar_native(*value)?),
+            Value::JubjubPoint(value) => private_transcript.extend(jubjub::coordinates(*value)?),
             value => aligned(value, "field")?.value_only_field_repr(&mut private_transcript),
         }
     }
@@ -1447,6 +1586,7 @@ pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usi
 /// Versioned C ABI over the bounded provider/session runtime.
 pub mod ffi;
 
+mod jubjub;
 mod scalars;
 pub use scalars::{MAX_UINT_BITS, ScalarType, canonical_unsigned, max_uint};
 
