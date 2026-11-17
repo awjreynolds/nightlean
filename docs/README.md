@@ -13,6 +13,7 @@ Write a contract, prove its specified behavior in Lean, and compile for Midnight
 | Review contract correctness | [Actual-source proofs](development/private-claim-proofs.md), [registered obligations and axiom policy](development/proof-registration.md) |
 | Review compilation and trust | [Layered guarantees](designs/architecture.md#assurance-boundaries), [source-to-artifact proof chain](#follow-the-proof-chain) |
 | Review scope and contribute | [Capability goal](compatibility/GOAL.md), [public issue map](https://github.com/awjreynolds/noctium/issues/1), [contributing](../CONTRIBUTING.md) |
+| Follow the complex-contract POC | [OpenZeppelin token port and feature dependencies](development/openzeppelin-port.md) |
 
 ## Reproduce native evidence
 

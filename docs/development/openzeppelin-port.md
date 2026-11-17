@@ -15,14 +15,50 @@ Different instruction sequences and constraint counts are acceptable.
 | Needed capability | Immediate use | Current boundary |
 | --- | --- | --- |
 | Dynamic map-value reads | Balances, registered keys and allowances | Scalar reads compile from Lean to native two-part index paths. A focused 3.2.1 example passes read-after-write and rejects a tampered read. Missing keys fail. |
-| Multi-entrypoint calls on current state | Registration, transfer and supply calls on one deployed contract | Bundle collection and retained-deployment assembly exist; proof/client handoff remains open in issue 67. |
-| Guarded native execution | Missing accounts, balance checks and conditional updates | Host control exists; native guard/effect integration remains open in issue 43. |
-| Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Checked composite values exist; general aggregate ledger effects remain open. |
-| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | Native inventory exists; safe Lean exposure remains incomplete. |
+| Multi-entrypoint calls on current state | Registration, transfer and supply calls on one deployed contract | Bundle collection, retained deployment and source/proof/client handoff are implemented. A selected-3.2.1 build and focused binding test pass; integrated multi-operation execution remains open in issue 67. |
+| Guarded native execution | Missing accounts, balance checks and conditional updates | Conditional scalar cell/map writes pass the selected-3.2.1 native checker. Guarded proof attachment, lazy reads and partial-expression totalization remain open in issue 43. |
+| Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Checked composite values exist; native ledger ADTs are tracked in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
+| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | Typed bytes, persistent hashes and curve source operations are tracked in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
 The token workload does not exercise every native instruction.
+
+The first source component is
+[`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).
+It rebuilds the public-supply extension's two accounting blocks with 128-bit
+overflow/underflow rejection and explicit public disclosure. It is an ungated
+component that still needs atomic pairing with encrypted token effects.
+One focused selected-3.2.1 native test checks supply `0 → 5 → 3`, unchanged
+initial state, overflow rejection and underflow rejection. It generates no keys,
+proof or deployment.
+
+## Reference behavior to retain
+
+The pinned reference exports 16 entrypoints. Its source requires the following
+paths, beyond the current scalar map example:
+
+| Entrypoints | Required behavior and implementation owner |
+| --- | --- |
+| `totalSupply`, `mint`, `burn`, `burnFrom` | Pair supply changes with encrypted token changes atomically. Retain 128-bit supply arithmetic and public mint/burn deltas. [Native state and crypto](https://github.com/awjreynolds/noctium/issues/70). |
+| `balanceOf`, `pendingOf`, `allowance`, `isRegistered` | Membership and guarded lookup. Missing entries return valid curve-identity encrypted zeros. Escrow uses nested owner/spender maps and a record containing two ciphertexts and an owner memo. [Ledger ADTs](https://github.com/awjreynolds/noctium/issues/69), [guards](https://github.com/awjreynolds/noctium/issues/43). |
+| `computeAccountId`, `registerWithKey` | Exact persistent-hash account identity, domain-separated encryption key ownership, registration uniqueness and encrypted-zero initialization. [Typed crypto](https://github.com/awjreynolds/noctium/issues/70). |
+| `transfer`, `_move`, `sweep` | Separate spendable and pending balances. Credit the pending pool, deliver a memo, preserve credit epochs, and sweep through the authenticated encryption key. [Ledger ADTs](https://github.com/awjreynolds/noctium/issues/69), [crypto](https://github.com/awjreynolds/noctium/issues/70). |
+| `approve`, `transferFrom`, `burnFrom` | Refund prior escrow, preserve encrypted allowance and owner-readable remaining balance, and bind spend randomness to owner, spender and epoch. [Ledger ADTs](https://github.com/awjreynolds/noctium/issues/69), [crypto](https://github.com/awjreynolds/noctium/issues/70). |
+| `clearMemos` | Authenticate the encryption key, check the expected memo epoch and reset the memo list without resetting lifetime credit counters. [Ledger ADTs](https://github.com/awjreynolds/noctium/issues/69). |
+| Caller-returning operations | Return the authenticated caller identity, which composing policies use for caller checks. Typed native inputs/returns remain part of [composition](https://github.com/awjreynolds/noctium/issues/50). |
+
+The constructor also retains sealed name, symbol and decimals plus initialization
+state. The witness interfaces supply an account secret, an encryption secret,
+a plaintext claim indexed by ciphertext, and a fresh invocation randomness seed.
+The circuit checks key ownership and plaintext claims. Seed freshness is a wallet
+responsibility. Deterministic fixture seeds do not establish production privacy.
+
+These requirements come from the pinned
+[token](https://github.com/OpenZeppelin/compact-contracts/blob/f85f1a23685c6bbedfc8c2589ae3aa128aff7c46/contracts/src/token/ConfidentialFungibleToken.compact),
+[composed harness](https://github.com/OpenZeppelin/compact-contracts/blob/f85f1a23685c6bbedfc8c2589ae3aa128aff7c46/contracts/test/integration/_mocks/ComposedConfidentialFungibleTokenPublicSupply.compact),
+and [ElGamal helpers](https://github.com/OpenZeppelin/compact-contracts/blob/f85f1a23685c6bbedfc8c2589ae3aa128aff7c46/contracts/src/crypto/ElGamal.compact).
+They describe port requirements, not implemented capabilities.
 
 ## Minimum checks
 
