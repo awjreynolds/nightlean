@@ -1,0 +1,352 @@
+{
+  "schemaVersion": 1,
+  "status": "verified_immutable_source",
+  "scope": "Native runtime preparation of ordered state-cell reads from completed native mutation prefixes.",
+  "limits": [
+    "This is finite source-to-native test evidence, not a generic state-preservation theorem.",
+    "Map-value read operations remain unsupported by Impact lowering.",
+    "No ledger submission or deployment occurred."
+  ],
+  "sourceArchive": {
+    "path": "/private/tmp/noctium-state65-parent-ofzi2_d5",
+    "baseCommit": "7346401d8521ed32e36727ed42c6659d55dd2923",
+    "runtimeBIncluded": true,
+    "unpublishedGenericSourceExcluded": true
+  },
+  "reviewApproval": {
+    "status": "reviewed_and_applied_by_root",
+    "candidatePatchSha256": "32bec69e39e164fd7811d2188666266a2245e1ae1ccda8a519931b474e08b967",
+    "basis": "Root integration message confirmed the reviewed candidate was applied after the recorded base commit.",
+    "publishedCommit": "cd4eb2bb0ad57d088c155b11a665487ff8e8da51"
+  },
+  "sourceVerification": {
+    "leanToolchain": "Lean 4.35.0",
+    "commands": [
+      {
+        "argv": [
+          "lake",
+          "build"
+        ],
+        "exitCode": 0,
+        "result": "32 build jobs succeeded"
+      },
+      {
+        "argv": [
+          "lake",
+          "env",
+          "lean",
+          "tests/Issue65StateOrdering.lean"
+        ],
+        "exitCode": 0,
+        "result": "Lean source guards passed"
+      }
+    ],
+    "compilations": [
+      {
+        "argv": [
+          "lake",
+          "exe",
+          "noctium",
+          "compile",
+          "tests/Issue65StateOrdering.lean",
+          "--output",
+          "/private/tmp/noctium-state65-regenerate-issue65/issue65-320"
+        ],
+        "exitCode": 0,
+        "result": "1 circuit, 3 native entrypoint relations"
+      },
+      {
+        "argv": [
+          "lake",
+          "exe",
+          "noctium",
+          "compile",
+          "tests/Issue65StateOrdering.lean",
+          "--target",
+          "profiles/midnight-ledger-9-zkir-3.2.1-target.json",
+          "--output",
+          "/private/tmp/noctium-state65-regenerate-issue65/issue65-321"
+        ],
+        "exitCode": 0,
+        "result": "1 circuit, 3 native entrypoint relations"
+      },
+      {
+        "argv": [
+          "lake",
+          "exe",
+          "noctium",
+          "compile",
+          "examples/PrivateClaim.lean",
+          "--output",
+          "/private/tmp/noctium-state65-regenerate-issue65/private-claim-320"
+        ],
+        "exitCode": 0
+      },
+      {
+        "argv": [
+          "lake",
+          "exe",
+          "noctium",
+          "compile",
+          "examples/PrivateClaim.lean",
+          "--target",
+          "profiles/midnight-ledger-9-zkir-3.2.1-target.json",
+          "--output",
+          "/private/tmp/noctium-state65-regenerate-issue65/private-claim-321"
+        ],
+        "exitCode": 0
+      }
+    ],
+    "fixtureComparisonCount": 14,
+    "allGeneratedFixturesMatchCheckedInBytes": true,
+    "liveWorkspaceSourcesAndFixturesMatchVerifiedArchive": true
+  },
+  "sourceSha256": {
+    "tests/Issue65StateOrdering.lean": "af688069ff2bb7718704aec697a03d07931c211e95c77d175f3ba12734dd7848",
+    "examples/PrivateClaim.lean": "5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771",
+    "Nightlean/Semantics.lean": "e55723ecee83ec82773e29f962ee89f6477befc672ac9f82741eefe30f25f2e7",
+    "Nightlean/Backend/Impact.lean": "7d80654f880fd6d0ddda641899e2b515ea9d81037075104dfc3b7921f2002069",
+    "runtime/src/lib.rs": "1a2ac2f098e532dafc60f683c35087a840e0dbfa17357991df6a12edaaf010af",
+    "runtime/tests/state_ordering.rs": "9474204788042b09e70d9d0ca6f0ae3a9411d7a6411ced53fed057efaec78d63",
+    "runtime/tests/validation.rs": "72e92dd6583eb528714d29f18400ab6609b6551b9d8fb22146a1e49296309ac7",
+    "runtime/tests/unsigned.rs": "407d8c245fa097b1ee661586624e7fe7c20a47b353803746a9bf6afc2adb6b45",
+    "runtime/Cargo.lock": "0df66d3aa5162fa1826a8ec49180e02f5c8188e37e6a74fbfeb57e27d6b26153",
+    "lean-toolchain": "ca5f1f601d34c49079e38d7e7041eb0f2a9c227fbc1df0f404820069a052330c",
+    "profiles/midnight-ledger-9.json": "f02c99dc0043e554800a688d62610a71302652eea08465eee919d12bbe464d4f",
+    "profiles/midnight-ledger-9-zkir-3.2.1-target.json": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093"
+  },
+  "fixtureComparisons": [
+    {
+      "profile": "issue65-320",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-320/OrderedState.failingGuard.zkir",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.failingGuard.zkir",
+      "byteMatch": true,
+      "bytes": 1181,
+      "sha256": "92f8bf781fbec3d6b0a83a5250d5489420e984e27f1077fc15cbe19f41760f11"
+    },
+    {
+      "profile": "issue65-320",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-320/OrderedState.failingGuard.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.failingGuard-320.impact.json",
+      "byteMatch": true,
+      "bytes": 1167,
+      "sha256": "5eaea5d79198296f7e45cd1546eaa56af5c8164678d0f5dab8a90c9cba912aed"
+    },
+    {
+      "profile": "issue65-321",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-321/OrderedState.failingGuard.zkir",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.failingGuard.zkir",
+      "byteMatch": true,
+      "bytes": 1181,
+      "sha256": "92f8bf781fbec3d6b0a83a5250d5489420e984e27f1077fc15cbe19f41760f11"
+    },
+    {
+      "profile": "issue65-321",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-321/OrderedState.failingGuard.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.failingGuard-321.impact.json",
+      "byteMatch": true,
+      "bytes": 1744,
+      "sha256": "0cca1eed9e34bbe5412fc9906721288c423d68687fed5b86e132d31afef6ee76"
+    },
+    {
+      "profile": "issue65-320",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-320/OrderedState.noncanonicalRead.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.noncanonicalRead-320.impact.json",
+      "byteMatch": true,
+      "bytes": 1238,
+      "sha256": "4154fbd731447da847f745d8288984898edae1522aed04099bbf377491e0690c"
+    },
+    {
+      "profile": "issue65-321",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-321/OrderedState.noncanonicalRead.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.noncanonicalRead-321.impact.json",
+      "byteMatch": true,
+      "bytes": 1815,
+      "sha256": "08c68d44535936d18b43bea5131d8fab24fdad3011550a5ae96f03bd07b2886a"
+    },
+    {
+      "profile": "issue65-320",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-320/OrderedState.sequential.zkir",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.sequential.zkir",
+      "byteMatch": true,
+      "bytes": 6883,
+      "sha256": "2614e2928f1373d6ccfb4129170cdc209e20ee67e1fe3483f600ce8d1e27dec3"
+    },
+    {
+      "profile": "issue65-320",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-320/OrderedState.sequential.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.sequential-320.impact.json",
+      "byteMatch": true,
+      "bytes": 4682,
+      "sha256": "6dca5f3de47591ffd7d3d382c87dd12eeb726d3d3e1c03fa2f5b52a2a9034282"
+    },
+    {
+      "profile": "issue65-321",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-321/OrderedState.sequential.zkir",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.sequential.zkir",
+      "byteMatch": true,
+      "bytes": 6883,
+      "sha256": "2614e2928f1373d6ccfb4129170cdc209e20ee67e1fe3483f600ce8d1e27dec3"
+    },
+    {
+      "profile": "issue65-321",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/issue65-321/OrderedState.sequential.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/OrderedState.sequential-321.impact.json",
+      "byteMatch": true,
+      "bytes": 5259,
+      "sha256": "d93f4b70b25e41375b6869945523208ef0ec81f5b26eced011baedb54f102f71"
+    },
+    {
+      "profile": "private-claim-320",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/private-claim-320/PrivateClaim.claim.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/PrivateClaim.claim-320.impact.json",
+      "byteMatch": true,
+      "bytes": 5788,
+      "sha256": "cbb84324fa64596fcf076b6fe8dd566ad5956a82ce1e04682e030bc1b7c14242"
+    },
+    {
+      "profile": "private-claim-320",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/private-claim-320/PrivateClaim.claim.zkir",
+      "checkedInPath": "runtime/tests/fixtures/issue65/PrivateClaim.claim.zkir",
+      "byteMatch": true,
+      "bytes": 6191,
+      "sha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c"
+    },
+    {
+      "profile": "private-claim-321",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/private-claim-321/PrivateClaim.claim.impact.json",
+      "checkedInPath": "runtime/tests/fixtures/issue65/PrivateClaim.claim-321.impact.json",
+      "byteMatch": true,
+      "bytes": 6365,
+      "sha256": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42"
+    },
+    {
+      "profile": "private-claim-321",
+      "generatedPath": "/private/tmp/noctium-state65-regenerate-issue65/private-claim-321/PrivateClaim.claim.zkir",
+      "checkedInPath": "runtime/tests/fixtures/issue65/PrivateClaim.claim.zkir",
+      "byteMatch": true,
+      "bytes": 6191,
+      "sha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c"
+    }
+  ],
+  "nativeRuntimeVerification": {
+    "rustToolchain": "Rust 1.100.0",
+    "cargoTargetDir": "/private/tmp/nightlean-issue65-runtime-target",
+    "runs": [
+      {
+        "profile": "320",
+        "command": [
+          "/private/tmp/nightlean-cargo/bin/cargo",
+          "+1.100.0",
+          "test",
+          "--manifest-path",
+          "runtime/Cargo.toml",
+          "--locked",
+          "--offline",
+          "--test",
+          "state_ordering",
+          "--test",
+          "validation",
+          "--test",
+          "unsigned"
+        ],
+        "exitCode": 0,
+        "suites": [
+          {
+            "name": "state_ordering",
+            "passed": 5,
+            "failed": 0
+          },
+          {
+            "name": "unsigned",
+            "passed": 6,
+            "failed": 0
+          },
+          {
+            "name": "validation",
+            "passed": 9,
+            "failed": 0
+          }
+        ],
+        "log": "/private/tmp/noctium-state65-parent-ofzi2_d5/parent-native-320.log",
+        "logSha256": "7e236da79c64ee4cc3af0c3081c0e156c7b1e87da4b3c2b2d0473adff4de7feb"
+      },
+      {
+        "profile": "321",
+        "command": [
+          "/private/tmp/nightlean-cargo/bin/cargo",
+          "+1.100.0",
+          "test",
+          "--manifest-path",
+          "runtime/Cargo.toml",
+          "--locked",
+          "--offline",
+          "--no-default-features",
+          "--features",
+          "zkir-321",
+          "--test",
+          "state_ordering",
+          "--test",
+          "validation",
+          "--test",
+          "unsigned"
+        ],
+        "exitCode": 0,
+        "suites": [
+          {
+            "name": "state_ordering",
+            "passed": 5,
+            "failed": 0
+          },
+          {
+            "name": "unsigned",
+            "passed": 6,
+            "failed": 0
+          },
+          {
+            "name": "validation",
+            "passed": 9,
+            "failed": 0
+          }
+        ],
+        "log": "/private/tmp/noctium-state65-parent-ofzi2_d5/parent-native-321.log",
+        "logSha256": "90022258433941bbe678e147282508722d8d1bb90c92f43b745be10be1cf4387"
+      }
+    ],
+    "observations": {
+      "orderedPublicReadOutputs": [
+        "0",
+        "1",
+        "2",
+        "9",
+        "1",
+        "255",
+        "9"
+      ],
+      "successorCells": {
+        "counter": "2",
+        "untouched": "9",
+        "flag": "1",
+        "amount": "255"
+      },
+      "successorMapSizes": {
+        "spent": 1
+      },
+      "sourceOutputMatchesNativeCheck": true,
+      "inputStateUnchangedAfterPreparationAndFailureChecks": true,
+      "inconsistentReadOutputRejectedByCheck": true,
+      "failingGuardRejectedByCheck": true,
+      "noncanonicalBooleanFieldRejectedByPrepare": true,
+      "privateClaimPrewriteReadsAndPreimagePreserved": true,
+      "unsignedRegressionSuitePassed": true
+    }
+  },
+  "publication": {
+    "implementationCommit": "cd4eb2bb0ad57d088c155b11a665487ff8e8da51",
+    "implementationTree": "a604506cbec953a14f21b709a0558fffd3546c1b",
+    "ledgerSubmission": false,
+    "runtimeAndLeanFixtureBlobsMatched": 94,
+    "allRuntimeAndLeanFixtureBlobsAndModesMatched": true,
+    "matchRecordSha256": "8ba080e343ac1b4f3bde90419426ca73714485f0788a444f8d68e4884a6c08d6"
+  }
+}
