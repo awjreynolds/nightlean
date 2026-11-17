@@ -20,7 +20,7 @@ Noctium is a Lean 4 compiler and proof framework for Midnight private contracts.
 - **Specify and prove** correctness, invariants and scoped privacy with ordinary Lean theorems and tactics.
 - **Compile and execute** through native ZKIR circuits, Impact ledger plans and a Rust client for proving, funding, submission and recovery.
 
-The compiler and primary lowering are written in Lean. Contract execution uses a finite supported subset. Proof authoring uses Lean's full theorem language. The Rust application path needs no Node, and Noctium has no Compact compiler or runtime dependency.
+The compiler and primary lowering are written in Lean. Contract execution uses a finite supported subset. Proof authoring uses Lean's full theorem language. The Rust and C/C++ application paths need no Node, and Noctium has no Compact compiler or runtime dependency.
 
 **Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. These are claim-specific guarantees. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
 
@@ -38,7 +38,7 @@ lake exe noctium compile examples/PrivateClaim.lean --output build/claim
 
 The output includes the standalone `claimRelation.zkir`, contract-call `PrivateClaim.claim.zkir`, runtime plan `PrivateClaim.claim.impact.json`, and `nightlean.json` manifest. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source: imports and elaborators execute development code.
 
-For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
+For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 
 Legacy technical identifiers such as `Nightlean.Frontend`, `nightlean_*` and `nightlean.json` stay stable for proof and artifact compatibility. Historical receipts retain the former Nightlean name.
 
@@ -83,7 +83,7 @@ Native cryptography, parser/VM agreement, host behavior and authenticated author
 
 The destination is [full native ZKIR v3 and Midnight ledger capability coverage](docs/compatibility/GOAL.md). Compact feature equivalence is a minimum comparison, not the scope limit.
 
-SDK goals cover native Rust/C/C++, TypeScript with WASM for web dapps, Kotlin for Android and Swift for iOS. Rust and the C/C++ runtime subset have qualified execution evidence. Web/mobile packages and full proof/transaction bindings remain goals.
+SDK goals cover native Rust/C/C++, TypeScript with WASM for web dapps, Kotlin for Android and Swift for iOS. Rust and C/C++ have qualified private-claim proof, transaction and recovery evidence on localnet. Web/mobile packages and general source witness execution remain goals.
 
 Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, scalar and component disclosure checks, and lazy host control. Checked composite layouts and codecs are present. [Source helper outputs](docs/development/component-disclosure.md) flatten checked composite results into native circuit leaves. Aggregate ledger effects, native guarded execution and broader composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
 

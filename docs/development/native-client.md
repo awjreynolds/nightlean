@@ -1,6 +1,6 @@
 # Native Rust client
 
-The Rust SDK prepares, funds, approves, seals and submits one native contract deployment or call. The application path uses native Rust libraries throughout. `runtime/examples/native_client.rs` deploys the retained Lean claim and submits its claim call without a Node runtime, Compact compiler, toolkit executable or proof-server subprocess.
+The Rust SDK prepares, funds, approves, seals and submits one native contract deployment or call. The application path uses native Rust libraries throughout. `runtime/examples/native_client.rs` deploys the retained Lean claim and submits its claim call without a Node runtime, Compact compiler, toolkit executable or proof-server subprocess. C and C++ hosts use the [native client ABI](native-client-abi.md), which drives this same Rust transaction state machine through explicit host requests.
 
 The host-neutral modules are `proof`, `funding` and `client`. The `localnet` feature adds an explicit loopback RPC adapter, development wallet adapter and filesystem journal. The added HTTP, BIP32 and metadata adapters build only with `localnet`. The core exposes no endpoint or seed policy.
 
@@ -86,7 +86,7 @@ The adapter bounds responses at 64 MiB in the example, metadata at 2 MiB, native
 
 ## Retained qualification
 
-[tests/native-client-evidence.json](../../tests/native-client-evidence.json) records public native receipts, full-state hashes, metadata and runtime-code fingerprints, both SRS digests, profile manifests and source hashes for both selected contract profiles. The opt-in Rust test `localnet::tests::real_rust_only_funded_deploy_and_claim` runs real local contract and DUST proofs, funds and seals native transactions, submits them through metadata-encoded RPC, and requires exact finalized contract state.
+[tests/native-client-evidence.json](../../tests/native-client-evidence.json) records public native receipts, full-state hashes, metadata and runtime-code fingerprints, both SRS digests, profile manifests and source hashes for both selected contract profiles. The opt-in Rust test `localnet::tests::real_rust_only_funded_deploy_and_claim` runs real local contract and DUST proofs, funds and seals native transactions, submits them through metadata-encoded RPC, and requires exact finalized contract state. The linked C++ client ABI also passes deployment, claim, lost-acknowledgement recovery, and separate-process restart qualification on both profiles. See [native client ABI evidence](../../tests/native-client-abi-evidence.json) for source binding, independent receipt checks, and scope.
 
 The same test loses the first submission acknowledgement, persists uncertainty, rejects cancellation after broadcast, preserves a deadline as uncertainty, reopens the filesystem journal and retransmits identical bytes. It requires fresh finality after committed recovery. Both transactions remain chain-accepted when a shared private revision permits one CAS and conflicts the other. Invalid native proof bytes, a changed public commitment, the wrong network, wrong genesis/profile, altered receipt fields and replay all reject. The five retained invalid claim inputs are secret, path, direction, root and nullifier. All 34 adversarial scalar cases run against each linked native profile.
 

@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 1,
+  "scope": "Native client C ABI phase B qualification through explicit host requests and Rust-owned tasks.",
+  "publishedSource": {
+    "commit": "7346401d8521ed32e36727ed42c6659d55dd2923",
+    "tree": "5b6be85f2adff7286b83c018f71afa8bcea9e377",
+    "ci": "https://github.com/awjreynolds/noctium/actions/runs/43998040599",
+    "ownedRuntimeFiles": {
+      "runtime/src/native_client.rs": "0bfe522518b797843f7613b112c571d63d60af038dd02893adfa8ab336c5999b",
+      "runtime/src/localnet_ffi.rs": "82112c85c2f9507347112396bf3663b536f523ece527a174694e368d122a63f6",
+      "runtime/src/native_ffi.rs": "c9a7d7f8bbb867d09232eca1ec3d8c5f99c40f457f808a48a7eb3609e0ab617e",
+      "runtime/include/nightlean_native.h": "d3b84495a55ed71f296e66b0a4cc28d1e5613e9a63d97c0a55bfb61d343bc11b",
+      "runtime/tests/native_client_cpp_smoke.cpp": "5247282b6b2d5864c29b96c842b0a55a10247f0a6276d304d987fa3fd0475fb0",
+      "runtime/tests/native_client_ffi.rs": "1b88f2683316f450d684281574221cb174cee8a317c00e6759a9600184e760fa",
+      "runtime/src/lib.rs": "8b897f2b2be9cd58ba549a66d8272d9f8fea8c7be5be0604d78089c12d4e456f",
+      "runtime/src/client.rs": "fb8535021aa578dae66ec51221b267e63b0688c8b8b75491687e6ae61b9cd08b"
+    },
+    "all81PublishedRuntimeBlobsAndModesMatched": true
+  },
+  "profiles": {
+    "320": {
+      "name": "midnight-ledger-9",
+      "workerOrdinarySuite": {
+        "passed": 117,
+        "failed": 0,
+        "ignored": 8
+      },
+      "workerRetainedMaterialProofAndAbi": {
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0
+      },
+      "independentFocusedTests": {
+        "core": {
+          "passed": 2,
+          "failed": 0
+        },
+        "malformedFfi": {
+          "passed": 1,
+          "failed": 0
+        }
+      },
+      "independentCpp": {
+        "freshProcessExitCode": 0,
+        "recoveryProcessExitCode": 0
+      },
+      "workerLibrarySha256": "c43889be72a0fb3112cdcab6df9b500c624dfcb9fb48933c82626cdf2d3bcdfe",
+      "workerCppSha256": "3c10b58a786eea1797743ee4d2eec139863f1c247a4e5d7ce36045850d4e9391",
+      "independentLibrarySha256": "89711755884777cafe0f054455b8b354f4fe9b45ad5eb5b6be2cf0158fb35003",
+      "independentCppSha256": "c534390e785868d710d5887044f6a3d80f74038d2e05121292bbc59f65e6a7d3"
+    },
+    "321": {
+      "name": "midnight-ledger-9-zkir-3.2.1",
+      "workerOrdinarySuite": {
+        "passed": 121,
+        "failed": 0,
+        "ignored": 9
+      },
+      "workerRetainedMaterialProofAndAbi": {
+        "passed": 6,
+        "failed": 0,
+        "ignored": 0
+      },
+      "independentFocusedTests": {
+        "core": {
+          "passed": 2,
+          "failed": 0
+        },
+        "malformedFfi": {
+          "passed": 1,
+          "failed": 0
+        }
+      },
+      "independentCpp": {
+        "freshProcessExitCode": 0,
+        "recoveryProcessExitCode": 0
+      },
+      "workerLibrarySha256": "07f39ee0f2851880eefd9ddb2a52dcd0fc32efc28608c13bfd289d8ed1ca2d87",
+      "workerCppSha256": "4a1dbb076fec71f8f2606cc4c0429f6e2c4e80c6fcd454f4dde781daad36eba2",
+      "independentLibrarySha256": "376d65a38a91f7554db5809196d15cd71531af3dec365355d8d844d8133bd366",
+      "independentCppSha256": "db1350ee7a1c6b76195e67c1ebfab30e923090471c866eb40468453d18b3237f"
+    }
+  },
+  "independentSourceReconstruction": {
+    "baseCommit": "f1f50e6d02d14b7464397f57f5c6ee8b642cc164",
+    "sourceTreeSha256": "f90e78e88b5853f2391cfef0b12f614e6db6d3ebc93a4030925173837c047446",
+    "matchedWorkerSourceEntries": 176,
+    "workerSourceEntries": 179,
+    "ownedOverlayFilesMatched": 8,
+    "ownedOverlayFileCount": 8,
+    "excludedUnrelatedFiles": [
+      "tests/GenericSpecialization.lean",
+      "tests/generics/Native.lean",
+      "tests/generics/cases.json"
+    ],
+    "ownedOverlayManifestSha256": "a2a0c8459dca7c81ef36cac09114f64416853ec29ca538033da23a91050e6494",
+    "sourceManifestSha256": "4d7d7cd896e6187cd431e9e4fa24adbaffe39cd4582cb5642eb1937a8b9a5db6",
+    "qualificationSummarySha256": "e7f213b4b18e1a37bb27307d9acfd309f1367427dfcc03a7b09122c9195b337a"
+  },
+  "exactIndependentRuntimeClosure": {
+    "runtimeBlobCount": 81,
+    "allBlobsAndModesMatchedPublishedCommit": true,
+    "recordSha256": "f58b63e163f6b7d3d50def92171f63a8facd5c263d1c578b114f32d1fcc93c1b"
+  },
+  "transactionRecovery": {
+    "bothProfiles": true,
+    "lostSubmissionAcknowledgement": true,
+    "recoveryInSeparateCppProcess": true,
+    "retriedIdenticalSealedBytes": true,
+    "recoveryNeededWitnessSeedFundingOrSigning": false,
+    "deploymentAcceptedWithPrivateCasConflict": true,
+    "claimCommittedPrivateRevision": "r1",
+    "staleWriterRejectedBeforeBroadcast": true,
+    "terminalReplayHadNoSecondCas": true,
+    "largestObservedPrivateServicePayloadBytes": 35881
+  },
+  "receipts": {
+    "independentObserver": "Separate development receipt harness, outside Rust/C++ application path",
+    "workerRun": [
+      {
+        "event": "Deploy",
+        "height": 6985,
+        "blockHash": "7ae7cd4bd8d79cd97f53c995e00cfe7c4db89911393f32a06d6ee94f6e4d9419",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "ce591698fc92c7a36f3acb07fd17254639fc05437b5390e11085c8b2371f91df",
+        "transactionId": "179e0a75aed84cb51df9df14746c572e2f746a60e67f6d3f173260d98d84e849",
+        "contractAddress": "0bd02804af4be4d96e37ddab209daf762ce36c9111c7a99582b6c0ef5674c83f",
+        "contractStateBytes": 1689,
+        "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+        "observerOutcome": "applied",
+        "observerBlockHash": "7ae7cd4bd8d79cd97f53c995e00cfe7c4db89911393f32a06d6ee94f6e4d9419",
+        "observerExtrinsicHash": "ce591698fc92c7a36f3acb07fd17254639fc05437b5390e11085c8b2371f91df",
+        "observerTransactionId": "179e0a75aed84cb51df9df14746c572e2f746a60e67f6d3f173260d98d84e849",
+        "exactStateMatched": true
+      },
+      {
+        "event": "Call",
+        "height": 6988,
+        "blockHash": "35bbcc1acc2ca6bc016dbff56bae726271b589a0fc4d17a4d67ca5ae55f87067",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "539f50d5b9ce39ad1d2dfb6fdc0c1ab0091d66f59531298b51de722884583bdc",
+        "transactionId": "744f01dce499aa8ad42afad21324519ece8ee5ced879fcbf5d111e818eda0921",
+        "contractAddress": "0bd02804af4be4d96e37ddab209daf762ce36c9111c7a99582b6c0ef5674c83f",
+        "contractStateBytes": 1874,
+        "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "observerOutcome": "applied",
+        "observerBlockHash": "35bbcc1acc2ca6bc016dbff56bae726271b589a0fc4d17a4d67ca5ae55f87067",
+        "observerExtrinsicHash": "539f50d5b9ce39ad1d2dfb6fdc0c1ab0091d66f59531298b51de722884583bdc",
+        "observerTransactionId": "744f01dce499aa8ad42afad21324519ece8ee5ced879fcbf5d111e818eda0921",
+        "exactStateMatched": true
+      },
+      {
+        "event": "Deploy",
+        "height": 7002,
+        "blockHash": "a300b071ee37f1d49c38abc10e0b8f79ce161728f27530c79643b50e2fad4795",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "762522d02b6ca4d20545ad5c5751dda7965dc28ed31a879b65a1dcb2c652bf24",
+        "transactionId": "8d07c65fe5bf2d404aebfe1f8eaa27e7e91f14365ad86554a758d2b346e42086",
+        "contractAddress": "90d0e37225ca58b318f3d62d19c3182e97171a85cc47f2d797e831f0713801bc",
+        "contractStateBytes": 1689,
+        "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+        "observerOutcome": "applied",
+        "observerBlockHash": "a300b071ee37f1d49c38abc10e0b8f79ce161728f27530c79643b50e2fad4795",
+        "observerExtrinsicHash": "762522d02b6ca4d20545ad5c5751dda7965dc28ed31a879b65a1dcb2c652bf24",
+        "observerTransactionId": "8d07c65fe5bf2d404aebfe1f8eaa27e7e91f14365ad86554a758d2b346e42086",
+        "exactStateMatched": true
+      },
+      {
+        "event": "Call",
+        "height": 7005,
+        "blockHash": "e221f8ca70507d461caa9a8d5c585995aa8f63031e6f1edcc912927921cf57db",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "df458f7f834610d9fe9ff61aee9372bcd7ba149bab9aaadff10a6413a06054a1",
+        "transactionId": "5bd396adc1d314e1f84ec56a9636eb37447784ff0ac4605644514b6e2bbfad27",
+        "contractAddress": "90d0e37225ca58b318f3d62d19c3182e97171a85cc47f2d797e831f0713801bc",
+        "contractStateBytes": 1874,
+        "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "observerOutcome": "applied",
+        "observerBlockHash": "e221f8ca70507d461caa9a8d5c585995aa8f63031e6f1edcc912927921cf57db",
+        "observerExtrinsicHash": "df458f7f834610d9fe9ff61aee9372bcd7ba149bab9aaadff10a6413a06054a1",
+        "observerTransactionId": "5bd396adc1d314e1f84ec56a9636eb37447784ff0ac4605644514b6e2bbfad27",
+        "exactStateMatched": true
+      }
+    ],
+    "independentCppRun": [
+      {
+        "event": "Deploy",
+        "height": 7194,
+        "blockHash": "edbff783e425126519f50de0b34c8220741286819af4f34e4f6cd332a62f27af",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "10ae2970cf17434232af216c1a7ab2ed88885332a9e925c551acfec144d8374a",
+        "transactionId": "ed74f7f1af74b6d1cdcd5f5c0238d2998a7404f84bbc75ab9f877be6be19c002",
+        "contractAddress": "7d82b95a20851e782fb3922dce5c8182bb575c8fcade7932703121b73fb2279a",
+        "contractStateBytes": 1689,
+        "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+        "observerOutcome": "applied",
+        "observerBlockHash": "edbff783e425126519f50de0b34c8220741286819af4f34e4f6cd332a62f27af",
+        "observerExtrinsicHash": "10ae2970cf17434232af216c1a7ab2ed88885332a9e925c551acfec144d8374a",
+        "observerTransactionId": "ed74f7f1af74b6d1cdcd5f5c0238d2998a7404f84bbc75ab9f877be6be19c002",
+        "exactStateMatched": true
+      },
+      {
+        "event": "Call",
+        "height": 7197,
+        "blockHash": "034ecc570afe3b6690ff7f49616a33117b3b754ab58b8cca097cdc769ac104c0",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "1c9afd703f22d303d97a2b972cf8b79930be9073d90ebeb404d6691bb649be2d",
+        "transactionId": "73f1ce1ed2758d169e27eac78353f2b934f6f821e6c72c5af8d8e4f0493f270e",
+        "contractAddress": "7d82b95a20851e782fb3922dce5c8182bb575c8fcade7932703121b73fb2279a",
+        "contractStateBytes": 1874,
+        "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "observerOutcome": "applied",
+        "observerBlockHash": "034ecc570afe3b6690ff7f49616a33117b3b754ab58b8cca097cdc769ac104c0",
+        "observerExtrinsicHash": "1c9afd703f22d303d97a2b972cf8b79930be9073d90ebeb404d6691bb649be2d",
+        "observerTransactionId": "73f1ce1ed2758d169e27eac78353f2b934f6f821e6c72c5af8d8e4f0493f270e",
+        "exactStateMatched": true
+      },
+      {
+        "event": "Deploy",
+        "height": 7214,
+        "blockHash": "4cc570b634f3b540b3354b12745c53db34ede87fe90278fb1da45a61db94310c",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "d9656add99e89e85a7c6849b436d620b41231956f7ab0e92b04a1715f525f0b6",
+        "transactionId": "cc6bcce6f38896fe0cfa7bdc3beb4e94d289cfba31ececf2980710e960d01411",
+        "contractAddress": "9b1bc718434bc5f861e9d41cf4384e264faf23b23c3d5b12ac480b095e34cf68",
+        "contractStateBytes": 1689,
+        "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+        "observerOutcome": "applied",
+        "observerBlockHash": "4cc570b634f3b540b3354b12745c53db34ede87fe90278fb1da45a61db94310c",
+        "observerExtrinsicHash": "d9656add99e89e85a7c6849b436d620b41231956f7ab0e92b04a1715f525f0b6",
+        "observerTransactionId": "cc6bcce6f38896fe0cfa7bdc3beb4e94d289cfba31ececf2980710e960d01411",
+        "exactStateMatched": true
+      },
+      {
+        "event": "Call",
+        "height": 7217,
+        "blockHash": "0b5a660c5af4d1f3f31c88e7900f46afa89a5a55fb4fd15e8d3c07d77a648253",
+        "extrinsicIndex": 4,
+        "extrinsicHash": "27f529ac6312e34e72f60b783da275705ea3271113187a19f8181ec9275ed506",
+        "transactionId": "62e08afcfee64e3a637ade9ea37952d8e247ead381a1df4bbd6c9fb564abc110",
+        "contractAddress": "9b1bc718434bc5f861e9d41cf4384e264faf23b23c3d5b12ac480b095e34cf68",
+        "contractStateBytes": 1874,
+        "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "observerOutcome": "applied",
+        "observerBlockHash": "0b5a660c5af4d1f3f31c88e7900f46afa89a5a55fb4fd15e8d3c07d77a648253",
+        "observerExtrinsicHash": "27f529ac6312e34e72f60b783da275705ea3271113187a19f8181ec9275ed506",
+        "observerTransactionId": "62e08afcfee64e3a637ade9ea37952d8e247ead381a1df4bbd6c9fb564abc110",
+        "exactStateMatched": true
+      }
+    ],
+    "workerObserverRecordSha256": "5cf6498be14c8f8da05a85949db809f81ba0af0755d2593f2003d370c5892bdc",
+    "independentObserverRecordSha256": "274d09b1d7a1806d63c640ef69d19b193e7d37d0485151d22f25db66940e0463",
+    "observerRecordsSha256": {
+      "workerRun": "5cf6498be14c8f8da05a85949db809f81ba0af0755d2593f2003d370c5892bdc",
+      "independentRebuild": "274d09b1d7a1806d63c640ef69d19b193e7d37d0485151d22f25db66940e0463"
+    }
+  },
+  "publicStateDigests": {
+    "deploymentBytes": 1689,
+    "deploymentSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+    "claimBytes": 1874,
+    "claimSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3"
+  },
+  "trustAndScope": {
+    "network": "Isolated localnet, network id undeployed",
+    "sourceEffects": "The host stages the Boolean private write. This ABI qualification does not cover general source-declared private effects.",
+    "consensus": "Trusted loopback node and finality report, not a consensus light client.",
+    "compiler": "No universal Lean-to-ledger compiler correctness claim.",
+    "unqualifiedTargets": [
+      "TypeScript/WASM",
+      "Kotlin",
+      "Swift"
+    ],
+    "privateArtifactsPublished": false
+  },
+  "independentRunRecordHashes": {
+    "320FreshRun": "63a66cf9a467cf258f608235c14b028638a1631960f7009baddea2e8742e8084",
+    "320Recovered": "89e0853696d3e76bd56ca07c633baa8f8d7ee61f3503f7d886fcb8ba6a7b22d6",
+    "321FreshRun": "9f155312ae38c945958a99994775ec94c565e740337aa78d076f697f0915da9a",
+    "321Recovered": "3a7644b56b25f4cb1f413d0693678a06e88b2dcc9357c158b87c0cedfa465a6f"
+  }
+}

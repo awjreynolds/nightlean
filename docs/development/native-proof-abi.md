@@ -2,7 +2,7 @@
 
 Noctium's phase A native proof ABI lets a host authenticate a native bundle, prepare one proof session, obtain a proof request, and ask the Rust runtime to verify and attach a returned proof. The C ABI is declared in [`nightlean_native.h`](../../runtime/include/nightlean_native.h). [`native_cpp_smoke.cpp`](../../runtime/tests/native_cpp_smoke.cpp) shows a linked C++ caller and its adversarial reply checks. The exported `NIGHTLEAN_*` names remain Nightlean compatibility identifiers.
 
-Phase A ends with an unfunded, unsubmitted public intent projection. Funding, signing, submission, receipts, and journal persistence belong to phase B. The bounded completed session retains the typed, unsealed `ProvedIntent` internally until the host frees the session. Phase A exposes no private-intent serialization or funding operation. Issue 61 remains open for phase B.
+Phase A ends with an unfunded, unsubmitted public intent projection. Its bounded completed session retains the typed, unsealed `ProvedIntent` internally until the host frees the session. Phase A exposes no private-intent serialization or funding operation. The [phase B native client ABI](native-client-abi.md) extends the header with explicit funding, signing, submission, receipt, and journal requests while preserving phase A behavior.
 
 ## Build and qualify
 
@@ -38,4 +38,4 @@ Free result and private tokens after use. Caller-owned copies remain the host's 
 
 The ABI allows at most 8 sessions, 2 live prepare/prove/verification calls, 64 ordinary result tokens, and 16 private tokens. Private configuration, requests, proof responses, and results are capped at 1 MiB; descriptor and reply metadata at 64 KiB; declared bundle payload at 16 MiB; and SRS bytes at 128 MiB. These are host/resource limits for this ABI, not compiler capability limits.
 
-This API's checks establish the retained verifier key's relation for the exact native statement. They do not prove a general connection from Lean source through compiler output to generated keys, nor audit the full native source or compiler. Bundle digests authenticate bytes only. The host remains responsible for source-certificate authority, native implementation/key generation, SRS ceremony relations, service authorization, and entropy quality. TypeScript/mobile SDKs remain goals.
+This API's checks establish the retained verifier key's relation for the exact native statement. They do not prove a general connection from Lean source through compiler output to generated keys, nor audit the full native source or compiler. Bundle digests authenticate bytes only. The host remains responsible for source-certificate authority, native implementation/key generation, SRS ceremony relations, service authorization, and entropy quality. Phase B's implementation and qualification are recorded in [native client ABI evidence](../../tests/native-client-abi-evidence.json). TypeScript/WASM, Kotlin, and Swift SDKs remain goals.
