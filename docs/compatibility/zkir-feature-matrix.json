@@ -4689,5 +4689,89 @@
         "../../tests/helpers/qualification-evidence.json"
       ]
     }
-  ]
+  ],
+  "currentSourceSnapshot": {
+    "checkedOn": "2026-11-17",
+    "sourceCommit": "213e51e18aef56c27ddab087699a938036fc81b8",
+    "meaning": "Registered source-producer opcode coverage for restricted Native-field overloads. This is not complete overload, proof or ledger qualification.",
+    "registeredOpcodeCount": 16,
+    "registeredOpcodes": [
+      "add",
+      "mul",
+      "test_eq",
+      "neg",
+      "not",
+      "assert",
+      "cond_select",
+      "constrain_bits",
+      "constrain_eq",
+      "constrain_to_boolean",
+      "less_than",
+      "transient_hash",
+      "public_input",
+      "private_input",
+      "impact",
+      "output"
+    ],
+    "notExposedOpcodeCount": 31,
+    "notExposedOpcodes": [
+      "encode",
+      "copy",
+      "ec_mul",
+      "ec_mul_generator",
+      "hash_to_curve",
+      "into_coordinates",
+      "from_coordinates",
+      "into_bytes32",
+      "from_bytes32",
+      "reverse_bytes",
+      "bytes32_into_low_high",
+      "bytes32_from_low_high",
+      "div_mod_power_of_two",
+      "reconstitute_field",
+      "persistent_hash",
+      "keccak256",
+      "inv",
+      "jubjub_scalar_from_native",
+      "slice",
+      "nth",
+      "concat",
+      "load_constant",
+      "sha512",
+      "and",
+      "or",
+      "xor",
+      "to_bytes",
+      "from_bytes",
+      "reverse",
+      "bytes_into_natives",
+      "bytes_from_natives"
+    ],
+    "explicitNativeValueTypes": [
+      "Native"
+    ],
+    "derivedSourceEncodings": [
+      "Bool as constrained Native 0/1",
+      "bounded UInt through 248 bits",
+      "Bytes32 as constrained byte leaves with native byte-aligned map keys"
+    ],
+    "ledgerSourceSlices": [
+      "scalar cells/maps",
+      "source-bound guarded reads/writes and nested effect blocks",
+      "Bytes32 map keys",
+      "nested scalar map paths and explicit empty-map construction",
+      "checked nonempty Native-field record cells"
+    ],
+    "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
+    "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
+    "remainingTokenDependencies": [
+      "persistent hashing and domain/byte alignment",
+      "Jubjub/ElGamal/ECDH source primitives",
+      "mixed record values and memo lists",
+      "complete Counter behavior",
+      "native typed inputs/returns and composition",
+      "integrated token localnet lifecycle"
+    ],
+    "minimumChecksPolicy": "One focused source/native example per feature group and one completed-token localnet demonstration. Deeper assurance remains tracked separately."
+  }
 }
