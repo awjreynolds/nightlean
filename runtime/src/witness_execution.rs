@@ -479,6 +479,39 @@ impl WitnessContractTarget {
         .map_err(Error::Client)?;
         Ok(WitnessClient { driver })
     }
+
+    /// Start a CALL client without a witness-control sidecar from a bound proof and explicit host setup.
+    /// This handoff accepts no witness Runtime or synthetic control plan. It checks the retained
+    /// contract deployment, selected operation, and exact prepared-state binding before the host
+    /// setup Runtime is created. The proved value moves only after client startup succeeds.
+    pub fn start_call_client(
+        &self,
+        operation: &ContractOperationTarget,
+        proved: &mut Option<ProvedIntent>,
+        descriptor_json: &[u8],
+        setup_json: &[u8],
+    ) -> Result<WitnessClient> {
+        if !operation.belongs_to(self) {
+            return Err(Error::Proof(proof::Error::BindingMismatch));
+        }
+        let proved_ref = proved.as_ref().ok_or(Error::State)?;
+        let binding = proved_ref
+            .contract_binding()
+            .filter(|binding| binding.matches_operation_target(operation))
+            .cloned()
+            .ok_or(Error::Proof(proof::Error::BindingMismatch))?;
+        let descriptor: Descriptor =
+            serde_json::from_slice(descriptor_json).map_err(|_| Error::InvalidClientDescriptor)?;
+        let driver = Driver::start_with_state_binding(
+            descriptor,
+            setup_json,
+            Contract::Proved(proved_ref.native().clone()),
+            binding,
+        )
+        .map_err(Error::Client)?;
+        proved.take();
+        Ok(WitnessClient { driver })
+    }
 }
 
 /// A prepared native proof that still owns the exact source Runtime and target.

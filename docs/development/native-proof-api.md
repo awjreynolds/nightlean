@@ -50,6 +50,22 @@ One focused selected-3.2.1 lifecycle test covers rejected input, cancellation
 after source failure, corrected retry and token consumption at preparation. It
 uses the retained scalar witness bundle without a new proof or deployment.
 
+Contracts without a witness-control sidecar use
+`operation.prepare_call(&mut current_state, &parameters, scalar_inputs, &mut rng)`.
+This validates the selected operation's parameter identity and admitted state
+before construction. Errors preserve the token. Success consumes the token and
+returns the same `PreparedProof` used by the native prover.
+After proving, `target.start_call_client(&operation, &mut proved, descriptor, setup)`
+checks the retained deployment, operation and state binding before starting the
+client with explicit host setup. Failed startup preserves the proved value.
+No synthetic witness plan or Node process is required.
+
+The focused PublicSupply test uses authenticated add/subtract bundles with k9/k8
+parameters. It checks state transitions 0→5→3, parameter and foreign-state
+rejection, and client startup after one real addSupply proof. Its state-token
+admission is test-only. It does not establish finalized ledger execution or
+complete issue 67's multi-operation localnet lifecycle.
+
 ## Native phase and statement
 
 The pinned ledger's `Intent::prove` checks circuit activity, rewrites skipped transcript groups, derives binding from the resulting call and the parent intent commitment, then requests a proof with the exact binding override. Noctium previews its Noop insertion/merging and added compute gas before freezing the expected statement. Checked arithmetic rejects invalid counts and overflow. The preview calls native `ContractCall::public_inputs(parent_binding_commitment)` for the binding calculation. Actual attachment still uses `Intent::prove`, and the adapter requires its binding override and final statement to match the frozen preview.

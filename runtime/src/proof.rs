@@ -450,6 +450,40 @@ impl ContractOperationTarget {
         self.inner.deployment.address()
     }
 
+    /// Prepare a contract CALL without a witness-control sidecar from scalar inputs and one admitted current-state
+    /// token. The selected operation target pins its own SRS identity and call TTL. Public
+    /// target and state checks run before the token moves, and any preparation error preserves
+    /// the token for a corrected attempt. Contracts without a witness-control sidecar use this
+    /// path directly.
+    pub fn prepare_call(
+        &self,
+        current_state: &mut Option<CurrentStateContext>,
+        parameters: &TrustedParameters,
+        inputs: BTreeMap<String, Json>,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<PreparedProof> {
+        let mut inputs = SecretInputs(inputs);
+        if parameters.k() != self.k || parameters.sha256() != self.proof_parameters_sha256 {
+            return Err(Error::InvalidParameters);
+        }
+        let state = current_state.as_ref().ok_or(Error::BindingMismatch)?;
+        if !self.context_matches(state) {
+            return Err(Error::BindingMismatch);
+        }
+        let prepared = PreparedProof::from_contract_witness_inputs(
+            self,
+            state,
+            std::mem::take(&mut inputs.0),
+            rng,
+        )?;
+        current_state.take().ok_or(Error::BindingMismatch)?;
+        Ok(prepared)
+    }
+
+    pub(crate) fn belongs_to(&self, contract: &WitnessContractTarget) -> bool {
+        Arc::ptr_eq(&self.inner, &contract.inner)
+    }
+
     pub(crate) fn bundle(&self) -> Result<&VerifiedBundle> {
         self.inner
             .bundles
@@ -591,6 +625,28 @@ impl ContractStateBinding {
 
     pub(crate) fn matches_target(&self, address: &str, operation: &str) -> bool {
         self.address == address && self.operation == operation
+    }
+
+    pub(crate) fn matches_operation_target(&self, target: &ContractOperationTarget) -> bool {
+        if self.deployment
+            || self.contract_set_identity != target.contract_set_identity()
+            || self.deployment_identity != target.deployment_identity()
+            || self.state_schema_sha256 != target.state_schema_sha256()
+            || self.address != target.contract_address()
+            || self.operation != target.operation
+        {
+            return false;
+        }
+        let Some(current_state) = self.current_state.as_deref() else {
+            return false;
+        };
+        self.current_state_sha256.as_deref()
+            == Some(hex::encode(Sha256::digest(current_state)).as_str())
+            && self.context_identity.len() == 64
+            && self
+                .context_identity
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
     }
 }
 
@@ -1695,6 +1751,96 @@ mod tests {
     use rand::rngs::OsRng;
 
     #[cfg(feature = "zkir-321")]
+    fn issue67_supply_fixture(name: &str) -> String {
+        std::env::var(format!("NIGHTLEAN_ISSUE67_SUPPLY_{name}"))
+            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_ISSUE67_SUPPLY_{name}"))
+    }
+
+    #[cfg(feature = "zkir-321")]
+    fn issue67_supply_total(state_bytes: &[u8]) -> String {
+        use onchain_runtime::state::StateValue;
+        use transient_crypto::fab::AlignedValueExt;
+
+        let state: ContractState<Db> = decode(state_bytes).unwrap();
+        let StateValue::Array(array) = state.data.get_ref() else {
+            panic!("expected contract state array")
+        };
+        let StateValue::Cell(value) = &*array.get(0).unwrap() else {
+            panic!("expected totalSupply cell")
+        };
+        let mut fields = Vec::new();
+        value.value_only_field_repr(&mut fields);
+        assert_eq!(fields.len(), 1);
+        crate::field_decimal(fields[0])
+    }
+
+    #[cfg(feature = "zkir-321")]
+    fn issue67_supply_bundles() -> ContractBundleSet {
+        let add = crate::artifacts::verify(
+            std::path::Path::new(&issue67_supply_fixture("ADD_BUNDLE")),
+            Some("96398175fb2a762a38b079e00a4cb405e2ce3b9517c64ad8546b25c1ed173903"),
+        )
+        .unwrap();
+        let sub = crate::artifacts::verify(
+            std::path::Path::new(&issue67_supply_fixture("SUB_BUNDLE")),
+            Some("15b820d15e0ad5ad0f231c04fdabd11b9dbfe7b92a944324b10e791862c4c6a8"),
+        )
+        .unwrap();
+        ContractBundleSet::new(vec![add, sub]).unwrap()
+    }
+
+    #[cfg(feature = "zkir-321")]
+    fn issue67_supply_parameters(name: &str, k: u8, digest: &str) -> TrustedParameters {
+        let bytes = std::fs::read(issue67_supply_fixture(name)).unwrap();
+        TrustedParameters::from_bytes(&bytes, k, digest).unwrap()
+    }
+
+    #[cfg(feature = "zkir-321")]
+    fn issue67_client_descriptor() -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "abiVersion": 1,
+            "policy": {
+                "networkId": "nightlean-test",
+                "genesis": "8".repeat(64),
+                "specVersion": 1,
+                "transactionVersion": 4,
+                "profile": crate::profile::NAME,
+                "maxDust": "1"
+            },
+            "capabilities": {
+                "chain": "chain",
+                "funding": "wallet",
+                "signing": "signer",
+                "journal": "store"
+            }
+        }))
+        .unwrap()
+    }
+
+    #[cfg(feature = "zkir-321")]
+    fn issue67_client_setup() -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({
+            "hostContext": {
+                "protocolVersion": 1,
+                "namespace": "nightlean-test",
+                "baseRevision": "r0",
+                "attemptId": "c".repeat(64),
+                "capabilities": [{
+                    "id": "commit",
+                    "namespace": "nightlean-test",
+                    "keyPrefix": "cache/",
+                    "operations": [crate::host::CAS]
+                }],
+                "operations": [],
+                "providers": [],
+                "commitCapability": "commit"
+            },
+            "stages": []
+        }))
+        .unwrap()
+    }
+
+    #[cfg(feature = "zkir-321")]
     fn issue43_fixture(name: &str) -> String {
         std::env::var(format!("NIGHTLEAN_ISSUE43_{name}"))
             .unwrap_or_else(|_| panic!("missing NIGHTLEAN_ISSUE43_{name}"))
@@ -1734,6 +1880,145 @@ mod tests {
                 .admit_committed_state(&wrong_successor, &wrong_successor, &"aa".repeat(32), false,)
                 .is_err()
         );
+    }
+
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    #[ignore = "requires the pinned PublicSupply operation bundles and trusted k8/k9 SRS fixtures"]
+    fn public_supply_scalar_handoff_binds_operation_and_current_state() {
+        let bundles = issue67_supply_bundles();
+        let state_config = br#"{"state":{"totalSupply":"0"}}"#;
+        let ttl = 2_000_000_000;
+        let contract = WitnessContractTarget::from_state_config(
+            bundles,
+            state_config,
+            ttl,
+            &mut OsRng,
+        )
+        .unwrap();
+        let params9 = issue67_supply_parameters(
+            "PARAMETERS_K9",
+            9,
+            "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+        );
+        let params8 = issue67_supply_parameters(
+            "PARAMETERS_K8",
+            8,
+            "909b707551eaaea79828e883cde6fc46ab15986c3b1d791bed462c9e2805c933",
+        );
+        let add = contract.operation("addSupply", &params9, ttl).unwrap();
+        let sub = contract.operation("subSupply", &params8, ttl).unwrap();
+        assert_eq!(add.contract_address(), sub.contract_address());
+        assert_eq!(add.k(), 9);
+        assert_eq!(sub.k(), 8);
+
+        // This test-only admission stands in for the later native client receipt/checkpoint
+        // owner. It does not claim finalized-ledger evidence.
+        let deployment_binding = contract.deployment_binding("addSupply").unwrap();
+        let initial_bytes = deployment_binding.expected_state.clone();
+        let mut current = Some(
+            deployment_binding
+                .admit_committed_state(
+                    &initial_bytes,
+                    &initial_bytes,
+                    &"a".repeat(64),
+                    true,
+                )
+                .unwrap(),
+        );
+        assert_eq!(issue67_supply_total(&initial_bytes), "0");
+
+        let amount5 = BTreeMap::from([("amount".to_owned(), serde_json::json!("5"))]);
+        assert!(matches!(
+            add.prepare_call(&mut current, &params8, amount5.clone(), &mut OsRng),
+            Err(Error::InvalidParameters)
+        ));
+        assert!(current.is_some(), "bad SRS must preserve the state token");
+        let prepared_add = add
+            .prepare_call(&mut current, &params9, amount5, &mut OsRng)
+            .unwrap();
+        assert!(current.is_none(), "successful preparation consumes the token");
+        let add_binding = prepared_add.contract_binding.as_ref().unwrap();
+        assert!(add_binding.matches_operation_target(&add));
+        let state5_bytes = add_binding.expected_state.clone();
+        assert_eq!(issue67_supply_total(&state5_bytes), "5");
+
+        // One local proof exercises the public typed client handoff. A wrong selected operation
+        // is rejected first and leaves the proved value available for the correct operation.
+        let proved = block_on(prepared_add.prove(
+            &LocalProver::new(OsRng),
+            &params9,
+            MAX_RESPONSE,
+            pending(),
+        ))
+        .unwrap();
+        let mut proved = Some(proved);
+        let descriptor = issue67_client_descriptor();
+        let setup = issue67_client_setup();
+        assert!(matches!(
+            contract.start_call_client(&sub, &mut proved, &descriptor, &setup),
+            Err(crate::witness_execution::Error::Proof(Error::BindingMismatch))
+        ));
+        assert!(proved.is_some(), "wrong operation must preserve the proved value");
+        let client = contract
+            .start_call_client(&add, &mut proved, &descriptor, &setup)
+            .unwrap();
+        assert_eq!(client.status()["status"], "ready");
+        assert!(proved.is_none(), "successful startup consumes the proved value");
+
+        let mut current5 = Some(
+            add_binding
+                .admit_committed_state(
+                    &state5_bytes,
+                    &state5_bytes,
+                    &"b".repeat(64),
+                    false,
+                )
+                .unwrap(),
+        );
+        let amount2 = BTreeMap::from([("amount".to_owned(), serde_json::json!("2"))]);
+        assert!(matches!(
+            sub.prepare_call(&mut current5, &params9, amount2.clone(), &mut OsRng),
+            Err(Error::InvalidParameters)
+        ));
+        assert!(current5.is_some(), "bad per-operation SRS must preserve state");
+
+        // A fresh deployment over the same immutable bundle set has a different retained
+        // address/deployment identity, so its test token cannot satisfy this selected CALL.
+        let other = WitnessContractTarget::from_state_config(
+            issue67_supply_bundles(),
+            state_config,
+            ttl,
+            &mut OsRng,
+        )
+        .unwrap();
+        let other_binding = other.deployment_binding("subSupply").unwrap();
+        let other_initial = other_binding.expected_state.clone();
+        let mut wrong_state = Some(
+            other_binding
+                .admit_committed_state(
+                    &other_initial,
+                    &other_initial,
+                    &"d".repeat(64),
+                    true,
+                )
+                .unwrap(),
+        );
+        assert!(matches!(
+            sub.prepare_call(&mut wrong_state, &params8, amount2.clone(), &mut OsRng),
+            Err(Error::BindingMismatch)
+        ));
+        assert!(wrong_state.is_some(), "foreign deployment token must remain owned");
+
+        let prepared_sub = sub
+            .prepare_call(&mut current5, &params8, amount2, &mut OsRng)
+            .unwrap();
+        assert!(current5.is_none());
+        let sub_binding = prepared_sub.contract_binding.as_ref().unwrap();
+        assert!(sub_binding.matches_operation_target(&sub));
+        assert_eq!(sub_binding.address, add_binding.address);
+        assert_eq!(sub_binding.deployment_identity, add_binding.deployment_identity);
+        assert_eq!(issue67_supply_total(&sub_binding.expected_state), "3");
     }
 
     #[cfg(feature = "zkir-321")]
