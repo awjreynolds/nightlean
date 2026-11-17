@@ -17,6 +17,7 @@ inductive Aligned where
 inductive Op where
   | dup
   | index (slot : Nat) (pushPath : Bool := false)
+  | mapIndex (slot : Nat) (key : Scalar)
   | push (value : Aligned) (storage : Bool := false)
   | popeq (value : Aligned)
   | member
@@ -33,6 +34,8 @@ def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
   | .index slot pushPath => [.native (if pushPath then 0x70 else 0x50)] ++
       (Aligned.field (.native slot)).fields
+  | .mapIndex slot key => [.native 0x51] ++
+      (Aligned.field (.native slot)).fields ++ (Aligned.field key).fields
   | .push value storage => [.native (if storage then 0x11 else 0x10), .native 1] ++ value.fields
   | .popeq value => [.native 0x0c] ++ value.fields
   | .member => [.native 0x18]
@@ -106,7 +109,13 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with operations := plan.operations ++ [
       .index slot true, .push (.field (nativeValue _ key)),
       .push (.field (nativeValue _ value)) true, .insert 2]}
-  | .readMap .. => throw "map value reads are not supported by the initial native transcript plan"
+  | .readMap name destination _ ty key => do
+    let slot ← stateSlot state name
+    pure { plan with
+      operations := plan.operations ++ [
+        .dup, .mapIndex slot (nativeValue _ key),
+        .popeq (.field (nativeRead ty destination))]
+      reads := plan.reads ++ [{name := destination, ty}] }
 
 def appendEffects (state : List StateDecl) (effects : List Effect)
     (initial : Plan) : Except String Plan :=
@@ -151,8 +160,7 @@ theorem previousPublicInputLoop_eq_publicInputPlan (inputs : List Input)
   rw [List.forIn_pure_yield_eq_foldl]
   rfl
 
-/-- The former mutable effect body, retained as a pure reference for the
-kernel equivalence check. -/
+/-- Imperative counterpart retained for the kernel equivalence check. -/
 private def previousEffectStep (state : List StateDecl) (effect : Effect)
     (initial : Plan) : Except String Plan := do
   let mut plan := initial
@@ -181,7 +189,13 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with operations := plan.operations ++ [
       .index slot true, .push (.field (nativeValue _ key)),
       .push (.field (nativeValue _ value)) true, .insert 2]}
-  | .readMap .. => throw "map value reads are not supported by the initial native transcript plan"
+  | .readMap name destination _ ty key => do
+    let slot ← stateSlot state name
+    plan := { plan with
+      operations := plan.operations ++ [
+        .dup, .mapIndex slot (nativeValue _ key),
+        .popeq (.field (nativeRead ty destination))]
+      reads := plan.reads ++ [{name := destination, ty}] }
   pure plan
 
 private def previousEffectLoop (state : List StateDecl) (effects : List Effect)
@@ -275,6 +289,14 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
     pure (Lean.Json.mkObj [("idx", Lean.Json.mkObj [
       ("cached", Lean.toJson false), ("pushPath", Lean.toJson pushPath),
       ("path", Lean.Json.arr #[Lean.Json.mkObj [("tag", Lean.toJson ("value" : String)), ("value", value)]])])])
+  | .mapIndex slot key => do
+    let slotValue ← (Aligned.field (.native slot)).toJson ctx env
+    let keyValue ← (Aligned.field key).toJson ctx env
+    pure (Lean.Json.mkObj [("idx", Lean.Json.mkObj [
+      ("cached", Lean.toJson false), ("pushPath", Lean.toJson false),
+      ("path", Lean.Json.arr #[
+        Lean.Json.mkObj [("tag", Lean.toJson ("value" : String)), ("value", slotValue)],
+        Lean.Json.mkObj [("tag", Lean.toJson ("value" : String)), ("value", keyValue)]])])])
   | .push value storage => do
     pure (Lean.Json.mkObj [("push", Lean.Json.mkObj [("storage", Lean.toJson storage),
       ("value", Lean.Json.mkObj [("tag", Lean.toJson ("cell" : String)),

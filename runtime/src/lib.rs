@@ -311,6 +311,8 @@ pub enum Instruction {
         slot: u32,
         #[serde(rename = "pushPath")]
         push_path: bool,
+        #[serde(default)]
+        key: Option<Expr>,
     },
     Push {
         storage: bool,
@@ -466,6 +468,33 @@ fn read_cell(context: &QueryContext<Db>, slot: u32, ty: &str) -> Result<Value> {
         ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
     }
 }
+fn read_map_cell(context: &QueryContext<Db>, slot: u32, key: Fr, ty: &str) -> Result<Value> {
+    let StateValue::Array(array) = context.state.get_ref() else {
+        bail!("expected array state")
+    };
+    let map = array
+        .get(slot as usize)
+        .ok_or_else(|| anyhow!("state slot out of range"))?;
+    let StateValue::Map(map) = &*map else {
+        bail!("expected state map")
+    };
+    let value = map
+        .get(&field_value(key))
+        .ok_or_else(|| anyhow!("missing map key"))?;
+    let StateValue::Cell(value) = &*value else {
+        bail!("expected map value cell")
+    };
+    let mut fields = Vec::new();
+    value.value_only_field_repr(&mut fields);
+    ensure!(fields.len() == 1, "expected scalar map value");
+    match ScalarType::parse(ty)? {
+        ScalarType::Native => Ok(Value::Native(fields[0])),
+        ScalarType::Bool => Ok(Value::Bool(
+            bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
+        )),
+        ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
+    }
+}
 fn advance_native_state_prefix(
     context: &mut QueryContext<Db>,
     program: &[Op<ResultModeVerify, Db>],
@@ -509,22 +538,36 @@ pub fn prepare(
     let mut mutation_boundary = 0usize;
     let mut program: Program = Vec::new();
     let mut read_index = 0usize;
-    let mut previous_slot = None;
+    let mut previous_index = None;
     let mut has_written = false;
     for i in &plan.operations {
+        let mut current_index = None;
         let op = match i {
             Instruction::Dup => Op::Dup { n: 0 },
-            Instruction::Index { slot, push_path } => Op::Idx {
-                cached: false,
-                push_path: *push_path,
-                path: vec![Key::Value(
+            Instruction::Index { slot, push_path, key } => {
+                let map_key = key
+                    .as_ref()
+                    .map(|key| evaluate(key, &env)?.field())
+                    .transpose()?;
+                let mut path = vec![Key::Value(
                     field_value(Fr::from(*slot as u64))
                         .try_into()
                         .map_err(|_| anyhow!("invalid native index key"))?,
-                )]
-                .into_iter()
-                .collect(),
-            },
+                )];
+                if let Some(key) = map_key {
+                    path.push(Key::Value(
+                        field_value(key)
+                            .try_into()
+                            .map_err(|_| anyhow!("invalid native map key"))?,
+                    ));
+                }
+                current_index = Some((*slot, map_key));
+                Op::Idx {
+                    cached: false,
+                    push_path: *push_path,
+                    path: path.into_iter().collect(),
+                }
+            }
             Instruction::Push {
                 storage,
                 expression,
@@ -563,19 +606,14 @@ pub fn prepare(
                                 cost,
                             )?;
                         }
-                        env.insert(
-                            name.clone(),
-                            read_cell(
-                                if has_written {
-                                    &prefix_context
-                                } else {
-                                    &context
-                                },
-                                previous_slot
-                                    .ok_or_else(|| anyhow!("unsupported state-read shape"))?,
-                                &read.ty,
-                            )?,
-                        );
+                        let (slot, key) = previous_index
+                            .ok_or_else(|| anyhow!("unsupported state-read shape"))?;
+                        let read_context = if has_written { &prefix_context } else { &context };
+                        let value = match key {
+                            Some(key) => read_map_cell(read_context, slot, key, &read.ty)?,
+                            None => read_cell(read_context, slot, &read.ty)?,
+                        };
+                        env.insert(name.clone(), value);
                     }
                 }
                 let value = evaluate(expression, &env)?;
@@ -597,10 +635,7 @@ pub fn prepare(
                 }
             }
         };
-        previous_slot = match i {
-            Instruction::Index { slot, .. } => Some(*slot),
-            _ => None,
-        };
+        previous_index = current_index;
         program.push(op);
         if matches!(i, Instruction::Insert { .. }) {
             mutation_boundary = program.len();

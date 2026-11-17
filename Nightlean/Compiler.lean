@@ -78,6 +78,9 @@ private def operationJson : Backend.Impact.Op → Json
   | .dup => Json.mkObj [("op", toJson ("dup" : String))]
   | .index slot pushPath => Json.mkObj [("op", toJson ("index" : String)),
       ("slot", toJson slot), ("pushPath", toJson pushPath)]
+  | .mapIndex slot key => Json.mkObj [("op", toJson ("index" : String)),
+      ("slot", toJson slot), ("pushPath", toJson Bool.false),
+      ("key", nativeExpressionJson key)]
   | .push value storage => Json.mkObj ([("op", toJson ("push" : String)), ("storage", toJson storage)] ++ alignedJson value)
   | .popeq value => Json.mkObj ([("op", toJson ("popeq" : String))] ++ alignedJson value)
   | .member => Json.mkObj [("op", toJson ("member" : String))]

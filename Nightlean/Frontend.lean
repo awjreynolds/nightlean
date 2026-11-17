@@ -124,6 +124,7 @@ scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
 
 declare_syntax_cat nleffect
 scoped syntax "read" ident "as" ident : nleffect
+scoped syntax "read" ident "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "require" nlexpr : nleffect
 scoped syntax "absent" ident "[" nlexpr "]" : nleffect
 scoped syntax "write" ident ":=" nlexpr : nleffect
@@ -417,6 +418,14 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
             effectTerms := effectTerms.push (← `(Nightlean.Effect.readCell
               $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString) $(← tyTerm ty)))
             env ← addReferences env [(dest.getId.toString, ty)]
+          | `(nleffect| read $state:ident [ $key:nlexpr ] as $dest:ident) =>
+            let some (.map keyTy valueTy) := schema.lookup state.getId.toString
+              | throwErrorAt state "map read requires a declared state map"
+            ensureFresh env dest
+            effectTerms := effectTerms.push (← `(Nightlean.Effect.readMap
+              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString)
+              $(← tyTerm keyTy) $(← tyTerm valueTy) $(← checkedExpression env key keyTy)))
+            env ← addReferences env [(dest.getId.toString, valueTy)]
           | `(nleffect| write $state:ident := $value:nlexpr) =>
             let some (.cell ty) := schema.lookup state.getId.toString
               | throwErrorAt state "write requires a declared state cell"

@@ -47,14 +47,15 @@ export function materialize(plan,inputs,context,cost){
   let op;
   switch(instruction.op){
    case 'dup':op={dup:{n:0}};break;
-   case 'index':op={idx:{cached:false,pushPath:instruction.pushPath,path:[{tag:'value',value:field(BigInt(instruction.slot))}]}};break;
+   case 'index':{const path=[{tag:'value',value:field(BigInt(instruction.slot))}];if(instruction.key)path.push({tag:'value',value:field(evaluate(instruction.key,env))});op={idx:{cached:false,pushPath:instruction.pushPath,path}};break;}
    case 'push':{const value=evaluate(instruction.expression,env);op={push:{storage:instruction.storage,value:{tag:'cell',content:instruction.alignment==='bit'?bit(value):field(value)}}};break;}
    case 'popeq':{
     const read=plan.reads[readIndex++];
     if(instruction.expression.tag==='reference'&&!env.has(instruction.expression.name)){
      if(previous?.op!=='index')throw Error('Unsupported state-read shape');
-     const observed=context.state.state.asArray()[previous.slot].asCell();
-     const number=l.valueToBigInt(observed.value);
+     const witness=context.query([...program.map(item=>typeof item==='object'&&item.popeq?{popeq:{...item.popeq,result:null}}:item),{popeq:{cached:false,result:null}}],cost).events.filter(event=>event.tag==='read').at(-1);
+     if(!witness)throw Error('Native VM did not produce the indexed state read');
+     const number=l.valueToBigInt(witness.content.value);
      env.set(instruction.expression.name,read.type==='Bool'?number===1n:number);
     }
     const expected=evaluate(instruction.expression,env);

@@ -1,7 +1,9 @@
 //! Source-backed native state effects and adversarial transcript bindings.
 use nightlean_runtime::{
-    Db, Plan, check, create_state, field_decimal, field_value, prepare, zkir::IrSource,
+    Db, Expr, Instruction, Plan, check, create_state, field_decimal, field_value, prepare,
+    zkir::IrSource,
 };
+use onchain_runtime::ops::Op;
 use onchain_runtime::state::{ChargedState, StateValue};
 use serde_json::{Value as Json, json};
 use sha2::{Digest, Sha256};
@@ -29,6 +31,12 @@ const OUTPUT_CIRCUIT: &[u8] =
 #[cfg(feature = "zkir-321")]
 const OUTPUT_CIRCUIT: &[u8] =
     include_bytes!("fixtures/generic-state/321/Issue66OutputState.apply.zkir");
+#[cfg(feature = "zkir-321")]
+const MAP_READ_PLAN: &str =
+    include_str!("fixtures/generic-state/issue68/321/Issue68MapReads.update.impact.json");
+#[cfg(feature = "zkir-321")]
+const MAP_READ_CIRCUIT: &[u8] =
+    include_bytes!("fixtures/generic-state/issue68/321/Issue68MapReads.update.zkir");
 
 #[cfg(feature = "zkir-320")]
 const PROFILE: &str = "320";
@@ -37,6 +45,64 @@ const PROFILE: &str = "321";
 
 fn plan() -> Plan {
     serde_json::from_str(PLAN).expect("source-generated Impact plan parses")
+}
+
+#[cfg(feature = "zkir-321")]
+#[test]
+fn source_backed_dynamic_map_value_read_is_checked_and_transcript_bound() {
+    let plan: Plan = serde_json::from_str(MAP_READ_PLAN).expect("source-generated map plan parses");
+    let inputs = BTreeMap::from([("account".to_owned(), json!("17"))]);
+    let initial = create_state(
+        &plan,
+        &BTreeMap::from([("balances".to_owned(), json!([]))]),
+    )
+    .expect("source map schema creates native state");
+    let execution = prepare(
+        &plan,
+        &inputs,
+        &initial,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .expect("dynamic map reads pass the upstream native VM");
+    assert!(execution.program.iter().any(|operation| matches!(
+        operation,
+        Op::Idx { path, .. } if path.len() == 2
+    )));
+    assert_eq!(
+        execution
+            .preimage
+            .public_transcript_outputs
+            .iter()
+            .copied()
+            .map(field_decimal)
+            .collect::<Vec<_>>(),
+        ["17", "7", "8"]
+    );
+    assert_eq!(map_value_decimal(&execution.after.state, 0, 17), "8");
+    let circuit = IrSource::load(MAP_READ_CIRCUIT).expect("source ZKIR parses");
+    assert_eq!(check(&execution, &circuit).unwrap().len(), execution.program.len());
+
+    let mut dishonest = plan.clone();
+    let map_index = dishonest
+        .operations
+        .iter()
+        .position(|operation| matches!(operation, Instruction::Index { key: Some(_), .. }))
+        .expect("dynamic map read index exists");
+    let Instruction::Popeq { expression, .. } = &mut dishonest.operations[map_index + 1] else {
+        panic!("dynamic map index is followed by a read binding")
+    };
+    *expression = Expr::Constant {
+        value: "99".to_owned(),
+    };
+    assert!(prepare(
+        &dishonest,
+        &inputs,
+        &initial,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .is_err());
 }
 
 fn source_json() -> Json {
