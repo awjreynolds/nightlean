@@ -11,11 +11,23 @@ open Lean
 /-- Initial relation producer. Ledger transcript/state integration is separate. -/
 private def nativeType : Json := toJson ("Scalar<BLS12-381>" : String)
 
+theorem nativeType_eq : nativeType = toJson ("Scalar<BLS12-381>" : String) := rfl
+
 private def validateProduced (span : SourceSpan) (expected : Native.Expected) (program : Json) :
     Except Diagnostic Json :=
   match Native.validate expected program with
   | .ok _ => .ok program
   | .error message => .error {span, message := "native producer invariant: " ++ message}
+
+theorem validateProduced_ok (span : SourceSpan) (expected : Native.Expected) (program result : Json) :
+    validateProduced span expected program = .ok result ↔
+      result = program ∧ Native.validate expected program = .ok () := by
+  cases checked : Native.validate expected program <;> simp [validateProduced, checked]
+  constructor <;> intro equal <;> exact equal.symm
+
+private theorem bind_ok (first : Except ε α) (next : α → Except ε β) (value : β) :
+    Except.bind first next = .ok value ↔ ∃ intermediate, first = .ok intermediate ∧ next intermediate = .ok value := by
+  cases first <;> simp [Except.bind]
 
 def nativeModulus : Nat :=
   52435875175126190479447740508185965837690552500527637822603658699938581184513
@@ -38,7 +50,7 @@ private def checkConstants : Expr ty → Except String Unit
     checkConstants a
     checkConstants b
 
-private def instruction (op : String) (fields : List (String × Json)) : Json :=
+def instruction (op : String) (fields : List (String × Json)) : Json :=
   Json.mkObj (("op", toJson op) :: fields)
 
 /-- ZKIR field immediates use little-endian bytes, including leading zero bytes. -/
@@ -53,32 +65,36 @@ where
       String.singleton digits[byte / 16]! ++ String.singleton digits[byte % 16]! ++
         go (n / 256) fuel
 
+/-- CSE compares actual opcode, ordered operands and optional hash domain.
+Structural keys make cache-hit meaning available to kernel proofs. -/
+abbrev ExpressionKey := String × List String × Option Nat
+
 structure LowerState where
   next : Nat := 0
   instructions : Array Json := #[]
-  expressions : List (String × String) := []
+  expressions : List (ExpressionKey × String) := []
   aliases : List (String × String) := []
 
 private abbrev LowerM := StateM LowerState
 
-private def emit (op : String) (fields : List (String × Json)) : LowerM Unit :=
+def emit (op : String) (fields : List (String × Json)) : LowerM Unit :=
   modify fun s => { s with instructions := s.instructions.push (instruction op fields) }
 
-private def fresh : LowerM String := do
+def fresh : LowerM String := do
   let s ← get
   set { s with next := s.next + 1 }
   return s!"%v{s.next}"
 
-private def binary (op a b : String) : LowerM String := do
-  let key := reprStr (op, a, b)
+def binary (op a b : String) : LowerM String := do
+  let key : ExpressionKey := (op, [a, b], none)
   if let some existing := (← get).expressions.lookup key then return existing
   let output ← fresh
   emit op [("a", toJson a), ("b", toJson b), ("output", toJson output)]
   modify fun s => {s with expressions := (key, output) :: s.expressions}
   return output
 
-private def unary (op a : String) : LowerM String := do
-  let key := reprStr (op, a)
+def unary (op a : String) : LowerM String := do
+  let key : ExpressionKey := (op, [a], none)
   if let some existing := (← get).expressions.lookup key then return existing
   let output ← fresh
   emit op [("a", toJson a), ("output", toJson output)]
@@ -87,7 +103,7 @@ private def unary (op a : String) : LowerM String := do
 
 /-- less_than assumes bounded operands. Range-check the value first and only
 compare against a constant fitting the same width. Power-of-two limits need no comparison. -/
-private def constrainUnsigned (maximum : Nat) (value : String) : LowerM Unit := do
+def constrainUnsigned (maximum : Nat) (value : String) : LowerM Unit := do
   if maximum == 0 then
     emit "constrain_eq" [("a", toJson value), ("b", toJson ("0x00" : String))]
   else
@@ -99,14 +115,14 @@ private def constrainUnsigned (maximum : Nat) (value : String) : LowerM Unit := 
         ("bits", toJson bits), ("output", toJson output)]
       emit "assert" [("cond", toJson output)]
 
-private def constrainType (ty : Ty) (value : String) : LowerM Unit :=
+def constrainType (ty : Ty) (value : String) : LowerM Unit :=
   match ty with
   | .native => pure ()
   | .bool => emit "constrain_to_boolean" [("val", toJson value)]
   | .uint maximum => constrainUnsigned maximum value
 
 /-- All bools use constrained Native 0/1 values, matching test_eq's result type. -/
-private def lowerExpr : Expr ty → LowerM String
+def lowerExpr : Expr ty → LowerM String
   | .native n => pure (fieldImmediate n)
   | .uint _ n => pure (fieldImmediate n)
   | .bool b => pure (if b then "0x01" else "0x00")
@@ -152,7 +168,7 @@ private def lowerExpr : Expr ty → LowerM String
     let bit ← lowerExpr condition
     let a ← lowerExpr yes
     let b ← lowerExpr no
-    let key := reprStr ("cond_select", bit, a, b)
+    let key : ExpressionKey := ("cond_select", [bit, a, b], none)
     if let some existing := (← get).expressions.lookup key then return existing
     let output ← fresh
     emit "cond_select" [("bit", toJson bit), ("a", toJson a),
@@ -162,17 +178,17 @@ private def lowerExpr : Expr ty → LowerM String
   | .poseidon2 domain a b => do
     let a ← lowerExpr a
     let b ← lowerExpr b
-    let key := reprStr ("transient_hash", domain, a, b)
+    let key : ExpressionKey := ("transient_hash", [a, b], some domain)
     if let some existing := (← get).expressions.lookup key then return existing
     let output ← fresh
     emit "transient_hash" [("inputs", toJson [fieldImmediate domain, a, b]),
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
-private def bindPublic (values : List String) : LowerM Unit :=
+def bindPublic (values : List String) : LowerM Unit :=
   emit "impact" [("guard", toJson ("0x01" : String)), ("inputs", toJson values)]
 
-private def lowerBody (c : Circuit) : LowerM Unit := do
+def lowerBody (c : Circuit) : LowerM Unit := do
   for input in c.inputs do
     let output := "%input_" ++ input.name
     emit (if input.visibility == .«public» then "public_input" else "private_input")
@@ -211,6 +227,38 @@ def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
     ("do_communications_commitment", toJson false),
     ("instructions", Json.arr result.instructions)]
   validateProduced c.span (← Native.expectedCircuit c) program
+
+/-- Successful lowering necessarily passes the existing mandatory validation
+against the independently reconstructed statement of the actual pruned source. -/
+theorem lowerCircuit_validated (circuit : Circuit) (program : Json)
+    (accepted : lowerCircuit circuit = .ok program) :
+    ∃ expected, Native.expectedCircuit (Passes.pruneCircuit circuit) = .ok expected ∧
+      Native.validate expected program = .ok () := by
+  simp only [lowerCircuit, bind, bind_ok] at accepted
+  rcases accepted with ⟨_, disclosure, _, validation, _, constants, _, outputConstants, gate⟩
+  cases produced : (lowerBody (Passes.pruneCircuit circuit)).run {} with
+  | mk value state =>
+    simp only [produced] at gate
+    rw [bind_ok] at gate
+    rcases gate with ⟨expected, expectedAccepted, producerAccepted⟩
+    obtain ⟨equal, checked⟩ := (validateProduced_ok _ _ _ _).mp producerAccepted
+    exact ⟨expected, expectedAccepted, by rw [equal]; exact checked⟩
+
+/-- Relate the accepted JSON instruction vector to the actual lowerBody run. -/
+theorem lowerCircuit_instructions (circuit : Circuit) (program : Json)
+    (accepted : lowerCircuit circuit = .ok program) :
+    Native.arrayField program "instructions" =
+      .ok ((lowerBody (Passes.pruneCircuit circuit)).run {}).2.instructions := by
+  simp only [lowerCircuit, bind, bind_ok] at accepted
+  rcases accepted with ⟨_, disclosure, _, validation, _, constants, _, outputConstants, gate⟩
+  cases produced : (lowerBody (Passes.pruneCircuit circuit)).run {} with
+  | mk value state =>
+    simp only [produced] at gate
+    rw [bind_ok] at gate
+    rcases gate with ⟨expected, expectedAccepted, producerAccepted⟩
+    obtain ⟨equal, checked⟩ := (validateProduced_ok _ _ _ _).mp producerAccepted
+    rw [equal]
+    rfl
 
 private def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
   for input in entry.circuit.inputs do

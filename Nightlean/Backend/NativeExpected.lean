@@ -18,6 +18,32 @@ private def collect (env : AliasEnvironment) (values : List (Expr ty)) : Except 
   let results ← values.mapM (normalize env)
   pure (results.map (·.term), results.flatMap (·.bounds), results.flatMap (·.assertions))
 
+theorem inputRequirement_eq (input : Input) :
+    inputRequirement input =
+      {identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty} := rfl
+
+theorem inputAliases_eq (inputs : List InputRequirement) :
+    inputAliases inputs = inputs.map (fun input => (input.identifier.drop 7 |>.toString, .input input.identifier)) := rfl
+
+theorem inputAliases_source (inputs : List Input) :
+    inputAliases (inputs.map inputRequirement) =
+      inputs.map (fun input => (input.name, Term.input ("%input_" ++ input.name))) := by
+  have strip (name : String) : (("%input_" ++ name).drop 7).copy = name := by
+    apply String.toList_injective
+    change (("%input_" ++ name).drop 7).copy.toList = name.toList
+    rw [String.toList_copy_drop, String.toList_append]
+    rfl
+  simp [inputAliases, inputRequirement, List.map_map, strip]
+
+theorem convert_ok (span : SourceSpan) (result : Except String α) (value : α) :
+    convert span result = .ok value ↔ result = .ok value := by
+  cases result <;> simp [convert]
+
+theorem collect_eq (env : AliasEnvironment) (values : List (Expr ty)) :
+    collect env values = (do
+      let results ← values.mapM (normalize env)
+      pure (results.map (·.term), results.flatMap (·.bounds), results.flatMap (·.assertions))) := rfl
+
 def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
   value.validate {poseidon2 := true}
   Disclosure.circuit value

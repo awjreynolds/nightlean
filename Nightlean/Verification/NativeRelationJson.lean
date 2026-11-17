@@ -6,25 +6,25 @@ namespace Nightlean.Verification.NativeRelationJson
 open Lean
 open Nightlean.Verification.NativeRelation
 
-private def ensure (condition : Bool) (message : String) : Except String Unit :=
+def ensure (condition : Bool) (message : String) : Except String Unit :=
   if condition then .ok () else .error message
 
-private def objectFields (value : Json) : Except String (List String) := do
+def objectFields (value : Json) : Except String (List String) := do
   pure ((← value.getObj?).toList.map Prod.fst)
 
-private def exactFields (value : Json) (expected : List String) : Except String Unit := do
+def exactFields (value : Json) (expected : List String) : Except String Unit := do
   let actual ← objectFields value
   ensure (actual.length == expected.length && actual.eraseDups.length == actual.length &&
     actual.all expected.contains && expected.all actual.contains)
     "missing, unknown or mismatched native JSON fields"
 
-private def stringField (value : Json) (name : String) : Except String String := do
+def stringField (value : Json) (name : String) : Except String String := do
   (← value.getObjVal? name).getStr?
 
-private def arrayField (value : Json) (name : String) : Except String (Array Json) := do
+def arrayField (value : Json) (name : String) : Except String (Array Json) := do
   (← value.getObjVal? name).getArr?
 
-private def naturalField (value : Json) (name : String) : Except String Nat := do
+def naturalField (value : Json) (name : String) : Except String Nat := do
   let item ← value.getObjVal? name
   match item with
   | .num number => do
@@ -34,17 +34,17 @@ private def naturalField (value : Json) (name : String) : Except String Nat := d
     | .negSucc _ => throw "native JSON version values must be natural numbers"
   | _ => throw "native JSON version values must be natural numbers"
 
-private def nativeType : Json := toJson ("Scalar<BLS12-381>" : String)
+def nativeType : Json := toJson ("Scalar<BLS12-381>" : String)
 
-private def checkNativeType (value : Json) : Except String Unit := do
+def checkNativeType (value : Json) : Except String Unit := do
   ensure ((← value.getStr?) == "Scalar<BLS12-381>") "unsupported native value type/encoding"
 
-private def hexDigit (value : Char) : Option Nat :=
+def hexDigit (value : Char) : Option Nat :=
   if '0' ≤ value && value ≤ '9' then some (value.toNat - '0'.toNat)
   else if 'a' ≤ value && value ≤ 'f' then some (value.toNat - 'a'.toNat + 10)
   else none
 
-private def decodeHexBytes : List Char → Except String (List Nat)
+def decodeHexBytes : List Char → Except String (List Nat)
   | [] => pure []
   | high :: low :: rest => do
     let some high := hexDigit high | throw "invalid native hexadecimal immediate"
@@ -52,14 +52,14 @@ private def decodeHexBytes : List Char → Except String (List Nat)
     pure ((high * 16 + low) :: (← decodeHexBytes rest))
   | _ => throw "native immediate must contain complete lowercase hexadecimal bytes"
 
-private def littleEndianValue : List Nat → Nat
+def littleEndianValue : List Nat → Nat
   | [] => 0
   | byte :: rest => byte + 256 * littleEndianValue rest
 
 /-- Decode the producer's canonical little-endian byte spelling for a scalar.
 This handles the full canonical field range, including the claim's 0, 1, 2,
 and 3 constants. -/
-private def decodeImmediate (text : String) : Except String Nat := do
+def decodeImmediate (text : String) : Except String Nat := do
   ensure (text.startsWith "0x") "native immediate must start with lowercase 0x"
   let bytes ← decodeHexBytes (text.toList.drop 2)
   ensure (!bytes.isEmpty && bytes.length ≤ 32) "native immediate has an invalid byte width"
@@ -68,24 +68,24 @@ private def decodeImmediate (text : String) : Except String Nat := do
   ensure (number < Field.modulus) "noncanonical native field immediate"
   pure number
 
-private def validIdentifier (name : String) : Bool :=
+def validIdentifier (name : String) : Bool :=
   name.startsWith "%" && name.length > 1 && name.utf8ByteSize ≤ 1024
 
-private def decodeOperand (value : Json) : Except String Operand := do
+def decodeOperand (value : Json) : Except String Operand := do
   let text ← value.getStr?
   if text.startsWith "0x" then
     return .immediate (scalar (← decodeImmediate text))
   ensure (validIdentifier text) "invalid native SSA reference"
   return .reference text
 
-private def decodeOperands (value : Json) : Except String (List Operand) := do
+def decodeOperands (value : Json) : Except String (List Operand) := do
   let values ← value.getArr?
   values.toList.mapM decodeOperand
 
-private def decodeOperandField (value : Json) (name : String) : Except String Operand := do
+def decodeOperandField (value : Json) (name : String) : Except String Operand := do
   decodeOperand (← value.getObjVal? name)
 
-private def decodeInstruction (value : Json) : Except String Instruction := do
+def decodeInstruction (value : Json) : Except String Instruction := do
   let opcode ← stringField value "op"
   match opcode with
   | "public_input" | "private_input" => do
@@ -99,6 +99,20 @@ private def decodeInstruction (value : Json) : Except String Instruction := do
   | "constrain_to_boolean" => do
     exactFields value ["op", "val"]
     return .boolean (← decodeOperandField value "val")
+  | "constrain_bits" => do
+    exactFields value ["op", "val", "bits"]
+    let bits ← naturalField value "bits"
+    ensure (0 < bits && bits ≤ Nightlean.ScalarPolicy.maxBits) "unsupported native bit width"
+    return .bits (← decodeOperandField value "val") bits
+  | "less_than" => do
+    exactFields value ["op", "a", "b", "bits", "output"]
+    let bits ← naturalField value "bits"
+    ensure (0 < bits && bits ≤ Nightlean.ScalarPolicy.maxBits) "unsupported native bit width"
+    let a ← decodeOperandField value "a"
+    let b ← decodeOperandField value "b"
+    let output ← stringField value "output"
+    ensure (validIdentifier output) "invalid native SSA definition"
+    return .lessThan a b bits output
   | "add" => do
     exactFields value ["op", "a", "b", "output"]
     let a ← decodeOperandField value "a"
@@ -217,6 +231,11 @@ private def encodeInstruction : Instruction → Json
   | .input visibility output => instruction (visibilityOpcode visibility)
       [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
   | .boolean value => instruction "constrain_to_boolean" [("val", encodeOperand value)]
+  | .bits value width => instruction "constrain_bits"
+      [("val", encodeOperand value), ("bits", toJson width)]
+  | .lessThan a b width output => instruction "less_than"
+      [("a", encodeOperand a), ("b", encodeOperand b), ("bits", toJson width),
+        ("output", toJson output)]
   | .add a b output => instruction "add"
       [("a", encodeOperand a), ("b", encodeOperand b), ("output", toJson output)]
   | .mul a b output => instruction "mul"

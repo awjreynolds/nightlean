@@ -32,6 +32,8 @@ def Operand.read (witness : Assignment) : Operand → Scalar
 inductive Instruction where
   | input (visibility : Visibility) (output : String)
   | boolean (value : Operand)
+  | bits (value : Operand) (width : Nat)
+  | lessThan (a b : Operand) (width : Nat) (output : String)
   | add (a b : Operand) (output : String)
   | mul (a b : Operand) (output : String)
   | neg (a : Operand) (output : String)
@@ -50,6 +52,10 @@ assignment, never defined as the output of the source or compiler evaluator. -/
 def Instruction.Holds (hash : Hash) (witness : Assignment) : Instruction → Prop
   | .input _ _ => True
   | .boolean value => value.read witness = zero ∨ value.read witness = one
+  | .bits value width => (value.read witness).val < 2 ^ width
+  | .lessThan a b width destination =>
+      (a.read witness).val < 2 ^ width → (b.read witness).val < 2 ^ width →
+        witness destination = bit (decide ((a.read witness).val < (b.read witness).val))
   | .add a b destination => witness destination = scalar ((a.read witness).val + (b.read witness).val)
   | .mul a b destination => witness destination = scalar ((a.read witness).val * (b.read witness).val)
   | .neg a destination => witness destination = scalar (Field.modulus - (a.read witness).val)
@@ -137,6 +143,36 @@ theorem test_eq_assert_sound (a b result : Scalar)
   · exact equal
   · simp only [equal, decide_false, bit, Bool.false_eq_true, zero] at test
     exact False.elim (assertion test)
+
+theorem range_constraint_bound (hash : Hash) (witness : Assignment) (value : Operand) (width : Nat)
+    (holds : Instruction.Holds hash witness (.bits value width)) :
+    (value.read witness).val ≤ 2 ^ width - 1 := by
+  simp only [Instruction.Holds] at holds
+  omega
+
+theorem less_than_sound (hash : Hash) (witness : Assignment) (a b : Operand) (width : Nat)
+    (destination : String)
+    (holds : Instruction.Holds hash witness (.lessThan a b width destination))
+    (aBound : (a.read witness).val < 2 ^ width)
+    (bBound : (b.read witness).val < 2 ^ width) :
+    witness destination = bit (decide ((a.read witness).val < (b.read witness).val)) :=
+  holds aBound bBound
+
+theorem less_than_sound_of_ranges (hash : Hash) (witness : Assignment) (a b : Operand)
+    (width : Nat) (destination : String)
+    (aRange : Instruction.Holds hash witness (.bits a width))
+    (bRange : Instruction.Holds hash witness (.bits b width))
+    (holds : Instruction.Holds hash witness (.lessThan a b width destination)) :
+    witness destination = bit (decide ((a.read witness).val < (b.read witness).val)) := by
+  have aBound : (a.read witness).val < 2 ^ width := by
+    have hbound := range_constraint_bound hash witness a width aRange
+    have hpositive : 0 < 2 ^ width := Nat.pow_pos (by decide)
+    omega
+  have bBound : (b.read witness).val < 2 ^ width := by
+    have hbound := range_constraint_bound hash witness b width bRange
+    have hpositive : 0 < 2 ^ width := Nat.pow_pos (by decide)
+    omega
+  exact less_than_sound hash witness a b width destination holds aBound bBound
 
 theorem scalar_canonical (n : Nat) : (scalar n).val < Field.modulus := (scalar n).isLt
 

@@ -10,7 +10,7 @@ def maxVectorLength : Nat := 4096
 def maxSymbolicNodes : Nat := 65536
 def maxSymbolicDepth : Nat := 256
 
-private def ensure (condition : Bool) (message : String) : Except String Unit :=
+def ensure (condition : Bool) (message : String) : Except String Unit :=
   if condition then pure () else throw message
 
 private def objectFields (value : Json) : Except String (List String) := do
@@ -22,24 +22,24 @@ private def fields (value : Json) (expected : List String) : Except String Unit 
     actual.all expected.contains && expected.all actual.contains)
     "missing, unknown or mismatched native instruction fields"
 
-private def stringField (value : Json) (name : String) : Except String String := do
+def stringField (value : Json) (name : String) : Except String String := do
   (← value.getObjVal? name).getStr?
 
-private def arrayField (value : Json) (name : String) : Except String (Array Json) := do
+def arrayField (value : Json) (name : String) : Except String (Array Json) := do
   (← value.getObjVal? name).getArr?
 
-private def natField (value : Json) (name : String) : Except String Nat := do
+def natField (value : Json) (name : String) : Except String Nat := do
   let item ← value.getObjVal? name
   let number ← item.getNat?
   ensure (item.compress == toString number) "native integer metadata must use canonical natural JSON numbers"
   pure number
 
-private def hexDigit (value : Char) : Option Nat :=
+def hexDigit (value : Char) : Option Nat :=
   if '0' ≤ value && value ≤ '9' then some (value.toNat - '0'.toNat)
   else if 'a' ≤ value && value ≤ 'f' then some (value.toNat - 'a'.toNat + 10)
   else none
 
-private def hexBytes : List Char → Option (List Nat)
+def hexBytes : List Char → Option (List Nat)
   | [] => some []
   | high :: low :: rest => do
     let high ← hexDigit high
@@ -47,7 +47,7 @@ private def hexBytes : List Char → Option (List Nat)
     pure ((high * 16 + low) :: (← hexBytes rest))
   | _ => none
 
-private def littleEndian : List Nat → Nat
+def littleEndian : List Nat → Nat
   | [] => 0
   | first :: rest => first + 256 * littleEndian rest
 
@@ -72,19 +72,19 @@ structure Fact where
   assertedLessThan : Option (String × Nat) := none
   deriving Repr
 
-private structure State where
+structure State where
   definitions : List (String × Fact) := []
   inputCount : Nat := 0
   groupCount : Nat := 0
   assertionCount : Nat := 0
 
-private def combine (term : Term) (maximum : Nat) (children : List Fact) : Except String Fact := do
+def combine (term : Term) (maximum : Nat) (children : List Fact) : Except String Fact := do
   let nodes := 1 + (children.map (·.nodes)).sum
   let depth := 1 + (children.map (·.depth)).foldl max 0
   ensure (nodes ≤ maxSymbolicNodes && depth ≤ maxSymbolicDepth) "native symbolic expression resource limit exceeded"
   pure {term, maximum, nodes, depth}
 
-private def operand (state : State) (text : String) : Except String Fact := do
+def operand (state : State) (text : String) : Except String Fact := do
   if text.startsWith "0x" then
     let value ← immediate text
     pure {term := .constant value, maximum := value}
@@ -93,18 +93,18 @@ private def operand (state : State) (text : String) : Except String Fact := do
     let some fact := state.definitions.lookup text | throw s!"native use before definition: {text}"
     pure fact
 
-private def argument (state : State) (instruction : Json) (name : String) : Except String Fact := do
+def argument (state : State) (instruction : Json) (name : String) : Except String Fact := do
   operand state (← stringField instruction name)
 
-private def define (state : State) (name : String) (fact : Fact) : Except String State := do
+def define (state : State) (name : String) (fact : Fact) : Except String State := do
   ensure (validIdentifier name) "invalid native SSA definition"
   ensure ((state.definitions.lookup name).isNone) s!"duplicate native SSA definition: {name}"
   pure {state with definitions := state.definitions ++ [(name, fact)]}
 
-private def defineResult (state : State) (instruction : Json) (fact : Fact) : Except String State := do
+def defineResult (state : State) (instruction : Json) (fact : Fact) : Except String State := do
   define state (← stringField instruction "output") fact
 
-private def refine (state : State) (text : String) (maximum : Nat) : Except String State := do
+def refine (state : State) (text : String) (maximum : Nat) : Except String State := do
   let fact ← operand state text
   if text.startsWith "%" then
     pure {state with definitions := state.definitions.map fun (name, value) =>
@@ -116,12 +116,12 @@ private def refine (state : State) (text : String) (maximum : Nat) : Except Stri
 def requireBoolean (fact : Fact) : Except String Unit :=
   ensure (fact.maximum ≤ 1) "native Boolean precondition is not established"
 
-private def width (instruction : Json) : Except String Nat := do
+def width (instruction : Json) : Except String Nat := do
   let bits ← natField instruction "bits"
   ensure (0 < bits && bits ≤ ScalarPolicy.maxBits) "unsupported native bit width"
   pure bits
 
-private def arguments (state : State) (instruction : Json) (name : String) : Except String (List Fact) := do
+def arguments (state : State) (instruction : Json) (name : String) : Except String (List Fact) := do
   let values ← arrayField instruction name
   ensure (values.size ≤ maxVectorLength) "native operand vector resource limit exceeded"
   values.toList.mapM fun item => do operand state (← item.getStr?)
@@ -129,7 +129,7 @@ private def arguments (state : State) (instruction : Json) (name : String) : Exc
 private def nativeType (value : Json) : Except String Unit := do
   ensure ((← value.getStr?) == "Scalar<BLS12-381>") "unsupported native value type/encoding"
 
-private def validateInstruction (expected : Expected) (state : State) (instruction : Json) : Except String State := do
+def validateInstruction (expected : Expected) (state : State) (instruction : Json) : Except String State := do
   let opcode ← stringField instruction "op"
   let descriptor ← requireInstruction opcode
   fields instruction ("op" :: descriptor.fields)
@@ -217,7 +217,7 @@ private def validateInstruction (expected : Expected) (state : State) (instructi
     pure state
   | _ => throw "registered native descriptor has no executable validation rule"
 
-private def opcode (instruction : Json) : String :=
+def opcode (instruction : Json) : String :=
   (stringField instruction "op").toOption.getD ""
 
 def finalOutputShape (instructions : List Json) : Bool :=
@@ -227,12 +227,12 @@ def finalOutputShape (instructions : List Json) : Bool :=
 def requireFinalOutput (instructions : List Json) : Except String Unit :=
   ensure (finalOutputShape instructions) "native program requires exactly one final Output"
 
-private def sourceMaximum : Ty → Nat
+def sourceMaximum : Ty → Nat
   | .native => Field.modulus - 1
   | .bool => 1
   | .uint maximum => maximum
 
-private def checkBound (state : State) (term : Term) (maximum : Nat) : Except String Unit := do
+def checkBound (state : State) (term : Term) (maximum : Nat) : Except String Unit := do
   let bounded := match term with
     | .constant value => value ≤ maximum
     | _ => state.definitions.any fun (_, fact) => fact.term == term && fact.maximum ≤ maximum

@@ -43,6 +43,13 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .bool => true
   | .uint maximum => maximum ≤ ScalarPolicy.maxUint && v ≤ maximum && v < ctx.modulus
 
+/-- Public reduction equation for input-admission and preservation proofs. -/
+theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
+    canonical ctx ty value = match ty with
+      | .native => value < ctx.modulus
+      | .bool => true
+      | .uint maximum => maximum ≤ ScalarPolicy.maxUint && value ≤ maximum && value < ctx.modulus := rfl
+
 private def scalarNumber : (ty : Ty) → ty.Denote → Nat
   | .native, n | .uint _, n => n
   | .bool, b => if b then 1 else 0
