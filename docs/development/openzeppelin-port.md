@@ -18,7 +18,7 @@ Different instruction sequences and constraint counts are acceptable.
 | Multi-entrypoint calls on current state | Registration, transfer and supply calls on one deployed contract | Bundle collection, retained deployment and source/proof/client handoff are implemented. Scalar-only operations also prepare calls without a witness-control sidecar. A focused add/subtract test covers distinct k9/k8 parameters and client startup after one real proof. Integrated multi-operation ledger execution remains open in issue 67. |
 | Ledger-backed getter returns | totalSupply, balanceOf and isRegistered | Entrypoint returns are currently empty. Typed outputs checked after ledger effects and actual native CALL return binding remain in [issue 50](https://github.com/awjreynolds/noctium/issues/50). Public transcript reads supply state evidence, not returned function values. |
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
-| Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Two-key owner/spender Native records now have a source/native example. Mixed records, lists and the full Counter ADT remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
+| Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Two-key owner/spender Native records now have a source/native example. Native Counter read/increment/decrement/reset now use the ledger Bytes8 codec. Mixed records, lists and Counter comparisons remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
 | Jubjub and cryptographic source operations | ElGamal balances, key registration, memos and account identifiers | Typed curve operations, byte-derived keys/randomness, affine point hashing, ElGamal binding and ECDH memo recovery have source/native examples. Bytes32 equality checks both field chunks. Typed scalar and point callbacks now use the existing private host protocol. Curve helper calculations now run through the same private host protocol. Curve ledger schemas, further helper byte operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
@@ -145,6 +145,14 @@ owner/spender paths, plus a malformed-record rejection. This qualifies storage
 shape and path binding, not encryption validity. Memo List and Counter ADTs still
 need their native operations before the complete token port.
 
+[`tests/NativeCounter.lean`](../../tests/NativeCounter.lean) adds native Counter
+reads, immediate increment/decrement and reset for standalone and nested paths.
+Storage uses the ledger's eight-byte u64 cell encoding, distinct from Field-aligned
+UInt64 values. Updates use native Addi/Subi and retain overflow/underflow rejection.
+A focused native sequence checks current-state reads, reset, inactive guards and
+codec rejection. Counter comparison helpers and memo Lists remain separate work.
+See [Counter encoding and scope](native-counter.md).
+
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).
 It rebuilds the public-supply extension's two accounting blocks with 128-bit
@@ -183,7 +191,8 @@ They describe port requirements, not implemented capabilities.
 
 ## Minimum checks
 
-Compile each changed feature group. Run one focused native example and one
+Until feature implementation is complete, compile each changed feature group.
+Run one focused native example and one
 targeted rejection case where its semantics need one. Reuse existing evidence.
 Run one integrated localnet demonstration at the completed-port milestone.
 Additional proofs, repeated export audits, broad regression campaigns and
