@@ -15,10 +15,9 @@ not Lean theorems. A private read or calculation needs no `disclose`. A public
 result derived from either needs explicit release.
 
 This source form supports Native, Bool and bounded UInt values, with Unit callback
-results. Its `.observations.json` records authored proof conditions separately
+results. Typed callbacks also accept and return JubjubScalar and JubjubPoint values. Its `.observations.json` records authored proof conditions separately
 from generated validity checks. The summary is source review material and is
-not yet a verified bundle artifact. Composite and curve callback schemas and
-structured source branches remain separate work.
+not yet a verified bundle artifact. Composite curve schemas, curve private-state cells and structured source branches remain separate work.
 Private reads within one plan currently share one scalar result type because
 the host protocol declares one result schema per read operation. Mixed-type
 private reads require a protocol extension, tracked with [the remaining type work](https://github.com/awjreynolds/noctium/issues/69).
@@ -74,6 +73,22 @@ The companion binding file has one trailing LF. Its embedded copy in the control
 Public bindings record original input names and schemas, declaration paths, call sites, invocation ordinals and fresh circuit leaf names. Two executions of the same helper receive separate bindings. Unit and empty nominal results still receive invocation records.
 
 The binding contains the actual emitted relation tree. Runtime checks require a complete correspondence between original inputs, witness result leaves and declared circuit inputs. Aggregate leaves use native field encodings. A flattened Boolean leaf becomes decimal `"0"` or `"1"`; a scalar `Bool` input keeps its Boolean JSON encoding.
+
+[`tests/CurveWitness.lean`](../../tests/CurveWitness.lean) exercises typed curve
+callback arguments and results. A scalar uses a canonical decimal object. A point
+uses a subgroup-checked affine-coordinate object. Each remains one logical input
+in the private host protocol. The native relation expands a point into two field
+inputs and retains exact coordinate roundtrip constraints. Scalars retain their
+reduce/encode equality bridge. Runtime binding checks require these bridges and
+reject a typed curve input relabeled as Native.
+
+The focused selected-3.2.1 check drives both callbacks, rejects a malformed point
+reply, retries the pending request, and passes the completed private input map to
+the native checker. This extends callback transport and equality constraints.
+Curve arithmetic inside helper/control expressions, composite curve schemas and
+curve-valued contract returns remain separate implementation work. Historical
+witness proof claims do not extend automatically to this slice. No new keys,
+proofs or deployments were generated.
 
 Selected-entrypoint bundles retain optional `witnessBinding` and `witnessControl` roles together. The verifier rejects a missing member, unreferenced role, different entrypoint, changed relation, changed schema or incomplete input map. Existing bundles without witness roles keep their canonical format. An externally trusted manifest digest authenticates retained bytes. A self-hash alone supplies no source authority.
 

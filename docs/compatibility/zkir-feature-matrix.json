@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "4bf0eaaa735aa70c582e1b8dab32af69a3bb9676",
+    "sourceCommit": "82f16e23e6e616226fabdc263455d4d18391f256",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 27,
     "registeredOpcodes": [
@@ -4770,7 +4770,7 @@
     "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
     "remainingTokenDependencies": [
       "mixed aligned record hashing and general computed-digest byte indexing",
-      "typed curve witness/provider schemas and integration of derived ElGamal/ECDH helpers into token operations",
+      "curve composite schemas, helper crypto expressions and integration of derived ElGamal/ECDH helpers into token operations",
       "mixed record values and memo lists",
       "complete Counter behavior",
       "native typed inputs/returns and composition",
@@ -4817,6 +4817,12 @@
       "native": "runtime/tests/native_byte_conversions.rs",
       "implementationCommit": "4bf0eaaa735aa70c582e1b8dab32af69a3bb9676",
       "scope": "Modern to_bytes/from_bytes for Native, JubjubScalar and JubjubPoint, plus bytes_from_natives for exactly32 bytes with low31/highByte packing. Field decoding reduces modulo the target prime. Point decoding requires canonical prime-subgroup compressed encoding. Discarded invalid point decodes still reject, inactive guards use canonical identity bytes, and private origins propagate. Build and one selected-3.2.1 native smoke passed. General byte lengths, other curves and helper/control conversions remain open. No broad regression, keys, proofs or deployments."
+    },
+    "curveWitnessEvidence": {
+      "source": "tests/CurveWitness.lean",
+      "native": "runtime/tests/witness_control.rs",
+      "implementationCommit": "82f16e23e6e616226fabdc263455d4d18391f256",
+      "scope": "Declared JubjubScalar/JubjubPoint callback parameters and results, private typed source inputs, equality constraints and explicit Bool disclosure. Logical point values remain one typed private host payload and expand into two native input coordinates with exact roundtrip constraints. Scalar reduce/encode equality bridges remain mandatory. One selected-3.2.1 callback-to-native smoke passes, including malformed point rejection and corrected retry. Curve private-state cells, composite curve schemas, helper crypto arithmetic and typed contract returns remain open. No new keys, proofs, deployments or broad regression campaign."
     }
   }
 }
