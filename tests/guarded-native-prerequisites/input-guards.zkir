@@ -1,0 +1,13 @@
+{
+  "version": {"major": 3, "minor": 0},
+  "inputs": [{"name": "%gate", "type": "Scalar<BLS12-381>"}],
+  "outputs": [],
+  "do_communications_commitment": false,
+  "instructions": [
+    {"op": "constrain_to_boolean", "val": "%gate"},
+    {"op": "public_input", "guard": "%gate", "type": "Scalar<BLS12-381>", "output": "%public"},
+    {"op": "private_input", "guard": "%gate", "type": "Scalar<BLS12-381>", "output": "%private"},
+    {"op": "assert", "cond": "%public"},
+    {"op": "assert", "cond": "%private"}
+  ]
+}

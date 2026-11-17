@@ -1,0 +1,29 @@
+{
+  "version": {"major": 3, "minor": 0},
+  "inputs": [
+    {"name": "%g0", "type": "Scalar<BLS12-381>"},
+    {"name": "%p0", "type": "Scalar<BLS12-381>"},
+    {"name": "%x0", "type": "Scalar<BLS12-381>"},
+    {"name": "%g1", "type": "Scalar<BLS12-381>"},
+    {"name": "%p1", "type": "Scalar<BLS12-381>"},
+    {"name": "%x1", "type": "Scalar<BLS12-381>"}
+  ],
+  "outputs": [],
+  "do_communications_commitment": false,
+  "instructions": [
+    {"op": "constrain_to_boolean", "val": "%g0"},
+    {"op": "constrain_to_boolean", "val": "%p0"},
+    {"op": "cond_select", "bit": "%g0", "a": "%p0", "b": "0x01", "output": "%assert0"},
+    {"op": "assert", "cond": "%assert0"},
+    {"op": "cond_select", "bit": "%g0", "a": "%x0", "b": "0x00", "output": "%range0"},
+    {"op": "constrain_bits", "val": "%range0", "bits": 8},
+    {"op": "constrain_to_boolean", "val": "%g1"},
+    {"op": "constrain_to_boolean", "val": "%p1"},
+    {"op": "cond_select", "bit": "%g1", "a": "%p1", "b": "0x01", "output": "%assert1"},
+    {"op": "assert", "cond": "%assert1"},
+    {"op": "cond_select", "bit": "%g1", "a": "%x1", "b": "0x00", "output": "%range1"},
+    {"op": "constrain_bits", "val": "%range1", "bits": 8},
+    {"op": "impact", "guard": "%g0", "inputs": ["%x0", "%p0"]},
+    {"op": "impact", "guard": "%g1", "inputs": ["%x1"]}
+  ]
+}

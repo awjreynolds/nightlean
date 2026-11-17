@@ -48,7 +48,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Scalar design](designs/scalar-types.md), [native unsigned lowering](development/native-unsigned-scalars.md) and [producer safety gate](development/native-producer-safety.md).
 - [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) now compile to native circuit leaves with disclosure checks. General aggregate ledger effects remain separate.
 - [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/nightlean-portable-runtime-boundary.md).
-- [ZKIR capability research](research/zkir-v3-full-coverage.md), [native inventory](compatibility/zkir-feature-matrix.json) and [ledger capability research](research/midnight-ledger9-capabilities.md).
+- [ZKIR capability research](research/zkir-v3-full-coverage.md), [native inventory](compatibility/zkir-feature-matrix.json) and [ledger capability research](research/midnight-ledger9-capabilities.md). The [raw native guard experiment](research/native-guard-prerequisites.md) records verified prerequisites, with source guard support still gated.
 - [Compact comparison baseline](research/compact-equivalence-baseline.md). Inventory entries are not a completion percentage.
 - [Glossary](../GLOSSARY.md) for the distinctions between circuits, Impact execution, target profiles and ledger state.
 
