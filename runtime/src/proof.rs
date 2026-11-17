@@ -220,6 +220,7 @@ struct WitnessContractInner {
 
 /// An operation-specific target. It binds its own circuit degree and trusted SRS before
 /// source callbacks begin, while sharing the original deployment address and operation map.
+#[derive(Clone)]
 pub struct ContractOperationTarget {
     inner: Arc<WitnessContractInner>,
     operation: String,

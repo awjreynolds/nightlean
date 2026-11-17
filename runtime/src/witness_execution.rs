@@ -190,18 +190,20 @@ impl WitnessExecution {
     }
 
     /// Begin a complete-contract operation after the native client admits its exact current
-    /// state. Public target, SRS, operation, address, and state checks run before callbacks.
+    /// state. The caller retains the token if any public or source-construction check fails.
+    /// Public target, SRS, operation, address, and state checks run before callbacks.
     pub fn begin_contract_operation(
-        target: ContractOperationTarget,
-        current_state: CurrentStateContext,
+        target: &ContractOperationTarget,
+        current_state: &mut Option<CurrentStateContext>,
         source_inputs: BTreeMap<String, Json>,
         host_context: host::Context,
         parameters: &TrustedParameters,
     ) -> Result<Self> {
         let mut source_inputs = SecretInputs(source_inputs);
+        let current_state_ref = current_state.as_ref().ok_or(Error::State)?;
         if parameters.sha256() != target.parameters_sha256()
             || parameters.k() != target.k()
-            || !target.context_matches(&current_state)
+            || !target.context_matches(current_state_ref)
         {
             return Err(Error::Proof(proof::Error::BindingMismatch));
         }
@@ -220,12 +222,13 @@ impl WitnessExecution {
             authenticated,
         )
         .map_err(|_| Error::InvalidSource)?;
+        let current_state = current_state.take().ok_or(Error::State)?;
         let ttl = target.ttl();
         let contract_address = target.contract_address().to_owned();
         let entrypoint = target.operation().to_owned();
         Ok(Self {
             target: None,
-            contract_target: Some(target),
+            contract_target: Some(target.clone()),
             current_state: Some(current_state),
             session: Some(session),
             context_id,
@@ -270,6 +273,26 @@ impl WitnessExecution {
     }
 
     pub fn cancel(&mut self) -> Result<Json> {
+        if self.contract_target.is_some() {
+            return Err(Error::State);
+        }
+        self.cancel_session()
+    }
+
+    /// Cancel an unprepared complete-contract invocation and return its exact validated state
+    /// token for a corrected retry. The source Session clears staged writes before the token
+    /// leaves this owner. Once preparation consumes the token, this method returns State.
+    pub fn cancel_contract_operation(&mut self) -> Result<(Json, CurrentStateContext)> {
+        if self.contract_target.is_none() || self.current_state.is_none() {
+            return Err(Error::State);
+        }
+        let result = self.cancel_session()?;
+        self.contract_target = None;
+        let current_state = self.current_state.take().ok_or(Error::State)?;
+        Ok((result, current_state))
+    }
+
+    fn cancel_session(&mut self) -> Result<Json> {
         let result = self
             .session
             .as_mut()
@@ -278,8 +301,6 @@ impl WitnessExecution {
             .map_err(|_| Error::InvalidSource)?;
         self.session = None;
         self.target = None;
-        self.contract_target = None;
-        self.current_state = None;
         Ok(result)
     }
 
@@ -711,5 +732,263 @@ impl WitnessClient {
     /// private journal. Recovery-loaded clients lack this in-memory contract binding.
     pub fn current_state_context(&mut self) -> Result<CurrentStateContext> {
         self.driver.current_state_context().map_err(Error::Client)
+    }
+}
+
+#[cfg(all(test, feature = "zkir-321"))]
+mod tests {
+    use super::*;
+    use crate::{
+        artifacts::{self, ContractBundleSet},
+        control::TypedResponse,
+        host::{Capability, Context, Limits, Operation, Provider},
+    };
+    use rand::rngs::OsRng;
+    use serde_json::json;
+    use std::collections::{BTreeMap, BTreeSet};
+
+    const TTL: u64 = 2_000_000_000;
+
+    fn fixture_env(name: &str) -> String {
+        std::env::var(format!("NIGHTLEAN_WITNESS_PUBLIC_{name}"))
+            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_WITNESS_PUBLIC_{name}"))
+    }
+
+    fn test_context(plan: &Json, attempt_id: &str) -> host::Context {
+        let mut operations = BTreeMap::<String, Operation>::new();
+        let mut providers = Vec::new();
+        let mut capability_map = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+        for signature in plan["witnesses"].as_array().unwrap() {
+            let name = signature["name"].as_str().unwrap().to_owned();
+            let operation = signature["operation"].as_str().unwrap().to_owned();
+            let capability = signature["capability"].as_str().unwrap().to_owned();
+            let private_key = signature["privateKey"].as_str().map(str::to_owned);
+            let parameters = signature["parameters"].as_array().unwrap();
+            let mut argument_schema = parameters
+                .iter()
+                .map(|parameter| {
+                    (
+                        parameter["name"].as_str().unwrap().to_owned(),
+                        parameter["type"].as_str().unwrap().to_owned(),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+            if operation == host::READ {
+                argument_schema.insert("key".into(), "Key".into());
+            }
+            operations.insert(
+                operation.clone(),
+                Operation {
+                    operation: operation.clone(),
+                    argument_schema,
+                    result_schema: signature["resultType"].as_str().unwrap().to_owned(),
+                },
+            );
+            let prefix = private_key
+                .as_deref()
+                .map(|key| {
+                    key.rsplit_once('/')
+                        .map(|(root, _)| format!("{root}/"))
+                        .unwrap_or_else(|| key.to_owned())
+                })
+                .unwrap_or_else(|| "lookup/".into());
+            let entry = capability_map
+                .entry(capability.clone())
+                .or_insert_with(|| (prefix.clone(), BTreeSet::new()));
+            assert_eq!(entry.0, prefix);
+            entry.1.insert(operation.clone());
+            if private_key.is_some() {
+                entry.1.insert(host::STAGE.into());
+            }
+            providers.push(Provider {
+                input: name,
+                operation,
+                capability,
+                arguments: private_key
+                    .map(|key| BTreeMap::from([("key".into(), json!(key))]))
+                    .unwrap_or_default(),
+            });
+        }
+        let private = capability_map
+            .entry("private".into())
+            .or_insert_with(|| ("cache/".into(), BTreeSet::new()));
+        private.1.insert(host::STAGE.into());
+        let mut capabilities = capability_map
+            .into_iter()
+            .map(|(id, (key_prefix, operations))| Capability {
+                id,
+                namespace: "nightlean".into(),
+                key_prefix,
+                operations: operations.into_iter().collect(),
+            })
+            .collect::<Vec<_>>();
+        capabilities.push(Capability {
+            id: "commit".into(),
+            namespace: "nightlean".into(),
+            key_prefix: "cache/".into(),
+            operations: vec![host::CAS.into()],
+        });
+        Context {
+            protocol_version: 1,
+            namespace: "nightlean".into(),
+            base_revision: "preview-r0".into(),
+            attempt_id: attempt_id.into(),
+            capabilities,
+            operations: operations.into_values().collect(),
+            providers,
+            commit_capability: "commit".into(),
+            limits: Limits::default(),
+        }
+    }
+
+    fn source_inputs(expected: &str) -> BTreeMap<String, Json> {
+        BTreeMap::from([
+            ("expected".into(), json!(expected)),
+            ("seed".into(), json!("7")),
+        ])
+    }
+
+    fn complete_source(execution: &mut WitnessExecution, attempt_id: &str) -> bool {
+        for _ in 0..64 {
+            let status = execution.advance().unwrap();
+            match status["status"].as_str().unwrap() {
+                "completed" => return true,
+                "failed" => return false,
+                "need_host" => {
+                    let request = &status["request"];
+                    let value = match request["name"].as_str().unwrap() {
+                        "cache" => json!("1"),
+                        "lookup" => json!("14"),
+                        other => panic!("unexpected provider {other}"),
+                    };
+                    let response: TypedResponse = serde_json::from_value(json!({
+                        "protocolVersion": 2,
+                        "requestId": request["requestId"],
+                        "attemptId": attempt_id,
+                        "outcome": "value",
+                        "operation": request["operation"],
+                        "capability": request["capability"],
+                        "schema": request["schema"],
+                        "value": value,
+                    }))
+                    .unwrap();
+                    execution.resume_typed(response).unwrap();
+                }
+                other => panic!("unexpected source status {other}"),
+            }
+        }
+        panic!("source witness exceeded the request bound")
+    }
+
+    fn deployment_state_context(
+        target: &WitnessContractTarget,
+        operation: &str,
+    ) -> CurrentStateContext {
+        use ledger::structure::ContractAction;
+
+        let binding = target.deployment_binding(operation).unwrap();
+        let ContractAction::Deploy(deployment) = target
+            .deployment_intent()
+            .actions
+            .iter_deref()
+            .next()
+            .unwrap()
+        else {
+            unreachable!()
+        };
+        let mut state_bytes = Vec::new();
+        serialize::tagged_serialize(&deployment.initial_state, &mut state_bytes).unwrap();
+        binding
+            .admit_committed_state(&state_bytes, &state_bytes, &"f".repeat(64), true)
+            .unwrap()
+    }
+
+    #[test]
+    #[ignore = "requires authenticated witness bundle and pinned public SRS fixtures"]
+    fn cancelled_contract_source_returns_checkpoint_for_corrected_retry() {
+        let bundle = artifacts::verify(
+            std::path::Path::new(&fixture_env("BUNDLE")),
+            Some(&fixture_env("MANIFEST_SHA256")),
+        )
+        .unwrap();
+        let parameters_bytes = std::fs::read(fixture_env("PARAMETERS")).unwrap();
+        let parameters_digest = fixture_env("PARAMETERS_SHA256");
+        let parameters =
+            TrustedParameters::from_bytes(&parameters_bytes, 7, &parameters_digest).unwrap();
+        let control_plan: Json =
+            serde_json::from_slice(bundle.file(Role::WitnessControl).unwrap()).unwrap();
+        let entrypoint = serde_json::from_slice::<Json>(bundle.file(Role::Plan).unwrap()).unwrap()
+            ["entrypoint"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let bundles = ContractBundleSet::new(vec![bundle]).unwrap();
+        let contract = WitnessContractTarget::from_state_config(
+            bundles,
+            br#"{"state":{"total":"0"}}"#,
+            TTL,
+            &mut OsRng,
+        )
+        .unwrap();
+        let operation = contract.operation(&entrypoint, &parameters, TTL).unwrap();
+        let checkpoint = deployment_state_context(&contract, &entrypoint);
+
+        let mut available = Some(checkpoint);
+        let mut rejected_inputs = source_inputs("15");
+        rejected_inputs.insert("unexpected".into(), Json::Null);
+        assert!(matches!(
+            WitnessExecution::begin_contract_operation(
+                &operation,
+                &mut available,
+                rejected_inputs,
+                test_context(&control_plan, &"a".repeat(64)),
+                &parameters,
+            ),
+            Err(Error::InvalidSource)
+        ));
+        assert!(available.is_some(), "constructor rejection keeps the token");
+
+        let failed_attempt = "b".repeat(64);
+        let mut failed = WitnessExecution::begin_contract_operation(
+            &operation,
+            &mut available,
+            source_inputs("15"),
+            test_context(&control_plan, &failed_attempt),
+            &parameters,
+        )
+        .unwrap();
+        assert!(
+            available.is_none(),
+            "successful construction consumes the token"
+        );
+        assert!(!complete_source(&mut failed, &failed_attempt));
+        let (cancelled, checkpoint) = failed.cancel_contract_operation().unwrap();
+        assert_eq!(cancelled["status"], "cancelled");
+        assert!(
+            failed.session.is_none(),
+            "cancellation drops the source Runtime"
+        );
+        assert!(failed.current_state.is_none());
+        assert!(matches!(failed.advance(), Err(Error::State)));
+
+        let retry_attempt = "c".repeat(64);
+        let mut retry_state = Some(checkpoint);
+        let mut retry = WitnessExecution::begin_contract_operation(
+            &operation,
+            &mut retry_state,
+            source_inputs("14"),
+            test_context(&control_plan, &retry_attempt),
+            &parameters,
+        )
+        .unwrap();
+        assert!(retry_state.is_none());
+        assert!(complete_source(&mut retry, &retry_attempt));
+        let proof = retry.prepare_contract_proof(&mut OsRng).unwrap();
+        assert!(retry.current_state.is_none());
+        assert!(matches!(
+            retry.cancel_contract_operation(),
+            Err(Error::State)
+        ));
+        drop(proof);
     }
 }

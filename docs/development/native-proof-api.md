@@ -26,8 +26,9 @@ and one deployment address. `target.start_deployment_client` starts that
 deployment through the native client. After finalized receipt validation and
 private journal commit, `WitnessClient::current_state_context` issues an opaque
 one-use state token. `target.operation` selects an operation with its own trusted
-parameters and fresh call TTL. `WitnessInvocation::begin_contract_operation`
-checks those identities before source callbacks, then
+parameters and fresh call TTL. `WitnessExecution::begin_contract_operation`
+borrows the operation target and a mutable `Option<CurrentStateContext>`, checks
+those identities before source callbacks, then
 `prepare_contract_proof` retains the same invocation runtime for proof and client
 handoff. Later calls use current state at the original address.
 
@@ -37,8 +38,17 @@ localnet demonstration in issue 67. Recovery-loaded clients do not restore state
 tokens and fail closed. The token identifies a validated checkpoint, without a
 new latest-state RPC check. The single conditional-write proof case below does
 not establish a complete multi-operation lifecycle.
-Rejected or cancelled source invocations currently consume their state token.
-Recoverable pre-proof retries are tracked in [issue 71](https://github.com/awjreynolds/noctium/issues/71).
+Rejected construction leaves the token in the caller's `Option`. Successful
+construction takes it. Before proof preparation,
+`cancel_contract_operation` clears and drops the source session and returns the
+same token for a corrected retry. Generic `cancel` rejects this mode to prevent
+accidental token loss. Proof preparation consumes the token, so later
+cancellation cannot return a second owner. Process recovery and post-preparation
+restoration remain separate work in issue 67.
+
+One focused selected-3.2.1 lifecycle test covers rejected input, cancellation
+after source failure, corrected retry and token consumption at preparation. It
+uses the retained scalar witness bundle without a new proof or deployment.
 
 ## Native phase and statement
 

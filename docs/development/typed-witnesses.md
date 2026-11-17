@@ -82,7 +82,15 @@ A rejected handoff preserves a completed invocation for corrected retry. After s
 
 Chain acceptance and private CAS are separate outcomes. A finalized call does not disappear when private storage reports a revision conflict. Recovery retains typed schemas and the exact source journal through the existing trusted-store protocol.
 
-The retained context currently covers deployment and its first call. [Existing-state calls and multi-entrypoint assembly](https://github.com/awjreynolds/noctium/issues/67) have a separate integration gate. Source execution does not require a fresh-deployment assumption inside the interpreter or provider protocol.
+The qualified single-operation context covers deployment and its first call. [Existing-state calls and multi-entrypoint assembly](https://github.com/awjreynolds/noctium/issues/67) have a separate integration gate. Source execution does not require a fresh-deployment assumption inside the interpreter or provider protocol.
+
+The Rust contract-set POC also supports corrected pre-proof retries at an
+authenticated current-state checkpoint. `WitnessExecution::begin_contract_operation`
+borrows a target and `&mut Option<CurrentStateContext>` and only takes the token
+after source-session construction succeeds. `cancel_contract_operation` clears
+the tentative session and returns that token. Successful preparation consumes
+ownership. This path has one focused lifecycle test, with full multi-operation
+ledger integration and process recovery still in issue 67.
 
 ## Assurance scope
 
