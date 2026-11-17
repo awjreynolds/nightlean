@@ -21,6 +21,14 @@ These six goals match the public capability graphic. Each goal requires implemen
 
 The private one-time claim on the isolated localnet is the regression workload and first assurance case. Public-network deployment requires separate qualification. Full coverage requires all six exit gates, with no open feature rows relabelled as delivered. Research-preview milestones remain useful without implying full coverage or unrestricted compilation of Lean programs.
 
+## POC execution priority, 2026-11-17
+
+Prioritize native ZKIR v3 feature implementation and a complex existing contract rebuilt in Lean. The [OpenZeppelin confidential-token/public-supply port](https://github.com/awjreynolds/noctium/issues/68) is the concrete POC workload, pinned to upstream source. Use Compact as a behavioral reference, with direct Lean-to-ZKIR compilation. Compare observable results, state transitions and proof acceptance rather than requiring identical generated IR.
+
+For each feature group, compile the changed modules and run one focused native example. Add a targeted rejection case where the new behavior needs one. Reuse existing evidence. Defer additional formal proofs, repeated export audits, broad regression reruns, cross-profile duplication and deployment repetitions unless a concrete failure requires them. Run one integrated localnet demonstration when the port reaches that milestone.
+
+The final assurance goals above remain release requirements. They must not block POC feature breadth or consume repeated validation work during implementation. Keep support claims scoped to the checks performed.
+
 ## Baseline
 
 The latest stable feature reference checked on 2026-11-16 is Compact toolchain 0.36.1, language 0.28.0, at source revision `7fa3a117c5e7efe9d2c51da04263e5f0b3509144`. The public-network matrix still lists 0.36.0. The newer source release bundles ZKIR 3.2.1. Noctium preserves its accepted 3.2.0 default and now provides a [selectable 3.2.1 compiler/runtime profile](../development/zkir-3.2.1-integrated.md). An isolated exact-commit build produced authenticated public bundles and finalized claim/scalar deployments and calls with matching state bytes. The earlier [experimental qualification](../development/zkir-3.2.1-qualification.md) remains separate historical evidence. These selected workflows do not qualify every capability or a public network.
