@@ -95,11 +95,20 @@ private def boundedNativePlan (plan binding : Json) : Except Diagnostic Json := 
 /-- The native workflow requires declared providers and an exact ordered map
 from executed calls to actual fresh private inputs. Host-only control is separate. -/
 def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
-    (circuitName : String := "") : Except Diagnostic Compiled := do
+    (circuitName : String := "") (outputName : String := "") : Except Diagnostic Compiled := do
   let plan ← Control.compileTypedWithLimits limits program entryName
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown witness entrypoint"
   let lowered ← Helpers.compileHostedWithLimits limits (eraseProgram program) entryName
-  let circuit := if circuitName.isEmpty then lowered.circuit else {lowered.circuit with name := circuitName}
+  let mut circuit := if circuitName.isEmpty then lowered.circuit else {lowered.circuit with name := circuitName}
+  unless outputName.isEmpty do
+    let some declaration := program.declarations.find? (·.id == entry.target)
+      | fail entry.span "missing witness entry declaration"
+    unless (match declaration.result with | .scalar _ => true | _ => false) do
+      fail entry.span "named witness outputs require one scalar result"
+    let [output] := circuit.outputs | fail entry.span "named witness outputs require one scalar result"
+    if circuit.inputs.any (·.name == outputName) then
+      fail entry.span "witness output name collides with an input"
+    circuit := {circuit with outputs := [{output with name := outputName}]}
   if circuit.inputs.any (fun input => input.ty.isBytes) then
     fail entry.span "byte witness inputs require a composite bytes schema"
   let native ← Backend.Zkir.lowerCircuit circuit
@@ -120,8 +129,9 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
     ("calls", toJson calls), ("nativeRelation", native)]
   pure {circuit, binding, plan := ← boundedNativePlan plan binding}
 
-def compile (program : Program) (entryName : String) (circuitName : String := "") : Except Diagnostic Compiled :=
-  compileWithLimits {} program entryName circuitName
+def compile (program : Program) (entryName : String) (circuitName : String := "")
+    (outputName : String := "") : Except Diagnostic Compiled :=
+  compileWithLimits {} program entryName circuitName outputName
 
 /-- Bind the same source invocation to the actual ledger call relation, rather
 than substituting the standalone relation's public-return convention. -/

@@ -1,0 +1,16 @@
+{"witnessNames": ["NoctiumExamples.nextValue"],
+ "schemaVersion": 1,
+ "privateStages": ["noctium/NoctiumExamples.Wallet/saved"],
+ "privateReads": ["noctium/NoctiumExamples.Wallet/saved"],
+ "kind": "noctium-authoring-observations",
+ "inputs":
+ [{"visibility": "public", "type": "UIntRange 256", "name": "expected"}],
+ "generatedValidity":
+ ["typed private-state read reply: noctium/NoctiumExamples.Wallet/saved",
+  "typed witness reply: NoctiumExamples.nextValue",
+  "checked cast cast(UInt 8, add(previous, uint(1)))",
+  "typed staged private-state value: noctium/NoctiumExamples.Wallet/saved"],
+ "explicitReleases": [],
+ "entryName": "noctium.witness-circuit.NoctiumExamples.advance.v1",
+ "authoredProves":
+ ["eq(next, cast(UInt 8, add(previous, uint(1))))", "eq(next, expected)"]}

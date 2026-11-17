@@ -6,6 +6,30 @@ Noctium compiles finite Lean helper programs into a native circuit and an ordere
 
 Witness providers supply untrusted values through explicit operation and capability declarations. A returned value grants no circuit truth, disclosure permission or ledger authority. Circuit constraints still check the resulting private inputs.
 
+For straight-line scalar contracts, start with [the private state counter](../../examples/PrivateStateCounter.lean).
+`noctium_private_state` declares wallet-owned typed cells. `noctium_witness` declares
+an untrusted callback. A `noctium_witness_circuit ... where` body reads private
+cells, states acceptance conditions with `prove`, and stages updates through the
+same Rust execution plan described below. `prove` creates circuit constraints,
+not Lean theorems. A private read or calculation needs no `disclose`. A public
+result derived from either needs explicit release.
+
+This source form supports Native, Bool and bounded UInt values, with Unit callback
+results. Its `.observations.json` records authored proof conditions separately
+from generated validity checks. The summary is source review material and is
+not yet a verified bundle artifact. Composite and curve callback schemas and
+structured source branches remain separate work.
+Private reads within one plan currently share one scalar result type because
+the host protocol declares one result schema per read operation. Mixed-type
+private reads require a protocol extension, tracked with [the remaining type work](https://github.com/awjreynolds/noctium/issues/69).
+
+Declarations describe access requests. The host still grants storage permissions.
+Generated keys use `noctium/<qualified-schema>/<field>`. Grant a schema with
+the slash-terminated prefix `noctium/<qualified-schema>/`, or selected exact keys.
+The commit capability must cover every staged key. The example uses public writes
+only. Combining source witnesses with ledger reads still needs the
+[current-state witness integration](https://github.com/awjreynolds/noctium/issues/67).
+
 [`tests/WitnessSource.lean`](../../tests/WitnessSource.lean) contains the source examples. They cover scalar calls, nominal composite arguments and results, repeated helpers, Unit and empty nominal results, private reads, staged writes and rejected disclosure. The scalar example stages `cache/last = 1`, reads the staged value, calls a helper twice, checks the replies against a public value and stages the final result.
 
 [`tests/WitnessDisclosure.lean`](../../tests/WitnessDisclosure.lean) checks direct and helper-mediated leaks. Disclosing constants inside a branch does not disclose its private witness guard. The host plan requires explicit disclosure of the guard itself.

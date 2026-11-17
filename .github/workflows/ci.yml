@@ -38,6 +38,7 @@ jobs:
           lake env lean examples/BoundedScalars.lean
           lake env lean examples/Disclosure.lean
           lake env lean examples/NoctiumPrivateClaim.lean
+          lake env lean examples/PrivateStateCounter.lean
           lake env lean tests/Issue68MapReads.lean
           lake env lean tests/Issue69Bytes32Map.lean
           lake env lean tests/Issue69NestedCounter.lean
@@ -52,3 +53,5 @@ jobs:
           lake env lean tests/Issue43GuardedReads.lean
           lake env lean tests/Issue43EffectBlocks.lean
           lake env lean examples/openzeppelin/PublicSupply.lean
+      - name: Check readable private state source and disclosure
+        run: bash tests/private-authoring-cli.sh

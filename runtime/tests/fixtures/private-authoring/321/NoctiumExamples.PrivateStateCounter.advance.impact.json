@@ -1,0 +1,102 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "count", "kind": {"cell": "UIntRange<256>"}}],
+ "schemaVersion": 1,
+ "reads": [{"type": "UIntRange<256>", "name": "expected"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "expected"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "expected"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"value": "0", "tag": "constant"},
+   "alignment": "field"},
+  {"storage": true,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "nextCount"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "insert", "n": 1}],
+ "nativeCircuitFile": "NoctiumExamples.PrivateStateCounter.advance.zkir",
+ "guards": [],
+ "entrypoint": "advance",
+ "contractName": "NoctiumExamples.PrivateStateCounter",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "UIntRange<256>",
+    "name": "nextCount",
+    "expression":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper1"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper2"},
+        "tag": "let",
+        "name": "$helper3",
+        "body": {"tag": "reference", "name": "$helper4"}},
+       "tag": "let",
+       "name": "$helper5",
+       "body":
+       {"tag": "assertThen",
+        "condition":
+        {"tag": "eq",
+         "right":
+         {"value":
+          {"tag": "uadd",
+           "right": {"value": "1", "tag": "uint", "maximum": "1"},
+           "maximum": "256",
+           "left": {"tag": "reference", "name": "$helper2"}},
+          "type": "UIntRange<256>",
+          "tag": "cast"},
+         "left": {"tag": "reference", "name": "$helper5"}},
+        "body":
+        {"tag": "assertThen",
+         "condition":
+         {"tag": "eq",
+          "right": {"tag": "reference", "name": "$helper0"},
+          "left": {"tag": "reference", "name": "$helper5"}},
+         "body":
+         {"value": {"tag": "reference", "name": "$helper5"},
+          "tag": "let",
+          "name": "$helper6",
+          "body": {"tag": "reference", "name": "$helper0"}}}}}}}}],
+  "name": "NoctiumExamples.advance",
+  "inputs":
+  [{"visibility": "public", "type": "UIntRange<256>", "name": "expected"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "$helper1"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "$helper4"}],
+  "file": "NoctiumExamples.advance.zkir",
+  "constraints": []}}

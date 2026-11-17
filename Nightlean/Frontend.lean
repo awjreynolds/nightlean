@@ -42,6 +42,8 @@ structure WitnessInfo where
   circuitName : Name
   sourceName : Name
   exportName : String
+  outputName : String := ""
+  observationArtifact? : Option String := none
   deriving Inhabited
 
 /-- Exact source constants registered as Noctium module definitions. -/
@@ -1071,20 +1073,21 @@ open scoped Nightlean
 scoped syntax (name := witnessCircuitCommand) "nightlean_witness_circuit" ident
   "from" ident "entry" str : command
 
-@[command_elab witnessCircuitCommand] unsafe def elabWitnessCircuit : CommandElab := fun stx => do
-  match stx with
-  | `(nightlean_witness_circuit $name:ident from $source:ident entry $exportName:str) =>
-    let namespaceName := (← getCurrNamespace) ++ source.getId
-    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+/-- Share checked registration between generated authoring programs and explicit IR sources. -/
+unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportName : String)
+    (outputName : String := "") (observationArtifact? : Option String := none) : CommandElabM Unit := do
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     let fullName := (← getCurrNamespace) ++ name.getId
-    let compiled ← match Witness.compile program exportName.getString fullName.toString with
+    let compiled ← match Witness.compile program exportName fullName.toString outputName with
       | .ok value => pure value
       | .error diagnostic => failDisclosure diagnostic *> throwError "typed witness compilation failed"
     let sourceTerm := mkIdent sourceName
     let fullNameTerm := stringTerm fullName.toString
+    let exportNameTerm := stringTerm exportName
+    let outputNameTerm := stringTerm outputName
+    let name : TSyntax `ident := ⟨name⟩
     elabCommand (← `(def $name : Nightlean.Circuit :=
-      match Nightlean.Witness.compile $sourceTerm $exportName $fullNameTerm with
+      match Nightlean.Witness.compile $sourceTerm $exportNameTerm $fullNameTerm $outputNameTerm with
       | .ok value => value.circuit
       | .error _ => {name := $fullNameTerm, inputs := [], outputs := [], constraints := []}))
     unsafe checkGeneratedCircuit fullName
@@ -1093,8 +1096,16 @@ scoped syntax (name := witnessCircuitCommand) "nightlean_witness_circuit" ident
       inputs := compiled.circuit.inputs.map fun input => (input.name, input.ty),
       publicInputs := (compiled.circuit.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty),
       outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
-      sourceProgram? := some (sourceName, exportName.getString)}
-    modifyEnv fun env => witnessRegistry.addEntry env {circuitName := fullName, sourceName, exportName := exportName.getString}
+      sourceProgram? := some (sourceName, exportName)}
+    modifyEnv fun env => witnessRegistry.addEntry env {
+      circuitName := fullName, sourceName, exportName, outputName, observationArtifact?}
+
+@[command_elab witnessCircuitCommand] unsafe def elabWitnessCircuit : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_witness_circuit $name:ident from $source:ident entry $exportName:str) =>
+    let namespaceName := (← getCurrNamespace) ++ source.getId
+    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+    registerWitnessCircuit name sourceName exportName.getString
   | _ => throwUnsupportedSyntax
 
 private def moduleProgramDeclName (contractName : Name) (ordinal : Nat) : Name :=

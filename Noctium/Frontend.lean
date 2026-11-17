@@ -1,5 +1,6 @@
 import Nightlean.Frontend
 import Nightlean.Semantics
+import Noctium.Authoring
 
 open Lean Elab Command
 

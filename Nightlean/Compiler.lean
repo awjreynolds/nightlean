@@ -451,12 +451,17 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
     let program ← match moduleWitnessProgramFor moduleOutputs info with
       | some fresh => pure fresh
       | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
-    let compiled ← match Witness.compile program info.exportName info.circuitName.toString with
+    let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName with
       | .ok value => pure value
       | .error diagnostic => failDiagnostic diagnostic
     let witnessPrefix := artifactName info.circuitName
     lowered := lowered.push (witnessPrefix ++ ".witness.json", compiled.binding.compress)
     lowered := lowered.push (witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
+    if let some text := info.observationArtifact? then
+      let observation ← match Json.parse text with
+        | .ok value => pure value
+        | .error message => throwError "invalid source observation artifact: {message}"
+      lowered := lowered.push (witnessPrefix ++ ".observations.json", observation.pretty)
     witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson info.circuitName.toString),
       ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
       ("target", toJson ("standalone" : String)), ("nativeWitnessQualified", toJson Bool.false)])
@@ -471,7 +476,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
           let program ← match moduleWitnessProgramFor moduleOutputs info with
             | some fresh => pure fresh
             | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
-          let compiled ← match Witness.compile program info.exportName info.circuitName.toString with
+          let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName with
             | .ok value => pure value
             | .error diagnostic => failDiagnostic diagnostic
           let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name

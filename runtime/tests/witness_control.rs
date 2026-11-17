@@ -366,6 +366,121 @@ fn dishonest_provider_result_fails_independent_source_constraints() {
     assert!(session.private_request().is_err());
 }
 
+#[cfg(feature = "zkir-321")]
+#[test]
+fn readable_private_state_source_binds_callbacks_stages_and_native_constraints() {
+    use nightlean_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
+    use onchain_runtime::state::StateValue;
+    use transient_crypto::{curve::Fr, fab::AlignedValueExt};
+
+    let plan: Json = serde_json::from_str(include_str!(
+        "fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.witness.control.json"
+    ))
+    .unwrap();
+    let native_plan: Plan = serde_json::from_str(include_str!(
+        "fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.impact.json"
+    ))
+    .unwrap();
+    let circuit = IrSource::load(
+        include_bytes!(
+            "fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.zkir"
+        )
+        .as_slice(),
+    )
+    .unwrap();
+    let relation = binding(&plan)["nativeRelation"].clone();
+    let key = "noctium/NoctiumExamples.Wallet/saved";
+    for answer in ["2", "3"] {
+        let attempt = "7".repeat(64);
+        let mut context = source_context(&signatures(&plan), &attempt);
+        context
+            .capabilities
+            .iter_mut()
+            .find(|capability| capability.id == "commit")
+            .unwrap()
+            .key_prefix = "noctium/NoctiumExamples.Wallet/".into();
+        let digest = hex::encode(Sha256::digest(plan["binding"].as_str().unwrap().as_bytes()));
+        let mut session = Session::from_json_with_invocation_target(
+            plan.clone(),
+            BTreeMap::from([("expected".into(), json!("2"))]),
+            context,
+            Some(&digest),
+            Some(InvocationTarget {
+                contract_address: "a".repeat(64),
+                entrypoint: "advance".into(),
+            }),
+        )
+        .unwrap();
+        let read = session.advance().unwrap();
+        assert_eq!(read["request"]["operation"], host::READ);
+        assert_eq!(session.private_request().unwrap()["arguments"]["key"], key);
+        session
+            .resume_typed(reply(&read["request"], &attempt, "value", Some(json!("1"))))
+            .unwrap();
+        let call = session.advance().unwrap();
+        assert_eq!(
+            session.private_request().unwrap()["arguments"]["previous"],
+            "1"
+        );
+        assert!(
+            session
+                .resume_typed(reply(
+                    &call["request"],
+                    &attempt,
+                    "value",
+                    Some(json!("256"))
+                ))
+                .is_err()
+        );
+        assert_eq!(session.advance().unwrap(), call);
+        session
+            .resume_typed(reply(
+                &call["request"],
+                &attempt,
+                "value",
+                Some(json!(answer)),
+            ))
+            .unwrap();
+        let complete = session.advance().unwrap();
+        if answer == "3" {
+            assert_eq!(complete["status"], "failed");
+            assert!(session.private_completion(&relation).is_err());
+            continue;
+        }
+        assert_eq!(complete["status"], "completed", "{complete}");
+        assert_eq!(complete["result"], "2");
+        let completion = session.private_completion(&relation).unwrap();
+        assert_eq!(completion["hostWrites"][key]["value"], "2");
+        let inputs = serde_json::from_value(completion["inputs"].clone()).unwrap();
+        let state = create_state(
+            &native_plan,
+            &BTreeMap::from([(native_plan.state[0].name.clone(), json!("1"))]),
+        )
+        .unwrap();
+        let mut execution = prepare(
+            &native_plan,
+            &inputs,
+            &state,
+            &ledger::structure::INITIAL_PARAMETERS,
+            coin_structure::contract::ContractAddress::default(),
+        )
+        .unwrap();
+        check(&execution, &circuit).unwrap();
+        let StateValue::Array(state) = execution.after.state.get_ref() else {
+            panic!("expected public state array")
+        };
+        let StateValue::Cell(count) = &*state.get(0).unwrap() else {
+            panic!("expected public counter cell")
+        };
+        let mut fields = Vec::new();
+        count.value_only_field_repr(&mut fields);
+        assert_eq!(fields, vec![Fr::from(2u64)]);
+        // Alter the private read after host validation to exercise the native relation alone.
+        execution.preimage.private_transcript[0] = Fr::from(9u64);
+        assert!(check(&execution, &circuit).is_err());
+    }
+}
+
 #[test]
 fn fixed_composite_arguments_and_results_keep_component_types_and_private_leaves() {
     let attempt = "f".repeat(64);

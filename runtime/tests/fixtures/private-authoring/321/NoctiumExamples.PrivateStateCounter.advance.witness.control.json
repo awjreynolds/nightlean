@@ -1,0 +1,127 @@
+{"witnesses":
+ [{"resultType": "UIntRange<256>",
+   "privateKey": "noctium/NoctiumExamples.Wallet/saved",
+   "parameters": [],
+   "operation": "private_state.read.v1",
+   "name": "private_state.read.NoctiumExamples.Wallet.saved.v1",
+   "capability": "private_state:NoctiumExamples.Wallet"},
+  {"resultType": "UIntRange<256>",
+   "privateKey": null,
+   "parameters": [{"type": "UIntRange<256>", "name": "previous"}],
+   "operation": "noctium.witness.NoctiumExamples.nextValue.v1",
+   "name": "NoctiumExamples.nextValue",
+   "capability": "NoctiumExamples.nextValue"}],
+ "types": [],
+ "schemaVersion": 2,
+ "name": "noctium.witness-circuit.NoctiumExamples.advance.v1",
+ "mode": "native",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs":
+ [{"visibility": "public", "type": "UIntRange<256>", "name": "expected"}],
+ "functions":
+ [{"resultType": "UIntRange<256>",
+   "parameters": [{"type": "UIntRange<256>", "name": "expected"}],
+   "name": "NoctiumExamples.advance",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span":
+      {"line": 19, "file": "examples/PrivateStateCounter.lean", "column": 3},
+      "site": "NoctiumExamples.advance.read.1",
+      "name": "private_state.read.NoctiumExamples.Wallet.saved.v1",
+      "arguments": []},
+     "type": "UIntRange<256>",
+     "tag": "bind",
+     "span":
+     {"line": 17, "file": "examples/PrivateStateCounter.lean", "column": 1},
+     "name": "previous"},
+    {"value":
+     {"tag": "witnessCall",
+      "span":
+      {"line": 20, "file": "examples/PrivateStateCounter.lean", "column": 3},
+      "site": "NoctiumExamples.advance.call.s2.0",
+      "name": "NoctiumExamples.nextValue",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 20, "file": "examples/PrivateStateCounter.lean", "column": 3},
+        "name": "previous"}]},
+     "type": "UIntRange<256>",
+     "tag": "bind",
+     "span":
+     {"line": 17, "file": "examples/PrivateStateCounter.lean", "column": 1},
+     "name": "next"},
+    {"tag": "assert",
+     "span":
+     {"line": 17, "file": "examples/PrivateStateCounter.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span":
+      {"line": 21, "file": "examples/PrivateStateCounter.lean", "column": 3},
+      "right":
+      {"value":
+       {"tag": "binary",
+        "span":
+        {"line": 21, "file": "examples/PrivateStateCounter.lean", "column": 3},
+        "right":
+        {"value": "1",
+         "tag": "uint",
+         "span":
+         {"line": 21, "file": "examples/PrivateStateCounter.lean", "column": 3},
+         "maximum": "1"},
+        "operation": "add",
+        "left":
+        {"tag": "reference",
+         "span":
+         {"line": 21, "file": "examples/PrivateStateCounter.lean", "column": 3},
+         "name": "previous"}},
+       "type": "UIntRange<256>",
+       "tag": "cast",
+       "span":
+       {"line": 21, "file": "examples/PrivateStateCounter.lean", "column": 3}},
+      "left":
+      {"tag": "reference",
+       "span":
+       {"line": 21, "file": "examples/PrivateStateCounter.lean", "column": 3},
+       "name": "next"}}},
+    {"tag": "assert",
+     "span":
+     {"line": 17, "file": "examples/PrivateStateCounter.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span":
+      {"line": 22, "file": "examples/PrivateStateCounter.lean", "column": 3},
+      "right":
+      {"tag": "reference",
+       "span":
+       {"line": 22, "file": "examples/PrivateStateCounter.lean", "column": 3},
+       "name": "expected"},
+      "left":
+      {"tag": "reference",
+       "span":
+       {"line": 22, "file": "examples/PrivateStateCounter.lean", "column": 3},
+       "name": "next"}}},
+    {"value":
+     {"tag": "reference",
+      "span":
+      {"line": 23, "file": "examples/PrivateStateCounter.lean", "column": 3},
+      "name": "next"},
+     "type": "UIntRange<256>",
+     "tag": "stage",
+     "span":
+     {"line": 17, "file": "examples/PrivateStateCounter.lean", "column": 1},
+     "key": "noctium/NoctiumExamples.Wallet/saved",
+     "capability": "private_state:NoctiumExamples.Wallet"},
+    {"value":
+     {"tag": "reference",
+      "span":
+      {"line": 24, "file": "examples/PrivateStateCounter.lean", "column": 3},
+      "name": "expected"},
+     "tag": "return",
+     "span":
+     {"line": 17, "file": "examples/PrivateStateCounter.lean", "column": 1}}]}],
+ "entry": "s0d0",
+ "binding":
+ "{\"calls\":[{\"inputs\":[\"$helper1\"],\"name\":\"private_state.read.NoctiumExamples.Wallet.saved.v1\",\"ordinal\":\"0\",\"path\":[\"s0d0\"],\"resultType\":\"UIntRange<256>\",\"site\":\"NoctiumExamples.advance.read.1\"},{\"inputs\":[\"$helper4\"],\"name\":\"NoctiumExamples.nextValue\",\"ordinal\":\"1\",\"path\":[\"s0d0\"],\"resultType\":\"UIntRange<256>\",\"site\":\"NoctiumExamples.advance.call.s2.0\"}],\"circuitInputs\":[{\"name\":\"expected\",\"type\":\"UIntRange<256>\",\"visibility\":\"public\"},{\"name\":\"$helper1\",\"type\":\"UIntRange<256>\",\"visibility\":\"private\"},{\"name\":\"$helper4\",\"type\":\"UIntRange<256>\",\"visibility\":\"private\"}],\"circuitName\":\"NoctiumExamples.advance\",\"circuitOutputs\":[{\"name\":\"nextCount\",\"type\":\"UIntRange<256>\"}],\"inputBindings\":[{\"inputs\":[\"expected\"],\"name\":\"expected\",\"type\":\"UIntRange<256>\"}],\"kind\":\"typed-witness-bindings\",\"nativeRelation\":{\"do_communications_commitment\":true,\"inputs\":[],\"instructions\":[{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expected\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expected\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper1\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper4\"},{\"a\":\"%input_$helper1\",\"b\":\"0x01\",\"op\":\"add\",\"output\":\"%v0\"},{\"bits\":9,\"op\":\"constrain_bits\",\"val\":\"%v0\"},{\"a\":\"%v0\",\"b\":\"0x0101\",\"bits\":9,\"op\":\"less_than\",\"output\":\"%v1\"},{\"cond\":\"%v1\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v0\"},{\"a\":\"%input_$helper4\",\"b\":\"%v0\",\"op\":\"test_eq\",\"output\":\"%v2\"},{\"cond\":\"%v2\",\"op\":\"assert\"},{\"a\":\"%input_$helper4\",\"b\":\"%input_expected\",\"op\":\"test_eq\",\"output\":\"%v3\"},{\"cond\":\"%v3\",\"op\":\"assert\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expected\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expected\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expected\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x91\"],\"op\":\"impact\"},{\"op\":\"output\",\"vals\":[]}],\"outputs\":[],\"version\":{\"major\":3,\"minor\":2}},\"schemaVersion\":1,\"signatures\":[{\"capability\":\"private_state:NoctiumExamples.Wallet\",\"name\":\"private_state.read.NoctiumExamples.Wallet.saved.v1\",\"operation\":\"private_state.read.v1\",\"parameters\":[],\"privateKey\":\"noctium/NoctiumExamples.Wallet/saved\",\"resultType\":\"UIntRange<256>\"},{\"capability\":\"NoctiumExamples.nextValue\",\"name\":\"NoctiumExamples.nextValue\",\"operation\":\"noctium.witness.NoctiumExamples.nextValue.v1\",\"parameters\":[{\"name\":\"previous\",\"type\":\"UIntRange<256>\"}],\"privateKey\":null,\"resultType\":\"UIntRange<256>\"}],\"sourceExport\":\"noctium.witness-circuit.NoctiumExamples.advance.v1\",\"target\":{\"contractName\":\"NoctiumExamples.PrivateStateCounter\",\"entrypoint\":\"advance\",\"kind\":\"entrypoint\",\"nativeCircuitFile\":\"NoctiumExamples.PrivateStateCounter.advance.zkir\",\"targetProfile\":\"midnight-ledger-9-zkir-3.2.1\"},\"types\":[]}\n"}

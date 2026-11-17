@@ -2,6 +2,14 @@
 
 Research date: 2026-11-17. Read-only investigation of the working tree at `68247f92292ebaf2dd9cce58637ab83145b710ed`, plus pinned upstream sources. This report proposes authoring syntax. No new syntax, compiler support, proof, or native qualification was implemented during this investigation.
 
+Post-review implementation: [the private state counter](../../examples/PrivateStateCounter.lean)
+now uses readable scalar private-state declarations, typed witness callbacks,
+`prove` conditions and staged writes. The compiler emits a source observation
+summary. [The current guide](../development/typed-witnesses.md) records the
+supported source fragment and protocol limits. The wider proposal below,
+including complete public-activity policy and failure-channel analysis, remains
+future work. The counter deliberately reveals its values through acceptance.
+
 ## Recommended model
 
 Let authors compute with private values without repeatedly granting disclosure. Require explicit permission to release a value, reveal public activity, or make an intended acceptance claim. Keep permission to access wallet storage separate from all three.
