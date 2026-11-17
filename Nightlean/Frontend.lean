@@ -94,6 +94,7 @@ scoped syntax "Native" : nltype
 scoped syntax "Bool" : nltype
 scoped syntax "UInt" num : nltype
 scoped syntax "UIntRange" num : nltype
+scoped syntax "Bytes32" : nltype
 
 declare_syntax_cat nlexpr
 scoped syntax ident : nlexpr
@@ -164,12 +165,14 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
     | .ok (.uint maximum) => pure (.uint maximum)
     | .error message => throwErrorAt stx message
     | _ => throwErrorAt stx "invalid unsigned range"
+  | `(nltype| Bytes32) => pure (.bytes 32)
   | _ => throwErrorAt stx "unsupported Nightlean type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .native => `(Nightlean.Ty.native)
   | .bool => `(Nightlean.Ty.bool)
   | .uint maximum => `(Nightlean.Ty.uint $(⟨Syntax.mkNumLit (toString maximum)⟩))
+  | .bytes length => `(Nightlean.Ty.bytes $(⟨Syntax.mkNumLit (toString length)⟩))
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
@@ -252,6 +255,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .native => pure (.native, ← `(Nightlean.Expr.native 0))
     | .bool => pure (.bool, ← `(Nightlean.Expr.bool Bool.false))
     | .uint maximum => pure (target, ← `(Nightlean.Expr.uint $(natTerm maximum) 0))
+    | .bytes _ => throwErrorAt stx "Bytes32 has no scalar default expression"
   | `(nlexpr| disclose($value)) =>
     let (ty, value) ← expression env value
     pure (ty, ← `(Nightlean.Expr.disclose $(← spanTerm stx) $value))
@@ -264,6 +268,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| eq($a, $b)) =>
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b
+    if ta.isBytes || tb.isBytes then throwErrorAt stx "Bytes32 equality is not supported"
     let ty ← commonType stx ta tb
     let a ← coerceExpression stx ta ty a
     let b ← coerceExpression stx tb ty b
@@ -272,6 +277,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let c ← expected env c .bool
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b
+    if ta.isBytes || tb.isBytes then throwErrorAt stx "Bytes32 selection is not supported"
     let ty ← commonType stx ta tb
     let a ← coerceExpression stx ta ty a
     let b ← coerceExpression stx tb ty b
@@ -312,6 +318,7 @@ where
         | .mul => `(Nightlean.Expr.umul $left $right)
       pure (.uint maximum, term)
     | .bool => throwErrorAt stx "invalid arithmetic result type"
+    | .bytes _ => throwErrorAt stx "Bytes32 does not support arithmetic"
 
 private def checkedExpression (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) :
     CommandElabM (TSyntax `term) := do

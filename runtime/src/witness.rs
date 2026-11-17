@@ -64,7 +64,9 @@ impl Type {
             ensure!(valid_type_name(name), "invalid aggregate type token");
             return Ok(Self::Aggregate(token.to_owned()));
         }
-        Ok(Self::Scalar(ScalarType::parse(token)?))
+        let ty = ScalarType::parse(token)?;
+        ensure!(ty != ScalarType::Bytes32, "byte witnesses require an aggregate schema");
+        Ok(Self::Scalar(ty))
     }
 
     pub fn token(&self) -> String {
@@ -72,6 +74,7 @@ impl Type {
             Self::Unit => "Unit".to_owned(),
             Self::Scalar(ScalarType::Native) => "Native".to_owned(),
             Self::Scalar(ScalarType::Bool) => "Bool".to_owned(),
+            Self::Scalar(ScalarType::Bytes32) => "Bytes<32>".to_owned(),
             Self::Scalar(ScalarType::UInt(maximum)) => {
                 format!("UIntRange<{}>", maximum + BigUint::from(1u8))
             }
@@ -93,6 +96,7 @@ fn scalar_type_key(ty: &ScalarType) -> String {
     match ty {
         ScalarType::Native => "sN".to_owned(),
         ScalarType::Bool => "sB".to_owned(),
+        ScalarType::Bytes32 => "bytes32".to_owned(),
         ScalarType::UInt(maximum) => format!("sU{};", maximum.to_str_radix(10)),
     }
 }
@@ -122,6 +126,7 @@ fn validate_scalar(ty: &ScalarType, value: &Json) -> Result<()> {
                 .ok_or_else(|| anyhow!("expected canonical unsigned decimal"))?;
             canonical_unsigned(text, maximum)?;
         }
+        ScalarType::Bytes32 => bail!("byte witnesses require an aggregate schema"),
     }
     Ok(())
 }
@@ -349,6 +354,7 @@ impl Registry {
                 ScalarType::Native => "native",
                 ScalarType::Bool => "bool",
                 ScalarType::UInt(_) => "uint",
+                ScalarType::Bytes32 => bail!("byte projections require an aggregate schema"),
             };
             ensure!(
                 projected_value.get("kind").and_then(Json::as_str) == Some(expected_kind),
@@ -376,6 +382,7 @@ impl Registry {
                         .and_then(Json::as_bool)
                         .ok_or_else(|| anyhow!("aggregate projection Boolean value missing"))?,
                 ),
+                ScalarType::Bytes32 => bail!("byte projections require an aggregate schema"),
             };
             wipe_json(&mut projected_value);
             projected_value = canonical;

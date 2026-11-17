@@ -40,6 +40,11 @@ private def issue43EffectBlockEntry : Entrypoint :=
   | ep :: _ => ep
   | _ => {name := "missing", circuit := {name := "missing"}}
 
+#guard match issue43EffectBlockEntry.effectGuardAt 0 with
+  | some (.letE _ _ (.select _ (.disclose span _) _)) =>
+      span.file == "tests/Issue43EffectBlocks.lean" && span.line == 20 && span.column == 8
+  | _ => Bool.false
+
 private def issue43EffectBlockContext : EvalContext := {
   modulus := Field.modulus
   poseidon2 := fun _ _ _ => .error "unused by this fixture"

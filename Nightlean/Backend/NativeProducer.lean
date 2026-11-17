@@ -244,6 +244,7 @@ def sourceMaximum : Ty → Nat
   | .native => Field.modulus - 1
   | .bool => 1
   | .uint maximum => maximum
+  | .bytes _ => 0
 
 def checkBound (state : State) (term : Term) (maximum : Nat) : Except String Unit := do
   let bounded := match term with
@@ -282,6 +283,7 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   ensure (state.groupCount == expected.groups.length) "missing native transcript activity group"
   ensure (state.assertionCount == expected.assertions.length) "missing or reordered typed source assertion"
   for input in expected.inputs do
+    ensure (!input.ty.isBytes) "Bytes32 must be expanded into UInt8 native inputs"
     checkBound state (.input input.identifier) (sourceMaximum input.ty)
   for (term, maximum) in expected.bounds do checkBound state term maximum
 

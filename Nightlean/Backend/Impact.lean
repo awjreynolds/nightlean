@@ -13,12 +13,13 @@ inductive Aligned where
   | field (value : Scalar)
   | bit (value : Bool)
   | bitExpr (value : Expr .bool)
+  | bytes32 (value : Expr (.bytes 32))
   deriving Repr
 
 inductive Op where
   | dup
   | index (slot : Nat) (pushPath : Bool := false)
-  | mapIndex (slot : Nat) (key : Scalar)
+  | mapIndex (slot : Nat) (key : Aligned)
   | push (value : Aligned) (storage : Bool := false)
   | popeq (value : Aligned)
   | member
@@ -26,19 +27,21 @@ inductive Op where
   deriving Repr
 
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
-transient-crypto/src/fab.rs. Index keys use Native field alignment. -/
+transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
 def Aligned.fields : Aligned → List Scalar
   | .field value => [.native 1, .native (Field.modulus - 2), value]
   | .bit value => [.native 1, .native 1, .native (if value then 1 else 0)]
   | .bitExpr value => [.native 1, .native 1,
       .select value (.native 1) (.native 0)]
+  | .bytes32 value => [.native 1, .native 32,
+      .bytesField value 0, .bytesField value 1]
 
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
   | .index slot pushPath => [.native (if pushPath then 0x70 else 0x50)] ++
       (Aligned.field (.native slot)).fields
   | .mapIndex slot key => [.native 0x51] ++
-      (Aligned.field (.native slot)).fields ++ (Aligned.field key).fields
+      (Aligned.field (.native slot)).fields ++ key.fields
   | .push value storage => [.native (if storage then 0x11 else 0x10), .native 1] ++ value.fields
   | .popeq value => [.native 0x0c] ++ value.fields
   | .member => [.native 0x18]
@@ -52,11 +55,12 @@ structure Read where
   deriving Repr
 
 def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
-  read.guard.map fun guard => match read.ty with
-    | .native => .eq (.ref read.name) (.select guard (.ref read.name) (.native 0))
-    | .bool => .eq (.ref read.name) (.select guard (.ref read.name) (.bool false))
-    | .uint maximum => .eq (.ref read.name)
-        (.select guard (.ref read.name) (.uint maximum 0))
+  match read.ty, read.guard with
+  | .bytes _, _ | _, none => none
+  | .native, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.native 0)))
+  | .bool, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.bool false)))
+  | .uint maximum, some guard => some (.eq (.ref read.name)
+      (.select guard (.ref read.name) (.uint maximum 0)))
 
 structure Plan where
   operations : List Op := []
@@ -69,10 +73,22 @@ structure Plan where
 
 def Plan.fields (plan : Plan) : List Scalar := plan.operations.flatMap Op.fields
 
+/-- Public byte inputs are exposed to the pinned native transcript as one
+field-aligned UInt8 projection per source byte. -/
+def byteProjectionName (input : String) (index : Nat) : String :=
+  s!"_nightlean_bytes_{input}_{index}"
+
+def publicInputReadCount (inputs : List Input) : Nat :=
+  inputs.foldl (fun count input =>
+    if input.visibility != .«public» then count
+    else count + match input.ty with
+      | .bytes length => length
+      | _ => 1) 0
+
 /-- Generated field expressions must retain the source/read types even though
 their native representation is uniformly a field. -/
 def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
-  let publicCount := (entry.circuit.inputs.filter (·.visibility == .«public»)).length
+  let publicCount := publicInputReadCount entry.circuit.inputs
   let env := entry.circuit.inputs.map (fun input => (input.name, input.ty)) ++
     entry.circuit.outputs.map (fun output => (output.name, output.ty)) ++
     (plan.reads.drop publicCount).map (fun read => (read.name, read.ty))
@@ -85,16 +101,25 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
   for read in plan.reads do
     if let some guard := read.guard then guard.validate {poseidon2 := true} env
 
-private def nativeValue : (ty : Ty) → Expr ty → Scalar
-  | .native, value => value
-  | .bool, value => .select value (.native 1) (.native 0)
-  | .uint _, value => .cast .native value
+private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
+  | .native, value => pure value
+  | .bool, value => pure (.select value (.native 1) (.native 0))
+  | .uint _, value => pure (.cast .native value)
+  | .bytes _, _ => throw "Bytes32 requires byte alignment, not scalar conversion"
 
-private def nativeRead (ty : Ty) (name : String) : Scalar :=
+private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
+  | .native, value => pure (.field value)
+  | .bool, value => pure (.field (.select value (.native 1) (.native 0)))
+  | .uint _, value => pure (.field (.cast .native value))
+  | .bytes 32, value => pure (.bytes32 value)
+  | .bytes _, _ => throw "unsupported byte alignment"
+
+private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   match ty with
-  | .native => .ref name
-  | .bool => .cast .native (.ref name : Expr .bool)
-  | .uint maximum => .cast .native (.ref name : Expr (.uint maximum))
+  | .native => pure (.ref name)
+  | .bool => pure (.cast .native (.ref name : Expr .bool))
+  | .uint maximum => pure (.cast .native (.ref name : Expr (.uint maximum)))
+  | .bytes _ => throw "Bytes32 is read through byte alignment"
 
 private def stateSlot (state : List StateDecl) (name : String) : Except String Nat :=
   match state.findIdx? (·.name == name) with
@@ -103,6 +128,7 @@ private def stateSlot (state : List StateDecl) (name : String) : Except String N
 
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ => []
+  | .bytesField value _ | .bytesAt value _ => expressionNames value
   | .ref name => [name]
   | .add left right => expressionNames left ++ expressionNames right
   | .mul left right => expressionNames left ++ expressionNames right
@@ -123,10 +149,11 @@ private def freshActivityName (names : List String) : String :=
   let longest := names.foldl (fun length name => max length name.length) 0
   "_nightlean_activity_guard_" ++ String.ofList (List.replicate (longest + 1) 'x')
 
-private def zeroValue : (ty : Ty) → Expr ty
-  | .native => .native 0
-  | .bool => .bool false
-  | .uint maximum => .uint maximum 0
+private def zeroValue : (ty : Ty) → Option (Expr ty)
+  | .native => some (.native 0)
+  | .bool => some (.bool false)
+  | .uint maximum => some (.uint maximum 0)
+  | .bytes _ => none
 
 private def castMayFail (target source : Ty) : Bool :=
   match target, source with
@@ -142,6 +169,8 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .native value => .native value
   | .bool value => .bool value
   | .uint maximum value => .uint maximum value
+  | .bytesField value index => .bytesField (totalizeUnder guard value) index
+  | .bytesAt value index => .bytesAt (totalizeUnder guard value) index
   | .ref name => .ref name
   | .add left right => .add (totalizeUnder guard left) (totalizeUnder guard right)
   | .mul left right => .mul (totalizeUnder guard left) (totalizeUnder guard right)
@@ -155,7 +184,9 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .cast target (source := source) value =>
     let value := totalizeUnder guard value
     if castMayFail target source then
-      .cast target (.select guard value (zeroValue source))
+      match zeroValue source with
+      | some zero => .cast target (.select guard value zero)
+      | none => .cast target value
     else .cast target value
   | .letE name value body =>
     .letE name (totalizeUnder guard value) (totalizeUnder guard body)
@@ -194,40 +225,48 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   match effect with
   | .readCell name destination ty =>
     let slot ← stateSlot state name
+    let value ← nativeRead ty destination
     pure { plan with
-      operations := plan.operations ++ [.dup, .index slot, .popeq (.field (nativeRead ty destination))]
+      operations := plan.operations ++ [.dup, .index slot, .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .require condition =>
     pure {plan with guards := plan.guards ++ [condition]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
     let readName := s!"_nightlean_absence_{plan.reads.length}"
     pure { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push (.field (nativeValue _ key)), .member, .popeq (.bit false)]
+        .dup, .index slot, .push key, .member, .popeq (.bit false)]
       reads := plan.reads ++ [{name := readName, ty := .bool}]
       guards := plan.guards ++ [.eq (.ref readName : Expr .bool) (.bool false)] }
   | .writeCell name _ value =>
     let slot ← stateSlot state name
+    let value ← nativeValue _ value
     pure {plan with operations := plan.operations ++ [
-      .push (.field (.native slot)), .push (.field (nativeValue _ value)) true, .insert 1]}
+      .push (.field (.native slot)), .push (.field value) true, .insert 1]}
   | .writeMap name _ _ key value =>
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
+    let value ← nativeValue _ value
     pure {plan with operations := plan.operations ++ [
-      .index slot true, .push (.field (nativeValue _ key)),
-      .push (.field (nativeValue _ value)) true, .insert 2]}
+      .index slot true, .push key,
+      .push (.field value) true, .insert 2]}
   | .readMap name destination _ ty key => do
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
+    let value ← nativeRead ty destination
     pure { plan with
       operations := plan.operations ++ [
-        .dup, .mapIndex slot (nativeValue _ key),
-        .popeq (.field (nativeRead ty destination))]
+        .dup, .mapIndex slot key,
+        .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .readMember name destination _ _ key => do
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
     pure { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push (.field (nativeValue _ key)), .member,
+        .dup, .index slot, .push key, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}] }
 
@@ -294,44 +333,65 @@ def appendEffectsGuarded (state : List StateDecl) (effects : List Effect)
     plan ← appendEffectWithActivity state effect (guards[index]?.getD none) plan
   pure plan
 
-private def appendPublicInput (input : Input) (plan : Plan) : Plan :=
-  if input.visibility == .«public» then
-    let value := Aligned.field (nativeRead input.ty input.name)
-    { plan with
+private def publicInputStep (input : Input) (plan : Plan) : Except String Plan := do
+  if input.visibility != .«public» then return plan
+  match input.ty with
+  | .bytes length =>
+    let mut result := plan
+    for index in List.range length do
+      let bytes : Expr (.bytes 32) := .ref input.name
+      let byte : Expr (.uint 255) := .bytesAt bytes index
+      let value := Aligned.field (.cast .native byte)
+      let name := byteProjectionName input.name index
+      result := { result with
+        operations := result.operations ++ [.push value, .popeq value]
+        reads := result.reads ++ [{name, ty := .uint 255}] }
+    pure result
+  | .native | .bool | .uint _ => do
+    let value := Aligned.field (← nativeRead input.ty input.name)
+    pure { plan with
       operations := plan.operations ++ [.push value, .popeq value]
       reads := plan.reads ++ [{name := input.name, ty := input.ty}] }
-  else plan
+
+private def appendPublicInput := publicInputStep
 
 /-- The exact public-input prefix used before source effects. -/
-def publicInputPlan (inputs : List Input) (initial : Plan := {}) : Plan :=
-  inputs.foldl (fun plan input => appendPublicInput input plan) initial
+def publicInputPlan (inputs : List Input) (initial : Plan := {}) : Except String Plan :=
+  inputs.foldlM (fun plan input => appendPublicInput input plan) initial
 
-private def previousPublicInputStep (input : Input) (plan : Plan) : Plan :=
-  if input.visibility == .«public» then
-    let value := Aligned.field (nativeRead input.ty input.name)
-    { plan with
-        operations := plan.operations ++ [.push value, .popeq value]
-        reads := plan.reads ++ [{name := input.name, ty := input.ty}] }
-  else plan
+private def previousPublicInputStep (input : Input) (plan : Plan) : Except String Plan :=
+  publicInputStep input plan
 
 private def previousPublicInputLoop (inputs : List Input) (initial : Plan) : Except String Plan := do
   let mut plan := initial
   for input in inputs do
-    plan := previousPublicInputStep input plan
+    plan ← previousPublicInputStep input plan
   pure plan
 
 /-- The old mutable public-input loop equals the production pure prefix for
 all input lists and starting plans. -/
 theorem previousPublicInputLoop_eq_publicInputPlan (inputs : List Input)
     (initial : Plan) :
-    previousPublicInputLoop inputs initial = .ok (publicInputPlan inputs initial) := by
+    previousPublicInputLoop inputs initial = publicInputPlan inputs initial := by
   unfold previousPublicInputLoop
   simp only [bind_pure]
-  change (forIn inputs initial (fun input plan =>
-      (pure (ForInStep.yield (previousPublicInputStep input plan)) : Except String (ForInStep Plan)))) =
-    .ok (publicInputPlan inputs initial)
-  rw [List.forIn_pure_yield_eq_foldl]
-  rfl
+  change (forIn inputs initial (fun input plan => do
+      let result ← previousPublicInputStep input plan
+      pure (ForInStep.yield result))) =
+    inputs.foldlM (fun plan input => appendPublicInput input plan) initial
+  have stepEq (input : Input) (plan : Plan) :
+      (do let result ← previousPublicInputStep input plan
+          pure (ForInStep.yield result)) =
+        ForInStep.yield <$> previousPublicInputStep input plan := by
+    cases previousPublicInputStep input plan <;> rfl
+  simp only [stepEq]
+  rw [List.forIn_yield_eq_foldlM]
+  simp only [previousPublicInputStep, appendPublicInput]
+  have mapIdentity (plan : Plan) (input : Input) :
+      (fun result : Plan => result) <$> publicInputStep input plan =
+        publicInputStep input plan := by
+    cases publicInputStep input plan <;> rfl
+  simp only [mapIdentity]
 
 /-- Imperative counterpart retained for the kernel equivalence check. -/
 private def previousEffectStep (state : List StateDecl) (effect : Effect)
@@ -340,40 +400,48 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   match effect with
   | .readCell name destination ty =>
     let slot ← stateSlot state name
+    let value ← nativeRead ty destination
     plan := { plan with
-      operations := plan.operations ++ [.dup, .index slot, .popeq (.field (nativeRead ty destination))]
+      operations := plan.operations ++ [.dup, .index slot, .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .require condition =>
     plan := {plan with guards := plan.guards ++ [condition]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
     let name := s!"_nightlean_absence_{plan.reads.length}"
     plan := { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push (.field (nativeValue _ key)), .member, .popeq (.bit false)]
+        .dup, .index slot, .push key, .member, .popeq (.bit false)]
       reads := plan.reads ++ [{name, ty := .bool}]
       guards := plan.guards ++ [.eq (.ref name : Expr .bool) (.bool false)] }
   | .writeCell name _ value =>
     let slot ← stateSlot state name
+    let value ← nativeValue _ value
     plan := {plan with operations := plan.operations ++ [
-      .push (.field (.native slot)), .push (.field (nativeValue _ value)) true, .insert 1]}
+      .push (.field (.native slot)), .push (.field value) true, .insert 1]}
   | .writeMap name _ _ key value =>
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
+    let value ← nativeValue _ value
     plan := {plan with operations := plan.operations ++ [
-      .index slot true, .push (.field (nativeValue _ key)),
-      .push (.field (nativeValue _ value)) true, .insert 2]}
+      .index slot true, .push key,
+      .push (.field value) true, .insert 2]}
   | .readMap name destination _ ty key => do
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
+    let value ← nativeRead ty destination
     plan := { plan with
       operations := plan.operations ++ [
-        .dup, .mapIndex slot (nativeValue _ key),
-        .popeq (.field (nativeRead ty destination))]
+        .dup, .mapIndex slot key,
+        .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .readMember name destination _ _ key => do
     let slot ← stateSlot state name
+    let key ← nativeAligned _ key
     plan := { plan with
       operations := plan.operations ++ [
-        .dup, .index slot, .push (.field (nativeValue _ key)), .member,
+        .dup, .index slot, .push key, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}] }
   pure plan
@@ -441,7 +509,7 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
     if sourceNames.any (·.startsWith "_nightlean_") then
       throw "source names beginning '_nightlean_' are reserved by the native transcript producer"
     -- Public parameters must appear among Popeq reads consumed by public_input.
-    plan := publicInputPlan entry.circuit.inputs plan
+    plan ← publicInputPlan entry.circuit.inputs plan
     plan ← appendEffectsGuarded state entry.effects entry.effectGuards plan
     pure plan
   finishPlan entry result
@@ -454,14 +522,20 @@ where
 
 /-- JSON value atoms must be hydrated into Uint8Array by the ledger JS adapter. -/
 def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Except String Lean.Json := do
-  let (number, alignment) ← match value with
-    | .field expression => do pure (← expression.eval ctx env,
+  let (atoms, alignment) ← match value with
+    | .field expression => do
+      pure (Lean.toJson [bytes (← expression.eval ctx env)],
         Lean.Json.mkObj [("tag", Lean.toJson ("field" : String))])
-    | .bit b => pure ((if b then 1 else 0),
+    | .bit b => pure (Lean.toJson [bytes (if b then 1 else 0)],
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (1 : Nat))])
-    | .bitExpr expression => pure ((if ← expression.eval ctx env then 1 else 0),
+    | .bitExpr expression => pure (Lean.toJson [bytes (if ← expression.eval ctx env then 1 else 0)],
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (1 : Nat))])
-  pure (Lean.Json.mkObj [("value", Lean.toJson [bytes number]),
+    | .bytes32 expression => do
+      let values ← expression.eval ctx env
+      pure (Lean.Json.arr #[Lean.Json.arr (values.toArray.map Lean.toJson)],
+        Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)),
+          ("length", Lean.toJson (32 : Nat))])
+  pure (Lean.Json.mkObj [("value", atoms),
     ("alignment", Lean.Json.arr #[Lean.Json.mkObj [
       ("tag", Lean.toJson ("atom" : String)), ("value", alignment)]])])
 
@@ -474,7 +548,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("path", Lean.Json.arr #[Lean.Json.mkObj [("tag", Lean.toJson ("value" : String)), ("value", value)]])])])
   | .mapIndex slot key => do
     let slotValue ← (Aligned.field (.native slot)).toJson ctx env
-    let keyValue ← (Aligned.field key).toJson ctx env
+    let keyValue ← key.toJson ctx env
     pure (Lean.Json.mkObj [("idx", Lean.Json.mkObj [
       ("cached", Lean.toJson false), ("pushPath", Lean.toJson false),
       ("path", Lean.Json.arr #[

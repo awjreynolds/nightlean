@@ -381,6 +381,9 @@ impl Parser<'_> {
                         let lt = scalar_type(&a.ty)?;
                         let rt = scalar_type(&b.ty)?;
                         let t = match (lt, rt) {
+                            (ScalarType::Bytes32, _) | (_, ScalarType::Bytes32) => {
+                                bail!("control byte arithmetic")
+                            }
                             (ScalarType::Bool, _) | (_, ScalarType::Bool) => {
                                 bail!("control Boolean arithmetic")
                             }
@@ -935,6 +938,7 @@ fn validate_relation_inputs(
             ScalarType::Native => None,
             ScalarType::Bool => Some(1),
             ScalarType::UInt(maximum) => Some(maximum.bits().max(1)),
+            ScalarType::Bytes32 => bail!("native byte witness binding is unsupported"),
         };
         if let Some(bits) = required_bits {
             ensure!(

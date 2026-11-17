@@ -26,6 +26,12 @@ Zero-length vectors and byte sequences represent empty values in this source mod
 
 The enum tag and padding rules describe the source layout proposal. This package does not claim correspondence with the current native ledger ABI, ZKIR aggregate encoding or proof relation. Those rules need an explicit checked flattening transformation and native conformance evidence before Nightlean enables aggregate deployment.
 
+## Bytes32 map-key slice
+
+The selected ZKIR 3.2.1 path supports fixed-width `Bytes32` map keys with scalar map values. Circuit inputs expand to 32 ordered UInt8 leaves. Native map operations retain all 32 bytes under the pinned Bytes32 alignment and two-field encoding, and public byte inputs bind each leaf into the Impact transcript. `runtime/tests/fixtures/generic-state/issue69-bytes32/321` is generated from `tests/Issue69Bytes32Map.lean`. `runtime/tests/bytes32_map.rs` checks membership, guarded missing-key reads, insertion, scalar reads, and distinct byte strings whose scalar reductions would collide.
+
+This slice does not enable byte arithmetic, equality, scalar casts, byte-valued state, circuit outputs, or direct byte witness bindings. `CompositeType.bytes` keeps its checked aggregate layout and codec. A scalar `.bytes` layout is rejected; a 32-byte composite layout retains 32 leaves.
+
 ## Cases and check
 
 `tests/CompositeTypes.lean` contains the TYC-IDENTITY, TYC-ORDER, TYC-LENGTH, TYC-CYCLE and TYC-SUBTYPE cases. It checks insertion-order-stable fingerprints, field-order changes, nominal distinction, forward references, cycles, missing names, duplicate declarations, scalar bounds, sequence limits, enum tags/payloads and recursive UInt widening proofs. Its S8 nested zero-vector regression has three logical expanded nodes and 1,021 retained layout constructors. A 100-node retained-layout limit rejects it before layout construction. At a 1,021-node bound, the returned counts are `(expandedNodes, layoutNodes, value.expandedNodeCount, value.nodeCount) = (3, 1021, 3, 1021)`.

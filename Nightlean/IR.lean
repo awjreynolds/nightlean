@@ -11,12 +11,18 @@ structure SourceSpan where
 inductive Ty where
   | native | bool
   | uint (maximum : Nat)
+  | bytes (length : Nat)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def Ty.scalarKind : Ty → ScalarPolicy.Kind
   | .native => .native
   | .bool => .bool
   | .uint maximum => .uint maximum
+  | .bytes length => .bytes length
+
+def Ty.isBytes : Ty → Bool
+  | .bytes _ => true
+  | _ => false
 
 inductive Visibility where
   | «public» | «private»
@@ -31,6 +37,11 @@ inductive Expr : Ty → Type where
   | native (value : Nat) : Expr .native
   | bool (value : Bool) : Expr .bool
   | uint (maximum value : Nat) : Expr (.uint maximum)
+  /-- Pack one field-sized chunk of a typed byte string using the pinned
+  little-endian chunk encoding. This constructor is for backend transcript
+  lowering. Source expressions cannot cast or do arithmetic on byte strings. -/
+  | bytesField (value : Expr (.bytes length)) (chunkIndex : Nat) : Expr .native
+  | bytesAt (value : Expr (.bytes length)) (index : Nat) : Expr (.uint 255)
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -53,6 +64,14 @@ structure Input where
   visibility : Visibility
   span : SourceSpan := {}
   deriving Repr
+
+/-- Native scalar leaves for one source input. Byte leaves keep source byte
+order and receive explicit range-constrained identifiers. -/
+def Input.nativeIdentifiers (input : Input) : List String :=
+  match input.ty with
+  | .bytes length => (List.range length).map fun index =>
+      s!"%input_{input.name}_byte_{index}"
+  | _ => ["%input_" ++ input.name]
 
 structure Output where
   name : String
@@ -135,8 +154,12 @@ structure Diagnostic where
 abbrev TypeEnv := List (String × Ty)
 
 def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
-  ScalarPolicy.validate ty.scalarKind
-  if let .uint maximum := ty then
+  match ty with
+  | .bytes length =>
+    unless length == 32 do throw "only Bytes32 is supported by this source surface"
+  | .native | .bool => ScalarPolicy.validate ty.scalarKind
+  | .uint maximum =>
+    ScalarPolicy.validate ty.scalarKind
     unless maximum < caps.nativeModulus do throw "unsigned type exceeds native representation"
 
 def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except String Unit
@@ -146,6 +169,12 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     (Ty.uint maximum).validate caps
     if value ≤ maximum then pure () else .error "unsigned constant exceeds its type"
   | .bool _ => .ok ()
+  | .bytesField value chunkIndex => do
+    value.validate caps env
+    unless chunkIndex < 2 do throw "Bytes32 field chunk index is out of range"
+  | .bytesAt value index => do
+    value.validate caps env
+    unless index < 32 do throw "Bytes32 byte index is out of range"
   | .ref name => do
     ty.validate caps
     match env.lookup name with
@@ -160,7 +189,8 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     if !caps.nativeArithmetic then throw "target lacks native arithmetic"
     a.validate caps env
     b.validate caps env
-  | .cast target value => do
+  | .cast target (source := source) value => do
+    if target.isBytes || source.isBytes then throw "byte strings do not support scalar casts"
     target.validate caps
     value.validate caps env
   | .letE (source := source) name value body => do
@@ -170,11 +200,13 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     condition.validate caps env
     body.validate caps env
   | .disclose _ value => value.validate caps env
-  | .eq a b => do
+  | .eq (ty := operandTy) a b => do
+    if operandTy.isBytes then throw "byte string equality is not supported by this source surface"
     if !caps.equality then throw "target lacks equality"
     a.validate caps env
     b.validate caps env
   | .select c a b => do
+    if ty.isBytes then throw "byte string selection is not supported by this source surface"
     if !caps.select then throw "target lacks conditional selection"
     c.validate caps env
     a.validate caps env
@@ -199,6 +231,8 @@ def validateConstraints (caps : Capabilities) (env : TypeEnv) (span : SourceSpan
 def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Unit := do
   if !uniqueNames (c.inputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit input"}
+  if !uniqueNames (c.inputs.flatMap Input.nativeIdentifiers) then
+    throw {span := c.span, message := "input names collide after native byte expansion"}
   if !uniqueNames (c.outputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit output"}
   let env := c.inputs.map fun i => (i.name, i.ty)
@@ -208,6 +242,8 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     | .ok _ => pure ()
   validateConstraints caps env c.span c.constraints
   for output in c.outputs do
+    if output.ty.isBytes then
+      throw {span := output.span, message := "Bytes32 circuit outputs are not supported"}
     match output.ty.validate caps with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()
@@ -225,6 +261,10 @@ private def requireState (decls : List StateDecl) (name : String) (kind : StateK
 /-- Validate state names, typed reads, guards and writes in execution order. -/
 def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entrypoint) : Except Diagnostic Unit := do
   for decl in decls do
+    match decl.kind with
+    | .cell (.bytes _) | .map _ (.bytes _) =>
+      throw {span := decl.span, message := "Bytes32 state values are not supported"}
+    | _ => pure ()
     let types := match decl.kind with
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]

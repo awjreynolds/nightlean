@@ -43,6 +43,7 @@ pub enum Value {
     Native(Fr),
     Bool(bool),
     UInt { number: BigUint, maximum: BigUint },
+    Bytes(Vec<u8>),
 }
 impl Value {
     fn field(&self) -> Result<Fr> {
@@ -94,6 +95,16 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
             })]),
             alignment: Alignment::singleton(AlignmentAtom::Bytes { length: 1 }),
         }),
+        "bytes32" => {
+            let Value::Bytes(bytes) = value else {
+                bail!("expected bytes value")
+            };
+            ensure!(bytes.len() == 32, "expected 32 bytes");
+            Ok(AlignedValue {
+                value: FabValue(vec![ValueAtom::from(bytes.as_slice())]),
+                alignment: Alignment::singleton(AlignmentAtom::Bytes { length: 32 }),
+            })
+        }
         _ => bail!("unsupported alignment"),
     }
 }
@@ -136,6 +147,11 @@ pub enum Expr {
     },
     Reference {
         name: String,
+    },
+    #[serde(rename = "byteAt")]
+    ByteAt {
+        value: Box<Expr>,
+        index: usize,
     },
     Let {
         name: String,
@@ -211,7 +227,10 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             evaluate(body, &local)?
         }
         Expr::AssertThen { condition, body } => {
-            ensure!(evaluate(condition, env)?.boolean()?, "helper assertion failed");
+            ensure!(
+                evaluate(condition, env)?.boolean()?,
+                "helper assertion failed"
+            );
             evaluate(body, env)?
         }
         Expr::Cast { ty, value } => evaluate(value, env)?.cast(&ScalarType::parse(ty)?)?,
@@ -224,6 +243,18 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             .get(name)
             .cloned()
             .ok_or_else(|| anyhow!("unbound reference '{name}'"))?,
+        Expr::ByteAt { value, index } => {
+            let Value::Bytes(bytes) = evaluate(value, env)? else {
+                bail!("byte projection requires bytes")
+            };
+            let byte = bytes
+                .get(*index)
+                .ok_or_else(|| anyhow!("byte index out of range"))?;
+            Value::UInt {
+                number: BigUint::from(*byte),
+                maximum: BigUint::from(255u16),
+            }
+        }
         Expr::Add { left, right } => {
             Value::Native(evaluate(left, env)?.field()? + evaluate(right, env)?.field()?)
         }
@@ -338,15 +369,47 @@ pub enum Instruction {
 
 /// Number of transcript fields in one statically scheduled Impact group.
 /// Inactive guarded writes use only this shape metadata, never their payloads.
-fn impact_field_count(instruction: &Instruction) -> Result<usize> {
+fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
+    let value_fields = |alignment: &str| -> Result<usize> {
+        match alignment {
+            "field" | "bit" => Ok(1),
+            "bytes32" => Ok(2),
+            _ => bail!("unsupported alignment"),
+        }
+    };
     Ok(match instruction {
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } => 1,
         Instruction::Index { key: None, .. } => 4,
-        Instruction::Index { key: Some(_), .. } => 7,
-        Instruction::Push { .. } => 5,
-        Instruction::Popeq { .. } => 4,
+        Instruction::Index {
+            slot, key: Some(_), ..
+        } => {
+            let key_type = map_key_type(plan, *slot)?;
+            6 + value_fields(key_alignment(&key_type))?
+        }
+        Instruction::Push { alignment, .. } => 4 + value_fields(alignment)?,
+        Instruction::Popeq { alignment, .. } => 3 + value_fields(alignment)?,
         Instruction::Guarded { .. } => bail!("nested guarded native operation is unsupported"),
     })
+}
+
+fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
+    let ty = plan
+        .state
+        .get(slot as usize)
+        .and_then(|state| state.kind.get("map"))
+        .and_then(Json::as_array)
+        .and_then(|types| types.first())
+        .and_then(Json::as_str)
+        .ok_or_else(|| anyhow!("invalid map key schema"))?;
+    ScalarType::parse(ty)
+}
+
+fn key_alignment(ty: &ScalarType) -> &'static str {
+    if *ty == ScalarType::Bytes32 {
+        "bytes32"
+    } else {
+        "field"
+    }
 }
 fn inactive_read_value(ty: &str) -> Result<Value> {
     Ok(match ScalarType::parse(ty)? {
@@ -356,6 +419,7 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
             number: BigUint::from(0u8),
             maximum,
         },
+        ScalarType::Bytes32 => Value::Bytes(vec![0; 32]),
     })
 }
 #[derive(Clone, Deserialize)]
@@ -398,6 +462,30 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
             )?,
             maximum,
         }),
+        ScalarType::Bytes32 => {
+            let object = json
+                .as_object()
+                .ok_or_else(|| anyhow!("expected bytes object"))?;
+            ensure!(
+                object.len() == 2 && object.get("kind").and_then(Json::as_str) == Some("bytes"),
+                "invalid bytes object"
+            );
+            let values = object
+                .get("values")
+                .and_then(Json::as_array)
+                .ok_or_else(|| anyhow!("expected bytes array"))?;
+            ensure!(values.len() == 32, "expected 32 bytes");
+            let bytes = values
+                .iter()
+                .map(|value| {
+                    value
+                        .as_u64()
+                        .and_then(|value| u8::try_from(value).ok())
+                        .ok_or_else(|| anyhow!("expected canonical byte integer"))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(Value::Bytes(bytes))
+        }
     }
 }
 pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Environment> {
@@ -496,9 +584,15 @@ fn read_cell(context: &QueryContext<Db>, slot: u32, ty: &str) -> Result<Value> {
             bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
         )),
         ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
+        ScalarType::Bytes32 => bail!("bytes ledger values are unsupported"),
     }
 }
-fn read_map_cell(context: &QueryContext<Db>, slot: u32, key: Fr, ty: &str) -> Result<Value> {
+fn read_map_cell(
+    context: &QueryContext<Db>,
+    slot: u32,
+    key: &AlignedValue,
+    ty: &str,
+) -> Result<Value> {
     let StateValue::Array(array) = context.state.get_ref() else {
         bail!("expected array state")
     };
@@ -508,9 +602,7 @@ fn read_map_cell(context: &QueryContext<Db>, slot: u32, key: Fr, ty: &str) -> Re
     let StateValue::Map(map) = &*map else {
         bail!("expected state map")
     };
-    let value = map
-        .get(&field_value(key))
-        .ok_or_else(|| anyhow!("missing map key"))?;
+    let value = map.get(key).ok_or_else(|| anyhow!("missing map key"))?;
     let StateValue::Cell(value) = &*value else {
         bail!("expected map value cell")
     };
@@ -523,6 +615,7 @@ fn read_map_cell(context: &QueryContext<Db>, slot: u32, key: Fr, ty: &str) -> Re
             bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
         )),
         ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
+        ScalarType::Bytes32 => bail!("bytes ledger values are unsupported"),
     }
 }
 fn advance_native_state_prefix(
@@ -646,7 +739,7 @@ pub fn prepare(
                 activity_schedule.push(if active {
                     None
                 } else {
-                    Some(impact_field_count(operation.as_ref())?)
+                    Some(impact_field_count(operation.as_ref(), plan)?)
                 });
                 if !active {
                     if let Instruction::Popeq {
@@ -704,16 +797,19 @@ pub fn prepare(
             } => {
                 let map_key = key
                     .as_ref()
-                    .map(|key| evaluate(key, &env)?.field())
+                    .map(|key| {
+                        let key_type = map_key_type(plan, *slot)?;
+                        aligned(&evaluate(key, &env)?, key_alignment(&key_type))
+                    })
                     .transpose()?;
                 let mut path = vec![Key::Value(
                     field_value(Fr::from(*slot as u64))
                         .try_into()
                         .map_err(|_| anyhow!("invalid native index key"))?,
                 )];
-                if let Some(key) = map_key {
+                if let Some(key) = map_key.as_ref() {
                     path.push(Key::Value(
-                        field_value(key)
+                        key.clone()
                             .try_into()
                             .map_err(|_| anyhow!("invalid native map key"))?,
                     ));
@@ -784,10 +880,11 @@ pub fn prepare(
                             )?)
                         } else {
                             let (slot, key) = previous_index
+                                .as_ref()
                                 .ok_or_else(|| anyhow!("unsupported state-read shape"))?;
                             match key {
-                                Some(key) => read_map_cell(read_context, slot, key, &read.ty)?,
-                                None => read_cell(read_context, slot, &read.ty)?,
+                                Some(key) => read_map_cell(read_context, *slot, key, &read.ty)?,
+                                None => read_cell(read_context, *slot, &read.ty)?,
                             }
                         };
                         env.insert(name.clone(), value);
@@ -878,7 +975,12 @@ pub fn prepare(
         .iter()
         .filter(|i| i.visibility == "private")
     {
-        aligned(&env[&input.name], "field")?.value_only_field_repr(&mut private_transcript);
+        match &env[&input.name] {
+            Value::Bytes(bytes) => {
+                private_transcript.extend(bytes.iter().map(|byte| Fr::from(*byte as u64)))
+            }
+            value => aligned(value, "field")?.value_only_field_repr(&mut private_transcript),
+        }
     }
     let preimage = ProofPreimage {
         inputs: vec![],
@@ -929,11 +1031,11 @@ pub mod assembly;
 
 /// Scoped host providers and private journal transport.
 pub mod host;
+/// Pure private-state lifecycle model.
+pub mod lifecycle;
 pub mod witness;
 /// Owned source witness execution, native proof and client handoff.
 pub mod witness_execution;
-/// Pure private-state lifecycle model.
-pub mod lifecycle;
 
 #[cfg(all(feature = "zkir-320", feature = "zkir-321"))]
 compile_error!("select exactly one native profile: zkir-320 or zkir-321");
@@ -944,19 +1046,19 @@ pub use zkir_320 as zkir;
 #[cfg(all(feature = "zkir-321", not(feature = "zkir-320")))]
 pub use zkir_321 as zkir;
 pub mod aggregates;
+pub mod native_ffi;
 pub mod profile;
 pub mod proof;
-pub mod native_ffi;
 // Reply constructors live in explicitly selected native host adapters.
-#[cfg_attr(not(feature = "localnet"), allow(dead_code))]
-mod native_client;
-#[cfg(feature = "localnet")]
-pub mod localnet_ffi;
-pub mod funding;
 pub mod client;
 pub mod control;
 pub mod control_ffi;
-#[cfg(feature = "localnet")]
-pub mod localnet;
 #[cfg(all(feature = "localnet", feature = "zkir-321"))]
 pub mod deployment_audit;
+pub mod funding;
+#[cfg(feature = "localnet")]
+pub mod localnet;
+#[cfg(feature = "localnet")]
+pub mod localnet_ffi;
+#[cfg_attr(not(feature = "localnet"), allow(dead_code))]
+mod native_client;

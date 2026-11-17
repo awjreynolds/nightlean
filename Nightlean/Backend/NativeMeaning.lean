@@ -11,6 +11,7 @@ inductive Term where
   | binary (opcode : String) (left right : Term)
   | select (condition yes no : Term)
   | hash (values : List Term)
+  | bytes (values : List Term)
   deriving Repr, Inhabited
 
 /- Structural equality is total so acceptance checks have kernel-visible meaning.
@@ -23,6 +24,7 @@ def Term.equal : Term → Term → Bool
   | .binary a x y, .binary b z w => a == b && Term.equal x z && Term.equal y w
   | .select c x y, .select d z w => Term.equal c d && Term.equal x z && Term.equal y w
   | .hash xs, .hash ys => Term.equalList xs ys
+  | .bytes xs, .bytes ys => Term.equalList xs ys
   | _, _ => false
 termination_by left right => sizeOf left + sizeOf right
 
@@ -40,12 +42,14 @@ theorem Term.equal_iff : (left right : Term) → Term.equal left right = true �
   | .binary a x y, .binary b z w => by simp [Term.equal, Term.equal_iff x z, Term.equal_iff y w, and_assoc]
   | .select c x y, .select d z w => by simp [Term.equal, Term.equal_iff c d, Term.equal_iff x z, Term.equal_iff y w, and_assoc]
   | .hash xs, .hash ys => by simp [Term.equal, Term.equalList_iff xs ys]
-  | .constant _, .input _ | .constant _, .unary .. | .constant _, .binary .. | .constant _, .select .. | .constant _, .hash _
-  | .input _, .constant _ | .input _, .unary .. | .input _, .binary .. | .input _, .select .. | .input _, .hash _
-  | .unary .., .constant _ | .unary .., .input _ | .unary .., .binary .. | .unary .., .select .. | .unary .., .hash _
-  | .binary .., .constant _ | .binary .., .input _ | .binary .., .unary .. | .binary .., .select .. | .binary .., .hash _
-  | .select .., .constant _ | .select .., .input _ | .select .., .unary .. | .select .., .binary .. | .select .., .hash _
-  | .hash _, .constant _ | .hash _, .input _ | .hash _, .unary .. | .hash _, .binary .. | .hash _, .select .. => by simp [Term.equal]
+  | .bytes xs, .bytes ys => by simp [Term.equal, Term.equalList_iff xs ys]
+  | .constant _, .input _ | .constant _, .unary .. | .constant _, .binary .. | .constant _, .select .. | .constant _, .hash _ | .constant _, .bytes _
+  | .input _, .constant _ | .input _, .unary .. | .input _, .binary .. | .input _, .select .. | .input _, .hash _ | .input _, .bytes _
+  | .unary .., .constant _ | .unary .., .input _ | .unary .., .binary .. | .unary .., .select .. | .unary .., .hash _ | .unary .., .bytes _
+  | .binary .., .constant _ | .binary .., .input _ | .binary .., .unary .. | .binary .., .select .. | .binary .., .hash _ | .binary .., .bytes _
+  | .select .., .constant _ | .select .., .input _ | .select .., .unary .. | .select .., .binary .. | .select .., .hash _ | .select .., .bytes _
+  | .hash _, .constant _ | .hash _, .input _ | .hash _, .unary .. | .hash _, .binary .. | .hash _, .select .. | .hash _, .bytes _
+  | .bytes _, .constant _ | .bytes _, .input _ | .bytes _, .unary .. | .bytes _, .binary .. | .bytes _, .select .. | .bytes _, .hash _ => by simp [Term.equal]
 termination_by left right => sizeOf left + sizeOf right
 
 theorem Term.equalList_iff : (left right : List Term) → Term.equalList left right = true ↔ left = right
@@ -72,7 +76,19 @@ private def requireSourceType (ty : Ty) (term : Term) (bounds : List (Term × Na
   {term, bounds := match ty with
     | .native => bounds
     | .bool => bounds ++ [(term, 1)]
-    | .uint maximum => bounds ++ [(term, maximum)]}
+    | .uint maximum => bounds ++ [(term, maximum)]
+    | .bytes _ => bounds}
+
+def packByteTerms : List Term → Term
+  | [] => .constant 0
+  | byte :: rest => .binary "add" byte (.binary "mul" (.constant 256) (packByteTerms rest))
+
+private def bytesFieldTerms (terms : List Term) (index : Nat) : Except String (List Term) := do
+  if terms.length != 32 then throw "Bytes32 source term has wrong byte count"
+  match index with
+  | 0 => pure (terms.drop 31)
+  | 1 => pure (terms.take 31)
+  | _ => throw "Bytes32 field chunk index is out of range"
 
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
   {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
@@ -86,7 +102,8 @@ theorem requireSourceType_eq (ty : Ty) (term : Term) (bounds : List (Term × Nat
       {term, bounds := match ty with
         | .native => bounds
         | .bool => bounds ++ [(term, 1)]
-        | .uint maximum => bounds ++ [(term, maximum)]} := rfl
+        | .uint maximum => bounds ++ [(term, maximum)]
+        | .bytes _ => bounds} := rfl
 
 theorem arithmetic_eq (ty : Ty) (opcode : String) (left right : Normalized) :
     arithmetic ty opcode left right =
@@ -102,6 +119,17 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .native value => pure {term := .constant value}
   | .bool value => pure (requireSourceType .bool (.constant (if value then 1 else 0)) [])
   | .uint maximum value => pure (requireSourceType (.uint maximum) (.constant value) [])
+  | .bytesField value index => do
+    let normalized ← normalize env value
+    let .bytes terms := normalized.term | throw "Bytes32 normalization lost byte identity"
+    let chunk ← bytesFieldTerms terms index
+    let term := packByteTerms chunk
+    pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .bytesAt value index => do
+    let normalized ← normalize env value
+    let .bytes terms := normalized.term | throw "Bytes32 normalization lost byte identity"
+    let some term := terms[index]? | throw "Bytes32 byte index is out of range"
+    pure {term := term, bounds := normalized.bounds ++ [(term, 255)], assertions := normalized.assertions}
   | .ref name => do
     let some term := env.lookup name | throw s!"unbound native source symbol '{name}'"
     pure (requireSourceType ty term [])
@@ -149,6 +177,19 @@ structure InputRequirement where
   activityGuard : Option Term := none
   deriving Repr
 
+def InputRequirement.byte (input : Input) (index : Nat) : InputRequirement :=
+  {identifier := input.nativeIdentifiers[index]!, visibility := input.visibility, ty := .uint 255}
+
+def Input.requirements (input : Input) : List InputRequirement :=
+  match input.ty with
+  | .bytes length => (List.range length).map (InputRequirement.byte input)
+  | _ => [{identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}]
+
+def Input.sourceTerm (input : Input) : Term :=
+  match input.ty with
+  | .bytes _ => .bytes (input.nativeIdentifiers.map Term.input)
+  | _ => .input ("%input_" ++ input.name)
+
 inductive ProducerMode where
   | relation | ledgerCall
   deriving Repr, BEq, DecidableEq
@@ -168,6 +209,6 @@ structure Expected where
   deriving Repr
 
 theorem normalize_disclosure_erasure (env : AliasEnvironment) (span : SourceSpan) (value : Expr ty) :
-    normalize env (.disclose span value) = normalize env value := by rfl
+    normalize env (.disclose span value) = normalize env value := by simp [normalize]
 
 end Nightlean.Backend.Native

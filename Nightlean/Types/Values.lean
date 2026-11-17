@@ -14,6 +14,7 @@ private def typeEncodingSize : CompositeType → Nat
   | .unit => 1
   | .scalar .native | .scalar .bool => 2
   | .scalar (.uint maximum) => 2 + encodedNatSize maximum
+  | .scalar (.bytes length) => 2 + encodedNatSize length
   | .tuple items => 3 + encodedNatSize items.length + (items.map typeEncodingSize).sum
   | .structure id | .enumeration id => 1 + encodedTextSize id
   | .vector length element => 1 + encodedNatSize length + typeEncodingSize element

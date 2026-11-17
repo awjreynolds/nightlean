@@ -359,7 +359,9 @@ private def projectedType (program : Program) (span : SourceSpan)
 
 private def validateResultType (program : Program) (span : SourceSpan) : ResultType → Except Diagnostic Unit
   | .unit => pure ()
-  | .scalar type => liftError span (type.validate {poseidon2 := true})
+  | .scalar type => do
+    if type.isBytes then fail span "byte helpers require a composite bytes type"
+    liftError span (type.validate {poseidon2 := true})
   | .composite type => discard (checkedComposite program span type)
 
 partial def sourceLeafTypes : Types.Layout → List Ty
@@ -763,10 +765,11 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       let lt ← scalar span left.ty
       let rt ← scalar span right.ty
       let result ← liftError span (ScalarPolicy.infer op lt.scalarKind rt.scalarKind)
-      let ty := match result with
-        | .native => Ty.native
-        | .bool => .bool
-        | .uint maximum => .uint maximum
+      let ty ← match result with
+        | .native => pure Ty.native
+        | .bool => pure Ty.bool
+        | .uint maximum => pure (Ty.uint maximum)
+        | .bytes _ => fail span "byte strings do not support scalar arithmetic"
       pure (combine (.scalar ty) [left, right]
         (if op == .sub && lt != .native && rt != .native then [.fallibleCast] else []))
     | .eq left right =>
@@ -1223,11 +1226,12 @@ def projectionSlice (layout : Types.Layout) (projection : Types.Projection) :
       field.2.leafCount)
   | _, _ => throw "aggregate projection kind/type mismatch"
 
-private def nativeOfScalar (value : Scalar) : Expr .native :=
+private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnostic (Expr .native) :=
   match value with
-  | ⟨.native, value⟩ => value
-  | ⟨.bool, value⟩ => .cast .native value
-  | ⟨.uint _, value⟩ => .cast .native value
+  | ⟨.native, value⟩ => pure value
+  | ⟨.bool, value⟩ => pure (.cast .native value)
+  | ⟨.uint _, value⟩ => pure (.cast .native value)
+  | ⟨.bytes _, _⟩ => fail span "byte strings require separate native byte leaves"
 
 private def liftD (value : Except Diagnostic α) : LowerM α := liftM value
 
@@ -1326,8 +1330,9 @@ mutual
         | .composite type => do
           let compiled ← liftD (checkedComposite program span type)
           let state ← get
+          let nativeLeaves ← liftD (leaves.mapM (nativeOfScalar span))
           let checked ← liftD ((Types.checkNativeExpression compiled state.types
-            (leaves.map nativeOfScalar)).mapError fun message => {span, message})
+            nativeLeaves).mapError fun message => {span, message})
           constraints := constraints ++ checked.constraints
           pure (aggregateValue type leaves)
       modify fun state => {state with witnessCalls := state.witnessCalls ++ [{
@@ -1375,7 +1380,7 @@ mutual
             | liftD (fail span "unknown aggregate enum variant")
           let some tag := (components parent).head?
             | liftD (fail span "aggregate enum projection has no tag")
-          pure [Expr.eq (nativeOfScalar tag) (.native variantIndex)]
+          pure [Expr.eq (← liftD (nativeOfScalar span tag)) (.native variantIndex)]
         | _ => liftD (fail span "enum projection requires an enum layout")
       else pure []
       let constraints := parent.constraints ++ projectionConstraints
@@ -1383,7 +1388,7 @@ mutual
       | .unit => pure {unitValue with constraints}
       | .scalar ty =>
         let some selected := values.head? | liftD (fail span "aggregate scalar projection has no leaf")
-        pure {scalarValue (.cast ty (nativeOfScalar selected)) with constraints}
+        pure {scalarValue (.cast ty (← liftD (nativeOfScalar span selected))) with constraints}
       | .composite type => pure (aggregateValue type values constraints)
     | .index value index => do
       let parent ← lowerTerm program scope env span value
@@ -1397,11 +1402,11 @@ mutual
       let bounded := Expr.cast (.uint (length - 1)) indexExpr
       let boundCheck := Expr.eq bounded bounded
       let width := childType.checked.expandedLeaves
-      let parentLeaves := components parent
+      let parentLeaves ← liftD ((components parent).mapM (nativeOfScalar span))
       let selected := (List.range width).map fun leafOffset =>
         ((List.range length).foldr (fun position rest =>
           .select (.eq indexExpr (.native position))
-            ((parentLeaves[position * width + leafOffset]?).map nativeOfScalar |>.getD (.native 0)) rest)
+            ((parentLeaves[position * width + leafOffset]?).getD (.native 0)) rest)
           (.native 0))
       let constraints := parent.constraints ++ indexValue.constraints ++ [boundCheck]
       match resultTypeOfComposite element with
@@ -1565,7 +1570,7 @@ def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : S
     let compiled ← checkedComposite program entry.span type
     unless body.components.length == compiled.checked.expandedLeaves do
       fail entry.span "aggregate helper result leaf count mismatch"
-    let leaves := body.components.map nativeOfScalar
+    let leaves ← body.components.mapM (nativeOfScalar entry.span)
     let checked ← liftError entry.span ((Types.checkNativeExpression compiled lowering.types leaves).mapError id)
     outputConstraints := checked.constraints
   let circuit : Circuit := {
@@ -1606,7 +1611,7 @@ private def traceScalar (span : SourceSpan) (value : TraceValue) : TraceM Scalar
 private def traceType : TraceValue → ResultType
   | none => .unit
   | some value => .scalar (match value.kind with
-    | .native => .native | .bool => .bool | .uint m => .uint m)
+    | .native => .native | .bool => .bool | .uint m => .uint m | .bytes length => .bytes length)
 
 private def traceCast (span : SourceSpan) (value : TraceValue) (ty : ResultType) : TraceM TraceValue := do
   match ty with

@@ -12,12 +12,17 @@ private def typeName : Ty → String
   | .native => "Native"
   | .bool => "Bool"
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
+  | .bytes length => s!"Bytes<{length}>"
 
 private def expressionJson : Expr ty → Json
   | .native n => Json.mkObj [("native", toJson (toString n))]
   | .bool b => Json.mkObj [("bool", toJson b)]
   | .uint maximum value => Json.mkObj [("uint", Json.mkObj [
       ("maximum", toJson (toString maximum)), ("value", toJson (toString value))])]
+  | .bytesField value index => Json.mkObj [("bytesField", Json.mkObj [
+      ("value", expressionJson value), ("index", toJson index)])]
+  | .bytesAt value index => Json.mkObj [("byteAt", Json.mkObj [
+      ("value", expressionJson value), ("index", toJson index)])]
   | .ref name => Json.mkObj [("ref", toJson name)]
   | .add a b => Json.mkObj [("add", toJson [expressionJson a, expressionJson b])]
   | .mul a b => Json.mkObj [("mul", toJson [expressionJson a, expressionJson b])]
@@ -43,6 +48,10 @@ private def nativeExpressionJson : Expr ty → Json
   | .bool b => Json.mkObj [("tag", toJson ("bool" : String)), ("value", toJson b)]
   | .uint maximum value => Json.mkObj [("tag", toJson ("uint" : String)),
       ("maximum", toJson (toString maximum)), ("value", toJson (toString value))]
+  | .bytesField value index => Json.mkObj [("tag", toJson ("bytesField" : String)),
+      ("value", nativeExpressionJson value), ("index", toJson index)]
+  | .bytesAt value index => Json.mkObj [("tag", toJson ("byteAt" : String)),
+      ("value", nativeExpressionJson value), ("index", toJson index)]
   | .ref name => Json.mkObj [("tag", toJson ("reference" : String)), ("name", toJson name)]
   | .add a b => binary "add" (nativeExpressionJson a) (nativeExpressionJson b)
   | .mul a b => binary "mul" (nativeExpressionJson a) (nativeExpressionJson b)
@@ -74,6 +83,14 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   | .field expression => [("alignment", toJson ("field" : String)), ("expression", nativeExpressionJson expression)]
   | .bit b => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson (.bool b))]
   | .bitExpr expression => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson expression)]
+  | .bytes32 expression => [("alignment", toJson ("bytes32" : String)), ("expression", nativeExpressionJson expression)]
+
+private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
+  match value with
+  | .field expression => nativeExpressionJson expression
+  | .bit value => nativeExpressionJson (.bool value)
+  | .bitExpr expression => nativeExpressionJson expression
+  | .bytes32 expression => nativeExpressionJson expression
 
 private def operationJsonBare : Backend.Impact.Op → Json
   | .dup => Json.mkObj [("op", toJson ("dup" : String))]
@@ -81,7 +98,7 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("slot", toJson slot), ("pushPath", toJson pushPath)]
   | .mapIndex slot key => Json.mkObj [("op", toJson ("index" : String)),
       ("slot", toJson slot), ("pushPath", toJson Bool.false),
-      ("key", nativeExpressionJson key)]
+      ("key", alignedExpressionJson key)]
   | .push value storage => Json.mkObj ([("op", toJson ("push" : String)), ("storage", toJson storage)] ++ alignedJson value)
   | .popeq value => Json.mkObj ([("op", toJson ("popeq" : String))] ++ alignedJson value)
   | .member => Json.mkObj [("op", toJson ("member" : String))]

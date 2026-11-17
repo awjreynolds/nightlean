@@ -34,7 +34,9 @@ jobs:
         run: lake build noctium Nightlean.Compiler
       - name: Check source contract examples
         run: |
+          lake env lean examples/PrivateClaim.lean
           lake env lean tests/Issue68MapReads.lean
+          lake env lean tests/Issue69Bytes32Map.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean
           lake env lean tests/Issue43MapMembership.lean

@@ -63,6 +63,8 @@ private def reorderedEnvironment : CompositeEnv := {
 #guard ((layoutResult nestedEnvironment (.structure "Fixture.Outer")).map Layout.leafCount == some 8)
 #guard ((layoutResult nestedEnvironment (.vector 4 (.scalar .native))).map Layout.leafCount == some 4)
 #guard ((layoutResult nestedEnvironment (.bytes 16)).map Layout.leafCount == some 16)
+#guard ((layoutResult nestedEnvironment (.bytes 32)).map Layout.leafCount == some 32)
+#guard isError (layout defaultLimits nestedEnvironment (.scalar (.bytes 32)))
 #guard ((layoutResult nestedEnvironment .unit).map Layout.leafCount == some 0)
 #guard ((layoutResult nestedEnvironment (.bytes 0)).map Layout.leafCount == some 0)
 

@@ -37,12 +37,14 @@ pub enum ScalarType {
     Native,
     Bool,
     UInt(BigUint),
+    Bytes32,
 }
 impl ScalarType {
     pub fn parse(text: &str) -> Result<Self> {
         match text {
             "Native" => Ok(Self::Native),
             "Bool" => Ok(Self::Bool),
+            "Bytes<32>" => Ok(Self::Bytes32),
             _ => {
                 let bound = text
                     .strip_prefix("UIntRange<")
@@ -73,6 +75,7 @@ impl Value {
             Self::Native(_) => ScalarType::Native,
             Self::Bool(_) => ScalarType::Bool,
             Self::UInt { maximum, .. } => ScalarType::UInt(maximum.clone()),
+            Self::Bytes(_) => ScalarType::Bytes32,
         }
     }
     pub fn validate(&self) -> Result<()> {
@@ -80,19 +83,30 @@ impl Value {
         if let Self::UInt { number, maximum } = self {
             ensure!(number <= maximum, "unsigned value outside declared type");
         }
+        if let Self::Bytes(bytes) = self {
+            ensure!(bytes.len() == 32, "expected 32 bytes");
+        }
         Ok(())
     }
-    fn number(&self) -> BigUint {
-        match self {
+    fn number(&self) -> Result<BigUint> {
+        Ok(match self {
             Self::Native(n) => BigUint::from_bytes_le(&n.as_le_bytes()),
             Self::Bool(b) => BigUint::from(u8::from(*b)),
             Self::UInt { number, .. } => number.clone(),
-        }
+            Self::Bytes(_) => bail!("bytes have no numeric scalar encoding"),
+        })
     }
     pub fn cast(&self, target: &ScalarType) -> Result<Self> {
         self.validate()?;
         target.validate()?;
-        let number = self.number();
+        if let Self::Bytes(_) = self {
+            ensure!(
+                *target == ScalarType::Bytes32,
+                "bytes cannot be cast to a scalar"
+            );
+            return Ok(self.clone());
+        }
+        let number = self.number()?;
         let result = match target {
             ScalarType::Native => Self::Native(canonical_field(&number.to_str_radix(10))?),
             ScalarType::Bool => Self::Bool(number != BigUint::from(0u8)),
@@ -100,19 +114,21 @@ impl Value {
                 number,
                 maximum: maximum.clone(),
             },
+            ScalarType::Bytes32 => bail!("scalars cannot be cast to bytes"),
         };
         result.validate()?;
         Ok(result)
     }
     pub(crate) fn field_encoding(&self) -> Result<transient_crypto::curve::Fr> {
         self.validate()?;
-        canonical_field(&self.number().to_str_radix(10))
+        canonical_field(&self.number()?.to_str_radix(10))
     }
     pub fn public_json(&self) -> serde_json::Value {
         match self {
             Self::Native(n) => serde_json::Value::String(crate::field_decimal(*n)),
             Self::Bool(b) => serde_json::Value::Bool(*b),
             Self::UInt { number, .. } => serde_json::Value::String(number.to_str_radix(10)),
+            Self::Bytes(bytes) => serde_json::json!({"kind":"bytes","values":bytes}),
         }
     }
 }

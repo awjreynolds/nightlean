@@ -8,11 +8,12 @@ structure ScalarExpression where
   value : Expr type
   deriving Repr
 
-def ScalarExpression.native (value : ScalarExpression) : Expr .native :=
+def ScalarExpression.native (value : ScalarExpression) : Except String (Expr .native) :=
   match value with
-  | ⟨.native, value⟩ => value
-  | ⟨.bool, value⟩ => .cast .native value
-  | ⟨.uint _, value⟩ => .cast .native value
+  | ⟨.native, value⟩ => pure value
+  | ⟨.bool, value⟩ => pure (.cast .native value)
+  | ⟨.uint _, value⟩ => pure (.cast .native value)
+  | ⟨.bytes _, _⟩ => throw "byte strings require an aggregate bytes expression"
 
 inductive AggregateExpression where
   | unit
@@ -31,6 +32,7 @@ private def scalarExpression (type : Ty) (number : Nat) : Except String ScalarEx
   | .native => pure ⟨.native, .native number⟩
   | .bool => pure ⟨.bool, .bool (number == 1)⟩
   | .uint maximum => pure ⟨.uint maximum, .uint maximum number⟩
+  | .bytes _ => throw "byte strings require an aggregate bytes expression"
 
 private def literalAux : Nat → AggregateValue → Except String AggregateExpression
   | 0, _ => throw "aggregate literal traversal exhausted checked fuel"
@@ -112,6 +114,7 @@ private def evalAux (context : EvalContext) (environment : EvalEnv) : Nat → Ag
         | ⟨.native, value⟩ => value.eval context environment
         | ⟨.bool, value⟩ => pure (if ← value.eval context environment then 1 else 0)
         | ⟨.uint maximum, expression⟩ => @Nightlean.Expr.eval (.uint maximum) context environment expression
+        | ⟨.bytes _, _⟩ => throw "byte strings require an aggregate bytes expression"
       pure (.scalar value.type number)
     | .tuple values => pure (.tuple (← values.mapM (evalAux context environment fuel)))
     | .structure id fields => pure (.structure id (← fields.mapM fun (name, value) => do pure (name, ← evalAux context environment fuel value)))

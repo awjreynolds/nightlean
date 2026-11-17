@@ -38,6 +38,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .uint maximum value =>
     if maximum ≤ ScalarPolicy.maxUint && value ≤ maximum then pure ()
     else throw "noncanonical unsigned constant"
+  | .bytesField value _ | .bytesAt value _ => checkConstants value
   | .add a b | .mul a b | .sub a b | .eq a b
   | .uadd a b | .usub a b | .umul a b => do checkConstants a; checkConstants b
   | .cast _ value => checkConstants value
@@ -74,11 +75,18 @@ structure LowerState where
   instructions : Array Json := #[]
   expressions : List (ExpressionKey × String) := []
   aliases : List (String × String) := []
+  byteAliases : List (String × List String) := []
 
 private abbrev LowerM := StateM LowerState
 
 def emit (op : String) (fields : List (String × Json)) : LowerM Unit :=
   modify fun s => { s with instructions := s.instructions.push (instruction op fields) }
+
+/-- Keep the state-only lowering monad total while ensuring rejected source
+shapes still fail the mandatory native validator. -/
+-- shortcut: replace validator poison with typed lowering errors when extending byte expressions.
+private def rejectLowering (message : String) : LowerM Unit :=
+  emit "nightlean_invalid_lowering" [("message", toJson message)]
 
 def fresh : LowerM String := do
   let s ← get
@@ -120,13 +128,82 @@ def constrainType (ty : Ty) (value : String) : LowerM Unit :=
   | .native => pure ()
   | .bool => emit "constrain_to_boolean" [("val", toJson value)]
   | .uint maximum => constrainUnsigned maximum value
+  | .bytes _ => rejectLowering "Bytes32 must be expanded into byte inputs"
+
+private def lowerBytes : Expr (.bytes length) → LowerM (List String)
+  | .ref name => do
+    match (← get).byteAliases.lookup name with
+    | some values => pure values
+    | none =>
+      rejectLowering s!"unbound Bytes32 source symbol '{name}'"
+      pure []
+  | .disclose _ value => lowerBytes value
+  | @Expr.letE (.bytes _) _ name value body => do
+    let values ← lowerBytes value
+    let aliases := (← get).byteAliases
+    modify fun state => {state with byteAliases := (name, values) :: aliases}
+    let result ← lowerBytes body
+    modify fun state => {state with byteAliases := aliases}
+    pure result
+  | @Expr.letE _ _ _ _ body => lowerBytes body
+  | .assertE _ _ => do
+    rejectLowering "assertE cannot produce Bytes32 in native lowering"
+    pure []
+  | _ => do
+    rejectLowering "unsupported Bytes32 expression in native lowering"
+    pure []
+
+private def packBytes : List String → LowerM String
+  | [] => pure "0x00"
+  | byte :: rest => do
+    let suffix ← packBytes rest
+    let scaled ← binary "mul" "0x0001" suffix
+    binary "add" byte scaled
+
+private def lowerByteInput (input : Input) : LowerM Unit := do
+  match input.ty with
+  | .bytes _ =>
+    let identifiers := input.nativeIdentifiers
+    for output in identifiers do
+      emit (if input.visibility == .«public» then "public_input" else "private_input")
+        [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+      constrainUnsigned 255 output
+    modify fun state => {state with byteAliases := (input.name, identifiers) :: state.byteAliases}
+  | _ =>
+    let output := input.nativeIdentifiers.head!
+    emit (if input.visibility == .«public» then "public_input" else "private_input")
+      [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+    constrainType input.ty output
 
 /-- All bools use constrained Native 0/1 values, matching test_eq's result type. -/
 def lowerExpr : Expr ty → LowerM String
   | .native n => pure (fieldImmediate n)
   | .uint _ n => pure (fieldImmediate n)
   | .bool b => pure (if b then "0x01" else "0x00")
-  | .ref name => do pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
+  | .ref name => do
+    match ty with
+    | .bytes _ => do
+      rejectLowering "Bytes32 cannot be used as a scalar expression"
+      pure "0x00"
+    | _ => pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
+  | .bytesField value index => do
+    let values ← lowerBytes value
+    unless values.length == 32 do rejectLowering "Bytes32 source has wrong byte count"
+    let chunk ← match index with
+      | 0 => pure (values.drop 31)
+      | 1 => pure (values.take 31)
+      | _ => do
+        rejectLowering "Bytes32 field chunk index is out of range"
+        pure []
+    packBytes chunk
+  | .bytesAt value index => do
+    let values ← lowerBytes value
+    unless values.length == 32 do rejectLowering "Bytes32 source has wrong byte count"
+    match values[index]? with
+    | some byte => pure byte
+    | none =>
+      rejectLowering "Bytes32 byte index is out of range"
+      pure "0x00"
   | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
   | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
   | .sub a b => do binary "add" (← lowerExpr a) (← unary "neg" (← lowerExpr b))
@@ -152,6 +229,9 @@ def lowerExpr : Expr ty → LowerM String
     | .uint maximum => do
       constrainUnsigned maximum output
       pure output
+    | .bytes _ => do
+      rejectLowering "byte strings do not support scalar casts"
+      pure "0x00"
   | .letE name value body => do
     let value ← lowerExpr value
     let aliases := (← get).aliases
@@ -193,11 +273,9 @@ def bindPublicGuarded (guard : Expr .bool) (values : List String) : LowerM Unit 
 
 def lowerBody (c : Circuit) : LowerM Unit := do
   for input in c.inputs do
-    let output := "%input_" ++ input.name
-    emit (if input.visibility == .«public» then "public_input" else "private_input")
-      [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
-    constrainType input.ty output
-    if input.visibility == .«public» then bindPublic [output]
+    lowerByteInput input
+    if input.visibility == .«public» then
+      for output in input.nativeIdentifiers do bindPublic [output]
   for condition in c.constraints do
     let value ← lowerExpr condition
     emit "assert" [("cond", toJson value)]
@@ -265,10 +343,7 @@ theorem lowerCircuit_instructions (circuit : Circuit) (program : Json)
 
 def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
   for input in entry.circuit.inputs do
-    let output := "%input_" ++ input.name
-    emit (if input.visibility == .«public» then "public_input" else "private_input")
-      [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
-    constrainType input.ty output
+    lowerByteInput input
   for condition in entry.circuit.constraints do
     emit "assert" [("cond", toJson (← lowerExpr condition))]
   for output in entry.circuit.outputs do
@@ -276,7 +351,7 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
     modify fun s => {s with aliases := (output.name, value) :: s.aliases}
   -- Public parameters were read above in declaration order. Remaining reads
   -- come from ledger cells and the VM membership result in transcript order.
-  let publicCount := (entry.circuit.inputs.filter (·.visibility == .«public»)).length
+  let publicCount := Impact.publicInputReadCount entry.circuit.inputs
   for read in plan.reads.drop publicCount do
     let output := "%input_" ++ read.name
     let activity ← match read.guard with

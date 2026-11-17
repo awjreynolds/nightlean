@@ -240,10 +240,11 @@ structure CheckedLayout (limits : Limits) where
   layoutNodeBound : layoutNodes ≤ limits.maxLayoutNodes
   deriving Repr
 
-def scalarLeaf : Ty → ScalarLeaf
-  | .native => .nativeField
-  | .bool => .booleanField
-  | .uint maximum => .boundedUnsignedField maximum
+def scalarLeaf : Ty → Except String ScalarLeaf
+  | .native => pure .nativeField
+  | .bool => pure .booleanField
+  | .uint maximum => pure (.boundedUnsignedField maximum)
+  | .bytes _ => .error "byte strings require a composite bytes layout"
 
 mutual
   inductive CompositeSubtype : CompositeType → CompositeType → Prop where
@@ -477,6 +478,7 @@ private def measureType (fuel : Nat) (limits : Limits) (environment : CompositeE
   | fuel + 1 => match type with
     | .unit => checkedMeasure limits span 0 1 1
     | .scalar ty => do
+      if ty.isBytes then throw {span, message := "byte strings require a composite bytes layout"}
       match ty.validate {} with
       | .ok _ => pure ()
       | .error message => throw {span, message}
@@ -551,7 +553,9 @@ private def layoutType (fuel : Nat) (limits : Limits) (environment : CompositeEn
       match ty.validate {} with
       | .ok _ => pure ()
       | .error message => throw {span, message}
-      return .scalar (scalarLeaf ty)
+      match scalarLeaf ty with
+      | .ok leaf => return .scalar leaf
+      | .error message => throw {span, message}
     | .tuple items => .tuple <$> items.mapM (layoutType fuel limits environment stack span)
     | .structure id => do
       if stack.contains id then throw {span, message := s!"recursive composite layout involving '{id}' is unsupported"}
@@ -628,6 +632,7 @@ private def encodeScalar : Ty → String
   | .native => "N"
   | .bool => "B"
   | .uint maximum => "U" ++ encodeNat maximum
+  | .bytes length => "X" ++ encodeNat length
 
 mutual
   private def encodeType : CompositeType → String

@@ -39,6 +39,7 @@ def checkSink (sink : Sink) (payload : Origins) (control : Origins := []) : Exce
 origins. Missing references fail closed instead of becoming public values. -/
 def origins (env : Environment) : Expr ty → Except String Origins
   | .native _ | .bool _ | .uint _ _ => pure []
+  | .bytesField value _ | .bytesAt value _ => origins env value
   | .ref name => match env.lookup name with
     | some result => pure result
     | none => .error s!"missing disclosure origin rule for reference '{name}'"

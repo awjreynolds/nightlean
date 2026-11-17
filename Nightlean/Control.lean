@@ -25,7 +25,7 @@ private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
   | .composite _ => fail span "aggregate control values are unavailable"
 
 private def fromKind : ScalarPolicy.Kind → Ty
-  | .native => .native | .bool => .bool | .uint m => .uint m
+  | .native => .native | .bool => .bool | .uint m => .uint m | .bytes length => .bytes length
 
 private def declaration (program : Program) (id : DeclarationId) (span : SourceSpan) : Except Diagnostic Helpers.Declaration :=
   match program.declarations.find? (·.id == id) with
@@ -237,6 +237,7 @@ private def typeName : ResultType → String
   | .scalar .native => "Native"
   | .scalar .bool => "Bool"
   | .scalar (.uint maximum) => s!"UIntRange<{maximum + 1}>"
+  | .scalar (.bytes length) => s!"Bytes<{length}>"
   | .composite _ => "Aggregate"
 
 private def idName (id : DeclarationId) : String := s!"s{id.scope}d{id.ordinal}"

@@ -243,6 +243,7 @@ private def canonicalType : Types.CompositeType → String
   | .scalar .native => "native"
   | .scalar .bool => "bool"
   | .scalar (.uint maximum) => s!"uint({maximum})"
+  | .scalar (.bytes length) => s!"scalar-bytes({length})"
   | .tuple items => s!"tuple({String.intercalate "," (items.map canonicalType)})"
   | .structure id => s!"struct({id})"
   | .enumeration id => s!"enum({id})"
@@ -254,6 +255,7 @@ private def canonicalTypeSize : Types.CompositeType → Nat
   | .scalar .native => 6
   | .scalar .bool => 4
   | .scalar (.uint maximum) => 6 + (toString maximum).length
+  | .scalar (.bytes length) => 14 + (toString length).length
   | .tuple items => 7 + (if items.isEmpty then 0 else items.length - 1) +
       items.foldl (fun size item => size + canonicalTypeSize item) 0
   | .structure id => 8 + id.utf8ByteSize
@@ -1048,6 +1050,7 @@ private def signatureType : Types.CompositeType → SignatureType
   | .scalar .native => .native
   | .scalar .bool => .bool
   | .scalar (.uint maximum) => .uint (toString maximum)
+  | .scalar (.bytes length) => .bytes (toString length)
   | .tuple items => .tuple (items.map signatureType)
   | .structure id => .structure id
   | .enumeration id => .enumeration id
@@ -1059,6 +1062,7 @@ private def signatureResult : Helpers.ResultType → SignatureType
   | .scalar .native => .native
   | .scalar .bool => .bool
   | .scalar (.uint maximum) => .uint (toString maximum)
+  | .scalar (.bytes length) => .bytes (toString length)
   | .composite value => signatureType value
 
 private def signatureArgument : SpecializationArgument → SignatureArgument

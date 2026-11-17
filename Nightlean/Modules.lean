@@ -299,6 +299,7 @@ private partial def canonicalTypeSize (fuel : Nat) (value : Types.CompositeType)
     | .scalar .native => some 3
     | .scalar .bool => some 3
     | .scalar (.uint maximum) => some (2 + natSize maximum)
+    | .scalar (.bytes length) => some (2 + natSize length)
     | .tuple items => do
       let sizes ← items.mapM (canonicalTypeSize fuel)
       pure (3 + natSize items.length + sizes.foldl (· + ·) 0)
@@ -328,6 +329,7 @@ private partial def consumeTypeNodes (span : SourceSpan) (remaining : Nat)
   | .scalar (.uint maximum) => do
     if maximum > ScalarPolicy.maxUint then resource span "module unsigned type bound"
     pure remaining
+  | .scalar (.bytes _) => fail span "module byte types require a composite bytes layout"
   | .scalar .native | .scalar .bool | .unit => pure remaining
 
 private def encodeType : Types.CompositeType → String
@@ -335,6 +337,7 @@ private def encodeType : Types.CompositeType → String
   | .scalar .native => "sn;"
   | .scalar .bool => "sb;"
   | .scalar (.uint maximum) => "su" ++ encodeNat maximum
+  | .scalar (.bytes length) => "sx" ++ encodeNat length
   | .tuple items => "t" ++ encodeNat items.length ++ "[" ++ String.join (items.map encodeType) ++ "]"
   | .structure id => "r" ++ encodeText id
   | .enumeration id => "e" ++ encodeText id
@@ -623,6 +626,7 @@ private def resolveStateScalar (limits : Limits) (span : SourceSpan)
         match ScalarPolicy.validate (.uint maximum) with
         | .ok _ => pure (.uint maximum)
         | .error message => fail span message
+      | .bytes _ => fail span "module byte state parameters require a composite bytes type"
     | _ => fail span s!"Noctium ledger state parameter '{name}' must specialize to a scalar; aggregate ledger state is not supported"
 
 private def resolveModuleStateKind (limits : Limits) (span : SourceSpan)
@@ -1037,6 +1041,7 @@ private partial def genericTypeOfConcrete : Types.CompositeType → GenericType
   | .scalar .native => .native
   | .scalar .bool => .bool
   | .scalar (.uint maximum) => .uint (.literal maximum)
+  | .scalar (.bytes length) => .bytes (.literal length)
   | .tuple items => .tuple (items.map genericTypeOfConcrete)
   | .structure id => .structure id []
   | .enumeration id => .enumeration id

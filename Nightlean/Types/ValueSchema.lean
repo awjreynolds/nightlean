@@ -88,6 +88,7 @@ private def valueJsonAux : Nat → AggregateValue → Except String Json
     | .scalar .bool value => pure (Json.mkObj [("kind", toJson ("bool" : String)), ("value", toJson (value == 1))])
     | .scalar (.uint maximum) value => pure (Json.mkObj [("kind", toJson ("uint" : String)),
         ("maximum", toJson (toString maximum)), ("value", toJson (toString value))])
+    | .scalar (.bytes _) _ => throw "byte strings require an aggregate bytes value"
     | .tuple items => pure (Json.mkObj [("kind", toJson ("tuple" : String)), ("items", toJson (← items.mapM (valueJsonAux fuel)))])
     | .structure id fields =>
       let fields ← fields.mapM fun (name, value) => do

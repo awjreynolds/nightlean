@@ -6,23 +6,28 @@ abbrev Ty.Denote : Ty → Type
   | .native => Nat
   | .bool => Bool
   | .uint _ => Nat
+  | .bytes _ => List Nat
 
 inductive Value where
   | native (value : Nat)
   | bool (value : Bool)
   | uint (maximum value : Nat)
+  | bytes (length : Nat) (value : List Nat)
   deriving Repr, BEq, DecidableEq
 
 def Value.as : (ty : Ty) → Value → Option ty.Denote
   | .native, .native n => some n
   | .bool, .bool b => some b
   | .uint maximum, .uint found n => if maximum == found then some n else none
+  | .bytes length, .bytes found values =>
+    if length == found && values.length == length && values.all (· ≤ 255) then some values else none
   | _, _ => none
 
 def Value.pack : (ty : Ty) → ty.Denote → Value
   | .native, n => .native n
   | .bool, b => .bool b
   | .uint maximum, n => .uint maximum n
+  | .bytes length, values => .bytes length values
 
 abbrev EvalEnv := List (String × Value)
 
@@ -36,23 +41,27 @@ private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
   | .bool, a, b => a == b
   | .uint _, a, b => a == b
+  | .bytes _, a, b => a == b
 
 private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   match ty with
   | .native => v < ctx.modulus
   | .bool => true
   | .uint maximum => maximum ≤ ScalarPolicy.maxUint && v ≤ maximum && v < ctx.modulus
+  | .bytes length => v.length == length && v.all (· ≤ 255)
 
 /-- Public reduction equation for input-admission and preservation proofs. -/
 theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
     canonical ctx ty value = match ty with
       | .native => value < ctx.modulus
       | .bool => true
-      | .uint maximum => maximum ≤ ScalarPolicy.maxUint && value ≤ maximum && value < ctx.modulus := rfl
+      | .uint maximum => maximum ≤ ScalarPolicy.maxUint && value ≤ maximum && value < ctx.modulus
+      | .bytes length => value.length == length && value.all (· ≤ 255) := rfl
 
 private def scalarNumber : (ty : Ty) → ty.Denote → Nat
   | .native, n | .uint _, n => n
   | .bool, b => if b then 1 else 0
+  | .bytes _, _ => 0
 
 private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except String target.Denote :=
   match target with
@@ -61,6 +70,21 @@ private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except
   | .uint maximum =>
     if maximum ≤ ScalarPolicy.maxUint && number ≤ maximum && number < ctx.modulus then pure number
     else .error "scalar conversion exceeds unsigned bound"
+  | .bytes _ => .error "byte strings do not support scalar conversion"
+
+/-- Pinned native Bytes field packing: little-endian bytes within each
+FR_BYTES_STORED-sized chunk, with the chunk sequence reversed. For Bytes32 the
+two chunks are byte 31 first, followed by bytes 0 through 30. -/
+private def bytesFieldChunk (length chunkIndex : Nat) (values : List Nat) : Nat := Id.run do
+  let chunks := (length + 30) / 31
+  let rawIndex := chunks - 1 - chunkIndex
+  let start := rawIndex * 31
+  let size := min 31 (length - start)
+  let part := values.drop start |>.take size
+  let mut result := 0
+  for (value, index) in part.zipIdx do
+    result := result + value * 256 ^ index
+  return result
 
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/
@@ -69,6 +93,15 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
   | .bool b => .ok b
   | .uint maximum n =>
     if canonical ctx (.uint maximum) n then pure n else .error "noncanonical unsigned constant"
+  | .bytesField (length := length) value index => do
+    let values ← value.eval ctx env
+    let result := bytesFieldChunk length index values
+    if result < ctx.modulus then pure result else .error "noncanonical packed byte field"
+  | .bytesAt value index => do
+    let values ← value.eval ctx env
+    match values[index]? with
+    | some byte => if byte ≤ 255 then pure byte else .error "noncanonical Bytes32 byte"
+    | none => .error "Bytes32 byte index is out of range"
   | .ref name => do
     let some raw := env.lookup name | throw s!"missing value '{name}'"
     let some value := raw.as ty | throw s!"value type mismatch for '{name}'"
@@ -95,6 +128,7 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if a < b then throw "unsigned subtraction underflow"
     scalarCast ctx (.uint m) (a - b)
   | .cast (source := source) target value => do
+    if target.isBytes || source.isBytes then throw "byte strings do not support scalar conversion"
     scalarCast ctx target (scalarNumber source (← value.eval ctx env))
   | .letE (source := source) name value body => do
     let value ← value.eval ctx env
@@ -270,12 +304,14 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
             | .native => 0
             | .bool => false
             | .uint _ => 0
+            | .bytes length => List.replicate length 0
           env := (destination, Value.pack ty zero) :: env
         | .readMap _ destination _ ty _ =>
           let zero : ty.Denote := match ty with
             | .native => 0
             | .bool => false
             | .uint _ => 0
+            | .bytes length => List.replicate length 0
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env

@@ -9,6 +9,7 @@ inductive Kind where
   | bool
   | native
   | uint (maximum : Nat)
+  | bytes (length : Nat)
   deriving Repr, BEq, DecidableEq
 
 inductive Binary where
@@ -22,6 +23,7 @@ def validate : Kind → Except String Unit
   | .bool | .native => pure ()
   | .uint maximum =>
     if maximum ≤ maxUint then pure () else .error "unsigned type exceeds target maximum"
+  | .bytes _ => .error "byte strings are not scalar values"
 
 def sized (bits : Nat) : Except String Kind :=
   if bits ≤ maxBits then .ok (.uint (2 ^ bits - 1))
@@ -37,6 +39,7 @@ def accepts : Kind → Nat → Bool
   | .bool, value => value ≤ 1
   | .native, value => value < Field.modulus
   | .uint maximum, value => maximum ≤ maxUint && value ≤ maximum
+  | .bytes _, _ => false
 
 def infer (op : Binary) (left right : Kind) : Except String Kind := do
   validate left
@@ -52,6 +55,7 @@ def infer (op : Binary) (left right : Kind) : Except String Kind := do
     let result := Kind.uint maximum
     validate result
     return result
+  | .bytes _, _ | _, .bytes _ => throw "byte strings do not support scalar arithmetic"
 
 structure Value where
   kind : Kind
@@ -80,6 +84,7 @@ def evaluate (op : Binary) (left right : Value) : Except String Value := do
       | .mul => pure (a * b)
       | .sub =>
         if b ≤ a then pure (a - b) else throw "unsigned subtraction underflow"
+    | .bytes _ => throw "byte strings do not support scalar arithmetic"
   let value := { kind := result, number : Value }
   value.validate
   return value

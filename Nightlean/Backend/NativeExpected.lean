@@ -9,6 +9,9 @@ private def inputRequirement (input : Input) : InputRequirement :=
 private def inputAliases (inputs : List InputRequirement) : AliasEnvironment :=
   inputs.map fun input => (input.identifier.drop 7 |>.toString, .input input.identifier)
 
+private def sourceInputAliases (inputs : List Input) : AliasEnvironment :=
+  inputs.map fun input => (input.name, Input.sourceTerm input)
+
 private def convert (span : SourceSpan) (result : Except String α) : Except Diagnostic α :=
   match result with
   | .ok value => .ok value
@@ -44,6 +47,9 @@ theorem inputAliases_source (inputs : List Input) :
     rfl
   simp [inputAliases, inputRequirement, List.map_map, strip]
 
+theorem sourceInputAliases_source (inputs : List Input) :
+    sourceInputAliases inputs = inputs.map (fun input => (input.name, Input.sourceTerm input)) := rfl
+
 theorem convert_ok (span : SourceSpan) (result : Except String α) (value : α) :
     convert span result = .ok value ↔ result = .ok value := by
   cases result <;> simp [convert]
@@ -73,13 +79,14 @@ def collectOperations (span : SourceSpan) (aliases : AliasEnvironment)
 def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
   value.validate {poseidon2 := true}
   Disclosure.circuit value
-  let inputs := value.inputs.map inputRequirement
-  let aliases := inputAliases inputs
+  let inputs := value.inputs.flatMap Input.requirements
+  let aliases := sourceInputAliases value.inputs
   let (_, constraints, _) ← convert value.span (collect aliases value.constraints)
   let conditions ← convert value.span (value.constraints.mapM (normalize aliases))
   let outputs ← value.outputs.mapM fun output => convert output.span (normalize aliases output.value)
   let returns := outputs.map (·.term)
-  let groups := (inputs.filter (·.visibility == .«public»)).map (fun input => [.input input.identifier])
+  let groups := (value.inputs.filter (·.visibility == .«public»)).flatMap fun input =>
+    input.nativeIdentifiers.map fun identifier => [.input identifier]
   pure {
     mode := .relation
     inputs := inputs
@@ -95,11 +102,12 @@ producer's alleged group count or supplied payload list. Impact layout and its
 native ledger interpretation remain separately tested/proved obligations. -/
 def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Diagnostic Expected := do
   let plan ← Impact.lower state value
-  let publicCount := (value.circuit.inputs.filter (·.visibility == .«public»)).length
-  let mut inputs := value.circuit.inputs.map inputRequirement ++
-    (plan.reads.drop publicCount).map fun read =>
-      {identifier := "%input_" ++ read.name, visibility := .«public», ty := read.ty}
-  let mut aliases := inputAliases inputs
+  let publicCount := Impact.publicInputReadCount value.circuit.inputs
+  let circuitInputs := value.circuit.inputs.flatMap Input.requirements
+  let readInputs := (plan.reads.drop publicCount).map fun read =>
+      ({identifier := "%input_" ++ read.name, visibility := .«public», ty := read.ty} : InputRequirement)
+  let mut inputs := circuitInputs ++ readInputs
+  let mut aliases := sourceInputAliases value.circuit.inputs ++ inputAliases readInputs
   let mut outputBounds := []
   let mut outputAssertions := []
   for output in value.circuit.outputs do
@@ -112,7 +120,7 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   for (read, index) in (plan.reads.drop publicCount).zipIdx do
     if let some guard := read.guard then
       let result ← convert value.span (normalize aliases guard)
-      let inputIndex := value.circuit.inputs.length + index
+      let inputIndex := circuitInputs.length + index
       inputs := inputs.zipIdx.map fun (input, position) =>
         if position == inputIndex then {input with activityGuard := some result.term} else input
       readAssertions := readAssertions ++ result.assertions
