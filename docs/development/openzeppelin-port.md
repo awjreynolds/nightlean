@@ -19,7 +19,7 @@ Different instruction sequences and constraint counts are acceptable.
 | Ledger-backed getter returns | totalSupply, balanceOf and isRegistered | Entrypoint returns are currently empty. Typed outputs checked after ledger effects and actual native CALL return binding remain in [issue 50](https://github.com/awjreynolds/noctium/issues/50). Public transcript reads supply state evidence, not returned function values. |
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Mixed records, lists and the full Counter ADT remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
-| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | The source path has typed Jubjub scalar and point inputs, scalar reduction and lossless Native conversion, generator multiplication, point multiplication/addition/negation, coordinate conversion and equality. The source fixture builds and checks an ElGamal relation and stores four disclosed Native coordinates in one checked record cell. Curve-valued provider/control inputs, curve ledger schemas, computed-digest byte projections and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
+| Jubjub and cryptographic source operations | ElGamal balances, key registration, memos and account identifiers | Typed curve operations, byte-derived keys/randomness, affine point hashing, ElGamal binding and ECDH memo recovery have source/native examples. Bytes32 equality checks both field chunks. Curve-valued provider/control inputs, curve ledger schemas, general digest byte indexing and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
@@ -72,6 +72,29 @@ the first 31 digest bytes interpreted little-endian, matching the pinned native
 `degrade_to_transient` builtin. Hashing and degradation retain private origins.
 This slice generates no keys, proofs or deployment. It does not extend the
 claim-specific or generic scalar preservation theorems to curve operations.
+
+[`tests/Issue70DerivedCrypto.lean`](../../tests/Issue70DerivedCrypto.lean)
+combines account hashing, domain-separated key and randomness derivation,
+ElGamal encryption/decryption checks and ECDH memo recovery. The memo uses a
+separate randomness tag from the balance ciphertext. Only ciphertext fields
+are explicitly disclosed. Account comparison retains all 256 hash bits.
+
+`persistentHashNativeVector` hashes 1 to 32 canonical Native fields in order,
+each as 32 little-endian bytes. `persistentHashPoint(p)` hashes affine
+`LE32(x) || LE32(y)`, using two FAB Field atoms. This follows the pinned
+[ledger point alignment](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/transient-crypto/src/curve.rs)
+and the native persistent-hash encoding. Compressed point bytes produce a
+different digest. These representations are not interchangeable.
+
+The selected-3.2.1 native case in `runtime/tests/derived_crypto.rs` matches raw
+SHA-256 reference preimages, checks two accounts including zero amount, preserves
+the first encrypted record, and recovers the memo. Wrong secrets, a changed
+account high byte and an altered private plaintext reject. Private point hashes
+remain subject to disclosure checks. This adds a `persistent_hash` overload,
+so the registered opcode-name count stays 23. Typed curve providers and the
+complete token remain separate work. Seeds in the fixture are public test data.
+Fresh, secret production seeds remain a wallet obligation. No new keys, proofs
+or deployments were generated.
 
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).
