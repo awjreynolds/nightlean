@@ -447,10 +447,16 @@ private def lowerBytes : Expr (.bytes length) → LowerM (List String)
     let result ← lowerBytes body
     modify fun state => {state with byteAliases := aliases}
     pure result
-  | @Expr.letE _ _ _ _ body => lowerBytes body
-  | .assertE _ _ => do
-    rejectLowering "assertE cannot produce Bytes32 in native lowering"
-    pure []
+  | @Expr.letE _ _ name value body => do
+    let value ← lowerExpr value
+    let aliases := (← get).aliases
+    modify fun state => {state with aliases := (name, value) :: aliases}
+    let result ← lowerBytes body
+    modify fun state => {state with aliases}
+    pure result
+  | .assertE condition body => do
+    emit "assert" [("cond", toJson (← lowerExpr condition))]
+    lowerBytes body
   | _ => do
     rejectLowering "unsupported Bytes32 expression in native lowering"
     pure []
@@ -598,6 +604,13 @@ def lowerExpr : Expr ty → LowerM String
     | .jubjubScalar | .jubjubPoint => do
       rejectLowering "Jubjub values do not support generic scalar casts"
       pure "0x00"
+  | @Expr.letE (.bytes _) _ name value body => do
+    let value ← lowerBytes value
+    let byteAliases := (← get).byteAliases
+    modify fun state => {state with byteAliases := (name, value) :: byteAliases}
+    let result ← lowerExpr body
+    modify fun state => {state with byteAliases}
+    pure result
   | .letE name value body => do
     let value ← lowerExpr value
     let aliases := (← get).aliases

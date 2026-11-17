@@ -65,10 +65,6 @@ impl Type {
             return Ok(Self::Aggregate(token.to_owned()));
         }
         let ty = ScalarType::parse(token)?;
-        ensure!(
-            ty != ScalarType::Bytes32,
-            "byte witnesses require an aggregate schema"
-        );
         Ok(Self::Scalar(ty))
     }
 
@@ -133,8 +129,7 @@ fn validate_scalar(ty: &ScalarType, value: &Json) -> Result<()> {
                 .ok_or_else(|| anyhow!("expected canonical unsigned decimal"))?;
             canonical_unsigned(text, maximum)?;
         }
-        ScalarType::Bytes32 => bail!("byte witnesses require an aggregate schema"),
-        ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+        ScalarType::Bytes32 | ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
             let token = Type::Scalar(ty.clone()).token();
             crate::input_value(&token, value)?;
         }

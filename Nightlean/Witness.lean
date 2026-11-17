@@ -24,6 +24,7 @@ private def scalarName : Ty → String
   | .native => "Native"
   | .bool => "Bool"
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
+  | .bytes 32 => "Bytes<32>"
   | .bytes length => s!"Bytes<{length}>"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
@@ -42,9 +43,7 @@ private def resultToken (program : Program) (plan : Json) (span : SourceSpan)
     (type : ResultType) : Except Diagnostic String := do
   match type with
   | .unit => pure "Unit"
-  | .scalar type => do
-    if type.isBytes then fail span "byte witnesses require a composite bytes schema"
-    pure (scalarName type)
+  | .scalar type => pure (scalarName type)
   | .composite type =>
     let compiled ← (Types.compileType program.composites type).mapError fun diagnostic =>
       {span, message := diagnostic.message}
@@ -109,8 +108,6 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
     if circuit.inputs.any (·.name == outputName) then
       fail entry.span "witness output name collides with an input"
     circuit := {circuit with outputs := [{output with name := outputName}]}
-  if circuit.inputs.any (fun input => input.ty.isBytes) then
-    fail entry.span "byte witness inputs require a composite bytes schema"
   let native ← Backend.Zkir.lowerCircuit circuit
   let mut calls := []
   for call in lowered.calls do

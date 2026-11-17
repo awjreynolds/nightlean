@@ -53,7 +53,8 @@ private def constantBool (value : Abstract) : Option Bool := do
 
 private def abstractCast (ty : ResultType) (value : Abstract) : Abstract :=
   {value with ty, literal := match ty, value.literal with
-    | .scalar ty, some literal => (ScalarPolicy.cast literal ty.scalarKind).toOption
+    | .scalar ty, some literal =>
+      if ty.isBytes || ty.isJubjub then none else (ScalarPolicy.cast literal ty.scalarKind).toOption
     | _, _ => none}
 
 private abbrev Environment := List (String × Abstract)
@@ -142,6 +143,11 @@ mutual
     | .poseidon2 _ a b =>
       pure (combined (.scalar .native) [← expression checked scope env span a, ← expression checked scope env span b])
     | .curve _ arguments => do
+      let values ← arguments.mapM (expression checked scope env span)
+      let info ← liftD (checked.infer scope (env.map fun (name, value) => (name, value.ty)) span term)
+      pure (combined info.ty values)
+    | .bytes32Literal _ => pure {ty := .scalar (.bytes 32)}
+    | .bytes _ arguments => do
       let values ← arguments.mapM (expression checked scope env span)
       let info ← liftD (checked.infer scope (env.map fun (name, value) => (name, value.ty)) span term)
       pure (combined info.ty values)
@@ -364,6 +370,11 @@ mutual
     | .curve operation arguments => do
       unless (← get).typed do emitLift (fail span "curve operations require control schema version 2")
       pure (node span "curve" [("operation", toJson operation.operationName),
+        ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
+    | .bytes32Literal values => pure (node span "bytes32" [("values", toJson values)])
+    | .bytes operation arguments => do
+      unless (← get).typed do emitLift (fail span "Bytes32 operations require control schema version 2")
+      pure (node span "bytes" [("operation", toJson operation.operationName),
         ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
     | .call name arguments =>
       let types ← emitLift (arguments.mapM fun argument => do pure (← checked.infer scope env span argument).ty)

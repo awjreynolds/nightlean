@@ -200,11 +200,82 @@ fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crat
     })
 }
 
-fn evaluate_curve(operation: &str, values: Vec<Value>) -> Result<Value> {
-    let (parameters, result, expression) = curve_operation(operation)?;
+fn bytes_operation(
+    operation: &str,
+    count: usize,
+) -> Result<(Vec<ScalarType>, ScalarType, crate::Expr)> {
+    use ScalarType::{Bytes32, JubjubPoint, Native};
+    let argument = |index: usize| {
+        Box::new(crate::Expr::Reference {
+            name: index.to_string(),
+        })
+    };
+    Ok(match operation {
+        "persistentHash32" => (
+            vec![Bytes32],
+            Bytes32,
+            crate::Expr::PersistentHash32 { value: argument(0) },
+        ),
+        "persistentHashVector32" => {
+            ensure!((1..=32).contains(&count), "control byte hash vector size");
+            (
+                vec![Bytes32; count],
+                Bytes32,
+                crate::Expr::PersistentHashVector32 {
+                    values: (0..count).map(|index| *argument(index)).collect(),
+                },
+            )
+        }
+        "persistentHashNative" => (
+            vec![Native],
+            Bytes32,
+            crate::Expr::PersistentHashNative { value: argument(0) },
+        ),
+        "persistentHashNativeVector" => {
+            ensure!((1..=32).contains(&count), "control field hash vector size");
+            (
+                vec![Native; count],
+                Bytes32,
+                crate::Expr::PersistentHashNativeVector {
+                    values: (0..count).map(|index| *argument(index)).collect(),
+                },
+            )
+        }
+        "persistentHashPoint" => (
+            vec![JubjubPoint],
+            Bytes32,
+            crate::Expr::PersistentHashNativeVector {
+                values: vec![
+                    crate::Expr::JubjubCoordinate {
+                        point: argument(0),
+                        index: 0,
+                    },
+                    crate::Expr::JubjubCoordinate {
+                        point: argument(0),
+                        index: 1,
+                    },
+                ],
+            },
+        ),
+        "degradeToNative" => (
+            vec![Bytes32],
+            Native,
+            crate::Expr::BytesField {
+                value: argument(0),
+                index: 1,
+            },
+        ),
+        _ => bail!("unsupported control byte operation"),
+    })
+}
+
+fn evaluate_operation(
+    (parameters, result, expression): (Vec<ScalarType>, ScalarType, crate::Expr),
+    values: Vec<Value>,
+) -> Result<Value> {
     ensure!(
         values.len() == parameters.len(),
-        "control curve argument count"
+        "control operation argument count"
     );
     let env = values
         .into_iter()
@@ -213,7 +284,10 @@ fn evaluate_curve(operation: &str, values: Vec<Value>) -> Result<Value> {
         .map(|(index, (value, ty))| Ok((index.to_string(), value.cast(&ty)?)))
         .collect::<Result<BTreeMap<_, _>>>()?;
     let value = crate::evaluate(&expression, &env)?;
-    ensure!(value.scalar_type() == result, "control curve result type");
+    ensure!(
+        value.scalar_type() == result,
+        "control operation result type"
+    );
     Ok(value)
 }
 fn text<'a>(v: &'a Json, key: &str) -> Result<&'a str> {
@@ -293,6 +367,7 @@ enum ExprKind {
     Or(Arc<Expr>, Arc<Expr>),
     Hash(String, Arc<Expr>, Arc<Expr>),
     Curve(String, Vec<Arc<Expr>>),
+    Bytes(String, Vec<Arc<Expr>>),
     Call(String, Vec<Arc<Expr>>),
     Witness(String),
     WitnessCall {
@@ -550,6 +625,52 @@ impl Parser<'_> {
                 (
                     Type::Scalar(result),
                     ExprKind::Curve(operation.to_owned(), arguments),
+                )
+            }
+            "bytes32" => {
+                ensure!(self.schema_version == 2, "byte literals require v2 plan");
+                shape(v, &["tag", "values"], true)?;
+                let bytes = list(v, "values")?;
+                ensure!(bytes.len() == 32, "control byte literal length");
+                let bytes = bytes
+                    .iter()
+                    .map(|value| {
+                        value
+                            .as_u64()
+                            .and_then(|value| u8::try_from(value).ok())
+                            .ok_or_else(|| anyhow!("control byte literal must contain octets"))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (
+                    Type::Scalar(ScalarType::Bytes32),
+                    ExprKind::Literal(Value::Bytes(bytes)),
+                )
+            }
+            "bytes" => {
+                ensure!(self.schema_version == 2, "byte operations require v2 plan");
+                shape(v, &["tag", "operation", "arguments"], true)?;
+                let operation = text(v, "operation")?;
+                let arguments = list(v, "arguments")?;
+                let (parameters, result, _) = bytes_operation(operation, arguments.len())?;
+                ensure!(
+                    arguments.len() == parameters.len(),
+                    "control byte argument count"
+                );
+                let arguments = arguments
+                    .iter()
+                    .zip(parameters)
+                    .map(|(argument, expected)| {
+                        let argument = self.expr(argument, env, depth + 1)?;
+                        ensure!(
+                            argument.ty == Type::Scalar(expected),
+                            "control byte argument type"
+                        );
+                        Ok(argument)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (
+                    Type::Scalar(result),
+                    ExprKind::Bytes(operation.to_owned(), arguments),
                 )
             }
             "call" => {
@@ -995,6 +1116,10 @@ fn validate_relation_inputs(
             .ok_or_else(|| anyhow!("unknown native circuit input"))?;
         let names = if token == "JubjubPoint" {
             vec![format!("{name}_x"), format!("{name}_y")]
+        } else if token == "Bytes<32>" {
+            (0..32)
+                .map(|index| format!("{name}_byte_{index}"))
+                .collect()
         } else {
             vec![name.clone()]
         };
@@ -1084,7 +1209,17 @@ fn validate_relation_inputs(
             ScalarType::Native => None,
             ScalarType::Bool => Some(1),
             ScalarType::UInt(maximum) => Some(maximum.bits().max(1)),
-            ScalarType::Bytes32 => bail!("native byte witness binding is unsupported"),
+            ScalarType::Bytes32 => {
+                for index in 0..32 {
+                    ensure!(
+                        bit_constraints
+                            .get(&format!("{name}_byte_{index}"))
+                            .is_some_and(|values| values.contains(&8)),
+                        "native byte input lacks its octet range constraint"
+                    );
+                }
+                None
+            }
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => None,
         };
         if let Some(bits) = required_bits {
@@ -2125,7 +2260,8 @@ impl Abstractor<'_> {
             | ExprKind::Project { .. }
             | ExprKind::Index { .. }
             | ExprKind::Hash(_, _, _)
-            | ExprKind::Curve(_, _) => None,
+            | ExprKind::Curve(_, _)
+            | ExprKind::Bytes(_, _) => None,
         })
     }
     fn body(&mut self, body: &Block, initial: &Constants, result: &Type) -> Result<AbstractFlow> {
@@ -2622,6 +2758,7 @@ enum Task {
     Eq(Type),
     Hash(String),
     Curve(String, usize),
+    Bytes(String, usize),
     EagerSelect(Type),
     Choose(Arc<Expr>, Arc<Expr>, Type, Env, Arc<Expr>),
     Short(bool, Arc<Expr>, Env),
@@ -3730,6 +3867,13 @@ impl Session {
                         self.tasks.push(Task::Eval(argument.clone(), env.clone()));
                     }
                 }
+                ExprKind::Bytes(operation, arguments) => {
+                    self.tasks
+                        .push(Task::Bytes(operation.clone(), arguments.len()));
+                    for argument in arguments.iter().rev() {
+                        self.tasks.push(Task::Eval(argument.clone(), env.clone()));
+                    }
+                }
                 ExprKind::Select(c, a, b) => {
                     self.tasks.push(Task::EagerSelect(expr.ty.clone()));
                     self.tasks.push(Task::Eval(b.clone(), env.clone()));
@@ -3884,8 +4028,27 @@ impl Session {
                             .ok_or_else(|| anyhow!("control curve scalar required"))
                     })
                     .collect::<Result<Vec<_>>>()?;
-                self.values
-                    .push(Tracked::scalar(evaluate_curve(&operation, values)?, taint));
+                self.values.push(Tracked::scalar(
+                    evaluate_operation(curve_operation(&operation)?, values)?,
+                    taint,
+                ));
+            }
+            Task::Bytes(operation, count) => {
+                ensure!(self.values.len() >= count, "control byte argument stack");
+                let arguments = self.values.split_off(self.values.len() - count);
+                let taint = arguments.iter().any(Tracked::is_tainted);
+                let values = arguments
+                    .into_iter()
+                    .map(|argument| {
+                        argument
+                            .value
+                            .ok_or_else(|| anyhow!("control byte scalar required"))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                self.values.push(Tracked::scalar(
+                    evaluate_operation(bytes_operation(&operation, count)?, values)?,
+                    taint,
+                ));
             }
             Task::Hash(domain) => {
                 let b = self.pop()?;

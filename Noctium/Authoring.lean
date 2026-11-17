@@ -42,6 +42,7 @@ private def typeName : Ty → String
   | .native => "Native"
   | .bool => "Bool"
   | .uint maximum => s!"UIntRange {maximum + 1}"
+  | .bytes 32 => "Bytes32"
   | .bytes length => s!"Bytes {length}"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
@@ -162,7 +163,7 @@ private def readScalarTy (stx : TSyntax `nltype) : CommandElabM Ty := do
     | .ok (.uint maximum) => pure (.uint maximum)
     | .error message => throwErrorAt stx message
     | _ => throwErrorAt stx "invalid unsigned range"
-  | `(nltype| Bytes32) => throwErrorAt stx "Bytes32 is not supported by readable witness source yet"
+  | `(nltype| Bytes32) => pure (.bytes 32)
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
   | _ => throwErrorAt stx "unsupported readable witness scalar type"
@@ -287,6 +288,15 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"select({renderExpr condition}, {renderExpr yes}, {renderExpr no})"
   | `(nlexpr| poseidon2($domain:num, $left, $right)) =>
     s!"poseidon2({domain.getNat}, {renderExpr left}, {renderExpr right})"
+  | `(nlexpr| persistentHash32($value)) => s!"persistentHash32({renderExpr value})"
+  | `(nlexpr| bytes32($literal:str)) => s!"bytes32({(toJson literal.getString).compress})"
+  | `(nlexpr| persistentHashVector32([$values,*])) =>
+    s!"persistentHashVector32([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| persistentHashNative($value)) => s!"persistentHashNative({renderExpr value})"
+  | `(nlexpr| persistentHashNativeVector([$values,*])) =>
+    s!"persistentHashNativeVector([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| persistentHashPoint($point)) => s!"persistentHashPoint({renderExpr point})"
+  | `(nlexpr| degradeToNative($value)) => s!"degradeToNative({renderExpr value})"
   | `(nlexpr| jubjubScalarFromNative($value)) => s!"jubjubScalarFromNative({renderExpr value})"
   | `(nlexpr| jubjubScalarToNative($value)) => s!"jubjubScalarToNative({renderExpr value})"
   | `(nlexpr| jubjubMulGenerator($value)) => s!"jubjubMulGenerator({renderExpr value})"
@@ -313,6 +323,10 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| select($condition, $yes, $no)) =>
     disclosedValues condition ++ disclosedValues yes ++ disclosedValues no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => disclosedValues left ++ disclosedValues right
+  | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
+  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value)) => disclosedValues value
+  | `(nlexpr| persistentHashVector32([$values,*]))
+  | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap disclosedValues
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -338,6 +352,10 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| select($condition, $yes, $no)) =>
     inlineAssertions condition ++ inlineAssertions yes ++ inlineAssertions no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => inlineAssertions left ++ inlineAssertions right
+  | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
+  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value)) => inlineAssertions value
+  | `(nlexpr| persistentHashVector32([$values,*]))
+  | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap inlineAssertions
   | `(nlexpr| jubjubScalarFromNative($value))
   | `(nlexpr| jubjubScalarToNative($value))
   | `(nlexpr| jubjubMulGenerator($value))
@@ -462,6 +480,22 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let left ← coerce stx left .native
     let right ← coerce stx right .native
     pure (mergeLowered (.scalar .native) (.poseidon2 domain.getNat left.term right.term) [left, right])
+  | `(nlexpr| bytes32($literal:str)) => do
+    let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
+    if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
+    pure {type := .scalar (.bytes 32), term := .bytes32Literal (bytes ++ List.replicate (32 - bytes.length) 0)}
+  | `(nlexpr| persistentHash32($value)) =>
+    lowerBytesOperation programName callPrefix env stx .persistentHash32 [value]
+  | `(nlexpr| persistentHashVector32([$values,*])) =>
+    lowerBytesOperation programName callPrefix env stx .persistentHashVector32 values.getElems.toList
+  | `(nlexpr| persistentHashNative($value)) =>
+    lowerBytesOperation programName callPrefix env stx .persistentHashNative [value]
+  | `(nlexpr| persistentHashNativeVector([$values,*])) =>
+    lowerBytesOperation programName callPrefix env stx .persistentHashNativeVector values.getElems.toList
+  | `(nlexpr| persistentHashPoint($point)) =>
+    lowerBytesOperation programName callPrefix env stx .persistentHashPoint [point]
+  | `(nlexpr| degradeToNative($value)) =>
+    lowerBytesOperation programName callPrefix env stx .degradeToNative [value]
   | `(nlexpr| jubjubScalarFromNative($value)) =>
     lowerCurve programName callPrefix env stx .scalarFromNative [value]
   | `(nlexpr| jubjubScalarToNative($value)) =>
@@ -482,13 +516,14 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let signatureName := signature.name
     validIdentity function signatureName
     unless signature.parameters.all (fun p => match p.type with
-      | .scalar ty => ty.isBytes == _root_.Bool.false
+      | .scalar ty => !ty.isBytes || ty == .bytes 32
       | _ => _root_.Bool.false) do
       throwErrorAt function "witness callback parameters must use supported scalar types"
-    unless match signature.result with
-      | .scalar ty => !ty.isBytes
+    let supportedResult : _root_.Bool := match signature.result with
+      | .scalar ty => !ty.isBytes || ty == .bytes 32
       | .unit => _root_.Bool.true
-      | .composite _ => _root_.Bool.false do
+      | .composite _ => _root_.Bool.false
+    if !supportedResult then
       throwErrorAt function "witness callback results require Unit or a supported scalar type"
     unless args.getElems.size == signature.parameters.length do
       throwErrorAt stx s!"witness '{function.getId}' argument count does not match its declaration"
@@ -512,6 +547,19 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
           [s!"typed witness reply: {signatureName}"]).eraseDups }
   | _ => throwErrorAt stx "unsupported readable witness expression"
 where
+  lowerBytesOperation (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
+      (operation : Nightlean.Helpers.BytesOp) (arguments : List (TSyntax `nlexpr)) : ExprM Lowered := do
+    let (expected, result) ← match operation.signature arguments.length with
+      | .ok signature => pure signature
+      | .error message => throwErrorAt stx message
+    let values ← arguments.mapM (lowerExpr programName callPrefix env)
+    for (value, expectedType) in values.zip expected do
+      let .scalar actualType := value.type | throwErrorAt stx "Bytes32 operation argument cannot be Unit"
+      unless actualType == expectedType do
+        throwErrorAt stx s!"{operation.operationName} argument type mismatch"
+    let term := Nightlean.Helpers.Term.bytes operation (values.map (·.term))
+    pure (mergeLowered (.scalar result) term values)
+
   lowerCurve (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
       (operation : Nightlean.Helpers.CurveOp) (arguments : List (TSyntax `nlexpr)) : ExprM Lowered := do
     let (expected, result) := operation.signature
@@ -599,6 +647,20 @@ private partial def termTerm : Nightlean.Helpers.Term → CommandElabM (TSyntax 
     let arguments ← arguments.mapM termTerm
     let arguments := arguments.toArray
     `(Nightlean.Helpers.Term.curve $operation [$arguments,*])
+  | .bytes operation arguments => do
+    let operation ← match operation with
+      | .persistentHash32 => `(Nightlean.Helpers.BytesOp.persistentHash32)
+      | .persistentHashVector32 => `(Nightlean.Helpers.BytesOp.persistentHashVector32)
+      | .persistentHashNative => `(Nightlean.Helpers.BytesOp.persistentHashNative)
+      | .persistentHashNativeVector => `(Nightlean.Helpers.BytesOp.persistentHashNativeVector)
+      | .persistentHashPoint => `(Nightlean.Helpers.BytesOp.persistentHashPoint)
+      | .degradeToNative => `(Nightlean.Helpers.BytesOp.degradeToNative)
+    let arguments ← arguments.mapM termTerm
+    let arguments := arguments.toArray
+    `(Nightlean.Helpers.Term.bytes $operation [$arguments,*])
+  | .bytes32Literal values => do
+    let values := values.map natTerm |>.toArray
+    `(Nightlean.Helpers.Term.bytes32Literal [$values,*])
   | .composite type leaves => do
     let type ← compositeTypeTerm type
     let leaves ← leaves.mapM termTerm

@@ -245,6 +245,12 @@ structure Capabilities where
   stateMaps : Bool := false
   deriving Repr
 
+/-- Pure expression capabilities implemented by the pinned native crypto path. -/
+def Capabilities.crypto : Capabilities := {
+  poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
+  persistentHashNative := true, bytes32Conversions := true, jubjub := true
+}
+
 structure Diagnostic where
   span : SourceSpan
   message : String

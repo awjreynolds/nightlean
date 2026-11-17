@@ -9,6 +9,181 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "zkir-321")]
 #[test]
+fn byte_witness_state_and_hash_helpers_bind_account_ciphertext_and_memo() {
+    use nightlean_runtime::{
+        Plan, canonical_field, check, create_state, field_decimal, field_value, prepare,
+        zkir::IrSource,
+    };
+    use num_bigint::BigUint;
+    use onchain_runtime::state::StateValue;
+    use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine, Fr};
+
+    let source =
+        include_str!("fixtures/hash-witness/321/HashWitness.register.witness.control.json");
+    let plan: Json = serde_json::from_str(source).unwrap();
+    let native_plan: Plan = serde_json::from_str(include_str!(
+        "fixtures/hash-witness/321/HashWitness.register.impact.json"
+    ))
+    .unwrap();
+    let circuit: &[u8] = include_bytes!("fixtures/hash-witness/321/HashWitness.register.zkir");
+    let circuit = IrSource::load(circuit).unwrap();
+    let account_secret = [0x11u8; 32];
+    let encryption_secret = [0x22u8; 32];
+    let seed = [0x33u8; 32];
+    let bytes = |value: &[u8]| json!({"kind":"bytes", "values":value});
+    let tag = |text: &str| {
+        let mut value = [0u8; 32];
+        value[..text.len()].copy_from_slice(text.as_bytes());
+        value
+    };
+    let pair_hash = |left: &[u8], right: &[u8]| -> Vec<u8> {
+        let mut hash = Sha256::new();
+        hash.update(left);
+        hash.update(right);
+        hash.finalize().to_vec()
+    };
+    let field = |digest: &[u8]| {
+        canonical_field(&BigUint::from_bytes_le(&digest[..31]).to_string()).unwrap()
+    };
+    let scalar = |digest: &[u8]| EmbeddedFr::try_from(field(digest)).unwrap();
+    let account: [u8; 32] = Sha256::digest(account_secret).into();
+    let secret = scalar(&pair_hash(
+        &tag("ElGamal:secretToScalar"),
+        &encryption_secret,
+    ));
+    let balance_r = scalar(&pair_hash(&seed, &tag("Noctium:balance")));
+    let memo_r = scalar(&pair_hash(&seed, &tag("Noctium:memo")));
+    let generator = EmbeddedGroupAffine::generator();
+    let recipient = generator * secret;
+    let c1 = generator * balance_r;
+    let c2 = generator * EmbeddedFr::from(3u64) + recipient * balance_r;
+    let ephemeral = generator * memo_r;
+    let shared = recipient * memo_r;
+    let point_digest = Sha256::digest(
+        [
+            shared.x().unwrap().as_le_bytes(),
+            shared.y().unwrap().as_le_bytes(),
+        ]
+        .concat(),
+    );
+    let memo = Fr::from(3u64) + field(&pair_hash(&point_digest, &tag("Noctium:memo:amount")));
+    let expected = [
+        c1.x().unwrap(),
+        c1.y().unwrap(),
+        c2.x().unwrap(),
+        c2.y().unwrap(),
+        ephemeral.x().unwrap(),
+        ephemeral.y().unwrap(),
+        memo,
+    ];
+    for altered_account in [false, true] {
+        let mut supplied_account = account;
+        if altered_account {
+            supplied_account[31] ^= 1;
+        }
+        let inputs = BTreeMap::from([
+            ("account".into(), bytes(&supplied_account)),
+            (
+                "recipient".into(),
+                json!({"kind":"jubjubPoint", "x":field_decimal(recipient.x().unwrap()), "y":field_decimal(recipient.y().unwrap())}),
+            ),
+        ]);
+        let attempt = if altered_account { "d" } else { "e" }.repeat(64);
+        let mut context = source_context(&signatures(&plan), &attempt);
+        context
+            .capabilities
+            .iter_mut()
+            .find(|capability| capability.id == "commit")
+            .unwrap()
+            .key_prefix = "noctium/Wallet/".into();
+        let digest = hex::encode(Sha256::digest(plan["binding"].as_str().unwrap().as_bytes()));
+        let mut session = Session::from_json_with_invocation_target(
+            plan.clone(),
+            inputs,
+            context,
+            Some(&digest),
+            Some(InvocationTarget {
+                contract_address: "a".repeat(64),
+                entrypoint: "register".into(),
+            }),
+        )
+        .unwrap();
+        loop {
+            let status = session.advance().unwrap();
+            if status["status"] != "need_host" {
+                assert_eq!(
+                    status["status"],
+                    if altered_account {
+                        "failed"
+                    } else {
+                        "completed"
+                    },
+                    "{status}"
+                );
+                break;
+            }
+            let request = &status["request"];
+            let value = if request["operation"] == host::READ {
+                let private = session.private_request().unwrap();
+                match private["arguments"]["key"].as_str().unwrap() {
+                    "noctium/Wallet/accountSecret" => bytes(&account_secret),
+                    "noctium/Wallet/encryptionSecret" => bytes(&encryption_secret),
+                    other => panic!("unexpected private read {other}"),
+                }
+            } else {
+                match request["name"].as_str().unwrap() {
+                    "randomnessSeed" => bytes(&seed),
+                    "plaintext" => json!("3"),
+                    other => panic!("unexpected provider {other}"),
+                }
+            };
+            session
+                .resume_typed(reply(request, &attempt, "value", Some(value)))
+                .unwrap();
+        }
+        let relation = binding(&plan)["nativeRelation"].clone();
+        if altered_account {
+            assert!(session.private_completion(&relation).is_err());
+            continue;
+        }
+        let completion = session.private_completion(&relation).unwrap();
+        assert_eq!(
+            completion["hostWrites"]["noctium/Wallet/lastSeed"]["value"],
+            bytes(&seed)
+        );
+        let names = ["c1x", "c1y", "c2x", "c2y", "memoX", "memoY", "memoAmount"];
+        let initial = create_state(
+            &native_plan,
+            &names
+                .iter()
+                .map(|name| ((*name).into(), json!("0")))
+                .collect(),
+        )
+        .unwrap();
+        let native_inputs = serde_json::from_value(completion["inputs"].clone()).unwrap();
+        let execution = prepare(
+            &native_plan,
+            &native_inputs,
+            &initial,
+            &ledger::structure::INITIAL_PARAMETERS,
+            coin_structure::contract::ContractAddress::default(),
+        )
+        .unwrap();
+        check(&execution, &circuit).unwrap();
+        let StateValue::Array(state) = execution.after.state.get_ref() else {
+            panic!("expected state array")
+        };
+        for (index, expected) in expected.into_iter().enumerate() {
+            let StateValue::Cell(cell) = state.get(index).unwrap() else {
+                panic!("expected ciphertext cell")
+            };
+            assert_eq!(**cell, field_value(expected));
+        }
+    }
+}
+
+#[cfg(feature = "zkir-321")]
+#[test]
 fn witness_backed_curve_helpers_bind_elgamal_outputs_and_reject_a_wrong_key() {
     use nightlean_runtime::{
         Plan, check, create_state, field_decimal, field_value, prepare, zkir::IrSource,
@@ -252,7 +427,7 @@ fn signatures(plan: &Json) -> Vec<WitnessSignature> {
 }
 
 fn source_context(signatures: &[WitnessSignature], attempt_id: &str) -> Context {
-    let mut operations = BTreeMap::new();
+    let mut operations = BTreeMap::<String, Operation>::new();
     let mut providers = Vec::new();
     let mut capability_map = BTreeMap::<String, (String, BTreeSet<String>)>::new();
     for signature in signatures {
@@ -264,18 +439,18 @@ fn source_context(signatures: &[WitnessSignature], attempt_id: &str) -> Context 
         if signature.operation == host::READ {
             arguments.insert("key".into(), "Key".into());
         }
-        assert!(
-            operations
-                .insert(
-                    signature.operation.clone(),
-                    Operation {
-                        operation: signature.operation.clone(),
-                        argument_schema: arguments,
-                        result_schema: signature.result_type.clone(),
-                    },
-                )
-                .is_none()
-        );
+        let operation = Operation {
+            operation: signature.operation.clone(),
+            argument_schema: arguments,
+            result_schema: signature.result_type.clone(),
+        };
+        if let Some(previous) = operations.insert(signature.operation.clone(), operation) {
+            assert_eq!(
+                previous.argument_schema,
+                operations[&signature.operation].argument_schema
+            );
+            assert_eq!(previous.result_schema, signature.result_type);
+        }
         let prefix = signature
             .private_key
             .as_deref()

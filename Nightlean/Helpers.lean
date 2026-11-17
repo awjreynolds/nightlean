@@ -94,6 +94,48 @@ def CurveOp.signature : CurveOp → List Ty × Ty
   | .x | .y => ([.jubjubPoint], .native)
   | .fromCoordinates => ([.native, .native], .jubjubPoint)
 
+/-- Closed readable Bytes32/hash operations. Vector operations are bounded at
+the typed source boundary, and point hashing follows FAB affine coordinates. -/
+inductive BytesOp where
+  | persistentHash32
+  | persistentHashVector32
+  | persistentHashNative
+  | persistentHashNativeVector
+  | persistentHashPoint
+  | degradeToNative
+  deriving Repr, BEq, DecidableEq, Inhabited
+
+def BytesOp.operationName : BytesOp → String
+  | .persistentHash32 => "persistentHash32"
+  | .persistentHashVector32 => "persistentHashVector32"
+  | .persistentHashNative => "persistentHashNative"
+  | .persistentHashNativeVector => "persistentHashNativeVector"
+  | .persistentHashPoint => "persistentHashPoint"
+  | .degradeToNative => "degradeToNative"
+
+def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except String (List Ty × Ty) := do
+  match operation with
+  | .persistentHash32 =>
+    unless argumentCount == 1 do throw "persistentHash32 requires one Bytes32 argument"
+    pure ([.bytes 32], .bytes 32)
+  | .persistentHashVector32 =>
+    unless argumentCount ≥ 1 && argumentCount ≤ 32 do
+      throw "persistentHashVector32 requires 1 to 32 Bytes32 arguments"
+    pure (List.replicate argumentCount (.bytes 32), .bytes 32)
+  | .persistentHashNative =>
+    unless argumentCount == 1 do throw "persistentHashNative requires one Native argument"
+    pure ([.native], .bytes 32)
+  | .persistentHashNativeVector =>
+    unless argumentCount ≥ 1 && argumentCount ≤ 32 do
+      throw "persistentHashNativeVector requires 1 to 32 Native arguments"
+    pure (List.replicate argumentCount .native, .bytes 32)
+  | .persistentHashPoint =>
+    unless argumentCount == 1 do throw "persistentHashPoint requires one JubjubPoint argument"
+    pure ([.jubjubPoint], .bytes 32)
+  | .degradeToNative =>
+    unless argumentCount == 1 do throw "degradeToNative requires one Bytes32 argument"
+    pure ([.bytes 32], .native)
+
 inductive Term where
   | unit
   | native (number : Nat)
@@ -112,6 +154,8 @@ inductive Term where
   | witnessCall (site name : String) (arguments : List Term)
   | poseidon2 (domain : Nat) (left right : Term)
   | curve (operation : CurveOp) (arguments : List Term)
+  | bytes (operation : BytesOp) (arguments : List Term)
+  | bytes32Literal (values : List Nat)
   | call (name : String) (arguments : List Term)
   /-- A checked aggregate assembled from scalar source terms in canonical leaf order. -/
   | composite (type : Types.CompositeType) (leaves : List Term)
@@ -279,6 +323,9 @@ where
         | .curve _ arguments => do
           if arguments.length > limits.maxParameters then resource span "curve arguments"
           pure arguments
+        | .bytes _ arguments => do
+          if arguments.length > limits.maxParameters then resource span "byte operation arguments"
+          pure arguments
         | _ => pure []
       go fuel (used + 1) (max deepest depth) (children.map (·, depth + 1) ++ rest)
 
@@ -323,6 +370,9 @@ where
             | .curve _ arguments => do
               if arguments.length > limits.maxParameters then resource span "curve arguments"
               pure arguments
+            | .bytes _ arguments => do
+              if arguments.length > limits.maxParameters then resource span "byte operation arguments"
+              pure arguments
             | _ => pure []
           pure (terms.map SourceNode.term, statements)
       go fuel (used + 1) statements (max deepest depth)
@@ -351,6 +401,7 @@ where
           | .witnessCall site _ arguments => (arguments, some site)
           | .call _ arguments | .composite _ arguments => (arguments, none)
           | .curve _ arguments => (arguments, none)
+          | .bytes _ arguments => (arguments, none)
           | .binary _ a b | .eq a b | .poseidon2 _ a b | .andThen a b | .orElse a b
           | .index a b => ([a, b], none)
           | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
@@ -404,8 +455,9 @@ private def projectedType (program : Program) (span : SourceSpan)
 private def validateResultType (program : Program) (span : SourceSpan) : ResultType → Except Diagnostic Unit
   | .unit => pure ()
   | .scalar type => do
-    if type.isBytes then fail span "byte helpers require a composite bytes type"
-    liftError span (type.validate {poseidon2 := true, jubjub := true})
+    if type.isBytes && type != .bytes 32 then
+      fail span "only Bytes32 is supported as a readable witness scalar"
+    liftError span (type.validate Capabilities.crypto)
   | .composite type => discard (checkedComposite program span type)
 
 partial def sourceLeafTypes : Types.Layout → List Ty
@@ -824,6 +876,7 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       discard (common span (← scalar span left.ty) (← scalar span right.ty))
       pure (combine (.scalar .bool) [left, right])
     | .cast target value =>
+      if target.isBytes then fail span "byte strings do not support scalar casts"
       liftError span (target.validate {poseidon2 := true})
       let value ← inferTerm fuel program scope env span value
       discard (scalar span value.ty)
@@ -852,7 +905,7 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
         fail span "short-circuit operands require Bool"
       pure {combine (.scalar .bool) [left, right] with guarded := true}
     | .witness _ ty =>
-      liftError span (ty.validate {poseidon2 := true})
+      liftError span (ty.validate Capabilities.crypto)
       pure {ty := .scalar ty, effects := [.witness]}
     | .witnessCall _ name arguments =>
       let signature ← witnessSignature program name span
@@ -879,6 +932,18 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
           fail span s!"{operation.operationName} argument type mismatch"
       pure (combine (.scalar result) values
         (if operation == .fromCoordinates then [.fallibleCast] else []))
+    | .bytes32Literal bytes => do
+      unless bytes.length == 32 && bytes.all (· ≤ 255) do
+        fail span "Bytes32 literal must contain exactly 32 byte values"
+      pure {ty := .scalar (.bytes 32)}
+    | .bytes operation arguments => do
+      let (expected, result) ← (operation.signature arguments.length).mapError fun message =>
+        {span, message}
+      let values ← arguments.mapM (inferTerm fuel program scope env span)
+      for (value, expectedType) in values.zip expected do
+        unless value.ty == .scalar expectedType do
+          fail span s!"{operation.operationName} argument type mismatch"
+      pure (combine (.scalar result) values)
     | .call name arguments =>
       if (env.lookup name).isSome then fail span s!"helper '{name}' is hidden by a value binding"
       let arguments ← arguments.mapM (inferTerm fuel program scope env span)
@@ -985,7 +1050,7 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
           result := {result with returned := result.returned || (yes.returned && no.returned)}
           pure {ty := .unit, calls := condition.calls ++ yes.calls ++ no.calls, effects := (condition.effects ++ yes.effects ++ no.effects).eraseDups, guarded := true}
         | .stage _ _ ty value => do
-          liftError span (ty.validate {poseidon2 := true})
+          liftError span (ty.validate Capabilities.crypto)
           let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
           unless subtype info.ty (.scalar ty) do fail span "private stage type mismatch"
           pure {info with effects := (.privateState :: info.effects).eraseDups}
@@ -1087,7 +1152,7 @@ def analyzeWithLimits (limits : Limits) (program : Program) : Except Diagnostic 
     let scalarNames := entry.inputs.map (·.name)
     if entry.compositeInputs.any (fun input => scalarNames.contains input.name) then
       fail entry.span "duplicate helper entrypoint input"
-    for input in entry.inputs do liftError input.span (input.ty.validate {poseidon2 := true, jubjub := true})
+    for input in entry.inputs do liftError input.span (input.ty.validate Capabilities.crypto)
     for input in entry.compositeInputs do discard (checkedComposite program input.span input.type)
     let mut scalarInputs := entry.inputs
     let mut aggregateInputs := entry.compositeInputs
@@ -1326,9 +1391,16 @@ mutual
       let right ← lowerTerm program scope env span right
       let constraints := left.constraints ++ right.constraints
       let ty ← liftD (common span left.scalar.ty right.scalar.ty)
-      let left ← liftD (typedExpr span ty left)
-      let right ← liftD (typedExpr span ty right)
-      let value := Expr.eq left right
+      let value ← if ty == .bytes 32 then do
+        let left ← liftD (typedExpr span (.bytes 32) left)
+        let right ← liftD (typedExpr span (.bytes 32) right)
+        let highEqual := Expr.eq (Expr.bytesField left 0) (Expr.bytesField right 0)
+        let lowEqual := Expr.eq (Expr.bytesField left 1) (Expr.bytesField right 1)
+        pure (Expr.select highEqual lowEqual (.bool false))
+      else do
+        let left ← liftD (typedExpr span ty left)
+        let right ← liftD (typedExpr span ty right)
+        pure (Expr.eq left right)
       pure {scalarValue value with constraints}
     | .cast target value =>
       let value ← lowerTerm program scope env span value
@@ -1446,6 +1518,36 @@ mutual
           let y ← liftD (typedExpr span .native y)
           pure (scalarValue (.jubjubFromCoordinates x y))
         | _, _ => liftD (fail span "invalid checked curve operation shape")
+      pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
+    | .bytes32Literal bytes => pure (scalarValue (Expr.bytes32Literal bytes))
+    | .bytes operation arguments => do
+      let (expectedTypes, _) ← liftD ((operation.signature arguments.length).mapError fun message =>
+        {span, message})
+      let values ← arguments.mapM (lowerTerm program scope env span)
+      for (value, expectedType) in values.zip expectedTypes do
+        unless value.ty == .scalar expectedType do
+          liftD (fail span s!"{operation.operationName} argument type mismatch")
+      let result ← match operation, values with
+        | .persistentHash32, [value] => do
+          let value ← liftD (typedExpr span (.bytes 32) value)
+          pure (scalarValue (Expr.persistentHash32 value))
+        | .persistentHashVector32, values => do
+          let values ← values.mapM fun value => liftD (typedExpr span (.bytes 32) value)
+          pure (scalarValue (Expr.persistentHashVector32 values))
+        | .persistentHashNative, [value] => do
+          let value ← liftD (typedExpr span .native value)
+          pure (scalarValue (Expr.persistentHashNative value))
+        | .persistentHashNativeVector, values => do
+          let values ← values.mapM fun value => liftD (typedExpr span .native value)
+          pure (scalarValue (Expr.persistentHashNativeVector values))
+        | .persistentHashPoint, [value] => do
+          let point ← liftD (typedExpr span .jubjubPoint value)
+          pure (scalarValue (Expr.persistentHashNativeVector [
+            Expr.jubjubCoordinate point 0, Expr.jubjubCoordinate point 1]))
+        | .degradeToNative, [value] => do
+          let value ← liftD (typedExpr span (.bytes 32) value)
+          pure (scalarValue (Expr.bytesField value 1))
+        | _, _ => liftD (fail span "invalid checked Bytes32 operation shape")
       pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .call name arguments =>
       let values ← arguments.mapM (lowerTerm program scope env span)
@@ -1679,7 +1781,7 @@ def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : S
     constraints := inputConstraints ++ body.constraints ++ outputConstraints ++
       (if declaration.result == .unit then [.letE "$unit" body.scalar.value (.bool true)] else [])
   }
-  circuit.validate {poseidon2 := true, jubjub := true}
+  circuit.validate Capabilities.crypto
   Disclosure.circuit circuit
   pure {circuit, calls := lowering.witnessCalls}
 
@@ -1778,6 +1880,9 @@ mutual
       pure (some value)
     -- shortcut: curve diagnostic traces need typed point values; extend the trace model before enabling them.
     | .curve .. => liftM (fail span "Jubjub helper evaluation requires the native control runtime")
+    -- shortcut: Bytes32 traces need ordered byte values; extend the trace model before enabling them.
+    | .bytes32Literal _ | .bytes .. =>
+      liftM (fail span "Bytes32 helper evaluation requires the qualified native control runtime")
     | .call name arguments =>
       let values ← arguments.mapM (traceTerm program ctx scope env span)
       let declaration ← liftM (resolveUnchecked program scope name (values.map traceType) span)

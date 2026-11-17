@@ -174,7 +174,7 @@ private partial def analyzeTerm (fuel : Nat) (program : Program) (prepared : Pre
   let info ← scalarInfo prepared scope typeEnv span term
   match term with
   | .unit => pure (zeroValue .unit)
-  | .native _ | .bool _ | .uint _ _ => pure (scalarValue info.ty)
+  | .native _ | .bool _ | .uint _ _ | .bytes32Literal _ => pure (scalarValue info.ty)
   | .ref name =>
     match env.lookup name with
     | some value => pure value
@@ -187,7 +187,7 @@ private partial def analyzeTerm (fuel : Nat) (program : Program) (prepared : Pre
     pure (makeValue info.ty [merge (payloadOrigins left) (payloadOrigins right)]
       (merge left.indexOrigins right.indexOrigins) (merge left.tagOrigins right.tagOrigins)
       (merge left.controlOrigins right.controlOrigins))
-  | .curve _ arguments => do
+  | .curve _ arguments | .bytes _ arguments => do
     let values ← arguments.mapM (analyzeTerm fuel program prepared scope env span)
     pure (makeValue info.ty [values.foldl (fun result value => merge result (payloadOrigins value)) []]
       (values.foldl (fun result value => merge result value.indexOrigins) [])
