@@ -1078,6 +1078,12 @@ impl Schema {
         self.flatten_value(json).map(|_| ())
     }
 
+    pub fn native_field_only(&self) -> bool {
+        self.nodes.iter().all(|node| matches!(node,
+            LayoutNode::Scalar(Leaf::Native) | LayoutNode::Tuple(_)
+                | LayoutNode::Struct { .. } | LayoutNode::Vector { .. }))
+    }
+
     pub fn leaf_types(&self) -> Result<Vec<String>> {
         let mut pending = vec![self.root];
         let mut result = Vec::with_capacity(self.counts().leaves);

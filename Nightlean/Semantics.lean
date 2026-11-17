@@ -33,6 +33,7 @@ def Value.pack : (ty : Ty) → ty.Denote → Value
 inductive LedgerValue where
   | scalar (value : Value)
   | map (entries : List (Value × LedgerValue))
+  | composite (type : Types.CompositeType) (leaves : List Nat)
   deriving Repr, BEq
 
 abbrev EvalEnv := List (String × Value)
@@ -204,6 +205,7 @@ private def treeLookup (root : LedgerValue) : List Value → Option LedgerValue
   | [] => some root
   | key :: rest => match root with
     | .scalar _ => none
+    | .composite .. => none
     | .map entries => (entries.lookup key).bind fun value => treeLookup value rest
 
 private def treeMember (root : LedgerValue) (keys : List Value) : Except String Bool := do
@@ -222,6 +224,7 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
   | key :: rest =>
     match root with
     | .scalar _ => none
+    | .composite .. => none
     | .map entries =>
       if rest.isEmpty then
         pure (.map (updateAssoc key value entries))
@@ -285,6 +288,16 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       let some value := raw.as ty | throw s!"nested map value type mismatch '{name}'"
       if !canonical ctx ty value then throw s!"noncanonical nested map value '{name}'"
       env := (destination, Value.pack ty value) :: env
+    | .readCompositePath name _ keys type destinations => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
+      let some (.composite found leaves) := treeLookup root evaluated
+        | throw s!"missing or non-composite nested map value '{name}'"
+      unless found == type && leaves.length == destinations.length do
+        throw s!"nested composite state type mismatch '{name}'"
+      unless leaves.all (· < ctx.modulus) do throw s!"noncanonical nested composite value '{name}'"
+      env := env ++ (destinations.zip leaves).map fun (destination, value) =>
+        (destination, .native value)
     | .memberPath name destination keys => do
       let evaluated ← evaluatePath ctx env keys
       let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
@@ -294,6 +307,13 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
       let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
       let some updated := treeSet root evaluated payload
+        | throw s!"nested map parent is missing or not a map '{name}'"
+      next := {next with trees := updateAssoc name updated next.trees}
+    | .writeCompositePath name keys type values => do
+      let evaluated ← evaluatePath ctx env keys
+      let leaves ← values.mapM (fun value => value.eval ctx env)
+      let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
+      let some updated := treeSet root evaluated (.composite type leaves)
         | throw s!"nested map parent is missing or not a map '{name}'"
       next := {next with trees := updateAssoc name updated next.trees}
     | .emptyMapPath name keys => do
@@ -321,7 +341,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
       if guard.isSome then
         match effect with
         | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. |
-            .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. => pure ()
+            .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
+            .writePath .. | .writeCompositePath .. | .emptyMapPath .. => pure ()
         | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -375,6 +396,16 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
           let some value := raw.as ty | throw s!"nested map value type mismatch '{name}'"
           if !canonical ctx ty value then throw s!"noncanonical nested map value '{name}'"
           env := (destination, Value.pack ty value) :: env
+        | .readCompositePath name _ keys type destinations => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
+          let some (.composite found leaves) := treeLookup root evaluated
+            | throw s!"missing or non-composite nested map value '{name}'"
+          unless found == type && leaves.length == destinations.length do
+            throw s!"nested composite state type mismatch '{name}'"
+          unless leaves.all (· < ctx.modulus) do throw s!"noncanonical nested composite value '{name}'"
+          env := env ++ (destinations.zip leaves).map fun (destination, value) =>
+            (destination, .native value)
         | .memberPath name destination keys => do
           let evaluated ← evaluatePath ctx env keys
           let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
@@ -384,6 +415,13 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
           let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
           let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
           let some updated := treeSet root evaluated payload
+            | throw s!"nested map parent is missing or not a map '{name}'"
+          next := {next with trees := updateAssoc name updated next.trees}
+        | .writeCompositePath name keys type values => do
+          let evaluated ← evaluatePath ctx env keys
+          let leaves ← values.mapM (fun value => value.eval ctx env)
+          let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
+          let some updated := treeSet root evaluated (.composite type leaves)
             | throw s!"nested map parent is missing or not a map '{name}'"
           next := {next with trees := updateAssoc name updated next.trees}
         | .emptyMapPath name keys => do
@@ -410,7 +448,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
-        | .writeCell .. | .writeMap .. | .require .. | .insertPath .. | .writePath .. | .emptyMapPath .. => pure ()
+        | .writeCell .. | .writeMap .. | .require .. | .insertPath .. | .writePath .. |
+            .writeCompositePath .. | .emptyMapPath .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with
             | .native => 0
@@ -418,6 +457,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
             | .uint _ => 0
             | .bytes length => List.replicate length 0
           env := (destination, Value.pack ty zero) :: env
+        | .readCompositePath _ _ _ _ destinations =>
+          env := env ++ destinations.map fun destination => (destination, .native 0)
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
         | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
     pure next

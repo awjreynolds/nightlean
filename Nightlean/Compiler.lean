@@ -1,6 +1,7 @@
 import Nightlean.Frontend
 import Nightlean.Backend.Zkir
 import Nightlean.Target
+import Nightlean.Types.ValueSchema
 
 namespace Nightlean.Compiler
 open Lean Elab Command
@@ -84,6 +85,8 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   | .bit b => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson (.bool b))]
   | .bitExpr expression => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson expression)]
   | .bytes32 expression => [("alignment", toJson ("bytes32" : String)), ("expression", nativeExpressionJson expression)]
+  | .nativeFields expressions => [("alignment", toJson ("nativeFields" : String)),
+      ("expressions", toJson (expressions.map nativeExpressionJson))]
 
 private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   match value with
@@ -91,6 +94,7 @@ private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   | .bit value => nativeExpressionJson (.bool value)
   | .bitExpr expression => nativeExpressionJson expression
   | .bytes32 expression => nativeExpressionJson expression
+  | .nativeFields expressions => toJson (expressions.map nativeExpressionJson)
 
 private def operationJsonBare : Backend.Impact.Op → Json
   | .dup => Json.mkObj [("op", toJson ("dup" : String))]
@@ -106,6 +110,12 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .push value storage => Json.mkObj ([("op", toJson ("push" : String)), ("storage", toJson storage)] ++ alignedJson value)
   | .newMap => Json.mkObj [("op", toJson ("new" : String))]
   | .popeq value => Json.mkObj ([("op", toJson ("popeq" : String))] ++ alignedJson value)
+  | .pushFields schema expressions storage => Json.mkObj [
+      ("op", toJson ("pushFields" : String)), ("storage", toJson storage),
+      ("expressions", toJson (expressions.map nativeExpressionJson)), ("schema", schema)]
+  | .popeqFields schema expressions => Json.mkObj [
+      ("op", toJson ("popeqFields" : String)),
+      ("expressions", toJson (expressions.map nativeExpressionJson)), ("schema", schema)]
   | .member => Json.mkObj [("op", toJson ("member" : String))]
   | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
 
@@ -153,6 +163,16 @@ private def effectJson : Effect → Json
       ("op", toJson ("writePath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value)), ("value", expressionJson value)]
+  | .readCompositePath state destination keys _ destinations => Json.mkObj [
+        ("op", toJson ("readCompositePath" : String)), ("state", toJson state),
+        ("destination", toJson destination), ("destinations", toJson destinations),
+        ("keys", toJson (keys.map fun key => match key with
+          | .mk _ value => expressionJson value))]
+  | .writeCompositePath state keys _ values => Json.mkObj [
+      ("op", toJson ("writeCompositePath" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value)),
+      ("values", toJson (values.map expressionJson))]
   | .emptyMapPath state keys => Json.mkObj [
       ("op", toJson ("emptyMapPath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
@@ -168,9 +188,14 @@ private def guardedEffectJson (guard : Option (Expr .bool)) (effect : Effect) : 
       ("effect", encoded)]
 
 private def stateJson (state : StateDecl) : Json :=
+  let compositeSchema (environment : Types.CompositeEnv) (type : Types.CompositeType) : Json :=
+    match Types.compileType environment type with
+    | .error _ => Json.null
+    | .ok compiled => (Types.schemaJson compiled).toOption.getD Json.null
   let rec treeJson : LedgerValueType → Json
     | .scalar ty => Json.mkObj [("scalar", toJson (typeName ty))]
     | .map keyTy value => Json.mkObj [("map", toJson [toJson (typeName keyTy), treeJson value])]
+    | .composite environment type => Json.mkObj [("composite", compositeSchema environment type)]
   let kind := match state.kind with
     | .cell ty => Json.mkObj [("cell", toJson (typeName ty))]
     | .map kt vt => Json.mkObj [("map", toJson [typeName kt, typeName vt])]
@@ -289,7 +314,14 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
     ("reads", toJson (plan.reads.map fun item => Json.mkObj ([
-      ("name", toJson item.name), ("type", toJson (typeName item.ty))] ++
+      ("name", toJson item.name),
+      ("type", toJson (if item.schema.isSome then "Composite" else typeName item.ty))] ++
+      (match item.schema with
+        | none => []
+        | some schema => [
+            ("components", toJson (item.components.map fun (name, ty) => Json.mkObj [
+              ("name", toJson name), ("type", toJson (typeName ty))])),
+            ("schema", schema)]) ++
       (match item.guard with
         | none => []
         | some guard => [("guard", nativeExpressionJson guard)])))),

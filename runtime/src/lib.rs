@@ -336,6 +336,17 @@ pub struct Read {
     pub ty: String,
     #[serde(default)]
     pub guard: Option<Expr>,
+    #[serde(default)]
+    pub components: Vec<ReadComponent>,
+    #[serde(default)]
+    pub schema: Option<Json>,
+}
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ReadComponent {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub ty: String,
 }
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -371,9 +382,20 @@ pub enum Instruction {
         expression: Expr,
         alignment: String,
     },
+    #[serde(rename = "pushFields")]
+    PushFields {
+        storage: bool,
+        expressions: Vec<Expr>,
+        schema: Json,
+    },
     Popeq {
         expression: Expr,
         alignment: String,
+    },
+    #[serde(rename = "popeqFields")]
+    PopeqFields {
+        expressions: Vec<Expr>,
+        schema: Json,
     },
     Member,
     Insert {
@@ -414,6 +436,29 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         }
         Instruction::Push { alignment, .. } => 4 + value_fields(alignment)?,
         Instruction::Popeq { alignment, .. } => 3 + value_fields(alignment)?,
+        Instruction::PushFields {
+            expressions,
+            schema,
+            ..
+        } => {
+            let parsed = checked_record_schema(schema)?;
+            ensure!(
+                expressions.len() == parsed.counts().leaves,
+                "record expression count mismatch"
+            );
+            3 + 2 * expressions.len()
+        }
+        Instruction::PopeqFields {
+            expressions,
+            schema,
+        } => {
+            let parsed = checked_record_schema(schema)?;
+            ensure!(
+                expressions.len() == parsed.counts().leaves,
+                "record expression count mismatch"
+            );
+            2 + 2 * expressions.len()
+        }
         Instruction::Guarded { .. } => bail!("nested guarded native operation is unsupported"),
     })
 }
@@ -476,6 +521,10 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         );
         return Ok(());
     }
+    if let Some(schema) = fields.get("composite") {
+        checked_record_schema(schema)?;
+        return Ok(());
+    }
     let parts = fields
         .get("map")
         .and_then(Json::as_array)
@@ -487,6 +536,60 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
             .ok_or_else(|| anyhow!("invalid state tree key type"))?,
     )?;
     validate_tree_schema(&parts[1], depth + 1)
+}
+
+fn checked_record_schema(json: &Json) -> Result<aggregates::Schema> {
+    let schema = aggregates::Schema::from_json(&serde_json::to_vec(json)?)?;
+    ensure!(
+        schema.counts().leaves > 0 && schema.native_field_only(),
+        "record requires nonempty Native leaves"
+    );
+    Ok(schema)
+}
+
+fn aligned_fields(fields: &[Fr]) -> AlignedValue {
+    let fields: Vec<_> = fields.iter().copied().map(field_value).collect();
+    AlignedValue::concat(fields.iter())
+}
+
+fn validate_record_fields(schema: &aggregates::Schema, fields: &[Fr]) -> Result<()> {
+    let json: Vec<_> = fields
+        .iter()
+        .map(|field| Json::String(field_decimal(*field)))
+        .collect();
+    schema.from_leaf_json(&json)?;
+    Ok(())
+}
+
+fn record_component_names<'a>(
+    read: &'a Read,
+    expressions: &[Expr],
+    schema: &Json,
+) -> Result<Vec<&'a str>> {
+    let checked = checked_record_schema(schema)?;
+    ensure!(
+        read.ty == "Composite"
+            && read.schema.as_ref() == Some(schema)
+            && read.components.len() == checked.counts().leaves
+            && expressions.len() == read.components.len(),
+        "record read schema mismatch"
+    );
+    let mut names = BTreeSet::new();
+    for (component, expression) in read.components.iter().zip(expressions) {
+        ensure!(
+            component.ty == "Native" && names.insert(component.name.as_str()),
+            "invalid record read component"
+        );
+        ensure!(
+            matches!(expression, Expr::Reference { name } if name == &component.name),
+            "record read expression differs from source component"
+        );
+    }
+    Ok(read
+        .components
+        .iter()
+        .map(|component| component.name.as_str())
+        .collect())
 }
 
 fn key_alignment(ty: &ScalarType) -> &'static str {
@@ -649,6 +752,19 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                     &input_value(ty, value)?,
                     "field",
                 )?)));
+            } else if let Some(schema) = schema.get("composite") {
+                let schema = checked_record_schema(schema)?;
+                let leaves = schema.flatten_leaves_json(&serde_json::to_vec(value)?)?;
+                let fields = leaves
+                    .iter()
+                    .map(|leaf| {
+                        canonical_field(
+                            leaf.as_str()
+                                .ok_or_else(|| anyhow!("record requires Native leaves"))?,
+                        )
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                values.push(StateValue::Cell(Sp::new(aligned_fields(&fields))));
             } else {
                 ensure!(
                     value.as_array().is_some_and(|items| items.is_empty()),
@@ -664,12 +780,11 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
         values.into_iter().collect(),
     )))
 }
-fn read_state_cell(
+fn read_state_aligned(
     context: &QueryContext<Db>,
     slot: u32,
     keys: &[AlignedValue],
-    ty: &str,
-) -> Result<Value> {
+) -> Result<AlignedValue> {
     let StateValue::Array(array) = context.state.get_ref() else {
         bail!("expected array state")
     };
@@ -690,6 +805,16 @@ fn read_state_cell(
     let StateValue::Cell(value) = &*cell else {
         bail!("expected state cell")
     };
+    Ok((**value).clone())
+}
+
+fn read_state_cell(
+    context: &QueryContext<Db>,
+    slot: u32,
+    keys: &[AlignedValue],
+    ty: &str,
+) -> Result<Value> {
+    let value = read_state_aligned(context, slot, keys)?;
     let mut fields = Vec::new();
     value.value_only_field_repr(&mut fields);
     ensure!(fields.len() == 1, "expected scalar state cell");
@@ -701,6 +826,26 @@ fn read_state_cell(
         ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
         ScalarType::Bytes32 => bail!("bytes ledger values are unsupported"),
     }
+}
+
+fn record_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
+    let mut schema = plan
+        .state
+        .get(slot as usize)
+        .and_then(|state| state.kind.get("tree"))
+        .ok_or_else(|| anyhow!("record path requires tree state"))?;
+    ensure!(depth < 16, "record path exceeds native index limit");
+    for _ in 0..depth {
+        schema = schema
+            .get("map")
+            .and_then(Json::as_array)
+            .filter(|parts| parts.len() == 2)
+            .and_then(|parts| parts.get(1))
+            .ok_or_else(|| anyhow!("record path exceeds declared schema"))?;
+    }
+    schema
+        .get("composite")
+        .ok_or_else(|| anyhow!("path does not select a record"))
 }
 fn native_index(
     plan: &Plan,
@@ -855,6 +1000,8 @@ pub fn prepare(
                             | Instruction::Insert { .. }
                             | Instruction::IndexPath { .. }
                             | Instruction::New
+                            | Instruction::PushFields { .. }
+                            | Instruction::PopeqFields { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -896,6 +1043,28 @@ pub fn prepare(
                         );
                         read_index += 1;
                         env.insert(read.name.clone(), inactive_read_value(&read.ty)?);
+                    }
+                    if let Instruction::PopeqFields {
+                        expressions,
+                        schema,
+                    } = operation.as_ref()
+                    {
+                        let read = plan
+                            .reads
+                            .get(read_index)
+                            .ok_or_else(|| anyhow!("missing inactive record read schema"))?;
+                        ensure!(
+                            read.guard.as_ref() == Some(guard),
+                            "inactive record read guard mismatch"
+                        );
+                        for name in record_component_names(read, expressions, schema)? {
+                            ensure!(
+                                !env.contains_key(name),
+                                "record component shadows an existing value"
+                            );
+                            env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
+                        }
+                        read_index += 1;
                     }
                     continue;
                 }
@@ -964,6 +1133,24 @@ pub fn prepare(
                     .try_into_checked()
                     .map_err(|_| anyhow!("invalid native pushed value"))?,
             },
+            Instruction::PushFields {
+                storage,
+                expressions,
+                schema,
+            } => {
+                let schema = checked_record_schema(schema)?;
+                let fields = expressions
+                    .iter()
+                    .map(|expression| evaluate(expression, &env)?.field())
+                    .collect::<Result<Vec<_>>>()?;
+                validate_record_fields(&schema, &fields)?;
+                Op::Push {
+                    storage: *storage,
+                    value: StateValue::Cell(Sp::new(aligned_fields(&fields)))
+                        .try_into_checked()
+                        .map_err(|_| anyhow!("invalid native record value"))?,
+                }
+            }
             Instruction::Popeq {
                 expression,
                 alignment,
@@ -1027,6 +1214,63 @@ pub fn prepare(
                 Op::Popeq {
                     cached: false,
                     result: aligned(&value, alignment)?,
+                }
+            }
+            Instruction::PopeqFields {
+                expressions,
+                schema,
+            } => {
+                let read = plan
+                    .reads
+                    .get(read_index)
+                    .ok_or_else(|| anyhow!("missing record read schema"))?;
+                ensure!(
+                    read.guard.as_ref() == instruction_guard,
+                    "active record read guard mismatch"
+                );
+                let names = record_component_names(read, expressions, schema)?;
+                let (slot, keys) = previous_index
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("record read lacks a native index"))?;
+                ensure!(
+                    record_schema_at_path(plan, *slot, keys.len())? == schema,
+                    "record read differs from state schema"
+                );
+                if has_written {
+                    advance_native_state_prefix(
+                        &mut prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let value = read_state_aligned(read_context, *slot, keys)?;
+                let expected_alignment =
+                    aligned_fields(&vec![Fr::from(0u64); names.len()]).alignment;
+                ensure!(
+                    value.alignment == expected_alignment,
+                    "record cell alignment mismatch"
+                );
+                let mut fields = Vec::new();
+                value.value_only_field_repr(&mut fields);
+                validate_record_fields(&checked_record_schema(schema)?, &fields)?;
+                for (name, field) in names.into_iter().zip(fields) {
+                    ensure!(
+                        !env.contains_key(name),
+                        "record component shadows an existing value"
+                    );
+                    env.insert(name.to_owned(), Value::Native(field));
+                }
+                read_index += 1;
+                Op::Popeq {
+                    cached: false,
+                    result: value,
                 }
             }
             Instruction::Member => Op::Member,

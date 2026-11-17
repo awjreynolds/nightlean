@@ -104,8 +104,9 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   let plan ← Impact.lower state value
   let publicCount := Impact.publicInputReadCount value.circuit.inputs
   let circuitInputs := value.circuit.inputs.flatMap Input.requirements
-  let readInputs := (plan.reads.drop publicCount).map fun read =>
-      ({identifier := "%input_" ++ read.name, visibility := .«public», ty := read.ty} : InputRequirement)
+  let readInputs := (plan.reads.drop publicCount).flatMap fun read =>
+      read.bindings.map fun (name, ty) =>
+        ({identifier := "%input_" ++ name, visibility := .«public», ty} : InputRequirement)
   let mut inputs := circuitInputs ++ readInputs
   let mut aliases := sourceInputAliases value.circuit.inputs ++ inputAliases readInputs
   let mut outputBounds := []
@@ -117,18 +118,22 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     outputAssertions := outputAssertions ++ result.assertions
   let mut readAssertions := []
   let mut readBounds := []
-  for (read, index) in (plan.reads.drop publicCount).zipIdx do
+  let mut readInputIndex := circuitInputs.length
+  for read in plan.reads.drop publicCount do
     if let some guard := read.guard then
       let result ← convert value.span (normalize aliases guard)
-      let inputIndex := circuitInputs.length + index
+      let start := readInputIndex
+      let finish := start + read.bindings.length
       inputs := inputs.zipIdx.map fun (input, position) =>
-        if position == inputIndex then {input with activityGuard := some result.term} else input
+        if start ≤ position && position < finish then
+          {input with activityGuard := some result.term} else input
       readAssertions := readAssertions ++ result.assertions
       readBounds := readBounds ++ result.bounds
-    if let some condition := read.inactiveDefaultConstraint then
+    for condition in read.inactiveDefaultConstraints do
       let result ← convert value.span (normalize aliases condition)
       readAssertions := readAssertions ++ result.assertions ++ [result.term]
       readBounds := readBounds ++ result.bounds
+    readInputIndex := readInputIndex + read.bindings.length
   let (_, constraints, _) ← convert value.span (collect aliases value.circuit.constraints)
   let conditions ← convert value.span (value.circuit.constraints.mapM (normalize aliases))
   let (_, guards, _) ← convert value.span (collect aliases plan.guards)

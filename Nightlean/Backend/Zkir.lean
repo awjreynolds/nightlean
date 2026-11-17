@@ -353,13 +353,14 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
   -- come from ledger cells and the VM membership result in transcript order.
   let publicCount := Impact.publicInputReadCount entry.circuit.inputs
   for read in plan.reads.drop publicCount do
-    let output := "%input_" ++ read.name
     let activity ← match read.guard with
       | none => pure Json.null
       | some guard => pure (toJson (← lowerExpr guard))
-    emit "public_input" [("guard", activity), ("type", nativeType), ("output", toJson output)]
-    constrainType read.ty output
-    if let some condition := read.inactiveDefaultConstraint then
+    for (name, ty) in read.bindings do
+      let output := "%input_" ++ name
+      emit "public_input" [("guard", activity), ("type", nativeType), ("output", toJson output)]
+      constrainType ty output
+    for condition in read.inactiveDefaultConstraints do
       emit "assert" [("cond", toJson (← lowerExpr condition))]
   for condition in plan.guards do
     emit "assert" [("cond", toJson (← lowerExpr condition))]

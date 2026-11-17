@@ -1,28 +1,7 @@
-import Nightlean.ScalarPolicy
+import Nightlean.Core
+import Nightlean.Types.Composite
 
 namespace Nightlean
-
-structure SourceSpan where
-  file : String := ""
-  line : Nat := 1
-  column : Nat := 1
-  deriving Repr, BEq, Inhabited
-
-inductive Ty where
-  | native | bool
-  | uint (maximum : Nat)
-  | bytes (length : Nat)
-  deriving Repr, BEq, DecidableEq, Inhabited
-
-def Ty.scalarKind : Ty → ScalarPolicy.Kind
-  | .native => .native
-  | .bool => .bool
-  | .uint maximum => .uint maximum
-  | .bytes length => .bytes length
-
-def Ty.isBytes : Ty → Bool
-  | .bytes _ => true
-  | _ => false
 
 inductive Visibility where
   | «public» | «private»
@@ -85,6 +64,7 @@ scalar surface. Maps retain their key type and recursively describe values. -/
 inductive LedgerValueType where
   | scalar (ty : Ty)
   | map (keyTy : Ty) (value : LedgerValueType)
+  | composite (environment : Types.CompositeEnv) (type : Types.CompositeType)
   deriving Repr, BEq, DecidableEq
 
 /-- A typed dynamic key in a nested ledger path. -/
@@ -105,6 +85,45 @@ def LedgerValueType.resolvePath (schema : LedgerValueType) : List PathKey →
     | .map expected value =>
       unless keyTy == expected do throw "nested map key type mismatch"
       value.resolvePath rest
+    | .composite .. => throw "nested map path continues through a composite value"
+
+private def checkedNativeRecord (environment : Types.CompositeEnv)
+    (type : Types.CompositeType) : Except String (Types.CheckedLayout Types.defaultLimits) := do
+  let checked ← (Types.checkedLayout Types.defaultLimits environment type).mapError (·.message)
+  unless checked.expandedLeaves > 0 && checked.value.nativeFieldOnly do
+    throw "ledger composite values must contain one or more Native fields only"
+  pure checked
+
+def LedgerValueType.compositeSchema (schema : LedgerValueType) :
+    Except String (Types.CompositeEnv × Types.CompositeType × Types.CheckedLayout Types.defaultLimits) :=
+  match schema with
+  | .composite environment type => do
+    let checked ← checkedNativeRecord environment type
+    pure (environment, type, checked)
+  | _ => .error "nested map value is not a composite record"
+
+def LedgerValueType.nativeLeafNames (environment : Types.CompositeEnv)
+    (type : Types.CompositeType) : Except String (List String) := do
+  let checked ← checkedNativeRecord environment type
+  let rec names : Nat → Types.Layout → Except String (List String)
+    | 0, _ => throw "composite leaf name traversal exhausted checked fuel"
+    | fuel + 1, layout => do
+      match layout with
+      | .scalar .nativeField => pure ["value"]
+      | .tuple items =>
+        pure (← items.zipIdx.mapM fun (item, index) => do
+          pure ((← names fuel item).map fun name => s!"{index}_{name}")).flatten
+      | .structure _ fields =>
+        pure (← fields.mapM fun (field, item) => do
+          pure ((← names fuel item).map fun name =>
+            if name == "value" then field else s!"{field}_{name}")).flatten
+      | .vector length element =>
+        pure (← (List.range length).mapM fun index => do
+          pure ((← names fuel element).map fun name => s!"{index}_{name}")).flatten
+      | _ => throw "ledger composite values must contain Native fields only"
+  let result ← names (checked.layoutNodes + 1) checked.value
+  unless result.length == checked.expandedLeaves do throw "composite leaf name count mismatch"
+  pure result
 
 structure Circuit where
   name : String
@@ -144,6 +163,10 @@ inductive Effect where
   | memberPath (state destination : String) (keys : List PathKey)
   | insertPath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
   | writePath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
+  | readCompositePath (state destination : String) (keys : List PathKey)
+      (type : Types.CompositeType) (destinations : List String)
+  | writeCompositePath (state : String) (keys : List PathKey)
+      (type : Types.CompositeType) (values : List (Expr .native))
   | emptyMapPath (state : String) (keys : List PathKey)
   deriving Repr
 
@@ -258,6 +281,9 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
   | .map keyTy value => do
     keyTy.validate caps
     value.validate caps
+  | .composite environment type => do
+    let _ ← checkedNativeRecord environment type
+    pure ()
 
 private def resolveTreeState (decls : List StateDecl) (state : String)
     (keys : List PathKey) : Except String LedgerValueType := do
@@ -345,40 +371,41 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
-          .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. => pure ()
+          .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
+          .readCompositePath .. | .writeCompositePath .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on scalar reads, writes, and require effects"}
-    let result : Except String (Option (String × Ty)) := do
+    let result : Except String (List (String × Ty)) := do
       match effect with
       | .readCell state destination ty =>
         if !caps.stateCells then throw "target lacks state cells"
         requireState decls state (.cell ty)
-        pure (some (destination, ty))
+        pure [(destination, ty)]
       | .readMap state destination keyTy valueTy key =>
         if !caps.stateMaps then throw "target lacks state maps"
         requireState decls state (.map keyTy valueTy)
         key.validate caps env
-        pure (some (destination, valueTy))
+        pure [(destination, valueTy)]
       | .readMember state destination keyTy valueTy key =>
         if !caps.stateMaps then throw "target lacks state maps"
         requireState decls state (.map keyTy valueTy)
         key.validate caps env
-        pure (some (destination, .bool))
+        pure [(destination, .bool)]
       | .require condition =>
         condition.validate caps env
-        pure none
+        pure []
       | .writeCell state ty value =>
         if !caps.stateCells then throw "target lacks state cells"
         requireState decls state (.cell ty)
         value.validate caps env
-        pure none
+        pure []
       | .writeMap state keyTy valueTy key value =>
         if !caps.stateMaps then throw "target lacks state maps"
         requireState decls state (.map keyTy valueTy)
         key.validate caps env
         value.validate caps env
-        pure none
+        pure []
       | .requireAbsent state keyTy key =>
         if !caps.stateMaps then throw "target lacks state maps"
         match decls.find? (·.name == state) with
@@ -386,7 +413,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           if found != keyTy then throw s!"state key type mismatch for '{state}'"
         | _ => throw s!"unknown map state '{state}'"
         key.validate caps env
-        pure none
+        pure []
       | .readPath state destination keys valueTy => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
@@ -394,12 +421,12 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           | throw "nested map read must select a scalar value"
         unless found == valueTy do throw "nested map read value type mismatch"
         valueTy.validate caps
-        pure (some (destination, valueTy))
+        pure [(destination, valueTy)]
       | .memberPath state destination keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
         discard (resolveTreeState decls state keys)
-        pure (some (destination, .bool))
+        pure [(destination, .bool)]
       | .insertPath state keys valueTy value
       | .writePath state keys valueTy value => do
         if !caps.stateMaps then throw "target lacks state maps"
@@ -408,20 +435,41 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           | throw "nested scalar write must select a scalar value"
         unless found == valueTy do throw "nested scalar write value type mismatch"
         value.validate caps env
-        pure none
+        pure []
+      | .readCompositePath state _ keys type destinations => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let .composite compositeEnv foundType ← resolveTreeState decls state keys
+          | throw "nested composite read must select a composite value"
+        unless foundType == type do throw "nested composite read type mismatch"
+        let names ← LedgerValueType.nativeLeafNames compositeEnv type
+        unless names.length == destinations.length do
+          throw "nested composite read destination count mismatch"
+        unless uniqueNames destinations do throw "duplicate nested composite read destination"
+        pure (destinations.map fun name => (name, .native))
+      | .writeCompositePath state keys type values => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let .composite compositeEnv foundType ← resolveTreeState decls state keys
+          | throw "nested composite write must select a composite value"
+        unless foundType == type do throw "nested composite write type mismatch"
+        let names ← LedgerValueType.nativeLeafNames compositeEnv type
+        unless names.length == values.length do throw "nested composite write leaf count mismatch"
+        for value in values do value.validate caps env
+        pure []
       | .emptyMapPath state keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
         let .map _ _ ← resolveTreeState decls state keys
           | throw "emptyMap assignment must select a map value"
-        pure none
+        pure []
     match result with
     | .error message => throw {span := e.span, message}
-    | .ok none => pure ()
-    | .ok (some (name, ty)) =>
-      if (env.lookup name).isSome then
-        throw {span := e.span, message := s!"state read shadows '{name}'"}
-      env := env ++ [(name, ty)]
+    | .ok bindings =>
+      for (name, ty) in bindings do
+        if (env.lookup name).isSome then
+          throw {span := e.span, message := s!"state read shadows '{name}'"}
+        env := env ++ [(name, ty)]
 
 def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic Unit := do
   if !uniqueNames (c.state.map (·.name)) then

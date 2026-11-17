@@ -2,6 +2,8 @@ import Nightlean.IR
 import Nightlean.Field
 import Nightlean.Semantics
 import Nightlean.Disclosure
+import Nightlean.Types.ValueSchema
+import Lean
 
 namespace Nightlean.Backend.Impact
 
@@ -14,6 +16,7 @@ inductive Aligned where
   | bit (value : Bool)
   | bitExpr (value : Expr .bool)
   | bytes32 (value : Expr (.bytes 32))
+  | nativeFields (values : List Scalar)
   deriving Repr
 
 inductive Op where
@@ -24,9 +27,10 @@ inductive Op where
   | push (value : Aligned) (storage : Bool := false)
   | newMap
   | popeq (value : Aligned)
+  | pushFields (schema : Lean.Json) (values : List Scalar) (storage : Bool := false)
+  | popeqFields (schema : Lean.Json) (values : List Scalar)
   | member
   | insert (levels : Nat)
-  deriving Repr
 
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
@@ -37,6 +41,8 @@ def Aligned.fields : Aligned → List Scalar
       .select value (.native 1) (.native 0)]
   | .bytes32 value => [.native 1, .native 32,
       .bytesField value 0, .bytesField value 1]
+  | .nativeFields values => [.native values.length] ++
+      List.replicate values.length (.native (Field.modulus - 2)) ++ values
 
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
@@ -50,23 +56,43 @@ def Op.fields : Op → List Scalar
   | .push value storage => [.native (if storage then 0x11 else 0x10), .native 1] ++ value.fields
   | .newMap => [.native 0x05]
   | .popeq value => [.native 0x0c] ++ value.fields
+  | .pushFields _ values storage =>
+      [.native (if storage then 0x11 else 0x10), .native 1] ++
+        (Aligned.nativeFields values).fields
+  | .popeqFields _ values => [.native 0x0c] ++ (Aligned.nativeFields values).fields
   | .member => [.native 0x18]
   | .insert levels => [.native (0x90 + levels)]
 
 structure Read where
   name : String
   ty : Ty
+  components : List (String × Ty) := []
+  schema : Option Lean.Json := none
   /-- Source guard for a conditionally bound read. Inactive reads use zero. -/
   guard : Option (Expr .bool) := none
-  deriving Repr
 
 def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
+  if !read.components.isEmpty then none else
   match read.ty, read.guard with
   | .bytes _, _ | _, none => none
   | .native, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.native 0)))
   | .bool, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.bool false)))
   | .uint maximum, some guard => some (.eq (.ref read.name)
       (.select guard (.ref read.name) (.uint maximum 0)))
+
+def Read.bindings (read : Read) : List (String × Ty) :=
+  if read.components.isEmpty then [(read.name, read.ty)] else read.components
+
+def Read.inactiveDefaultConstraints (read : Read) : List (Expr .bool) :=
+  if read.components.isEmpty then read.inactiveDefaultConstraint.toList else
+  match read.guard with
+  | none => []
+  | some guard => read.components.filterMap fun (name, type) =>
+      match type with
+      | .native => some (.eq (.ref name) (.select guard (.ref name) (.native 0)))
+      | .bool => some (.eq (.ref name) (.select guard (.ref name) (.bool false)))
+      | .uint maximum => some (.eq (.ref name) (.select guard (.ref name) (.uint maximum 0)))
+      | .bytes _ => none
 
 structure Plan where
   operations : List Op := []
@@ -75,7 +101,6 @@ structure Plan where
   activityGuards : List (Option (Expr .bool)) := []
   reads : List Read := []
   guards : List (Expr .bool) := []
-  deriving Repr
 
 def Plan.fields (plan : Plan) : List Scalar := plan.operations.flatMap Op.fields
 
@@ -97,7 +122,7 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
   let publicCount := publicInputReadCount entry.circuit.inputs
   let env := entry.circuit.inputs.map (fun input => (input.name, input.ty)) ++
     entry.circuit.outputs.map (fun output => (output.name, output.ty)) ++
-    (plan.reads.drop publicCount).map (fun read => (read.name, read.ty))
+    (plan.reads.drop publicCount).flatMap Read.bindings
   for field in plan.fields do field.validate {poseidon2 := true} env
   for guard in plan.guards do guard.validate {poseidon2 := true} env
   unless plan.activityGuards.isEmpty || plan.activityGuards.length == plan.operations.length do
@@ -105,6 +130,13 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
   for guard in plan.activityGuards do
     if let some guard := guard then guard.validate {poseidon2 := true} env
   for read in plan.reads do
+    if read.components.isEmpty != read.schema.isNone then
+      throw "native composite read schema/component metadata mismatch"
+    if !read.components.isEmpty then
+      unless uniqueNames (read.components.map Prod.fst) do
+        throw "duplicate native composite read field binding"
+      unless read.components.all (fun component => component.2 == .native) do
+        throw "native composite reads currently require Native fields"
     if let some guard := read.guard then guard.validate {poseidon2 := true} env
 
 private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
@@ -131,6 +163,11 @@ private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) 
   keys.mapM fun key => match key with
     | .mk ty value => nativeAligned ty value
 
+private def compositeSchema (environment : Types.CompositeEnv) (type : Types.CompositeType) :
+    Except String Lean.Json := do
+  let compiled ← (Types.compileType environment type).mapError (·.message)
+  Types.schemaJson compiled
+
 private def splitPath (keys : List Aligned) : Except String (List Aligned × Aligned) := do
   if keys.isEmpty then throw "nested map path must contain at least one key"
   let some finalKey := keys.getLast? | throw "nested map path must contain at least one key"
@@ -146,10 +183,24 @@ private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : Aligned)
   else [.push finalKey, .push value true]
   pure ([.indexPath slot true parents] ++ newValue ++ [.insert levels])
 
+private def pathWriteCompositeOps (slot : Nat) (keys : List Aligned)
+    (schema : Lean.Json) (values : List Scalar) : Except String (List Op) := do
+  let (parents, finalKey) ← splitPath keys
+  let levels := keys.length + 1
+  if levels >= 16 then throw "nested map insertion exceeds native Ins depth"
+  pure ([.indexPath slot true parents, .push finalKey,
+    .pushFields schema values true, .insert levels])
+
 private def stateSlot (state : List StateDecl) (name : String) : Except String Nat :=
   match state.findIdx? (·.name == name) with
   | some index => pure index
   | none => throw s!"unknown ledger state '{name}'"
+
+private def resolveTreeState (state : List StateDecl) (name : String)
+    (keys : List PathKey) : Except String LedgerValueType := do
+  let some declaration := state.find? (·.name == name) | throw s!"unknown tree state '{name}'"
+  let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
+  schema.resolvePath keys
 
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ => []
@@ -310,6 +361,21 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}]}
+  | .readCompositePath name destination keys type destinations => do
+    let slot ← stateSlot state name
+    let .composite environment foundType ← resolveTreeState state name keys
+      | throw "nested composite read must select a composite value"
+    unless foundType == type do throw "nested composite read type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == destinations.length do throw "nested composite read destination count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    let values := destinations.map fun name => Expr.ref (ty := .native) name
+    let components := destinations.map fun name => (name, Ty.native)
+    pure {plan with
+      operations := plan.operations ++ [
+        .dup, .indexPath slot false alignedKeys, .popeqFields schema values]
+      reads := plan.reads ++ [{name := destination, ty := .native, components := components, schema := some schema}]}
   | .memberPath name destination keys => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
@@ -324,6 +390,17 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let keys ← nativePathKeys keys
     let value ← nativeAligned ty value
     let operations ← pathWriteOps slot keys value false
+    pure {plan with operations := plan.operations ++ operations}
+  | .writeCompositePath name keys type values => do
+    let slot ← stateSlot state name
+    let .composite environment foundType ← resolveTreeState state name keys
+      | throw "nested composite write must select a composite value"
+    unless foundType == type do throw "nested composite write type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == values.length do throw "nested composite write leaf count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    let operations ← pathWriteCompositeOps slot alignedKeys schema values
     pure {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
     let slot ← stateSlot state name
@@ -356,6 +433,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (totalizeActivityValue condition (expressionNames key) key))
     | some condition, .readPath name destination keys ty =>
       pure (.readPath name destination (totalizePathKeys condition keys) ty)
+    | some condition, .readCompositePath name destination keys type destinations =>
+      pure (.readCompositePath name destination (totalizePathKeys condition keys) type destinations)
     | some condition, .memberPath name destination keys =>
       pure (.memberPath name destination (totalizePathKeys condition keys))
     | some condition, .insertPath name keys ty value =>
@@ -366,6 +445,10 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       let avoid := pathExpressionNames keys ++ expressionNames value
       pure (.writePath name (totalizePathKeys condition keys) ty
         (totalizeActivityValue condition avoid value))
+    | some condition, .writeCompositePath name keys type values =>
+      let avoid := pathExpressionNames keys ++ values.flatMap expressionNames
+      pure (.writeCompositePath name (totalizePathKeys condition keys) type
+        (values.map (totalizeActivityValue condition avoid)))
     | some condition, .emptyMapPath name keys =>
       pure (.emptyMapPath name (totalizePathKeys condition keys))
     | some _, .readCell .. => pure effect
@@ -386,7 +469,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     pure {result with
       reads := reads
       activityGuards := priorGuards ++ List.replicate added (some condition)}
-  | some condition, .readPath .. | some condition, .memberPath .. =>
+  | some condition, .readPath .. | some condition, .readCompositePath .. |
+      some condition, .memberPath .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -399,7 +483,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
-  | some condition, .insertPath .. | some condition, .writePath .. | some condition, .emptyMapPath .. =>
+  | some condition, .insertPath .. | some condition, .writePath .. |
+      some condition, .writeCompositePath .. | some condition, .emptyMapPath .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -539,6 +624,21 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
       reads := plan.reads ++ [{name := destination, ty}]}
+  | .readCompositePath name destination keys type destinations => do
+    let slot ← stateSlot state name
+    let .composite environment foundType ← resolveTreeState state name keys
+      | throw "nested composite read must select a composite value"
+    unless foundType == type do throw "nested composite read type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == destinations.length do throw "nested composite read destination count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    let values := destinations.map fun name => Expr.ref (ty := .native) name
+    let components := destinations.map fun name => (name, Ty.native)
+    plan := {plan with
+      operations := plan.operations ++ [
+        .dup, .indexPath slot false alignedKeys, .popeqFields schema values]
+      reads := plan.reads ++ [{name := destination, ty := .native, components := components, schema := some schema}]}
   | .memberPath name destination keys => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
@@ -553,6 +653,17 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let keys ← nativePathKeys keys
     let value ← nativeAligned ty value
     let operations ← pathWriteOps slot keys value false
+    plan := {plan with operations := plan.operations ++ operations}
+  | .writeCompositePath name keys type values => do
+    let slot ← stateSlot state name
+    let .composite environment foundType ← resolveTreeState state name keys
+      | throw "nested composite write must select a composite value"
+    unless foundType == type do throw "nested composite write type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == values.length do throw "nested composite write leaf count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    let operations ← pathWriteCompositeOps slot alignedKeys schema values
     plan := {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
     let slot ← stateSlot state name
@@ -617,11 +728,12 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
   let result : Except String Plan := do
     let mut plan : Plan := {}
     let sourceNames := entry.circuit.inputs.map (·.name) ++ entry.circuit.outputs.map (·.name) ++
-      entry.effects.filterMap (fun effect => match effect with
+      entry.effects.flatMap (fun effect => match effect with
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
-            .memberPath _ destination .. => some destination
-        | _ => none)
+            .memberPath _ destination .. => [destination]
+        | .readCompositePath _ _ _ _ destinations => destinations
+        | _ => [])
     if sourceNames.any (·.startsWith "_nightlean_") then
       throw "source names beginning '_nightlean_' are reserved by the native transcript producer"
     -- Public parameters must appear among Popeq reads consumed by public_input.
@@ -651,6 +763,7 @@ def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Excep
       pure (Lean.Json.arr #[Lean.Json.arr (values.toArray.map Lean.toJson)],
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)),
           ("length", Lean.toJson (32 : Nat))])
+    | .nativeFields _ => throw "grouped Native fields serialize through pushFields/popeqFields"
   pure (Lean.Json.mkObj [("value", atoms),
     ("alignment", Lean.Json.arr #[Lean.Json.mkObj [
       ("tag", Lean.toJson ("atom" : String)), ("value", alignment)]])])
@@ -686,6 +799,14 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .popeq value => do
     pure (Lean.Json.mkObj [("popeq", Lean.Json.mkObj [("cached", Lean.toJson false),
       ("result", ← value.toJson ctx env)])])
+  | .pushFields schema values storage => do
+    let values ← values.mapM (fun value => value.eval ctx env)
+    pure (Lean.Json.mkObj [("pushFields", Lean.Json.mkObj [
+      ("schema", schema), ("storage", Lean.toJson storage), ("values", Lean.toJson values)])])
+  | .popeqFields schema values => do
+    let values ← values.mapM (fun value => value.eval ctx env)
+    pure (Lean.Json.mkObj [("popeqFields", Lean.Json.mkObj [
+      ("schema", schema), ("values", Lean.toJson values)])])
   | .member => pure (Lean.toJson ("member" : String))
   | .insert levels => pure (Lean.Json.mkObj [("ins", Lean.Json.mkObj [
       ("cached", Lean.toJson false), ("n", Lean.toJson levels)])])

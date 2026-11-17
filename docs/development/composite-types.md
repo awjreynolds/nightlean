@@ -1,6 +1,6 @@
 # Canonical composite types and source layouts
 
-`Nightlean.Types.Composite` defines the Lean-owned type/layout foundation for unit, scalar leaves, structural tuples, nominal structs, nominal enums, fixed vectors and fixed byte sequences. [Checked composite values](composite-values.md) adds construction, flattening, native relation constraints and a Rust/C++ value codec. Source aggregate effects and ledger acceptance remain separate work.
+`Nightlean.Types.Composite` defines the Lean-owned type/layout foundation for unit, scalar leaves, structural tuples, nominal structs, nominal enums, fixed vectors and fixed byte sequences. [Checked composite values](composite-values.md) adds construction, flattening, native relation constraints and a Rust/C++ value codec. The source ledger path below reuses these checked layouts for a narrow Native-only record case.
 
 ## Identity and ordering
 
@@ -31,6 +31,14 @@ The enum tag and padding rules describe the source layout proposal. This package
 The selected ZKIR 3.2.1 path supports fixed-width `Bytes32` map keys with scalar map values. Circuit inputs expand to 32 ordered UInt8 leaves. Native map operations retain all 32 bytes under the pinned Bytes32 alignment and two-field encoding, and public byte inputs bind each leaf into the Impact transcript. `runtime/tests/fixtures/generic-state/issue69-bytes32/321` is generated from `tests/Issue69Bytes32Map.lean`. `runtime/tests/bytes32_map.rs` checks membership, guarded missing-key reads, insertion, scalar reads, and distinct byte strings whose scalar reductions would collide.
 
 This slice does not enable byte arithmetic, equality, scalar casts, byte-valued state, circuit outputs, or direct byte witness bindings. `CompositeType.bytes` keeps its checked aggregate layout and codec. A scalar `.bytes` layout is rejected; a 32-byte composite layout retains 32 leaves.
+
+## Bytes32-keyed Native record cells
+
+Recursive `tree` state also accepts a checked composite value at a Bytes32 key. The source fixture `tests/Issue69CompositeMap.lean` declares one named four-Native-field record, writes each field through explicit `disclose`, and reads the selected cell back as separate source-bound aliases. A guarded read of an absent cell binds four zero fields without evaluating its key payload. The next call reads the record from state.
+
+The native plan emits `pushFields` and `popeqFields` with the existing checked schema JSON. The VM stores one `Cell` using `AlignedValue::concat`, with one segment count, the ordered Field descriptors, then the ordered field values. State reads require the declared schema and exact Field alignment. `runtime/tests/composite_map.rs` covers insertion, replacement, readback, an untouched second key, skipped and active read groups, malformed leaf counts and altered transcript leaves.
+
+The IR ledger gate accepts nonempty layouts made only from Native scalar leaves and their existing tuple, structure or vector containers. The current source syntax exposes inline named records. This slice does not enable mixed scalar records, bytes, enums or general aggregate operations. Ciphertext-shaped storage does not establish Jubjub point validity or ElGamal correctness; those remain in the cryptography workstream.
 
 ## Nested Bytes32 scalar maps
 

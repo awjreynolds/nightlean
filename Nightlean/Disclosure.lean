@@ -126,6 +126,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .writeCell .. | some condition, .writeMap ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .insertPath .. | some condition, .writePath ..
+      | some condition, .readCompositePath .. | some condition, .writeCompositePath ..
       | some condition, .emptyMapPath .. =>
         expression env span condition
       | some condition, .require _ =>
@@ -170,6 +171,12 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       checkSink {description := s!"public nested map read path '{state}'", span}
         (← pathExpression env span keys) activeControl
       env := env ++ [(destination, [])]
+    | .readCompositePath state _ keys _ destinations =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public nested composite read guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public nested composite read path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ destinations.map fun destination => (destination, [])
     | .memberPath state destination keys =>
       if value.effectGuardAt index |>.isSome then
         checkSink {description := s!"public nested map membership guard '{state}'", span} [] activeControl
@@ -181,6 +188,12 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
         (← pathExpression env span keys) activeControl
       checkSink {description := s!"public nested map write value '{state}'", span}
         (← expression env span payload) activeControl
+    | .writeCompositePath state keys _ payloads =>
+      checkSink {description := s!"public nested composite write path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      for (payload, index) in payloads.zipIdx do
+        checkSink {description := s!"public nested composite write field {index} of '{state}'", span}
+          (← expression env span payload) activeControl
     | .emptyMapPath state keys =>
       checkSink {description := s!"public empty-map path '{state}'", span}
         (← pathExpression env span keys) activeControl

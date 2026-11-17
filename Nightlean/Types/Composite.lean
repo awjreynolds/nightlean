@@ -1,4 +1,4 @@
-import Nightlean.IR
+import Nightlean.Core
 
 namespace Nightlean.Types
 
@@ -88,34 +88,40 @@ instance : LawfulBEq CompositeType where
   rfl {a} := (CompositeType.structuralBEq_eq_true a a).mpr rfl
   eq_of_beq {a b} h := (CompositeType.structuralBEq_eq_true a b).mp h
 
+instance : DecidableEq CompositeType := fun left right =>
+  if equal : left == right then
+    isTrue ((CompositeType.structuralBEq_eq_true left right).mp equal)
+  else
+    isFalse (fun unequal => equal ((CompositeType.structuralBEq_eq_true left right).mpr unequal))
+
 structure Field where
   name : String
   type : CompositeType
   span : SourceSpan := {}
-  deriving Repr, BEq
+  deriving Repr, BEq, DecidableEq
 
 structure StructDecl where
   id : DeclId
   fields : List Field
   span : SourceSpan := {}
-  deriving Repr, BEq
+  deriving Repr, BEq, DecidableEq
 
 structure VariantDecl where
   name : String
   fields : List Field := []
   span : SourceSpan := {}
-  deriving Repr, BEq
+  deriving Repr, BEq, DecidableEq
 
 structure EnumDecl where
   id : DeclId
   variants : List VariantDecl
   span : SourceSpan := {}
-  deriving Repr, BEq
+  deriving Repr, BEq, DecidableEq
 
 structure CompositeEnv where
   structures : List StructDecl := []
   enumerations : List EnumDecl := []
-  deriving Repr, BEq
+  deriving Repr, BEq, DecidableEq
 
 /-- These are local compiler resource limits, not upstream language limits. -/
 structure Limits where
@@ -161,6 +167,24 @@ inductive Layout where
 
 abbrev LayoutField := String × Layout
 abbrev LayoutVariant := String × List LayoutField × Nat
+
+mutual
+  /-- True only for layouts made entirely from native-field leaves. -/
+  def Layout.nativeFieldOnly : Layout → Bool
+    | .scalar .nativeField => true
+    | .tuple items => LayoutList.nativeFieldOnly items
+    | .structure _ fields => LayoutFields.nativeFieldOnly fields
+    | .vector _ element => element.nativeFieldOnly
+    | _ => false
+
+  def LayoutList.nativeFieldOnly : List Layout → Bool
+    | [] => true
+    | item :: rest => item.nativeFieldOnly && LayoutList.nativeFieldOnly rest
+
+  def LayoutFields.nativeFieldOnly : List (String × Layout) → Bool
+    | [] => true
+    | (_, item) :: rest => item.nativeFieldOnly && LayoutFields.nativeFieldOnly rest
+end
 
 mutual
   def Layout.leafCount : Layout → Nat
@@ -245,6 +269,10 @@ def scalarLeaf : Ty → Except String ScalarLeaf
   | .bool => pure .booleanField
   | .uint maximum => pure (.boundedUnsignedField maximum)
   | .bytes _ => .error "byte strings require a composite bytes layout"
+
+private def validateScalarLayoutTy (ty : Ty) : Except String Unit := do
+  if ty.isBytes then throw "byte strings require a composite bytes layout"
+  ScalarPolicy.validate ty.scalarKind
 
 mutual
   inductive CompositeSubtype : CompositeType → CompositeType → Prop where
@@ -479,7 +507,7 @@ private def measureType (fuel : Nat) (limits : Limits) (environment : CompositeE
     | .unit => checkedMeasure limits span 0 1 1
     | .scalar ty => do
       if ty.isBytes then throw {span, message := "byte strings require a composite bytes layout"}
-      match ty.validate {} with
+      match validateScalarLayoutTy ty with
       | .ok _ => pure ()
       | .error message => throw {span, message}
       checkedMeasure limits span 1 1 1
@@ -550,7 +578,7 @@ private def layoutType (fuel : Nat) (limits : Limits) (environment : CompositeEn
   | fuel + 1 => match type with
     | .unit => pure .unit
     | .scalar ty => do
-      match ty.validate {} with
+      match validateScalarLayoutTy ty with
       | .ok _ => pure ()
       | .error message => throw {span, message}
       match scalarLeaf ty with

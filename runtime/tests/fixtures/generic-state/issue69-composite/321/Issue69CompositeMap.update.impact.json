@@ -1,0 +1,235 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "balances",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"composite":
+       {"typeFingerprint":
+        "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+        "schemaVersion": 1,
+        "layout":
+        {"kind": "struct",
+         "id": "Issue69CompositeMap.Ciphertext4",
+         "fields":
+         [{"name": "c1x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c1y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+        "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}}}]}}}],
+ "schemaVersion": 1,
+ "reads":
+ [{"type": "Bool", "name": "present"},
+  {"type": "Composite",
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "Issue69CompositeMap.Ciphertext4",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "name": "before",
+   "guard":
+   {"tag": "eq",
+    "right": {"value": true, "tag": "bool"},
+    "left": {"tag": "reference", "name": "present"}},
+   "components":
+   [{"type": "Native", "name": "before_c1x"},
+    {"type": "Native", "name": "before_c1y"},
+    {"type": "Native", "name": "before_c2x"},
+    {"type": "Native", "name": "before_c2y"}]},
+  {"type": "Composite",
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "Issue69CompositeMap.Ciphertext4",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "name": "observed",
+   "components":
+   [{"type": "Native", "name": "observed_c1x"},
+    {"type": "Native", "name": "observed_c1y"},
+    {"type": "Native", "name": "observed_c2x"},
+    {"type": "Native", "name": "observed_c2y"}]}],
+ "operations":
+ [{"op": "dup"},
+  {"slot": 0, "pushPath": false, "op": "indexPath", "keys": []},
+  {"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "account"},
+   "alignment": "bytes32"},
+  {"op": "member"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "present"},
+   "alignment": "bit"},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"tag": "eq",
+    "right": {"value": true, "tag": "bool"},
+    "left": {"tag": "reference", "name": "present"}}},
+  {"operation":
+   {"slot": 0,
+    "pushPath": false,
+    "op": "indexPath",
+    "keys":
+    [{"expression":
+      {"value":
+       {"tag": "eq",
+        "right": {"value": true, "tag": "bool"},
+        "left": {"tag": "reference", "name": "present"}},
+       "tag": "let",
+       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "body": {"tag": "reference", "name": "account"}},
+      "alignment": "bytes32"}]},
+   "op": "guarded",
+   "guard":
+   {"tag": "eq",
+    "right": {"value": true, "tag": "bool"},
+    "left": {"tag": "reference", "name": "present"}}},
+  {"operation":
+   {"schema":
+    {"typeFingerprint":
+     "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+     "schemaVersion": 1,
+     "layout":
+     {"kind": "struct",
+      "id": "Issue69CompositeMap.Ciphertext4",
+      "fields":
+      [{"name": "c1x",
+        "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+       {"name": "c1y",
+        "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+       {"name": "c2x",
+        "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+       {"name": "c2y",
+        "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+     "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+    "op": "popeqFields",
+    "expressions":
+    [{"tag": "reference", "name": "before_c1x"},
+     {"tag": "reference", "name": "before_c1y"},
+     {"tag": "reference", "name": "before_c2x"},
+     {"tag": "reference", "name": "before_c2y"}]},
+   "op": "guarded",
+   "guard":
+   {"tag": "eq",
+    "right": {"value": true, "tag": "bool"},
+    "left": {"tag": "reference", "name": "present"}}},
+  {"slot": 0, "pushPath": true, "op": "indexPath", "keys": []},
+  {"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "account"},
+   "alignment": "bytes32"},
+  {"storage": true,
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "Issue69CompositeMap.Ciphertext4",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "op": "pushFields",
+   "expressions":
+   [{"tag": "reference", "name": "c1x"},
+    {"tag": "reference", "name": "c1y"},
+    {"tag": "reference", "name": "c2x"},
+    {"tag": "reference", "name": "c2y"}]},
+  {"op": "insert", "n": 2},
+  {"op": "dup"},
+  {"slot": 0,
+   "pushPath": false,
+   "op": "indexPath",
+   "keys":
+   [{"expression": {"tag": "reference", "name": "account"},
+     "alignment": "bytes32"}]},
+  {"schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "Issue69CompositeMap.Ciphertext4",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "op": "popeqFields",
+   "expressions":
+   [{"tag": "reference", "name": "observed_c1x"},
+    {"tag": "reference", "name": "observed_c1y"},
+    {"tag": "reference", "name": "observed_c2x"},
+    {"tag": "reference", "name": "observed_c2y"}]}],
+ "nativeCircuitFile": "Issue69CompositeMap.update.zkir",
+ "guards":
+ [{"tag": "eq",
+   "right": {"tag": "reference", "name": "c1x"},
+   "left": {"tag": "reference", "name": "observed_c1x"}},
+  {"tag": "eq",
+   "right": {"tag": "reference", "name": "c1y"},
+   "left": {"tag": "reference", "name": "observed_c1y"}},
+  {"tag": "eq",
+   "right": {"tag": "reference", "name": "c2x"},
+   "left": {"tag": "reference", "name": "observed_c2x"}},
+  {"tag": "eq",
+   "right": {"tag": "reference", "name": "c2y"},
+   "left": {"tag": "reference", "name": "observed_c2y"}}],
+ "entrypoint": "update",
+ "contractName": "Issue69CompositeMap",
+ "circuit":
+ {"outputs": [],
+  "name": "issue69CompositeMap",
+  "inputs":
+  [{"visibility": "private", "type": "Bytes<32>", "name": "account"},
+   {"visibility": "private", "type": "Native", "name": "c1x"},
+   {"visibility": "private", "type": "Native", "name": "c1y"},
+   {"visibility": "private", "type": "Native", "name": "c2x"},
+   {"visibility": "private", "type": "Native", "name": "c2y"}],
+  "file": "issue69CompositeMap.zkir",
+  "constraints": []}}

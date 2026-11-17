@@ -58,6 +58,9 @@ fn operation_fields(instruction: &Instruction) -> usize {
         Instruction::Push { .. } => 5,
         Instruction::Popeq { .. } => 4,
         Instruction::IndexPath { .. } => panic!("this scalar fixture has no path operations"),
+        Instruction::PushFields { .. } | Instruction::PopeqFields { .. } => {
+            panic!("this scalar fixture has no grouped record operations")
+        }
     }
 }
 
