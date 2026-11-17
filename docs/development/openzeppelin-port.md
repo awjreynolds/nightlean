@@ -19,7 +19,7 @@ Different instruction sequences and constraint counts are acceptable.
 | Ledger-backed getter returns | totalSupply, balanceOf and isRegistered | Entrypoint returns are currently empty. Typed outputs checked after ledger effects and actual native CALL return binding remain in [issue 50](https://github.com/awjreynolds/noctium/issues/50). Public transcript reads supply state evidence, not returned function values. |
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Mixed records, lists and the full Counter ADT remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
-| Jubjub and cryptographic source operations | ElGamal balances, key registration, memos and account identifiers | Typed curve operations, byte-derived keys/randomness, affine point hashing, ElGamal binding and ECDH memo recovery have source/native examples. Bytes32 equality checks both field chunks. Typed scalar and point callbacks now use the existing private host protocol. Curve arithmetic inside helper/control expressions, curve ledger schemas, general digest byte indexing and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
+| Jubjub and cryptographic source operations | ElGamal balances, key registration, memos and account identifiers | Typed curve operations, byte-derived keys/randomness, affine point hashing, ElGamal binding and ECDH memo recovery have source/native examples. Bytes32 equality checks both field chunks. Typed scalar and point callbacks now use the existing private host protocol. Curve arithmetic inside helper/control expressions, curve ledger schemas, helper/control byte operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
@@ -58,8 +58,8 @@ Typed scalar inputs retain their original Native leaf and must equal the
 modern-Encode representation of their reduced scalar. Typed point coordinates
 must roundtrip exactly through the checked native point constructor. The four
 coordinates enter the ledger as one existing checked Native-field record. The
-record itself carries no point-validity claim. Native curve inputs also remain
-outside provider/control witness schemas.
+record itself carries no point-validity claim. This initial curve fixture does not exercise provider/control witness schemas.
+Typed callback transport now has separate evidence in `tests/CurveWitness.lean`.
 
 The selected-3.2.1 native test `runtime/tests/jubjub.rs` passes exact ciphertext
 coordinates for two accounts and a full-range public scalar `q - 1`. It rejects
@@ -91,8 +91,8 @@ SHA-256 reference preimages, checks two accounts including zero amount, preserve
 the first encrypted record, and recovers the memo. Wrong secrets, a changed
 account high byte and an altered private plaintext reject. Private point hashes
 remain subject to disclosure checks. This extends an existing `persistent_hash`
-opcode rather than adding an opcode name. Typed curve providers and the
-complete token remain separate work. Seeds in the fixture are public test data.
+opcode rather than adding an opcode name. Typed curve providers now have separate callback evidence. The complete token
+remains separate work. Seeds in the fixture are public test data.
 Fresh, secret production seeds remain a wallet obligation. No new keys, proofs
 or deployments were generated.
 
@@ -108,6 +108,18 @@ Discarded malformed point decodes still reject. Inactive guarded decodes use
 the canonical identity encoding, not zero-filled bytes. Compilation and one
 focused selected-3.2.1 native smoke passed. Other byte lengths, other curves
 and helper/control conversion routes remain outside this slice.
+
+[`tests/NativeByteIndexing.lean`](../../tests/NativeByteIndexing.lean) adds
+`byteAt(value, index)` for raw and computed Bytes32 values. Indices are public
+compile-time constants from 0 through 31, in byte order. The result is UInt 8.
+Hash digests, typed serialization and selected byte strings use native `nth`
+followed by one-limb `encode`. Raw byte inputs keep their existing leaf path.
+Indexing retains private origins and needs explicit disclosure at public sinks.
+
+The focused selected-3.2.1 example compares first/last SHA-256 bytes, serialized
+field bytes and both selector branches against independent byte values. General
+byte lengths, slicing, concatenation and dynamic byte indexing remain separate
+capabilities. This slice generates no keys, proofs or deployment.
 
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).
