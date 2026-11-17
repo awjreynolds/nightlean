@@ -4692,9 +4692,9 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "3888210ff1d27a5839fe4bd74c90256fb792387f",
+    "sourceCommit": "39715de3419b0f459eab74915b44a2d3fccb142e",
     "meaning": "Registered source-producer opcode coverage for restricted Native-field operations and an internal typed Bytes32 persistent-hash/Encode path. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 18,
+    "registeredOpcodeCount": 23,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4713,16 +4713,17 @@
       "impact",
       "output",
       "persistent_hash",
-      "encode"
+      "encode",
+      "jubjub_scalar_from_native",
+      "ec_mul_generator",
+      "ec_mul",
+      "from_coordinates",
+      "into_coordinates"
     ],
-    "notExposedOpcodeCount": 29,
+    "notExposedOpcodeCount": 24,
     "notExposedOpcodes": [
       "copy",
-      "ec_mul",
-      "ec_mul_generator",
       "hash_to_curve",
-      "into_coordinates",
-      "from_coordinates",
       "into_bytes32",
       "from_bytes32",
       "reverse_bytes",
@@ -4732,7 +4733,6 @@
       "reconstitute_field",
       "keccak256",
       "inv",
-      "jubjub_scalar_from_native",
       "slice",
       "nth",
       "concat",
@@ -4748,12 +4748,16 @@
       "bytes_from_natives"
     ],
     "explicitNativeValueTypes": [
-      "Native"
+      "Native",
+      "JubjubScalar",
+      "JubjubPoint"
     ],
     "derivedSourceEncodings": [
       "Bool as constrained Native 0/1",
       "bounded UInt through 248 bits",
-      "Bytes32 as constrained byte leaves with native byte-aligned map keys"
+      "Bytes32 as constrained byte leaves with native byte-aligned map keys",
+      "JubjubScalar inputs as canonical Native leaves with mandatory reduce/Encode equality bridges",
+      "JubjubPoint inputs as Native x/y leaves with exact coordinate roundtrip constraints"
     ],
     "ledgerSourceSlices": [
       "scalar cells/maps",
@@ -4766,7 +4770,7 @@
     "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
     "remainingTokenDependencies": [
       "mixed aligned record hashing, computed-digest byte projections and scalar derivation",
-      "Jubjub/ElGamal/ECDH source primitives",
+      "remaining Jubjub/ElGamal/ECDH KDF and memo integration",
       "mixed record values and memo lists",
       "complete Counter behavior",
       "native typed inputs/returns and composition",
@@ -4789,6 +4793,12 @@
       "scope": "Noctium",
       "declarations": "noctium_*",
       "compatibility": "Legacy Nightlean modules, declarations, proof identities and ABI/artifact identifiers remain accepted."
-    }
+    },
+    "jubjubEvidence": {
+      "source": "tests/Issue70Jubjub.lean",
+      "native": "runtime/tests/jubjub.rs",
+      "scope": "Selected-3.2.1 typed inputs, explicit scalar conversions, point generator/multiplication/addition/negation/equality and coordinates. Generic ElGamal encryption/decryption binds one aligned four-Native ciphertext record. Two accounts and q-1 pass; wrong key, zero randomness, identity key, altered plaintext, q+7 alias, malformed/off-curve/non-subgroup/noncanonical points and scalars reject. Producer rejects removed scalar and coordinate bridges. No keygen, proof or deployment for this slice. Provider/control curve schemas and typed curve ledger/CALL returns remain unsupported."
+    },
+    "degradeToNative": "Explicit Bytes32 field projection selecting little-endian bytes0..30, matching pinned native degrade_to_transient. Keeps private origins; no implicit conversion or release."
   }
 }
