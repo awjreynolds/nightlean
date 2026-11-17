@@ -86,7 +86,7 @@ theorem expectedCircuit_parts (circuit : Circuit) (expected : Expected)
   · simp only [List.isEmpty_map, inputRequirement_eq, List.filter_map, List.map_map, Function.comp_apply]
     rfl
 
-private theorem constraints_sound (ctx : EvalContext) (hash : Hash)
+theorem constraints_sound (ctx : EvalContext) (hash : Hash)
     (implementation : HashAgreement ctx hash) (inputs : Assignment)
     (types : TypeEnv) (aliases : AliasEnvironment) (values : EvalEnv)
     (environment : TypedEnvironment hash inputs aliases values types)
@@ -143,7 +143,7 @@ def valueNumber : Value → Nat
 def evalOutput (ctx : EvalContext) (values : EvalEnv) (output : Output) : Except String (String × Value) := do
   pure (output.name, Value.pack output.ty (← output.value.eval ctx values))
 
-private theorem outputs_sound (ctx : EvalContext) (hash : Hash)
+theorem outputs_sound (ctx : EvalContext) (hash : Hash)
     (implementation : HashAgreement ctx hash) (inputs : Assignment)
     (types : TypeEnv) (aliases : AliasEnvironment) (values : EvalEnv)
     (environment : TypedEnvironment hash inputs aliases values types)
@@ -292,7 +292,7 @@ private theorem bind_ok_intro (first : Except ε α) (next : α → Except ε β
   rw [checked]
   exact rest
 
-private theorem circuit_run_preflight (ctx : EvalContext) (modulus : ctx.modulus = Field.modulus)
+theorem circuit_run_preflight (ctx : EvalContext) (modulus : ctx.modulus = Field.modulus)
     (circuit : Circuit) (values result : EvalEnv) (inputs : Assignment)
     (admitted : CanonicalInputs circuit values inputs)
     (valid : circuit.validate {poseidon2 := true} = .ok ())
@@ -386,7 +386,7 @@ theorem circuit_run_steps (ctx : EvalContext) (circuit : Circuit) (values result
       cases unit
       exact ⟨constraints, output⟩
 
-private theorem constraints_complete (ctx : EvalContext) (hash : Hash)
+theorem constraints_complete (ctx : EvalContext) (hash : Hash)
     (implementation : HashAgreement ctx hash) (inputs : Assignment)
     (aliases : AliasEnvironment) (values : EvalEnv)
     (agreement : AliasAgreement hash inputs aliases values)

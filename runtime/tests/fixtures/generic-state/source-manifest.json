@@ -1,0 +1,67 @@
+{
+  "schemaVersion": 1,
+  "source": "tests/Issue66GenericState.lean",
+  "sourceSha256": "4d46ebf886d3a3855802214445536f8921615643234dab8d925e0099cf18f291",
+  "leanVersion": "4.35.0",
+  "scope": "Source-generated generic ledger plans and relations, including a computed output bound to a state write. Native preparation and checker regressions only, no proof generation, ledger acceptance or immutable compiler qualification.",
+  "profiles": [
+    {
+      "profile": "320",
+      "selector": "profiles/midnight-ledger-9.json",
+      "files": [
+        {
+          "file": "Issue66MixedState.apply.impact.json",
+          "bytes": 5768,
+          "sha256": "77784d3bad3387b72c0a8309f2e7b65cf44e49a852bb8525e1699b528ed8342c"
+        },
+        {
+          "file": "Issue66MixedState.apply.zkir",
+          "bytes": 8266,
+          "sha256": "0a4a4eebd7f35e7cb5d40da8c0fef64ec281418e0534a6fb433d12122f0fe5ca"
+        },
+        {
+          "file": "Issue66OutputState.apply.impact.json",
+          "bytes": 1524,
+          "sha256": "bedfb524125280acf750b6c5550b8753881f50f0afc20fc3a658aa42946b07c2"
+        },
+        {
+          "file": "Issue66OutputState.apply.zkir",
+          "bytes": 1720,
+          "sha256": "4bf0f7b99c6ce11117a48ccd7f984d00a74248335c13ca97ed98f6a788795570"
+        }
+      ]
+    },
+    {
+      "profile": "321",
+      "selector": "profiles/midnight-ledger-9-zkir-3.2.1-target.json",
+      "files": [
+        {
+          "file": "Issue66MixedState.apply.impact.json",
+          "bytes": 6345,
+          "sha256": "c0c29009c4863f64204c38af39819d8ad31fbb199755c559a823729136a8cd7b"
+        },
+        {
+          "file": "Issue66MixedState.apply.zkir",
+          "bytes": 8266,
+          "sha256": "0a4a4eebd7f35e7cb5d40da8c0fef64ec281418e0534a6fb433d12122f0fe5ca"
+        },
+        {
+          "file": "Issue66OutputState.apply.impact.json",
+          "bytes": 2101,
+          "sha256": "916b45b253bd75c9e1a939e2399529397ff7dfecf86b45309689692979a630c7"
+        },
+        {
+          "file": "Issue66OutputState.apply.zkir",
+          "bytes": 1720,
+          "sha256": "4bf0f7b99c6ce11117a48ccd7f984d00a74248335c13ca97ed98f6a788795570"
+        }
+      ]
+    }
+  ],
+  "additionalSources": [
+    {
+      "source": "tests/Issue66OutputBinding.lean",
+      "sourceSha256": "719b0f4f3f249c663e14cce9db67491ed0c75cf19ac74d60a260acb29a95356b"
+    }
+  ]
+}

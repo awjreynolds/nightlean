@@ -15,13 +15,25 @@ structure Cell where
 def field (value : Scalar) : Cell := ⟨.field, value⟩
 def boolean (value : _root_.Bool) : Cell := ⟨.bit, bit value⟩
 
-/-- The claim uses an array of two cells and one field-keyed map. Other native
-state constructors are deliberately outside this qualified VM subset. -/
+/-- The current native state backend stores a flat array of scalar cells and
+field-keyed maps. -/
+inductive Slot where
+  | cell (value : Cell)
+  | map (entries : List (Scalar × Scalar))
+  deriving Repr, DecidableEq
+
+/-- The legacy array constructor retains the fixed claim certificate. The
+vector constructor represents arbitrary current scalar cell/map schemas. -/
 inductive Node where
   | cell (value : Cell)
   | map (entries : List (Scalar × Scalar))
   | array (cells : List Cell) (entries : List (Scalar × Scalar))
+  | vector (items : List Slot)
   deriving Repr, DecidableEq
+
+def Slot.toNode : Slot → Node
+  | .cell value => .cell value
+  | .map entries => .map entries
 
 inductive Op where
   | push (value : Cell) (storage : _root_.Bool)
@@ -41,6 +53,14 @@ structure Machine where
 Map replacement and root-array insertion are separate VM steps. -/
 def insert : Nat → Node → List Node → Option (List Node)
   | 0, value, rest => some (value :: rest)
+  | n + 1, .cell value, .cell ⟨.field, key⟩ :: .vector items :: rest =>
+    match items[key.val]? with
+    | some (.cell _) => insert n (.vector (items.set key.val (Slot.cell value))) rest
+    | _ => none
+  | n + 1, .map entries, .cell ⟨.field, key⟩ :: .vector items :: rest =>
+    match items[key.val]? with
+    | some (.map _) => insert n (.vector (items.set key.val (Slot.map entries))) rest
+    | _ => none
   | n + 1, .cell ⟨.field, value⟩, .cell ⟨.field, key⟩ :: .map entries :: rest =>
     insert n (.map ((key, value) :: entries.filter (fun p => p.1 != key))) rest
   | n + 1, .map entries, .cell ⟨.field, key⟩ :: .array cells _ :: rest =>
@@ -60,6 +80,10 @@ def step (op : Op) (machine : Machine) : Option Machine := do
       else if slot = cells.length then some (.map entries) else none
     let rest := if path then .cell (field (scalar slot)) :: .array cells entries :: rest else rest
     pure {machine with stack := child :: rest}
+  | .index slot path, .vector items :: rest =>
+    let child ← (items[slot]?).map Slot.toNode
+    let rest := if path then .cell (field (scalar slot)) :: .vector items :: rest else rest
+    pure {machine with stack := child :: rest}
   | .member, .cell ⟨.field, key⟩ :: .map entries :: rest =>
     pure {machine with stack := .cell (boolean (entries.any (fun p => p.1 == key))) :: rest}
   | .insert levels, value :: rest =>
@@ -70,6 +94,16 @@ def step (op : Op) (machine : Machine) : Option Machine := do
 def run : List Op → Machine → Option Machine
   | [], machine => some machine
   | op :: rest, machine => (step op machine).bind (run rest)
+
+theorem run_append (first second : List Op) (before : Machine) :
+    run (first ++ second) before = (run first before).bind (run second) := by
+  induction first generalizing before with
+  | nil => rfl
+  | cons op rest ih =>
+    simp only [List.cons_append, run]
+    cases stepped : step op before with
+    | none => simp
+    | some middle => simpa [stepped] using ih middle
 
 @[simp] theorem field_inj (a b : Scalar) : field a = field b ↔ a = b := by simp [field, Cell.mk.injEq]
 @[simp] theorem boolean_ne : boolean true ≠ boolean false := by decide
@@ -113,6 +147,46 @@ theorem run_insert_two (a b : Cell) (entries : List (Scalar × Scalar)) (key val
       .cell (field (scalar 2)) :: .array [a,b] entries :: stack, reads⟩ =
       run ops ⟨.array [a,b] ((key,value) :: entries.filter (fun p => p.1 != key)) :: stack, reads⟩ := by
   simp [run, step, insert, field, show (scalar 2).val = 2 by decide]
+
+/-- Generic root slots use the same native index and insert opcodes as the
+fixed claim. A slot's former constructor must match the inserted constructor. -/
+theorem run_index_vector (items : List Slot) (slot : Nat) (path : _root_.Bool)
+    (child : Slot) (ops : List Op) (stack : List Node) (reads : List Cell)
+    (found : items[slot]? = some child) :
+    run (.index slot path :: ops) ⟨.vector items :: stack, reads⟩ =
+      run ops ⟨child.toNode ::
+        (if path then .cell (field (scalar slot)) :: .vector items :: stack else stack), reads⟩ := by
+  simp [run, step, found]
+
+theorem run_insert_vector_cell (items : List Slot) (slot : Nat) (old value : Cell)
+    (ops : List Op) (stack : List Node) (reads : List Cell)
+    (found : items[slot]? = some (.cell old))
+    (canonicalSlot : slot < Field.modulus) :
+    run (.insert 1 :: ops)
+      ⟨.cell value :: .cell (field (scalar slot)) :: .vector items :: stack, reads⟩ =
+      run ops ⟨.vector (items.set slot (.cell value)) :: stack, reads⟩ := by
+  have inserted :
+      insert 1 (.cell value) (.cell (field (scalar slot)) :: .vector items :: stack) =
+        some (.vector (items.set slot (.cell value)) :: stack) := by
+    simp [insert, field, scalar_no_wrap slot canonicalSlot, found]
+  simp [run, step, inserted]
+
+theorem run_insert_vector_map (items : List Slot) (slot : Nat)
+    (old : List (Scalar × Scalar)) (key value : Scalar)
+    (ops : List Op) (stack : List Node) (reads : List Cell)
+    (found : items[slot]? = some (.map old))
+    (canonicalSlot : slot < Field.modulus) :
+    run (.insert 2 :: ops)
+      ⟨.cell (field value) :: .cell (field key) :: .map old ::
+        .cell (field (scalar slot)) :: .vector items :: stack, reads⟩ =
+      run ops ⟨.vector (items.set slot (.map ((key, value) :: old.filter (fun p => p.1 != key)))) ::
+        stack, reads⟩ := by
+  have inserted :
+      insert 2 (.cell (field value))
+        (.cell (field key) :: .map old :: .cell (field (scalar slot)) :: .vector items :: stack) =
+        some (.vector (items.set slot (.map ((key, value) :: old.filter (fun p => p.1 != key)))) :: stack) := by
+    simp [insert, field, scalar_no_wrap slot canonicalSlot, found]
+  simp [run, step, inserted]
 
 /-- Every executed prefix is checked, including the exact final stack and read
 stream. An adversarial trace is accepted only when every transition holds. -/
