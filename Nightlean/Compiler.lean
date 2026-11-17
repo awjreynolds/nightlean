@@ -468,6 +468,9 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
   for (name, contract) in contracts do
     for ep in contract.entrypoints do
       let ep := Passes.pruneEntrypoint ep
+      let plan ← match Backend.Impact.lower contract.state ep with
+        | .error d => failDiagnostic d
+        | .ok plan => pure plan
       match Backend.Zkir.lowerEntrypoint contract.state ep with
       | .error d => failDiagnostic d
       | .ok json =>
@@ -480,7 +483,8 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
             | .ok value => pure value
             | .error diagnostic => failDiagnostic diagnostic
           let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name
-              (nativeCircuitFile name ep) profile.name with
+              (nativeCircuitFile name ep) profile.name
+              ((plan.reads.drop (Backend.Impact.publicInputReadCount ep.circuit.inputs)).flatMap (·.bindings)) with
             | .ok value => pure value
             | .error diagnostic => failDiagnostic diagnostic
           let witnessPrefix := artifactName name ++ "." ++ ep.name
@@ -490,9 +494,6 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
             ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
             ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
             ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
-      let plan ← match Backend.Impact.lower contract.state ep with
-        | .error d => failDiagnostic d
-        | .ok plan => pure plan
       let planJson := nativePlanJson profile name contract.state ep plan
       lowered := lowered.push (nativePlanFile name ep, planJson.pretty)
   unless uniqueNames (lowered.toList.map (·.1)) do

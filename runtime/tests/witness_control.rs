@@ -390,20 +390,45 @@ fn readable_private_state_source_binds_callbacks_stages_and_native_constraints()
     .unwrap();
     let relation = binding(&plan)["nativeRelation"].clone();
     let key = "noctium/NoctiumExamples.Wallet/saved";
+    assert_eq!(
+        binding(&plan)["ledgerInputs"],
+        json!([
+            {"name":"current", "type":"UIntRange<256>", "visibility":"public"}
+        ])
+    );
     for answer in ["2", "3"] {
         let attempt = "7".repeat(64);
-        let mut context = source_context(&signatures(&plan), &attempt);
-        context
-            .capabilities
-            .iter_mut()
-            .find(|capability| capability.id == "commit")
-            .unwrap()
-            .key_prefix = "noctium/NoctiumExamples.Wallet/".into();
+        let make_context = || {
+            let mut context = source_context(&signatures(&plan), &attempt);
+            context
+                .capabilities
+                .iter_mut()
+                .find(|capability| capability.id == "commit")
+                .unwrap()
+                .key_prefix = "noctium/NoctiumExamples.Wallet/".into();
+            context
+        };
         let digest = hex::encode(Sha256::digest(plan["binding"].as_str().unwrap().as_bytes()));
+        assert!(
+            Session::from_json_with_invocation_target(
+                plan.clone(),
+                BTreeMap::from([
+                    ("expected".into(), json!("2")),
+                    ("current".into(), json!("1"))
+                ]),
+                make_context(),
+                Some(&digest),
+                Some(InvocationTarget {
+                    contract_address: "a".repeat(64),
+                    entrypoint: "advance".into(),
+                }),
+            )
+            .is_err()
+        );
         let mut session = Session::from_json_with_invocation_target(
             plan.clone(),
             BTreeMap::from([("expected".into(), json!("2"))]),
-            context,
+            make_context(),
             Some(&digest),
             Some(InvocationTarget {
                 contract_address: "a".repeat(64),
@@ -450,6 +475,7 @@ fn readable_private_state_source_binds_callbacks_stages_and_native_constraints()
         assert_eq!(complete["status"], "completed", "{complete}");
         assert_eq!(complete["result"], "2");
         let completion = session.private_completion(&relation).unwrap();
+        assert!(completion["inputs"].get("current").is_none());
         assert_eq!(completion["hostWrites"][key]["value"], "2");
         let inputs = serde_json::from_value(completion["inputs"].clone()).unwrap();
         let state = create_state(
@@ -466,6 +492,20 @@ fn readable_private_state_source_binds_callbacks_stages_and_native_constraints()
         )
         .unwrap();
         check(&execution, &circuit).unwrap();
+        let wrong_state = create_state(
+            &native_plan,
+            &BTreeMap::from([(native_plan.state[0].name.clone(), json!("7"))]),
+        )
+        .unwrap();
+        if let Ok(wrong) = prepare(
+            &native_plan,
+            &inputs,
+            &wrong_state,
+            &ledger::structure::INITIAL_PARAMETERS,
+            coin_structure::contract::ContractAddress::default(),
+        ) {
+            assert!(check(&wrong, &circuit).is_err());
+        }
         let StateValue::Array(state) = execution.after.state.get_ref() else {
             panic!("expected public state array")
         };

@@ -1160,6 +1160,7 @@ fn validate_witness_payloads(
         &control,
         binding,
         circuit,
+        plan,
         plan["contractName"].as_str().unwrap_or_default(),
         plan["entrypoint"].as_str().unwrap_or_default(),
         circuit_name,
@@ -1175,10 +1176,74 @@ fn validate_witness_payloads(
 
 #[cfg(test)]
 mod witness_source_tests {
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    fn ledger_read_bindings_match_the_selected_plan_and_native_input_order() {
+        use serde_json::{Value as Json, json};
+        let control: Json = serde_json::from_str(include_str!(
+            "../tests/fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.witness.control.json"
+        )).unwrap();
+        let binding: Json = serde_json::from_str(control["binding"].as_str().unwrap()).unwrap();
+        let relation: Json = serde_json::from_str(include_str!(
+            "../tests/fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.zkir"
+        )).unwrap();
+        let plan: Json = serde_json::from_str(include_str!(
+            "../tests/fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.impact.json"
+        )).unwrap();
+        let validate = |binding: Json, relation: &Json, plan: &Json| {
+            let bytes = serde_json::to_vec(&binding).unwrap();
+            let mut control = control.clone();
+            control["binding"] = json!(String::from_utf8(bytes.clone()).unwrap());
+            crate::control::validate_witness_artifacts(
+                &control,
+                &bytes,
+                relation,
+                plan,
+                "NoctiumExamples.PrivateStateCounter",
+                "advance",
+                "NoctiumExamples.PrivateStateCounter.advance.zkir",
+                crate::profile::NAME,
+            )
+        };
+        validate(binding.clone(), &relation, &plan).unwrap();
+        let mut missing = binding.clone();
+        missing.as_object_mut().unwrap().remove("ledgerInputs");
+        assert!(validate(missing, &relation, &plan).is_err());
+        let mut widened = binding.clone();
+        widened["ledgerInputs"][0]["type"] = json!("Native");
+        assert!(validate(widened, &relation, &plan).is_err());
+        let mut wrong_read = plan.clone();
+        wrong_read["reads"][1]["name"] = json!("other");
+        assert!(validate(binding.clone(), &relation, &wrong_read).is_err());
+        let mut wrong_prologue = plan.clone();
+        wrong_prologue["reads"][0]["type"] = json!("Native");
+        assert!(validate(binding.clone(), &relation, &wrong_prologue).is_err());
+        let mut wrong_schema = plan.clone();
+        wrong_schema["reads"][0]["schema"] = json!({});
+        assert!(validate(binding.clone(), &relation, &wrong_schema).is_err());
+        let mut empty_components = plan.clone();
+        empty_components["reads"][1]["components"] = json!([]);
+        validate(binding.clone(), &relation, &empty_components).unwrap();
+        let mut reordered = relation.clone();
+        let instructions = reordered["instructions"].as_array_mut().unwrap();
+        let positions: Vec<_> = instructions
+            .iter()
+            .enumerate()
+            .filter_map(|(index, value)| {
+                matches!(value["op"].as_str(), Some("public_input" | "private_input"))
+                    .then_some(index)
+            })
+            .collect();
+        instructions.swap(positions[0], *positions.last().unwrap());
+        let mut changed_binding = binding.clone();
+        changed_binding["nativeRelation"] = reordered.clone();
+        assert!(validate(changed_binding, &reordered, &plan).is_err());
+    }
+
     #[test]
     fn actual_lean_generated_witness_bindings_match_call_relations() {
         #[cfg(not(feature = "zkir-321"))]
-        let fixtures: [(&[u8], &[u8], &[u8], &str); 2] = [
+        let fixtures: [(&[u8], &[u8], &[u8], &[u8], &str); 2] = [
             (
                 include_bytes!(
                     "../tests/fixtures/witness/320/TypedWitness.ScalarWitness.claim.witness.control.json"
@@ -1188,6 +1253,9 @@ mod witness_source_tests {
                 ),
                 include_bytes!(
                     "../tests/fixtures/witness/320/TypedWitness.ScalarWitness.claim.zkir"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/320/TypedWitness.ScalarWitness.claim.impact.json"
                 ),
                 "Scalar",
             ),
@@ -1199,11 +1267,14 @@ mod witness_source_tests {
                     "../tests/fixtures/witness/320/TypedWitness.PairWitness.claim.witness.json"
                 ),
                 include_bytes!("../tests/fixtures/witness/320/TypedWitness.PairWitness.claim.zkir"),
+                include_bytes!(
+                    "../tests/fixtures/witness/320/TypedWitness.PairWitness.claim.impact.json"
+                ),
                 "Pair",
             ),
         ];
         #[cfg(feature = "zkir-321")]
-        let fixtures: [(&[u8], &[u8], &[u8], &str); 2] = [
+        let fixtures: [(&[u8], &[u8], &[u8], &[u8], &str); 2] = [
             (
                 include_bytes!(
                     "../tests/fixtures/witness/321/TypedWitness.ScalarWitness.claim.witness.control.json"
@@ -1213,6 +1284,9 @@ mod witness_source_tests {
                 ),
                 include_bytes!(
                     "../tests/fixtures/witness/321/TypedWitness.ScalarWitness.claim.zkir"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/321/TypedWitness.ScalarWitness.claim.impact.json"
                 ),
                 "Scalar",
             ),
@@ -1224,18 +1298,23 @@ mod witness_source_tests {
                     "../tests/fixtures/witness/321/TypedWitness.PairWitness.claim.witness.json"
                 ),
                 include_bytes!("../tests/fixtures/witness/321/TypedWitness.PairWitness.claim.zkir"),
+                include_bytes!(
+                    "../tests/fixtures/witness/321/TypedWitness.PairWitness.claim.impact.json"
+                ),
                 "Pair",
             ),
         ];
-        for (control, binding, relation, kind) in fixtures {
+        for (control, binding, relation, impact_plan, kind) in fixtures {
             let control = serde_json::from_slice(control).unwrap();
             let relation = serde_json::from_slice(relation).unwrap();
+            let impact_plan = serde_json::from_slice(impact_plan).unwrap();
             let contract = format!("TypedWitness.{kind}Witness");
             let file = format!("{contract}.claim.zkir");
             crate::control::validate_witness_artifacts(
                 &control,
                 binding,
                 &relation,
+                &impact_plan,
                 &contract,
                 "claim",
                 &file,

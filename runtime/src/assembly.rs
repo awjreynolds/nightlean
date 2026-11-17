@@ -1070,9 +1070,10 @@ mod tests {
             bytes(&initial_state.data).unwrap()
         );
         assert_eq!(
-            crate::read_cell(
+            crate::read_state_cell(
                 &QueryContext::new(predicted.data.clone(), deployment.address()),
                 1,
+                &[],
                 "UIntRange<511>"
             )
             .unwrap(),

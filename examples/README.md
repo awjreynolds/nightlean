@@ -8,7 +8,7 @@ Use the current authoring examples below. They import `Noctium.Frontend`, open
 | [Bounded scalars](BoundedScalars.lean) | Private numeric inputs, inferred arithmetic bounds and a public ledger update. |
 | [Disclosure](Disclosure.lean) | Explicit release of a private value or decision. |
 | [Private claim](NoctiumPrivateClaim.lean) | Private witness inputs and calculations, approved public root/nullifier values, and a public replay-prevention map. |
-| [Private state counter](PrivateStateCounter.lean) | A wallet-owned private cell, a typed untrusted callback, explicit proof conditions and a staged private update. |
+| [Private state counter](PrivateStateCounter.lean) | A wallet-owned private cell, a typed untrusted callback, explicit proof conditions, a checked public ledger read and a staged private update. |
 | [OpenZeppelin public supply](openzeppelin/PublicSupply.lean) | Checked 128-bit accounting. Public supply changes reveal the amount even when the input is marked private. |
 
 A `private` circuit input is a witness value supplied by your application. It is

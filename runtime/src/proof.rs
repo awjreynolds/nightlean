@@ -706,6 +706,7 @@ fn authenticated_control_target(
         &control_plan,
         &binding_bytes,
         &relation,
+        &selected_plan,
         contract,
         entrypoint,
         circuit_file,

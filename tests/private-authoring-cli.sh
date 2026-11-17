@@ -36,9 +36,10 @@ test ! -e "$scratch/rejected"
 
 sed 's/:= previous/:= disclose(previous)/' "$scratch/private-release.lean" > "$scratch/approved-release.lean"
 "$cli" compile "$scratch/approved-release.lean" --output "$scratch/approved"
-python3 - "$scratch/generated/NoctiumExamples.advance.observations.json" "$scratch/approved/leak.observations.json" <<'PY'
+python3 - "$scratch/generated/NoctiumExamples.advance.observations.json" "$scratch/approved/leak.observations.json" "$scratch/generated" <<'PY'
 import json
 import sys
+from pathlib import Path
 
 with open(sys.argv[1]) as stream:
     counter = json.load(stream)
@@ -51,5 +52,13 @@ assert any("cast" in condition for condition in counter["generatedValidity"])
 with open(sys.argv[2]) as stream:
     release = json.load(stream)
 assert release["explicitReleases"] == ["previous"]
+root = Path(sys.argv[3])
+with (root / "NoctiumExamples.PrivateStateCounter.advance.witness.json").open() as stream:
+    bound = json.load(stream)
+assert bound["ledgerInputs"] == [{"name":"current", "type":"UIntRange<256>", "visibility":"public"}]
+assert all(value["name"] != "current" for value in bound["circuitInputs"])
+with (root / "NoctiumExamples.advance.witness.json").open() as stream:
+    standalone = json.load(stream)
+assert "ledgerInputs" not in standalone
 PY
 echo "readable private state source checks passed"

@@ -17,7 +17,9 @@
  "target": "midnight-ledger-9-zkir-3.2.1",
  "state": [{"name": "count", "kind": {"cell": "UIntRange<256>"}}],
  "schemaVersion": 1,
- "reads": [{"type": "UIntRange<256>", "name": "expected"}],
+ "reads":
+ [{"type": "UIntRange<256>", "name": "expected"},
+  {"type": "UIntRange<256>", "name": "current"}],
  "operations":
  [{"storage": false,
    "op": "push",
@@ -29,6 +31,14 @@
   {"op": "popeq",
    "expression":
    {"value": {"tag": "reference", "name": "expected"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "dup"},
+  {"slot": 0, "pushPath": false, "op": "index"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "current"},
     "type": "Native",
     "tag": "cast"},
    "alignment": "field"},
@@ -45,7 +55,17 @@
    "alignment": "field"},
   {"op": "insert", "n": 1}],
  "nativeCircuitFile": "NoctiumExamples.PrivateStateCounter.advance.zkir",
- "guards": [],
+ "guards":
+ [{"tag": "eq",
+   "right":
+   {"value": {"tag": "reference", "name": "expected"},
+    "type": "UIntRange<257>",
+    "tag": "cast"},
+   "left":
+   {"tag": "uadd",
+    "right": {"value": "1", "tag": "uint", "maximum": "1"},
+    "maximum": "256",
+    "left": {"tag": "reference", "name": "current"}}}],
  "entrypoint": "advance",
  "contractName": "NoctiumExamples.PrivateStateCounter",
  "circuit":

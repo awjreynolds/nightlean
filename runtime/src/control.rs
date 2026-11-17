@@ -858,6 +858,7 @@ fn raw_preflight(value: &Json) -> Result<()> {
 fn validate_relation_inputs(
     relation: &Json,
     circuit_inputs: &BTreeMap<String, (String, String)>,
+    input_order: &[(String, String)],
 ) -> Result<()> {
     let version = field(relation, "version")?;
     ensure!(
@@ -867,6 +868,7 @@ fn validate_relation_inputs(
     );
     let instructions = list(relation, "instructions")?;
     let mut declared = BTreeMap::new();
+    let mut declared_order = Vec::new();
     let mut bit_constraints = BTreeMap::<String, Vec<u64>>::new();
     let mut aliases = BTreeMap::<String, String>::new();
     let mut pending_constraints = Vec::new();
@@ -892,6 +894,7 @@ fn validate_relation_inputs(
                     .is_none(),
                 "duplicate native relation input"
             );
+            declared_order.push((input_name.to_owned(), visibility.to_owned()));
         } else if operation == "constrain_bits" {
             if let (Some(input), Some(bits)) = (
                 instruction.get("val").and_then(Json::as_str),
@@ -937,6 +940,10 @@ fn validate_relation_inputs(
             }),
         "native relation input map differs from witness binding"
     );
+    ensure!(
+        declared_order.as_slice() == input_order,
+        "native relation input order differs from witness binding"
+    );
     for (name, (type_token, _)) in circuit_inputs {
         let required_bits = match ScalarType::parse(type_token)? {
             ScalarType::Native => None,
@@ -970,24 +977,25 @@ fn validate_native_binding(
     functions: &BTreeMap<String, Arc<Function>>,
     registry: &witness::Registry,
 ) -> Result<Vec<Json>> {
-    shape(
-        binding,
-        &[
-            "schemaVersion",
-            "kind",
-            "circuitName",
-            "sourceExport",
-            "target",
-            "types",
-            "inputBindings",
-            "nativeRelation",
-            "circuitInputs",
-            "circuitOutputs",
-            "signatures",
-            "calls",
-        ],
-        false,
-    )?;
+    let has_ledger_inputs = binding.get("ledgerInputs").is_some();
+    let mut fields = vec![
+        "schemaVersion",
+        "kind",
+        "circuitName",
+        "sourceExport",
+        "target",
+        "types",
+        "inputBindings",
+        "nativeRelation",
+        "circuitInputs",
+        "circuitOutputs",
+        "signatures",
+        "calls",
+    ];
+    if has_ledger_inputs {
+        fields.push("ledgerInputs");
+    }
+    shape(binding, &fields, false)?;
     ensure!(
         field(binding, "schemaVersion")?.as_u64() == Some(1)
             && text(binding, "kind")? == "typed-witness-bindings"
@@ -1007,7 +1015,8 @@ fn validate_native_binding(
         field(binding, "types")? == &Json::Array(type_declarations.to_vec()),
         "native witness aggregate type mismatch"
     );
-    match text(field(binding, "target")?, "kind")? {
+    let target_kind = text(field(binding, "target")?, "kind")?;
+    match target_kind {
         "standalone" => shape(field(binding, "target")?, &["kind"], false)?,
         "entrypoint" => {
             let target = field(binding, "target")?;
@@ -1036,8 +1045,13 @@ fn validate_native_binding(
         }
         _ => bail!("invalid native target identity"),
     }
+    ensure!(
+        target_kind != "standalone" || !has_ledger_inputs,
+        "standalone native witness binding cannot declare ledger inputs"
+    );
 
     let mut circuit_inputs = BTreeMap::new();
+    let mut relation_input_order = Vec::new();
     for input in list(binding, "circuitInputs")? {
         shape(input, &["name", "type", "visibility"], false)?;
         let input_name = name(text(input, "name")?)?;
@@ -1047,12 +1061,60 @@ fn validate_native_binding(
         ensure!(
             ["public", "private"].contains(&visibility)
                 && circuit_inputs
-                    .insert(input_name, (input_type, visibility.to_owned()))
+                    .insert(input_name.clone(), (input_type, visibility.to_owned()))
                     .is_none(),
             "invalid or duplicate native circuit input"
         );
+        relation_input_order.push((input_name, visibility.to_owned()));
     }
     ensure!(circuit_inputs.len() <= 4096, "native circuit input limit");
+    let ledger_input_descriptors: &[Json] = match binding.get("ledgerInputs") {
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| anyhow!("invalid native ledger input list"))?,
+        None => &[],
+    };
+    ensure!(
+        circuit_inputs
+            .len()
+            .checked_add(ledger_input_descriptors.len())
+            .is_some_and(|count| count <= 4096),
+        "native relation input limit"
+    );
+    let mut ledger_inputs = BTreeMap::<String, (String, String)>::new();
+    for input in ledger_input_descriptors {
+        shape(input, &["name", "type", "visibility"], false)?;
+        let input_name = name(text(input, "name")?)?;
+        let input_type = text(input, "type")?.to_owned();
+        let scalar = ScalarType::parse(&input_type)?;
+        ensure!(
+            matches!(
+                scalar,
+                ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_)
+            ),
+            "unsupported native ledger input type"
+        );
+        let visibility = text(input, "visibility")?;
+        ensure!(
+            visibility == "public",
+            "native ledger inputs must be public"
+        );
+        ensure!(
+            ledger_inputs
+                .insert(input_name.clone(), (input_type, visibility.to_owned()))
+                .is_none(),
+            "duplicate native ledger input"
+        );
+        relation_input_order.push((input_name, visibility.to_owned()));
+    }
+    ensure!(
+        circuit_inputs
+            .len()
+            .checked_add(ledger_inputs.len())
+            .is_some_and(|count| count <= 4096),
+        "native relation input limit"
+    );
     let mut output_names = BTreeSet::new();
     for output in list(binding, "circuitOutputs")? {
         shape(output, &["name", "type"], false)?;
@@ -1227,7 +1289,23 @@ fn validate_native_binding(
                 }),
         "unbound native circuit input"
     );
-    validate_relation_inputs(field(binding, "nativeRelation")?, &expected_inputs)?;
+    let mut relation_inputs = expected_inputs;
+    for (input_name, (input_type, visibility)) in ledger_inputs {
+        ensure!(
+            !source_inputs
+                .iter()
+                .any(|(source_name, _, _)| source_name == &input_name)
+                && relation_inputs
+                    .insert(input_name, (input_type, visibility))
+                    .is_none(),
+            "native ledger input collides with source or witness input"
+        );
+    }
+    validate_relation_inputs(
+        field(binding, "nativeRelation")?,
+        &relation_inputs,
+        &relation_input_order,
+    )?;
     Ok(calls.to_vec())
 }
 
@@ -1544,10 +1622,123 @@ impl Plan {
     }
 }
 
+fn append_impact_ledger_input(
+    input: &Json,
+    impact_read: bool,
+    source_input_count: usize,
+    names: &mut BTreeSet<String>,
+    expected: &mut Vec<Json>,
+) -> Result<()> {
+    if impact_read {
+        let object = input
+            .as_object()
+            .ok_or_else(|| anyhow!("invalid Impact ledger read"))?;
+        ensure!(
+            object.contains_key("name")
+                && object.contains_key("type")
+                && !object.contains_key("schema")
+                && object
+                    .keys()
+                    .all(|key| { ["name", "type", "guard", "components"].contains(&key.as_str()) }),
+            "invalid Impact ledger read"
+        );
+    } else {
+        shape(input, &["name", "type"], false)?;
+    }
+    let input_name = name(text(input, "name")?)?;
+    let input_type = text(input, "type")?;
+    let scalar = ScalarType::parse(input_type)?;
+    ensure!(
+        matches!(
+            scalar,
+            ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_)
+        ),
+        "unsupported Impact ledger input type"
+    );
+    ensure!(
+        names.insert(input_name.clone()),
+        "duplicate Impact ledger input"
+    );
+    ensure!(
+        source_input_count
+            .checked_add(expected.len())
+            .is_some_and(|count| count < 4096),
+        "native relation input limit"
+    );
+    expected.push(json!({
+        "name": input_name,
+        "type": input_type,
+        "visibility": "public"
+    }));
+    Ok(())
+}
+
+fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
+    let source_inputs = list(field(impact_plan, "circuit")?, "inputs")?;
+    let mut public_source_inputs = Vec::new();
+    for input in source_inputs {
+        shape(input, &["name", "type", "visibility"], false)?;
+        match text(input, "visibility")? {
+            "public" => public_source_inputs.push(input),
+            "private" => {}
+            _ => bail!("invalid Impact source input visibility"),
+        }
+    }
+
+    let reads = list(impact_plan, "reads")?;
+    ensure!(
+        reads.len() >= public_source_inputs.len(),
+        "Impact plan is missing its public input prologue"
+    );
+    for (input, read) in public_source_inputs.iter().zip(reads) {
+        ensure!(
+            read.get("components").is_none()
+                && read.get("guard").is_none()
+                && read.get("schema").is_none()
+                && text(input, "name")? == text(read, "name")?
+                && text(input, "type")? == text(read, "type")?,
+            "Impact plan public input prologue mismatch"
+        );
+    }
+
+    let mut expected = Vec::new();
+    let mut names = BTreeSet::new();
+    for read in reads.iter().skip(public_source_inputs.len()) {
+        if let Some(components) = read.get("components") {
+            let components = components
+                .as_array()
+                .ok_or_else(|| anyhow!("invalid Impact ledger read components"))?;
+            if components.is_empty() {
+                append_impact_ledger_input(
+                    read,
+                    true,
+                    source_inputs.len(),
+                    &mut names,
+                    &mut expected,
+                )?;
+                continue;
+            }
+            for component in components {
+                append_impact_ledger_input(
+                    component,
+                    false,
+                    source_inputs.len(),
+                    &mut names,
+                    &mut expected,
+                )?;
+            }
+        } else {
+            append_impact_ledger_input(read, true, source_inputs.len(), &mut names, &mut expected)?;
+        }
+    }
+    Ok(expected)
+}
+
 pub(crate) fn validate_witness_artifacts(
     control_plan: &Json,
     binding_bytes: &[u8],
     relation: &Json,
+    impact_plan: &Json,
     contract: &str,
     entrypoint: &str,
     circuit_file: &str,
@@ -1575,6 +1766,31 @@ pub(crate) fn validate_witness_artifacts(
         .binding
         .as_ref()
         .ok_or_else(|| anyhow!("missing typed witness binding"))?;
+    ensure!(
+        text(impact_plan, "contractName")? == contract
+            && text(impact_plan, "entrypoint")? == entrypoint
+            && text(impact_plan, "nativeCircuitFile")? == circuit_file
+            && impact_plan
+                .get("target")
+                .is_none_or(|target| target.as_str() == Some(profile)),
+        "selected Impact plan identity mismatch"
+    );
+    ensure!(
+        field(binding, "circuitInputs")? == field(field(impact_plan, "circuit")?, "inputs")?,
+        "selected Impact plan source input mismatch"
+    );
+    let actual_ledger_inputs: &[Json] = match binding.get("ledgerInputs") {
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| anyhow!("invalid native ledger input list"))?,
+        None => &[],
+    };
+    let expected_ledger_descriptors = expected_ledger_inputs(impact_plan)?;
+    ensure!(
+        actual_ledger_inputs == expected_ledger_descriptors.as_slice(),
+        "selected Impact plan ledger input mismatch"
+    );
     ensure!(
         field(binding, "nativeRelation")? == relation,
         "typed witness relation mismatch"

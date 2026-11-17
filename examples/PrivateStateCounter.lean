@@ -27,6 +27,8 @@ end
 noctium_contract PrivateStateCounter where
   cell count : UInt 8
   entry advance uses advance where
+    read count as current
+    require eq(add(current, uint(1)), expected)
     write count := nextCount
   end
 end

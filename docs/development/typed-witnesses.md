@@ -26,9 +26,15 @@ private reads require a protocol extension, tracked with [the remaining type wor
 Declarations describe access requests. The host still grants storage permissions.
 Generated keys use `noctium/<qualified-schema>/<field>`. Grant a schema with
 the slash-terminated prefix `noctium/<qualified-schema>/`, or selected exact keys.
-The commit capability must cover every staged key. The example uses public writes
-only. Combining source witnesses with ledger reads still needs the
-[current-state witness integration](https://github.com/awjreynolds/noctium/issues/67).
+The commit capability must cover every staged key.
+
+The counter reads the public ledger count and checks the requested increment.
+Entrypoint bindings describe those public transcript inputs separately as
+`ledgerInputs`. Supply only the original circuit arguments to source execution.
+Native execution obtains ledger read values from its admitted contract state,
+not from witness callbacks or caller-supplied source arguments. Multi-operation
+proof and accepted-state qualification remains tracked in
+[current-state integration](https://github.com/awjreynolds/noctium/issues/67).
 
 [`tests/WitnessSource.lean`](../../tests/WitnessSource.lean) contains the source examples. They cover scalar calls, nominal composite arguments and results, repeated helpers, Unit and empty nominal results, private reads, staged writes and rejected disclosure. The scalar example stages `cache/last = 1`, reads the staged value, calls a helper twice, checks the replies against a public value and stages the final result.
 
