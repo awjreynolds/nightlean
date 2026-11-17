@@ -466,6 +466,27 @@ fn read_cell(context: &QueryContext<Db>, slot: u32, ty: &str) -> Result<Value> {
         ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
     }
 }
+fn advance_native_state_prefix(
+    context: &mut QueryContext<Db>,
+    program: &[Op<ResultModeVerify, Db>],
+    materialized: &mut usize,
+    boundary: usize,
+    cost: &onchain_runtime::cost_model::CostModel,
+) -> Result<()> {
+    ensure!(
+        *materialized <= boundary && boundary <= program.len(),
+        "invalid native state prefix boundary"
+    );
+    if *materialized == boundary {
+        return Ok(());
+    }
+    *context = context
+        .query(&program[*materialized..boundary], None, cost)
+        .map_err(|_| anyhow!("native state prefix rejected"))?
+        .context;
+    *materialized = boundary;
+    Ok(())
+}
 pub struct Execution {
     pub program: Program,
     pub after: QueryContext<Db>,
@@ -482,6 +503,10 @@ pub fn prepare(
 ) -> Result<Execution> {
     let mut env = environment(plan, inputs)?;
     let context = QueryContext::new(state.clone(), address);
+    let cost = &params.cost_model.runtime_cost_model;
+    let mut prefix_context = context.clone();
+    let mut materialized_prefix = 0usize;
+    let mut mutation_boundary = 0usize;
     let mut program: Program = Vec::new();
     let mut read_index = 0usize;
     let mut previous_slot = None;
@@ -529,14 +554,23 @@ pub fn prepare(
                 };
                 if let Some(name) = read_reference {
                     if !env.contains_key(name) {
-                        ensure!(
-                            !has_written,
-                            "state reads after writes are not qualified in this runtime slice"
-                        );
+                        if has_written {
+                            advance_native_state_prefix(
+                                &mut prefix_context,
+                                &program,
+                                &mut materialized_prefix,
+                                mutation_boundary,
+                                cost,
+                            )?;
+                        }
                         env.insert(
                             name.clone(),
                             read_cell(
-                                &context,
+                                if has_written {
+                                    &prefix_context
+                                } else {
+                                    &context
+                                },
                                 previous_slot
                                     .ok_or_else(|| anyhow!("unsupported state-read shape"))?,
                                 &read.ty,
@@ -568,9 +602,11 @@ pub fn prepare(
             _ => None,
         };
         program.push(op);
+        if matches!(i, Instruction::Insert { .. }) {
+            mutation_boundary = program.len();
+        }
     }
     ensure!(read_index == plan.reads.len(), "read schema mismatch");
-    let cost = &params.cost_model.runtime_cost_model;
     context.query(&program, None, cost).map_err(|_| {
         anyhow!("native state transcript rejected (spent nullifier or state mismatch)")
     })?;

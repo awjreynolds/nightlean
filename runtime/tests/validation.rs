@@ -117,7 +117,7 @@ fn unqualified_nonempty_map_state_rejects() {
 }
 
 #[test]
-fn unqualified_state_read_after_write_rejects_explicitly() {
+fn state_read_after_write_uses_the_native_tentative_state() {
     let plan:Plan=serde_json::from_value(json!({"schemaVersion":1,"entrypoint":"claim","circuit":{"inputs":[],"outputs":[]},"state":[{"name":"root","kind":{"cell":"Native"}}],"operations":[
         {"op":"push","storage":false,"alignment":"field","expression":{"tag":"constant","value":"0"}},
         {"op":"push","storage":true,"alignment":"field","expression":{"tag":"constant","value":"2"}},
@@ -130,19 +130,17 @@ fn unqualified_state_read_after_write_rejects_explicitly() {
         &serde_json::from_value(json!({"root":"1"})).unwrap(),
     )
     .unwrap();
-    let result = nightlean_runtime::prepare(
+    let execution = nightlean_runtime::prepare(
         &plan,
         &BTreeMap::new(),
         &state,
         &ledger::structure::INITIAL_PARAMETERS,
         coin_structure::contract::ContractAddress::default(),
+    )
+    .unwrap();
+    assert_eq!(execution.preimage.public_transcript_outputs.len(), 1);
+    assert_eq!(
+        field_decimal(execution.preimage.public_transcript_outputs[0]),
+        "2"
     );
-    match result {
-        Err(error) => assert!(
-            error
-                .to_string()
-                .contains("state reads after writes are not qualified")
-        ),
-        Ok(_) => panic!("unqualified state ordering accepted"),
-    }
 }
