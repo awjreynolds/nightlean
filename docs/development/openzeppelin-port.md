@@ -19,11 +19,25 @@ Different instruction sequences and constraint counts are acceptable.
 | Ledger-backed getter returns | totalSupply, balanceOf and isRegistered | Entrypoint returns are currently empty. Typed outputs checked after ledger effects and actual native CALL return binding remain in [issue 50](https://github.com/awjreynolds/noctium/issues/50). Public transcript reads supply state evidence, not returned function values. |
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Mixed records, lists and the full Counter ADT remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
-| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | Typed bytes, persistent hashes and curve source operations are tracked in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
+| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | The first issue70 slice adds `persistentHash32(Bytes32) -> Bytes32` as untagged SHA-256, explicit disclosure at a state-key sink, and `persistent_hash` plus modern `encode` lowering with pinned Bytes32 alignment. Byte projections from a computed digest, domain-separated preimages, curve operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
 The token workload does not exercise every native instruction.
+
+The account-ID hash slice has a source-derived selected-3.2.1 native test in
+`runtime/tests/persistent_hash.rs`. It checks independent SHA-256 vectors for
+32 zero bytes and the byte sequence `00..1f`, exact byte-aligned ledger keys,
+replacement of an existing key, and preservation of a second key. A wrong
+expected key and an altered private transcript fail. The source fixture also
+rejects a hash key without explicit disclosure. Hashing preserves private
+origin labels. This slice generates no keys, proofs or deployment.
+
+The preimage is exactly one Bytes32 value without a domain tag, matching the
+reference account-ID function. It is not the domain-separated tuple hashing
+needed by the remaining token operations. Modern native `encode` converts the
+typed digest to two field chunks for FAB ledger alignment. A computed digest
+does not masquerade as 32 byte leaves.
 
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).

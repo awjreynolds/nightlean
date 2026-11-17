@@ -39,6 +39,7 @@ private def checkConstants : Expr ty → Except String Unit
     if maximum ≤ ScalarPolicy.maxUint && value ≤ maximum then pure ()
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
+  | .persistentHash32 value => checkConstants value
   | .add a b | .mul a b | .sub a b | .eq a b
   | .uadd a b | .usub a b | .umul a b => do checkConstants a; checkConstants b
   | .cast _ value => checkConstants value
@@ -130,6 +131,43 @@ def constrainType (ty : Ty) (value : String) : LowerM Unit :=
   | .uint maximum => constrainUnsigned maximum value
   | .bytes _ => rejectLowering "Bytes32 must be expanded into byte inputs"
 
+private def packBytes : List String → LowerM String
+  | [] => pure "0x00"
+  | byte :: rest => do
+    let suffix ← packBytes rest
+    let scaled ← binary "mul" "0x0001" suffix
+    binary "add" byte scaled
+
+private def bytes32Alignment : Json := Json.arr #[Json.mkObj [
+  ("tag", toJson ("atom" : String)),
+  ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson (32 : Nat))])]]
+
+/-- Emit/reuse the typed SHA-256 result and modern Encode outputs. The returned
+chunks are in Encode order: low31 first, then the high byte. -/
+private def lowerPersistentHash32 (highByte low31 : String) : LowerM (List String) := do
+  let hashKey : ExpressionKey := ("persistent_hash", [highByte, low31], none)
+  let hashOutput ← match (← get).expressions.lookup hashKey with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "persistent_hash" [
+        ("alignment", bytes32Alignment),
+        ("inputs", toJson [highByte, low31]),
+        ("output", toJson output)]
+      modify fun state => {state with expressions := (hashKey, output) :: state.expressions}
+      pure output
+  let lowKey : ExpressionKey := ("encode_bytes32", [hashOutput], some 0)
+  let highKey : ExpressionKey := ("encode_bytes32", [hashOutput], some 1)
+  match ((← get).expressions.lookup lowKey, (← get).expressions.lookup highKey) with
+  | (some low, some high) => pure [low, high]
+  | _ => do
+    let low ← fresh
+    let high ← fresh
+    emit "encode" [("input", toJson hashOutput), ("outputs", toJson [low, high])]
+    modify fun state => {state with expressions :=
+      (lowKey, low) :: (highKey, high) :: state.expressions}
+    pure [low, high]
+
 private def lowerBytes : Expr (.bytes length) → LowerM (List String)
   | .ref name => do
     match (← get).byteAliases.lookup name with
@@ -138,6 +176,17 @@ private def lowerBytes : Expr (.bytes length) → LowerM (List String)
       rejectLowering s!"unbound Bytes32 source symbol '{name}'"
       pure []
   | .disclose _ value => lowerBytes value
+  | .persistentHash32 value => do
+    let values ← lowerBytes value
+    let (highByte, low31) ← match values.length with
+      | 32 => do
+        let low31 ← packBytes (values.take 31)
+        pure (values[31]!, low31)
+      | 2 => pure (values[1]!, values[0]!)
+      | _ => do
+        rejectLowering "persistentHash32 source has wrong Bytes32 encoding"
+        pure ("0x00", "0x00")
+    lowerPersistentHash32 highByte low31
   | @Expr.letE (.bytes _) _ name value body => do
     let values ← lowerBytes value
     let aliases := (← get).byteAliases
@@ -152,13 +201,6 @@ private def lowerBytes : Expr (.bytes length) → LowerM (List String)
   | _ => do
     rejectLowering "unsupported Bytes32 expression in native lowering"
     pure []
-
-private def packBytes : List String → LowerM String
-  | [] => pure "0x00"
-  | byte :: rest => do
-    let suffix ← packBytes rest
-    let scaled ← binary "mul" "0x0001" suffix
-    binary "add" byte scaled
 
 private def lowerByteInput (input : Input) : LowerM Unit := do
   match input.ty with
@@ -188,22 +230,28 @@ def lowerExpr : Expr ty → LowerM String
     | _ => pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
   | .bytesField value index => do
     let values ← lowerBytes value
-    unless values.length == 32 do rejectLowering "Bytes32 source has wrong byte count"
-    let chunk ← match index with
-      | 0 => pure (values.drop 31)
-      | 1 => pure (values.take 31)
-      | _ => do
-        rejectLowering "Bytes32 field chunk index is out of range"
-        pure []
-    packBytes chunk
+    match values.length, index with
+    | 2, 0 => pure values[1]!
+    | 2, 1 => pure values[0]!
+    | 32, 0 => packBytes (values.drop 31)
+    | 32, 1 => packBytes (values.take 31)
+    | _, _ => do
+      rejectLowering "Bytes32 source or field chunk index has an invalid encoding"
+      pure "0x00"
   | .bytesAt value index => do
     let values ← lowerBytes value
-    unless values.length == 32 do rejectLowering "Bytes32 source has wrong byte count"
-    match values[index]? with
-    | some byte => pure byte
-    | none =>
-      rejectLowering "Bytes32 byte index is out of range"
+    if values.length == 2 then
+      rejectLowering "byteAt on a computed persistentHash32 digest is unsupported"
       pure "0x00"
+    else if values.length != 32 then
+      rejectLowering "Bytes32 source has wrong byte count"
+      pure "0x00"
+    else
+      match values[index]? with
+      | some byte => pure byte
+      | none =>
+        rejectLowering "Bytes32 byte index is out of range"
+        pure "0x00"
   | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
   | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
   | .sub a b => do binary "add" (← lowerExpr a) (← unary "neg" (← lowerExpr b))
@@ -265,6 +313,9 @@ def lowerExpr : Expr ty → LowerM String
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
+  | .persistentHash32 _ => do
+    rejectLowering "Bytes32 persistentHash32 must be consumed with Bytes32 alignment"
+    pure "0x00"
 def bindPublic (values : List String) : LowerM Unit :=
   emit "impact" [("guard", toJson ("0x01" : String)), ("inputs", toJson values)]
 
@@ -291,7 +342,7 @@ still bind this public-input sequence to its accepted ledger call transcript. -/
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c
   let c := Passes.pruneCircuit c
-  c.validate { poseidon2 := true }
+  c.validate { poseidon2 := true, persistentHash32 := true }
   for condition in c.constraints do
     match checkConstants condition with
     | .error message => throw {span := c.span, message}

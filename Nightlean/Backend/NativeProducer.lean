@@ -64,9 +64,14 @@ def immediate (text : String) : Except String Nat := do
 private def validIdentifier (name : String) : Bool :=
   name.startsWith "%" && name.length > 1 && name.utf8ByteSize ≤ 1024
 
+inductive NativeValueType where
+  | native | bytes32
+  deriving Repr, BEq, DecidableEq
+
 structure Fact where
   term : Term
   maximum : Nat
+  valueType : NativeValueType := .native
   nodes : Nat := 1
   depth : Nat := 1
   assertedLessThan : Option (String × Nat) := none
@@ -93,8 +98,19 @@ def operand (state : State) (text : String) : Except String Fact := do
     let some fact := state.definitions.lookup text | throw s!"native use before definition: {text}"
     pure fact
 
+private def requireNative (fact : Fact) : Except String Unit :=
+  ensure (fact.valueType == .native) "native instruction operand must have Native type"
+
+private def nativeOperand (state : State) (text : String) : Except String Fact := do
+  let fact ← operand state text
+  requireNative fact
+  pure fact
+
 def argument (state : State) (instruction : Json) (name : String) : Except String Fact := do
   operand state (← stringField instruction name)
+
+private def nativeArgument (state : State) (instruction : Json) (name : String) : Except String Fact := do
+  nativeOperand state (← stringField instruction name)
 
 def define (state : State) (name : String) (fact : Fact) : Except String State := do
   ensure (validIdentifier name) "invalid native SSA definition"
@@ -106,6 +122,7 @@ def defineResult (state : State) (instruction : Json) (fact : Fact) : Except Str
 
 def refine (state : State) (text : String) (maximum : Nat) : Except String State := do
   let fact ← operand state text
+  requireNative fact
   if text.startsWith "%" then
     pure {state with definitions := state.definitions.map fun (name, value) =>
       (name, if name == text then {value with maximum := min value.maximum maximum} else value)}
@@ -126,8 +143,17 @@ def arguments (state : State) (instruction : Json) (name : String) : Except Stri
   ensure (values.size ≤ maxVectorLength) "native operand vector resource limit exceeded"
   values.toList.mapM fun item => do operand state (← item.getStr?)
 
+private def nativeArguments (state : State) (instruction : Json) (name : String) : Except String (List Fact) := do
+  let values ← arguments state instruction name
+  values.forM requireNative
+  pure values
+
 private def nativeType (value : Json) : Except String Unit := do
   ensure ((← value.getStr?) == "Scalar<BLS12-381>") "unsupported native value type/encoding"
+
+private def bytes32Alignment : Json := Json.arr #[Json.mkObj [
+  ("tag", toJson ("atom" : String)),
+  ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson (32 : Nat))])]]
 
 def validateInstruction (expected : Expected) (state : State) (instruction : Json) : Except String State := do
   let opcode ← stringField instruction "op"
@@ -145,7 +171,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       ensure (expected.mode == .ledgerCall && opcode == "public_input" &&
         required.visibility == .«public»)
         "conditional inputs require a source-bound public ledger read"
-      let guard ← operand state (← stringField instruction "guard")
+      let guard ← nativeOperand state (← stringField instruction "guard")
       requireBoolean guard
       ensure (guard.term == expectedGuard) "native read activity guard mismatch"
     let output ← stringField instruction "output"
@@ -155,22 +181,22 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let state ← define state output {term := .input output, maximum := Field.modulus - 1}
     pure {state with inputCount := state.inputCount + 1}
   | "add" | "mul" | "test_eq" =>
-    let left ← argument state instruction "a"
-    let right ← argument state instruction "b"
+    let left ← nativeArgument state instruction "a"
+    let right ← nativeArgument state instruction "b"
     let maximum := if opcode == "test_eq" then 1 else
       let bound := if opcode == "add" then left.maximum + right.maximum else left.maximum * right.maximum
       if bound < Field.modulus then bound else Field.modulus - 1
     defineResult state instruction (← combine (.binary opcode left.term right.term) maximum [left, right])
   | "neg" | "not" =>
-    let value ← argument state instruction "a"
+    let value ← nativeArgument state instruction "a"
     if opcode == "not" then requireBoolean value
     let maximum := if opcode == "not" then 1 else if value.maximum == 0 then 0 else Field.modulus - 1
     defineResult state instruction (← combine (.unary opcode value.term) maximum [value])
   | "cond_select" =>
-    let condition ← argument state instruction "bit"
+    let condition ← nativeArgument state instruction "bit"
     requireBoolean condition
-    let yes ← argument state instruction "a"
-    let no ← argument state instruction "b"
+    let yes ← nativeArgument state instruction "a"
+    let no ← nativeArgument state instruction "b"
     defineResult state instruction (← combine (.select condition.term yes.term no.term)
       (max yes.maximum no.maximum) [condition, yes, no])
   | "constrain_to_boolean" => refine state (← stringField instruction "val") 1
@@ -179,15 +205,15 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
   | "constrain_eq" =>
     let leftText ← stringField instruction "a"
     let rightText ← stringField instruction "b"
-    let left ← operand state leftText
-    let right ← operand state rightText
+    let left ← nativeOperand state leftText
+    let right ← nativeOperand state rightText
     let maximum := min left.maximum right.maximum
     let state ← refine state leftText maximum
     refine state rightText maximum
   | "less_than" =>
     let leftText ← stringField instruction "a"
-    let left ← operand state leftText
-    let right ← argument state instruction "b"
+    let left ← nativeOperand state leftText
+    let right ← nativeArgument state instruction "b"
     let bits ← width instruction
     ensure (left.maximum < 2 ^ bits && right.maximum < 2 ^ bits)
       "less_than operand range precondition is not established"
@@ -197,7 +223,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       | _ => none
     defineResult state instruction {fact with assertedLessThan := assumption}
   | "assert" =>
-    let value ← argument state instruction "cond"
+    let value ← nativeArgument state instruction "cond"
     requireBoolean value
     let state := if expected.assertions[state.assertionCount]? == some value.term then
       {state with assertionCount := state.assertionCount + 1} else state
@@ -205,16 +231,42 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       ensure (exclusive > 0) "asserted less_than has an impossible zero bound"
       refine state identifier (exclusive - 1)
     else pure state
+  | "persistent_hash" => do
+    let alignment ← instruction.getObjVal? "alignment"
+    ensure (alignment == bytes32Alignment) "persistent_hash requires the exact Bytes32 FAB alignment"
+    let values ← nativeArguments state instruction "inputs"
+    let (highByte, low31) ← match values with
+      | [highByte, low31] => pure (highByte, low31)
+      | _ => throw "Bytes32 persistent_hash requires exactly two aligned field operands"
+    ensure (values.all (·.valueType == .native)) "persistent_hash operands must be native fields"
+    ensure (highByte.maximum ≤ 255 && low31.maximum ≤ 2 ^ (31 * 8) - 1)
+      "Bytes32 persistent_hash operands lack byte-aligned range constraints"
+    let fact ← combine (persistentHash32Term highByte.term low31.term)
+      (Field.modulus - 1) values
+    let output ← stringField instruction "output"
+    define state output {fact with valueType := .bytes32}
+  | "encode" => do
+    let input ← argument state instruction "input"
+    ensure (input.valueType == .bytes32)
+      "encode in this source package accepts only a typed persistent_hash Bytes32 result"
+    let outputs ← arrayField instruction "outputs"
+    ensure (outputs.size == 2) "Bytes32 encode requires exactly two native outputs"
+    let lowName ← outputs[0]!.getStr?
+    let highName ← outputs[1]!.getStr?
+    let low ← combine (encodedHashChunkTerm input.term 0) (2 ^ (31 * 8) - 1) [input]
+    let state ← define state lowName low
+    let high ← combine (encodedHashChunkTerm input.term 1) 255 [input]
+    define state highName high
   | "transient_hash" =>
-    let values ← arguments state instruction "inputs"
+    let values ← nativeArguments state instruction "inputs"
     ensure (!values.isEmpty) "empty native transient hash is unsupported by this producer"
     defineResult state instruction (← combine (.hash (values.map (·.term)))
       (Field.modulus - 1) values)
   | "impact" =>
     let guardText ← stringField instruction "guard"
-    let guard ← operand state guardText
+    let guard ← nativeOperand state guardText
     requireBoolean guard
-    let values ← arguments state instruction "inputs"
+    let values ← nativeArguments state instruction "inputs"
     let some group := expected.groups[state.groupCount]? | throw "unexpected native activity group"
     let expectedGuard ← if expected.groupGuards.isEmpty then pure (.constant 1) else
       match expected.groupGuards[state.groupCount]? with
@@ -222,10 +274,11 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       | none => throw "source activity guard schedule is incomplete"
     ensure (guard.term == expectedGuard)
       "native Impact guard differs from the source-derived activity guard"
-    ensure (values.map (·.term) == group) "native transcript activity grouping/payload mismatch"
+    let actualTerms := values.map (·.term)
+    ensure (actualTerms == group) "native transcript activity grouping/payload mismatch"
     pure {state with groupCount := state.groupCount + 1}
   | "output" =>
-    let values ← arguments state instruction "vals"
+    let values ← nativeArguments state instruction "vals"
     ensure (values.map (·.term) == expected.returns) "native return signature/value mismatch"
     pure state
   | _ => throw "registered native descriptor has no executable validation rule"

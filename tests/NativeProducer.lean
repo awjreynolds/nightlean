@@ -42,7 +42,7 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard valueTypeNames.length == 15
 #guard instructionNames.eraseDups.length == 47
 #guard valueTypeNames.eraseDups.length == 15
-#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 16
+#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 18
 #guard rejected (requireInstruction "new_native_without_metadata")
 #guard rejected (requireInstruction "inv")
 #guard rejected (requireInstruction "copy")

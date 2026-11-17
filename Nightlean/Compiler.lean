@@ -7,7 +7,8 @@ namespace Nightlean.Compiler
 open Lean Elab Command
 
 private def sourceCapabilities : Capabilities :=
-  { poseidon2 := Bool.true, stateCells := Bool.true, stateMaps := Bool.true }
+  { poseidon2 := Bool.true, persistentHash32 := Bool.true,
+    stateCells := Bool.true, stateMaps := Bool.true }
 
 private def typeName : Ty → String
   | .native => "Native"
@@ -24,6 +25,8 @@ private def expressionJson : Expr ty → Json
       ("value", expressionJson value), ("index", toJson index)])]
   | .bytesAt value index => Json.mkObj [("byteAt", Json.mkObj [
       ("value", expressionJson value), ("index", toJson index)])]
+  | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
+      ("value", expressionJson value)]
   | .ref name => Json.mkObj [("ref", toJson name)]
   | .add a b => Json.mkObj [("add", toJson [expressionJson a, expressionJson b])]
   | .mul a b => Json.mkObj [("mul", toJson [expressionJson a, expressionJson b])]
@@ -53,6 +56,8 @@ private def nativeExpressionJson : Expr ty → Json
       ("value", nativeExpressionJson value), ("index", toJson index)]
   | .bytesAt value index => Json.mkObj [("tag", toJson ("byteAt" : String)),
       ("value", nativeExpressionJson value), ("index", toJson index)]
+  | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
+      ("value", nativeExpressionJson value)]
   | .ref name => Json.mkObj [("tag", toJson ("reference" : String)), ("name", toJson name)]
   | .add a b => binary "add" (nativeExpressionJson a) (nativeExpressionJson b)
   | .mul a b => binary "mul" (nativeExpressionJson a) (nativeExpressionJson b)

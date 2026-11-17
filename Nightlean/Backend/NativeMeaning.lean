@@ -83,6 +83,15 @@ def packByteTerms : List Term → Term
   | [] => .constant 0
   | byte :: rest => .binary "add" byte (.binary "mul" (.constant 256) (packByteTerms rest))
 
+/-- Canonical typed source term for persistent_hash(Bytes32). The operands are
+the exact FAB-aligned fields: the high byte, then the packed low 31 bytes. -/
+def persistentHash32Term (highByte low31 : Term) : Term :=
+  .unary "persistent_hash32" (.bytes [highByte, low31])
+
+/-- Modern Encode output chunk terms. Index 0 is low31 and index 1 is highByte. -/
+def encodedHashChunkTerm (digest : Term) (index : Nat) : Term :=
+  .unary (if index == 0 then "encode_bytes32_low31" else "encode_bytes32_highByte") digest
+
 private def bytesFieldTerms (terms : List Term) (index : Nat) : Except String (List Term) := do
   if terms.length != 32 then throw "Bytes32 source term has wrong byte count"
   match index with
@@ -121,15 +130,42 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .uint maximum value => pure (requireSourceType (.uint maximum) (.constant value) [])
   | .bytesField value index => do
     let normalized ← normalize env value
-    let .bytes terms := normalized.term | throw "Bytes32 normalization lost byte identity"
-    let chunk ← bytesFieldTerms terms index
-    let term := packByteTerms chunk
-    pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+    match normalized.term with
+    | .unary "persistent_hash32" _ =>
+      match index with
+      | 0 =>
+        let term := encodedHashChunkTerm normalized.term 1
+        pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+      | 1 =>
+        let term := encodedHashChunkTerm normalized.term 0
+        pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+      | _ => throw "Bytes32 field chunk index is out of range"
+    | .bytes terms => do
+      let chunk ← bytesFieldTerms terms index
+      let term := packByteTerms chunk
+      pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+    | _ => throw "Bytes32 normalization lost byte identity"
   | .bytesAt value index => do
     let normalized ← normalize env value
-    let .bytes terms := normalized.term | throw "Bytes32 normalization lost byte identity"
-    let some term := terms[index]? | throw "Bytes32 byte index is out of range"
-    pure {term := term, bounds := normalized.bounds ++ [(term, 255)], assertions := normalized.assertions}
+    match normalized.term with
+    | .unary "persistent_hash32" _ => throw "byteAt on a computed persistentHash32 digest is unsupported"
+    | .bytes terms => do
+      let some term := terms[index]? | throw "Bytes32 byte index is out of range"
+      pure {term := term, bounds := normalized.bounds ++ [(term, 255)], assertions := normalized.assertions}
+    | _ => throw "Bytes32 normalization lost byte identity"
+  | .persistentHash32 value => do
+    let normalized ← normalize env value
+    let (highByte, low31) ← match normalized.term with
+      | .bytes terms => do
+        unless terms.length == 32 do throw "Bytes32 source term has wrong byte count"
+        let some high := terms[31]? | throw "Bytes32 source term has no high byte"
+        let low ← bytesFieldTerms terms 1
+        pure (high, packByteTerms low)
+      | .unary "persistent_hash32" _ =>
+        pure (encodedHashChunkTerm normalized.term 1, encodedHashChunkTerm normalized.term 0)
+      | _ => throw "persistentHash32 source lost Bytes32 identity"
+    let term := persistentHash32Term highByte low31
+    pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
   | .ref name => do
     let some term := env.lookup name | throw s!"unbound native source symbol '{name}'"
     pure (requireSourceType ty term [])
@@ -209,6 +245,7 @@ structure Expected where
   deriving Repr
 
 theorem normalize_disclosure_erasure (env : AliasEnvironment) (span : SourceSpan) (value : Expr ty) :
-    normalize env (.disclose span value) = normalize env value := by simp [normalize]
+    normalize env (.disclose span value) = normalize env value := by
+  rw [normalize.eq_18]
 
 end Nightlean.Backend.Native

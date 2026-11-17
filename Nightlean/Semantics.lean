@@ -43,6 +43,10 @@ hash is supplied by the reference semantics. -/
 structure EvalContext where
   modulus : Nat
   poseidon2 : Nat → Nat → Nat → Except String Nat
+  /-- Qualified host implementation of the pinned Bytes32 persistent hash.
+  The default rejects, so evaluation never substitutes a placeholder hash. -/
+  persistentHash32 : List Nat → Except String (List Nat) :=
+    fun _ => .error "qualified Bytes32 persistent-hash oracle is unavailable"
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
@@ -109,6 +113,12 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     match values[index]? with
     | some byte => if byte ≤ 255 then pure byte else .error "noncanonical Bytes32 byte"
     | none => .error "Bytes32 byte index is out of range"
+  | .persistentHash32 value => do
+    let input ← value.eval ctx env
+    let result ← ctx.persistentHash32 input
+    if result.length != 32 || !result.all (· ≤ 255) then
+      throw "persistent-hash oracle returned a malformed Bytes32 digest"
+    pure result
   | .ref name => do
     let some raw := env.lookup name | throw s!"missing value '{name}'"
     let some value := raw.as ty | throw s!"value type mismatch for '{name}'"
@@ -170,7 +180,7 @@ theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSp
     (Expr.disclose span value).eval ctx env = value.eval ctx env := by rfl
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
-  match c.validate {nativeModulus := ctx.modulus, poseidon2 := true} with
+  match c.validate {nativeModulus := ctx.modulus, poseidon2 := true, persistentHash32 := true} with
   | .error diagnostic => throw diagnostic.message
   | .ok _ => pure ()
   if !uniqueNames (env.map Prod.fst) then throw "duplicate input value"

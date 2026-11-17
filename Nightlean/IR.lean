@@ -21,6 +21,9 @@ inductive Expr : Ty → Type where
   lowering. Source expressions cannot cast or do arithmetic on byte strings. -/
   | bytesField (value : Expr (.bytes length)) (chunkIndex : Nat) : Expr .native
   | bytesAt (value : Expr (.bytes length)) (index : Nat) : Expr (.uint 255)
+  /-- SHA-256 over the pinned FAB Bytes32 alignment, using native ZKIR
+  persistent_hash and returning a typed Bytes32 digest. -/
+  | persistentHash32 (value : Expr (.bytes 32)) : Expr (.bytes 32)
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -197,6 +200,7 @@ structure Capabilities where
   equality : Bool := true
   select : Bool := true
   poseidon2 : Bool := false
+  persistentHash32 : Bool := false
   stateCells : Bool := false
   stateMaps : Bool := false
   deriving Repr
@@ -230,6 +234,9 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .bytesAt value index => do
     value.validate caps env
     unless index < 32 do throw "Bytes32 byte index is out of range"
+  | .persistentHash32 value => do
+    unless caps.persistentHash32 do throw "target lacks qualified Bytes32 persistent-hash support"
+    value.validate caps env
   | .ref name => do
     ty.validate caps
     match env.lookup name with

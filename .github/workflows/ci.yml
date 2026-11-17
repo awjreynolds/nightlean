@@ -39,6 +39,7 @@ jobs:
           lake env lean tests/Issue69Bytes32Map.lean
           lake env lean tests/Issue69NestedCounter.lean
           lake env lean tests/Issue69CompositeMap.lean
+          lake env lean tests/Issue70PersistentHash.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean
           lake env lean tests/Issue43MapMembership.lean

@@ -123,12 +123,12 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
   let env := entry.circuit.inputs.map (fun input => (input.name, input.ty)) ++
     entry.circuit.outputs.map (fun output => (output.name, output.ty)) ++
     (plan.reads.drop publicCount).flatMap Read.bindings
-  for field in plan.fields do field.validate {poseidon2 := true} env
-  for guard in plan.guards do guard.validate {poseidon2 := true} env
+  for field in plan.fields do field.validate {poseidon2 := true, persistentHash32 := true} env
+  for guard in plan.guards do guard.validate {poseidon2 := true, persistentHash32 := true} env
   unless plan.activityGuards.isEmpty || plan.activityGuards.length == plan.operations.length do
     throw "native activity guard schedule length mismatch"
   for guard in plan.activityGuards do
-    if let some guard := guard then guard.validate {poseidon2 := true} env
+    if let some guard := guard then guard.validate {poseidon2 := true, persistentHash32 := true} env
   for read in plan.reads do
     if read.components.isEmpty != read.schema.isNone then
       throw "native composite read schema/component metadata mismatch"
@@ -137,7 +137,7 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
         throw "duplicate native composite read field binding"
       unless read.components.all (fun component => component.2 == .native) do
         throw "native composite reads currently require Native fields"
-    if let some guard := read.guard then guard.validate {poseidon2 := true} env
+    if let some guard := read.guard then guard.validate {poseidon2 := true, persistentHash32 := true} env
 
 private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
   | .native, value => pure value
@@ -205,6 +205,7 @@ private def resolveTreeState (state : List StateDecl) (name : String)
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ => []
   | .bytesField value _ | .bytesAt value _ => expressionNames value
+  | .persistentHash32 value => expressionNames value
   | .ref name => [name]
   | .add left right => expressionNames left ++ expressionNames right
   | .mul left right => expressionNames left ++ expressionNames right
@@ -251,6 +252,7 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .uint maximum value => .uint maximum value
   | .bytesField value index => .bytesField (totalizeUnder guard value) index
   | .bytesAt value index => .bytesAt (totalizeUnder guard value) index
+  | .persistentHash32 value => .persistentHash32 (totalizeUnder guard value)
   | .ref name => .ref name
   | .add left right => .add (totalizeUnder guard left) (totalizeUnder guard right)
   | .mul left right => .mul (totalizeUnder guard left) (totalizeUnder guard right)
@@ -723,7 +725,7 @@ is a root array with one slot per declaration. Cells, including booleans, use
 Native field alignment. Membership results use the VM's byte-aligned boolean.
 The plan is not deployable until its fields are bound by the relation producer. -/
 def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan := do
-  entry.validate {poseidon2 := true, stateCells := true, stateMaps := true} state
+  entry.validate {poseidon2 := true, persistentHash32 := true, stateCells := true, stateMaps := true} state
   Disclosure.entrypoint entry
   let result : Except String Plan := do
     let mut plan : Plan := {}

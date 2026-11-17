@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="1160" viewBox="0 0 1600 1160" role="img" aria-labelledby="title description">
   <title id="title">Noctium project goals: the full native Midnight capability map</title>
-  <desc id="description">Research preview. Six project goals cover full native ZKIR v3, the Lean contract language, ledger capabilities and composition, private execution and disclosure, native/web/mobile SDKs, and proof-to-deployment assurance. These are target capabilities, not a list of delivered features. Current evidence covers claim-specific correctness and scoped privacy, exact byte/build certificates, Rust and C/C++ private-claim proving, transactions and recovery on localnet. Generic scalar lowerer soundness and completeness are proved. Frontend preservation, broader native proofs, capabilities and web/mobile SDKs remain open. The selected claim has qualified deployed identity.</desc>
+  <desc id="description">Research preview. Six project goals cover full native ZKIR v3, the Lean contract language, ledger capabilities and composition, private execution and disclosure, native/web/mobile SDKs, and proof-to-deployment assurance. These are target capabilities, not a list of delivered features. Current evidence covers claim-specific correctness and scoped privacy, exact byte/build certificates, Rust and C/C++ private-claim proving, transactions and recovery on localnet. Eighteen opcode names have restricted source-producer support. Native examples cover guarded state effects, nested maps, Native-field records and untagged Bytes32 SHA-256 account hashes. This count does not establish complete overload coverage. Generic scalar lowerer soundness and completeness are proved. Frontend preservation, broader native proofs, capabilities and web/mobile SDKs remain open. The selected claim has qualified deployed identity.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#101D30"/>
@@ -51,7 +51,7 @@
       <text x="875" y="741">Proof-to-deployment assurance</text>
     </g>
     <g fill="#C5D2E4" font-size="21">
-      <text x="84" y="352">Every instruction and value type in the pinned implementation</text>
+      <text x="84" y="352">47 instruction variants · 15 native value types · ZKIR 3.2.1</text>
       <text x="84" y="382">Typed source mappings · canonical encodings · cryptography</text>
       <text x="84" y="412">Native checking · key generation · proving · verification</text>
       <text x="84" y="442">Execution evidence and explicit upstream blockers</text>
@@ -84,14 +84,14 @@
 
     <path d="M60 925H1540" stroke="#293A52"/>
     <text x="60" y="962" fill="#70E6CF" font-size="16" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
-    <text x="60" y="998" fill="#E3EBF5" font-size="21">Claim + scalar lowerer proofs · scoped native privacy</text>
-    <text x="60" y="1029" fill="#AEBFD5" font-size="21">Exact byte/build certificates · claim deployment identity</text>
-    <text x="60" y="1060" fill="#AEBFD5" font-size="21">Rust + C/C++ proof, transactions + recovery · localnet</text>
+    <text x="60" y="998" fill="#E3EBF5" font-size="21">18 opcode names · restricted source support · Bytes32 SHA-256</text>
+    <text x="60" y="1029" fill="#AEBFD5" font-size="21">Native maps + records · guarded state effects</text>
+    <text x="60" y="1060" fill="#AEBFD5" font-size="21">Claim + scalar proofs · localnet · Rust + C/C++ clients</text>
 
     <path d="M800 952V1064" stroke="#293A52"/>
     <text x="840" y="962" fill="#CFB58A" font-size="16" font-weight="700" letter-spacing="1.8">OPEN ASSURANCE + COVERAGE</text>
-    <text x="840" y="998" fill="#E3EBF5" font-size="21">Frontend preservation · broader circuit + ledger proofs</text>
-    <text x="840" y="1029" fill="#AEBFD5" font-size="21">Broader language, ZKIR and ledger feature qualification</text>
+    <text x="840" y="998" fill="#E3EBF5" font-size="21">Full ZKIR v3 · curve crypto + contract composition</text>
+    <text x="840" y="1029" fill="#AEBFD5" font-size="21">Mixed state + token integration · broader compiler proofs</text>
     <text x="840" y="1060" fill="#AEBFD5" font-size="21">TypeScript/WASM, Kotlin and Swift SDKs</text>
 
     <text x="60" y="1125" fill="#92A9C7" font-size="20">github.com/awjreynolds/noctium</text>

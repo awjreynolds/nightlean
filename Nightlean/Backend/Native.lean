@@ -7,10 +7,11 @@ def inventoryRevision : String := "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
 inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
+  | persistentHash32 | encodeBytes32
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
-  | canonicalNative
+  | canonicalNative | fabBytes32Hash | bytes32EncodingChunks
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -23,6 +24,7 @@ inductive EffectRule where
 
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
+  | alignedBytes32 | typedBytes32Input
   deriving Repr, BEq, DecidableEq
 
 inductive GuardRule where
@@ -31,6 +33,7 @@ inductive GuardRule where
 
 inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
+  | sourceHashTerm | encodedHashChunks
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -145,6 +148,14 @@ def instructionSupport (opcode : String) : Except String Support :=
     scalar .nativeBinary .propagateAll .pure .boundedOperands .noGuard .none ["a", "b", "bits", "output"]
   | "transient_hash" => .supported <|
     scalar .nativeVector .propagateAll .pure .canonicalNative .noGuard .none ["inputs", "output"]
+  | "persistent_hash" => .supported <|
+    let descriptor := scalar .persistentHash32 .propagateAll .pure .alignedBytes32 .noGuard .sourceHashTerm
+      ["alignment", "inputs", "output"]
+    {descriptor with encoding := .fabBytes32Hash}
+  | "encode" => .supported <|
+    let descriptor := scalar .encodeBytes32 .propagateAll .pure .typedBytes32Input .noGuard .encodedHashChunks
+      ["input", "outputs"]
+    {descriptor with encoding := .bytes32EncodingChunks}
   | "public_input" => .supported <|
     scalar .nativeInput .declaredInputOrigin .transcriptInput .matchingNativeSignature .sourceBoundPublicRead
       .expectedInputSchema ["guard", "type", "output"]

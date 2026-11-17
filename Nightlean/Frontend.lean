@@ -113,6 +113,7 @@ scoped syntax "disclose(" nlexpr ")" : nlexpr
 scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
 
 declare_syntax_cat nlcstmt
 scoped syntax "public" ident ":" nltype : nlcstmt
@@ -232,6 +233,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| add($a, $b)) | `(nlexpr| mul($a, $b))
   | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
+  | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
   | `(nlexpr| select($c, $a, $b)) =>
     hasPartialScalar c || hasPartialScalar a || hasPartialScalar b
   | _ => Bool.false
@@ -302,6 +304,11 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let a ← expected env a .native
     let b ← expected env b .native
     pure (.native, ← `(Nightlean.Expr.poseidon2 $domain $a $b))
+  | `(nlexpr| persistentHash32($value)) => do
+    let (valueTy, value) ← expression env value
+    unless valueTy == .bytes 32 do
+      throwErrorAt stx "persistentHash32 requires a Bytes32 expression"
+    pure (.bytes 32, ← `(Nightlean.Expr.persistentHash32 $value))
   | _ => throwErrorAt stx "unsupported Nightlean expression"
 where
   expected (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) : CommandElabM (TSyntax `term) := do

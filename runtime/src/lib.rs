@@ -2,6 +2,7 @@
 use crate::zkir::IrSource;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
+use base_crypto::repr::BinaryHashRepr;
 use coin_structure::contract::ContractAddress;
 use ledger::{
     construct::{PreTranscript, partition_transcripts},
@@ -18,6 +19,7 @@ use onchain_runtime::{
 };
 use serde::Deserialize;
 use serde_json::Value as Json;
+use sha2::{Digest, Sha256};
 use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
@@ -25,7 +27,7 @@ use std::{
 use storage::{arena::Sp, db::InMemoryDB};
 use transient_crypto::{
     curve::Fr,
-    fab::AlignedValueExt,
+    fab::{AlignedValueExt, AlignmentExt, ValueReprAlignedValue},
     hash::transient_hash,
     proofs::{KeyLocation, ProofPreimage},
     repr::FieldRepr,
@@ -153,6 +155,10 @@ pub enum Expr {
         value: Box<Expr>,
         index: usize,
     },
+    #[serde(rename = "persistentHash32")]
+    PersistentHash32 {
+        value: Box<Expr>,
+    },
     Let {
         name: String,
         value: Box<Expr>,
@@ -254,6 +260,18 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 number: BigUint::from(*byte),
                 maximum: BigUint::from(255u16),
             }
+        }
+        Expr::PersistentHash32 { value } => {
+            let value = aligned(&evaluate(value, env)?, "bytes32")?;
+            let mut fields = Vec::new();
+            value.value_only_field_repr(&mut fields);
+            let decoded = value
+                .alignment
+                .parse_field_repr(&fields)
+                .ok_or_else(|| anyhow!("invalid persistent hash byte alignment"))?;
+            let mut bytes = zeroize::Zeroizing::new(Vec::new());
+            ValueReprAlignedValue(decoded).binary_repr(&mut *bytes);
+            Value::Bytes(Sha256::digest(bytes.as_slice()).to_vec())
         }
         Expr::Add { left, right } => {
             Value::Native(evaluate(left, env)?.field()? + evaluate(right, env)?.field()?)

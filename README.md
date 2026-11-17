@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/noctium-social.png" alt="Noctium research preview. Prove contract behavior in Lean and compile for Midnight. Published evidence covers the private claim's correctness, scoped privacy and exact artifacts. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open." width="100%">
+  <img src="docs/assets/noctium-social.png" alt="Noctium research preview. Prove contract behavior in Lean and compile for Midnight. Published evidence covers the private claim's correctness, scoped privacy and exact artifacts. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open." width="100%">
 </p>
 
 <p align="center">
@@ -22,7 +22,7 @@ Noctium is a Lean 4 compiler and proof framework for Midnight private contracts.
 
 The compiler and primary lowering are written in Lean. Contract execution uses a finite supported subset. Proof authoring uses Lean's full theorem language. The Rust and C/C++ application paths need no Node, and Noctium has no Compact compiler or runtime dependency.
 
-**Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. These are claim-specific guarantees. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
+**Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. These are claim-specific guarantees. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
 
 ## Try the compiler
 
@@ -85,7 +85,7 @@ The destination is [full native ZKIR v3 and Midnight ledger capability coverage]
 
 SDK goals cover native Rust/C/C++, TypeScript with WASM for web dapps, Kotlin for Android and Swift for iOS. Rust and C/C++ have qualified private-claim and [typed source-witness](docs/development/typed-witness-qualification.md) proof, transaction and private-state evidence on localnet. Web/mobile packages and full witness-language coverage remain goals.
 
-Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, [bounded type and natural specialization](docs/development/generics.md), scalar and component disclosure checks, and lazy host control. Checked composite layouts and codecs are present. [Source helper outputs](docs/development/component-disclosure.md) flatten checked composite results into native circuit leaves. Aggregate ledger effects, native guarded execution and broader composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
+Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, [bounded type and natural specialization](docs/development/generics.md), scalar and component disclosure checks, and lazy host control. Checked composite layouts and codecs are present. [Source helper outputs](docs/development/component-disclosure.md) flatten checked composite results into native circuit leaves. Source/native examples cover guarded state effects, Bytes32 map keys, nested scalar maps, Native-field records and untagged Bytes32 SHA-256 account hashes. Mixed ledger values, curve cryptography, typed contract returns and broader composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
 
 Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/1) and [contribution guide](CONTRIBUTING.md). The [documentation index](docs/README.md) connects authoring, runtime integration, proof reproduction and capability research.
 

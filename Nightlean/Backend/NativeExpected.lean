@@ -77,7 +77,7 @@ def collectOperations (span : SourceSpan) (aliases : AliasEnvironment)
     pieces.flatMap (fun piece => piece.2.2))
 
 def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
-  value.validate {poseidon2 := true}
+  value.validate {poseidon2 := true, persistentHash32 := true}
   Disclosure.circuit value
   let inputs := value.inputs.flatMap Input.requirements
   let aliases := sourceInputAliases value.inputs
