@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "668da8bb9077b8cef6b957359a4f40cb95402e52",
+    "sourceCommit": "a702952ca222d6ae58bc22c948e01cd30305bae7",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4765,7 +4765,7 @@
       "source-bound guarded reads/writes and nested effect blocks",
       "Bytes32 map keys",
       "nested scalar map paths and explicit empty-map construction",
-      "checked nonempty Native-field record cells"
+      "checked nonempty Native-field record cells under one or two map keys"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Empty only; nonempty typed getter/call returns remain in issue 50.",
@@ -4854,6 +4854,12 @@
       "native": "runtime/tests/witness_control.rs",
       "implementationCommit": "668da8bb9077b8cef6b957359a4f40cb95402e52",
       "scope": "Logical Bytes32 callback parameters/results and private-state reads/staging, typed hash/degrade helpers, full-width byte equality and ordered byte/non-byte let bindings. One selected-3.2.1 source/host/native example reads two wallet byte cells, derives account/key/balance/memo hashes, checks ElGamal and ECDH memo recovery, publishes seven Native fields, and stages a private seed. Independent SHA256/group output values pass; an altered account high byte rejects. Every expanded byte input retains its octet bounds. Private seed staging is tentative, and deterministic fixture seeds do not establish freshness. No new native opcode names, keys, proofs, deployments or broad regression campaign. General byte lengths, public byte returns, typed native CALL ABI, mixed ledger schemas and full token integration remain open."
+    },
+    "nestedRecordEvidence": {
+      "source": "tests/NestedEscrow.lean",
+      "native": "runtime/tests/nested_escrow.rs",
+      "implementationCommit": "a702952ca222d6ae58bc22c948e01cd30305bae7",
+      "scope": "Two-key source declarations and read/write/insert operations reuse existing recursive Native-record ledger paths. One selected-3.2.1 native sequence stores one aligned 11-field Cell per owner/spender path, reads after writes, replaces a record, preserves a second spender and second owner, and rejects a missing field. This qualifies path/shape binding, not curve validity or token escrow policy. Mixed record types, memo Lists, Counter operations, typed CALL ABI and full token integration remain open. No new native opcode names, keys, proofs, deployments or broad regression campaign."
     }
   }
 }

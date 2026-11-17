@@ -61,7 +61,7 @@
     <path d="M60 456H1140" stroke="#293A52"/>
     <text x="60" y="484" fill="#70E6CF" font-size="13" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
     <text x="60" y="512" fill="#E3EBF5" font-size="18">Claim proofs + localnet · Rust + C/C++</text>
-    <text x="60" y="540" fill="#AEBFD5" font-size="18">Private wallet bytes · ElGamal + ECDH memos</text>
+    <text x="60" y="540" fill="#AEBFD5" font-size="18">Nested record state · wallet bytes · ElGamal + ECDH</text>
     <path d="M620 479V543" stroke="#293A52"/>
     <text x="653" y="484" fill="#CFB58A" font-size="13" font-weight="700" letter-spacing="1.8">OPEN COVERAGE + ASSURANCE</text>
     <text x="653" y="512" fill="#E3EBF5" font-size="18">Full ZKIR v3 · more crypto + composition</text>

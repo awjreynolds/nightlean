@@ -54,3 +54,20 @@ Native plans use `indexPath` for typed key paths. Empty-map creation indexes the
 lake build Nightlean.Types.Composite
 lake env lean tests/CompositeTypes.lean
 ```
+
+## Nested owner/spender records
+
+`tree escrow : Bytes32 => Bytes32 => struct EscrowRecord { ... }` places a
+checked Native-field record beneath two independent native map keys. Two-key
+`read`, `write` and `insert ... := fields(...)` use the same recursive path and
+record encoding as the one-key case. Outer maps require explicit initialization.
+Each key and each stored field still needs disclosure when derived from private
+values.
+
+[`tests/NestedEscrow.lean`](../../tests/NestedEscrow.lean) uses an 11-field record
+shaped for owner/spender ciphertexts and a memo. A focused native sequence checks
+read-after-write, replacement, two spender keys, a second owner, preservation of
+neighboring records and rejection of a missing field. Each record remains one
+aligned Cell. Native coordinate fields alone establish no curve validity or
+encryption property. Mixed typed records, lists and full token integration remain
+separate work. No new keys, proofs or deployments were generated.
