@@ -85,7 +85,7 @@
     <path d="M60 925H1540" stroke="#293A52"/>
     <text x="60" y="962" fill="#70E6CF" font-size="16" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
     <text x="60" y="998" fill="#E3EBF5" font-size="21">28 opcode names · scoped source support · tagged SHA-256</text>
-    <text x="60" y="1029" fill="#AEBFD5" font-size="21">Native state + derived keys · ElGamal + ECDH memos</text>
+    <text x="60" y="1029" fill="#AEBFD5" font-size="21">Native state · private witness crypto · ElGamal + ECDH memos</text>
     <text x="60" y="1060" fill="#AEBFD5" font-size="21">Claim + scalar proofs · localnet · Rust + C/C++ clients</text>
 
     <path d="M800 952V1064" stroke="#293A52"/>

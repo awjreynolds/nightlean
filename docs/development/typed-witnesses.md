@@ -85,10 +85,31 @@ reject a typed curve input relabeled as Native.
 The focused selected-3.2.1 check drives both callbacks, rejects a malformed point
 reply, retries the pending request, and passes the completed private input map to
 the native checker. This extends callback transport and equality constraints.
-Curve arithmetic inside helper/control expressions, composite curve schemas and
-curve-valued contract returns remain separate implementation work. Historical
+Additional helper cryptography, composite curve schemas and curve-valued contract
+returns remain separate implementation work. Historical
 witness proof claims do not extend automatically to this slice. No new keys,
 proofs or deployments were generated.
+
+[`tests/CurveHelpers.lean`](../../tests/CurveHelpers.lean) computes ElGamal
+ciphertexts inside a witness-backed contract. Typed helper expressions support
+scalar conversion, generator multiplication, point multiplication, addition,
+negation, coordinate extraction and checked coordinate reconstruction. The Rust
+control interpreter calls the same pinned curve implementation used by the
+existing circuit evaluator. The runtime executes in process without Node. Every operation propagates its arguments' private origins.
+
+The example obtains a secret key, randomness and bounded 128-bit plaintext from
+private providers. Circuit constraints check key ownership, nonzero reduced keys
+and randomness, and decryption. Four explicit releases publish the ciphertext
+coordinates. Multiple trailing scalar outputs use an existing checked record
+result. Single scalar outputs retain their format. These are source circuit
+outputs, not typed native CALL returns, which remain separate work.
+
+One selected-3.2.1 source-to-host-to-native example checks the resulting ciphertext
+and rejects a wrong secret key. Test randomness is deterministic. Production
+randomness remains a wallet obligation. The old scalar diagnostic trace evaluator
+rejects curve expressions explicitly. The native control runtime executes them.
+This slice generates no keys, proofs or deployments and extends no historical
+witness preservation theorem.
 
 Selected-entrypoint bundles retain optional `witnessBinding` and `witnessControl` roles together. The verifier rejects a missing member, unreferenced role, different entrypoint, changed relation, changed schema or incomplete input map. Existing bundles without witness roles keep their canonical format. An externally trusted manifest digest authenticates retained bytes. A self-hash alone supplies no source authority.
 
