@@ -6,7 +6,7 @@ Write a contract, prove its specified behavior in Lean, and compile for Midnight
 
 | Your task | Start here |
 | --- | --- |
-| Write and compile a contract | [Private claim source](../examples/PrivateClaim.lean), [bounded scalars](../examples/BoundedScalars.lean), [named helpers](development/named-helpers.md) |
+| Write and compile a contract | [Private claim source](../examples/PrivateClaim.lean), [bounded scalars](../examples/BoundedScalars.lean), [named helpers](development/named-helpers.md), [compile-time generics](development/generics.md) |
 | Understand private and public data | [Scalar disclosure](development/disclosure.md), [structured host control](development/structured-control.md), [private-state lifecycle](designs/private-state-lifecycle.md) |
 | Embed native execution | [Rust runtime](development/native-rust-runtime.md), [C/C++ ABI](development/native-runtime-abi.md) |
 | Build a native application | [Rust client](development/native-client.md), [C/C++ client ABI](development/native-client-abi.md), [proof API](development/native-proof-api.md), [native assembler](development/native-assembler.md) |

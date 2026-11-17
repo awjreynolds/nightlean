@@ -1,6 +1,6 @@
 # Compile-time generics
 
-Issue 46 adds bounded type and natural specialization to the Lean source helper
+Bounded type and natural specialization extends the Lean source helper
 compiler. The pass turns one generic export into an ordinary monomorphic
 `Nightlean.Helpers.Program`. Existing helper analysis, component disclosure,
 compilation and native lowering then process that concrete program.
@@ -36,8 +36,8 @@ sidecar. Compiler checks run again over that same program during compilation.
 The additive sidecar uses schema version 1 and writes natural values and source
 or generated identity integers as canonical decimal strings. Existing
 `nightlean.json` and aggregate schemas stay unchanged. The sidecar records typed
-witness signatures as compile-time metadata. Runtime execution of general typed
-witness functions belongs to issue 62 and is not part of issue 46.
+witness signatures as compile-time metadata. [General typed witness execution](https://github.com/awjreynolds/noctium/issues/62)
+is separate runtime work.
 
 Specialization preflights source size and nesting, charges clone costs before
 substitution, caches instances by structural declaration ID and ordered
@@ -45,8 +45,25 @@ normalized arguments, and enforces hard limits on helper and type instances,
 retained composite declarations and layout nodes, work, argument count, depth
 and natural values. Active recursive or growing specializations fail with a
 Noctium cycle diagnostic. These are Nightlean implementation caps,
-not Compact language limits. Full module visibility and anonymous loops remain
-separate work under issues 47 and 48.
+not Compact language limits. [Module visibility](https://github.com/awjreynolds/noctium/issues/47)
+and [finite iteration](https://github.com/awjreynolds/noctium/issues/48) remain separate work.
+
+## Published qualification
+
+The implementation is commit `396c514de223c9cda7f6f49a4525c9531ccfe1ba`.
+All 74 selected compiler, proof, tool and fixture Git blobs and executable modes
+match the independently tested snapshot. The full compiler/source-proof check
+passed, including the new lexical-scope, active-instance, depth and normalized-type
+resource regressions. Independent compilation of both profiles produced identical
+relations and signature sidecars. Six official 3.2.1 checker cases passed.
+
+[Qualification evidence](../../tests/generics/qualification-evidence.json) records
+source, checker, relation, key and proof hashes. The two exact retained relations
+produced native proofs which the worker observed the service self-verify.
+Independent qualification checked relation identity and raw witnesses, without
+rerunning cryptographic proof verification. This is compile-time specialization
+evidence, with no general specialization-preservation theorem or ledger-deployment
+claim.
 
 ## Focused checks
 

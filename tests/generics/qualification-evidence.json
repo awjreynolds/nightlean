@@ -1,0 +1,200 @@
+{
+  "schemaVersion": 1,
+  "scope": "Bounded compile-time type/natural specialization into the existing checked helper compiler.",
+  "publishedSource": {
+    "commit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba",
+    "tree": "40efd98f9e2dbd6161ac3914f0bddf670343e42c",
+    "sourceSha256": {
+      "Nightlean/Helpers/Specialization.lean": "b30729dd4d3ffcfb6eb46bf8296ced18642ce9238f523ea3aa0a7cf79f4b5a4c",
+      "Nightlean/Frontend.lean": "fa55d1d6a2ebaf3e73cb06ddfa23416bee20a385711eaeb3d449170532f8842b",
+      "Nightlean/Compiler.lean": "c528bdecbce1471f0495331c687653b5dfd5598441d9d9e6bc53002e44baf7c4",
+      "tests/GenericSpecialization.lean": "c4f0ceb1086840bdd7c68c0ab01e276211c2bd49ca9fdb61b89b1f6e99141e88",
+      "tests/generics/Native.lean": "f1d7d3c48c8244d6bb581e08a68f983f2ea92d4d80af4fef7f23d28a5cb77e98",
+      "tests/generics/cases.json": "c6fa9ade72a34d008b54358997492b21713b704d79d4a365944fedd09e584e08",
+      "tests/generics/prove-native.mjs": "db724ed306b01817348fddd91b434d24f586701b89f9bd3f96e2408bd6add8aa"
+    },
+    "matchedCompilerProofToolAndSelectedFixtureBlobsAndModes": 74,
+    "matchRecordSha256": "cd6b6c7c6bb0208394aee45cce5b5ae6a8d8ed9a2e98963b6ab33ac4027e0de7"
+  },
+  "review": {
+    "independentAstraReview": "approved after lexical-scope and resource-bound regressions",
+    "findingsResolved": [
+      "Caller generic environments do not leak into callees, aliases or structures.",
+      "Pending specializations count toward instance limits.",
+      "Alias and structure expansion share depth accounting.",
+      "Normalized type size is bounded before cache comparison and key encoding, including phantom arguments."
+    ]
+  },
+  "independentQualification": {
+    "status": "passed",
+    "baseCommit": "c541bdd530c174ac0b61c462037577d91c25b037",
+    "snapshot": "/private/tmp/noctium-generic46-independent/snapshot-2cf14xzh",
+    "overlayManifestSha256": "faf1d25628fd306ad9d2b68e6a10b641dc8f539e21f529b14f54a26b68be2135",
+    "checks": [
+      {
+        "command": "bash scripts/check-lean.sh",
+        "exitCode": 0,
+        "coverage": "70-module Lake build, every tests/*.lean fixture, CLI check and compile, private-claim proof regression, component disclosure CLI",
+        "log": "/private/tmp/noctium-generic46-independent/snapshot-2cf14xzh/check-lean.log",
+        "logSha256": "be3abd4fa5a908d891b390044df7d79e05ef20d2929373cd501720227e3ef18b"
+      },
+      {
+        "command": "lake env lean tests/generics/Native.lean",
+        "exitCode": 0
+      },
+      {
+        "command": "lake exe noctium compile tests/generics/Native.lean --output <profile-320 temp dir>",
+        "exitCode": 0
+      },
+      {
+        "command": "lake exe noctium compile tests/generics/Native.lean --target profiles/midnight-ledger-9-zkir-3.2.1-target.json --output <profile-321 temp dir>",
+        "exitCode": 0
+      },
+      {
+        "command": "node scripts/zkir/check-scalar-cases.mjs <profile-321 dir> /private/tmp/nightlean-zkir321-wasm/package/midnight_zkir_wasm_fs.js tests/generics/cases.json",
+        "exitCode": 0,
+        "cases": 6,
+        "positiveAccepted": 2,
+        "negativeRejected": 4,
+        "outputSha256": "2e2edef1dc2f7d9ac08ff336aa82f8a1afde93960d7f961970acaa7334854f9a"
+      },
+      {
+        "command": "node --check tests/generics/prove-native.mjs",
+        "exitCode": 0
+      }
+    ],
+    "artifacts": {
+      "profile-320": {
+        "genericAddSmall.zkir": {
+          "bytes": 1297,
+          "sha256": "50ba0a14db48681ed0f7f3098919ace413d3082437b3ce389c46afe2e6f0f37a"
+        },
+        "genericAddWide.zkir": {
+          "bytes": 1301,
+          "sha256": "434e9deb4ae5078286cb75533d6ffc03171d0d72020c51dc4eb81755e16fb12c"
+        },
+        "genericAddSmall.specialization.json": {
+          "bytes": 527,
+          "sha256": "d375bfaafd2afac8887ede33d13b5ac68ed33040e315d2cdfa84ef7f01e39baf"
+        },
+        "genericAddWide.specialization.json": {
+          "bytes": 531,
+          "sha256": "b0444747cd56323c6bd425b7c52b1d5d4d1c924dae1f4bf5e42f99219d0151d5"
+        },
+        "nightlean.json": {
+          "bytes": 3085,
+          "sha256": "f037fa3c86471dc4166bd71bef232b0a084c22aaa34777e7beaaffd52b11db4d"
+        }
+      },
+      "profile-321": {
+        "genericAddSmall.zkir": {
+          "bytes": 1297,
+          "sha256": "50ba0a14db48681ed0f7f3098919ace413d3082437b3ce389c46afe2e6f0f37a"
+        },
+        "genericAddWide.zkir": {
+          "bytes": 1301,
+          "sha256": "434e9deb4ae5078286cb75533d6ffc03171d0d72020c51dc4eb81755e16fb12c"
+        },
+        "genericAddSmall.specialization.json": {
+          "bytes": 527,
+          "sha256": "d375bfaafd2afac8887ede33d13b5ac68ed33040e315d2cdfa84ef7f01e39baf"
+        },
+        "genericAddWide.specialization.json": {
+          "bytes": 531,
+          "sha256": "b0444747cd56323c6bd425b7c52b1d5d4d1c924dae1f4bf5e42f99219d0151d5"
+        },
+        "nightlean.json": {
+          "bytes": 3365,
+          "sha256": "1004b84a3d0d79a56c995356146a50faa1f526f41f06b9c79faada1352180870"
+        }
+      },
+      "proofBearingWorkerOutput": {
+        "path": "/private/tmp/nightlean-generic46-reviewfix-final-20261117",
+        "allFourZkirAndSidecarsByteMatch": true
+      }
+    },
+    "profileInvariant": "The two ZKIR relations and specialization sidecars are byte-identical across the selected compiler profiles. nightlean.json differs as expected because it records the target profile.",
+    "proofIdentity": "Both independent emitted .zkir files match byte-for-byte with the retained worker proof-generation relations. Worker report says native proofs self-verified; this independent run checked relation identity and official 3.2.1 raw witness cases, without generating new keys/proofs.",
+    "scope": "Compile-time helper/type/natural specialization only. This does not establish general source witness runtime (issue 62), full ZKIR feature coverage, broad state preservation, whole compiler correctness, or delivered mobile/web SDKs."
+  },
+  "independentQualificationRecordSha256": "452415e257c18c6385799dce129edf1f98e2213ffd040ef85429f9ece249bb17",
+  "nativeProofGeneration": {
+    "profile": "midnight-ledger-9-zkir-3.2.1",
+    "nativeCliSha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "nativeCliBanner": "midnight-zkir 3.2.0",
+    "nativeSourceRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "officialCheckerSha256": "a4ec641776c45bd06fe033f25b8d74fccca7900d5e97cc360468ddeacfa2424c",
+    "service": "Authorized loopback native proof service at 127.0.0.1:16300",
+    "cases": [
+      {
+        "circuit": "genericAddSmall",
+        "degreeK": 7,
+        "nativeRows": 34,
+        "artifacts": {
+          "relation": {
+            "bytes": 1297,
+            "sha256": "50ba0a14db48681ed0f7f3098919ace413d3082437b3ce389c46afe2e6f0f37a"
+          },
+          "nativeCircuit": {
+            "bytes": 312,
+            "sha256": "17c49a72451f34e80c6ffcd6427711f28ae3d8ec64ff65b885e66c9b2818ffed"
+          },
+          "proof": {
+            "bytes": 3468,
+            "sha256": "47d7ab8a3e891a1ab3d353ba0194c1fe7994e629ee3cde169c00317cb93ba46c"
+          },
+          "proverKey": {
+            "bytes": 105280,
+            "sha256": "63f4011e550e74ca6d81a25d70277faf291d73011f17e140ce64546a78530bf0"
+          },
+          "verifierKey": {
+            "bytes": 1257,
+            "sha256": "f003f06aa2f2a7607587f8238809512d958354f0b3d6d6df73bac294faceecac"
+          }
+        },
+        "workerNativeServiceSelfVerificationReported": true,
+        "independentRelationBytesMatched": true,
+        "independentProofVerificationPerformed": false
+      },
+      {
+        "circuit": "genericAddWide",
+        "degreeK": 6,
+        "nativeRows": 38,
+        "artifacts": {
+          "relation": {
+            "bytes": 1301,
+            "sha256": "434e9deb4ae5078286cb75533d6ffc03171d0d72020c51dc4eb81755e16fb12c"
+          },
+          "nativeCircuit": {
+            "bytes": 316,
+            "sha256": "0af877521b87065e422e20aeaff39269b72a0f9215b2fc519a4ed15043939c3c"
+          },
+          "proof": {
+            "bytes": 3468,
+            "sha256": "b5b01bf08364ebd168e925307037d76a8823ae7813484cf8aa3fc6db510c45e1"
+          },
+          "proverKey": {
+            "bytes": 54084,
+            "sha256": "e9edccea4e378fef86324eeac6e59a62dc2a542a2b214bb829963bd5b8490252"
+          },
+          "verifierKey": {
+            "bytes": 1257,
+            "sha256": "9c95aae76b28c9e91abcc456e27d57dfdd8457e21be31bd84e9d0df17c28995f"
+          }
+        },
+        "workerNativeServiceSelfVerificationReported": true,
+        "independentRelationBytesMatched": true,
+        "independentProofVerificationPerformed": false
+      }
+    ],
+    "workerProofStdoutRetained": false,
+    "keysAndProofBytesPublished": false
+  },
+  "limits": [
+    "No general witness runtime execution claim.",
+    "No generic specialization preservation theorem or whole compiler verification claim.",
+    "No ledger deployment or full native feature coverage claim.",
+    "Native proof service verification is worker-observed integration evidence. Independent qualification checks exact relation identity and raw witness acceptance, without rerunning proof verification.",
+    "TypeScript/WASM, Kotlin and Swift SDKs remain open."
+  ]
+}

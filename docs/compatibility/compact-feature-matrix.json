@@ -393,7 +393,7 @@
       "id": "C-LANG-STRUCT",
       "layer": "language",
       "surface": "Struct",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Named fields, defaults, construction, access, destructuring, spread and generic structs.",
       "source": [
         "reference"
@@ -405,17 +405,23 @@
       "observedEvidence": [],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
+        "checkedOn": "2026-11-17",
+        "scope": "Checked Lean composite values and Rust/C++ codecs preserve nominal/logical identity. Source helper composite outputs flatten under component disclosure checks. Bounded generic structures specialize with declaration-derived nominal identity. General aggregate ledger effects, complete constructor/default/spread/destructuring surface and Compact equivalence remain unqualified.",
         "evidence": [
           "Nightlean/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
           "docs/development/composite-values.md",
-          "tests/composite-values/qualification-evidence.json"
+          "tests/composite-values/qualification-evidence.json",
+          "Nightlean/Helpers/Specialization.lean",
+          "tests/GenericSpecialization.lean",
+          "tests/generics/Native.lean",
+          "tests/generics/qualification-evidence.json",
+          "docs/development/generics.md"
         ],
-        "fullEquivalence": "unverified"
+        "fullEquivalence": "unverified",
+        "sourceCommit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba"
       }
     },
     {
@@ -451,7 +457,7 @@
       "id": "C-LANG-ALIAS",
       "layer": "language",
       "surface": "Structural and nominal type aliases",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Structural Uint aliases use inclusive-maximum widening. Nominal numeric aliases require matching identities, retain their original type and downcast checked arithmetic results. The max-unsigned guard precedes nominal downcasting. See C-LANG-UINT conformance cases.",
       "source": [
         "reference",
@@ -462,7 +468,20 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-17",
+        "sourceCommit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba",
+        "scope": "Transparent compile-time aliases normalize within bounded generic helper/type specialization. Nominal generic structures preserve distinct identity. Compact nominal numeric alias arithmetic/downcast semantics remain unqualified.",
+        "fullEquivalence": "unverified",
+        "evidence": [
+          "Nightlean/Helpers/Specialization.lean",
+          "tests/GenericSpecialization.lean",
+          "tests/generics/Native.lean",
+          "tests/generics/qualification-evidence.json",
+          "docs/development/generics.md"
+        ]
+      }
     },
     {
       "id": "C-LANG-OPAQUE",
@@ -689,7 +708,7 @@
       "id": "C-LANG-GENERICS",
       "layer": "language",
       "surface": "Type and natural-number generic parameters",
-      "nightleanStatus": "missing",
+      "nightleanStatus": "subset",
       "notes": "Specialization and invalid/recursive instantiation cases.",
       "source": [
         "reference"
@@ -699,7 +718,20 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-17",
+        "sourceCommit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba",
+        "scope": "Bounded Lean helper/type specialization accepts compile-time type and natural arguments, preserves declaration identity, rejects kind/arity/free-name/cycle/resource errors, and emits checked concrete programs plus versioned signature sidecars. Two selected native scalar instantiations have independent compiler/checker evidence and retained native proofs. This is not complete generic-module or Compact semantic equivalence.",
+        "fullEquivalence": "unverified",
+        "evidence": [
+          "Nightlean/Helpers/Specialization.lean",
+          "tests/GenericSpecialization.lean",
+          "tests/generics/Native.lean",
+          "tests/generics/qualification-evidence.json",
+          "docs/development/generics.md"
+        ]
+      }
     },
     {
       "id": "C-LANG-MODULE",
@@ -4660,8 +4692,8 @@
     "separateScopedPrivacyObligationRequired": true
   },
   "publishedImplementationObservation": {
-    "commit": "69c5c87",
-    "checkedOn": "2026-11-16",
-    "scope": "Incremental published implementation evidence supplements the original immutable POC observation. Full equivalence stays unverified. Unpublished aggregate/helper/SDK work receives no completion credit."
+    "commit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba",
+    "checkedOn": "2026-11-17",
+    "scope": "Incremental source-bound implementation evidence supplements the original immutable POC observation. Feature updates identify qualified subsets and excluded capabilities. Full comparison equivalence stays unverified."
   }
 }
