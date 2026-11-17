@@ -38,14 +38,15 @@ These layers establish different properties. Contract theorems describe intended
 | Source privacy to native observations | [Successful-run native privacy and its excluded observables](development/private-claim-native-privacy-proofs.md) |
 | Exact bytes and build provenance | [Qualified immutable builds and exact retained-byte certificates](development/private-claim-artifact-certificates.md), with functional/privacy composition |
 | Deployed claim identity | [Qualified source/key/deployment join](development/private-claim-deployment-audit.md), with public-only verification and explicit trusted-node assumptions |
-| Generic compiler preservation | Open [scalar compiler proof work](https://github.com/awjreynolds/noctium/issues/64), followed by broader feature coverage |
+| Generic scalar lowering | [Qualified soundness and source completeness](research/generic-scalar-preservation.md), exact two-role checks and independent model pin |
+| Broader compiler preservation | Open [assurance work](https://github.com/awjreynolds/noctium/issues/21), including frontend, other native primitives and general ledger preservation |
 
 The [assurance report](development/assurance.md) documents the proved pruning pass and external boundaries. The [proof audit chain research](research/lean-proof-audit-chain.md) explains the required release chain. Claim-specific proofs do not establish correctness for every source program.
 
 ## Language and capability references
 
 - [Scalar design](designs/scalar-types.md), [native unsigned lowering](development/native-unsigned-scalars.md) and [producer safety gate](development/native-producer-safety.md).
-- [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). Aggregate source effects still need component disclosure integration.
+- [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) now compile to native circuit leaves with disclosure checks. General aggregate ledger effects remain separate.
 - [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/nightlean-portable-runtime-boundary.md).
 - [ZKIR capability research](research/zkir-v3-full-coverage.md), [native inventory](compatibility/zkir-feature-matrix.json) and [ledger capability research](research/midnight-ledger9-capabilities.md).
 - [Compact comparison baseline](research/compact-equivalence-baseline.md). Inventory entries are not a completion percentage.

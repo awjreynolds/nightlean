@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "product": "Noctium",
+  "scope": "Component-aware source helper output disclosure analysis and source-to-native scalar flattening. Native private-state effects, guarded ledger execution, full native sink coverage and formal aggregate non-disclosure remain separate work.",
+  "qualification": {
+    "kind": "isolated-published-baseline-plus-reviewed-source-hashes",
+    "baselineCommit": "71984164131b406e82cfa6a1b149e1115a6b4ab8",
+    "testedSnapshot": "/private/tmp/noctium-component44-isolated-867v0mk0",
+    "issue64WorktreeExcluded": true,
+    "sourceSha256": {
+      "Nightlean/Helpers.lean": "cecef66645fcab26542eb4f09c721377f207a4af3803b88da06376b9bf55394a",
+      "Nightlean/Control.lean": "4364c8c190a79a30f560749bfe3af4ae38ecc3edcf45199391468616d1dc88c0",
+      "Nightlean/Frontend.lean": "26d635738a439f6cef8500e79ead642b9449d858b8ab68f614785c6fb609eac9",
+      "Nightlean/Compiler.lean": "9dbffaa5e49437ef4230cab513273450200ac231b3b0c143373209c0a089bcb8",
+      "Nightlean/ComponentDisclosure.lean": "bb72a2e901b4d87ecf729e39d4357009cddd44c109bd1869c3e4ef07e492ecb6",
+      "tests/ComponentDisclosure.lean": "e5ec2f9ef66b23ba5cfdd20e43486e9b7a163ec67d95f8ffa8b79b65ae4bb69e",
+      "tests/component-disclosure-cli.sh": "78f91e3f7a4a5b6f1d0480a5e09e2aa98888816be1e56c2e73718bbca45c34ee",
+      "scripts/check-lean.sh": "d4bc2f8ffa8a89e76ac52aa01d0cf96ae3e5255a87342b5648d1f878bd1046eb",
+      "tests/component-disclosure/authorized.lean": "8e26706bdf101139ddd6b165c9aa517f744720793f30381ed65ec1bf5754a536",
+      "tests/component-disclosure/qualify.mjs": "1b55ad3798cbc814847a3247f5348229288d9e819e3818bf973db9df1fd6b17c",
+      "tests/component-disclosure/unauthorized-private-state.lean": "12fbbf5aee28b60a58d48d683c33ef99877870b33adf1426721b75469f4576ed",
+      "tests/component-disclosure/unauthorized.lean": "d92e5bda043c69b0bd961eb037bfc5d242a30f70074d73f85d1c7f04b8bed3de"
+    },
+    "fullSourceChecksPassed": true,
+    "sourceChecksLogSha256": "4849816984d8593889bac8d49454827d33aed6f28e308f2e680469cdb53bb246",
+    "independentAstraReview": "Three scalar subtype/export identity/declared-binding regressions resolved and independently reproduced; origins retained; nominal composite identity strict",
+    "continuationRegression": {
+      "sourcePreparation": "accepted",
+      "componentDisclosure": "rejected private secret",
+      "nativeGuardCapability": "still disabled CF02",
+      "nestedEarlyReturnAndLexicalScopeRegressionsPassed": true,
+      "independentAstraRereview": "approved after BodyFlow fix"
+    },
+    "publicationWhitespaceFinalization": {
+      "changes": {
+        "Nightlean/ComponentDisclosure.lean": {
+          "before": "9b2799b238dd5fe32cfcbb7c3389e88246414142f29da53231b3c5a2c0486f6e",
+          "after": "bb72a2e901b4d87ecf729e39d4357009cddd44c109bd1869c3e4ef07e492ecb6"
+        },
+        "tests/ComponentDisclosure.lean": {
+          "before": "c7a5b59c191d291261934cc058238d7ea86afdb575bb06cb36a2fc82d975acf7",
+          "after": "e5ec2f9ef66b23ba5cfdd20e43486e9b7a163ec67d95f8ffa8b79b65ae4bb69e"
+        }
+      },
+      "syntaxOnly": true,
+      "focusedIsolatedBuildAndTestsPassed": true,
+      "logSha256": "852f07a3bd398fedb16d2d85def05dc47ec062f21581afbe60b444a645fc0654"
+    }
+  },
+  "native": {
+    "scope": "Isolated baseline719 plus only reviewed44 source and CI test integration, no64 worktree changes",
+    "sourceChecksExit": 0,
+    "checker": {
+      "scope": "compiler-generated disclosed composite result through a source helper and provider input; no ledger acceptance",
+      "nativeChecker": "3.2.1",
+      "checkerGlueSha256": "a4ec641776c45bd06fe033f25b8d74fccca7900d5e97cc360468ddeacfa2424c",
+      "relationK": 4,
+      "relationSha256": "7afcf57a6a3481448e663e9c6afd507b94e78d5501f8d2a8b11faadabba07010",
+      "checkerAccepted": true,
+      "tamperedPublicOutputRejected": true,
+      "changedProviderWitnessRejected": true
+    },
+    "relationJsonSha256": "a7fd816122ba57b6036a48d0e65fd5000812e57e08aa802164fb58b7315e6ac8",
+    "proverKeySha256": "807bde7c52134f49c71c4d25e3692f5a9f08171b161b2b2ed4999187a9d923cf",
+    "verifierKeySha256": "3d7616bb817f9ab46720cf710650f64a39251600bd37040d5cb3f5d91f93b136",
+    "keysEqualAuthorQualification": true,
+    "authorProverEvidence": {
+      "scope": "compiler-generated disclosed composite result through a source helper and provider input; no ledger acceptance",
+      "nativeChecker": "3.2.1",
+      "checkerGlueSha256": "a4ec641776c45bd06fe033f25b8d74fccca7900d5e97cc360468ddeacfa2424c",
+      "relationK": 4,
+      "relationSha256": "7afcf57a6a3481448e663e9c6afd507b94e78d5501f8d2a8b11faadabba07010",
+      "checkerAccepted": true,
+      "tamperedPublicOutputRejected": true,
+      "changedProviderWitnessRejected": true,
+      "proof": {
+        "bytes": 3468,
+        "sha256": "cb4ccbc117b70221600377cf070acf54ba1005fba92501ac276f41388dc7abbe",
+        "nativeServerSelfVerified": true
+      }
+    },
+    "authorProverEvidenceSha256": "23a28a06362f9d86f490f5cbd914407fe6e77a227616315e7b634f2d73177c16",
+    "proofPath": "/private/tmp/component-disclosure.S9b1lb/artifacts/componentRelease.proof",
+    "proofClaim": "Native proof service generated and self-verified the retained proof. Parent independently regenerated matching keys and checked valid/invalid witnesses for exactly the same source-emitted relation.",
+    "ledgerAcceptanceClaimed": false
+  },
+  "assumptions": [
+    "Pinned native checker, prover and serialization implementation agreement",
+    "Qualified K4 proving parameters and native key generation",
+    "This static origin analysis is not a formal privacy theorem covering failures, timing, logs or host observations"
+  ],
+  "integrationChecks": {
+    "scalarProofCheckpoint": "6ed98d2991b14146176da7028588404464d0ba5a",
+    "combinedLeanAndSourceCliChecksPassed": true,
+    "combinedLog": "/private/tmp/noctium-combined44-64-source-check.log",
+    "combinedLogSha256": "c9682198f8d05672729003beed6ab15cfb3058c1fdec205d95463a8fe031ac78"
+  }
+}

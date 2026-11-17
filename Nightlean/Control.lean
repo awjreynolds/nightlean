@@ -20,6 +20,7 @@ private def join (span : SourceSpan) (a b : ResultType) : Except Diagnostic Resu
 private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
   | .scalar ty => pure ty
   | .unit => fail span "unit is not a scalar control value"
+  | .composite _ => fail span "aggregate control values are unavailable"
 
 private def fromKind : ScalarPolicy.Kind → Ty
   | .native => .native | .bool => .bool | .uint m => .uint m
@@ -141,6 +142,7 @@ mutual
       let origins := if kind == .witness || kind == .privateState then
         [{name, kind := if kind == .witness then .provider else .privateState, span}] else []
       pure {value with origins := merge value.origins origins}
+    | .composite .. | .project .. | .index .. => liftD (fail span "aggregate control values are unavailable")
     | .at span value => expression checked scope env span value
 
   private partial def call (checked : Helpers.Prepared) (target : Helpers.Declaration) (arguments : List Abstract) : CheckM Abstract := do
@@ -202,6 +204,10 @@ is visible to the controller. Callback arguments/traces/journals use private cha
 private def checkPreparedDisclosure (limits : Helpers.Limits) (checked : Helpers.Prepared) (entryName : String) : Except Diagnostic Unit := do
   let program := checked.program
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown control entrypoint"
+  if !entry.compositeInputs.isEmpty || program.declarations.any fun declaration =>
+      (match declaration.result with | .composite _ => true | _ => false) ||
+        !declaration.compositeParameters.isEmpty then
+    fail entry.span "aggregate values are not supported by the portable control plan"
   let target ← declaration program entry.target entry.span
   let arguments := entry.inputs.map fun input =>
     ({ty := .scalar input.ty, origins := if input.visibility == .private then
@@ -224,6 +230,7 @@ private def typeName : ResultType → String
   | .scalar .native => "Native"
   | .scalar .bool => "Bool"
   | .scalar (.uint maximum) => s!"UIntRange<{maximum + 1}>"
+  | .composite _ => "Aggregate"
 
 private def idName (id : DeclarationId) : String := s!"s{id.scope}d{id.ordinal}"
 private def spanJson (span : SourceSpan) : Json := Json.mkObj [
@@ -310,6 +317,7 @@ mutual
         modify fun state => {state with witnesses := state.witnesses ++ [(name, ty)]}
       pure (node span "witness" [("name", toJson name), ("type", toJson (typeName (.scalar ty)))])
     | .effect .. => emitLift (fail span "portable control capability unavailable: labelled effect fixture")
+    | .composite .. | .project .. | .index .. => emitLift (fail span "aggregate control values are unavailable")
     | .at span value => emitExpression checked scope env span value
 
   private partial def emitBody (checked : Helpers.Prepared) (target : Helpers.Declaration) (env : Helpers.Environment)

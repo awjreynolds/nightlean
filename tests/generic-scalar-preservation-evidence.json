@@ -1,0 +1,492 @@
+{
+  "assumptions": [
+    "CanonicalInputs: exact unique declared typed source inputs, canonical numeric bounds and binding to native input assignment",
+    "HashAgreement: field modulus and successful source/native hash agreement on canonical operands",
+    "Abstract native instruction satisfaction and JSON-tree decode acceptance, with separate native implementation agreement",
+    "Pinned Lean kernel/toolchain and three standard axioms: propext, Classical.choice, Quot.sound"
+  ],
+  "compilerBuildAuthenticated": false,
+  "deployedIdentityVerified": false,
+  "exclusions": [
+    "Lean/helper/composite frontend preservation",
+    "Raw JSON byte parsing agreement with official native reader",
+    "Other native primitives and guarded control",
+    "Generic ledger-state/contract-call preservation",
+    "Exact compiler executable authentication or complete production assurance"
+  ],
+  "implementationCommit": "6ed98d2991b14146176da7028588404464d0ba5a",
+  "implementationTree": "c829b42d03645eb02d7036fcdbde7cb7bc63a03d",
+  "independentModelAndAudit": {
+    "auditLogSha256": "84baeb9d03397b640ed309dbaf2b5602b7ed34eda73c3a098491089d90ec70a5",
+    "externalAudit": {
+      "axioms": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "compilerBuildAuthenticated": false,
+      "completenessProof": "ScalarAuditFixtures.completeness",
+      "deployedIdentityVerified": false,
+      "externalModelPinChecked": true,
+      "freshKernelReplay": true,
+      "ledgerStatePreservationProved": false,
+      "proofExportSha256": "db7aa10850fbee429b99cde2cd2c4e4aa63388dd8ff3443e5c9ac765ef0e71cf",
+      "soundnessProof": "ScalarAuditFixtures.soundness",
+      "statementComparison": "kernel definitional equality to externally pinned model roles",
+      "status": "generic-scalar-library-proofs-checked",
+      "trustedModelSha256": "6e9b4da95bc6bdf305b5a8e32be7585e62ed74efc6942287ff8c38d7828c98d9",
+      "wholeCompilerVerified": false
+    },
+    "modelBytes": 71177434,
+    "modelExport": "/private/tmp/noctium-scalar64-parent-33fz6u_v/parent-reviewed-model.ndjson",
+    "modelMatchesLeadFrozenExport": true,
+    "modelSha256": "6e9b4da95bc6bdf305b5a8e32be7585e62ed74efc6942287ff8c38d7828c98d9",
+    "review": "Astra independently approved soundness, completeness and exact-role auditor source. Parent independently rebuilt all source/tests excluding44/61 and exported these role types.",
+    "reviewedSourceManifestSha256": "b2a8dd26cae26fc37e1e2c360d4b5757d2c18aa01bffe6cf12dbb4e49ace1706",
+    "separateSourceBuild": true,
+    "sourceChecksExit": 0,
+    "totalElapsedSeconds": 67.88
+  },
+  "ledgerStatePreservationProved": false,
+  "localRegressionUsedIndependentModel": false,
+  "parentPositiveReplayUsedIndependentModel": true,
+  "product": "Noctium",
+  "publicCompilerCi": {
+    "commit": "6ed98d2991b14146176da7028588404464d0ba5a",
+    "status": "passed",
+    "url": "https://github.com/awjreynolds/noctium/actions/runs/43985675275"
+  },
+  "retainedEvidence": [
+    {
+      "bytes": 5742,
+      "path": "/private/tmp/scalar-proof-support-tests.json",
+      "sha256": "7f2a0197f53b92b4396a764434d10517c2338af29e88489644e761f420552996"
+    },
+    {
+      "bytes": 272,
+      "path": "/private/tmp/nightlean-cse-parity-summary.json",
+      "sha256": "ca58740c9792a6200410d2e4067bcce9aa1a5dbe86dc4a5d786a871b69541bd1"
+    },
+    {
+      "bytes": 2680,
+      "path": "/private/tmp/nightlean-cse-scalar-checker-321.json",
+      "sha256": "0437d2c78089b886c601f849617c3a37e2dbcc6ed873cc5384920997b5eddec8"
+    },
+    {
+      "bytes": 2036,
+      "path": "/private/tmp/nightlean-cse-helper-prover-321.json",
+      "sha256": "e2e031be31a966a18ff8ffb109deb21af8bb7a2eb7c44c3a0a13125afbef98ed"
+    },
+    {
+      "bytes": 724,
+      "path": "/private/tmp/nightlean-cse-qualified/checker-evidence.json",
+      "sha256": "a3b605049ca973d82c5475c5b37d44b4814a2c7c57b2aad65f45ac6a4961c077"
+    },
+    {
+      "bytes": 207,
+      "path": "/private/tmp/nightlean-cse-qualified/prover-evidence.json",
+      "sha256": "3d6ec674d402da3ba54bd90bfbf96e6e1414f6c50bc679016ad488b4d3046417"
+    },
+    {
+      "bytes": 924,
+      "path": "/private/tmp/nightlean-generic-scalar-claim-regression/summary.json",
+      "sha256": "093430d345214f7f96c7927891333213173c132308f5dd460b6563fa5bf0c844"
+    },
+    {
+      "bytes": 1745,
+      "path": "/private/tmp/nightlean-cse-final.json",
+      "sha256": "93e40c06eafede79e8241335b221546e56fd2d968552d825c4614eaef10f6db2"
+    }
+  ],
+  "roleRegression": {
+    "compilerBuildAuthenticated": false,
+    "completenessRole": "Nightlean.Verification.ScalarTranslation.lowerCircuit_complete",
+    "externalReviewedModelProvided": false,
+    "rejections": [
+      "swapped",
+      "missing",
+      "weakened",
+      "forbiddenAxiom",
+      "wrongPin",
+      "oversized",
+      "fifo"
+    ],
+    "reports": {
+      "accepted": {
+        "axioms": [
+          "propext",
+          "Classical.choice",
+          "Quot.sound"
+        ],
+        "compilerBuildAuthenticated": false,
+        "completenessProof": "ScalarAuditFixtures.completeness",
+        "deployedIdentityVerified": false,
+        "externalModelPinChecked": true,
+        "freshKernelReplay": true,
+        "ledgerStatePreservationProved": false,
+        "proofExportSha256": "db7aa10850fbee429b99cde2cd2c4e4aa63388dd8ff3443e5c9ac765ef0e71cf",
+        "soundnessProof": "ScalarAuditFixtures.soundness",
+        "statementComparison": "kernel definitional equality to externally pinned model roles",
+        "status": "generic-scalar-library-proofs-checked",
+        "trustedModelSha256": "6e9b4da95bc6bdf305b5a8e32be7585e62ed74efc6942287ff8c38d7828c98d9",
+        "wholeCompilerVerified": false
+      },
+      "fifo": {
+        "error": "export_not_regular_file",
+        "status": "rejected"
+      },
+      "forbiddenAxiom": {
+        "error": "forbidden_axiom: ScalarAuditFixtures.forbiddenAxiom",
+        "status": "rejected"
+      },
+      "missing": {
+        "error": "missing_proof: completeness",
+        "status": "rejected"
+      },
+      "oversized": {
+        "error": "export_limit",
+        "status": "rejected"
+      },
+      "swapped": {
+        "error": "wrong_statement: soundness",
+        "status": "rejected"
+      },
+      "weakened": {
+        "error": "wrong_statement: soundness",
+        "status": "rejected"
+      },
+      "wrongPin": {
+        "error": "model_pin_mismatch",
+        "status": "rejected"
+      }
+    },
+    "scope": "generic scalar library proof roles and transitive axiom policy",
+    "soundnessRole": "Nightlean.Verification.ScalarTranslation.lowerCircuit_sound",
+    "status": "passed",
+    "trustedModelSha256": "6e9b4da95bc6bdf305b5a8e32be7585e62ed74efc6942287ff8c38d7828c98d9",
+    "wholeCompilerVerified": false
+  },
+  "schemaVersion": 1,
+  "scope": "Generic actual straight-line scalar lowerer soundness and source completeness under canonical typed inputs, field/hash agreement, accepted lowering and accepted decoded native relation. Not frontend, raw-byte native parser, general ledger or whole-compiler verification.",
+  "sourceChecks": {
+    "baselineCommit": "71984164131b406e82cfa6a1b149e1115a6b4ab8",
+    "fileCount": 50,
+    "issue44and61WorktreeExcluded": true,
+    "root": "/private/tmp/noctium-scalar64-parent-33fz6u_v",
+    "sourceChecksExit": 0,
+    "sourceChecksLogSha256": "60fbbfdc6271223c397845efe99264d2aa486ee0b148f13bdfed9d59a04690c9",
+    "sourceManifestSha256": "b2a8dd26cae26fc37e1e2c360d4b5757d2c18aa01bffe6cf12dbb4e49ace1706"
+  },
+  "sourceFiles": [
+    {
+      "bytes": 8465,
+      "path": "Nightlean/Backend/NativeMeaning.lean",
+      "role": "core",
+      "sha256": "bfdd687cf2e565251b4f8c4e8617b74674e72c3627819dc86ce4b8ac851de799"
+    },
+    {
+      "bytes": 5280,
+      "path": "Nightlean/Backend/NativeExpected.lean",
+      "role": "core",
+      "sha256": "0234b68c4b3cbed5bc548199dd6a60336ab501a9296e65eb2de4ff1a4a289f26"
+    },
+    {
+      "bytes": 14073,
+      "path": "Nightlean/Backend/NativeProducer.lean",
+      "role": "core",
+      "sha256": "bac2cb19e43d404b1ac3d52fe1e1bf2c33656ea7d7a9b6e4a2ef88b396f296df"
+    },
+    {
+      "bytes": 14479,
+      "path": "Nightlean/Backend/Zkir.lean",
+      "role": "core",
+      "sha256": "cc9a9353bf0b2682f0984d33264302301161d0f05051cfb8a8db7ee7b02d0ee9"
+    },
+    {
+      "bytes": 12276,
+      "path": "Nightlean/Semantics.lean",
+      "role": "core",
+      "sha256": "e55723ecee83ec82773e29f962ee89f6477befc672ac9f82741eefe30f25f2e7"
+    },
+    {
+      "bytes": 9098,
+      "path": "Nightlean/Verification/NativeRelation.lean",
+      "role": "core",
+      "sha256": "41f6403c8c74ff6f46f69a2358d286da70142ca24ea46a59f7598a47d95f4feb"
+    },
+    {
+      "bytes": 12567,
+      "path": "Nightlean/Verification/NativeRelationJson.lean",
+      "role": "core",
+      "sha256": "085442018324ff985f79e21ed6e6df8d80b8bb7cfa0153bfaa421be24d345fc9"
+    },
+    {
+      "bytes": 9396,
+      "path": "Nightlean/Verification/ScalarAdmission.lean",
+      "role": "proof",
+      "sha256": "0b16487482d258c1546c6aa50b4944c238f3203581fa9a74868bf2d37323661c"
+    },
+    {
+      "bytes": 13115,
+      "path": "Nightlean/Verification/ScalarAllocation.lean",
+      "role": "proof",
+      "sha256": "84bd5d74a3aad2c7a2339e99d603fbcd2bf7b0333994fb74995ef4a9eedea72f"
+    },
+    {
+      "bytes": 8810,
+      "path": "Nightlean/Verification/ScalarCache.lean",
+      "role": "proof",
+      "sha256": "16302aeebaffdedc56467e0698b717a4a49f22707594a81168aa4d8ac1fc0f6c"
+    },
+    {
+      "bytes": 28700,
+      "path": "Nightlean/Verification/ScalarCircuit.lean",
+      "role": "proof",
+      "sha256": "70bff175095ed7601fdcacf38b1cf022f6535590e26872315e481ff9f09e8526"
+    },
+    {
+      "bytes": 38185,
+      "path": "Nightlean/Verification/ScalarCircuitLowering.lean",
+      "role": "proof",
+      "sha256": "c8316f1d0c61ca8b295e3b1e458a78988552a91719cdc21aca7ae77170d38188"
+    },
+    {
+      "bytes": 4835,
+      "path": "Nightlean/Verification/ScalarExportAudit.lean",
+      "role": "proof",
+      "sha256": "2964c9396b47679cae8e090467942f19df478d4ce18c19e4dab74171f4577f78"
+    },
+    {
+      "bytes": 89800,
+      "path": "Nightlean/Verification/ScalarExpressionArithmetic.lean",
+      "role": "proof",
+      "sha256": "1611116b691bb913f52e02019a38138379dae930747c8c1db836f68c146ca79b"
+    },
+    {
+      "bytes": 5545,
+      "path": "Nightlean/Verification/ScalarExpressionAssertion.lean",
+      "role": "proof",
+      "sha256": "f53cdadda9993719dfa1032204a98af990a7923308f3212fc6816fb245db270d"
+    },
+    {
+      "bytes": 26567,
+      "path": "Nightlean/Verification/ScalarExpressionControl.lean",
+      "role": "proof",
+      "sha256": "3e27fd34e2f2a7cb80330393fdb640bf0a70c9d17097c9168ff29115875d3799"
+    },
+    {
+      "bytes": 19596,
+      "path": "Nightlean/Verification/ScalarExpressionHash.lean",
+      "role": "proof",
+      "sha256": "507e37b260fbcc898947f2c6fbe2bbbc415de98f120fa1e03aa2adf18257d8c1"
+    },
+    {
+      "bytes": 3071,
+      "path": "Nightlean/Verification/ScalarExpressionLowering.lean",
+      "role": "proof",
+      "sha256": "2cb364b9ceb9fd694c207fe0acfa80fcdc13fde370e6fa4c207944e19c1b8841"
+    },
+    {
+      "bytes": 11620,
+      "path": "Nightlean/Verification/ScalarExpressionSelect.lean",
+      "role": "proof",
+      "sha256": "0d427286a99a03cdc7c1676bfcab7fe38dbe42d6f6dc69cef4534e2087233700"
+    },
+    {
+      "bytes": 8100,
+      "path": "Nightlean/Verification/ScalarImmediate.lean",
+      "role": "proof",
+      "sha256": "7011541b0ca72ff0ff103d7088dd527bf84d68737b17ec66ab5a0b3225f125f8"
+    },
+    {
+      "bytes": 17389,
+      "path": "Nightlean/Verification/ScalarInstructionEncoding.lean",
+      "role": "proof",
+      "sha256": "bac41e99eee6a8f12885abe8d40e9574d70a8b89e245476f1029979608ff784a"
+    },
+    {
+      "bytes": 33908,
+      "path": "Nightlean/Verification/ScalarLowering.lean",
+      "role": "proof",
+      "sha256": "f91e7ed7141a5c027158e31475fb7759c85d5d23139b549a310c3de5fce5d02a"
+    },
+    {
+      "bytes": 32504,
+      "path": "Nightlean/Verification/ScalarNormalization.lean",
+      "role": "proof",
+      "sha256": "dfd33380e7e206a77be4e1ddef8a994379e1ee16f726b5cb4cac6c8c5793e07b"
+    },
+    {
+      "bytes": 28977,
+      "path": "Nightlean/Verification/ScalarNormalizationSoundness.lean",
+      "role": "proof",
+      "sha256": "9fa12c38c80a012b2454f7b1b1e8853b967f4a678a187bc65add757abb8ebd0e"
+    },
+    {
+      "bytes": 10417,
+      "path": "Nightlean/Verification/ScalarParserAgreement.lean",
+      "role": "proof",
+      "sha256": "ea1a851b44ca1bb0352e6c1616bc89910c4a1842fd1b82cb1887b7544760e458"
+    },
+    {
+      "bytes": 11587,
+      "path": "Nightlean/Verification/ScalarRangeLowering.lean",
+      "role": "proof",
+      "sha256": "6a53890ae80be374863381e7b3d8bfbf6099c95d52be664ac0e46e694ff4316c"
+    },
+    {
+      "bytes": 6509,
+      "path": "Nightlean/Verification/ScalarStateExtensions.lean",
+      "role": "proof",
+      "sha256": "372c00abdc9170f01c44dbc91fac18ba610b237d07681a8402494d9097c33314"
+    },
+    {
+      "bytes": 9312,
+      "path": "Nightlean/Verification/ScalarTranslation.lean",
+      "role": "proof",
+      "sha256": "daaba578effe1a1c5b452f42a519710f7e5e3b856303699bdf3d961db2ae82ab"
+    },
+    {
+      "bytes": 78628,
+      "path": "Nightlean/Verification/ScalarValidation.lean",
+      "role": "proof",
+      "sha256": "de01de8a111527dc8d000adb9067bee8f4876d4ed53df541329729b924ea4346"
+    },
+    {
+      "bytes": 7348,
+      "path": "Nightlean/Verification/ScalarWitness.lean",
+      "role": "proof",
+      "sha256": "c87847a06e0d6ab45aa57d4f3273bc925cc1d45098431f158c2a20a206530ac9"
+    },
+    {
+      "bytes": 1388,
+      "path": "tests/ScalarCache.lean",
+      "role": "test",
+      "sha256": "a85b0406ee61bd3fea573561c57897668e993a1e91806e28131db9f5e4fc4362"
+    },
+    {
+      "bytes": 3137,
+      "path": "tests/ScalarCseParity.lean",
+      "role": "test",
+      "sha256": "0425a1629c9df43a8322a1363b97611cd065350c5017ae7fc64b897c84245663"
+    },
+    {
+      "bytes": 3130,
+      "path": "tests/ScalarExpressionArithmetic.lean",
+      "role": "test",
+      "sha256": "38ee98dc7d24731387f9361d3fbd69558748a92611fef5f3b7650747da1d2864"
+    },
+    {
+      "bytes": 1027,
+      "path": "tests/ScalarExpressionAssertion.lean",
+      "role": "test",
+      "sha256": "cd54d7e0030ef1085aa8e16574c091e932117155a5940c2340244446d6157576"
+    },
+    {
+      "bytes": 777,
+      "path": "tests/ScalarExpressionHash.lean",
+      "role": "test",
+      "sha256": "fb00d24b21e84ed13da68e6aa7855eafc1911e1b84091ef3e1b5c4227a6371ca"
+    },
+    {
+      "bytes": 701,
+      "path": "tests/ScalarExpressionLowering.lean",
+      "role": "test",
+      "sha256": "b8477d984243e7e143f7a9fbce1578c597c20f45dd1fad4c224e2af66dfb4f10"
+    },
+    {
+      "bytes": 1040,
+      "path": "tests/ScalarExpressionSelect.lean",
+      "role": "test",
+      "sha256": "aedba50d69a95bf62dab49a6894140c45947ce6aeda823c5c5a30a58416d14f0"
+    },
+    {
+      "bytes": 1778,
+      "path": "tests/ScalarImmediate.lean",
+      "role": "test",
+      "sha256": "c9597284646ae772e9a062ccdcfac95bbf7b4962579ce8bfdce3e3e7cac6c9f8"
+    },
+    {
+      "bytes": 6573,
+      "path": "tests/ScalarInstructionEncoding.lean",
+      "role": "test",
+      "sha256": "8a4851c8a389bb4066ff57cac43fef58aafacb7c66ddd473f1e6a83e94fe0f88"
+    },
+    {
+      "bytes": 3531,
+      "path": "tests/ScalarNormalization.lean",
+      "role": "test",
+      "sha256": "cc60dd0911017720585eb826a2fade032a27945f1680d42c73434bdf18d17c71"
+    },
+    {
+      "bytes": 1489,
+      "path": "tests/ScalarParserAgreement.lean",
+      "role": "test",
+      "sha256": "d5cbfbdf96e8732ee0c0b8100dfd935318095471e76dc30719b4542a11eaa09d"
+    },
+    {
+      "bytes": 2533,
+      "path": "tests/ScalarRangeLowering.lean",
+      "role": "test",
+      "sha256": "cffb73734366a682517ccccbae29f329f0ac56116e1ca169bd1e22a9e53faff6"
+    },
+    {
+      "bytes": 3293,
+      "path": "tests/ScalarRangeRelation.lean",
+      "role": "test",
+      "sha256": "648e9dba0d7fa42aaacab135629ac3c03da0f68d96e35bb47c68d6bba5aefcbf"
+    },
+    {
+      "bytes": 3108,
+      "path": "tests/ScalarTranslation.lean",
+      "role": "test",
+      "sha256": "122baa05450385c90f46ad4805fac621af93881448d0c3e9625fb0bf37a25a86"
+    },
+    {
+      "bytes": 4949,
+      "path": "tests/ScalarValidation.lean",
+      "role": "test",
+      "sha256": "9860d27f6fcd3a29e5f7f4295aa9105c8f249366fa774c61118bf998e5e77f71"
+    },
+    {
+      "bytes": 5850,
+      "path": "tests/scalars/cse-cases.json",
+      "role": "test",
+      "sha256": "e71562df129089a4b36955d6e1caac850db183e82ef809ca3aa85046f6548731"
+    },
+    {
+      "bytes": 146,
+      "path": "scripts/proofs/AuditScalarExport.lean",
+      "role": "script",
+      "sha256": "d46bba3f4e0e3e37083a8454855ad53a36e0bfde7e48730fb65ffbfaa05e14bc"
+    },
+    {
+      "bytes": 3559,
+      "path": "scripts/proofs/audit-scalar-proof.py",
+      "role": "script",
+      "sha256": "b54c2dab2cf16373c0f4e95049999a0e1db2d2016752aad2d286ec7624961805"
+    },
+    {
+      "bytes": 7309,
+      "path": "scripts/proofs/check-scalar-proof-audit.py",
+      "role": "script",
+      "sha256": "4d016765f3136e3e4a67430f6b3ff0f143df8fbb9f8245be745359d245060254"
+    },
+    {
+      "bytes": 13975,
+      "path": "docs/research/generic-scalar-preservation.md",
+      "role": "doc",
+      "sha256": "95bffd51b1ef7dcd19c01021883c93ac6007b3c2cc2ee770e2252a3a7ff1d296"
+    }
+  ],
+  "sourceInventorySha256": "f80833a5d05a6cd2a1106a4939f4016124aa4127c4b468df7aa6de9496f0b12d",
+  "sourceQualification": {
+    "allTrackedBlobsAndModesMatched": true,
+    "commit": "6ed98d2991b14146176da7028588404464d0ba5a",
+    "count": 358,
+    "note": "Independent source build/export/audit preceded publication, then every tracked published-source blob and mode was independently matched to that built snapshot.",
+    "snapshot": "/private/tmp/noctium-scalar64-parent-33fz6u_v",
+    "tree": "c829b42d03645eb02d7036fcdbde7cb7bc63a03d"
+  },
+  "wholeCompilerVerified": false
+}

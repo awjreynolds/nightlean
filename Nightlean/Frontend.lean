@@ -1,5 +1,6 @@
 import Nightlean.Disclosure
 import Nightlean.Helpers
+import Nightlean.ComponentDisclosure
 import Nightlean.Control
 import Lean
 
@@ -12,6 +13,7 @@ structure CircuitInfo where
   inputs : List (String × Ty)
   publicInputs : List (String × Ty)
   outputs : List (String × Ty)
+  sourceProgram? : Option (Name × String) := none
   deriving Inhabited
 
 initialize circuitRegistry : SimplePersistentEnvExtension CircuitInfo (Array CircuitInfo) ←
@@ -400,6 +402,9 @@ open scoped Nightlean
     let namespaceName := (← getCurrNamespace) ++ source.getId
     let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+    match ComponentDisclosure.checkProgram program exportName.getString with
+    | .ok _ => pure ()
+    | .error diagnostic => failDisclosure diagnostic
     let value ← match Helpers.compile program exportName.getString with
       | .ok value => pure value
       | .error diagnostic => failDisclosure diagnostic *> throwError "helper compilation failed"
@@ -415,7 +420,19 @@ open scoped Nightlean
       inputs := value.inputs.map fun input => (input.name, input.ty)
       publicInputs := (value.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty)
       outputs := value.outputs.map fun item => (item.name, item.ty)
+      sourceProgram? := some (sourceName, exportName.getString)
     }
+  | _ => throwUnsupportedSyntax
+
+/-- Explicit source spelling for component-aware helper circuits. It compiles
+through the same checked helper IR and mandatory origin pass. -/
+scoped syntax (name := componentCircuitCommand) "nightlean_component_circuit" ident
+  "from" ident "entry" str : command
+
+@[command_elab componentCircuitCommand] unsafe def elabComponentCircuit : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_component_circuit $name:ident from $source:ident entry $exportName:str) =>
+    elabHelperCircuit (← `(command| nightlean_helper_circuit $name from $source entry $exportName))
   | _ => throwUnsupportedSyntax
 
 /-- Portable host-only execution plans never enter the native circuit registry. -/

@@ -19,3 +19,4 @@ scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 lake exe noctium compile examples/PrivateClaim.lean --output "$scratch/claim"
 bash scripts/proofs/check-private-claim.sh
+bash tests/component-disclosure-cli.sh

@@ -1,4 +1,6 @@
 import Nightlean.Semantics
+import Nightlean.Types.ValueExpressions
+import Nightlean.Types.ValueViews
 
 namespace Nightlean.Helpers
 
@@ -11,7 +13,8 @@ structure DeclarationId where
 inductive ResultType where
   | unit
   | scalar (ty : Ty)
-  deriving Repr, BEq, DecidableEq, Inhabited
+  | composite (type : Types.CompositeType)
+  deriving Repr, BEq, Inhabited
 
 inductive EffectKind where
   | witness | privateState | ledgerRead | ledgerWrite
@@ -36,6 +39,9 @@ structure Parameter where
   ty : Ty
   deriving Repr, Inhabited
 
+def Parameter.resultType (parameter : Parameter) : ResultType :=
+  .scalar parameter.ty
+
 inductive Term where
   | unit
   | native (number : Nat)
@@ -53,6 +59,12 @@ inductive Term where
   | witness (name : String) (ty : Ty)
   | poseidon2 (domain : Nat) (left right : Term)
   | call (name : String) (arguments : List Term)
+  /-- A checked aggregate assembled from scalar source terms in canonical leaf order. -/
+  | composite (type : Types.CompositeType) (leaves : List Term)
+  /-- A static tuple, struct, enum-payload, vector or byte projection. -/
+  | project (value : Term) (projection : Types.Projection)
+  /-- A checked dynamic selection from a fixed-length vector. -/
+  | index (value index : Term)
   /-- An external-effect fixture has a typed result, but no native implementation.
   Its label is recorded by the reference trace evaluator. -/
   | effect (kind : EffectKind) (label : String) (result : Term)
@@ -72,9 +84,23 @@ structure Declaration where
   id : DeclarationId
   name : String
   parameters : List Parameter := []
+  /-- Nominal aggregate types keyed by parameter name; scalar Parameter stays source-compatible. -/
+  compositeParameters : List (String × Types.CompositeType) := []
   result : ResultType := .unit
   body : List Statement := []
   declaredPure : Bool := false
+  span : SourceSpan := {}
+  deriving Repr
+
+def Declaration.parameterType (declaration : Declaration) (parameter : Parameter) : ResultType :=
+  match declaration.compositeParameters.lookup parameter.name with
+  | some type => .composite type
+  | none => .scalar parameter.ty
+
+structure AggregateInput where
+  name : String
+  type : Types.CompositeType
+  visibility : Visibility
   span : SourceSpan := {}
   deriving Repr
 
@@ -82,6 +108,7 @@ structure Export where
   name : String
   target : DeclarationId
   inputs : List Input := []
+  compositeInputs : List AggregateInput := []
   span : SourceSpan := {}
   deriving Repr
 
@@ -89,6 +116,7 @@ structure Program where
   scopes : List Scope := [{id := 0}]
   declarations : List Declaration := []
   exports : List Export := []
+  composites : Types.CompositeEnv := {}
   deriving Repr
 
 private def fail (span : SourceSpan) (message : String) : Except Diagnostic α :=
@@ -113,7 +141,7 @@ structure Limits where
   maxExpandedNodes : Nat := 65536
   maxExpandedDepth : Nat := 256
   maxExecutionSteps : Nat := 131072
-  deriving Repr, Inhabited
+  deriving Repr
 
 private def resource (span : SourceSpan) (kind : String) : Except Diagnostic α :=
   fail span s!"helper resource limit exceeded: {kind}"
@@ -145,6 +173,8 @@ private def spanMetadata (span : SourceSpan) : Except Diagnostic Unit := do
 private def termMetadata : Term → Except Diagnostic Unit
   | .ref name | .call name _ | .witness name _ | .effect _ name _ => textMetadata name
   | .at span _ | .disclose span _ => spanMetadata span
+  | .project _ (.field name) => textMetadata name
+  | .project _ (.enumField variant name) => do textMetadata variant; textMetadata name
   | _ => pure ()
 
 private def statementMetadata : Statement → Except Diagnostic Unit
@@ -170,7 +200,10 @@ where
       let children ← match term with
         | .binary _ a b | .eq a b | .poseidon2 _ a b
         | .andThen a b | .orElse a b => pure [a, b]
-        | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value => pure [value]
+        | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
+        | .project value _ => pure [value]
+        | .composite _ leaves => pure leaves
+        | .index value index => pure [value, index]
         | .select c a b | .ite c a b => pure [c, a, b]
         | .call _ arguments => do
           if arguments.length > limits.maxParameters then resource span "call arguments"
@@ -208,7 +241,10 @@ where
           let terms ← match value with
             | .binary _ a b | .eq a b | .poseidon2 _ a b
             | .andThen a b | .orElse a b => pure [a, b]
-            | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value => pure [value]
+            | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
+            | .project value _ => pure [value]
+            | .composite _ leaves => pure leaves
+            | .index value index => pure [value, index]
             | .select c a b | .ite c a b => pure [c, a, b]
             | .call _ arguments => do
               if arguments.length > limits.maxParameters then resource span "call arguments"
@@ -221,6 +257,89 @@ where
 private structure SourceSize where
   nodes : Nat
   depth : Nat
+
+private def checkedComposite (program : Program) (span : SourceSpan)
+    (type : Types.CompositeType) : Except Diagnostic Types.CompiledType :=
+  match Types.compileType program.composites type with
+  | .ok compiled => pure compiled
+  | .error diagnostic => fail (if diagnostic.span.file.isEmpty then span else diagnostic.span) diagnostic.message
+
+private def projectedType (program : Program) (span : SourceSpan)
+    (parent : Types.CompositeType) (projection : Types.Projection) : Except Diagnostic Types.CompositeType := do
+  discard (checkedComposite program span parent)
+  match parent, projection with
+  | .tuple items, .tupleIndex index =>
+    match items[index]? with
+    | some type => pure type
+    | none => fail span "aggregate tuple projection out of bounds"
+  | .structure id, .field name =>
+    match program.composites.structures.find? (·.id == id) with
+    | none => fail span s!"unknown aggregate struct '{id}'"
+    | some declaration =>
+      match declaration.fields.find? (·.name == name) with
+      | some field => pure field.type
+      | none => fail span s!"unknown aggregate struct field '{name}'"
+  | .vector length type, .vectorIndex index =>
+    if index < length then pure type else fail span "aggregate vector projection out of bounds"
+  | .bytes length, .byteIndex index =>
+    if index < length then pure (.scalar (.uint 255)) else fail span "aggregate byte projection out of bounds"
+  | .enumeration id, .enumField variant name =>
+    match program.composites.enumerations.find? (·.id == id) with
+    | none => fail span s!"unknown aggregate enum '{id}'"
+    | some declaration =>
+      match declaration.variants.find? (·.name == variant) with
+      | none => fail span s!"unknown aggregate enum variant '{variant}'"
+      | some selected =>
+        match selected.fields.find? (·.name == name) with
+        | some field => pure field.type
+        | none => fail span s!"unknown aggregate enum field '{name}'"
+  | _, _ => fail span "aggregate projection kind/type mismatch"
+
+private def validateResultType (program : Program) (span : SourceSpan) : ResultType → Except Diagnostic Unit
+  | .unit => pure ()
+  | .scalar type => liftError span (type.validate {poseidon2 := true})
+  | .composite type => discard (checkedComposite program span type)
+
+private partial def sourceLeafTypes : Types.Layout → List Ty
+  | .unit => []
+  | .scalar .nativeField => [.native]
+  | .scalar .booleanField => [.bool]
+  | .scalar (.boundedUnsignedField maximum) => [.uint maximum]
+  | .scalar (.enumTagField _) => [.native]
+  | .scalar .byteField => [.native]
+  | .tuple items => items.flatMap sourceLeafTypes
+  | .structure _ fields => fields.flatMap (sourceLeafTypes ∘ Prod.snd)
+  | .vector length element => (List.range length).flatMap fun _ => sourceLeafTypes element
+  | .bytes length _ => List.replicate length .native
+  | .enumeration _ _ _ payloadLeaves _ _ => .native :: List.replicate payloadLeaves .native
+
+private partial def sourceLeafPaths : Types.Layout → String → List String
+  | .unit, _ => []
+  | .scalar _, path => [path]
+  | .tuple items, path => items.zipIdx.flatMap fun (item, index) =>
+      sourceLeafPaths item (path ++ s!".{index}")
+  | .structure _ fields, path => fields.flatMap fun (name, item) =>
+      sourceLeafPaths item (path ++ s!".{name}")
+  | .vector length element, path => (List.range length).flatMap fun index =>
+      sourceLeafPaths element (path ++ s!".{index}")
+  | .bytes length _, path => (List.range length).map fun index => path ++ s!".{index}"
+  | .enumeration _ _ _ payloadLeaves _ _, path =>
+      (path ++ ".$tag") :: ((List.range payloadLeaves).map fun index => path ++ s!".$payload{index}")
+
+private def aggregateInputName (root component : String) : String :=
+  if component.isEmpty then root else root ++ component
+
+private def aggregateInputs (program : Program) (entry : Export) : Except Diagnostic (List Input) := do
+  let mut inputs := entry.inputs
+  for input in entry.compositeInputs do
+    let compiled ← checkedComposite program input.span input.type
+    let names := sourceLeafPaths compiled.checked.value ""
+    unless names.length == compiled.checked.expandedLeaves do
+      fail input.span "aggregate source input path count mismatch"
+    inputs := inputs ++ (names.map fun path => {
+      name := aggregateInputName input.name path, ty := .native,
+      visibility := input.visibility, span := input.span : Input})
+  pure inputs
 
 private def sourcePreflight (limits : Limits) (program : Program) :
     Except Diagnostic (List (DeclarationId × SourceSize)) := do
@@ -238,9 +357,14 @@ private def sourcePreflight (limits : Limits) (program : Program) :
     if entry.target.scope > 18446744073709551615 || entry.target.ordinal > 18446744073709551615 then
       resource {} "declaration identity metadata"
     if entry.inputs.length > limits.maxParameters then resource entry.span "entry inputs"
+    if entry.inputs.length + entry.compositeInputs.length > limits.maxParameters then resource entry.span "entry inputs"
     for input in entry.inputs do
       textMetadata input.name
       spanMetadata input.span
+    for input in entry.compositeInputs do
+      textMetadata input.name
+      spanMetadata input.span
+      discard (checkedComposite program input.span input.type)
   let mut available := limits.maxSourceNodes
   let mut sizes := []
   for declaration in program.declarations do
@@ -250,6 +374,16 @@ private def sourcePreflight (limits : Limits) (program : Program) :
       resource {} "declaration identity metadata"
     if declaration.parameters.length > limits.maxParameters then resource declaration.span "parameters"
     for parameter in declaration.parameters do textMetadata parameter.name
+    unless uniqueNames (declaration.compositeParameters.map Prod.fst) do
+      fail declaration.span "duplicate composite helper parameter type"
+    for (name, type) in declaration.compositeParameters do
+      textMetadata name
+      unless declaration.parameters.any (·.name == name) do
+        fail declaration.span s!"composite helper type for unknown parameter '{name}'"
+      validateResultType program declaration.span (.composite type)
+    for parameter in declaration.parameters do
+      validateResultType program declaration.span (declaration.parameterType parameter)
+    validateResultType program declaration.span declaration.result
     let (nodes, statements, depth) ← scanBody limits declaration.span available declaration.body
     available := available - nodes
     sizes := (declaration.id, {
@@ -264,11 +398,13 @@ def subtype : ResultType → ResultType → Bool
       | .uint m, .uint n => m ≤ n
       | .uint _, .native => true
       | _, _ => false
+  | .composite left, .composite right => left == right
   | _, _ => false
 
-private def compatible (arguments : List ResultType) (parameters : List Parameter) : Bool :=
-  arguments.length == parameters.length &&
-    (arguments.zip parameters).all (fun (actual, parameter) => subtype actual (.scalar parameter.ty))
+private def compatible (arguments : List ResultType) (declaration : Declaration) : Bool :=
+  arguments.length == declaration.parameters.length &&
+    (arguments.zip declaration.parameters).all fun (actual, parameter) =>
+      subtype actual (declaration.parameterType parameter)
 
 /-- Search one lexical group at a time. An ambiguous inner group never falls back. -/
 private def resolveUnchecked (program : Program) (scope : Nat) (name : String) (arguments : List ResultType)
@@ -281,7 +417,7 @@ where
         | fail span "unknown helper lexical scope"
       if group.values.contains name then fail span s!"helper '{name}' is hidden by a value binding"
       let candidates := program.declarations.filter fun declaration =>
-        declaration.id.scope == scope && declaration.name == name && compatible arguments declaration.parameters
+        declaration.id.scope == scope && declaration.name == name && compatible arguments declaration
       match candidates with
       | [declaration] => pure declaration
       | _ :: _ :: _ => fail span s!"ambiguous helper overload '{name}'"
@@ -306,6 +442,12 @@ abbrev Environment := List (String × ResultType)
 private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
   | .scalar ty => pure ty
   | .unit => fail span "unit is not a scalar helper argument"
+  | .composite _ => fail span "aggregate helper value is not a scalar"
+
+private def resultTypeOfComposite : Types.CompositeType → ResultType
+  | .unit => .unit
+  | .scalar type => .scalar type
+  | type => .composite type
 
 private def common (span : SourceSpan) (left right : Ty) : Except Diagnostic Ty := do
   if subtype (.scalar left) (.scalar right) then pure right
@@ -406,6 +548,30 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       let declaration ← resolveUnchecked program scope name (arguments.map (·.ty)) span
       let info := combine declaration.result arguments
       pure {info with calls := declaration.id :: info.calls}
+    | .composite type leaves => do
+      let compiled ← checkedComposite program span type
+      let values ← leaves.mapM (inferTerm fuel program scope env span)
+      let expected := sourceLeafTypes compiled.checked.value
+      unless values.length == expected.length do fail span "aggregate source leaf count mismatch"
+      for (value, expectedType) in values.zip expected do
+        unless subtype value.ty (.scalar expectedType) do
+          fail span "aggregate source leaf type mismatch"
+      pure (combine (resultTypeOfComposite type) values)
+    | .project value projection => do
+      let parent ← inferTerm fuel program scope env span value
+      let .composite type := parent.ty | fail span "aggregate projection requires a composite value"
+      let selected ← projectedType program span type projection
+      pure (combine (resultTypeOfComposite selected) [parent])
+    | .index value index => do
+      let parent ← inferTerm fuel program scope env span value
+      let index ← inferTerm fuel program scope env span index
+      let .composite (.vector length element) := parent.ty
+        | fail span "dynamic aggregate index requires a vector value"
+      unless length > 0 do fail span "cannot dynamically index an empty aggregate vector"
+      let indexType ← scalar span index.ty
+      unless indexType == .native || (match indexType with | .uint _ => true | _ => false) do
+        fail span "aggregate index requires Native or UInt"
+      pure (combine (resultTypeOfComposite element) [parent, index])
     | .effect kind _ result =>
       unless kind.impure do fail span "external helper effects require an external effect category"
       let result ← inferTerm fuel program scope env span result
@@ -456,7 +622,7 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
     for statement in body do
       let info ← match statement with
         | .bind name ty value => do
-          if let .scalar target := ty then liftError span (target.validate {poseidon2 := true})
+          validateResultType program span ty
           if (env.lookup name).isSome then fail span s!"duplicate helper value '{name}'"
           let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
           unless subtype info.ty ty do fail span "helper binding type mismatch"
@@ -495,9 +661,9 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
 private def checkDeclarationUnchecked (limits : Limits) (program : Program) (declaration : Declaration) : Except Diagnostic Summary := do
   let span := declaration.span
   unless uniqueNames (declaration.parameters.map (·.name)) do fail span "duplicate helper parameter"
-  let env := declaration.parameters.map fun parameter => (parameter.name, .scalar parameter.ty)
-  for parameter in declaration.parameters do liftError span (parameter.ty.validate {poseidon2 := true})
-  if let .scalar ty := declaration.result then liftError span (ty.validate {poseidon2 := true})
+  let env := declaration.parameters.map fun parameter => (parameter.name, declaration.parameterType parameter)
+  for parameter in declaration.parameters do validateResultType program span (declaration.parameterType parameter)
+  validateResultType program span declaration.result
   let info ← checkBody limits program declaration limits.maxSourceDepth env declaration.body
   unless info.returned || declaration.result == .unit do fail span "helper fall-through returns unit, incompatible with declared result"
   pure {id := declaration.id, calls := info.calls, direct := info.effects, guarded := info.guarded}
@@ -580,8 +746,31 @@ def analyzeWithLimits (limits : Limits) (program : Program) : Except Diagnostic 
   for entry in program.exports do
     let declaration ← lookup program entry.target entry.span
     unless uniqueNames (entry.inputs.map (·.name)) do fail entry.span "duplicate helper entrypoint input"
+    unless uniqueNames (entry.compositeInputs.map (·.name)) do fail entry.span "duplicate aggregate helper entrypoint input"
+    let scalarNames := entry.inputs.map (·.name)
+    if entry.compositeInputs.any (fun input => scalarNames.contains input.name) then
+      fail entry.span "duplicate helper entrypoint input"
     for input in entry.inputs do liftError input.span (input.ty.validate {poseidon2 := true})
-    unless compatible (entry.inputs.map fun input => .scalar input.ty) declaration.parameters do
+    for input in entry.compositeInputs do discard (checkedComposite program input.span input.type)
+    let mut scalarInputs := entry.inputs
+    let mut aggregateInputs := entry.compositeInputs
+    let mut arguments := []
+    for parameter in declaration.parameters do
+      match declaration.parameterType parameter with
+      | .scalar _ =>
+        let some input := scalarInputs.head?
+          | fail entry.span "helper entrypoint input signature mismatch"
+        scalarInputs := scalarInputs.drop 1
+        arguments := arguments ++ [.scalar input.ty]
+      | .composite _ =>
+        let some input := aggregateInputs.head?
+          | fail entry.span "helper entrypoint input signature mismatch"
+        aggregateInputs := aggregateInputs.drop 1
+        arguments := arguments ++ [.composite input.type]
+      | .unit => fail entry.span "helper parameters cannot have unit type"
+    unless compatible arguments declaration do
+      fail entry.span "helper entrypoint input signature mismatch"
+    unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
       fail entry.span "helper entrypoint input signature mismatch"
     let (_, next) ← (summarize limits summaries sizes entry.span entry.target).run state
     state := next
@@ -634,17 +823,34 @@ retains unused arguments, assertions and fallible casts. -/
 structure Lowered where
   ty : ResultType
   scalar : Scalar
+  components : List Scalar := []
+  constraints : List (Expr .bool) := []
   deriving Inhabited
 
-private def unitValue : Lowered := ⟨.unit, ⟨.bool, .bool true⟩⟩
+private def scalarValue {ty : Ty} (value : Expr ty) : Lowered :=
+  { ty := .scalar ty, scalar := ⟨ty, value⟩ }
+
+private def unitValue : Lowered := {ty := .unit, scalar := ⟨.bool, .bool true⟩}
+
+private def components (value : Lowered) : List Scalar :=
+  match value.ty with
+  | .unit => []
+  | .scalar _ => [value.scalar]
+  | .composite _ => value.components
+
+private def aggregateValue (type : Types.CompositeType) (values : List Scalar)
+    (constraints : List (Expr .bool) := []) : Lowered :=
+  { ty := .composite type, scalar := values.headD ⟨.bool, .bool true⟩,
+    components := values, constraints }
 
 private def coerce (span : SourceSpan) (value : Lowered) (target : ResultType) : Except Diagnostic Lowered := do
   unless subtype value.ty target do fail span "helper lowering type mismatch"
   match target with
   | .unit => pure value
   | .scalar ty =>
-    if h : value.scalar.ty = ty then pure ⟨target, ⟨ty, h ▸ value.scalar.value⟩⟩
-    else pure ⟨target, ⟨ty, .cast ty value.scalar.value⟩⟩
+    if h : value.scalar.ty = ty then pure {value with ty := target, scalar := ⟨ty, h ▸ value.scalar.value⟩}
+    else pure {value with ty := target, scalar := ⟨ty, .cast ty value.scalar.value⟩}
+  | .composite _ => pure value
 
 private def boolExpr (span : SourceSpan) (value : Lowered) : Except Diagnostic (Expr .bool) :=
   if h : value.scalar.ty = .bool then pure (h ▸ value.scalar.value)
@@ -661,12 +867,20 @@ private def typedExpr (span : SourceSpan) (target : Ty) (value : Lowered) : Exce
   else fail span "helper lowering expected declared scalar type"
 
 private def sequence (name : String) (value body : Lowered) : Lowered :=
-  {body with scalar := ⟨body.scalar.ty, .letE name value.scalar.value body.scalar.value⟩}
+  let bind {ty : Ty} (expression : Expr ty) : Expr ty := .letE name value.scalar.value expression
+  {body with
+    scalar := ⟨body.scalar.ty, bind body.scalar.value⟩
+    components := body.components.map fun component =>
+      ⟨component.ty, bind component.value⟩
+    constraints := body.constraints.map fun condition => bind condition}
 
 private abbrev LowerEnv := List (String × Lowered)
 private structure LowerState where
   next : Nat := 0
   reserved : List String := []
+  types : TypeEnv := []
+  witnessInputs : List Input := []
+  privateOrigins : List (String × PrivateOriginKind) := []
   remaining : Nat
   deriving Inhabited
 
@@ -687,6 +901,41 @@ private def fresh : LowerM String := do
   set {state with next := n + 1}
   pure s!"$helper{n}"
 
+private def freshTyped (type : Ty) : LowerM String := do
+  let name ← fresh
+  modify fun state => {state with types := (name, type) :: state.types}
+  pure name
+
+private def projectionSlice (layout : Types.Layout) (projection : Types.Projection) :
+    Except String (Nat × Nat) := do
+  match layout, projection with
+  | .tuple items, .tupleIndex index =>
+    let some selected := items[index]? | throw "aggregate tuple projection out of bounds"
+    pure ((items.take index).map Types.Layout.leafCount |>.sum, selected.leafCount)
+  | .structure _ fields, .field name =>
+    let some index := fields.findIdx? (·.1 == name) | throw "unknown aggregate field"
+    let some selected := fields[index]? | throw "aggregate field layout mismatch"
+    pure ((fields.take index).map (fun field => field.2.leafCount) |>.sum, selected.2.leafCount)
+  | .vector length element, .vectorIndex index =>
+    unless index < length do throw "aggregate vector projection out of bounds"
+    pure (index * element.leafCount, element.leafCount)
+  | .bytes length _, .byteIndex index =>
+    unless index < length do throw "aggregate byte projection out of bounds"
+    pure (index, 1)
+  | .enumeration _ _ _ _ _ variants, .enumField variant name =>
+    let some selected := variants.find? (·.1 == variant) | throw "unknown aggregate enum variant"
+    let some index := selected.2.1.findIdx? (·.1 == name) | throw "unknown aggregate enum field"
+    let some field := selected.2.1[index]? | throw "aggregate enum layout mismatch"
+    pure (1 + ((selected.2.1.take index).map (fun item => item.2.leafCount)).sum,
+      field.2.leafCount)
+  | _, _ => throw "aggregate projection kind/type mismatch"
+
+private def nativeOfScalar (value : Scalar) : Expr .native :=
+  match value with
+  | ⟨.native, value⟩ => value
+  | ⟨.bool, value⟩ => .cast .native value
+  | ⟨.uint _, value⟩ => .cast .native value
+
 private def liftD (value : Except Diagnostic α) : LowerM α := liftM value
 
 mutual
@@ -695,59 +944,137 @@ mutual
     spendLower span
     match term with
     | .unit => pure unitValue
-    | .native n => pure ⟨.scalar .native, ⟨.native, .native n⟩⟩
-    | .bool b => pure ⟨.scalar .bool, ⟨.bool, .bool b⟩⟩
-    | .uint m n => pure ⟨.scalar (.uint m), ⟨.uint m, .uint m n⟩⟩
+    | .native n => pure (scalarValue (.native n))
+    | .bool b => pure (scalarValue (.bool b))
+    | .uint m n => pure (scalarValue (.uint m n))
     | .ref name =>
       let some value := env.lookup name | liftD (fail span s!"unbound helper value '{name}'")
       pure value
     | .binary op left right =>
       let left ← lowerTerm program scope env span left
       let right ← lowerTerm program scope env span right
-      match left.scalar, right.scalar with
-      | ⟨.uint m, a⟩, ⟨.uint n, b⟩ =>
+      let result ← match left.scalar, right.scalar with
+      | ⟨.uint _, a⟩, ⟨.uint _, b⟩ =>
         match op with
-        | .add => pure ⟨.scalar (.uint (m+n)), ⟨.uint (m+n), .uadd a b⟩⟩
-        | .sub => pure ⟨.scalar (.uint m), ⟨.uint m, .usub a b⟩⟩
-        | .mul => pure ⟨.scalar (.uint (m*n)), ⟨.uint (m*n), .umul a b⟩⟩
+        | .add => pure (scalarValue (.uadd a b))
+        | .sub => pure (scalarValue (.usub a b))
+        | .mul => pure (scalarValue (.umul a b))
       | _, _ =>
         let left ← liftD (nativeExpr span left)
         let right ← liftD (nativeExpr span right)
         let value := match op with | .add => Expr.add left right | .sub => .sub left right | .mul => .mul left right
-        pure ⟨.scalar .native, ⟨.native, value⟩⟩
+        pure (scalarValue value)
+      pure {result with constraints := left.constraints ++ right.constraints ++ result.constraints}
     | .eq left right =>
       let left ← lowerTerm program scope env span left
       let right ← lowerTerm program scope env span right
+      let constraints := left.constraints ++ right.constraints
       let ty ← liftD (common span left.scalar.ty right.scalar.ty)
       let left ← liftD (typedExpr span ty left)
       let right ← liftD (typedExpr span ty right)
       let value := Expr.eq left right
-      pure ⟨.scalar .bool, ⟨.bool, value⟩⟩
+      pure {scalarValue value with constraints}
     | .cast target value =>
       let value ← lowerTerm program scope env span value
-      pure ⟨.scalar target, ⟨target, .cast target value.scalar.value⟩⟩
+      pure {scalarValue (.cast target value.scalar.value) with constraints := value.constraints}
     | .disclose release value =>
       let value ← lowerTerm program scope env span value
-      pure {value with scalar := ⟨value.scalar.ty, .disclose release value.scalar.value⟩}
+      match value.ty with
+      | .unit => pure value
+      | .scalar _ => pure {value with scalar := ⟨value.scalar.ty, .disclose release value.scalar.value⟩}
+      | .composite _ => pure {value with components := value.components.map fun item =>
+          ⟨item.ty, .disclose release item.value⟩}
     | .select condition yes no =>
       let condition ← lowerTerm program scope env span condition
       let yes ← lowerTerm program scope env span yes
       let no ← lowerTerm program scope env span no
+      let constraints := condition.constraints ++ yes.constraints ++ no.constraints
       let ty ← liftD (common span yes.scalar.ty no.scalar.ty)
-      pure ⟨.scalar ty, ⟨ty, .select (← liftD (boolExpr span condition))
-        (← liftD (typedExpr span ty yes)) (← liftD (typedExpr span ty no))⟩⟩
+      let result := scalarValue (.select (← liftD (boolExpr span condition))
+        (← liftD (typedExpr span ty yes)) (← liftD (typedExpr span ty no)))
+      pure {result with constraints}
     | .ite .. | .andThen .. | .orElse .. =>
       liftD (fail span "native helper capability unavailable: structured control (CF-02)")
-    | .witness .. => liftD (fail span "native helper capability unavailable: witness")
+    | .witness _ ty => do
+      let inputName ← freshTyped ty
+      modify fun state => {state with
+        witnessInputs := state.witnessInputs ++ [{name := inputName, ty, visibility := .private, span}]
+        privateOrigins := state.privateOrigins ++ [(inputName, .provider)]}
+      pure (scalarValue (ty := ty) (Expr.ref inputName))
     | .poseidon2 domain left right =>
       let left ← lowerTerm program scope env span left
       let right ← lowerTerm program scope env span right
-      pure ⟨.scalar .native, ⟨.native, .poseidon2 domain
-        (← liftD (nativeExpr span left)) (← liftD (nativeExpr span right))⟩⟩
+      let result := scalarValue (.poseidon2 domain
+        (← liftD (nativeExpr span left)) (← liftD (nativeExpr span right)))
+      pure {result with constraints := left.constraints ++ right.constraints}
     | .call name arguments =>
       let values ← arguments.mapM (lowerTerm program scope env span)
       let declaration ← liftD (resolveUnchecked program scope name (values.map (·.ty)) span)
       lowerCall program declaration values span
+    | .composite type leaves => do
+      let compiled ← liftD (checkedComposite program span type)
+      let values ← leaves.mapM (lowerTerm program scope env span)
+      let expected := sourceLeafTypes compiled.checked.value
+      unless values.length == expected.length do liftD (fail span "aggregate source leaf count mismatch")
+      let nativeLeaves ← values.mapM fun value => liftD (nativeExpr span value)
+      let state ← get
+      let checked ← liftD ((Types.checkNativeExpression compiled state.types nativeLeaves).mapError
+        fun message => {span, message})
+      pure (aggregateValue type (nativeLeaves.map fun leaf => ⟨.native, leaf⟩)
+        (values.flatMap (·.constraints) ++ checked.constraints))
+    | .project value projection => do
+      let parent ← lowerTerm program scope env span value
+      let .composite parentType := parent.ty
+        | liftD (fail span "aggregate projection requires a composite value")
+      let selectedType ← liftD (projectedType program span parentType projection)
+      let parentLayout := (← liftD (checkedComposite program span parentType)).checked.value
+      let childType ← liftD (checkedComposite program span selectedType)
+      let (offset, count) ← liftD ((projectionSlice parentLayout projection).mapError fun message => {span, message})
+      let values := (components parent).drop offset |>.take count
+      unless values.length == childType.checked.expandedLeaves do
+        liftD (fail span "aggregate projection leaf count mismatch")
+      let projectionConstraints ← if let .enumField variant _ := projection then
+        match parentLayout with
+        | .enumeration _ _ _ _ _ variants => do
+          let some variantIndex := variants.findIdx? (·.1 == variant)
+            | liftD (fail span "unknown aggregate enum variant")
+          let some tag := (components parent).head?
+            | liftD (fail span "aggregate enum projection has no tag")
+          pure [Expr.eq (nativeOfScalar tag) (.native variantIndex)]
+        | _ => liftD (fail span "enum projection requires an enum layout")
+      else pure []
+      let constraints := parent.constraints ++ projectionConstraints
+      match resultTypeOfComposite selectedType with
+      | .unit => pure {unitValue with constraints}
+      | .scalar ty =>
+        let some selected := values.head? | liftD (fail span "aggregate scalar projection has no leaf")
+        pure {scalarValue (.cast ty (nativeOfScalar selected)) with constraints}
+      | .composite type => pure (aggregateValue type values constraints)
+    | .index value index => do
+      let parent ← lowerTerm program scope env span value
+      let indexValue ← lowerTerm program scope env span index
+      let .composite (.vector length element) := parent.ty
+        | liftD (fail span "dynamic aggregate index requires a vector value")
+      unless length > 0 do liftD (fail span "cannot dynamically index an empty aggregate vector")
+      let _ ← liftD (checkedComposite program span (.vector length element))
+      let childType ← liftD (checkedComposite program span element)
+      let indexExpr ← liftD (nativeExpr span indexValue)
+      let bounded := Expr.cast (.uint (length - 1)) indexExpr
+      let boundCheck := Expr.eq bounded bounded
+      let width := childType.checked.expandedLeaves
+      let parentLeaves := components parent
+      let selected := (List.range width).map fun leafOffset =>
+        ((List.range length).foldr (fun position rest =>
+          .select (.eq indexExpr (.native position))
+            ((parentLeaves[position * width + leafOffset]?).map nativeOfScalar |>.getD (.native 0)) rest)
+          (.native 0))
+      let constraints := parent.constraints ++ indexValue.constraints ++ [boundCheck]
+      match resultTypeOfComposite element with
+      | .unit => pure {unitValue with constraints}
+      | .scalar ty =>
+        let some selected := selected.head? | liftD (fail span "aggregate scalar index has no leaf")
+        pure {scalarValue (.cast ty selected) with constraints}
+      | .composite type => pure (aggregateValue type (selected.map fun leaf => ⟨.native, leaf⟩) constraints)
     | .effect kind label _ => liftD (fail span s!"native helper capability unavailable: {repr kind} ({label})")
     | .at span value => lowerTerm program scope env span value
 
@@ -758,12 +1085,22 @@ mutual
     let mut bindings := []
     for (parameter, actual) in declaration.parameters.zip values do
       spendLower span
-      let actual ← liftD (coerce span actual (.scalar parameter.ty))
-      let name ← fresh
-      bindings := bindings ++ [(name, actual)]
-      env := (parameter.name, ⟨.scalar parameter.ty, ⟨parameter.ty, .ref name⟩⟩) :: env
+      let parameterType := declaration.parameterType parameter
+      let actual ← liftD (coerce span actual parameterType)
+      let mut references : List Scalar := []
+      for component in components actual do
+        let name ← freshTyped component.ty
+        bindings := bindings ++ [(name, component)]
+        references := references ++ [⟨component.ty, .ref name⟩]
+      let reference := match parameterType with
+        | .composite type => aggregateValue type references
+        | .scalar _ => {actual with scalar := references.headD actual.scalar}
+        | .unit => unitValue
+      env := (parameter.name, reference) :: env
     let body ← lowerBody program declaration env declaration.body
-    pure (bindings.foldr (fun (name, value) body => sequence name value body) body)
+    let body := {body with constraints := values.flatMap (·.constraints) ++ body.constraints}
+    pure (bindings.foldr (fun (name, value) body =>
+      sequence name {ty := .scalar value.ty, scalar := value} body) body)
 
   private partial def lowerBody (program : Program) (declaration : Declaration)
       (env : LowerEnv) (body : List Statement) : LowerM Lowered := do
@@ -780,19 +1117,45 @@ mutual
       | .bind name ty value =>
         let value ← lowerTerm program declaration.id.scope env declaration.span value
         let value ← liftD (coerce declaration.span value ty)
-        let localName ← fresh
-        let reference : Lowered := ⟨ty, ⟨value.scalar.ty, .ref localName⟩⟩
+        let mut references : List Scalar := []
+        let mut bindings := []
+        for component in components value do
+          let localName ← freshTyped component.ty
+          bindings := bindings ++ [(localName, component)]
+          references := references ++ [⟨component.ty, .ref localName⟩]
+        let reference : Lowered := match ty with
+          | .unit => unitValue
+          | .scalar _ => {value with scalar := references.headD value.scalar}
+          | .composite type => aggregateValue type references
         let body ← lowerBody program declaration ((name, reference) :: env) rest
-        pure (sequence localName value body)
+        let body := {body with constraints := value.constraints ++ body.constraints}
+        pure (bindings.foldr (fun (localName, component) body =>
+          sequence localName {ty := .scalar component.ty, scalar := component} body) body)
       | .evaluate value =>
         let value ← lowerTerm program declaration.id.scope env declaration.span value
-        let name ← fresh
+        let mut bindings := []
+        for component in components value do
+          let name ← freshTyped component.ty
+          bindings := bindings ++ [(name, component)]
         let body ← lowerBody program declaration env rest
-        pure (sequence name value body)
+        let body := {body with constraints := value.constraints ++ body.constraints}
+        if bindings.isEmpty && value.ty == .unit then
+          let name ← freshTyped .bool
+          pure (sequence name value body)
+        else
+          pure (bindings.foldr (fun (name, component) body =>
+            sequence name {ty := .scalar component.ty, scalar := component} body) body)
       | .assert condition =>
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
         let body ← lowerBody program declaration env rest
-        pure {body with scalar := ⟨body.scalar.ty, .assertE (← liftD (boolExpr declaration.span condition)) body.scalar.value⟩}
+        let conditionExpr ← liftD (boolExpr declaration.span condition)
+        if let .composite _ := body.ty then
+          pure {body with constraints := condition.constraints ++
+            [Expr.eq conditionExpr (.bool true)] ++ body.constraints}
+        else
+          pure {body with
+            scalar := ⟨body.scalar.ty, .assertE conditionExpr body.scalar.value⟩
+            constraints := condition.constraints ++ body.constraints}
       | .branch .. => liftD (fail declaration.span "native helper capability unavailable: structured control (CF-02)")
       | .stage .. => liftD (fail declaration.span "native helper capability unavailable: private state")
       | .return _ => liftD (fail declaration.span "invalid helper statement sequence")
@@ -804,23 +1167,74 @@ def compileWithLimits (limits : Limits) (program : Program) (entryName : String)
   let summaries ← analyzeWithLimits limits program
   for summary in summaries do
     if summary.guarded then fail {} "native helper capability unavailable: structured control (CF-02)"
-    if let some effect := summary.effects.find? EffectKind.impure then
+    if let some effect := summary.effects.find? fun effect => effect.impure && effect != .witness then
       let declaration ← lookup program summary.id {}
       fail declaration.span s!"native helper capability unavailable: {repr effect}"
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown helper entrypoint"
   let declaration ← lookup program entry.target entry.span
-  let values := entry.inputs.map fun input =>
-    (⟨.scalar input.ty, ⟨input.ty, .ref input.name⟩⟩ : Lowered)
-  let (body, _) ← (lowerCall program declaration values entry.span).run {reserved := entry.inputs.map (·.name), remaining := limits.maxExecutionSteps}
-  let outputName := ((List.range (entry.inputs.length + 1)).map fun n =>
+  let inputs ← aggregateInputs program entry
+  unless uniqueNames (inputs.map (·.name)) do fail entry.span "aggregate input component names collide"
+  let inputTypes : TypeEnv := inputs.map fun input => (input.name, input.ty)
+  let mut inputConstraints := []
+  for input in entry.compositeInputs do
+    let compiled ← checkedComposite program input.span input.type
+    let leaves := (sourceLeafPaths compiled.checked.value "").map fun path =>
+      Expr.ref (aggregateInputName input.name path)
+    let checked ← liftError input.span ((Types.checkNativeExpression compiled inputTypes leaves).mapError id)
+    inputConstraints := inputConstraints ++ checked.constraints
+  let mut values := []
+  let mut scalarInputs := entry.inputs
+  let mut aggregateInputs := entry.compositeInputs
+  for parameter in declaration.parameters do
+    match declaration.parameterType parameter with
+    | .composite type =>
+      let some input := aggregateInputs.head?
+        | fail entry.span s!"missing composite helper input '{parameter.name}'"
+      aggregateInputs := aggregateInputs.drop 1
+      unless input.type == type do fail input.span "helper composite input identity mismatch"
+      let compiled ← checkedComposite program input.span type
+      let leaves := (sourceLeafPaths compiled.checked.value "").map fun path =>
+        ⟨.native, Expr.ref (aggregateInputName input.name path)⟩
+      values := values ++ [aggregateValue type leaves]
+    | .scalar _ =>
+      let some input := scalarInputs.head?
+        | fail entry.span s!"missing scalar helper input '{parameter.name}'"
+      scalarInputs := scalarInputs.drop 1
+      values := values ++ [scalarValue (ty := input.ty) (Expr.ref input.name)]
+    | .unit => fail entry.span "helper parameters cannot have unit type"
+  unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
+    fail entry.span "helper entrypoint input signature mismatch"
+  let (body, lowering) ← (lowerCall program declaration values entry.span).run
+    {reserved := inputs.map (·.name), types := inputTypes, remaining := limits.maxExecutionSteps}
+  let inputs := inputs ++ lowering.witnessInputs
+  let outputName := ((List.range (inputs.length + 1)).map fun n =>
     if n == 0 then "result" else s!"result{n}").find?
-      (fun name => !(entry.inputs.map (·.name)).contains name) |>.getD "result"
-  let outputs := match declaration.result with
-    | .unit => []
-    | .scalar _ => [{name := outputName, ty := body.scalar.ty, value := body.scalar.value, span := entry.span}]
+      (fun name => !(inputs.map (·.name)).contains name) |>.getD "result"
+  let outputValues ← match declaration.result with
+    | .unit => pure []
+    | .scalar _ => pure [(outputName, body.scalar)]
+    | .composite type => do
+      let compiled ← checkedComposite program entry.span type
+      unless body.components.length == compiled.checked.expandedLeaves do
+        fail entry.span "aggregate helper result leaf count mismatch"
+      let paths := sourceLeafPaths compiled.checked.value ""
+      pure ((paths.zip body.components).map fun (path, component) =>
+        (aggregateInputName outputName path, component))
+  let outputs := outputValues.map fun (name, component) => {
+    name, ty := component.ty, value := component.value, span := entry.span : Output}
+  let mut outputConstraints := []
+  if let .composite type := declaration.result then
+    let compiled ← checkedComposite program entry.span type
+    unless body.components.length == compiled.checked.expandedLeaves do
+      fail entry.span "aggregate helper result leaf count mismatch"
+    let leaves := body.components.map nativeOfScalar
+    let checked ← liftError entry.span ((Types.checkNativeExpression compiled lowering.types leaves).mapError id)
+    outputConstraints := checked.constraints
   let circuit : Circuit := {
-    name := entry.name, inputs := entry.inputs, outputs, span := entry.span
-    constraints := if declaration.result == .unit then [.letE "$unit" body.scalar.value (.bool true)] else []
+    name := entry.name, inputs, outputs, span := entry.span
+    privateOrigins := lowering.privateOrigins
+    constraints := inputConstraints ++ body.constraints ++ outputConstraints ++
+      (if declaration.result == .unit then [.letE "$unit" body.scalar.value (.bool true)] else [])
   }
   circuit.validate {poseidon2 := true}
   Disclosure.circuit circuit
@@ -859,6 +1273,7 @@ private def traceCast (span : SourceSpan) (value : TraceValue) (ty : ResultType)
   | .scalar ty =>
     let value ← traceScalar span value
     some <$> liftM (liftError span (ScalarPolicy.cast value ty.scalarKind))
+  | .composite _ => liftM (fail span "aggregate helper trace is unavailable")
 
 mutual
   private partial def traceTerm (program : Program) (ctx : EvalContext) (scope : Nat)
@@ -918,6 +1333,7 @@ mutual
       let values ← arguments.mapM (traceTerm program ctx scope env span)
       let declaration ← liftM (resolveUnchecked program scope name (values.map traceType) span)
       traceCall program ctx declaration values
+    | .composite .. | .project .. | .index .. => liftM (fail span "aggregate helper trace is unavailable")
     | .effect _ label result =>
       let result ← traceTerm program ctx scope env span result
       modify fun state => {state with events := label :: state.events}

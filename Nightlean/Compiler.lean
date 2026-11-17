@@ -122,6 +122,11 @@ private unsafe def registeredCircuits : CommandElabM (Array (Name × Circuit)) :
   let mut circuits := #[]
   for info in circuitRegistry.getState env do
     unless env.isImportedConst info.declName do
+      if let some (sourceName, exportName) := info.sourceProgram? then
+        let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+        match ComponentDisclosure.checkProgram program exportName with
+        | .ok _ => pure ()
+        | .error d => failDiagnostic d
       let circuit ← evalConstCheck Circuit ``Circuit info.declName
       match circuit.validate sourceCapabilities with
       | .error d => failDiagnostic d
