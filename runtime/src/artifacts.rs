@@ -180,6 +180,369 @@ impl VerifiedBundle {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Eq, PartialEq)]
+struct SourceAuthority {
+    name: String,
+    sha256: String,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct EntrypointArtifacts {
+    circuit: String,
+    native_circuit: String,
+    native_plan: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OperationIdentity<'a> {
+    name: &'a str,
+    manifest_sha256: &'a str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ContractBundleSetIdentity<'a> {
+    schema_version: u32,
+    profile: &'a str,
+    ledger_revision: &'a str,
+    zkir_revision: &'a str,
+    compiler: &'a Compiler,
+    contract_name: &'a str,
+    source_authority: &'a [SourceAuthority],
+    metadata_sha256: &'a str,
+    operations: Vec<OperationIdentity<'a>>,
+}
+
+/// A complete, immutable collection of authenticated entrypoint bundles for one source contract.
+pub struct ContractBundleSet {
+    contract_name: String,
+    identity: String,
+    operations: BTreeMap<String, VerifiedBundle>,
+}
+
+impl ContractBundleSet {
+    /// Join all exported entrypoints from one source contract without copying retained payloads.
+    pub fn new(bundles: Vec<VerifiedBundle>) -> Result<Self> {
+        require(
+            !bundles.is_empty() && bundles.len() <= MAX_ENTRIES,
+            "limit_exceeded",
+            "invalid contract bundle operation count",
+        )?;
+
+        let mut operation_names = Vec::with_capacity(bundles.len());
+        let mut seen_operations = BTreeSet::new();
+        let mut expected_operations: Option<BTreeMap<String, EntrypointArtifacts>> = None;
+        let mut contract_name: Option<String> = None;
+        let mut metadata_bytes: Option<&[u8]> = None;
+        let mut ledger_parameters: Option<&[u8]> = None;
+        let mut source_authority: Option<Vec<SourceAuthority>> = None;
+        let mut base_manifest: Option<&Manifest> = None;
+        let mut retained_bytes = 0u64;
+
+        for bundle in &bundles {
+            let manifest = bundle.manifest();
+            let pin = bundle.authenticated_manifest_sha256().ok_or_else(|| {
+                error(
+                    "missing_authority",
+                    "contract bundle sets require externally pinned manifests",
+                )
+            })?;
+            require(
+                hex_length(pin, 64) && pin.bytes().any(|byte| byte != b'0'),
+                "invalid_provenance",
+                "manifest authority must be a nonzero SHA-256 digest",
+            )?;
+            require(
+                manifest
+                    .compiler
+                    .source_revision
+                    .bytes()
+                    .any(|byte| byte != b'0'),
+                "invalid_provenance",
+                "compiler source authority must be nonzero",
+            )?;
+            retained_bytes = manifest
+                .entries
+                .iter()
+                .try_fold(retained_bytes, |total, entry| {
+                    total
+                        .checked_add(entry.size)
+                        .filter(|sum| *sum <= MAX_TOTAL_BYTES)
+                        .ok_or_else(|| {
+                            error(
+                                "limit_exceeded",
+                                "contract bundle set exceeds retained payload limit",
+                            )
+                        })
+                })?;
+
+            let source_entries: Vec<_> = manifest
+                .entries
+                .iter()
+                .filter(|entry| entry.role == Role::Source)
+                .map(|entry| SourceAuthority {
+                    name: entry.name.clone(),
+                    sha256: entry.sha256.clone(),
+                })
+                .collect();
+            require(
+                !source_entries.is_empty()
+                    && source_entries
+                        .iter()
+                        .all(|entry| entry.sha256.bytes().any(|byte| byte != b'0')),
+                "missing_authority",
+                "contract bundle needs nonzero source authority",
+            )?;
+
+            if let Some(first) = base_manifest {
+                require(
+                    manifest.profile == first.profile
+                        && manifest.ledger_revision == first.ledger_revision
+                        && manifest.zkir_revision == first.zkir_revision,
+                    "profile_mismatch",
+                    "contract bundle profiles or source pins differ",
+                )?;
+                require(
+                    manifest.compiler == first.compiler
+                        && source_authority.as_deref() == Some(source_entries.as_slice()),
+                    "authority_mismatch",
+                    "compiler or source authority differs across contract bundles",
+                )?;
+            } else {
+                source_authority = Some(source_entries);
+                base_manifest = Some(manifest);
+            }
+
+            let metadata = bundle.file(Role::Metadata)?;
+            if let Some(first) = metadata_bytes {
+                require(
+                    metadata == first,
+                    "plan_mismatch",
+                    "contract bundles use different compiler metadata",
+                )?;
+            } else {
+                metadata_bytes = Some(metadata);
+            }
+            let metadata_value = json(metadata)?;
+            let plan: Value = json(bundle.file(Role::Plan)?)?;
+            let selected_contract = plan["contractName"]
+                .as_str()
+                .ok_or_else(|| error("plan_mismatch", "selected plan lacks a contract name"))?;
+            let operation_name = plan["entrypoint"]
+                .as_str()
+                .ok_or_else(|| error("plan_mismatch", "selected plan lacks an entrypoint name"))?;
+            require(
+                !selected_contract.is_empty() && !operation_name.is_empty(),
+                "plan_mismatch",
+                "selected contract and operation names must be nonempty",
+            )?;
+            if let Some(first) = &contract_name {
+                require(
+                    selected_contract == first,
+                    "plan_mismatch",
+                    "contract bundles select different source contracts",
+                )?;
+            } else {
+                contract_name = Some(selected_contract.to_owned());
+            }
+            require(
+                seen_operations.insert(operation_name.to_owned()),
+                "duplicate_operation",
+                "contract bundle set selects an operation more than once",
+            )?;
+            operation_names.push(operation_name.to_owned());
+
+            let selected_contract_metadata =
+                selected_contract_metadata(&metadata_value, selected_contract)?;
+            require(
+                plan["state"] == selected_contract_metadata["state"],
+                "plan_mismatch",
+                "selected plan state schema differs from compiler metadata",
+            )?;
+            let declared_operations = entrypoint_artifacts(selected_contract_metadata)?;
+            if let Some(expected) = &expected_operations {
+                require(
+                    &declared_operations == expected,
+                    "plan_mismatch",
+                    "contract bundles declare different operation maps",
+                )?;
+            } else {
+                expected_operations = Some(declared_operations);
+            }
+
+            let circuit_name = role_entry(manifest, Role::Circuit)?.name.as_str();
+            let plan_name = role_entry(manifest, Role::Plan)?.name.as_str();
+            let declared = expected_operations
+                .as_ref()
+                .and_then(|operations| operations.get(operation_name))
+                .ok_or_else(|| {
+                    error("unexpected_operation", "selected operation is not exported")
+                })?;
+            require(
+                declared.native_circuit == circuit_name
+                    && declared.native_plan == plan_name
+                    && declared.circuit == plan["circuit"]["name"].as_str().unwrap_or_default()
+                    && plan["nativeCircuitFile"] == circuit_name,
+                "plan_mismatch",
+                "selected operation association differs from verified artifacts",
+            )?;
+
+            let parameters = bundle.file(Role::LedgerParameters)?;
+            if let Some(first) = ledger_parameters {
+                require(
+                    parameters == first,
+                    "parameter_mismatch",
+                    "contract bundles use different ledger parameters",
+                )?;
+            } else {
+                ledger_parameters = Some(parameters);
+            }
+        }
+
+        let expected_operations = expected_operations.expect("nonempty bundle set");
+        let actual_operations: BTreeSet<_> = operation_names.iter().map(String::as_str).collect();
+        let expected_names: BTreeSet<_> = expected_operations.keys().map(String::as_str).collect();
+        require(
+            actual_operations == expected_names,
+            if actual_operations.is_subset(&expected_names) {
+                "missing_operation"
+            } else {
+                "unexpected_operation"
+            },
+            "contract bundle set must contain every exported operation exactly once",
+        )?;
+
+        let operations: BTreeMap<_, _> = operation_names
+            .into_iter()
+            .zip(bundles)
+            .map(|(name, bundle)| (name, bundle))
+            .collect();
+        let first = operations.values().next().expect("nonempty bundle set");
+        let identity = digest(&canonical(&ContractBundleSetIdentity {
+            schema_version: 1,
+            profile: &first.manifest.profile,
+            ledger_revision: &first.manifest.ledger_revision,
+            zkir_revision: &first.manifest.zkir_revision,
+            compiler: &first.manifest.compiler,
+            contract_name: contract_name.as_deref().expect("nonempty bundle set"),
+            source_authority: source_authority.as_deref().expect("nonempty bundle set"),
+            metadata_sha256: &role_entry(first.manifest(), Role::Metadata)?.sha256,
+            operations: operations
+                .iter()
+                .map(|(name, bundle)| OperationIdentity {
+                    name,
+                    manifest_sha256: bundle
+                        .authenticated_manifest_sha256()
+                        .expect("pinned bundle checked above"),
+                })
+                .collect(),
+        })?);
+
+        Ok(Self {
+            contract_name: contract_name.expect("nonempty bundle set"),
+            identity,
+            operations,
+        })
+    }
+
+    pub fn contract_name(&self) -> &str {
+        &self.contract_name
+    }
+
+    /// Stable SHA-256 identity over authority and ordered selected manifest pins.
+    pub fn identity(&self) -> &str {
+        &self.identity
+    }
+
+    pub fn operation(&self, name: &str) -> Option<&VerifiedBundle> {
+        self.operations.get(name)
+    }
+
+    pub fn iter(&self) -> impl ExactSizeIterator<Item = (&str, &VerifiedBundle)> {
+        self.operations
+            .iter()
+            .map(|(name, bundle)| (name.as_str(), bundle))
+    }
+
+    pub fn len(&self) -> usize {
+        self.operations.len()
+    }
+}
+
+fn role_entry(manifest: &Manifest, role: Role) -> Result<&Entry> {
+    let mut entries = manifest.entries.iter().filter(|entry| entry.role == role);
+    let entry = entries.next().ok_or_else(|| {
+        error(
+            "missing_role",
+            "bundle is missing a required public artifact role",
+        )
+    })?;
+    require(
+        entries.next().is_none(),
+        "duplicate_role",
+        "public artifact role must occur exactly once",
+    )?;
+    Ok(entry)
+}
+
+fn selected_contract_metadata<'a>(metadata: &'a Value, name: &str) -> Result<&'a Value> {
+    let contracts = metadata["contracts"]
+        .as_array()
+        .ok_or_else(|| error("plan_mismatch", "compiler metadata lacks contracts"))?;
+    let mut matches = contracts.iter().filter(|contract| contract["name"] == name);
+    let selected = matches
+        .next()
+        .ok_or_else(|| error("plan_mismatch", "selected source contract is absent"))?;
+    require(
+        matches.next().is_none(),
+        "plan_mismatch",
+        "selected source contract is ambiguous",
+    )?;
+    Ok(selected)
+}
+
+fn entrypoint_artifacts(contract: &Value) -> Result<BTreeMap<String, EntrypointArtifacts>> {
+    let entries = contract["entrypoints"]
+        .as_array()
+        .ok_or_else(|| error("plan_mismatch", "compiler metadata lacks entrypoints"))?;
+    require(
+        !entries.is_empty() && entries.len() <= MAX_ENTRIES,
+        "limit_exceeded",
+        "invalid exported operation count",
+    )?;
+    let mut operations = BTreeMap::new();
+    for entry in entries {
+        let operation = entry["name"]
+            .as_str()
+            .filter(|name| !name.is_empty() && name.len() <= 4096)
+            .ok_or_else(|| error("plan_mismatch", "invalid exported operation name"))?;
+        let artifacts = EntrypointArtifacts {
+            circuit: entry["circuit"]
+                .as_str()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| error("plan_mismatch", "entrypoint lacks a circuit name"))?
+                .to_owned(),
+            native_circuit: entry["nativeCircuitFile"]
+                .as_str()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| error("plan_mismatch", "entrypoint lacks a circuit file"))?
+                .to_owned(),
+            native_plan: entry["nativePlanFile"]
+                .as_str()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| error("plan_mismatch", "entrypoint lacks a plan file"))?
+                .to_owned(),
+        };
+        require(
+            operations.insert(operation.to_owned(), artifacts).is_none(),
+            "duplicate_operation",
+            "compiler metadata exports an operation more than once",
+        )?;
+    }
+    Ok(operations)
+}
+
 fn hex_length(value: &str, length: usize) -> bool {
     value.len() == length
         && value

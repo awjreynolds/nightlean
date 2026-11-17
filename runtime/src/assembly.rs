@@ -24,7 +24,7 @@ use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged
 use sha2::{Digest, Sha256};
 use std::{
     borrow::Cow,
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -112,6 +112,101 @@ pub(crate) struct PreparedDeployment {
     pub(crate) intent: NativeIntent,
     pub(crate) address: String,
     pub(crate) entrypoint: String,
+}
+
+pub(crate) struct PreparedOperationMapDeployment {
+    intent: NativeIntent,
+    address: String,
+    contract: String,
+}
+impl PreparedOperationMapDeployment {
+    pub(crate) fn intent(&self) -> &NativeIntent {
+        &self.intent
+    }
+
+    pub(crate) fn address(&self) -> &str {
+        &self.address
+    }
+}
+
+fn valid_operation_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 128
+        && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_')
+        && !name.as_bytes()[0].is_ascii_digit()
+}
+
+fn checked_operation_names(
+    expected: &[String],
+    operations: Vec<(String, ContractOperation)>,
+) -> Result<BTreeMap<String, ContractOperation>> {
+    ensure!(
+        !expected.is_empty()
+            && expected.len() <= crate::artifacts::MAX_ENTRIES
+            && operations.len() <= crate::artifacts::MAX_ENTRIES,
+        "invalid operation count"
+    );
+    let mut expected_names = BTreeSet::new();
+    for name in expected {
+        ensure!(valid_operation_name(name), "invalid entrypoint");
+        ensure!(
+            expected_names.insert(name.as_str()),
+            "duplicate operation name"
+        );
+    }
+    let mut operation_map = BTreeMap::new();
+    for (name, operation) in operations {
+        ensure!(valid_operation_name(&name), "invalid entrypoint");
+        ensure!(
+            operation_map.insert(name, operation).is_none(),
+            "duplicate operation name"
+        );
+    }
+    let actual_names: BTreeSet<_> = operation_map.keys().map(String::as_str).collect();
+    ensure!(
+        actual_names == expected_names,
+        "operation map does not match the complete operation list"
+    );
+    Ok(operation_map)
+}
+
+/// Retain one deployment with all validated operation bindings for the source contract.
+pub(crate) fn prepare_operation_map_deployment_target(
+    plan: &Plan,
+    contract: &str,
+    state: &BTreeMap<String, Json>,
+    expected_operations: &[String],
+    operations: Vec<(String, ContractOperation)>,
+    ttl: u64,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<PreparedOperationMapDeployment> {
+    ensure!(ttl > 0, "TTL must be explicit Unix seconds");
+    ensure!(
+        !contract.is_empty() && contract.len() <= 4096,
+        "invalid contract name"
+    );
+    ensure!(valid_operation_name(&plan.entrypoint), "invalid entrypoint");
+    let operations = checked_operation_names(expected_operations, operations)?;
+    ensure!(
+        operations.contains_key(&plan.entrypoint),
+        "selected operation missing from contract"
+    );
+
+    let mut initial = ContractState::<Db>::default();
+    initial.data = create_state(plan, state)?;
+    for (name, operation) in operations {
+        initial.operations = initial
+            .operations
+            .insert(EntryPointBuf(name.into_bytes()), operation);
+    }
+    let deployment = ContractDeploy::new(rng, initial);
+    let address = hex::encode(deployment.address().0.0);
+    let intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl)).add_deploy(deployment);
+    Ok(PreparedOperationMapDeployment {
+        intent,
+        address,
+        contract: contract.to_owned(),
+    })
 }
 
 fn contract_initial_state(
@@ -320,6 +415,71 @@ pub(crate) fn prepare_call_for_target(
         rng,
     )?;
     Ok(built.call)
+}
+
+/// Prepare a call against current public state while retaining the original deployment address.
+pub(crate) fn prepare_call_for_current_state(
+    plan: &Plan,
+    contract: &str,
+    selected_operation: &str,
+    config: &Config,
+    parameters: &LedgerParameters,
+    operation: ContractOperation,
+    circuit: &IrSource,
+    ttl: u64,
+    target: &PreparedOperationMapDeployment,
+    current: &ContractState<Db>,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<(NativeIntent, ContractState<Db>)> {
+    ensure!(
+        target.contract == contract,
+        "native target contract mismatch"
+    );
+    ensure!(
+        selected_operation == plan.entrypoint && valid_operation_name(selected_operation),
+        "selected operation does not match plan"
+    );
+    ensure!(
+        target.intent().actions.len() == 1,
+        "native target deployment missing"
+    );
+    let Some(ContractAction::Deploy(deployment)) = target.intent().actions.iter_deref().next()
+    else {
+        return Err(anyhow!("native target deployment missing"));
+    };
+    ensure!(
+        hex::encode(deployment.address().0.0) == target.address(),
+        "native target address mismatch"
+    );
+    ensure!(
+        current.operations == deployment.initial_state.operations,
+        "current contract operation revision differs from retained deployment"
+    );
+    let entry = EntryPointBuf(selected_operation.as_bytes().to_vec());
+    ensure!(
+        deployment.initial_state.operations.get(&entry).as_deref() == Some(&operation)
+            && current.operations.get(&entry).as_deref() == Some(&operation),
+        "selected operation verifier differs from retained deployment"
+    );
+
+    let built = build_for_deployment(
+        plan,
+        config,
+        parameters,
+        operation,
+        circuit,
+        ttl,
+        current.clone(),
+        entry,
+        (**deployment).clone(),
+        Some(target.intent()),
+        rng,
+    )?;
+    ensure!(
+        built.address == target.address(),
+        "native target address mismatch"
+    );
+    Ok((built.call, built.predicted))
 }
 
 /// In-memory constructor used by the native proof API after authenticating public material.
@@ -598,6 +758,12 @@ mod tests {
          serde_json::from_value(json!({"inputs":{"left":"255","right":"255","expected":"510"},"state":{"total":"0"}})).unwrap(),
          IrSource::load(include_bytes!("../tests/fixtures/unsigned/circuit.zkir").as_slice()).unwrap())
     }
+    fn operation_entries(names: &[&str]) -> Vec<(String, ContractOperation)> {
+        names
+            .iter()
+            .map(|name| (name.to_string(), ContractOperation::new(None, None)))
+            .collect()
+    }
     #[test]
     fn constructor_uses_fresh_randomness_and_roundtrips_real_preimage() {
         let (plan, config, circuit) = sample();
@@ -742,5 +908,280 @@ mod tests {
         }
         assert_eq!(error.chain().count(), 1);
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn operation_map_deployment_requires_complete_unique_bounded_valid_names() {
+        let (plan, config, _) = sample();
+        let names = vec!["apply".to_owned(), "alias".to_owned()];
+        let mut rng = ConstantRng(1, 0);
+        let target = prepare_operation_map_deployment_target(
+            &plan,
+            "BoundedScalars",
+            &config.state,
+            &names,
+            operation_entries(&["apply", "alias"]),
+            2_000_000_000,
+            &mut rng,
+        )
+        .unwrap();
+        let Some(ContractAction::Deploy(deployment)) = target.intent.actions.iter_deref().next()
+        else {
+            panic!("operation map target should retain one deployment");
+        };
+        assert_eq!(deployment.initial_state.operations.iter().count(), 2);
+        assert!(
+            deployment
+                .initial_state
+                .operations
+                .get(&EntryPointBuf(b"apply".to_vec()))
+                .is_some()
+        );
+
+        for (names, entries) in [
+            (
+                vec!["apply".to_owned(), "apply".to_owned()],
+                operation_entries(&["apply", "apply"]),
+            ),
+            (
+                vec!["apply".to_owned(), "alias".to_owned()],
+                operation_entries(&["apply", "apply"]),
+            ),
+            (
+                vec!["apply".to_owned(), "alias".to_owned()],
+                operation_entries(&["apply"]),
+            ),
+            (
+                vec!["apply".to_owned(), "bad-name".to_owned()],
+                operation_entries(&["apply", "bad-name"]),
+            ),
+            (vec!["alias".to_owned()], operation_entries(&["alias"])),
+        ] {
+            assert!(
+                prepare_operation_map_deployment_target(
+                    &plan,
+                    "BoundedScalars",
+                    &config.state,
+                    &names,
+                    entries,
+                    2_000_000_000,
+                    &mut rng,
+                )
+                .is_err()
+            );
+        }
+
+        let too_many: Vec<_> = (0..=crate::artifacts::MAX_ENTRIES)
+            .map(|index| format!("op{index}"))
+            .collect();
+        assert!(
+            prepare_operation_map_deployment_target(
+                &plan,
+                "BoundedScalars",
+                &config.state,
+                &too_many,
+                too_many
+                    .iter()
+                    .map(|name| (name.clone(), ContractOperation::new(None, None)))
+                    .collect(),
+                2_000_000_000,
+                &mut rng,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn current_state_call_keeps_original_deployment_and_uses_current_data() {
+        let (mut plan, mut config, circuit) = sample();
+        plan.state.push(crate::StateDecl {
+            name: "unused".into(),
+            kind: json!({"cell":"UIntRange<511>"}),
+        });
+        config.state.insert("unused".into(), json!("0"));
+        let names = vec!["apply".to_owned(), "alias".to_owned()];
+        let entries = operation_entries(&["apply", "alias"]);
+        let mut rng = ConstantRng(1, 0);
+        let target = prepare_operation_map_deployment_target(
+            &plan,
+            "BoundedScalars",
+            &config.state,
+            &names,
+            entries,
+            2_000_000_000,
+            &mut rng,
+        )
+        .unwrap();
+        let retained_bytes = bytes(&target.intent).unwrap();
+        let Some(ContractAction::Deploy(deployment)) = target.intent.actions.iter_deref().next()
+        else {
+            panic!("operation map target should retain one deployment");
+        };
+        let initial_state = deployment.initial_state.clone();
+        let original_address = target.address.clone();
+        let operation = ContractOperation::new(None, None);
+
+        let mut changed_state = config.state.clone();
+        changed_state.insert("unused".into(), json!("7"));
+        let mut current = initial_state.clone();
+        current.data = create_state(&plan, &changed_state).unwrap();
+        let mut call_rng = ConstantRng(1, 0);
+        let (call, predicted) = prepare_call_for_current_state(
+            &plan,
+            "BoundedScalars",
+            "apply",
+            &config,
+            &ledger::structure::INITIAL_PARAMETERS,
+            operation,
+            &circuit,
+            2_000_000_000,
+            &target,
+            &current,
+            &mut call_rng,
+        )
+        .unwrap();
+        let Some(ContractAction::Call(call_action)) = call.actions.iter_deref().next() else {
+            panic!("current state intent should contain one call");
+        };
+        assert_eq!(hex::encode(call_action.address.0.0), original_address);
+        assert_eq!(predicted.operations, current.operations);
+        assert_ne!(
+            bytes(&predicted.data).unwrap(),
+            bytes(&initial_state.data).unwrap()
+        );
+        assert_eq!(
+            crate::read_cell(
+                &QueryContext::new(predicted.data.clone(), deployment.address()),
+                1,
+                "UIntRange<511>"
+            )
+            .unwrap(),
+            crate::input_value("UIntRange<511>", &json!("7")).unwrap()
+        );
+        assert_eq!(bytes(&target.intent).unwrap(), retained_bytes);
+        assert_eq!(target.address, original_address);
+    }
+
+    #[test]
+    fn current_state_call_rejects_wrong_selection_and_changed_operation_revision() {
+        use rand::{Rng, rngs::OsRng};
+
+        let (plan, config, circuit) = sample();
+        let mut key_rng = OsRng;
+        // Synthetic uninitialized keys test binding equality only, never proof verification.
+        let verifier: VerifierKey = key_rng.r#gen();
+        let names = vec!["apply".to_owned(), "alias".to_owned()];
+        let entries = vec![
+            (
+                "apply".to_owned(),
+                ContractOperation::new(Some(verifier.clone()), None),
+            ),
+            ("alias".to_owned(), ContractOperation::new(None, None)),
+        ];
+        let mut rng = ConstantRng(1, 0);
+        let target = prepare_operation_map_deployment_target(
+            &plan,
+            "BoundedScalars",
+            &config.state,
+            &names,
+            entries,
+            2_000_000_000,
+            &mut rng,
+        )
+        .unwrap();
+        let Some(ContractAction::Deploy(deployment)) = target.intent.actions.iter_deref().next()
+        else {
+            panic!("operation map target should retain one deployment");
+        };
+        let current = deployment.initial_state.clone();
+
+        assert!(
+            prepare_call_for_current_state(
+                &plan,
+                "BoundedScalars",
+                "alias",
+                &config,
+                &ledger::structure::INITIAL_PARAMETERS,
+                ContractOperation::new(Some(verifier.clone()), None),
+                &circuit,
+                2_000_000_000,
+                &target,
+                &current,
+                &mut rng,
+            )
+            .is_err()
+        );
+        assert!(
+            prepare_call_for_current_state(
+                &plan,
+                "BoundedScalars",
+                "apply",
+                &config,
+                &ledger::structure::INITIAL_PARAMETERS,
+                ContractOperation::new(None, None),
+                &circuit,
+                2_000_000_000,
+                &target,
+                &current,
+                &mut rng,
+            )
+            .is_err()
+        );
+
+        let mut changed = current.clone();
+        changed.operations = changed.operations.insert(
+            EntryPointBuf(b"apply".to_vec()),
+            ContractOperation::new(None, None),
+        );
+        assert!(
+            prepare_call_for_current_state(
+                &plan,
+                "BoundedScalars",
+                "apply",
+                &config,
+                &ledger::structure::INITIAL_PARAMETERS,
+                ContractOperation::new(Some(verifier), None),
+                &circuit,
+                2_000_000_000,
+                &target,
+                &changed,
+                &mut rng,
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn legacy_single_entrypoint_target_keeps_its_retained_address() {
+        use rand::{Rng, rngs::OsRng};
+
+        let (plan, config, circuit) = sample();
+        let verifier: VerifierKey = OsRng.r#gen();
+        let mut rng = ConstantRng(1, 0);
+        let target = prepare_deployment_target(
+            &plan,
+            &config.state,
+            verifier.clone(),
+            2_000_000_000,
+            &mut rng,
+        )
+        .unwrap();
+        let retained = bytes(&target.intent).unwrap();
+        let call = prepare_call_for_target(
+            &plan,
+            &config,
+            &ledger::structure::INITIAL_PARAMETERS,
+            verifier,
+            &circuit,
+            2_000_000_000,
+            &target,
+            &mut rng,
+        )
+        .unwrap();
+        let Some(ContractAction::Call(call)) = call.actions.iter_deref().next() else {
+            panic!("legacy target helper should return a call");
+        };
+        assert_eq!(hex::encode(call.address.0.0), target.address);
+        assert_eq!(bytes(&target.intent).unwrap(), retained);
     }
 }

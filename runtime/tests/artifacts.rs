@@ -1,5 +1,7 @@
-use nightlean_runtime::artifacts::{self, Manifest, Recipe, Role, Selection};
-use serde_json::json;
+use nightlean_runtime::artifacts::{
+    self, ContractBundleSet, Manifest, Recipe, Role, Selection, VerifiedBundle,
+};
+use serde_json::{Value, json};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -87,6 +89,82 @@ impl Fixture {
     }
     fn assemble(&self, name: &str) -> Manifest {
         artifacts::assemble(self.recipe(), &self.path(name)).unwrap()
+    }
+    fn operation_recipe(&self, operation: &str, compiler_revision: &str) -> Recipe {
+        let mut recipe = self.recipe();
+        recipe.compiler_revision = compiler_revision.into();
+        for selection in &mut recipe.files {
+            match selection.role {
+                Role::Circuit => {
+                    selection.name = format!("Contract.{operation}.zkir");
+                    selection.input = self.path(&format!("Contract.{operation}.zkir"));
+                }
+                Role::Plan => {
+                    selection.name = format!("Contract.{operation}.impact.json");
+                    selection.input = self.path(&format!("Contract.{operation}.impact.json"));
+                }
+                _ => {}
+            }
+        }
+        recipe
+    }
+    fn configure_operations(&self, operations: &[&str], state: &Value) {
+        let base: Value =
+            serde_json::from_slice(&fs::read(self.path("entry.impact.json")).unwrap()).unwrap();
+        let circuit = base["circuit"].clone();
+        let mut metadata: Value =
+            serde_json::from_slice(&fs::read(self.path("nightlean.json")).unwrap()).unwrap();
+        metadata["contracts"][0]["state"] = state.clone();
+        metadata["contracts"][0]["entrypoints"] = json!(
+            operations
+                .iter()
+                .map(|operation| json!({
+                    "name": operation,
+                    "circuit": "relation",
+                    "nativeCircuitFile": format!("Contract.{operation}.zkir"),
+                    "nativePlanFile": format!("Contract.{operation}.impact.json")
+                }))
+                .collect::<Vec<_>>()
+        );
+        fs::write(self.path("nightlean.json"), metadata.to_string()).unwrap();
+        for operation in operations {
+            let circuit_name = format!("Contract.{operation}.zkir");
+            let plan_name = format!("Contract.{operation}.impact.json");
+            let mut plan = base.clone();
+            plan["entrypoint"] = json!(operation);
+            plan["nativeCircuitFile"] = json!(circuit_name);
+            plan["state"] = state.clone();
+            fs::write(
+                self.path(&circuit_name),
+                json!({
+                    "version":{"major":3,"minor":2},
+                    "do_communications_commitment":true,
+                    "instructions":[]
+                })
+                .to_string(),
+            )
+            .unwrap();
+            fs::write(self.path(&plan_name), plan.to_string()).unwrap();
+        }
+        metadata["circuits"] = json!([circuit]);
+        fs::write(self.path("nightlean.json"), metadata.to_string()).unwrap();
+    }
+    fn verified_operation(
+        &self,
+        directory: &str,
+        operation: &str,
+        operations: &[&str],
+        compiler_revision: &str,
+        state: &Value,
+    ) -> VerifiedBundle {
+        self.configure_operations(operations, state);
+        let manifest = artifacts::assemble(
+            self.operation_recipe(operation, compiler_revision),
+            &self.path(directory),
+        )
+        .unwrap();
+        let pin = artifacts::digest(&artifacts::manifest_bytes(&manifest).unwrap());
+        artifacts::verify(&self.path(directory), Some(&pin)).unwrap()
     }
 }
 impl Drop for Fixture {
@@ -736,4 +814,299 @@ fn host_payload_budget_rejects_authenticated_total_before_payload_reads() {
         "io_error"
     );
     assert_eq!(failure(artifacts::verify(&root, Some(&pin))), "io_error");
+}
+
+#[test]
+fn contract_bundle_set_joins_alias_operations_with_stable_identity() {
+    let fixture = Fixture::new();
+    let operations = ["claim", "claimAlias"];
+    let state = json!([]);
+    let claim = fixture.verified_operation(
+        "claim-bundle",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    let alias = fixture.verified_operation(
+        "alias-bundle",
+        operations[1],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        claim.file(Role::Circuit).unwrap(),
+        alias.file(Role::Circuit).unwrap()
+    );
+    assert_eq!(
+        claim.file(Role::VerifierKey).unwrap(),
+        alias.file(Role::VerifierKey).unwrap()
+    );
+    let set = ContractBundleSet::new(vec![claim, alias]).unwrap();
+    assert_eq!(set.contract_name(), "Contract");
+    assert_eq!(set.len(), 2);
+    assert!(set.operation("claim").is_some());
+    assert_eq!(
+        set.iter().map(|(name, _)| name).collect::<Vec<_>>(),
+        ["claim", "claimAlias"]
+    );
+    let identity = set.identity().to_owned();
+
+    let claim = fixture.verified_operation(
+        "claim-bundle-reversed",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    let alias = fixture.verified_operation(
+        "alias-bundle-reversed",
+        operations[1],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        ContractBundleSet::new(vec![alias, claim])
+            .unwrap()
+            .identity(),
+        identity
+    );
+}
+
+#[test]
+fn contract_bundle_set_requires_each_exported_operation_once() {
+    let fixture = Fixture::new();
+    let operations = ["claim", "claimAlias"];
+    let state = json!([]);
+    let claim = fixture.verified_operation(
+        "missing-operation",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![claim])),
+        "missing_operation"
+    );
+
+    let only = ["claim"];
+    let first = fixture.verified_operation(
+        "duplicate-operation-a",
+        only[0],
+        &only,
+        &"c".repeat(40),
+        &state,
+    );
+    let second = fixture.verified_operation(
+        "duplicate-operation-b",
+        only[0],
+        &only,
+        &"c".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![first, second])),
+        "duplicate_operation"
+    );
+
+    let duplicated_exports = ["claim", "claimAlias", "claimAlias"];
+    let bundle = fixture.verified_operation(
+        "duplicate-export-name",
+        "claim",
+        &duplicated_exports,
+        &"c".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![bundle])),
+        "duplicate_operation"
+    );
+}
+
+#[test]
+fn contract_bundle_set_requires_shared_authority_metadata_source_and_parameters() {
+    let state = json!([]);
+    let operations = ["claim", "claimAlias"];
+
+    let fixture = Fixture::new();
+    let first = fixture.verified_operation(
+        "authority-a",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    let second = fixture.verified_operation(
+        "authority-b",
+        operations[1],
+        &operations,
+        &"d".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![first, second])),
+        "authority_mismatch"
+    );
+
+    let fixture = Fixture::new();
+    let first = fixture.verified_operation(
+        "source-name-a",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    fixture.configure_operations(&operations, &state);
+    let mut recipe = fixture.operation_recipe(operations[1], &"c".repeat(40));
+    recipe
+        .files
+        .iter_mut()
+        .find(|selection| selection.role == Role::Source)
+        .unwrap()
+        .name = "examples/ContractAlias.lean".into();
+    let manifest = artifacts::assemble(recipe, &fixture.path("source-name-b")).unwrap();
+    let pin = artifacts::digest(&artifacts::manifest_bytes(&manifest).unwrap());
+    let second = artifacts::verify(&fixture.path("source-name-b"), Some(&pin)).unwrap();
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![first, second])),
+        "authority_mismatch"
+    );
+
+    let fixture = Fixture::new();
+    let first = fixture.verified_operation(
+        "source-a",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    fs::write(
+        fixture.path("Contract.lean"),
+        b"import Nightlean\n-- changed source\n",
+    )
+    .unwrap();
+    let second = fixture.verified_operation(
+        "source-b",
+        operations[1],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![first, second])),
+        "authority_mismatch"
+    );
+
+    let fixture = Fixture::new();
+    let first = fixture.verified_operation(
+        "parameters-a",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    fs::write(
+        fixture.path("ledger.params"),
+        b"different public ledger parameters",
+    )
+    .unwrap();
+    let second = fixture.verified_operation(
+        "parameters-b",
+        operations[1],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![first, second])),
+        "parameter_mismatch"
+    );
+
+    let fixture = Fixture::new();
+    let first = fixture.verified_operation(
+        "schema-a",
+        operations[0],
+        &operations,
+        &"c".repeat(40),
+        &state,
+    );
+    let changed_state = json!([{"name":"counter","type":"UInt"}]);
+    let second = fixture.verified_operation(
+        "schema-b",
+        operations[1],
+        &operations,
+        &"c".repeat(40),
+        &changed_state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![first, second])),
+        "plan_mismatch"
+    );
+}
+
+#[test]
+fn contract_bundle_set_rejects_unpinned_zero_authority_and_profile_mismatch() {
+    let fixture = Fixture::new();
+    let operation = ["claim"];
+    let state = json!([]);
+    fixture.configure_operations(&operation, &state);
+    let manifest = artifacts::assemble(
+        fixture.operation_recipe(operation[0], &"c".repeat(40)),
+        &fixture.path("unsigned-set-bundle"),
+    )
+    .unwrap();
+    let unpinned = artifacts::verify(&fixture.path("unsigned-set-bundle"), None).unwrap();
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![unpinned])),
+        "missing_authority"
+    );
+    let zero_authority = fixture.verified_operation(
+        "zero-authority",
+        operation[0],
+        &operation,
+        &"0".repeat(40),
+        &state,
+    );
+    assert_eq!(
+        failure(ContractBundleSet::new(vec![zero_authority])),
+        "invalid_provenance"
+    );
+
+    let mut wrong_profile = manifest;
+    wrong_profile.profile = if cfg!(feature = "zkir-321") {
+        "midnight-ledger-9"
+    } else {
+        "midnight-ledger-9-zkir-3.2.1"
+    }
+    .into();
+    rewrite_manifest(&fixture.path("unsigned-set-bundle"), &wrong_profile);
+    assert_eq!(
+        failure(artifacts::verify(
+            &fixture.path("unsigned-set-bundle"),
+            None
+        )),
+        "profile_mismatch"
+    );
+}
+
+#[test]
+fn selected_entrypoint_association_mismatch_rejects_before_set_creation() {
+    let fixture = Fixture::new();
+    let operations = ["claim", "claimAlias"];
+    fixture.configure_operations(&operations, &json!([]));
+    let mut metadata: Value =
+        serde_json::from_slice(&fs::read(fixture.path("nightlean.json")).unwrap()).unwrap();
+    metadata["contracts"][0]["entrypoints"][0]["nativeCircuitFile"] =
+        json!("Contract.claimAlias.zkir");
+    fs::write(fixture.path("nightlean.json"), metadata.to_string()).unwrap();
+    assert_eq!(
+        failure(artifacts::assemble(
+            fixture.operation_recipe("claim", &"c".repeat(40)),
+            &fixture.path("swapped-operation")
+        )),
+        "plan_mismatch"
+    );
 }

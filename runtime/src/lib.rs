@@ -700,6 +700,7 @@ pub use scalars::{MAX_UINT_BITS, ScalarType, canonical_unsigned, max_uint};
 
 /// Versioned portable artifact manifests.
 pub mod artifacts;
+pub use artifacts::ContractBundleSet;
 
 /// Native private transaction artifact assembly.
 pub mod assembly;
