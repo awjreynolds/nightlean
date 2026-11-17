@@ -1,3 +1,4 @@
+import Init.Data.Nat.PowMod
 import Nightlean.Disclosure
 
 namespace Nightlean
@@ -152,6 +153,15 @@ private def evaluatePersistentHash (ctx : EvalContext) (preimage : List Nat) :
     throw "persistent-hash oracle returned a malformed Bytes32 digest"
   pure result
 
+private def checkedPrimeFieldInverse (value modulus : Nat) : Except String Nat := do
+  if modulus ≤ 2 then throw "invalid prime-field modulus for inverse"
+  if value == 0 then throw "inverse of zero is undefined"
+  if value ≥ modulus then throw "inverse operand is outside its prime field"
+  let inverse := Nat.powMod value (modulus - 2) modulus
+  if value * inverse % modulus != 1 then
+    throw "prime-field inverse failed its multiplication postcondition"
+  pure inverse
+
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/
 def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty.Denote
@@ -211,6 +221,11 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     for value in values do
       preimage := preimage ++ nativeFieldBytesLE (← value.eval ctx env)
     evaluatePersistentHash ctx preimage
+  | .inv (ty := .native) value => do
+    checkedPrimeFieldInverse (← value.eval ctx env) ctx.modulus
+  | .inv (ty := .jubjubScalar) value => do
+    checkedPrimeFieldInverse (← value.eval ctx env) Jubjub.scalarOrder
+  | .inv _ => .error "inverse supports only Native and JubjubScalar"
   | .ref name => do
     let some raw := env.lookup name | throw s!"missing value '{name}'"
     let some value := raw.as ty | throw s!"value type mismatch for '{name}'"
@@ -611,6 +626,7 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
     | letE name value body => simp [pruneTrue, ConstraintsHold, ih]
     | assertE condition body => simp [pruneTrue, ConstraintsHold, ih]
     | disclose span value => simp [pruneTrue, ConstraintsHold, ih]
+    | inv value => simp [pruneTrue, ConstraintsHold, ih]
 
 theorem unsigned_addition_no_wrap (a b m n : Nat) (ha : a ≤ m) (hb : b ≤ n)
     (hbound : m + n ≤ ScalarPolicy.maxUint) : (a + b) % Field.modulus = a + b :=

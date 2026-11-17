@@ -267,6 +267,18 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .uadd left right => do pure (arithmetic ty "add" (← normalize env left) (← normalize env right))
   | .umul left right => do pure (arithmetic ty "mul" (← normalize env left) (← normalize env right))
   | .usub left right => do pure (subtraction ty (← normalize env left) (← normalize env right))
+  | .inv value => do
+    let normalized ← normalize env value
+    let (opcode, maximum, nonzeroInput) ← match ty with
+      | .native => pure ("inverse_native", Field.modulus - 1, normalized.term)
+      | .jubjubScalar => pure ("inverse_jubjub_scalar", Jubjub.scalarOrder - 1,
+          .unary "jubjub_scalar_to_native" normalized.term)
+      | _ => throw "inverse supports only Native and JubjubScalar"
+    let nonzero := .unary "not" (.binary "test_eq" nonzeroInput (.constant 0))
+    pure {
+      term := .unary opcode normalized.term
+      bounds := normalized.bounds ++ [(normalized.term, maximum)]
+      assertions := normalized.assertions ++ [nonzero] }
   | .eq left right => do pure (arithmetic ty "test_eq" (← normalize env left) (← normalize env right))
   | .cast target value => do
     let value ← normalize env value

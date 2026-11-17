@@ -221,6 +221,16 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let bound := left.maximum * right.maximum
     let maximum := if bound < Field.modulus then bound else Field.modulus - 1
     defineResult state instruction (← combine (.binary opcode left.term right.term) maximum [left, right])
+  | "inv" => do
+    let value ← operand state (← stringField instruction "a")
+    let (termOpcode, maximum) ← match value.valueType with
+      | .native => pure ("inverse_native", Field.modulus - 1)
+      | .jubjubScalar => pure ("inverse_jubjub_scalar", Jubjub.scalarOrder - 1)
+      | _ => throw "inv supports only Native and JubjubScalar operands"
+    ensure (value.maximum ≤ maximum) "inv operand range precondition is not established"
+    ensure (value.maximum > 0) "inv cannot invert an operand known to be zero"
+    let fact ← combine (.unary termOpcode value.term) maximum [value]
+    defineResult state instruction {fact with valueType := value.valueType}
   | "add" | "test_eq" => do
     let left ← argument state instruction "a"
     let right ← argument state instruction "b"

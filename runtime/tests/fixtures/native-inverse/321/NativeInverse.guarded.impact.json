@@ -1,0 +1,111 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "nativeResult", "kind": {"cell": "Native"}},
+  {"name": "scalarResult", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "reads": [{"type": "Bool", "name": "enabled"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxxxxxxx",
+     "body":
+     {"value":
+      {"yes": {"tag": "reference", "name": "denominator"},
+       "tag": "select",
+       "no": {"value": "1", "tag": "constant"},
+       "condition":
+       {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxx"}},
+      "tag": "inv"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "1", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxxx",
+     "body":
+     {"value":
+      {"value":
+       {"value":
+        {"yes":
+         {"value": {"tag": "reference", "name": "scalar"},
+          "tag": "jubjubScalarToNative"},
+         "tag": "select",
+         "no": {"value": "1", "tag": "constant"},
+         "condition":
+         {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+        "tag": "jubjubScalarFromNative"},
+       "tag": "inv"},
+      "tag": "jubjubScalarToNative"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}}],
+ "nativeCircuitFile": "NativeInverse.guarded.zkir",
+ "guards": [],
+ "entrypoint": "guarded",
+ "contractName": "NativeInverse",
+ "circuit":
+ {"outputs": [],
+  "name": "guardedInverse",
+  "inputs":
+  [{"visibility": "private", "type": "Native", "name": "denominator"},
+   {"visibility": "private", "type": "JubjubScalar", "name": "scalar"},
+   {"visibility": "public", "type": "Bool", "name": "enabled"}],
+  "file": "guardedInverse.zkir",
+  "constraints": []}}

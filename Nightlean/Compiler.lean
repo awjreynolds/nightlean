@@ -61,6 +61,7 @@ private def expressionJson : Expr ty → Json
   | .uadd a b => Json.mkObj [("uadd", toJson [expressionJson a, expressionJson b])]
   | .usub a b => Json.mkObj [("usub", toJson [expressionJson a, expressionJson b])]
   | .umul a b => Json.mkObj [("umul", toJson [expressionJson a, expressionJson b])]
+  | .inv value => Json.mkObj [("tag", toJson ("inv" : String)), ("value", expressionJson value)]
   | .cast target value => Json.mkObj [("cast", Json.mkObj [
       ("type", toJson (typeName target)), ("value", expressionJson value)])]
   | .letE name value body => Json.mkObj [("let", Json.mkObj [
@@ -116,6 +117,7 @@ private def nativeExpressionJson : Expr ty → Json
   | .uadd (m := m) (n := n) a b => unsigned "uadd" (m + n) (nativeExpressionJson a) (nativeExpressionJson b)
   | .usub (m := m) a b => unsigned "usub" m (nativeExpressionJson a) (nativeExpressionJson b)
   | .umul (m := m) (n := n) a b => unsigned "umul" (m * n) (nativeExpressionJson a) (nativeExpressionJson b)
+  | .inv value => Json.mkObj [("tag", toJson ("inv" : String)), ("value", nativeExpressionJson value)]
   | .cast target value => Json.mkObj [("tag", toJson ("cast" : String)),
       ("type", toJson (typeName target)), ("value", nativeExpressionJson value)]
   | .letE name value body => Json.mkObj [("tag", toJson ("let" : String)),

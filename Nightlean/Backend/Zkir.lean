@@ -40,6 +40,7 @@ private def checkConstants : Expr ty → Except String Unit
     if maximum ≤ ScalarPolicy.maxUint && value ≤ maximum then pure ()
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
+  | .inv value => checkConstants value
   | .persistentHash32 value => checkConstants value
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
@@ -449,6 +450,18 @@ def lowerExpr : Expr ty → LowerM String
     let output ← binary "mul" (← lowerExpr a) (← lowerExpr b)
     constrainUnsigned (m * n) output
     pure output
+  | .inv value => do
+    let operand ← lowerExpr value
+    let nonzeroOperand ← match ty with
+      | .native => pure operand
+      | .jubjubScalar => lowerJubjubScalarToNative operand
+      | _ => do
+        rejectLowering "inv supports only Native and JubjubScalar values"
+        pure operand
+    let isZero ← binary "test_eq" nonzeroOperand "0x00"
+    let isNonzero ← unary "not" isZero
+    emit "assert" [("cond", toJson isNonzero)]
+    unary "inv" operand
   | .usub (m := m) a b => do
     let output ← binary "add" (← lowerExpr a) (← unary "neg" (← lowerExpr b))
     constrainUnsigned m output

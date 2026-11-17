@@ -8,12 +8,12 @@ inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeBytes32
-  | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates
+  | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
-  | jubjubSubgroupScalar | jubjubAffinePoint
+  | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -27,7 +27,7 @@ inductive EffectRule where
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input
-  | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates
+  | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
 
 inductive GuardRule where
@@ -37,6 +37,7 @@ inductive GuardRule where
 inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
   | sourceHashTerm | encodedHashChunks | canonicalScalarInput | exactCoordinateRoundtrip
+  | typedInverseResult
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -137,6 +138,10 @@ def instructionSupport (opcode : String) : Except String Support :=
     scalar .nativeBinary .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "b", "output"]
   | "neg" => .supported <|
     scalar .nativeUnary .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "output"]
+  | "inv" => .supported <|
+    let descriptor := scalar .primeFieldInverse .propagateAll .pure .nonzeroField .noGuard
+      .typedInverseResult ["a", "output"]
+    {descriptor with encoding := .nativeOrJubjubScalar}
   | "not" => .supported <|
     scalar .nativeUnary .propagateAll .pure .nativeBoolean .noGuard .none ["a", "output"]
   | "assert" => .supported <|

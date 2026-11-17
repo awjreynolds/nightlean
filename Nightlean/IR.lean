@@ -50,6 +50,8 @@ inductive Expr : Ty → Type where
   | uadd (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint (m + n))
   | usub (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint m)
   | umul (a : Expr (.uint m)) (b : Expr (.uint n)) : Expr (.uint (m * n))
+  /-- Multiplicative inverse in the source type's pinned prime field. -/
+  | inv (value : Expr ty) : Expr ty
   | cast (target : Ty) (value : Expr source) : Expr target
   | letE (name : String) (value : Expr source) (body : Expr ty) : Expr ty
   | assertE (condition : Expr .bool) (body : Expr ty) : Expr ty
@@ -330,6 +332,14 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     if !caps.nativeArithmetic then throw "target lacks native arithmetic"
     a.validate caps env
     b.validate caps env
+  | .inv value => do
+    match ty with
+    | .native =>
+      unless caps.nativeArithmetic do throw "target lacks Native inverse support"
+    | .jubjubScalar =>
+      unless caps.jubjub do throw "target lacks Jubjub scalar inverse support"
+    | _ => throw "inverse supports only Native and JubjubScalar"
+    value.validate caps env
   | .cast target (source := source) value => do
     if target.isBytes || source.isBytes then
       throw "byte strings do not support scalar casts"

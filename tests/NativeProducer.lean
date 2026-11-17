@@ -42,9 +42,9 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard valueTypeNames.length == 15
 #guard instructionNames.eraseDups.length == 47
 #guard valueTypeNames.eraseDups.length == 15
-#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 23
+#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 24
 #guard rejected (requireInstruction "new_native_without_metadata")
-#guard rejected (requireInstruction "inv")
+#guard accepted (requireInstruction "inv")
 #guard rejected (requireInstruction "copy")
 #guard match valueTypeSupport "Bool" with | .ok (.unsupported _) => true | _ => false
 #guard match valueTypeSupport "Bytes" with | .ok (.unsupported _) => true | _ => false

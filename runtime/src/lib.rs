@@ -156,6 +156,9 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    Inv {
+        value: Box<Expr>,
+    },
     Cast {
         #[serde(rename = "type")]
         ty: String,
@@ -392,6 +395,17 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         Expr::JubjubScalarFromNative { value } => {
             Value::JubjubScalar(jubjub::reduce_scalar(evaluate(value, env)?.field()?)?)
         }
+        Expr::Inv { value } => match evaluate(value, env)? {
+            Value::Native(value) => {
+                ensure!(value != Fr::from(0u64), "cannot invert zero");
+                Value::Native(Fr::from(1u64) / value)
+            }
+            Value::JubjubScalar(value) => {
+                ensure!(value != EmbeddedFr::from(0u64), "cannot invert zero");
+                Value::JubjubScalar(EmbeddedFr::from(1u64) / value)
+            }
+            _ => bail!("inverse requires Native or JubjubScalar"),
+        },
         Expr::JubjubScalarToNative { value } => Value::Native(jubjub::scalar_native(
             evaluate(value, env)?.jubjub_scalar()?,
         )?),

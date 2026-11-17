@@ -47,6 +47,7 @@ jobs:
           lake env lean tests/Issue70HashPreimages.lean
           lake env lean tests/Issue70Jubjub.lean
           lake env lean tests/Issue70DerivedCrypto.lean
+          lake env lean tests/NativeInverse.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean
           lake env lean tests/Issue43MapMembership.lean

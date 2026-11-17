@@ -241,6 +241,7 @@ private def expressionNames : Expr ty → List String
   | .uadd left right => expressionNames left ++ expressionNames right
   | .usub left right => expressionNames left ++ expressionNames right
   | .umul left right => expressionNames left ++ expressionNames right
+  | .inv value => expressionNames value
   | .cast _ value => expressionNames value
   | .letE name value body => name :: (expressionNames value ++ expressionNames body)
   | .assertE condition body => expressionNames condition ++ expressionNames body
@@ -309,6 +310,12 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
       (.select guard (totalizeUnder guard left) (.uint m 0))
       (.select guard (totalizeUnder guard right) (.uint n 0))
   | .umul left right => .umul (totalizeUnder guard left) (totalizeUnder guard right)
+  | .inv (ty := .native) value =>
+    .inv (.select guard (totalizeUnder guard value) (.native 1))
+  | .inv (ty := .jubjubScalar) value =>
+    .inv (.jubjubScalarFromNative
+      (.select guard (.jubjubScalarToNative (totalizeUnder guard value)) (.native 1)))
+  | .inv value => .inv (totalizeUnder guard value)
   | .cast target (source := source) value =>
     let value := totalizeUnder guard value
     if castMayFail target source then

@@ -110,6 +110,7 @@ scoped syntax "assertThen(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "add(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "mul(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "sub(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "inv(" nlexpr ")" : nlexpr
 scoped syntax "uint(" num ")" : nlexpr
 scoped syntax "cast(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "default(" nltype ")" : nlexpr
@@ -279,6 +280,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   match stx with
   | `(nlexpr| cast($_:nltype, $_:nlexpr)) => Bool.true
   | `(nlexpr| sub($_:nlexpr, $_:nlexpr)) => Bool.true
+  | `(nlexpr| inv($_:nlexpr)) => Bool.true
   | `(nlexpr| assertThen($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| let $_:ident := $value:nlexpr in $body:nlexpr) =>
     hasPartialScalar value || hasPartialScalar body
@@ -356,6 +358,11 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     arithmetic env stx .mul a b
   | `(nlexpr| sub($a, $b)) =>
     arithmetic env stx .sub a b
+  | `(nlexpr| inv($value)) => do
+    let (ty, value) ← expression env value
+    unless ty == .native || ty == .jubjubScalar do
+      throwErrorAt stx "inv accepts only Native and JubjubScalar values"
+    pure (ty, ← `(Nightlean.Expr.inv $value))
   | `(nlexpr| eq($a, $b)) =>
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b

@@ -66,6 +66,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .add a b | .sub a b | .mul a b | .uadd a b | .usub a b | .umul a b
   | .eq a b | .poseidon2 _ a b => do
     pure (merge (← origins env a) (← origins env b))
+  | .inv value => origins env value
   | .cast _ value => origins env value
   | .select condition yes no => do
     pure (merge (← origins env condition) (merge (← origins env yes) (← origins env no)))
