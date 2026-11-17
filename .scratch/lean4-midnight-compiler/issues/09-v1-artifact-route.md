@@ -1,6 +1,6 @@
 # 09: Choose the v1 artifact route
 
-> Current source of truth: [public issue #10](https://github.com/awjreynolds/nightlean/issues/10). Use GitHub for the latest decision and dependencies.
+> Current source of truth: [public issue #10](https://github.com/awjreynolds/noctium/issues/10). Use GitHub for the latest decision and dependencies.
 
 Type: research
 

@@ -8,6 +8,9 @@ package noctium where
 lean_lib Nightlean
 
 @[default_target]
+lean_lib Noctium
+
+@[default_target]
 lean_exe noctium where
   root := `NoctiumMain
 

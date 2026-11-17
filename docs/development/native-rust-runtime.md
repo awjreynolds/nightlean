@@ -1,6 +1,6 @@
 # Native Rust runtime probe
 
-Checked on 2026-11-16 for [Run the private claim in a native Rust runtime without Node](https://github.com/awjreynolds/nightlean/issues/30).
+Checked on 2026-11-16 for [Run the private claim in a native Rust runtime without Node](https://github.com/awjreynolds/noctium/issues/30).
 
 The bounded runtime in `runtime/` executes the actual Lean compiler's schema-version-1 plan without invoking Node or loading a JavaScript/WASM package. The compiler remains Lean. This runtime consumes emitted program data through public native Midnight APIs.
 

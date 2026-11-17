@@ -5,13 +5,13 @@ The profile integration is built from reviewed compiler/runtime commit `41482a16
 ## Select the source target
 
 ```sh
-nightlean compile examples/PrivateClaim.lean \
+noctium compile examples/PrivateClaim.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json --output build/claim-321
 ```
 
 The selector manifest is [midnight-ledger-9-zkir-3.2.1-target.json](../../profiles/midnight-ledger-9-zkir-3.2.1-target.json). The existing similarly named manifest without `-target` remains the historical experiment record. It is not the selector manifest.
 
-The selected profile records release `3.2.1`, source tag `zkir-3.2.1`, revision `7a51b3385bbf4bce3604df87a7c70867c9ab43c0`, declared crate version `3.2.0` and observed CLI banner `midnight-zkir 3.2.0`. The upstream patch did not update its crate/banner. Nightlean preserves these distinct identities instead of editing upstream source or inferring the release from its banner.
+The selected profile records release `3.2.1`, source tag `zkir-3.2.1`, revision `7a51b3385bbf4bce3604df87a7c70867c9ab43c0`, declared crate version `3.2.0` and observed CLI banner `midnight-zkir 3.2.0`. The upstream patch did not update its crate/banner. Noctium preserves these distinct identities instead of editing upstream source or inferring the release from its banner.
 
 Both the CLI check and compile passes receive the validated target. The legacy `#nightlean_compile` command still uses 3.2.0. The selected compile command is `#nightlean_compile_target directory profileJson`. Only 3.2.1 plans add `target` and full `targetProfile` fields. Compiler metadata carries the same exact profile. IR language version remains 3.2. The default profile still omits the optional native-source field, preserving its original serialized profile and compiler artifact bytes.
 

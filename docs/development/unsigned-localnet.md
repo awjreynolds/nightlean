@@ -29,19 +29,19 @@ A wrong public sum and an out-of-range private input reject before submission. A
 
 ## Adversarial circuit checks
 
-The [34 raw-witness cases](../../tests/scalars/constraint-cases.json) run against actual source-generated circuits with both official 3.2.0 and 3.2.1 checkers. They bypass the Nightlean evaluator and ABI, so host input checks do not mask missing circuit constraints. Cases cover zero and 248-bit bounds, non-power-of-two ranges, addition/multiplication, wrong public statements, field-wrapped subtraction underflow, casts and malformed Boolean values.
+The [34 raw-witness cases](../../tests/scalars/constraint-cases.json) run against actual source-generated circuits with both official 3.2.0 and 3.2.1 checkers. They bypass the Noctium evaluator and ABI, so host input checks do not mask missing circuit constraints. Cases cover zero and 248-bit bounds, non-power-of-two ranges, addition/multiplication, wrong public statements, field-wrapped subtraction underflow, casts and malformed Boolean values.
 
 Unused partial expressions retain their rejection behavior. Independent review found an underflow inside an unused Boolean wrapper disappearing from the relation. The fix conservatively retains nested subtraction and casts through Boolean, Native, hash and eager-selection wrappers. Each wrapper now has a positive and direct invalid-witness circuit case. A later optimizer must prove totality before removing such evaluation.
 
 Lean also checks unsigned addition/multiplication no-wrap lemmas and proves that field-wrapped underflow exceeds every supported unsigned bound. These are scoped internal facts. Full lowering correctness remains an open assurance obligation.
 
-Reproduce the source/checker cases after building Nightlean and installing the pinned conformance libraries:
+Reproduce the source/checker cases after building Noctium and installing the pinned conformance libraries:
 
 ```sh
 lake build
 lake env lean tests/BoundedScalars.lean
 bash tests/uint-cli.sh
-.lake/build/bin/nightlean compile tests/BoundedScalars.lean --output /tmp/nightlean-scalar-cases
+.lake/build/bin/noctium compile tests/BoundedScalars.lean --output /tmp/nightlean-scalar-cases
 node scripts/zkir/check-scalar-cases.mjs /tmp/nightlean-scalar-cases
 ```
 

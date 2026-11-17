@@ -1,8 +1,8 @@
 # Source-driven native contract workflow
 
-Nightlean's compiler is Lean. The [native Rust runtime](native-rust-runtime.md) executes its emitted plan and the [Rust assembler](native-assembler.md) constructs real native intents from retained authenticated bundle bytes. Neither execution nor assembly requires Node. The [C ABI](native-runtime-abi.md) exposes witness acquisition and private-state journals.
+Noctium's compiler is Lean. The [native Rust runtime](native-rust-runtime.md) executes its emitted plan and the [Rust assembler](native-assembler.md) constructs real native intents from retained authenticated bundle bytes. Neither execution nor assembly requires Node. The [C ABI](native-runtime-abi.md) exposes witness acquisition and private-state journals.
 
-The commands below reproduce the earlier JavaScript development harness. They use native ledger/proving formats, but their orchestration and one assembler are JavaScript. This is an optional development workflow. New native applications should start with the [Rust client](native-client.md), which integrates [proof construction](native-proof-api.md), funding, signing, submission, finalized receipt validation and durable recovery. The [full host-neutral transaction ABI](https://github.com/awjreynolds/nightlean/issues/61) remains separate work. Native key generation uses the pinned independent ZKIR CLI.
+The commands below reproduce the earlier JavaScript development harness. They use native ledger/proving formats, but their orchestration and one assembler are JavaScript. This is an optional development workflow. New native applications should start with the [Rust client](native-client.md), which integrates [proof construction](native-proof-api.md), funding, signing, submission, finalized receipt validation and durable recovery. The [full host-neutral transaction ABI](https://github.com/awjreynolds/noctium/issues/61) remains separate work. Native key generation uses the pinned independent ZKIR CLI.
 
 The helpers consume generated plans and ZKIR. They do not parse Lean source or invoke another source-language compiler. Use the linked Rust assembler workflow when embedding execution and assembly in a native application.
 
@@ -25,7 +25,7 @@ The bootstrap builds the official independent ZKIR 3.2.0 CLI from pinned source 
 ## Compile the actual Lean source
 
 ```sh
-.lake/build/bin/nightlean compile examples/PrivateClaim.lean --output build/native-claim/source
+.lake/build/bin/noctium compile examples/PrivateClaim.lean --output build/native-claim/source
 /private/tmp/nightlean-native-zkir/bin/zkir compile build/native-claim/source/PrivateClaim.claim.zkir build/native-claim/claim.prover build/native-claim/claim.verifier
 node scripts/zkir/claim-config.mjs build/native-claim/inputs.json
 node scripts/zkir/native-contract.mjs build/native-claim/source/PrivateClaim.claim.impact.json build/native-claim/source/PrivateClaim.claim.zkir build/native-claim/claim.prover build/native-claim/claim.verifier build/native-claim/artifacts --ledger-params build/native-claim/ledger.params --config build/native-claim/inputs.json --prove

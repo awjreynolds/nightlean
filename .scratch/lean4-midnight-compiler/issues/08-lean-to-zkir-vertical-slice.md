@@ -1,16 +1,16 @@
 # 08: Run the first Lean-to-ZKIR vertical slice
 
-> Current source of truth: [public issue #9](https://github.com/awjreynolds/nightlean/issues/9). It includes witness/state checks and all current blockers.
+> Current source of truth: [public issue #9](https://github.com/awjreynolds/noctium/issues/9). It includes witness/state checks and all current blockers.
 
 Type: task
 
 ## Task
 
-After the first contract workloads are selected, run one bounded vertical slice using a temporary Lean-owned circuit representation. Keep Nightlean's compiler code and primary lowering in Lean 4.
+After the first contract workloads are selected, run one bounded vertical slice using a temporary Lean-owned circuit representation. Keep Noctium's compiler code and primary lowering in Lean 4.
 
 - Express the selected relation in Lean and lower it to the current ledger 9 ZKIR format.
 - Validate the emitted IR with the exact pinned Midnight toolchain, generate keys, produce a proof, and verify it cryptographically.
-- Determine which additional artifacts a deployable contract bundle needs. Exercise a Lean-generated Compact adapter only if it preserves Nightlean semantics.
+- Determine which additional artifacts a deployable contract bundle needs. Exercise a Lean-generated Compact adapter only if it preserves Noctium semantics.
 - Deploy and call the generated contract on Preview after local output validation. Do not use Mainnet.
 - Record tested commits, versions, commands, outputs, and the first failing stage if the path stops.
 

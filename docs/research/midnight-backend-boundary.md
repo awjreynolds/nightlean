@@ -1,6 +1,6 @@
 # Midnight backend boundary for a Lean frontend
 
-Context pointer: [GitHub issue #3, Map the deployable Midnight backend boundary](https://github.com/awjreynolds/nightlean/issues/3)
+Context pointer: [GitHub issue #3, Map the deployable Midnight backend boundary](https://github.com/awjreynolds/noctium/issues/3)
 
 Research checked on 2026-11-16 against official Midnight documentation and repositories.
 
@@ -14,6 +14,6 @@ Research checked on 2026-11-16 against official Midnight documentation and repos
 
 ## What this evidence establishes
 
-The official documented pipeline proves one complete route from Compact source to generated circuits, keys, bindings, and deployment inputs. The `midnight-zkir` repository documents compilation of `.zkir` files into prover and verifier keys. Reviewed official sources do not document a complete direct-ZKIR contract bundle. This evidence describes available routes. It does not require Nightlean to adopt Compact as its source semantics or backend.
+The official documented pipeline proves one complete route from Compact source to generated circuits, keys, bindings, and deployment inputs. The `midnight-zkir` repository documents compilation of `.zkir` files into prover and verifier keys. Reviewed official sources do not document a complete direct-ZKIR contract bundle. This evidence describes available routes. It does not require Noctium to adopt Compact as its source semantics or backend.
 
 Any direct-ZKIR route needs a tested contract interface and deployment bundle. Moriarty's current direct ZKIR compiler is a relevant additional reference; see [Moriarty overlap research](moriarty-overlap.md).

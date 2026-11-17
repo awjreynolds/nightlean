@@ -33,7 +33,7 @@ node scripts/zkir/check-impact.mjs build/direct-impact/operations.json build/dir
 
 The fixture uses public, deterministic test inputs. Its secret is 42, campaign
 is 7, siblings are 17 and 23, and directions are false and true. Domain tags
-1, 2, and 3 are Nightlean application choices. The Lean operation fixture uses
+1, 2, and 3 are Noctium application choices. The Lean operation fixture uses
 root 99 and nullifier 123 as placeholders. The harness replaces those values
 with the pinned ledger package's native hash results before constructing the
 proof preimage and executing the VM.

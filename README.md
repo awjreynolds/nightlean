@@ -32,25 +32,25 @@ Install [elan](https://github.com/leanprover/elan#installation) and Git. Elan se
 git clone https://github.com/awjreynolds/noctium.git
 cd noctium
 lake build
-lake exe noctium check examples/PrivateClaim.lean
-lake exe noctium compile examples/PrivateClaim.lean --output build/claim
+lake exe noctium check examples/BoundedScalars.lean
+lake exe noctium compile examples/BoundedScalars.lean --output build/bounded
 ```
 
-The output includes the standalone `claimRelation.zkir`, contract-call `PrivateClaim.claim.zkir`, runtime plan `PrivateClaim.claim.impact.json`, and `nightlean.json` manifest. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source: imports and elaborators execute development code.
+The output includes the standalone `boundedRelation.zkir`, contract-call `BoundedScalars.apply.zkir`, runtime plan `BoundedScalars.apply.impact.json`, and `nightlean.json` manifest. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source: imports and elaborators execute development code.
 
 For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 
-Legacy technical identifiers such as `Nightlean.Frontend`, `nightlean_*` and `nightlean.json` stay stable for proof and artifact compatibility. Historical receipts retain the former Nightlean name.
+Use `Noctium.Frontend`, the `Noctium` scope and `noctium_*` declarations for new source. Legacy module, ABI and artifact identifiers remain accepted for compatibility with pinned proof evidence.
 
 ## A small, real example
 
 This circuit from [`examples/BoundedScalars.lean`](examples/BoundedScalars.lean) constrains the sum of two private 8-bit values to a public result:
 
 ```lean
-import Nightlean.Frontend
-open scoped Nightlean
+import Noctium.Frontend
+open scoped Noctium
 
-nightlean_circuit boundedRelation where
+noctium_circuit boundedRelation where
   public expected : UIntRange 511
   private left : UInt 8
   private right : UInt 8
@@ -85,7 +85,7 @@ The destination is [full native ZKIR v3 and Midnight ledger capability coverage]
 
 SDK goals cover native Rust/C/C++, TypeScript with WASM for web dapps, Kotlin for Android and Swift for iOS. Rust and C/C++ have qualified private-claim and [typed source-witness](docs/development/typed-witness-qualification.md) proof, transaction and private-state evidence on localnet. Web/mobile packages and full witness-language coverage remain goals.
 
-Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, [bounded type and natural specialization](docs/development/generics.md), scalar and component disclosure checks, and lazy host control. Checked composite layouts and codecs are present. [Source helper outputs](docs/development/component-disclosure.md) flatten checked composite results into native circuit leaves. Source/native examples cover guarded state effects, Bytes32 map keys, nested scalar maps, Native-field records and untagged Bytes32 SHA-256 account hashes. Mixed ledger values, curve cryptography, typed contract returns and broader composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
+Today: `Native`, `Bool`, bounded unsigned scalars, typed helpers, [bounded type and natural specialization](docs/development/generics.md), scalar and component disclosure checks, and lazy host control. Checked composite layouts and codecs are present. [Source helper outputs](docs/development/component-disclosure.md) flatten checked composite results into native circuit leaves. Source/native examples cover guarded state effects, Bytes32 map keys, nested scalar maps, Native-field records and Bytes32 account hashes, ordered domain-separated SHA-256 preimages and canonical Native-field hashing. Mixed ledger values, curve cryptography, typed contract returns and broader composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
 
 Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/1) and [contribution guide](CONTRIBUTING.md). The [documentation index](docs/README.md) connects authoring, runtime integration, proof reproduction and capability research.
 

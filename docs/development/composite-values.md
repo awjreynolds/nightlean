@@ -10,7 +10,7 @@ Dynamic fixed-vector selection emits a UInt constraint on the Native index with 
 
 ## WireV1 and host checks
 
-The Nightlean wire is `nightlean:aggregate:value:v1:`, a u32 little-endian descriptor length, the full canonical type descriptor, a u32 little-endian leaf count, then one fixed 32-byte little-endian canonical Native field per leaf. This format is distinct from ZKIR's minimal-length immediate strings and ledger proof-preimage SCALE encoding. The native fixture converts the same leaves into the upstream relation preimage.
+The Noctium wire is `nightlean:aggregate:value:v1:`, a u32 little-endian descriptor length, the full canonical type descriptor, a u32 little-endian leaf count, then one fixed 32-byte little-endian canonical Native field per leaf. This format is distinct from ZKIR's minimal-length immediate strings and ledger proof-preimage SCALE encoding. The native fixture converts the same leaves into the upstream relation preimage.
 
 The Rust codec accepts compiler schema JSON, recomputes the canonical descriptor and all layout counts, checks repeated nominal definitions for consistency, and validates each logical value against the layout. Iterative parsing and traversal preserve the checked limits, including retained children under zero-length vectors. Schema, logical JSON and wire inputs each have a 1 MiB transport limit. C ABI output buffers have owned tokens with copy and free operations.
 

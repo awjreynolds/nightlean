@@ -9,19 +9,19 @@ Measured on 2026-11-16 from an isolated clean archive of published commit `1a972
 
 Each value uses five fresh CLI processes. Compilation includes source elaboration, validation and ZKIR/Impact/metadata emission into a new output directory. It excludes native key generation, transaction proving and the separate contract theorem/export-audit suites. Imports use prebuilt Lean library artifacts. Source bytes were not served from a compiled-example cache.
 
-The clean Nightlean project build took 8.60 s. This is a build of the compiler project against the installed Lean toolchain, not a clean build of Lean or all native dependencies.
+The clean Noctium project build took 8.60 s. This is a build of the compiler project against the installed Lean toolchain, not a clean build of Lean or all native dependencies.
 
 [Raw samples and scope](compile-performance.json) preserve every measured run. No matched Compact benchmark was performed, so these results establish no speed advantage. A fair comparison needs semantically matched programs, the same machine/profile and equal treatment of key generation and other output stages. The limited current source feature set also prevents extrapolation to full feature equivalence.
 
 ## Repeat the measurement
 
-Use an isolated archive of the recorded commit, run `lake build`, and time the prebuilt `.lake/build/bin/nightlean` executable from that directory:
+Use an isolated archive of the recorded commit, run `lake build`, and time the prebuilt `.lake/build/bin/noctium` executable from that directory:
 
 ```sh
-/usr/bin/time -p .lake/build/bin/nightlean check examples/PrivateClaim.lean
-/usr/bin/time -p .lake/build/bin/nightlean compile examples/PrivateClaim.lean --output build/timing-claim
-/usr/bin/time -p .lake/build/bin/nightlean check examples/BoundedScalars.lean
-/usr/bin/time -p .lake/build/bin/nightlean compile examples/BoundedScalars.lean --output build/timing-scalars
+/usr/bin/time -p .lake/build/bin/noctium check examples/PrivateClaim.lean
+/usr/bin/time -p .lake/build/bin/noctium compile examples/PrivateClaim.lean --output build/timing-claim
+/usr/bin/time -p .lake/build/bin/noctium check examples/BoundedScalars.lean
+/usr/bin/time -p .lake/build/bin/noctium compile examples/BoundedScalars.lean --output build/timing-scalars
 ```
 
 Repeat each command five times, using fresh compile output directories, and report the median plus range. Rebuilding libraries or including key generation measures a different stage and should receive a separate result.

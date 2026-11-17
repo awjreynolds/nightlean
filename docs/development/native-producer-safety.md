@@ -1,12 +1,12 @@
 # Native producer safety
 
-Nightlean now validates its emitted scalar ZKIR before returning an artifact from either public native lowerer. The compiler, descriptor registry, typed-statement normalizer and validator are Lean. No Compact compiler or runtime participates.
+Noctium now validates its emitted scalar ZKIR before returning an artifact from either public native lowerer. The compiler, descriptor registry, typed-statement normalizer and validator are Lean. No Compact compiler or runtime participates.
 
 The registry follows the exact 47 instruction and 15 value-type inventory at native ZKIR revision `7a51b3385bbf4bce3604df87a7c70867c9ab43c0`. The producer emits IR version 3.2. The external native executable release, its source revision, ledger profile and host ABI remain separate identities.
 
 ## Supported extension contract
 
-`Native.lean` records every instruction and value-type name in pinned enum order. Sixteen instruction descriptors support the current Native-scalar producer: Add, Mul, Neg, TestEq, Not, Assert, CondSelect, ConstrainBits, ConstrainEq, ConstrainToBoolean, LessThan, TransientHash, PublicInput, PrivateInput, Impact and Output. Only the native `Scalar<BLS12-381>` value representation is enabled. Nightlean Bool and UInt values use constrained Native fields. Native `IrType::Bool`, bytes and all foreign-curve types remain unsupported here.
+`Native.lean` records every instruction and value-type name in pinned enum order. Sixteen instruction descriptors support the current Native-scalar producer: Add, Mul, Neg, TestEq, Not, Assert, CondSelect, ConstrainBits, ConstrainEq, ConstrainToBoolean, LessThan, TransientHash, PublicInput, PrivateInput, Impact and Output. Only the native `Scalar<BLS12-381>` value representation is enabled. Noctium Bool and UInt values use constrained Native fields. Native `IrType::Bool`, bytes and all foreign-curve types remain unsupported here.
 
 Each supported descriptor requires typing, encoding, privacy, effects, preconditions, guard policy, public-binding policy and exact field metadata. None has a default. A regression tactic verifies an omitted privacy/effect rule does not elaborate. Unknown instructions reject. Known unsupported inventory entries reject with an explicit implementation boundary. Registering a descriptor without an executable validation rule still rejects.
 
@@ -81,7 +81,7 @@ The accepted private-claim circuit retains SHA-256 `c569dd887fdf6aa3bdd2c8e23589
 ```sh
 lake build
 lake env lean --run tests/NativeProducer.lean
-.lake/build/bin/nightlean compile tests/NativeProducerSource.lean --output /tmp/nightlean-producer-bool
+.lake/build/bin/noctium compile tests/NativeProducerSource.lean --output /tmp/nightlean-producer-bool
 node tests/native-producer-checker.mjs "$OFFICIAL_321_CHECKER" /tmp/nightlean-producer-bool "$NATIVE_321_CLI"
 ```
 

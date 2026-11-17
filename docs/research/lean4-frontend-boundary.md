@@ -1,6 +1,6 @@
 # Lean 4 frontend options for a restricted compiler
 
-Research ticket: [GitHub issue #6: Identify Lean 4 frontend constraints for a compiler subset](https://github.com/awjreynolds/nightlean/issues/6)
+Research ticket: [GitHub issue #6: Identify Lean 4 frontend constraints for a compiler subset](https://github.com/awjreynolds/noctium/issues/6)
 
 Checked 2026-11-16 against the Lean reference manual and the Lean 4 repository.
 
@@ -22,4 +22,4 @@ Checked 2026-11-16 against the Lean reference manual and the Lean 4 repository.
 
 ## Recommendation
 
-Use Lean-elaborated declarations for contracts and circuits. A contract describes ledger state and transition entrypoints. A circuit relation describes private witnesses, public inputs, constraints, and outputs. Compose these in a compiler-owned typed representation while keeping relation semantics separate from state effects. Preserve syntax spans for diagnostics and reject arbitrary Lean definitions outside the supported surface. The private claim is the first program in this model, not its defining language feature. This is an architectural recommendation recorded in [GitHub issue #2](https://github.com/awjreynolds/nightlean/issues/2).
+Use Lean-elaborated declarations for contracts and circuits. A contract describes ledger state and transition entrypoints. A circuit relation describes private witnesses, public inputs, constraints, and outputs. Compose these in a compiler-owned typed representation while keeping relation semantics separate from state effects. Preserve syntax spans for diagnostics and reject arbitrary Lean definitions outside the supported surface. The private claim is the first program in this model, not its defining language feature. This is an architectural recommendation recorded in [GitHub issue #2](https://github.com/awjreynolds/noctium/issues/2).

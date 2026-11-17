@@ -1,6 +1,6 @@
 # Independent native ZKIR toolchain
 
-Nightlean's supported key-generation path uses the independent `midnightntwrk/midnight-zkir` project. The source-language compiler is unnecessary for this path. Nightlean's own compiler and lowering remain Lean code. The external native ZKIR CLI generates proving and verifying keys from the emitted relation.
+Noctium's supported key-generation path uses the independent `midnightntwrk/midnight-zkir` project. The source-language compiler is unnecessary for this path. Noctium's own compiler and lowering remain Lean code. The external native ZKIR CLI generates proving and verifying keys from the emitted relation.
 
 ## Verified build
 
@@ -68,6 +68,6 @@ The [independent ZKIR 3.2 release](https://github.com/midnightntwrk/midnight-zki
 
 An audit of executable scripts and the `scripts/zkir` and `scripts/preview` package lockfiles found no imports or package dependencies on a source-language compiler or contract adapter. The localnet's native transaction commands invoke `/midnight-node-toolkit` for ledger funding, inspection, submission, and state reads. The running localnet relay uses pinned official Node.js image `node@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf`, using only Node's TCP API.
 
-After the final source-derived native claim passed at blocks 398 and 401, `node scripts/localnet/stack.mjs restart-relay` replaced only Nightlean's owned relay. The node, proof server, and indexer retained their containers and state. Finalized height remained 425 before and after replacement, with finalized hash `0x4fe75d3368a4174ef89292e859624b1f305a9a831de287e000451cb05743281f` and the same development genesis. Node RPC, proof-server health, and indexer GraphQL all passed through the replacement relay. Loopback ports 19944, 16300, and 18088 stayed the same. No running Nightlean service uses the earlier JavaScript toolkit image.
+After the final source-derived native claim passed at blocks 398 and 401, `node scripts/localnet/stack.mjs restart-relay` replaced only Noctium's owned relay. The node, proof server, and indexer retained their containers and state. Finalized height remained 425 before and after replacement, with finalized hash `0x4fe75d3368a4174ef89292e859624b1f305a9a831de287e000451cb05743281f` and the same development genesis. Node RPC, proof-server health, and indexer GraphQL all passed through the replacement relay. Loopback ports 19944, 16300, and 18088 stayed the same. No running Noctium service uses the earlier JavaScript toolkit image.
 
 Historical research and adapter experiments describe earlier evidence. They do not define this independent toolchain's build or runtime dependencies.

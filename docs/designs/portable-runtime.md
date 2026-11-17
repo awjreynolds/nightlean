@@ -18,7 +18,7 @@ The present JavaScript helper performs more than provider calls: it evaluates co
 
 Implement one reference runtime in Rust over the compiler-owned plan and official Midnight native libraries. Native Rust callers link it directly. C and C++ use a narrow C ABI. Kotlin and Swift receive native bindings over the same core. Browser and optional JavaScript hosts use a WASM build with TypeScript declarations and wrappers.
 
-This is a runtime implementation choice, not a change to the compiler implementation language. A Rust application must not have to embed a JavaScript engine. A native application also need not embed a WASM engine merely to execute the standard Nightlean plan.
+This is a runtime implementation choice, not a change to the compiler implementation language. A Rust application must not have to embed a JavaScript engine. A native application also need not embed a WASM engine merely to execute the standard Noctium plan.
 
 The ABI is defined independently from any binding generator. Canonical buffers and explicit ownership cross the boundary. Field elements use the named target profile's canonical representation, rather than JavaScript numbers or a platform-dependent integer ABI. Errors, limits, cancellation, memory ownership, and execution capabilities are versioned parts of the contract.
 
@@ -68,4 +68,4 @@ Only after this gate should the ABI be frozen and C/C++, WASM, Kotlin, Swift, an
 - [Runtime boundaries and pinned Midnight APIs](../research/nightlean-portable-runtime-boundary.md)
 - [Noir, Aztec, Circom and mobile runtime comparison](../research/portable-witness-comparison.md)
 
-These reports distinguish verified upstream APIs from Nightlean recommendations and untested target support.
+These reports distinguish verified upstream APIs from Noctium recommendations and untested target support.

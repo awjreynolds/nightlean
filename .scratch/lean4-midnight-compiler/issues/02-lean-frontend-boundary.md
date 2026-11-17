@@ -1,6 +1,6 @@
 # 02: Identify Lean 4 frontend constraints for a compiler subset
 
-> Current source of truth: [public issue #6](https://github.com/awjreynolds/nightlean/issues/6). Use GitHub for the latest decision and dependencies.
+> Current source of truth: [public issue #6](https://github.com/awjreynolds/noctium/issues/6). Use GitHub for the latest decision and dependencies.
 
 Type: research
 

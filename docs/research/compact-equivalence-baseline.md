@@ -1,6 +1,6 @@
 # Compact feature-equivalence baseline
 
-Research checked on 2026-11-16. This document records the baseline for a fully featured Nightlean compiler written in Lean, targeting ZKIR and native Midnight ledger artifacts without a Compact compiler or runtime dependency. The host-neutral witness runtime is a separate implementation track. This research adds no compiler code and certifies no new capability.
+Research checked on 2026-11-16. This document records the baseline for a fully featured Noctium compiler written in Lean, targeting ZKIR and native Midnight ledger artifacts without a Compact compiler or runtime dependency. The host-neutral witness runtime is a separate implementation track. This research adds no compiler code and certifies no new capability.
 
 The machine-readable inventory is [compact-feature-matrix.json](../compatibility/compact-feature-matrix.json). Its 221 stable IDs cover language families, every method heading in the pinned ledger ADT reference, every named type/function/event heading in the pinned standard-library API reference, and artifact/runtime obligations. These are inventory entries, not 221 independent features or a completeness score. Every equivalence result is `unverified`. Overloads, negative cases, compositions and runtime boundaries still need finer acceptance cases.
 
@@ -12,13 +12,13 @@ Use Compact toolchain 0.36.1, language 0.28.0, as the current stable feature ref
 | --- | --- | --- |
 | Compact feature reference | Toolchain 0.36.1, language 0.28.0 | Latest stable compiler release observed |
 | Compiler source | `LFDT-Minokawa/compact`, `7fa3a117c5e7efe9d2c51da04263e5f0b3509144` | Commit resolved from `compactc-v0.36.1` |
-| Compact runtime | 0.21.0 | Reference behavior only, forbidden Nightlean dependency |
+| Compact runtime | 0.21.0 | Reference behavior only, forbidden Noctium dependency |
 | Emitted circuit format | ZKIR 3.1 | Producer format, distinct from executable version |
 | Bundled key generator | ZKIR 3.2.1, `7a51b3385bbf4bce3604df87a7c70867c9ab43c0` | Latest patch fixes a Jubjub key-generation failure |
 | Public-network matrix | Toolchain 0.36.0, on-chain runtime 4.0.0, proof server 9.0.0 | Documented tested combination on research date |
 | Ledger source | 9.1.0.1, `a2b30128ca4b660b73a068e29b56b48ede8c9a74` | Ledger contract/maintenance interface inspected |
-| Existing Nightlean observation | `da3ffa3b61b0948768ca370b2abc391575e1dbae` | Local source inspected during research |
-| Existing Nightlean local proof of concept | ZKIR 3.2.0, on-chain runtime profile 4.0.1 | Existing evidence, different from both upstream combinations |
+| Existing Noctium observation | `da3ffa3b61b0948768ca370b2abc391575e1dbae` | Local source inspected during research |
+| Existing Noctium local proof of concept | ZKIR 3.2.0, on-chain runtime profile 4.0.1 | Existing evidence, different from both upstream combinations |
 
 Sources: [Compact tag](https://api.github.com/repos/LFDT-Minokawa/compact/git/ref/tags/compactc-v0.36.1), [pinned lockfile](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/flake.lock), [patch comparison and ZKIR 3.1 regression output](https://github.com/LFDT-Minokawa/compact/compare/compactc-v0.36.0...compactc-v0.36.1), [ledger tag](https://api.github.com/repos/midnightntwrk/midnight-ledger/git/ref/tags/ledger-9.1.0.1), [local profile](../../profiles/midnight-ledger-9.json), [existing native evidence](../development/native-localnet.md).
 
@@ -28,21 +28,21 @@ The 0.36.1 patch changes Boolean deserialization lowering and upgrades the key g
 
 ## What equivalence means
 
-The requested target is equivalent contract capability and observable semantics through Nightlean's Lean surface. Compact syntax, its generated JavaScript class shape and its compiler implementation are reference material, not implementation dependencies. A feature requires a supported Lean representation, semantic rules, native lowering, artifact/runtime support and the appropriate acceptance evidence. A low-level ZKIR opcode alone does not satisfy the feature.
+The requested target is equivalent contract capability and observable semantics through Noctium's Lean surface. Compact syntax, its generated JavaScript class shape and its compiler implementation are reference material, not implementation dependencies. A feature requires a supported Lean representation, semantic rules, native lowering, artifact/runtime support and the appropriate acceptance evidence. A low-level ZKIR opcode alone does not satisfy the feature.
 
 Keep three tracks separate:
 
 - Language and standard-library semantics: values, bounded computation, witness/disclosure rules, ledger operations, cryptographic functions, events and contract calls.
 - Native integration: canonical encodings, transcript/proof bindings, keys, deployment, portable host execution and lifecycle behavior exposed by ledger interfaces.
-- External SDK products: wallet UI, indexer infrastructure, package-manager commands, editors and explorer interfaces. Equivalent adapter capabilities matter where Nightlean uses them. Reimplementing those products is not a language-parity requirement.
+- External SDK products: wallet UI, indexer infrastructure, package-manager commands, editors and explorer interfaces. Equivalent adapter capabilities matter where Noctium uses them. Reimplementing those products is not a language-parity requirement.
 
 Arbitrary Lean theorem proving, unrestricted recursion, dependent values of unbounded runtime size and compilation of all Lean programs are separate goals. Lean as implementation/proof language does not make such constructs part of the bounded Compact comparison. Conversely, the small private-claim example does not define the intended language boundary. [Pinned language reference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/compact-reference.mdx).
 
-No production, build, runtime or mandatory test path should invoke Compact or import its runtime. Conformance evidence should use a pinned specification, independently checked expected values and official native ZKIR/ledger checks. Any externally generated Compact oracle fixtures would need explicit provenance and isolation, with no Compact dependency introduced into Nightlean's required toolchain. Identical verifier-key bytes across two different compilers are not a feature-equivalence requirement. Agreement with the keys deployed for each contract is a requirement.
+No production, build, runtime or mandatory test path should invoke Compact or import its runtime. Conformance evidence should use a pinned specification, independently checked expected values and official native ZKIR/ledger checks. Any externally generated Compact oracle fixtures would need explicit provenance and isolation, with no Compact dependency introduced into Noctium's required toolchain. Identical verifier-key bytes across two different compilers are not a feature-equivalence requirement. Agreement with the keys deployed for each contract is a requirement.
 
 ## Language and private execution inventory
 
-| IDs | Surface and required distinctions | Nightlean observation |
+| IDs | Surface and required distinctions | Noctium observation |
 | --- | --- | --- |
 | `C-LANG-BOOL`, `C-LANG-FIELD`, `C-LANG-UINT` | Boolean, native field, bounded/sized Uint, arithmetic, canonical inputs and bounds | Native/Bool literals, add, multiply and equality exist. Uint and general subtraction/conversions are absent |
 | `C-LANG-BYTES`, `C-LANG-VECTOR`, `C-LANG-TUPLE` | Fixed bytes, fixed homogeneous vectors, heterogeneous tuples, unit, indexing, slicing, spreads and destructuring | Missing from the supported frontend and IR |
@@ -51,7 +51,7 @@ No production, build, runtime or mandatory test path should invoke Compact or im
 | `C-LANG-SELECT`, `C-LANG-CONTROL`, `C-LANG-ASSERT` | Conditional expressions, guarded effects, short-circuit logic, statement order, return and unit-valued assert | Eager selection and Boolean assertions exist. General control-flow equivalence is absent |
 | `C-LANG-LOOP`, `C-LANG-MAPFOLD` | Compile-time bounded loops, anonymous circuits, map and fold | Missing. Ledger Map is a different feature |
 | `C-LANG-FUNCTION`, `C-LANG-PURITY`, `C-LANG-GENERICS` | Helper calls, static recursion restrictions, effect/purity analysis, type/natural generics | No general function/generic surface |
-| `C-LANG-MODULE`, `C-LANG-SCOPE`, `C-LANG-PRAGMA` | Namespaces, imports/exports, includes, scopes, version targeting | Lean namespaces exist, but corresponding Nightlean language contracts are not established |
+| `C-LANG-MODULE`, `C-LANG-SCOPE`, `C-LANG-PRAGMA` | Namespaces, imports/exports, includes, scopes, version targeting | Lean namespaces exist, but corresponding Noctium language contracts are not established |
 | `C-PRIVATE-*` | Typed witness calls, private-state initialization/evolution, public-input boundary, direct/indirect disclosure | Explicit scalar private inputs exist. General witness callbacks and disclosure analysis are absent |
 | `C-STATE-CONSTRUCTOR`, `C-STATE-SEALED`, `C-STATE-NESTED` | Constructor rules, immutable-after-construction fields, nested ledger ADTs | Runtime configuration initializes scalar cells and empty maps. General language support is absent |
 
@@ -94,7 +94,7 @@ These `C-LANG-UINT` case IDs are source-derived expectations, not executed resul
 
 Each accepting assignment case should also be exercised as a circuit return, typed const, ledger write and function argument. Negative cases need stable failure categories. Runtime cases need native checker rejection as well as evaluator behavior. The JSON records the equations, source trace and these case IDs under `C-LANG-UINT`, with related notes on alias and subtyping entries.
 
-Nightlean's eager `select` evaluates both arms. This is useful source-subset evidence, but guarded Compact branches also affect witness invocation, assertions and ledger effects. An implementation must define and test those rules before claiming conditional-expression parity. The existing runtime deliberately rejects an unknown reference even in an unselected expression arm. [Native runtime](../../scripts/zkir/native-runtime.mjs), [existing rejection evidence](../development/native-localnet.md).
+Noctium's eager `select` evaluates both arms. This is useful source-subset evidence, but guarded Compact branches also affect witness invocation, assertions and ledger effects. An implementation must define and test those rules before claiming conditional-expression parity. The existing runtime deliberately rejects an unknown reference even in an unselected expression arm. [Native runtime](../../scripts/zkir/native-runtime.mjs), [existing rejection evidence](../development/native-localnet.md).
 
 ## Complete ledger ADT heading inventory
 
@@ -113,7 +113,7 @@ Each operation below has its own `C-ADT-<TYPE>-<METHOD>` record. Host-only opera
 
 Cell is implicit for ordinary ledger field types. Set, Map and List are unbounded ledger collections, despite bounded circuit computation. Merkle trees have declared depth 2 through 32. Coin-specific mutations require qualified shielded coin values and transaction-local Merkle index resolution. Map values support nested ADTs. These distinctions need dedicated acceptance cases, not a shared generic map test. [ADT reference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/ledger-adt.mdx).
 
-Nightlean supports Native/Bool cell reads/writes, map insertion and an absent-key requirement. The IR contains `readMap`, but the native lowerer explicitly rejects map value reads. The frontend does not expose general map lookup. Empty-map initialization and a spent-nullifier map are not full Compact Map support. [IR](../../Nightlean/IR.lean), [native lowerer](../../Nightlean/Backend/Impact.lean), [frontend](../../Nightlean/Frontend.lean).
+Noctium supports Native/Bool cell reads/writes, map insertion and an absent-key requirement. The IR contains `readMap`, but the native lowerer explicitly rejects map value reads. The frontend does not expose general map lookup. Empty-map initialization and a spent-nullifier map are not full Compact Map support. [IR](../../Nightlean/IR.lean), [native lowerer](../../Nightlean/Backend/Impact.lean), [frontend](../../Nightlean/Frontend.lean).
 
 Kernel `caller` has an upstream limitation: a top-level off-chain invocation records no caller before the final unshielded inputs are known. The pinned docs restrict practical use to known contract callers. `balance` observes the start-of-execution balance. `checkpoint` introduces partial-failure boundaries. These semantics need to survive a portable runtime, and must not be replaced with superficially similar host APIs. [Kernel rules](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/ledger-adt.mdx).
 
@@ -134,7 +134,7 @@ Standard events are ShieldedSpend, ShieldedReceive, ShieldedMint, ShieldedBurn, 
 
 Contract interfaces and calls require provable, non-generic signatures, disclosed arguments and address, module/signature checks, verifier-key agreement, the callee entry-point hash and communication commitment. Re-entry and exported interface implementations calling witnesses are restricted. Older prose still mentions purity in runtime conformance, but 0.36.0 explicitly removed this field and rejects pure interface circuits. Preserve the release correction in acceptance cases. [Reference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/compact-reference.mdx), [0.36 changes](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/release-notes/toolchain-0.36.0.md).
 
-Upgrade/authority support belongs to the native ledger integration track. The inspected ledger binding exposes ReplaceAuthority, VerifierKeyInsert/Remove, IrInsert/Remove and signed MaintenanceUpdate with a counter. This is evidence of an available ledger API, not an implemented Nightlean upgrade path or a Compact language statement. [Pinned ledger binding](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger-wasm/src/contract.rs).
+Upgrade/authority support belongs to the native ledger integration track. The inspected ledger binding exposes ReplaceAuthority, VerifierKeyInsert/Remove, IrInsert/Remove and signed MaintenanceUpdate with a counter. This is evidence of an available ledger API, not an implemented Noctium upgrade path or a Compact language statement. [Pinned ledger binding](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/ledger-wasm/src/contract.rs).
 
 ## Existing evidence and its limits
 
@@ -142,7 +142,7 @@ The existing localnet receipt qualifies one selected workload. Lean source produ
 
 The initial inspection at `da3ffa3` found two source value types and a small expression/state effect set, with a Node ESM evaluator. Subsequent work adds [native Rust execution and C/C++ providers](../development/native-runtime-abi.md), [public bundle integrity checks](../development/portable-artifacts.md), and a [bounded UInt slice with finalized local ledger evidence](../development/unsigned-localnet.md). General providers/private-state journals, composite encodings, general state constructors, cross-calls, tokens, events and most ADT methods remain absent. The profile still labels itself `source-baseline-unqualified`, which must not silently become a claim of public-network or whole-language qualification. [IR](../../Nightlean/IR.lean), [original reference runtime](../../scripts/zkir/native-runtime.mjs), [profile validation](../../Nightlean/Target.lean).
 
-Compiler product parity requires more than a circuit file: exported value/type metadata, provable entrypoints, verifier/prover material, manifest sizes/hashes, source mapping, input validation, state views and portable execution context. Nightlean need not duplicate Compact's JavaScript product names, but a documented native ABI must cover equivalent behavior. The Compact runtime must remain absent from the resulting dependency closure. [Compiler product reference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/compact-reference.mdx).
+Compiler product parity requires more than a circuit file: exported value/type metadata, provable entrypoints, verifier/prover material, manifest sizes/hashes, source mapping, input validation, state views and portable execution context. Noctium need not duplicate Compact's JavaScript product names, but a documented native ABI must cover equivalent behavior. The Compact runtime must remain absent from the resulting dependency closure. [Compiler product reference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/compact-reference.mdx).
 
 ## Acceptance evidence and bounded first packages
 
@@ -152,7 +152,7 @@ Start with these bounded packages. They are prerequisites and first slices, not 
 
 1. Freeze the comparison contract. Record 0.36.1 source, native ZKIR 3.2.1 source/binaries and native ledger pins. Reconcile the existing 3.2.0/4.0.1 local proof profile with the documented matrix without overwriting its evidence. Produce a semantic source register, stable failure categories and an explicit list of upstream undefined/unsupported cases. Exit evidence: provenance validation and the 0.36.1 Boolean/Jubjub regressions represented as test requirements. No broad code changes are a prerequisite to this package.
 
-2. Establish a portable scalar ABI and two runners for the existing subset. Prerequisite: an agreed schema/versioning and private-state/witness protocol from the portable-runtime track. Use Native/Bool, argument/result validation, eager-selection behavior, ordered reads/writes and rejection fixtures already represented in Nightlean. Exit evidence: identical canonical values, outputs, errors and effect plans in two host languages, plus a dependency-closure check excluding Compact. This is runtime substrate, not whole-Compact witness support.
+2. Establish a portable scalar ABI and two runners for the existing subset. Prerequisite: an agreed schema/versioning and private-state/witness protocol from the portable-runtime track. Use Native/Bool, argument/result validation, eager-selection behavior, ordered reads/writes and rejection fixtures already represented in Noctium. Exit evidence: identical canonical values, outputs, errors and effect plans in two host languages, plus a dependency-closure check excluding Compact. This is runtime substrate, not whole-Compact witness support.
 
 3. Implement bounded integers and their conversions as one language slice. Prerequisites: scalar ABI and agreed source semantics. Cover Uint widths/ranges, arithmetic result bounds, underflow, narrowing, field conversions and boundary diagnostics. Exit evidence: independent value vectors, bad-witness rejection, official native proof verification and one ledger state round trip using Uint. Do not attach arrays, foreign curves or modules to this initial package.
 
@@ -183,6 +183,6 @@ The following gaps constrain planning without invalidating the current inventory
 - The network matrix has not adopted 0.36.1. The release declares ledger 9 compatibility, but exact network acceptance of all affected key-generation paths needs a pinned qualification run.
 - The 221 entries do not exhaust grammar alternatives, native overloads, compiler options, malformed encodings, alias compatibility or interactions. Source-heading coverage is measurable. Semantic completeness is not yet established.
 - Source/docs disagree on Uint result bounds and serialization extent, and contain stale cross-contract purity prose. The pinned implementation resolves the identified rules. Uint cases above remain source-derived expectations until native conformance tests execute. A systematic contradiction audit remains necessary.
-- Native ZKIR/ledger support for every foreign primitive, event, ADT and cross-call has not been qualified from Nightlean. Library exposure alone does not establish the compiler-to-ledger path.
+- Native ZKIR/ledger support for every foreign primitive, event, ADT and cross-call has not been qualified from Noctium. Library exposure alone does not establish the compiler-to-ledger path.
 - The first host-neutral scalar schema and linked language runners are implemented. General providers and private-state commit/failure rules remain separate work. This file does not preempt the [portable runtime contract](../designs/portable-runtime.md).
 - Existing local receipts prove a development-ledger subset. Public-network deployment, production assurance, full transaction-atomicity coverage and whole-language equivalence are unverified.

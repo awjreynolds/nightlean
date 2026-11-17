@@ -1,6 +1,6 @@
 # Ledger 9 ZKIR capability matrix
 
-Context pointer: [ticket 14, Audit source-level ZKIR and ledger capabilities beyond Compact](https://github.com/awjreynolds/nightlean/issues/14)
+Context pointer: [ticket 14, Audit source-level ZKIR and ledger capabilities beyond Compact](https://github.com/awjreynolds/noctium/issues/14)
 
 Research checked on 2026-11-16 against pinned Midnight sources and release notes. This is a source audit, not a compile, proof, or deployment test.
 
@@ -40,7 +40,7 @@ ZKIR is a straight-line circuit relation format. It does not define a contract l
 | Typed field, byte, and curve operations | Yes. Fifteen types and 47 instruction variants in the pinned Rust source. | Ledger pins the ZKIR and circuit library builds. This proves the component versions in the build, not that every source operation has a supported public authoring or deployment route. | Partial public evidence. Compact 0.36 documents SHA-512, Secp256r1/P256, Curve25519, and associated verification features. Its release notes do not map the full ZKIR operation set to source constructs. | Not established per operation. |
 | Private/public circuit inputs and outputs | Yes. The ZKIR source models public and private transcript reads and typed outputs. | Ledger 9.1.0.1 documents versioned proofs, public-input accounting, call transcripts, and stricter transcript validation. Binding an arbitrary non-Compact schema to those structures is unverified. | Yes, through Compact witness declarations and its documented proof flow. | Not established. |
 | Conditional public inputs (`Impact`) | Yes, as a ZKIR instruction. Its code describes guarded Native public inputs and activity data. | Ledger release notes establish transcript and public-input validation, not a standalone public compiler interface for this operation. | Mapping to a Compact source capability is unknown from reviewed release notes. | Not established. |
-| Contract state, events, and cross-contract calls | Not part of the ZKIR instruction set. | Ledger 9 and the v4 on-chain runtime execute calls and validate state transcripts. | Compact 0.36 release notes document cross-contract behavior and ledger 9 notes list events and calls on the Compact path. | No reviewed source documents the complete direct-ZKIR binding and generated contract package for Nightlean. |
+| Contract state, events, and cross-contract calls | Not part of the ZKIR instruction set. | Ledger 9 and the v4 on-chain runtime execute calls and validate state transcripts. | Compact 0.36 release notes document cross-contract behavior and ledger 9 notes list events and calls on the Compact path. | No reviewed source documents the complete direct-ZKIR binding and generated contract package for Noctium. |
 
 “Present in source” means the pinned repository contains the implementation. “Ledger acceptance” means there is evidence for that capability at a layer relevant to transaction verification. These are separate claims. Library code, ZKIR parser support, a prover API, and a ledger-accepted contract call do not imply one another without integration evidence.
 
@@ -48,7 +48,7 @@ ZKIR is a straight-line circuit relation format. It does not define a contract l
 
 Compact 0.36 is one producer for this stack, not a description of every source-level ZKIR or ledger capability. Its release notes establish a subset of features, and say its compiler emits 3.1 while its bundled binary comes from a 3.2.0 pre-release. The ZKIR 3.2 release notes document additional types and operations in the implementation. They also say the minor version is a label and no instruction is gated by it. The version difference alone therefore does not prove those operations are unavailable from Compact. The notes do not provide a complete Compact-to-ZKIR mapping.
 
-This audit did not confirm a specific feature that the ledger supports but Compact cannot express. It also did not prove Compact covers all ledger or prover capabilities. The evidence supports leaving the question open and building an explicit capability matrix from source and integration tests before committing Nightlean to any broader feature list.
+This audit did not confirm a specific feature that the ledger supports but Compact cannot express. It also did not prove Compact covers all ledger or prover capabilities. The evidence supports leaving the question open and building an explicit capability matrix from source and integration tests before committing Noctium to any broader feature list.
 
 ## Specification status
 
@@ -59,7 +59,7 @@ The ZKIR 3.2 source tree contains an Agda formalization and a language specifica
 
 ## Recommendation
 
-Keep Nightlean's source semantics and compiler implementation in Lean. Model circuit relations, witness/public-input boundaries, typed outputs, contract state effects, and transaction bindings as separate parts of an extensible compiler representation. Keep the ledger/ZKIR/proving target profile versioned independently from the source model.
+Keep Noctium's source semantics and compiler implementation in Lean. Model circuit relations, witness/public-input boundaries, typed outputs, contract state effects, and transaction bindings as separate parts of an extensible compiler representation. Keep the ledger/ZKIR/proving target profile versioned independently from the source model.
 
 Use this report as a capability audit starting point, not a feature promise. For each proposed feature, record four facts: the implementation source, the relevant ledger/prover acceptance boundary, whether Compact exposes it, and a tested end-to-end artifact path. Add support tickets for confirmed ledger-backed capabilities after the source comparison and first vertical slice. Do not use Compact's feature list to exclude a lower-level capability, and do not use low-level source presence alone to promise deployability.
 
@@ -69,6 +69,6 @@ Use this report as a capability audit starting point, not a feature promise. For
 - Which operations does Compact 0.36 emit in real generated ZKIR, versus operations the 3.2 checker/prover accepts but the compiler does not currently emit?
 - Is there a stable language-independent API for building the witness schema, public statement, transcript binding, contract artifacts, and call metadata?
 - Which capabilities in ledger and prover source are absent from Compact's source language, rather than simply undocumented in the reviewed release notes?
-- Which of those candidates should enter Nightlean's post-v1 support set after a compatibility spike?
+- Which of those candidates should enter Noctium's post-v1 support set after a compatibility spike?
 
-These questions become source-level and integration work in the Nightlean backlog. The private one-time claim is only the first program used to validate the compiler and runtime boundary.
+These questions become source-level and integration work in the Noctium backlog. The private one-time claim is only the first program used to validate the compiler and runtime boundary.

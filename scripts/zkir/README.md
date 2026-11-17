@@ -10,6 +10,6 @@ For the complete source-driven native deployment and claim, follow [the native w
 
 `node scripts/zkir/claim-witness.mjs /private/tmp/claim-witness.json` separately produces development values for the standalone relation example. This witness file belongs outside tracked source.
 
-With the Nightlean localnet proof server on loopback port 16300, run `node scripts/zkir/prove-relation.mjs INPUT.zkir KEY.prover KEY.verifier /private/tmp/claim-witness.json /private/tmp/claim.proof`. Override the loopback URL with `NIGHTLEAN_PROOF_SERVER` if needed. The harness performs official preprocessing checks and sends a native proof request. The server self-verifies before returning success.
+With the Noctium localnet proof server on loopback port 16300, run `node scripts/zkir/prove-relation.mjs INPUT.zkir KEY.prover KEY.verifier /private/tmp/claim-witness.json /private/tmp/claim.proof`. Override the loopback URL with `NIGHTLEAN_PROOF_SERVER` if needed. The harness performs official preprocessing checks and sends a native proof request. The server self-verifies before returning success.
 
 The experimental harness serializes explicit standalone relation statement vectors. These are synthetic transcript data, not a ledger's encoded Impact call transcript. A successful proof here does not establish ledger state reads, replay rejection, transaction acceptance, or Preview deployment. See `docs/development/backend-spike.md` for observed results and the remaining binding boundary.

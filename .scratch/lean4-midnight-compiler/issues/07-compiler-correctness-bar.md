@@ -1,6 +1,6 @@
 # 07: Set the compiler correctness bar
 
-> Current source of truth: [public issue #5](https://github.com/awjreynolds/nightlean/issues/5). Use GitHub for the latest decision and dependencies.
+> Current source of truth: [public issue #5](https://github.com/awjreynolds/noctium/issues/5). Use GitHub for the latest decision and dependencies.
 
 Type: research
 

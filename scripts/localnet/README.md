@@ -1,4 +1,4 @@
-# Isolated Nightlean development chain
+# Isolated Noctium development chain
 
 The launcher uses the cached released Midnight node, native Rust toolkit, Proof Server 9, Indexer 4.4.101, and official Node.js relay images. The relay uses only Node's TCP API. Native contract funding and submission invoke the Rust toolkit executable. These commands do not invoke a source-language compiler or JavaScript contract adapter. The launcher creates only `nightlean-dev` containers and an internal network with the same name. Existing AuthZK containers and chains stay untouched.
 
@@ -28,7 +28,7 @@ NIGHTLEAN_PROOF_CACHE_EXTRA_SOURCE="$HOME/.cache/midnight/zk-params" \
 node scripts/localnet/stack.mjs up
 ```
 
-The launcher copies missing parameter files into Nightlean's own directory, including dereferencing any source links. It checks the qualified k9 parameter's SHA-256 before starting. Other parameters must come from a source you have already verified. All image digests are pinned in `stack.mjs`. Docker must already contain those images. The launch command uses `--pull never` and does not download a replacement.
+The launcher copies missing parameter files into Noctium's own directory, including dereferencing any source links. It checks the qualified k9 parameter's SHA-256 before starting. Other parameters must come from a source you have already verified. All image digests are pinned in `stack.mjs`. Docker must already contain those images. The launch command uses `--pull never` and does not download a replacement.
 
 Missing parameter files triggered an `os error 30` when an earlier setup mounted the incomplete shared cache read-only. The repaired server uses the dedicated writable cache, with the missing k9 copied from the official native compiler's verified cache. To apply a cache repair while keeping the node and indexer's chain state:
 

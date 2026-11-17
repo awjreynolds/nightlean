@@ -1,6 +1,6 @@
 # Compiler assurance status
 
-Checked 2026-11-16. This report tracks [Establish semantic-preservation and backend conformance checks](https://github.com/awjreynolds/nightlean/issues/21). The ticket remains open because the backend transformations and external ledger boundary are not fully proved.
+Checked 2026-11-16. This report tracks [Establish semantic-preservation and backend conformance checks](https://github.com/awjreynolds/noctium/issues/21). The ticket remains open because the backend transformations and external ledger boundary are not fully proved.
 
 ## Kernel-checked compiler transformation
 

@@ -1,6 +1,6 @@
 # Scalar disclosure policy
 
-Nightlean rejects undisclosed private value and control origins at the current public source sinks. The executable policy lives in `Nightlean/Disclosure.lean`. The Lean compiler checks source declarations, checks again before artifact emission, and applies the policy at the public typed-IR ZKIR and Impact lowering entrypoints.
+Noctium rejects undisclosed private value and control origins at the current public source sinks. The executable policy lives in `Nightlean/Disclosure.lean`. The Lean compiler checks source declarations, checks again before artifact emission, and applies the policy at the public typed-IR ZKIR and Impact lowering entrypoints.
 
 This is DF-00, the current scalar-language policy. Composite values, source functions, structured guarded effects, general providers and native-wide propagation require their own rules. Structured `if` statements remain unsupported. This pass does not establish timing, failure-channel or whole-program noninterference.
 
@@ -16,7 +16,7 @@ Private parameters carry their name and source span as private origins. Explicit
 Use `disclose(value)` to authorize a particular value at a visible source location. The annotation retains a `SourceSpan` in the typed AST. It neither publishes the value by itself nor changes its computation, range checks or proof constraints. The existing native JSON and ZKIR lowerers erase the annotation, preserving their ABI and witness layout.
 
 ```lean
-nightlean_circuit release where
+noctium_circuit release where
   private secret : UInt 8
   output result : UInt 8 := disclose(secret)
 end

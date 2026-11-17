@@ -24,7 +24,7 @@ Zero-length vectors and byte sequences represent empty values in this source mod
 
 [`tests/composite-types/manifest.json`](../../tests/composite-types/manifest.json) records the current source layout leaves. Native, Bool and UInt each occupy one logical field slot; their respective canonicality/range constraints remain distinct. A byte occupies one UInt8-shaped field. An enum uses a checked UInt tag with maximum `variantCount - 1`, then a payload area sized to the largest variant. The proposed policy pads shorter variants with zero slots.
 
-The enum tag and padding rules describe the source layout proposal. This package does not claim correspondence with the current native ledger ABI, ZKIR aggregate encoding or proof relation. Those rules need an explicit checked flattening transformation and native conformance evidence before Nightlean enables aggregate deployment.
+The enum tag and padding rules describe the source layout proposal. This package does not claim correspondence with the current native ledger ABI, ZKIR aggregate encoding or proof relation. Those rules need an explicit checked flattening transformation and native conformance evidence before Noctium enables aggregate deployment.
 
 ## Bytes32 map-key slice
 

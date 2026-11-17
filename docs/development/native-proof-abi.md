@@ -1,6 +1,6 @@
 # Native proof ABI phase A
 
-Noctium's phase A native proof ABI lets a host authenticate a native bundle, prepare one proof session, obtain a proof request, and ask the Rust runtime to verify and attach a returned proof. The C ABI is declared in [`nightlean_native.h`](../../runtime/include/nightlean_native.h). [`native_cpp_smoke.cpp`](../../runtime/tests/native_cpp_smoke.cpp) shows a linked C++ caller and its adversarial reply checks. The exported `NIGHTLEAN_*` names remain Nightlean compatibility identifiers.
+Noctium's phase A native proof ABI lets a host authenticate a native bundle, prepare one proof session, obtain a proof request, and ask the Rust runtime to verify and attach a returned proof. The C ABI is declared in [`nightlean_native.h`](../../runtime/include/nightlean_native.h). [`native_cpp_smoke.cpp`](../../runtime/tests/native_cpp_smoke.cpp) shows a linked C++ caller and its adversarial reply checks. The exported `NIGHTLEAN_*` names remain Noctium compatibility identifiers.
 
 Phase A ends with an unfunded, unsubmitted public intent projection. Its bounded completed session retains the typed, unsealed `ProvedIntent` internally until the host frees the session. Phase A exposes no private-intent serialization or funding operation. The [phase B native client ABI](native-client-abi.md) extends the header with explicit funding, signing, submission, receipt, and journal requests while preserving phase A behavior.
 

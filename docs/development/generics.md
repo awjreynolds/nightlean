@@ -18,17 +18,17 @@ source declarations differ. Generated helper names are collision-checked and
 calls target those exact names, including when different type arguments have
 the same flattened runtime shape.
 
-Use `nightlean_generic_circuit` to register one selected export as a regular
+Use `noctium_generic_circuit` to register one selected export as a regular
 circuit:
 
 ```lean
 import Nightlean.Compiler
-open scoped Nightlean
+open scoped Noctium
 open Nightlean.Helpers.Specialization
 
 private def genericProgram : Program := ...
 
-nightlean_generic_circuit concreteCircuit from genericProgram entry "export"
+noctium_generic_circuit concreteCircuit from genericProgram entry "export"
 ```
 
 The frontend stores the generated concrete program and its versioned signature
@@ -44,7 +44,7 @@ substitution, caches instances by structural declaration ID and ordered
 normalized arguments, and enforces hard limits on helper and type instances,
 retained composite declarations and layout nodes, work, argument count, depth
 and natural values. Active recursive or growing specializations fail with a
-Noctium cycle diagnostic. These are Nightlean implementation caps,
+Noctium cycle diagnostic. These are Noctium implementation caps,
 not Compact language limits. [Module visibility](https://github.com/awjreynolds/noctium/issues/47)
 and [finite iteration](https://github.com/awjreynolds/noctium/issues/48) remain separate work.
 

@@ -1,4 +1,4 @@
-# Portable witness execution: Noir, Aztec, Circom, and Nightlean
+# Portable witness execution: Noir, Aztec, Circom, and Noctium
 
 Research checked on 2026-11-16. This report separates verified implementation facts from architectural recommendations. No runtime was built or benchmarked for this research.
 
@@ -6,11 +6,11 @@ Research checked on 2026-11-16. This report separates verified implementation fa
 
 Keep Lean 4 as the compiler. Give the compiler-owned witness/execution plan a versioned, host-neutral format and implement one resumable execution core, preferably in Rust. Ship this core as a native library and as WebAssembly. Put storage, keys, network access, entropy, and user interaction behind an explicit provider protocol. Keep circuit proving behind a separate adapter.
 
-For Nightlean's present plan, a small interpreter for the compiler-owned plan is the lowest-risk starting point. Native Rust, a C ABI, Android JNI, and Swift bindings would share the implementation. A browser would run its WASM build. This avoids implementing the same field arithmetic, transcript serialization, and plan semantics in each host language.
+For Noctium's present plan, a small interpreter for the compiler-owned plan is the lowest-risk starting point. Native Rust, a C ABI, Android JNI, and Swift bindings would share the implementation. A browser would run its WASM build. This avoids implementing the same field arithmetic, transcript serialization, and plan semantics in each host language.
 
 Per-program WASM is a valid later target, especially for general application-supplied computations or distributing one executable witness artifact. Require the same provider protocol and bounded execution contract. Do not make a direct Lean-to-WASM compiler backend, a general WASM runtime in every native application, or a new proving VM prerequisites for removing Node.
 
-This is a recommendation derived from the comparisons below, not an existing Nightlean implementation or a claim about measured performance.
+This is a recommendation derived from the comparisons below, not an existing Noctium implementation or a claim about measured performance.
 
 ## Separate the responsibilities
 
@@ -36,7 +36,7 @@ Brillig implements general unconstrained computation and foreign calls. Its docu
 
 The separate `acvm_js` implementation uses `wasm_bindgen`, JavaScript witness-map types, and asynchronous exported functions. Its execution loop awaits a JavaScript foreign-call handler, then feeds the result back to the Rust VM. Therefore the distributed JS-facing WASM wrapper is not evidence of a standalone WASI module or a host-independent import ABI. A native host would embed the Rust core or need a different wrapper. [JS/WASM execution wrapper](https://github.com/noir-lang/noir/blob/e5a1160aa6dea59567a95f382a366e72dd0ffa86/acvm-repo/acvm_js/src/execute.rs)
 
-Lesson for Nightlean: copy the separation between program format, deterministic executor, foreign-call protocol, and language wrapper. Adopting Noir or Brillig as Nightlean's compiler backend is not necessary. This inspection establishes Rust embedding and the JS/WASM wrapper, not an official supported ACVM SDK for all of C++, Kotlin, and Swift.
+Lesson for Noctium: copy the separation between program format, deterministic executor, foreign-call protocol, and language wrapper. Adopting Noir or Brillig as Noctium's compiler backend is not necessary. This inspection establishes Rust embedding and the JS/WASM wrapper, not an official supported ACVM SDK for all of C++, Kotlin, and Swift.
 
 ## Verified comparison: Aztec
 
@@ -52,7 +52,7 @@ The inspected `aztec-packages` commit is `e5a1cbe62b51ed89cf30047ffd03be786cfdb7
 
 PXE's package exports JavaScript entry points and depends on `bb.js`, Noir JS packages, the simulator, a key store, and a KV store. Its manifest declares Node `>=24`, although the distinct client entries support browser packaging. Neither the manifest nor the inspected simulator source establishes a ready-made Rust/C++/Kotlin/Swift PXE. [PXE package](https://github.com/aztec-labs-eng/aztec-node/blob/677343f0ea25c0b20b60a648cbf80e8207dfec13/yarn-project/pxe/package.json)
 
-Lesson for Nightlean: adopt the separation of private-state providers, oracle ABI, execution, and proving. Do not treat Aztec's WASM internals or native protocol simulator as proof of a language-neutral wallet stack. Aztec's oracle versioning is also a useful precedent for explicit compatibility between compiled programs and host capabilities. [Oracle versioning](https://docs.aztec.network/developers/docs/foundational-topics/pxe#oracle-versioning)
+Lesson for Noctium: adopt the separation of private-state providers, oracle ABI, execution, and proving. Do not treat Aztec's WASM internals or native protocol simulator as proof of a language-neutral wallet stack. Aztec's oracle versioning is also a useful precedent for explicit compatibility between compiled programs and host capabilities. [Oracle versioning](https://docs.aztec.network/developers/docs/foundational-topics/pxe#oracle-versioning)
 
 ## Verified comparison: Circom
 
@@ -60,24 +60,24 @@ Circom documents two generated witness calculators: WASM and C++. Both compute s
 
 At commit `9b4b23331644e17868c90a85768826ed3bcba59f`, the WASM calculator wrapper instantiates a module with imports under `runtime` for error/log handling. It feeds field limbs and signal identifiers through exports, reads witness values, and serializes WTNS. The generated launcher uses Node `fs` and process arguments. A different embedder would need to implement this import/export and data-layout contract rather than run the launcher unchanged. [Calculator wrapper](https://github.com/iden3/circom/blob/9b4b23331644e17868c90a85768826ed3bcba59f/code_producers/src/wasm_elements/common/witness_calculator.js) [Node launcher](https://github.com/iden3/circom/blob/9b4b23331644e17868c90a85768826ed3bcba59f/code_producers/src/wasm_elements/common/generate_witness.js)
 
-Lesson for Nightlean: portable computation still needs an ABI and artifact format. WASM alone does not specify field encoding, schema validation, witness serialization, storage, or host capabilities. Generated C++ is another valid route, with a separate per-program native build/distribution burden.
+Lesson for Noctium: portable computation still needs an ABI and artifact format. WASM alone does not specify field encoding, schema validation, witness serialization, storage, or host capabilities. Generated C++ is another valid route, with a separate per-program native build/distribution burden.
 
 ## Native embeddings and mobile constraints
 
-| Host | Practical Nightlean route, recommended | Verified runtime precedent and limits |
+| Host | Practical Noctium route, recommended | Verified runtime precedent and limits |
 | --- | --- | --- |
 | Rust | Link the execution-core crate directly. Use WASM interpretation for separately supplied guest code if needed. | Noir has a native Rust ACVM. Wasmi supplies a Rust interpreter with fuel metering and a C API. |
 | C++ | Call a small C ABI over the same core, with opaque handles and owned byte buffers. | Wasmtime has a C API and a C++ asynchronous-host-function example. Wasmi implements the Wasm C API. |
-| Kotlin/Android | Call the native core through a narrow JNI layer. Keep coroutine scheduling, secure storage, and networking in Kotlin. | Android documents JNI interoperability for Kotlin and Java. Nightlean-specific JNI packaging still needs implementation and device tests. |
+| Kotlin/Android | Call the native core through a narrow JNI layer. Keep coroutine scheduling, secure storage, and networking in Kotlin. | Android documents JNI interoperability for Kotlin and Java. Noctium-specific JNI packaging still needs implementation and device tests. |
 | Swift/iOS | Link a native library through a C interface, or embed an interpreter for portable WASM programs. Keep provider work in Swift tasks. | WasmKit is an embeddable Swift runtime. Its pinned README lists iOS 18+ as expected to work, but lists continuous testing on macOS, Linux, Android, and Windows, not iOS. |
 
-Wasmi's inspected commit `d6188fb1835a8fbfcb2208e00ff7c2c5d5de1392` documents interpretation, fuel metering, `no_std` operation, and the C API. Its feature matrix lists threads, GC, and exception handling as planned rather than implemented. This is a plausible conservative runtime for scalar witness programs, not a claim of a validated Nightlean mobile SDK. [Wasmi](https://github.com/wasmi-labs/wasmi/blob/d6188fb1835a8fbfcb2208e00ff7c2c5d5de1392/README.md)
+Wasmi's inspected commit `d6188fb1835a8fbfcb2208e00ff7c2c5d5de1392` documents interpretation, fuel metering, `no_std` operation, and the C API. Its feature matrix lists threads, GC, and exception handling as planned rather than implemented. This is a plausible conservative runtime for scalar witness programs, not a claim of a validated Noctium mobile SDK. [Wasmi](https://github.com/wasmi-labs/wasmi/blob/d6188fb1835a8fbfcb2208e00ff7c2c5d5de1392/README.md)
 
-WasmKit commit `6558e71635384e4c7e371297a30656b89dd2682c` documents an embeddable Swift library, an engine without external package dependencies, and a component model still in progress. The inspected branch requires Swift 6.3. These requirements need a release choice matched to Nightlean's supported iOS versions. [WasmKit](https://github.com/swiftwasm/WasmKit/blob/6558e71635384e4c7e371297a30656b89dd2682c/README.md)
+WasmKit commit `6558e71635384e4c7e371297a30656b89dd2682c` documents an embeddable Swift library, an engine without external package dependencies, and a component model still in progress. The inspected branch requires Swift 6.3. These requirements need a release choice matched to Noctium's supported iOS versions. [WasmKit](https://github.com/swiftwasm/WasmKit/blob/6558e71635384e4c7e371297a30656b89dd2682c/README.md)
 
 Wasmtime documents desktop OSes as its primary support, with Android and iOS supported but less tested. Its Cranelift/Winch modes require creating executable memory pages, including when loading AOT output. Therefore AOT alone does not establish a suitable iOS deployment route. [Platform support](https://docs.wasmtime.dev/stability-platform-support.html)
 
-Pulley provides an interpreter route through Wasmtime's existing Rust and C APIs. Its bytecode depends on pointer width, endianness, and Wasmtime version. Treat a precompiled Pulley artifact as an engine-specific cache, not Nightlean's portable canonical artifact. Its documentation expects slower execution than native compiled code. No Nightlean workload was measured. [Pulley](https://docs.wasmtime.dev/examples-pulley.html)
+Pulley provides an interpreter route through Wasmtime's existing Rust and C APIs. Its bytecode depends on pointer width, endianness, and Wasmtime version. Treat a precompiled Pulley artifact as an engine-specific cache, not Noctium's portable canonical artifact. Its documentation expects slower execution than native compiled code. No Noctium workload was measured. [Pulley](https://docs.wasmtime.dev/examples-pulley.html)
 
 Apple documents restrictions on writable/executable memory and dynamic code-signing entitlements. For ordinary iOS application design, choose a non-JIT interpreter for dynamic programs or statically linked native code for fixed runtime components. This is an engineering recommendation, not a completed App Store policy review. [Apple runtime security](https://support.apple.com/en-ie/guide/security-pdf/sec15bfe098e/1/web/1)
 
@@ -122,4 +122,4 @@ Resolve these gaps with one bounded prototype before selecting packaging:
 4. Inventory ledger-v9 hashing, alignment, state operations, transcript partitioning, and prototype construction. Establish the supported non-JS route for each call.
 5. Confirm the ZKIR/proving adapter remains the sole owner of circuit intermediates and accepts the portable executor's output unchanged.
 
-No checked source establishes an off-the-shelf Noir or Aztec native wallet stack spanning all four requested host languages. The evidence supports shared portable computation with explicit provider bindings. Nightlean still needs its own ABI, compatibility tests, and mobile packaging.
+No checked source establishes an off-the-shelf Noir or Aztec native wallet stack spanning all four requested host languages. The evidence supports shared portable computation with explicit provider bindings. Noctium still needs its own ABI, compatibility tests, and mobile packaging.

@@ -2,9 +2,9 @@
 
 Issue 41 uses structured Lean source declarations, without a Compact dependency.
 `Nightlean.Helpers.Program` contains lexical scopes, typed named declarations and
-monomorphic exports. `nightlean_helper_circuit name from program entry "export"`
+monomorphic exports. `noctium_helper_circuit name from program entry "export"`
 checks and registers an export in the existing frontend. Existing
-`nightlean_contract` entries then use the resulting circuit normally.
+`noctium_contract` entries then use the resulting circuit normally.
 
 See [the complete source example](../../tests/HelperSource.lean). Its `relation`
 helper calls a forward-declared `square`, checks the result against a public
@@ -13,7 +13,7 @@ express the same scalar relation. `HelperContract` uses the composed relation
 with a native state-cell write.
 
 ```lean
-import Nightlean.Frontend
+import Noctium.Frontend
 open Nightlean.Helpers
 
 def arithmeticHelpers : Program := {
@@ -32,11 +32,11 @@ def arithmeticHelpers : Program := {
   }]
 }
 
-open scoped Nightlean
-nightlean_helper_circuit doubleRelation from arithmeticHelpers entry "double"
+open scoped Noctium
+noctium_helper_circuit doubleRelation from arithmeticHelpers entry "double"
 ```
 
-Declare structured programs before opening the Nightlean syntax scope, or use
+Declare structured programs before opening the Noctium syntax scope, or use
 `Bool.true` and `Bool.false` for Lean Boolean fields. The scope reserves source
 keywords such as `true`, `false` and `output`.
 
@@ -191,7 +191,7 @@ the parent ceremony stays external.
 Regenerate source artifacts through the matching target:
 
 ```sh
-lake exe nightlean compile tests/HelperSource.lean \
+lake exe noctium compile tests/HelperSource.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
   --output /private/tmp/nightlean-helper-source-321
 ```

@@ -6,20 +6,20 @@ Observed 2026-11-16. This evidence qualifies the local contract path. Preview ac
 
 ## Source and route
 
-The source was `examples/PrivateClaim.lean`, SHA-256 `5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771`. The source frontend elaborated its circuit and contract declarations into Nightlean's typed model. Nightlean then emitted an optional Compact packaging adapter while retaining its Lean direct ZKIR backend.
+The source was `examples/PrivateClaim.lean`, SHA-256 `5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771`. The source frontend elaborated its circuit and contract declarations into Noctium's typed model. Noctium then emitted an optional Compact packaging adapter while retaining its Lean direct ZKIR backend.
 
 Commands executed from the repository root:
 
 ```sh
 lake build
-.lake/build/bin/nightlean compile examples/PrivateClaim.lean --adapter compact --output /private/tmp/nightlean-source-adapter
+.lake/build/bin/noctium compile examples/PrivateClaim.lean --adapter compact --output /private/tmp/nightlean-source-adapter
 /private/tmp/nightlean-backend-spike/compact-native/compactc /private/tmp/nightlean-source-adapter/PrivateClaim.compact /private/tmp/nightlean-backend-spike/source-claim-out
 node scripts/localnet/deploy-claim.mjs /private/tmp/nightlean-backend-spike/source-claim-out /private/tmp/nightlean-local-claim4
 ```
 
 The generated adapter's SHA-256 was `448ea7090f029e2fb8e6974ff8368d61420288561b744585ec6171dc1edc51f6`. The official compiler was Compact 0.36.0, commit `b5d9e4dfc532fe47011c4f6296e254f4853eb469`, language 0.28.0, runtime 0.21.0. The verifier key's SHA-256 was `b6354b0aaf6996b8c882e829910798d1fc2a925521a74175169a16604504d820`.
 
-The bounded hash adapter was checked against Native Poseidon field vectors before this run. Its fixed three-field vector uses the same hash inputs as Nightlean's `poseidon2(domain,a,b)`. This workload's source semantics remain defined by Nightlean and the qualified ledger/proving interfaces.
+The bounded hash adapter was checked against Native Poseidon field vectors before this run. Its fixed three-field vector uses the same hash inputs as Noctium's `poseidon2(domain,a,b)`. This workload's source semantics remain defined by Noctium and the qualified ledger/proving interfaces.
 
 ## Network and transaction evidence
 
@@ -43,7 +43,7 @@ The private witness values used for this run are public development fixtures onl
 
 ## Environment repair during qualification
 
-The first native proof attempt reached checking but lacked the k=9 public parameter in a read-only shared cache. The service owner created a separate Nightlean cache and copied the verified public k=9 file downloaded by the official native compiler, leaving the AuthZK cache unchanged. The successful run used the repaired owned proof service. The toolkit's JavaScript heap is bounded to 768 MiB to avoid Docker memory pressure from concurrent local services.
+The first native proof attempt reached checking but lacked the k=9 public parameter in a read-only shared cache. The service owner created a separate Noctium cache and copied the verified public k=9 file downloaded by the official native compiler, leaving the AuthZK cache unchanged. The successful run used the repaired owned proof service. The toolkit's JavaScript heap is bounded to 768 MiB to avoid Docker memory pressure from concurrent local services.
 
 ## Remaining gate
 
@@ -56,4 +56,4 @@ An independent Polkadot RPC observer then verified both ledger transaction hashe
 - Deployment: block 92, hash `0x594486ca9ef319aa7b119a9cc015d76ae1f304dd7c1c56181aa127a7bfefe14f`, extrinsic index 4, extrinsic hash `0x379aa3be5100c3beba44ca91fe54ae00aa390552ae7f827881b7477b624b8ff0`, contract event `ContractDeploy`.
 - Valid claim: block 98, hash `0x09282cce44617c484269634b657336e101920b0617bed4bca7ca3c1095b877bb`, extrinsic index 4, extrinsic hash `0x69e5e20d873a5af6043530df9b90e02978a761c2813860ffa598a6d23234db2b`, contract event `ContractCall`.
 
-Reproduce using `NIGHTLEAN_WALLET_DEPENDENCIES=/private/tmp/nightlean-preview-wallet node scripts/localnet/receipt.mjs TX_HASH CONTRACT_ADDRESS ContractDeploy 75` for deployment, or `ContractCall 75` for the claim. The configured dependency directory contains the locked Nightlean wallet SDK's Polkadot API dependency. The observer pins the development genesis and runtime and reads finalized blocks only.
+Reproduce using `NIGHTLEAN_WALLET_DEPENDENCIES=/private/tmp/nightlean-preview-wallet node scripts/localnet/receipt.mjs TX_HASH CONTRACT_ADDRESS ContractDeploy 75` for deployment, or `ContractCall 75` for the claim. The configured dependency directory contains the locked Noctium wallet SDK's Polkadot API dependency. The observer pins the development genesis and runtime and reads finalized blocks only.

@@ -1,6 +1,6 @@
 # 01: Map the deployable Midnight backend boundary
 
-> Current source of truth: [public issue #3](https://github.com/awjreynolds/nightlean/issues/3). Use GitHub for the latest decision and dependencies.
+> Current source of truth: [public issue #3](https://github.com/awjreynolds/noctium/issues/3). Use GitHub for the latest decision and dependencies.
 
 Type: research
 

@@ -1,6 +1,6 @@
 # Native private claim accepted on localnet
 
-On 2026-11-16, the actual `examples/PrivateClaim.lean` source compiled through Nightlean's Lean frontend, typed circuit/state model, native entrypoint lowerer, and symbolic Impact plan exporter. Native runtime helpers assembled ledger artifacts, the official final ZKIR 3.2.0 tool generated keys, and the isolated ledger accepted deployment and a private one-time claim. This route invokes no Compact compiler, runtime, source adapter, or generated contract bindings.
+On 2026-11-16, the actual `examples/PrivateClaim.lean` source compiled through Noctium's Lean frontend, typed circuit/state model, native entrypoint lowerer, and symbolic Impact plan exporter. Native runtime helpers assembled ledger artifacts, the official final ZKIR 3.2.0 tool generated keys, and the isolated ledger accepted deployment and a private one-time claim. This route invokes no Compact compiler, runtime, source adapter, or generated contract bindings.
 
 ## Accepted evidence
 
@@ -13,7 +13,7 @@ The machine-readable evidence is [native-localnet-receipts.json](native-localnet
 - The fetched accepted public state matches the native predicted state byte for byte. SHA-256: `d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3`.
 - Serialized claim transaction SHA-256: `9f4eada8cdbb6d7c53ae3ee009c610e01a12c5d6c0007368ce0fc52fdf9adbc0`.
 
-The network is `undeployed`, genesis `0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d`, runtime `2001100`, transaction version `4`. Funding uses the published synthetic development identity on Nightlean's isolated chain.
+The network is `undeployed`, genesis `0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d`, runtime `2001100`, transaction version `4`. Funding uses the published synthetic development identity on Noctium's isolated chain.
 
 ## Source and toolchain provenance
 

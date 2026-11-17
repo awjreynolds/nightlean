@@ -1,6 +1,6 @@
 # Bounded scalar semantics
 
-The feature reference is Compact 0.36.1 at `7fa3a117c5e7efe9d2c51da04263e5f0b3509144`. Nightlean uses its observed scalar semantics as a comparison contract. The source syntax, typed representation and backend remain Nightlean's own.
+The feature reference is Compact 0.36.1 at `7fa3a117c5e7efe9d2c51da04263e5f0b3509144`. Noctium uses its observed scalar semantics as a comparison contract. The source syntax, typed representation and backend remain Noctium's own.
 
 `Nightlean/ScalarPolicy.lean` is the executable policy foundation. The bounded scalar slice now extends this policy through the circuit DSL, native lowering and runtime ABI. A selected source program has [finalized local ledger evidence](../development/unsigned-localnet.md). The feature matrix remains unverified for full equivalence.
 
@@ -24,6 +24,6 @@ Boolean arithmetic requires an explicit conversion. A mixed field/unsigned opera
 
 The compiler implements typed expressions, source elaboration/coercion, checked inputs and ledger reads, circuit range constraints, canonical runtime encodings and matching scalar evaluation. Lean proves addition/multiplication do not wrap within accepted result bounds and field-wrapped underflow fails every supported unsigned range. Thirty-four direct circuit cases bypass runtime validation, and the selected integer state round trip has finalized local receipts.
 
-This is not a proof of compiler correctness or complete scalar feature equivalence. Nominal aliases, composite subtyping, additional operators and guarded execution remain separate packages. Ordinary source numbers retain their existing Native interpretation except at an explicitly expected UInt declaration. `uint(n)` exposes a prefix-range literal. This Nightlean syntax distinction is deliberate and does not duplicate Compact's syntax.
+This is not a proof of compiler correctness or complete scalar feature equivalence. Nominal aliases, composite subtyping, additional operators and guarded execution remain separate packages. Ordinary source numbers retain their existing Native interpretation except at an explicitly expected UInt declaration. `uint(n)` exposes a prefix-range literal. This Noctium syntax distinction is deliberate and does not duplicate Compact's syntax.
 
 The policy has no Compact runtime or compiler dependency. No reference compiler was executed to obtain these results.

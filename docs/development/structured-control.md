@@ -98,17 +98,17 @@ private-state key and scalar type. The complete working source is
 [ControlSource.lean](../../tests/ControlSource.lean).
 
 ```lean
-open scoped Nightlean
-nightlean_control conditionalProviders from conditionalProvidersProgram
+open scoped Noctium
+noctium_control conditionalProviders from conditionalProvidersProgram
   entry "conditionalProviders"
 ```
 
-The `nightlean_control` command checks the program and creates a registered
+The `noctium_control` command checks the program and creates a registered
 portable plan. The ordinary compiler exports this registry separately from
 native circuits:
 
 ```sh
-lake exe nightlean compile tests/ControlSource.lean \
+lake exe noctium compile tests/ControlSource.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
   --output /private/tmp/nightlean-control-source
 ```

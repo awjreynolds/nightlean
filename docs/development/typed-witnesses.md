@@ -17,10 +17,10 @@ Declare `Helpers.WitnessSignature` values on `Helpers.Program.witnesses`. Each s
 Register a circuit with:
 
 ```lean
-nightlean_witness_circuit scalarRelation from scalarProgram entry "scalar"
+noctium_witness_circuit scalarRelation from scalarProgram entry "scalar"
 ```
 
-The registered circuit also works inside the existing `nightlean_contract` declaration. The source program stays available to the compiler for fresh type and disclosure checks.
+The registered circuit also works inside the existing `noctium_contract` declaration. The source program stays available to the compiler for fresh type and disclosure checks.
 
 ```sh
 lake exe noctium compile tests/WitnessSource.lean --output /tmp/noctium-witnesses

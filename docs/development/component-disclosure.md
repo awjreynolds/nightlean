@@ -1,9 +1,9 @@
 # Component-aware disclosure
 
-The `nightlean_component_circuit` command compiles an exported helper entry and checks disclosure for each public output component before the compiler writes circuit artifacts.
+The `noctium_component_circuit` command compiles an exported helper entry and checks disclosure for each public output component before the compiler writes circuit artifacts.
 
 ```lean
-nightlean_component_circuit componentRelease
+noctium_component_circuit componentRelease
   from componentDisclosureProgram entry "release"
 ```
 
