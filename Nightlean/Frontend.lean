@@ -125,21 +125,29 @@ scoped syntax (name := circuitCommand) "nightlean_circuit" ident "where" nlcstmt
 declare_syntax_cat nlstate
 scoped syntax "cell" ident ":" nltype : nlstate
 scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 
 declare_syntax_cat nleffect
 scoped syntax "read" ident "as" ident : nleffect
 scoped syntax "read" ident "[" nlexpr "]" "as" ident : nleffect
+scoped syntax "read" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "member" ident "[" nlexpr "]" "as" ident : nleffect
+scoped syntax "member" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "require" nlexpr : nleffect
 scoped syntax "absent" ident "[" nlexpr "]" : nleffect
 scoped syntax "write" ident ":=" nlexpr : nleffect
 scoped syntax "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
+scoped syntax "insert" ident "[" nlexpr "]" ":=" "emptyMap" : nleffect
+scoped syntax "insert" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlexpr : nleffect
+scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
 scoped syntax "when" nlexpr "read" ident "as" ident : nleffect
 scoped syntax "when" nlexpr "read" ident "[" nlexpr "]" "as" ident : nleffect
+scoped syntax "when" nlexpr "read" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "when" nlexpr "member" ident "[" nlexpr "]" "as" ident : nleffect
+scoped syntax "when" nlexpr "member" ident "[" nlexpr "]" "[" nlexpr "]" "as" ident : nleffect
 
 declare_syntax_cat nlstatement
 scoped syntax nleffect : nlstatement
@@ -329,6 +337,28 @@ private def checkedExpression (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty)
   let (found, value) ← expression env stx
   coerceExpression stx found ty value
 
+private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
+    (keys : List (TSyntax `nlexpr)) :
+    CommandElabM (List (TSyntax `term) × LedgerValueType) := do
+  match schema, keys with
+  | value, [] => pure ([], value)
+  | .scalar _, _ :: _ => throwError "nested map path continues through a scalar value"
+  | .map keyTy child, key :: rest => do
+    let lowered ← checkedExpression env key keyTy
+    let (tail, result) ← lowerTreePath env child rest
+    pure ((← `(Nightlean.PathKey.mk $(← tyTerm keyTy) $lowered)) :: tail, result)
+
+private def pathKeysTerm (keys : List (TSyntax `term)) : CommandElabM (TSyntax `term) := do
+  let keyTerms := keys.toArray
+  let list ← `([$keyTerms,*])
+  `(($list : List Nightlean.PathKey))
+
+private def treeStateSchema (schema : List (String × StateKind)) (storage : TSyntax `ident) :
+    CommandElabM LedgerValueType := do
+  match schema.lookup storage.getId.toString with
+  | some (.tree value) => pure value
+  | _ => throwErrorAt storage "nested path requires a declared recursive tree state"
+
 private def ensureFresh (env : Bindings) (id : TSyntax `ident) : CommandElabM Unit := do
   if env.any (fun p => p.1 == id.getId.toString) then
     throwErrorAt id "duplicate Nightlean value '{id.getId}'"
@@ -428,7 +458,9 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr require $_value:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr read $_state:ident as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr read $_state:ident [ $_key:nlexpr ] as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr read $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr member $_state:ident [ $_key:nlexpr ] as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr member $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] as $_dest:ident) => some condition
   | _ => none
 
 private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
@@ -498,6 +530,17 @@ private def elaborateEffect (schema : List (String × StateKind))
       $(stringTerm storage.getId.toString) $(stringTerm readName) $(← tyTerm ty))
     state := {updated with terms := updated.terms.push term}
     state ← bindReadName state destination.getId.toString readName ty
+  | `(nleffect| when $_:nlexpr read $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident)
+  | `(nleffect| read $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident) => do
+    let schema ← treeStateSchema schema storage
+    let (path, result) ← lowerTreePath state.env schema [owner, spender]
+    let .scalar ty := result | throwErrorAt effect "nested map read must select a scalar value"
+    let (readName, updated) ← freshReadName depth state destination
+    let keys ← pathKeysTerm path
+    let term ← `(Nightlean.Effect.readPath $(stringTerm storage.getId.toString)
+      $(stringTerm readName) $keys $(← tyTerm ty))
+    state := {updated with terms := updated.terms.push term}
+    state ← bindReadName state destination.getId.toString readName ty
   | `(nleffect| when $_:nlexpr read $storage:ident [ $key:nlexpr ] as $destination:ident)
   | `(nleffect| read $storage:ident [ $key:nlexpr ] as $destination:ident) => do
     let some (.map keyTy valueTy) := schema.lookup storage.getId.toString
@@ -509,17 +552,36 @@ private def elaborateEffect (schema : List (String × StateKind))
       $(← tyTerm keyTy) $(← tyTerm valueTy) $loweredKey)
     state := {updated with terms := updated.terms.push term}
     state ← bindReadName state destination.getId.toString readName valueTy
-  | `(nleffect| when $_:nlexpr member $storage:ident [ $key:nlexpr ] as $destination:ident)
-  | `(nleffect| member $storage:ident [ $key:nlexpr ] as $destination:ident) => do
-    let some (.map keyTy valueTy) := schema.lookup storage.getId.toString
-      | throwErrorAt storage "membership requires a declared state map"
+  | `(nleffect| when $_:nlexpr member $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident)
+  | `(nleffect| member $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident) => do
+    let schema ← treeStateSchema schema storage
+    let (path, _) ← lowerTreePath state.env schema [owner, spender]
     let (readName, updated) ← freshReadName depth state destination
-    let loweredKey ← checkedExpression updated.env key keyTy
-    let term ← `(Nightlean.Effect.readMember
-      $(stringTerm storage.getId.toString) $(stringTerm readName)
-      $(← tyTerm keyTy) $(← tyTerm valueTy) $loweredKey)
+    let keys ← pathKeysTerm path
+    let term ← `(Nightlean.Effect.memberPath $(stringTerm storage.getId.toString)
+      $(stringTerm readName) $keys)
     state := {updated with terms := updated.terms.push term}
     state ← bindReadName state destination.getId.toString readName .bool
+  | `(nleffect| when $_:nlexpr member $storage:ident [ $key:nlexpr ] as $destination:ident)
+  | `(nleffect| member $storage:ident [ $key:nlexpr ] as $destination:ident) => do
+    match schema.lookup storage.getId.toString with
+    | some (.map keyTy valueTy) =>
+      let (readName, updated) ← freshReadName depth state destination
+      let loweredKey ← checkedExpression updated.env key keyTy
+      let term ← `(Nightlean.Effect.readMember
+        $(stringTerm storage.getId.toString) $(stringTerm readName)
+        $(← tyTerm keyTy) $(← tyTerm valueTy) $loweredKey)
+      state := {updated with terms := updated.terms.push term}
+      state ← bindReadName state destination.getId.toString readName .bool
+    | some (.tree treeSchema) =>
+      let (path, _) ← lowerTreePath state.env treeSchema [key]
+      let (readName, updated) ← freshReadName depth state destination
+      let keys ← pathKeysTerm path
+      let term ← `(Nightlean.Effect.memberPath $(stringTerm storage.getId.toString)
+        $(stringTerm readName) $keys)
+      state := {updated with terms := updated.terms.push term}
+      state ← bindReadName state destination.getId.toString readName .bool
+    | _ => throwErrorAt storage "membership requires a declared state map"
   | `(nleffect| write $storage:ident := $value:nlexpr)
   | `(nleffect| when $_:nlexpr write $storage:ident := $value:nlexpr) => do
     let some (.cell ty) := schema.lookup storage.getId.toString
@@ -537,6 +599,24 @@ private def elaborateEffect (schema : List (String × StateKind))
     let term ← `(Nightlean.Effect.writeMap
       $(stringTerm storage.getId.toString) $(← tyTerm keyTy) $(← tyTerm valueTy)
       $loweredKey $loweredValue)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| insert $storage:ident [$owner:nlexpr] := emptyMap) => do
+    let schema ← treeStateSchema schema storage
+    let (path, result) ← lowerTreePath state.env schema [owner]
+    let .map _ _ := result | throwErrorAt effect "emptyMap assignment must select a map value"
+    let keys ← pathKeysTerm path
+    let term ← `(Nightlean.Effect.emptyMapPath $(stringTerm storage.getId.toString) $keys)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| insert $storage:ident [$owner:nlexpr] [$spender:nlexpr] := $value:nlexpr)
+  | `(nleffect| write $storage:ident [$owner:nlexpr] [$spender:nlexpr] := $value:nlexpr) => do
+    let schema ← treeStateSchema schema storage
+    let (path, result) ← lowerTreePath state.env schema [owner, spender]
+    let .scalar ty := result | throwErrorAt effect "nested scalar write must select a scalar value"
+    let loweredValue ← checkedExpression state.env value ty
+    let keys ← pathKeysTerm path
+    let term ← if effect.raw[0].getAtomVal == "insert" then
+      `(Nightlean.Effect.insertPath $(stringTerm storage.getId.toString) $keys $(← tyTerm ty) $loweredValue)
+      else `(Nightlean.Effect.writePath $(stringTerm storage.getId.toString) $keys $(← tyTerm ty) $loweredValue)
     state := {state with terms := state.terms.push term}
   | `(nleffect| absent $storage:ident [ $key:nlexpr ]) => do
     if depth > 0 then throwErrorAt effect "absent queries inside if/else blocks are unsupported"
@@ -593,6 +673,20 @@ private partial def elaborateStatements (schema : List (String × StateKind))
           let k ← readTy key
           let v ← readTy value
           pure (id, StateKind.map k v, ← `(Nightlean.StateKind.map $(← tyTerm k) $(← tyTerm v)))
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => $value:nltype) => do
+          let outerTy ← readTy outer
+          let innerTy ← readTy inner
+          let valueTy ← readTy value
+          let valueSchema := LedgerValueType.map outerTy
+            (.map innerTy (.scalar valueTy))
+          let outerTerm ← tyTerm outerTy
+          let innerTerm ← tyTerm innerTy
+          let valueTerm ← tyTerm valueTy
+          pure (id, StateKind.tree valueSchema, ←
+            `(Nightlean.StateKind.tree
+              (Nightlean.LedgerValueType.map $outerTerm
+                (Nightlean.LedgerValueType.map $innerTerm
+                  (Nightlean.LedgerValueType.scalar $valueTerm)))))
         | _ => throwErrorAt state "unsupported Nightlean state declaration"
       if schema.any (fun p => p.1 == id.getId.toString) then throwErrorAt id "duplicate Nightlean state"
       schema := schema ++ [(id.getId.toString, kind)]

@@ -65,6 +65,14 @@ private def expression (env : Environment) (span : SourceSpan) (value : Expr ty)
   | .ok result => .ok result
   | .error message => .error {span, message}
 
+private def pathExpression (env : Environment) (span : SourceSpan)
+    (keys : List PathKey) : Except Diagnostic Origins := do
+  let mut result : Origins := []
+  for key in keys do
+    match key with
+    | .mk _ value => result := merge result (← expression env span value)
+  pure result
+
 def inputEnvironment (circuit : Circuit) : Except Diagnostic Environment := do
   if !uniqueNames (circuit.inputs.map (·.name)) then
     throw {span := circuit.span, message := "duplicate disclosure input"}
@@ -115,7 +123,10 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     let activityControl ← match value.effectGuardAt index, effect with
       | none, _ => pure []
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
-      | some condition, .writeCell .. | some condition, .writeMap .. =>
+      | some condition, .writeCell .. | some condition, .writeMap ..
+      | some condition, .readPath .. | some condition, .memberPath ..
+      | some condition, .insertPath .. | some condition, .writePath ..
+      | some condition, .emptyMapPath .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
@@ -153,6 +164,26 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .requireAbsent state _ key =>
       checkSink {description := s!"public map query path '{state}'", span}
         (← expression env span key) control
+    | .readPath state destination keys _ =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public nested map read guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public nested map read path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ [(destination, [])]
+    | .memberPath state destination keys =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public nested map membership guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public nested map membership path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ [(destination, [])]
+    | .insertPath state keys _ payload | .writePath state keys _ payload =>
+      checkSink {description := s!"public nested map write path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      checkSink {description := s!"public nested map write value '{state}'", span}
+        (← expression env span payload) activeControl
+    | .emptyMapPath state keys =>
+      checkSink {description := s!"public empty-map path '{state}'", span}
+        (← pathExpression env span keys) activeControl
 
 def contract (value : Contract) : Except Diagnostic Unit := do
   for entry in value.entrypoints do entrypoint entry

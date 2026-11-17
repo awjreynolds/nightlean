@@ -52,11 +52,12 @@ fn balance(state: &ChargedState<Db>, account: u64) -> Option<String> {
 fn operation_fields(instruction: &Instruction) -> usize {
     match instruction {
         Instruction::Guarded { operation, .. } => operation_fields(operation),
-        Instruction::Dup | Instruction::Member | Instruction::Insert { .. } => 1,
+        Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
         Instruction::Index { key: Some(_), .. } => 7,
         Instruction::Push { .. } => 5,
         Instruction::Popeq { .. } => 4,
+        Instruction::IndexPath { .. } => panic!("this scalar fixture has no path operations"),
     }
 }
 

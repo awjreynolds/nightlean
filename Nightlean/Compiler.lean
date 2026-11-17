@@ -99,7 +99,12 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .mapIndex slot key => Json.mkObj [("op", toJson ("index" : String)),
       ("slot", toJson slot), ("pushPath", toJson Bool.false),
       ("key", alignedExpressionJson key)]
+  | .indexPath slot pushPath keys => Json.mkObj [
+      ("op", toJson ("indexPath" : String)), ("slot", toJson slot),
+      ("pushPath", toJson pushPath),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
   | .push value storage => Json.mkObj ([("op", toJson ("push" : String)), ("storage", toJson storage)] ++ alignedJson value)
+  | .newMap => Json.mkObj [("op", toJson ("new" : String))]
   | .popeq value => Json.mkObj ([("op", toJson ("popeq" : String))] ++ alignedJson value)
   | .member => Json.mkObj [("op", toJson ("member" : String))]
   | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
@@ -130,6 +135,28 @@ private def effectJson : Effect → Json
       ("state", toJson state), ("key", expressionJson key), ("value", expressionJson value)]
   | .requireAbsent state _ key => Json.mkObj [("op", toJson ("requireAbsent" : String)),
       ("state", toJson state), ("key", expressionJson key)]
+  | .readPath state destination keys ty => Json.mkObj [
+      ("op", toJson ("readPath" : String)), ("state", toJson state),
+      ("destination", toJson destination), ("type", toJson (typeName ty)),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .memberPath state destination keys => Json.mkObj [
+      ("op", toJson ("memberPath" : String)), ("state", toJson state),
+      ("destination", toJson destination),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .insertPath state keys _ value => Json.mkObj [
+      ("op", toJson ("insertPath" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value)), ("value", expressionJson value)]
+  | .writePath state keys _ value => Json.mkObj [
+      ("op", toJson ("writePath" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value)), ("value", expressionJson value)]
+  | .emptyMapPath state keys => Json.mkObj [
+      ("op", toJson ("emptyMapPath" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
 
 private def guardedEffectJson (guard : Option (Expr .bool)) (effect : Effect) : Json :=
   let encoded := effectJson effect
@@ -141,9 +168,13 @@ private def guardedEffectJson (guard : Option (Expr .bool)) (effect : Effect) : 
       ("effect", encoded)]
 
 private def stateJson (state : StateDecl) : Json :=
+  let rec treeJson : LedgerValueType → Json
+    | .scalar ty => Json.mkObj [("scalar", toJson (typeName ty))]
+    | .map keyTy value => Json.mkObj [("map", toJson [toJson (typeName keyTy), treeJson value])]
   let kind := match state.kind with
     | .cell ty => Json.mkObj [("cell", toJson (typeName ty))]
     | .map kt vt => Json.mkObj [("map", toJson [typeName kt, typeName vt])]
+    | .tree value => Json.mkObj [("tree", treeJson value)]
   Json.mkObj [("name", toJson state.name), ("kind", kind)]
 
 private def circuitSchemaJson (name : Name) (circuit : Circuit) : Json :=

@@ -32,6 +32,12 @@ The selected ZKIR 3.2.1 path supports fixed-width `Bytes32` map keys with scalar
 
 This slice does not enable byte arithmetic, equality, scalar casts, byte-valued state, circuit outputs, or direct byte witness bindings. `CompositeType.bytes` keeps its checked aggregate layout and codec. A scalar `.bytes` layout is rejected; a 32-byte composite layout retains 32 leaves.
 
+## Nested Bytes32 scalar maps
+
+The native ledger source surface now accepts recursive map state through `tree`, with typed bracket paths for membership, scalar reads and writes. `tests/Issue69NestedCounter.lean` models `_escrowSpendEpochs` as Bytes32 owner → Bytes32 spender → UInt64 count. It checks each parent with `member`, creates an absent owner map with explicit `insert ... := emptyMap`, inserts a missing scalar count, increments with checked UInt arithmetic and reads the result again. Empty-map assignment replaces the selected map entry, so callers must guard it with membership when they intend initialization. The fixed `tree` source declaration currently accepts two map levels and scalar leaves; the IR schema is recursive so later value kinds do not change legacy `StateKind.map`.
+
+Native plans use `indexPath` for typed key paths. Empty-map creation indexes the parent with `pushPath`, pushes the final key and native map tag `2`, runs `new`, then `insert`. Scalar paths use aligned keys and the existing native `insert` update behavior. The focused source/native fixture lives under `runtime/tests/fixtures/generic-state/issue69-nested/321`; broader records, lists and Counter ADT semantics remain outside this slice.
+
 ## Cases and check
 
 `tests/CompositeTypes.lean` contains the TYC-IDENTITY, TYC-ORDER, TYC-LENGTH, TYC-CYCLE and TYC-SUBTYPE cases. It checks insertion-order-stable fingerprints, field-order changes, nominal distinction, forward references, cycles, missing names, duplicate declarations, scalar bounds, sequence limits, enum tags/payloads and recursive UInt widening proofs. Its S8 nested zero-vector regression has three logical expanded nodes and 1,021 retained layout constructors. A 100-node retained-layout limit rejects it before layout construction. At a 1,021-node bound, the returned counts are `(expandedNodes, layoutNodes, value.expandedNodeCount, value.nodeCount) = (3, 1021, 3, 1021)`.

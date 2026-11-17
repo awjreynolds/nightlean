@@ -80,6 +80,32 @@ structure Output where
   span : SourceSpan := {}
   deriving Repr
 
+/-- Recursive ledger value descriptions. Scalar leaves use the existing typed
+scalar surface. Maps retain their key type and recursively describe values. -/
+inductive LedgerValueType where
+  | scalar (ty : Ty)
+  | map (keyTy : Ty) (value : LedgerValueType)
+  deriving Repr, BEq, DecidableEq
+
+/-- A typed dynamic key in a nested ledger path. -/
+inductive PathKey where
+  | mk (ty : Ty) (value : Expr ty)
+  deriving Repr
+
+def PathKey.ty : PathKey → Ty
+  | .mk ty _ => ty
+
+/-- Resolve a complete source key path against a recursive map schema. -/
+def LedgerValueType.resolvePath (schema : LedgerValueType) : List PathKey →
+    Except String LedgerValueType
+  | [] => pure schema
+  | .mk keyTy _ :: rest => do
+    match schema with
+    | .scalar _ => throw "nested map path continues through a scalar value"
+    | .map expected value =>
+      unless keyTy == expected do throw "nested map key type mismatch"
+      value.resolvePath rest
+
 structure Circuit where
   name : String
   inputs : List Input := []
@@ -94,6 +120,7 @@ structure Circuit where
 inductive StateKind where
   | cell (valueTy : Ty)
   | map (keyTy valueTy : Ty)
+  | tree (value : LedgerValueType)
   deriving Repr, BEq, DecidableEq
 
 structure StateDecl where
@@ -113,6 +140,11 @@ inductive Effect where
   | writeCell (state : String) (ty : Ty) (value : Expr ty)
   | writeMap (state : String) (keyTy valueTy : Ty) (key : Expr keyTy) (value : Expr valueTy)
   | requireAbsent (state : String) (keyTy : Ty) (key : Expr keyTy)
+  | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
+  | memberPath (state destination : String) (keys : List PathKey)
+  | insertPath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
+  | writePath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
+  | emptyMapPath (state : String) (keys : List PathKey)
   deriving Repr
 
 structure Entrypoint where
@@ -217,6 +249,24 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     a.validate caps env
     b.validate caps env
 
+def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except String Unit
+  | .mk _ value => value.validate caps env
+
+def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
+  | .scalar (.bytes _) => throw "Bytes32 state values are not supported"
+  | .scalar ty => ty.validate caps
+  | .map keyTy value => do
+    keyTy.validate caps
+    value.validate caps
+
+private def resolveTreeState (decls : List StateDecl) (state : String)
+    (keys : List PathKey) : Except String LedgerValueType := do
+  let some decl := decls.find? (·.name == state) | throw s!"unknown tree state '{state}'"
+  let .tree schema := decl.kind | throw s!"state '{state}' is not a recursive map"
+  if keys.isEmpty then throw "nested map path must contain at least one key"
+  if keys.length > 14 then throw "nested map path exceeds the native insertion depth"
+  schema.resolvePath keys
+
 def uniqueNames (names : List String) : Bool := names.eraseDups.length == names.length
 
 /-- Preserve first constraint diagnostic and source span in list order. -/
@@ -264,10 +314,15 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
     match decl.kind with
     | .cell (.bytes _) | .map _ (.bytes _) =>
       throw {span := decl.span, message := "Bytes32 state values are not supported"}
+    | .tree schema =>
+      match schema.validate caps with
+      | .error message => throw {span := decl.span, message}
+      | .ok _ => pure ()
     | _ => pure ()
     let types := match decl.kind with
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
+      | .tree _ => []
     for ty in types do
       match ty.validate caps with
       | .error message => throw {span := decl.span, message}
@@ -289,7 +344,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span, message}
       | .ok _ => pure ()
       match effect with
-      | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. => pure ()
+      | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
+          .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on scalar reads, writes, and require effects"}
@@ -331,6 +387,34 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         | _ => throw s!"unknown map state '{state}'"
         key.validate caps env
         pure none
+      | .readPath state destination keys valueTy => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let .scalar found ← resolveTreeState decls state keys
+          | throw "nested map read must select a scalar value"
+        unless found == valueTy do throw "nested map read value type mismatch"
+        valueTy.validate caps
+        pure (some (destination, valueTy))
+      | .memberPath state destination keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveTreeState decls state keys)
+        pure (some (destination, .bool))
+      | .insertPath state keys valueTy value
+      | .writePath state keys valueTy value => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let .scalar found ← resolveTreeState decls state keys
+          | throw "nested scalar write must select a scalar value"
+        unless found == valueTy do throw "nested scalar write value type mismatch"
+        value.validate caps env
+        pure none
+      | .emptyMapPath state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let .map _ _ ← resolveTreeState decls state keys
+          | throw "emptyMap assignment must select a map value"
+        pure none
     match result with
     | .error message => throw {span := e.span, message}
     | .ok none => pure ()
@@ -348,8 +432,13 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
     let types := match decl.kind with
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
+      | .tree _ => []
     for ty in types do
       match ty.validate caps with
+      | .error message => throw {span := decl.span, message}
+      | .ok _ => pure ()
+    if let .tree schema := decl.kind then
+      match schema.validate caps with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   for entry in c.entrypoints do entry.validate caps c.state

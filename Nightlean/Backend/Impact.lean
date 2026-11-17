@@ -20,7 +20,9 @@ inductive Op where
   | dup
   | index (slot : Nat) (pushPath : Bool := false)
   | mapIndex (slot : Nat) (key : Aligned)
+  | indexPath (slot : Nat) (pushPath : Bool) (keys : List Aligned)
   | push (value : Aligned) (storage : Bool := false)
+  | newMap
   | popeq (value : Aligned)
   | member
   | insert (levels : Nat)
@@ -42,7 +44,11 @@ def Op.fields : Op → List Scalar
       (Aligned.field (.native slot)).fields
   | .mapIndex slot key => [.native 0x51] ++
       (Aligned.field (.native slot)).fields ++ key.fields
+  | .indexPath slot pushPath keys =>
+      [.native ((if pushPath then 0x70 else 0x50) + keys.length)] ++
+      (Aligned.field (.native slot)).fields ++ keys.flatMap Aligned.fields
   | .push value storage => [.native (if storage then 0x11 else 0x10), .native 1] ++ value.fields
+  | .newMap => [.native 0x05]
   | .popeq value => [.native 0x0c] ++ value.fields
   | .member => [.native 0x18]
   | .insert levels => [.native (0x90 + levels)]
@@ -121,6 +127,25 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   | .uint maximum => pure (.cast .native (.ref name : Expr (.uint maximum)))
   | .bytes _ => throw "Bytes32 is read through byte alignment"
 
+private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) :=
+  keys.mapM fun key => match key with
+    | .mk ty value => nativeAligned ty value
+
+private def splitPath (keys : List Aligned) : Except String (List Aligned × Aligned) := do
+  if keys.isEmpty then throw "nested map path must contain at least one key"
+  let some finalKey := keys.getLast? | throw "nested map path must contain at least one key"
+  pure (keys.take (keys.length - 1), finalKey)
+
+private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : Aligned)
+    (emptyMap : Bool) : Except String (List Op) := do
+  let (parents, finalKey) ← splitPath keys
+  let levels := keys.length + 1
+  if levels >= 16 then throw "nested map insertion exceeds native Ins depth"
+  let newValue := if emptyMap then
+    [.push finalKey, .push (.field (.native 2)), .newMap]
+  else [.push finalKey, .push value true]
+  pure ([.indexPath slot true parents] ++ newValue ++ [.insert levels])
+
 private def stateSlot (state : List StateDecl) (name : String) : Except String Nat :=
   match state.findIdx? (·.name == name) with
   | some index => pure index
@@ -144,6 +169,10 @@ private def expressionNames : Expr ty → List String
   | .select condition yes no =>
     expressionNames condition ++ expressionNames yes ++ expressionNames no
   | .poseidon2 _ left right => expressionNames left ++ expressionNames right
+
+private def pathExpressionNames (keys : List PathKey) : List String :=
+  keys.flatMap fun key => match key with
+    | .mk _ value => expressionNames value
 
 private def freshActivityName (names : List String) : String :=
   let longest := names.foldl (fun length name => max length name.length) 0
@@ -204,6 +233,11 @@ private def totalizeActivityValue (guard : Expr .bool) (avoid : List String)
     (value : Expr ty) : Expr ty :=
   let name := freshActivityName (avoid ++ expressionNames guard ++ expressionNames value)
   .letE name guard (totalizeUnder (.ref name) value)
+
+private def totalizePathKeys (condition : Expr .bool) (keys : List PathKey) : List PathKey :=
+  let avoid := pathExpressionNames keys
+  keys.map fun key => match key with
+    | .mk ty value => .mk ty (totalizeActivityValue condition avoid value)
 
 private def totalizeActivityCondition (guard condition : Expr .bool) : Expr .bool :=
   let name := freshActivityName (expressionNames guard ++ expressionNames condition)
@@ -269,6 +303,33 @@ def appendEffect (state : List StateDecl) (effect : Effect)
         .dup, .index slot, .push key, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}] }
+  | .readPath name destination keys ty => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let value ← nativeRead ty destination
+    pure {plan with
+      operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
+      reads := plan.reads ++ [{name := destination, ty}]}
+  | .memberPath name destination keys => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let (parents, finalKey) ← splitPath keys
+    pure {plan with
+      operations := plan.operations ++ [
+        .dup, .indexPath slot false parents, .push finalKey, .member,
+        .popeq (.bitExpr (.ref destination))]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .insertPath name keys ty value | .writePath name keys ty value => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let value ← nativeAligned ty value
+    let operations ← pathWriteOps slot keys value false
+    pure {plan with operations := plan.operations ++ operations}
+  | .emptyMapPath name keys => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let operations ← pathWriteOps slot keys (.field (.native 2)) true
+    pure {plan with operations := plan.operations ++ operations}
 
 def appendEffects (state : List StateDecl) (effects : List Effect)
     (initial : Plan) : Except String Plan :=
@@ -293,6 +354,20 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some condition, .readMember name destination keyTy valueTy key =>
       pure (.readMember name destination keyTy valueTy
         (totalizeActivityValue condition (expressionNames key) key))
+    | some condition, .readPath name destination keys ty =>
+      pure (.readPath name destination (totalizePathKeys condition keys) ty)
+    | some condition, .memberPath name destination keys =>
+      pure (.memberPath name destination (totalizePathKeys condition keys))
+    | some condition, .insertPath name keys ty value =>
+      let avoid := pathExpressionNames keys ++ expressionNames value
+      pure (.insertPath name (totalizePathKeys condition keys) ty
+        (totalizeActivityValue condition avoid value))
+    | some condition, .writePath name keys ty value =>
+      let avoid := pathExpressionNames keys ++ expressionNames value
+      pure (.writePath name (totalizePathKeys condition keys) ty
+        (totalizeActivityValue condition avoid value))
+    | some condition, .emptyMapPath name keys =>
+      pure (.emptyMapPath name (totalizePathKeys condition keys))
     | some _, .readCell .. => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
@@ -311,7 +386,20 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     pure {result with
       reads := reads
       activityGuards := priorGuards ++ List.replicate added (some condition)}
+  | some condition, .readPath .. | some condition, .memberPath .. =>
+    let readIndex := plan.reads.length
+    let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
+    let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
+    let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
+      else plan.activityGuards
+    pure {result with
+      reads := reads
+      activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .writeCell .. | some condition, .writeMap .. =>
+    let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
+      else plan.activityGuards
+    pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
+  | some condition, .insertPath .. | some condition, .writePath .. | some condition, .emptyMapPath .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -444,6 +532,33 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
         .dup, .index slot, .push key, .member,
         .popeq (.bitExpr (.ref destination))]
       reads := plan.reads ++ [{name := destination, ty := .bool}] }
+  | .readPath name destination keys ty => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let value ← nativeRead ty destination
+    plan := {plan with
+      operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
+      reads := plan.reads ++ [{name := destination, ty}]}
+  | .memberPath name destination keys => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let (parents, finalKey) ← splitPath keys
+    plan := {plan with
+      operations := plan.operations ++ [
+        .dup, .indexPath slot false parents, .push finalKey, .member,
+        .popeq (.bitExpr (.ref destination))]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .insertPath name keys ty value | .writePath name keys ty value => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let value ← nativeAligned ty value
+    let operations ← pathWriteOps slot keys value false
+    plan := {plan with operations := plan.operations ++ operations}
+  | .emptyMapPath name keys => do
+    let slot ← stateSlot state name
+    let keys ← nativePathKeys keys
+    let operations ← pathWriteOps slot keys (.field (.native 2)) true
+    plan := {plan with operations := plan.operations ++ operations}
   pure plan
 
 private def previousEffectLoop (state : List StateDecl) (effects : List Effect)
@@ -504,7 +619,8 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
     let sourceNames := entry.circuit.inputs.map (·.name) ++ entry.circuit.outputs.map (·.name) ++
       entry.effects.filterMap (fun effect => match effect with
         | .readCell _ destination _ | .readMap _ destination .. |
-            .readMember _ destination .. => some destination
+            .readMember _ destination .. | .readPath _ destination .. |
+            .memberPath _ destination .. => some destination
         | _ => none)
     if sourceNames.any (·.startsWith "_nightlean_") then
       throw "source names beginning '_nightlean_' are reserved by the native transcript producer"
@@ -554,10 +670,19 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("path", Lean.Json.arr #[
         Lean.Json.mkObj [("tag", Lean.toJson ("value" : String)), ("value", slotValue)],
         Lean.Json.mkObj [("tag", Lean.toJson ("value" : String)), ("value", keyValue)]])])])
+  | .indexPath slot pushPath keys => do
+    let slotValue ← (Aligned.field (.native slot)).toJson ctx env
+    let keyValues ← keys.mapM fun key => key.toJson ctx env
+    let path := (slotValue :: keyValues).map fun value =>
+      Lean.Json.mkObj [("tag", Lean.toJson ("value" : String)), ("value", value)]
+    pure (Lean.Json.mkObj [("idx", Lean.Json.mkObj [
+      ("cached", Lean.toJson false), ("pushPath", Lean.toJson pushPath),
+      ("path", Lean.Json.arr path.toArray)])])
   | .push value storage => do
     pure (Lean.Json.mkObj [("push", Lean.Json.mkObj [("storage", Lean.toJson storage),
       ("value", Lean.Json.mkObj [("tag", Lean.toJson ("cell" : String)),
         ("content", ← value.toJson ctx env)])])])
+  | .newMap => pure (Lean.Json.mkObj [("new", Lean.Json.mkObj [])])
   | .popeq value => do
     pure (Lean.Json.mkObj [("popeq", Lean.Json.mkObj [("cached", Lean.toJson false),
       ("result", ← value.toJson ctx env)])])

@@ -952,6 +952,7 @@ private def resolveContractEffect (expansion : Expansion) (moduleInstance : Modu
     match member.stateKind? with
     | some (.cell ty) => pure (.writeCell fieldName ty (.ref outputName), [identity])
     | some (.map ..) => fail effectSpec.span "module output write requires a cell state"
+    | some (.tree ..) => fail effectSpec.span "module output write requires a cell state"
     | none => fail effectSpec.span s!"state member '{member.name}' has no declared type"
   | .writeMap target keyTy valueTy key value => do
     let (identity, fieldName, _) ← resolveState target

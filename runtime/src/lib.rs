@@ -338,6 +338,12 @@ pub struct Read {
     pub guard: Option<Expr>,
 }
 #[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PathPart {
+    pub alignment: String,
+    pub expression: Expr,
+}
+#[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Instruction {
     Guarded {
@@ -352,6 +358,14 @@ pub enum Instruction {
         #[serde(default)]
         key: Option<Expr>,
     },
+    #[serde(rename = "indexPath")]
+    IndexPath {
+        slot: u32,
+        #[serde(rename = "pushPath")]
+        push_path: bool,
+        keys: Vec<PathPart>,
+    },
+    New,
     Push {
         storage: bool,
         expression: Expr,
@@ -378,13 +392,25 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         }
     };
     Ok(match instruction {
-        Instruction::Dup | Instruction::Member | Instruction::Insert { .. } => 1,
+        Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
         Instruction::Index {
             slot, key: Some(_), ..
         } => {
             let key_type = map_key_type(plan, *slot)?;
             6 + value_fields(key_alignment(&key_type))?
+        }
+        Instruction::IndexPath { slot, keys, .. } => {
+            let types = map_path_key_types(plan, *slot, keys.len())?;
+            let mut fields = 4;
+            for (part, ty) in keys.iter().zip(types) {
+                ensure!(
+                    part.alignment == key_alignment(&ty),
+                    "map path key alignment mismatch"
+                );
+                fields += 2 + value_fields(&part.alignment)?;
+            }
+            fields
         }
         Instruction::Push { alignment, .. } => 4 + value_fields(alignment)?,
         Instruction::Popeq { alignment, .. } => 3 + value_fields(alignment)?,
@@ -393,15 +419,74 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
 }
 
 fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
-    let ty = plan
+    map_path_key_types(plan, slot, 1)?
+        .pop()
+        .ok_or_else(|| anyhow!("invalid map key schema"))
+}
+
+fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<ScalarType>> {
+    ensure!(count < 16, "map path exceeds native index limit");
+    let state = plan
         .state
         .get(slot as usize)
-        .and_then(|state| state.kind.get("map"))
+        .ok_or_else(|| anyhow!("state slot out of range"))?;
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    if let Some(mut schema) = state.kind.get("tree") {
+        let mut types = Vec::with_capacity(count);
+        for _ in 0..count {
+            let parts = schema
+                .get("map")
+                .and_then(Json::as_array)
+                .filter(|parts| parts.len() == 2)
+                .ok_or_else(|| anyhow!("map path exceeds declared schema"))?;
+            let key = parts[0]
+                .as_str()
+                .ok_or_else(|| anyhow!("invalid map key schema"))?;
+            types.push(ScalarType::parse(key)?);
+            schema = &parts[1];
+        }
+        return Ok(types);
+    }
+    ensure!(count == 1, "scalar map has no nested path");
+    let parts = state
+        .kind
+        .get("map")
         .and_then(Json::as_array)
-        .and_then(|types| types.first())
-        .and_then(Json::as_str)
+        .filter(|parts| parts.len() == 2)
         .ok_or_else(|| anyhow!("invalid map key schema"))?;
-    ScalarType::parse(ty)
+    Ok(vec![ScalarType::parse(
+        parts[0]
+            .as_str()
+            .ok_or_else(|| anyhow!("invalid map key schema"))?,
+    )?])
+}
+
+fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
+    ensure!(depth <= 16, "state tree exceeds native path limit");
+    let fields = schema
+        .as_object()
+        .ok_or_else(|| anyhow!("invalid state tree schema"))?;
+    ensure!(fields.len() == 1, "invalid state tree schema");
+    if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
+        ensure!(
+            ScalarType::parse(ty)? != ScalarType::Bytes32,
+            "bytes ledger values are unsupported"
+        );
+        return Ok(());
+    }
+    let parts = fields
+        .get("map")
+        .and_then(Json::as_array)
+        .filter(|parts| parts.len() == 2)
+        .ok_or_else(|| anyhow!("invalid state tree map schema"))?;
+    ScalarType::parse(
+        parts[0]
+            .as_str()
+            .ok_or_else(|| anyhow!("invalid state tree key type"))?,
+    )?;
+    validate_tree_schema(&parts[1], depth + 1)
 }
 
 fn key_alignment(ty: &ScalarType) -> &'static str {
@@ -557,6 +642,20 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                 "initial map must be explicitly empty"
             );
             values.push(StateValue::Map(Default::default()));
+        } else if let Some(schema) = d.kind.get("tree") {
+            validate_tree_schema(schema, 0)?;
+            if let Some(ty) = schema.get("scalar").and_then(Json::as_str) {
+                values.push(StateValue::Cell(Sp::new(aligned(
+                    &input_value(ty, value)?,
+                    "field",
+                )?)));
+            } else {
+                ensure!(
+                    value.as_array().is_some_and(|items| items.is_empty()),
+                    "initial map tree must be explicitly empty"
+                );
+                values.push(StateValue::Map(Default::default()));
+            }
         } else {
             bail!("unsupported state kind");
         }
@@ -565,13 +664,29 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
         values.into_iter().collect(),
     )))
 }
-fn read_cell(context: &QueryContext<Db>, slot: u32, ty: &str) -> Result<Value> {
+fn read_state_cell(
+    context: &QueryContext<Db>,
+    slot: u32,
+    keys: &[AlignedValue],
+    ty: &str,
+) -> Result<Value> {
     let StateValue::Array(array) = context.state.get_ref() else {
         bail!("expected array state")
     };
-    let cell = array
-        .get(slot as usize)
-        .ok_or_else(|| anyhow!("state slot out of range"))?;
+    let mut cell = Sp::new(
+        array
+            .get(slot as usize)
+            .ok_or_else(|| anyhow!("state slot out of range"))?
+            .clone(),
+    );
+    for key in keys {
+        cell = match &*cell {
+            StateValue::Map(map) => map
+                .get(key)
+                .ok_or_else(|| anyhow!("missing map path key"))?,
+            _ => bail!("state path does not address a map"),
+        };
+    }
     let StateValue::Cell(value) = &*cell else {
         bail!("expected state cell")
     };
@@ -587,36 +702,42 @@ fn read_cell(context: &QueryContext<Db>, slot: u32, ty: &str) -> Result<Value> {
         ScalarType::Bytes32 => bail!("bytes ledger values are unsupported"),
     }
 }
-fn read_map_cell(
-    context: &QueryContext<Db>,
+fn native_index(
+    plan: &Plan,
     slot: u32,
-    key: &AlignedValue,
-    ty: &str,
-) -> Result<Value> {
-    let StateValue::Array(array) = context.state.get_ref() else {
-        bail!("expected array state")
-    };
-    let map = array
-        .get(slot as usize)
-        .ok_or_else(|| anyhow!("state slot out of range"))?;
-    let StateValue::Map(map) = &*map else {
-        bail!("expected state map")
-    };
-    let value = map.get(key).ok_or_else(|| anyhow!("missing map key"))?;
-    let StateValue::Cell(value) = &*value else {
-        bail!("expected map value cell")
-    };
-    let mut fields = Vec::new();
-    value.value_only_field_repr(&mut fields);
-    ensure!(fields.len() == 1, "expected scalar map value");
-    match ScalarType::parse(ty)? {
-        ScalarType::Native => Ok(Value::Native(fields[0])),
-        ScalarType::Bool => Ok(Value::Bool(
-            bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
-        )),
-        ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
-        ScalarType::Bytes32 => bail!("bytes ledger values are unsupported"),
+    keys: &[PathPart],
+    push_path: bool,
+    env: &Environment,
+) -> Result<(Op<ResultModeVerify, Db>, Vec<AlignedValue>)> {
+    let types = map_path_key_types(plan, slot, keys.len())?;
+    let mut path = vec![Key::Value(
+        field_value(Fr::from(slot as u64))
+            .try_into()
+            .map_err(|_| anyhow!("invalid native index key"))?,
+    )];
+    let mut values = Vec::with_capacity(keys.len());
+    for (part, ty) in keys.iter().zip(types) {
+        ensure!(
+            part.alignment == key_alignment(&ty),
+            "map path key alignment mismatch"
+        );
+        let value = aligned(&evaluate(&part.expression, env)?, &part.alignment)?;
+        path.push(Key::Value(
+            value
+                .clone()
+                .try_into()
+                .map_err(|_| anyhow!("invalid native map key"))?,
+        ));
+        values.push(value);
     }
+    Ok((
+        Op::Idx {
+            cached: false,
+            push_path,
+            path: path.into_iter().collect(),
+        },
+        values,
+    ))
 }
 fn advance_native_state_prefix(
     context: &mut QueryContext<Db>,
@@ -707,7 +828,7 @@ pub fn prepare(
     let mut mutation_boundary = 0usize;
     let mut program: Program = Vec::new();
     let mut read_index = 0usize;
-    let mut previous_index = None;
+    let mut previous_index: Option<(u32, Vec<AlignedValue>)> = None;
     let mut member_result_pending = false;
     let mut has_written = false;
     let mut activity_schedule = Vec::with_capacity(plan.operations.len());
@@ -732,6 +853,8 @@ pub fn prepare(
                             }
                             | Instruction::Push { .. }
                             | Instruction::Insert { .. }
+                            | Instruction::IndexPath { .. }
+                            | Instruction::New
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -814,13 +937,23 @@ pub fn prepare(
                             .map_err(|_| anyhow!("invalid native map key"))?,
                     ));
                 }
-                current_index = Some((*slot, map_key));
+                current_index = Some((*slot, map_key.into_iter().collect::<Vec<_>>()));
                 Op::Idx {
                     cached: false,
                     push_path: *push_path,
                     path: path.into_iter().collect(),
                 }
             }
+            Instruction::IndexPath {
+                slot,
+                push_path,
+                keys,
+            } => {
+                let (op, values) = native_index(plan, *slot, keys, *push_path, &env)?;
+                current_index = Some((*slot, values));
+                op
+            }
+            Instruction::New => Op::New,
             Instruction::Push {
                 storage,
                 expression,
@@ -879,13 +1012,10 @@ pub fn prepare(
                                 cost,
                             )?)
                         } else {
-                            let (slot, key) = previous_index
+                            let (slot, keys) = previous_index
                                 .as_ref()
                                 .ok_or_else(|| anyhow!("unsupported state-read shape"))?;
-                            match key {
-                                Some(key) => read_map_cell(read_context, *slot, key, &read.ty)?,
-                                None => read_cell(read_context, *slot, &read.ty)?,
-                            }
+                            read_state_cell(read_context, *slot, keys, &read.ty)?
                         };
                         env.insert(name.clone(), value);
                     }
