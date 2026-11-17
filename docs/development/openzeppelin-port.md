@@ -90,8 +90,8 @@ The selected-3.2.1 native case in `runtime/tests/derived_crypto.rs` matches raw
 SHA-256 reference preimages, checks two accounts including zero amount, preserves
 the first encrypted record, and recovers the memo. Wrong secrets, a changed
 account high byte and an altered private plaintext reject. Private point hashes
-remain subject to disclosure checks. This adds a `persistent_hash` overload,
-so the registered opcode-name count stays 23. Typed curve providers and the
+remain subject to disclosure checks. This extends an existing `persistent_hash`
+opcode rather than adding an opcode name. Typed curve providers and the
 complete token remain separate work. Seeds in the fixture are public test data.
 Fresh, secret production seeds remain a wallet obligation. No new keys, proofs
 or deployments were generated.

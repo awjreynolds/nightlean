@@ -4692,9 +4692,9 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "e07a37c30654577c02ee7b5e1a50ff24ac5ed0cb",
+    "sourceCommit": "bf5f35ce8584528cc5cb4d7e3d11248a84baac11",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 23,
+    "registeredOpcodeCount": 24,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4718,9 +4718,10 @@
       "ec_mul_generator",
       "ec_mul",
       "from_coordinates",
-      "into_coordinates"
+      "into_coordinates",
+      "inv"
     ],
-    "notExposedOpcodeCount": 24,
+    "notExposedOpcodeCount": 23,
     "notExposedOpcodes": [
       "copy",
       "hash_to_curve",
@@ -4732,7 +4733,6 @@
       "div_mod_power_of_two",
       "reconstitute_field",
       "keccak256",
-      "inv",
       "slice",
       "nth",
       "concat",
@@ -4805,6 +4805,12 @@
       "native": "runtime/tests/derived_crypto.rs",
       "implementationCommit": "e07a37c30654577c02ee7b5e1a50ff24ac5ed0cb",
       "scope": "Selected-3.2.1 Native field-vector hashing (1..32 values), affine point hashing as LE32(x)||LE32(y), source Bytes32 equality over both field chunks, byte-derived key/randomness, ElGamal binding and ECDH memo recovery. Raw SHA256 reference preimages, two accounts including zero amount, preserved prior record, wrong secrets, changed account high byte and altered private plaintext checks pass. Source rejects private point hash release. No new keys, proofs or deployments. Native opcode-name count remains 23. Typed curve providers, mixed record hashing, lists and full token integration remain open."
+    },
+    "inverseEvidence": {
+      "source": "tests/NativeInverse.lean",
+      "native": "runtime/tests/native_inverse.rs",
+      "implementationCommit": "bf5f35ce8584528cc5cb4d7e3d11248a84baac11",
+      "scope": "Native and JubjubScalar field inversion. Mandatory nonzero assertions retain zero rejection for discarded results. Inactive guarded inverses use typed one. Build and one selected-3.2.1 native smoke check pass. This is modular field arithmetic, not UInt division. Other prime-field types and helper/control inverse routes remain unimplemented. No new keys, proofs, deployments or broad regression campaign."
     }
   }
 }
