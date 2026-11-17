@@ -43,13 +43,21 @@ private def issue69Bytes32CastRejected : Expr .native :=
   | .error message => message == "byte strings do not support scalar casts"
   | .ok _ => Bool.false
 
-/-- error: Bytes32 equality is not supported -/
-#guard_msgs in
-nightlean_circuit issue69Bytes32EqualityRejected where
+nightlean_circuit issue69Bytes32Equality where
   private left : Bytes32
   private right : Bytes32
-  output same : Bool := eq(left, right)
+  output same : Bool := disclose(eq(left, right))
 end
+
+private def withoutRelease {ty : Ty} : Expr ty → Expr ty
+  | .disclose _ value => value
+  | value => value
+
+#guard match Disclosure.circuit {issue69Bytes32Equality with
+    outputs := issue69Bytes32Equality.outputs.map fun item =>
+      {item with value := withoutRelease item.value}} with
+  | .error diagnostic => diagnostic.message.startsWith "undisclosed private parameter"
+  | .ok _ => Bool.false
 
 private def issue69Bytes32NameCollision : Circuit := {
   name := "issue69Bytes32NameCollision"
