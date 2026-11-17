@@ -149,10 +149,11 @@ scoped syntax (name := circuitCommand) "nightlean_circuit" ident "where" nlcstmt
 declare_syntax_cat nlstate
 scoped syntax "cell" ident ":" nltype : nlstate
 scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
-scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 declare_syntax_cat nlcompositefield
 scoped syntax ident ":" nltype : nlcompositefield
 scoped syntax "tree" ident ":" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 
 declare_syntax_cat nlleaves
 scoped syntax "fields(" nlexpr,* ")" : nlleaves
@@ -172,6 +173,8 @@ scoped syntax "insert" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlexpr : nleffec
 scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "insert" ident "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "write" ident "[" nlexpr "]" ":=" nlleaves : nleffect
+scoped syntax "insert" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffect
+scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
@@ -705,9 +708,10 @@ private def bindReadName (state : EntryEffects) (sourceName internalName : Strin
     else addReferenceAs state.env sourceName internalName ty
   pure {state with env}
 
-private def elaborateTreeRead (storage destination : TSyntax `ident) (key : TSyntax `nlexpr)
+private def elaborateTreeRead (storage destination : TSyntax `ident)
+    (keys : List (TSyntax `nlexpr))
     (treeSchema : LedgerValueType) (depth : Nat) (state : EntryEffects) : CommandElabM EntryEffects := do
-  let (path, result) ← lowerTreePath state.env treeSchema [key]
+  let (path, result) ← lowerTreePath state.env treeSchema keys
   let keys ← pathKeysTerm path
   match result with
   | .scalar valueTy => do
@@ -743,6 +747,33 @@ private def elaborateTreeRead (storage destination : TSyntax `ident) (key : TSyn
   | .composite .. => throwErrorAt destination "native composite ledger reads require a named structure"
   | .map .. => throwErrorAt destination "nested map read must select a scalar or composite value"
 
+private def elaborateCompositePathWrite (schema : List (String × StateKind))
+    (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
+    (payload : TSyntax `nlleaves) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let treeSchema ← treeStateSchema schema storage
+  let (path, result) ← lowerTreePath state.env treeSchema keys
+  let (.composite environment type) := result
+    | throwErrorAt payload "composite write must select a composite record"
+  let fieldNames ← match LedgerValueType.nativeLeafNames environment type with
+    | .ok names => pure names
+    | .error message => throwErrorAt payload message
+  let values ← match payload with
+    | `(nlleaves| fields($items:nlexpr,*)) => pure items.getElems.toList
+    | _ => throwErrorAt payload "composite write expects fields(...)"
+  unless values.length == fieldNames.length do
+    throwErrorAt payload "composite write field count does not match its checked layout"
+  let lowered ← values.mapM fun value => checkedExpression state.env value Ty.native
+  let pathTerm ← pathKeysTerm path
+  let nativeTy ← tyTerm Ty.native
+  let valueListRaw ← nativeExprListTerm lowered
+  let valueList ← `(($valueListRaw : List (Nightlean.Expr $nativeTy)))
+  let typeTerm ← match type with
+    | .structure id => `(Nightlean.Types.CompositeType.structure $(stringTerm id))
+    | _ => throwErrorAt payload "composite writes currently require a named structure"
+  let term ← `(Nightlean.Effect.writeCompositePath
+    $(stringTerm storage.getId.toString) $pathTerm $typeTerm $valueList)
+  pure {state with terms := state.terms.push term}
+
 private def elaborateEffect (schema : List (String × StateKind))
     (parent : Option (TSyntax `term)) (depth : Nat) (state : EntryEffects)
     (effect : TSyntax `nleffect) : CommandElabM EntryEffects := do
@@ -772,14 +803,7 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| when $_:nlexpr read $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident)
   | `(nleffect| read $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident) => do
     let schema ← treeStateSchema schema storage
-    let (path, result) ← lowerTreePath state.env schema [owner, spender]
-    let .scalar ty := result | throwErrorAt effect "nested map read must select a scalar value"
-    let (readName, updated) ← freshReadName depth state destination
-    let keys ← pathKeysTerm path
-    let term ← `(Nightlean.Effect.readPath $(stringTerm storage.getId.toString)
-      $(stringTerm readName) $keys $(← tyTerm ty))
-    state := {updated with terms := updated.terms.push term}
-    state ← bindReadName state destination.getId.toString readName ty
+    state ← elaborateTreeRead storage destination [owner, spender] schema depth state
   | `(nleffect| when $_:nlexpr read $storage:ident [ $key:nlexpr ] as $destination:ident)
   | `(nleffect| read $storage:ident [ $key:nlexpr ] as $destination:ident) => do
     match schema.lookup storage.getId.toString with
@@ -792,7 +816,7 @@ private def elaborateEffect (schema : List (String × StateKind))
       state := {updated with terms := updated.terms.push term}
       state ← bindReadName state destination.getId.toString readName valueTy
     | some (.tree treeSchema) =>
-      state ← elaborateTreeRead storage destination key treeSchema depth state
+      state ← elaborateTreeRead storage destination [key] treeSchema depth state
     | _ => throwErrorAt storage "read requires a declared map or recursive tree"
   | `(nleffect| when $_:nlexpr member $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident)
   | `(nleffect| member $storage:ident [$owner:nlexpr] [$spender:nlexpr] as $destination:ident) => do
@@ -851,29 +875,10 @@ private def elaborateEffect (schema : List (String × StateKind))
     state := {state with terms := state.terms.push term}
   | `(nleffect| insert $storage:ident [ $key:nlexpr ] := $payload:nlleaves)
   | `(nleffect| write $storage:ident [ $key:nlexpr ] := $payload:nlleaves) => do
-    let treeSchema ← treeStateSchema schema storage
-    let (path, result) ← lowerTreePath state.env treeSchema [key]
-    let (.composite environment type) := result
-      | throwErrorAt effect "composite write must select a composite record"
-    let fieldNames ← match LedgerValueType.nativeLeafNames environment type with
-      | .ok names => pure names
-      | .error message => throwErrorAt effect message
-    let values ← match payload with
-      | `(nlleaves| fields($items:nlexpr,*)) => pure items.getElems.toList
-      | _ => throwErrorAt payload "composite write expects fields(...)"
-    unless values.length == fieldNames.length do
-      throwErrorAt payload "composite write field count does not match its checked layout"
-    let lowered ← values.mapM fun value => checkedExpression state.env value Ty.native
-    let keys ← pathKeysTerm path
-    let nativeTy ← tyTerm Ty.native
-    let valueListRaw ← nativeExprListTerm lowered
-    let valueList ← `(($valueListRaw : List (Nightlean.Expr $nativeTy)))
-    let typeTerm ← match type with
-      | .structure id => `(Nightlean.Types.CompositeType.structure $(stringTerm id))
-      | _ => throwErrorAt effect "composite writes currently require a named structure"
-    let term ← `(Nightlean.Effect.writeCompositePath
-      $(stringTerm storage.getId.toString) $keys $typeTerm $valueList)
-    state := {state with terms := state.terms.push term}
+    state ← elaborateCompositePathWrite schema storage [key] payload state
+  | `(nleffect| insert $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] := $payload:nlleaves)
+  | `(nleffect| write $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] := $payload:nlleaves) => do
+    state ← elaborateCompositePathWrite schema storage [owner, spender] payload state
   | `(nleffect| insert $storage:ident [$owner:nlexpr] [$spender:nlexpr] := $value:nlexpr)
   | `(nleffect| write $storage:ident [$owner:nlexpr] [$spender:nlexpr] := $value:nlexpr) => do
     let schema ← treeStateSchema schema storage
@@ -966,6 +971,37 @@ private partial def elaborateStatements (schema : List (String × StateKind))
             (LedgerValueType.composite environment (.structure typeId))
           let valueTerm ← `(Nightlean.LedgerValueType.map $(← tyTerm keyTy)
             (Nightlean.LedgerValueType.composite $environmentTerm $compositeTypeTerm))
+          pure (id, StateKind.tree valueSchema, ← `(Nightlean.StateKind.tree $valueTerm))
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => struct $record:ident { $recordFields:nlcompositefield* }) => do
+          let outerTy ← readTy outer
+          let innerTy ← readTy inner
+          let contractName := (← getCurrNamespace) ++ name.getId
+          let typeId := contractName.toString ++ "." ++ record.getId.toString
+          let mut fieldTerms : Array (TSyntax `term) := #[]
+          let mut fieldValues : List Nightlean.Types.Field := []
+          for field in recordFields do
+            match field with
+            | `(nlcompositefield| $fieldName:ident : $fieldType:nltype) => do
+              let fieldTy ← readTy fieldType
+              let fieldNameString := fieldName.getId.toString
+              fieldValues := fieldValues ++ [{name := fieldNameString, type := .scalar fieldTy}]
+              let fieldTyTerm ← tyTerm fieldTy
+              let fieldTypeTerm ← `(Nightlean.Types.CompositeType.scalar $fieldTyTerm)
+              let fieldSpan ← spanTerm field
+              fieldTerms := fieldTerms.push (← `({ name := $(stringTerm fieldNameString), type := $fieldTypeTerm, span := $fieldSpan : Nightlean.Types.Field }))
+            | _ => throwErrorAt field "unsupported composite record field"
+          let structSpan ← spanTerm state
+          let environment : Types.CompositeEnv := {structures := [{id := typeId, fields := fieldValues}]}
+          let structureTerm ← `({ id := $(stringTerm typeId), fields := [$fieldTerms,*], span := $structSpan : Nightlean.Types.StructDecl })
+          let environmentTerm ← `({ structures := [$structureTerm] : Nightlean.Types.CompositeEnv })
+          let compositeTypeTerm ← `(Nightlean.Types.CompositeType.structure $(stringTerm typeId))
+          let valueSchema := LedgerValueType.map outerTy
+            (.map innerTy (LedgerValueType.composite environment (.structure typeId)))
+          let outerTerm ← tyTerm outerTy
+          let innerTerm ← tyTerm innerTy
+          let valueTerm ← `(Nightlean.LedgerValueType.map $outerTerm
+            (Nightlean.LedgerValueType.map $innerTerm
+              (Nightlean.LedgerValueType.composite $environmentTerm $compositeTypeTerm)))
           pure (id, StateKind.tree valueSchema, ← `(Nightlean.StateKind.tree $valueTerm))
         | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => $value:nltype) => do
           let outerTy ← readTy outer
