@@ -64,7 +64,7 @@ private def expressionAux (environment : TypeEnv) : Nat → Layout → Aggregate
         | .boundedUnsignedField maximum => pure (Ty.uint maximum)
         | _ => throw "unsupported aggregate expression scalar"
       unless value.type == expected do throw "aggregate expression scalar type mismatch"
-      value.value.validate {poseidon2 := true} environment
+      value.value.validate {poseidon2 := true, jubjub := true} environment
       pure [value]
     | .tuple layouts, .tuple values =>
       unless layouts.length == values.length do throw "aggregate expression tuple arity mismatch"
@@ -77,7 +77,7 @@ private def expressionAux (environment : TypeEnv) : Nat → Layout → Aggregate
       pure (← values.mapM (expressionAux environment fuel element)).flatten
     | .bytes length .byteField, .bytes values =>
       unless length == values.length do throw "aggregate expression byte length mismatch"
-      for value in values do value.validate {poseidon2 := true} environment
+      for value in values do value.validate {poseidon2 := true, jubjub := true} environment
       pure (values.map fun value => ⟨.uint 255, value⟩)
     | .enumeration id _ maximum payloadLeaves _ variants, .enumeration actual variant values =>
       unless id == actual do throw "aggregate expression nominal enum mismatch"
@@ -213,7 +213,7 @@ private def constrainLayout : Nat → Layout → Expr .bool → List (Expr .nati
 def checkNativeExpression (type : CompiledType) (environment : TypeEnv)
     (leaves : List (Expr .native)) : Except String (NativeExpression type) := do
   if count : leaves.length = type.checked.expandedLeaves then
-    for leaf in leaves do leaf.validate {poseidon2 := true} environment
+  for leaf in leaves do leaf.validate {poseidon2 := true, jubjub := true} environment
     let (constraints, remaining) ← constrainLayout (type.checked.layoutNodes + 1)
       type.checked.value (.bool true) leaves
     unless remaining.isEmpty do throw "trailing aggregate native leaves"
@@ -238,8 +238,8 @@ def indexNativeVector (parent : CompiledType) (value : NativeExpression parent)
   let .vector length element := parent.type | throw "dynamic aggregate index requires a fixed vector"
   unless length > 0 do throw "cannot dynamically index an empty aggregate vector"
   unless componentOrigins.length == parent.checked.expandedLeaves do throw "aggregate native origin count mismatch"
-  index.validate {poseidon2 := true} environment
-  for condition in value.constraints do condition.validate {poseidon2 := true} environment
+  index.validate {poseidon2 := true, jubjub := true} environment
+  for condition in value.constraints do condition.validate {poseidon2 := true, jubjub := true} environment
   let checkedParent ← checkNativeExpression parent environment value.leaves
   let child ← (compileType parent.environment element parent.limits).mapError (·.message)
   let width := child.checked.expandedLeaves

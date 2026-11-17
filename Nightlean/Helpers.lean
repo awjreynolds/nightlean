@@ -58,6 +58,42 @@ structure WitnessSignature where
   span : SourceSpan := {}
   deriving Repr
 
+/-- Closed set of curve operations admitted in readable helper/control bodies.
+Argument and result types are fixed here so helper typing and native lowering
+share one signature table. -/
+inductive CurveOp where
+  | scalarFromNative
+  | scalarToNative
+  | mulGenerator
+  | mul
+  | add
+  | neg
+  | x
+  | y
+  | fromCoordinates
+  deriving Repr, BEq, DecidableEq, Inhabited
+
+def CurveOp.operationName : CurveOp → String
+  | .scalarFromNative => "jubjubScalarFromNative"
+  | .scalarToNative => "jubjubScalarToNative"
+  | .mulGenerator => "jubjubMulGenerator"
+  | .mul => "jubjubMul"
+  | .add => "jubjubAdd"
+  | .neg => "jubjubNeg"
+  | .x => "jubjubX"
+  | .y => "jubjubY"
+  | .fromCoordinates => "jubjubFromCoordinates"
+
+def CurveOp.signature : CurveOp → List Ty × Ty
+  | .scalarFromNative => ([.native], .jubjubScalar)
+  | .scalarToNative => ([.jubjubScalar], .native)
+  | .mulGenerator => ([.jubjubScalar], .jubjubPoint)
+  | .mul => ([.jubjubPoint, .jubjubScalar], .jubjubPoint)
+  | .add => ([.jubjubPoint, .jubjubPoint], .jubjubPoint)
+  | .neg => ([.jubjubPoint], .jubjubPoint)
+  | .x | .y => ([.jubjubPoint], .native)
+  | .fromCoordinates => ([.native, .native], .jubjubPoint)
+
 inductive Term where
   | unit
   | native (number : Nat)
@@ -75,6 +111,7 @@ inductive Term where
   | witness (name : String) (ty : Ty)
   | witnessCall (site name : String) (arguments : List Term)
   | poseidon2 (domain : Nat) (left right : Term)
+  | curve (operation : CurveOp) (arguments : List Term)
   | call (name : String) (arguments : List Term)
   /-- A checked aggregate assembled from scalar source terms in canonical leaf order. -/
   | composite (type : Types.CompositeType) (leaves : List Term)
@@ -239,6 +276,9 @@ where
         | .call _ arguments | .witnessCall _ _ arguments => do
           if arguments.length > limits.maxParameters then resource span "call arguments"
           pure arguments
+        | .curve _ arguments => do
+          if arguments.length > limits.maxParameters then resource span "curve arguments"
+          pure arguments
         | _ => pure []
       go fuel (used + 1) (max deepest depth) (children.map (·, depth + 1) ++ rest)
 
@@ -280,6 +320,9 @@ where
             | .call _ arguments | .witnessCall _ _ arguments => do
               if arguments.length > limits.maxParameters then resource span "call arguments"
               pure arguments
+            | .curve _ arguments => do
+              if arguments.length > limits.maxParameters then resource span "curve arguments"
+              pure arguments
             | _ => pure []
           pure (terms.map SourceNode.term, statements)
       go fuel (used + 1) statements (max deepest depth)
@@ -307,6 +350,7 @@ where
         let (children, site) := match term with
           | .witnessCall site _ arguments => (arguments, some site)
           | .call _ arguments | .composite _ arguments => (arguments, none)
+          | .curve _ arguments => (arguments, none)
           | .binary _ a b | .eq a b | .poseidon2 _ a b | .andThen a b | .orElse a b
           | .index a b => ([a, b], none)
           | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
@@ -824,6 +868,17 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       unless subtype left.ty (.scalar .native) && subtype right.ty (.scalar .native) do
         fail span "helper hash arguments require Native"
       pure (combine (.scalar .native) [left, right])
+    | .curve operation arguments => do
+      let (expected, result) := operation.signature
+      unless arguments.length == expected.length do
+        fail span s!"{operation.operationName} argument count mismatch"
+      let values ← arguments.mapM (inferTerm fuel program scope env span)
+      for (value, expectedType) in values.zip expected do
+        let .scalar actualType := value.ty | fail span "curve operation arguments require scalar values"
+        unless actualType == expectedType do
+          fail span s!"{operation.operationName} argument type mismatch"
+      pure (combine (.scalar result) values
+        (if operation == .fromCoordinates then [.fallibleCast] else []))
     | .call name arguments =>
       if (env.lookup name).isSome then fail span s!"helper '{name}' is hidden by a value binding"
       let arguments ← arguments.mapM (inferTerm fuel program scope env span)
@@ -1351,6 +1406,47 @@ mutual
       let result := scalarValue (.poseidon2 domain
         (← liftD (nativeExpr span left)) (← liftD (nativeExpr span right)))
       pure {result with constraints := left.constraints ++ right.constraints}
+    | .curve operation arguments => do
+      let (expectedTypes, _) := operation.signature
+      unless arguments.length == expectedTypes.length do
+        liftD (fail span s!"{operation.operationName} argument count mismatch")
+      let values ← arguments.mapM (lowerTerm program scope env span)
+      for (value, expectedType) in values.zip expectedTypes do
+        unless value.ty == .scalar expectedType do
+          liftD (fail span s!"{operation.operationName} argument type mismatch")
+      let result ← match operation, values with
+        | .scalarFromNative, [value] => do
+          let value ← liftD (typedExpr span .native value)
+          pure (scalarValue (.jubjubScalarFromNative value))
+        | .scalarToNative, [value] => do
+          let value ← liftD (typedExpr span .jubjubScalar value)
+          pure (scalarValue (.jubjubScalarToNative value))
+        | .mulGenerator, [value] => do
+          let value ← liftD (typedExpr span .jubjubScalar value)
+          pure (scalarValue (.jubjubMulGenerator value))
+        | .mul, [point, scalar] => do
+          let point ← liftD (typedExpr span .jubjubPoint point)
+          let scalar ← liftD (typedExpr span .jubjubScalar scalar)
+          pure (scalarValue (.jubjubMul point scalar))
+        | .add, [left, right] => do
+          let left ← liftD (typedExpr span .jubjubPoint left)
+          let right ← liftD (typedExpr span .jubjubPoint right)
+          pure (scalarValue (.jubjubAdd left right))
+        | .neg, [point] => do
+          let point ← liftD (typedExpr span .jubjubPoint point)
+          pure (scalarValue (.jubjubNeg point))
+        | .x, [point] => do
+          let point ← liftD (typedExpr span .jubjubPoint point)
+          pure (scalarValue (.jubjubCoordinate point 0))
+        | .y, [point] => do
+          let point ← liftD (typedExpr span .jubjubPoint point)
+          pure (scalarValue (.jubjubCoordinate point 1))
+        | .fromCoordinates, [x, y] => do
+          let x ← liftD (typedExpr span .native x)
+          let y ← liftD (typedExpr span .native y)
+          pure (scalarValue (.jubjubFromCoordinates x y))
+        | _, _ => liftD (fail span "invalid checked curve operation shape")
+      pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .call name arguments =>
       let values ← arguments.mapM (lowerTerm program scope env span)
       let declaration ← liftD (resolveUnchecked program scope name (values.map (·.ty)) span)
@@ -1680,6 +1776,8 @@ mutual
       let value : ScalarPolicy.Value := ⟨.native, result⟩
       liftM (liftError span value.validate)
       pure (some value)
+    -- shortcut: curve diagnostic traces need typed point values; extend the trace model before enabling them.
+    | .curve .. => liftM (fail span "Jubjub helper evaluation requires the native control runtime")
     | .call name arguments =>
       let values ← arguments.mapM (traceTerm program ctx scope env span)
       let declaration ← liftM (resolveUnchecked program scope name (values.map traceType) span)

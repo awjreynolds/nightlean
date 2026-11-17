@@ -133,6 +133,89 @@ fn scalar_type(ty: &Type) -> Result<&ScalarType> {
         _ => bail!("control scalar required"),
     }
 }
+
+fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crate::Expr)> {
+    use ScalarType::{JubjubPoint, JubjubScalar, Native};
+    let argument = |index: usize| {
+        Box::new(crate::Expr::Reference {
+            name: index.to_string(),
+        })
+    };
+    Ok(match operation {
+        "jubjubScalarFromNative" => (
+            vec![Native],
+            JubjubScalar,
+            crate::Expr::JubjubScalarFromNative { value: argument(0) },
+        ),
+        "jubjubScalarToNative" => (
+            vec![JubjubScalar],
+            Native,
+            crate::Expr::JubjubScalarToNative { value: argument(0) },
+        ),
+        "jubjubMulGenerator" => (
+            vec![JubjubScalar],
+            JubjubPoint,
+            crate::Expr::JubjubMulGenerator {
+                scalar: argument(0),
+            },
+        ),
+        "jubjubMul" => (
+            vec![JubjubPoint, JubjubScalar],
+            JubjubPoint,
+            crate::Expr::JubjubMul {
+                point: argument(0),
+                scalar: argument(1),
+            },
+        ),
+        "jubjubAdd" => (
+            vec![JubjubPoint, JubjubPoint],
+            JubjubPoint,
+            crate::Expr::JubjubAdd {
+                left: argument(0),
+                right: argument(1),
+            },
+        ),
+        "jubjubNeg" => (
+            vec![JubjubPoint],
+            JubjubPoint,
+            crate::Expr::JubjubNeg { point: argument(0) },
+        ),
+        "jubjubX" | "jubjubY" => (
+            vec![JubjubPoint],
+            Native,
+            crate::Expr::JubjubCoordinate {
+                point: argument(0),
+                index: usize::from(operation == "jubjubY"),
+            },
+        ),
+        "jubjubFromCoordinates" => (
+            vec![Native, Native],
+            JubjubPoint,
+            crate::Expr::JubjubFromCoordinates {
+                x: argument(0),
+                y: argument(1),
+            },
+        ),
+        _ => bail!("unsupported control curve operation"),
+    })
+}
+
+fn evaluate_curve(operation: &str, values: Vec<Value>) -> Result<Value> {
+    let (parameters, result, expression) = curve_operation(operation)?;
+    ensure!(
+        values.len() == parameters.len(),
+        "control curve argument count"
+    );
+    let env = values
+        .into_iter()
+        .zip(parameters)
+        .enumerate()
+        .map(|(index, (value, ty))| Ok((index.to_string(), value.cast(&ty)?)))
+        .collect::<Result<BTreeMap<_, _>>>()?;
+    let value = crate::evaluate(&expression, &env)?;
+    ensure!(value.scalar_type() == result, "control curve result type");
+    Ok(value)
+}
 fn text<'a>(v: &'a Json, key: &str) -> Result<&'a str> {
     v.get(key)
         .and_then(Json::as_str)
@@ -209,6 +292,7 @@ enum ExprKind {
     And(Arc<Expr>, Arc<Expr>),
     Or(Arc<Expr>, Arc<Expr>),
     Hash(String, Arc<Expr>, Arc<Expr>),
+    Curve(String, Vec<Arc<Expr>>),
     Call(String, Vec<Arc<Expr>>),
     Witness(String),
     WitnessCall {
@@ -440,6 +524,33 @@ impl Parser<'_> {
                     "control hash scalar types"
                 );
                 (Type::Scalar(ScalarType::Native), ExprKind::Hash(d, a, b))
+            }
+            "curve" => {
+                ensure!(self.schema_version == 2, "curve operations require v2 plan");
+                shape(v, &["tag", "operation", "arguments"], true)?;
+                let operation = text(v, "operation")?;
+                let (parameters, result, _) = curve_operation(operation)?;
+                let arguments = list(v, "arguments")?;
+                ensure!(
+                    arguments.len() == parameters.len(),
+                    "control curve argument count"
+                );
+                let arguments = arguments
+                    .iter()
+                    .zip(parameters)
+                    .map(|(argument, expected)| {
+                        let argument = self.expr(argument, env, depth + 1)?;
+                        ensure!(
+                            argument.ty == Type::Scalar(expected),
+                            "control curve argument type"
+                        );
+                        Ok(argument)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (
+                    Type::Scalar(result),
+                    ExprKind::Curve(operation.to_owned(), arguments),
+                )
             }
             "call" => {
                 shape(v, &["tag", "function", "arguments"], true)?;
@@ -2013,7 +2124,8 @@ impl Abstractor<'_> {
             | ExprKind::Composite { .. }
             | ExprKind::Project { .. }
             | ExprKind::Index { .. }
-            | ExprKind::Hash(_, _, _) => None,
+            | ExprKind::Hash(_, _, _)
+            | ExprKind::Curve(_, _) => None,
         })
     }
     fn body(&mut self, body: &Block, initial: &Constants, result: &Type) -> Result<AbstractFlow> {
@@ -2509,6 +2621,7 @@ enum Task {
     Binary(String, Type),
     Eq(Type),
     Hash(String),
+    Curve(String, usize),
     EagerSelect(Type),
     Choose(Arc<Expr>, Arc<Expr>, Type, Env, Arc<Expr>),
     Short(bool, Arc<Expr>, Env),
@@ -3610,6 +3723,13 @@ impl Session {
                     self.tasks.push(Task::Eval(b.clone(), env.clone()));
                     self.tasks.push(Task::Eval(a.clone(), env));
                 }
+                ExprKind::Curve(operation, arguments) => {
+                    self.tasks
+                        .push(Task::Curve(operation.clone(), arguments.len()));
+                    for argument in arguments.iter().rev() {
+                        self.tasks.push(Task::Eval(argument.clone(), env.clone()));
+                    }
+                }
                 ExprKind::Select(c, a, b) => {
                     self.tasks.push(Task::EagerSelect(expr.ty.clone()));
                     self.tasks.push(Task::Eval(b.clone(), env.clone()));
@@ -3751,6 +3871,21 @@ impl Session {
                 let b = ty.coerce(b)?;
                 self.values
                     .push(Tracked::scalar(Value::Bool(a.value == b.value), taint));
+            }
+            Task::Curve(operation, count) => {
+                ensure!(self.values.len() >= count, "control curve argument stack");
+                let arguments = self.values.split_off(self.values.len() - count);
+                let taint = arguments.iter().any(Tracked::is_tainted);
+                let values = arguments
+                    .into_iter()
+                    .map(|argument| {
+                        argument
+                            .value
+                            .ok_or_else(|| anyhow!("control curve scalar required"))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                self.values
+                    .push(Tracked::scalar(evaluate_curve(&operation, values)?, taint));
             }
             Task::Hash(domain) => {
                 let b = self.pop()?;

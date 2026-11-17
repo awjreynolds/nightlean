@@ -1,0 +1,433 @@
+{"witnesses":
+ [{"resultType": "Native",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.witness.secret.v1",
+   "name": "secret",
+   "capability": "secret"},
+  {"resultType": "Native",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.witness.randomness.v1",
+   "name": "randomness",
+   "capability": "randomness"},
+  {"resultType": "UIntRange<340282366920938463463374607431768211456>",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.witness.plaintext.v1",
+   "name": "plaintext",
+   "capability": "plaintext"}],
+ "types":
+ [{"schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r14:encrypt.OutputNightleanCompositeLayoutV1;1;R14:encrypt.Output4;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "encrypt.Output",
+     "fields":
+     [{"name": "c1x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c1y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "c2y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}},
+   "id": "t0"}],
+ "schemaVersion": 2,
+ "name": "noctium.witness-circuit.encrypt.v1",
+ "mode": "native",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs":
+ [{"visibility": "public", "type": "JubjubPoint", "name": "recipient"}],
+ "functions":
+ [{"resultType": "Aggregate:t0",
+   "parameters": [{"type": "JubjubPoint", "name": "recipient"}],
+   "name": "encrypt",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span": {"line": 11, "file": "tests/CurveHelpers.lean", "column": 3},
+      "site": "encrypt.call.s1.0",
+      "name": "secret",
+      "arguments": []},
+     "type": "Native",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "secretField"},
+    {"value":
+     {"tag": "witnessCall",
+      "span": {"line": 12, "file": "tests/CurveHelpers.lean", "column": 3},
+      "site": "encrypt.call.s2.0",
+      "name": "randomness",
+      "arguments": []},
+     "type": "Native",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "randomnessField"},
+    {"value":
+     {"tag": "witnessCall",
+      "span": {"line": 13, "file": "tests/CurveHelpers.lean", "column": 3},
+      "site": "encrypt.call.s3.0",
+      "name": "plaintext",
+      "arguments": []},
+     "type": "UIntRange<340282366920938463463374607431768211456>",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "plaintextField"},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 14, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubScalarFromNative",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 14, "file": "tests/CurveHelpers.lean", "column": 3},
+        "name": "secretField"}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "secretScalar"},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 15, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubScalarFromNative",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 15, "file": "tests/CurveHelpers.lean", "column": 3},
+        "name": "randomnessField"}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "randomnessScalar"},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 16, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubScalarFromNative",
+      "arguments":
+      [{"value":
+        {"tag": "reference",
+         "span": {"line": 16, "file": "tests/CurveHelpers.lean", "column": 3},
+         "name": "plaintextField"},
+        "type": "Native",
+        "tag": "cast",
+        "span": {"line": 16, "file": "tests/CurveHelpers.lean", "column": 3}}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "plaintextScalar"},
+    {"tag": "assert",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 17, "file": "tests/CurveHelpers.lean", "column": 3},
+      "right":
+      {"tag": "reference",
+       "span": {"line": 17, "file": "tests/CurveHelpers.lean", "column": 3},
+       "name": "recipient"},
+      "left":
+      {"tag": "curve",
+       "span": {"line": 17, "file": "tests/CurveHelpers.lean", "column": 3},
+       "operation": "jubjubMulGenerator",
+       "arguments":
+       [{"tag": "reference",
+         "span": {"line": 17, "file": "tests/CurveHelpers.lean", "column": 3},
+         "name": "secretScalar"}]}}},
+    {"tag": "assert",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 18, "file": "tests/CurveHelpers.lean", "column": 3},
+      "right":
+      {"tag": "reference",
+       "span": {"line": 18, "file": "tests/CurveHelpers.lean", "column": 3},
+       "name": "secretField"},
+      "left":
+      {"tag": "curve",
+       "span": {"line": 18, "file": "tests/CurveHelpers.lean", "column": 3},
+       "operation": "jubjubScalarToNative",
+       "arguments":
+       [{"tag": "reference",
+         "span": {"line": 18, "file": "tests/CurveHelpers.lean", "column": 3},
+         "name": "secretScalar"}]}}},
+    {"tag": "assert",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 19, "file": "tests/CurveHelpers.lean", "column": 3},
+      "right":
+      {"value": false,
+       "tag": "bool",
+       "span": {"line": 19, "file": "tests/CurveHelpers.lean", "column": 3}},
+      "left":
+      {"tag": "eq",
+       "span": {"line": 19, "file": "tests/CurveHelpers.lean", "column": 3},
+       "right":
+       {"value": "0",
+        "tag": "constant",
+        "span": {"line": 19, "file": "tests/CurveHelpers.lean", "column": 3}},
+       "left":
+       {"tag": "curve",
+        "span": {"line": 19, "file": "tests/CurveHelpers.lean", "column": 3},
+        "operation": "jubjubScalarToNative",
+        "arguments":
+        [{"tag": "reference",
+          "span": {"line": 19, "file": "tests/CurveHelpers.lean", "column": 3},
+          "name": "secretScalar"}]}}}},
+    {"tag": "assert",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 20, "file": "tests/CurveHelpers.lean", "column": 3},
+      "right":
+      {"value": false,
+       "tag": "bool",
+       "span": {"line": 20, "file": "tests/CurveHelpers.lean", "column": 3}},
+      "left":
+      {"tag": "eq",
+       "span": {"line": 20, "file": "tests/CurveHelpers.lean", "column": 3},
+       "right":
+       {"value": "0",
+        "tag": "constant",
+        "span": {"line": 20, "file": "tests/CurveHelpers.lean", "column": 3}},
+       "left":
+       {"tag": "curve",
+        "span": {"line": 20, "file": "tests/CurveHelpers.lean", "column": 3},
+        "operation": "jubjubScalarToNative",
+        "arguments":
+        [{"tag": "reference",
+          "span": {"line": 20, "file": "tests/CurveHelpers.lean", "column": 3},
+          "name": "randomnessScalar"}]}}}},
+    {"tag": "assert",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 21, "file": "tests/CurveHelpers.lean", "column": 3},
+      "right":
+      {"value": false,
+       "tag": "bool",
+       "span": {"line": 21, "file": "tests/CurveHelpers.lean", "column": 3}},
+      "left":
+      {"tag": "eq",
+       "span": {"line": 21, "file": "tests/CurveHelpers.lean", "column": 3},
+       "right":
+       {"tag": "curve",
+        "span": {"line": 21, "file": "tests/CurveHelpers.lean", "column": 3},
+        "operation": "jubjubFromCoordinates",
+        "arguments":
+        [{"value": "0",
+          "tag": "constant",
+          "span": {"line": 21, "file": "tests/CurveHelpers.lean", "column": 3}},
+         {"value": "1",
+          "tag": "constant",
+          "span":
+          {"line": 21, "file": "tests/CurveHelpers.lean", "column": 3}}]},
+       "left":
+       {"tag": "reference",
+        "span": {"line": 21, "file": "tests/CurveHelpers.lean", "column": 3},
+        "name": "recipient"}}}},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 22, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubFromCoordinates",
+      "arguments":
+      [{"tag": "curve",
+        "span": {"line": 22, "file": "tests/CurveHelpers.lean", "column": 3},
+        "operation": "jubjubX",
+        "arguments":
+        [{"tag": "reference",
+          "span": {"line": 22, "file": "tests/CurveHelpers.lean", "column": 3},
+          "name": "recipient"}]},
+       {"tag": "curve",
+        "span": {"line": 22, "file": "tests/CurveHelpers.lean", "column": 3},
+        "operation": "jubjubY",
+        "arguments":
+        [{"tag": "reference",
+          "span": {"line": 22, "file": "tests/CurveHelpers.lean", "column": 3},
+          "name": "recipient"}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "reconstructed"},
+    {"tag": "assert",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 23, "file": "tests/CurveHelpers.lean", "column": 3},
+      "right":
+      {"tag": "reference",
+       "span": {"line": 23, "file": "tests/CurveHelpers.lean", "column": 3},
+       "name": "recipient"},
+      "left":
+      {"tag": "reference",
+       "span": {"line": 23, "file": "tests/CurveHelpers.lean", "column": 3},
+       "name": "reconstructed"}}},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 24, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubMulGenerator",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 24, "file": "tests/CurveHelpers.lean", "column": 3},
+        "name": "randomnessScalar"}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "c1"},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 25, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubMulGenerator",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 25, "file": "tests/CurveHelpers.lean", "column": 3},
+        "name": "plaintextScalar"}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "messagePoint"},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 26, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 26, "file": "tests/CurveHelpers.lean", "column": 3},
+        "name": "messagePoint"},
+       {"tag": "curve",
+        "span": {"line": 26, "file": "tests/CurveHelpers.lean", "column": 3},
+        "operation": "jubjubMul",
+        "arguments":
+        [{"tag": "reference",
+          "span": {"line": 26, "file": "tests/CurveHelpers.lean", "column": 3},
+          "name": "recipient"},
+         {"tag": "reference",
+          "span": {"line": 26, "file": "tests/CurveHelpers.lean", "column": 3},
+          "name": "randomnessScalar"}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "c2"},
+    {"value":
+     {"tag": "curve",
+      "span": {"line": 27, "file": "tests/CurveHelpers.lean", "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 27, "file": "tests/CurveHelpers.lean", "column": 3},
+        "name": "c2"},
+       {"tag": "curve",
+        "span": {"line": 27, "file": "tests/CurveHelpers.lean", "column": 3},
+        "operation": "jubjubNeg",
+        "arguments":
+        [{"tag": "curve",
+          "span": {"line": 27, "file": "tests/CurveHelpers.lean", "column": 3},
+          "operation": "jubjubMul",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 27, "file": "tests/CurveHelpers.lean", "column": 3},
+            "name": "c1"},
+           {"tag": "reference",
+            "span":
+            {"line": 27, "file": "tests/CurveHelpers.lean", "column": 3},
+            "name": "secretScalar"}]}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "decrypted"},
+    {"tag": "assert",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 28, "file": "tests/CurveHelpers.lean", "column": 3},
+      "right":
+      {"tag": "reference",
+       "span": {"line": 28, "file": "tests/CurveHelpers.lean", "column": 3},
+       "name": "messagePoint"},
+      "left":
+      {"tag": "reference",
+       "span": {"line": 28, "file": "tests/CurveHelpers.lean", "column": 3},
+       "name": "decrypted"}}},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span": {"line": 29, "file": "tests/CurveHelpers.lean", "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span": {"line": 29, "file": "tests/CurveHelpers.lean", "column": 3},
+         "name": "c1"}]},
+      "tag": "disclose",
+      "span": {"line": 29, "file": "tests/CurveHelpers.lean", "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "__noctium_output_19_c1x"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span": {"line": 30, "file": "tests/CurveHelpers.lean", "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span": {"line": 30, "file": "tests/CurveHelpers.lean", "column": 3},
+         "name": "c1"}]},
+      "tag": "disclose",
+      "span": {"line": 30, "file": "tests/CurveHelpers.lean", "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "__noctium_output_20_c1y"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span": {"line": 31, "file": "tests/CurveHelpers.lean", "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span": {"line": 31, "file": "tests/CurveHelpers.lean", "column": 3},
+         "name": "c2"}]},
+      "tag": "disclose",
+      "span": {"line": 31, "file": "tests/CurveHelpers.lean", "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "__noctium_output_21_c2x"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span": {"line": 32, "file": "tests/CurveHelpers.lean", "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span": {"line": 32, "file": "tests/CurveHelpers.lean", "column": 3},
+         "name": "c2"}]},
+      "tag": "disclose",
+      "span": {"line": 32, "file": "tests/CurveHelpers.lean", "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+     "name": "__noctium_output_22_c2y"},
+    {"value":
+     {"type": "Aggregate:t0",
+      "tag": "composite",
+      "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+      "leaves":
+      [{"tag": "reference",
+        "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+        "name": "__noctium_output_19_c1x"},
+       {"tag": "reference",
+        "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+        "name": "__noctium_output_20_c1y"},
+       {"tag": "reference",
+        "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+        "name": "__noctium_output_21_c2x"},
+       {"tag": "reference",
+        "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1},
+        "name": "__noctium_output_22_c2y"}]},
+     "tag": "return",
+     "span": {"line": 9, "file": "tests/CurveHelpers.lean", "column": 1}}]}],
+ "entry": "s0d0",
+ "binding":
+ "{\"calls\":[{\"inputs\":[\"$helper1\"],\"name\":\"secret\",\"ordinal\":\"0\",\"path\":[\"s0d0\"],\"resultType\":\"Native\",\"site\":\"encrypt.call.s1.0\"},{\"inputs\":[\"$helper3\"],\"name\":\"randomness\",\"ordinal\":\"1\",\"path\":[\"s0d0\"],\"resultType\":\"Native\",\"site\":\"encrypt.call.s2.0\"},{\"inputs\":[\"$helper5\"],\"name\":\"plaintext\",\"ordinal\":\"2\",\"path\":[\"s0d0\"],\"resultType\":\"UIntRange<340282366920938463463374607431768211456>\",\"site\":\"encrypt.call.s3.0\"}],\"circuitInputs\":[{\"name\":\"recipient\",\"type\":\"JubjubPoint\",\"visibility\":\"public\"},{\"name\":\"$helper1\",\"type\":\"Native\",\"visibility\":\"private\"},{\"name\":\"$helper3\",\"type\":\"Native\",\"visibility\":\"private\"},{\"name\":\"$helper5\",\"type\":\"UIntRange<340282366920938463463374607431768211456>\",\"visibility\":\"private\"}],\"circuitName\":\"encrypt\",\"circuitOutputs\":[{\"name\":\"result.c1x\",\"type\":\"Native\"},{\"name\":\"result.c1y\",\"type\":\"Native\"},{\"name\":\"result.c2x\",\"type\":\"Native\"},{\"name\":\"result.c2y\",\"type\":\"Native\"}],\"inputBindings\":[{\"inputs\":[\"recipient\"],\"name\":\"recipient\",\"type\":\"JubjubPoint\"}],\"kind\":\"typed-witness-bindings\",\"nativeRelation\":{\"do_communications_commitment\":true,\"inputs\":[],\"instructions\":[{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_recipient_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_recipient_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_recipient_x\",\"%input_recipient_y\"],\"op\":\"from_coordinates\",\"output\":\"%v0\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v1\",\"%v2\"],\"point\":\"%v0\"},{\"a\":\"%input_recipient_x\",\"b\":\"%v1\",\"op\":\"constrain_eq\"},{\"a\":\"%input_recipient_y\",\"b\":\"%v2\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper1\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper3\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper5\"},{\"native\":\"%input_$helper1\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v3\"},{\"native\":\"%input_$helper3\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v4\"},{\"native\":\"%input_$helper5\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v5\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v6\",\"scalar\":\"%v3\"},{\"a\":\"%v6\",\"b\":\"%v0\",\"op\":\"test_eq\",\"output\":\"%v7\"},{\"a\":\"%v7\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v8\"},{\"cond\":\"%v8\",\"op\":\"assert\"},{\"input\":\"%v3\",\"op\":\"encode\",\"outputs\":[\"%v9\"]},{\"a\":\"%v9\",\"b\":\"%input_$helper1\",\"op\":\"test_eq\",\"output\":\"%v10\"},{\"a\":\"%v10\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v11\"},{\"cond\":\"%v11\",\"op\":\"assert\"},{\"a\":\"%v9\",\"b\":\"0x00\",\"op\":\"test_eq\",\"output\":\"%v12\"},{\"a\":\"%v12\",\"b\":\"0x00\",\"op\":\"test_eq\",\"output\":\"%v13\"},{\"a\":\"%v13\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v14\"},{\"cond\":\"%v14\",\"op\":\"assert\"},{\"input\":\"%v4\",\"op\":\"encode\",\"outputs\":[\"%v15\"]},{\"a\":\"%v15\",\"b\":\"0x00\",\"op\":\"test_eq\",\"output\":\"%v16\"},{\"a\":\"%v16\",\"b\":\"0x00\",\"op\":\"test_eq\",\"output\":\"%v17\"},{\"a\":\"%v17\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v18\"},{\"cond\":\"%v18\",\"op\":\"assert\"},{\"inputs\":[\"0x00\",\"0x01\"],\"op\":\"from_coordinates\",\"output\":\"%v19\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v20\",\"%v21\"],\"point\":\"%v19\"},{\"a\":\"0x00\",\"b\":\"%v20\",\"op\":\"constrain_eq\"},{\"a\":\"0x01\",\"b\":\"%v21\",\"op\":\"constrain_eq\"},{\"a\":\"%v0\",\"b\":\"%v19\",\"op\":\"test_eq\",\"output\":\"%v22\"},{\"a\":\"%v22\",\"b\":\"0x00\",\"op\":\"test_eq\",\"output\":\"%v23\"},{\"a\":\"%v23\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v24\"},{\"cond\":\"%v24\",\"op\":\"assert\"},{\"inputs\":[\"%v1\",\"%v2\"],\"op\":\"from_coordinates\",\"output\":\"%v25\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v26\",\"%v27\"],\"point\":\"%v25\"},{\"a\":\"%v1\",\"b\":\"%v26\",\"op\":\"constrain_eq\"},{\"a\":\"%v2\",\"b\":\"%v27\",\"op\":\"constrain_eq\"},{\"a\":\"%v25\",\"b\":\"%v0\",\"op\":\"test_eq\",\"output\":\"%v28\"},{\"a\":\"%v28\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v29\"},{\"cond\":\"%v29\",\"op\":\"assert\"},{\"a\":\"%v1\",\"b\":\"%v26\",\"op\":\"constrain_eq\"},{\"a\":\"%v2\",\"b\":\"%v27\",\"op\":\"constrain_eq\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v30\",\"scalar\":\"%v4\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v31\",\"scalar\":\"%v5\"},{\"a\":\"%v0\",\"op\":\"ec_mul\",\"output\":\"%v32\",\"scalar\":\"%v4\"},{\"a\":\"%v31\",\"b\":\"%v32\",\"op\":\"add\",\"output\":\"%v33\"},{\"a\":\"%v30\",\"op\":\"ec_mul\",\"output\":\"%v34\",\"scalar\":\"%v3\"},{\"a\":\"%v34\",\"op\":\"neg\",\"output\":\"%v35\"},{\"a\":\"%v33\",\"b\":\"%v35\",\"op\":\"add\",\"output\":\"%v36\"},{\"a\":\"%v36\",\"b\":\"%v31\",\"op\":\"test_eq\",\"output\":\"%v37\"},{\"a\":\"%v37\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v38\"},{\"cond\":\"%v38\",\"op\":\"assert\"},{\"a\":\"%v1\",\"b\":\"%v26\",\"op\":\"constrain_eq\"},{\"a\":\"%v2\",\"b\":\"%v27\",\"op\":\"constrain_eq\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v39\",\"%v40\"],\"point\":\"%v30\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v41\",\"%v42\"],\"point\":\"%v33\"},{\"a\":\"%v1\",\"b\":\"%v26\",\"op\":\"constrain_eq\"},{\"a\":\"%v2\",\"b\":\"%v27\",\"op\":\"constrain_eq\"},{\"a\":\"%v1\",\"b\":\"%v26\",\"op\":\"constrain_eq\"},{\"a\":\"%v2\",\"b\":\"%v27\",\"op\":\"constrain_eq\"},{\"a\":\"%v1\",\"b\":\"%v26\",\"op\":\"constrain_eq\"},{\"a\":\"%v2\",\"b\":\"%v27\",\"op\":\"constrain_eq\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v39\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x91\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x01\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v40\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x91\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x02\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v41\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x91\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x03\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v42\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x91\"],\"op\":\"impact\"},{\"op\":\"output\",\"vals\":[]}],\"outputs\":[],\"version\":{\"major\":3,\"minor\":2}},\"schemaVersion\":1,\"signatures\":[{\"capability\":\"secret\",\"name\":\"secret\",\"operation\":\"noctium.witness.secret.v1\",\"parameters\":[],\"privateKey\":null,\"resultType\":\"Native\"},{\"capability\":\"randomness\",\"name\":\"randomness\",\"operation\":\"noctium.witness.randomness.v1\",\"parameters\":[],\"privateKey\":null,\"resultType\":\"Native\"},{\"capability\":\"plaintext\",\"name\":\"plaintext\",\"operation\":\"noctium.witness.plaintext.v1\",\"parameters\":[],\"privateKey\":null,\"resultType\":\"UIntRange<340282366920938463463374607431768211456>\"}],\"sourceExport\":\"noctium.witness-circuit.encrypt.v1\",\"target\":{\"contractName\":\"CurveHelpers\",\"entrypoint\":\"encrypt\",\"kind\":\"entrypoint\",\"nativeCircuitFile\":\"CurveHelpers.encrypt.zkir\",\"targetProfile\":\"midnight-ledger-9-zkir-3.2.1\"},\"types\":[{\"id\":\"t0\",\"schema\":{\"counts\":{\"expandedNodes\":5,\"layoutNodes\":5,\"leaves\":4},\"layout\":{\"fields\":[{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"c1x\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"c1y\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"c2x\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"c2y\"}],\"id\":\"encrypt.Output\",\"kind\":\"struct\"},\"schemaVersion\":1,\"typeFingerprint\":\"NightleanCompositeTypeV1;r14:encrypt.OutputNightleanCompositeLayoutV1;1;R14:encrypt.Output4;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;\"}}]}\n"}

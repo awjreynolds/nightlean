@@ -178,7 +178,13 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
 private def resultTypeTerm : ResultType → CommandElabM (TSyntax `term)
   | .unit => `(Nightlean.Helpers.ResultType.unit)
   | .scalar ty => do `(Nightlean.Helpers.ResultType.scalar $(← tyTerm ty))
-  | .composite _ => throwError "readable witness source does not support composite results"
+  | .composite (.structure id) =>
+    `(Nightlean.Helpers.ResultType.composite (Nightlean.Types.CompositeType.structure $(stringTerm id)))
+  | .composite _ => throwError "readable witness source supports only synthesized record results"
+
+private def compositeTypeTerm : Types.CompositeType → CommandElabM (TSyntax `term)
+  | .structure id => `(Nightlean.Types.CompositeType.structure $(stringTerm id))
+  | _ => throwError "readable witness source supports only synthesized record types"
 
 private def validIdentity (stx : Syntax) (value : String) : CommandElabM _root_.Unit :=
   unless Helpers.validWitnessIdentifier value do
@@ -281,6 +287,16 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"select({renderExpr condition}, {renderExpr yes}, {renderExpr no})"
   | `(nlexpr| poseidon2($domain:num, $left, $right)) =>
     s!"poseidon2({domain.getNat}, {renderExpr left}, {renderExpr right})"
+  | `(nlexpr| jubjubScalarFromNative($value)) => s!"jubjubScalarFromNative({renderExpr value})"
+  | `(nlexpr| jubjubScalarToNative($value)) => s!"jubjubScalarToNative({renderExpr value})"
+  | `(nlexpr| jubjubMulGenerator($value)) => s!"jubjubMulGenerator({renderExpr value})"
+  | `(nlexpr| jubjubMul($point, $scalar)) => s!"jubjubMul({renderExpr point}, {renderExpr scalar})"
+  | `(nlexpr| jubjubAdd($left, $right)) => s!"jubjubAdd({renderExpr left}, {renderExpr right})"
+  | `(nlexpr| jubjubNeg($point)) => s!"jubjubNeg({renderExpr point})"
+  | `(nlexpr| jubjubX($point)) => s!"jubjubX({renderExpr point})"
+  | `(nlexpr| jubjubY($point)) => s!"jubjubY({renderExpr point})"
+  | `(nlexpr| jubjubFromCoordinates($x, $y)) =>
+    s!"jubjubFromCoordinates({renderExpr x}, {renderExpr y})"
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) =>
     s!"witness {function.getId}({String.intercalate ", " (args.getElems.toList.map renderExpr)})"
   | _ => "<unsupported-expression>"
@@ -297,6 +313,15 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| select($condition, $yes, $no)) =>
     disclosedValues condition ++ disclosedValues yes ++ disclosedValues no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => disclosedValues left ++ disclosedValues right
+  | `(nlexpr| jubjubScalarFromNative($value))
+  | `(nlexpr| jubjubScalarToNative($value))
+  | `(nlexpr| jubjubMulGenerator($value))
+  | `(nlexpr| jubjubNeg($value))
+  | `(nlexpr| jubjubX($value))
+  | `(nlexpr| jubjubY($value)) => disclosedValues value
+  | `(nlexpr| jubjubMul($point, $scalar)) | `(nlexpr| jubjubAdd($point, $scalar)) =>
+    disclosedValues point ++ disclosedValues scalar
+  | `(nlexpr| jubjubFromCoordinates($x, $y)) => disclosedValues x ++ disclosedValues y
   | `(nlexpr| witness $_:ident($args:nlexpr,*)) => args.getElems.toList.flatMap disclosedValues
   | _ => []
 
@@ -313,6 +338,15 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| select($condition, $yes, $no)) =>
     inlineAssertions condition ++ inlineAssertions yes ++ inlineAssertions no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => inlineAssertions left ++ inlineAssertions right
+  | `(nlexpr| jubjubScalarFromNative($value))
+  | `(nlexpr| jubjubScalarToNative($value))
+  | `(nlexpr| jubjubMulGenerator($value))
+  | `(nlexpr| jubjubNeg($value))
+  | `(nlexpr| jubjubX($value))
+  | `(nlexpr| jubjubY($value)) => inlineAssertions value
+  | `(nlexpr| jubjubMul($point, $scalar)) | `(nlexpr| jubjubAdd($point, $scalar)) =>
+    inlineAssertions point ++ inlineAssertions scalar
+  | `(nlexpr| jubjubFromCoordinates($x, $y)) => inlineAssertions x ++ inlineAssertions y
   | `(nlexpr| witness $_:ident($args:nlexpr,*)) => args.getElems.toList.flatMap inlineAssertions
   | _ => []
 
@@ -428,6 +462,21 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let left ← coerce stx left .native
     let right ← coerce stx right .native
     pure (mergeLowered (.scalar .native) (.poseidon2 domain.getNat left.term right.term) [left, right])
+  | `(nlexpr| jubjubScalarFromNative($value)) =>
+    lowerCurve programName callPrefix env stx .scalarFromNative [value]
+  | `(nlexpr| jubjubScalarToNative($value)) =>
+    lowerCurve programName callPrefix env stx .scalarToNative [value]
+  | `(nlexpr| jubjubMulGenerator($value)) =>
+    lowerCurve programName callPrefix env stx .mulGenerator [value]
+  | `(nlexpr| jubjubMul($point, $scalar)) =>
+    lowerCurve programName callPrefix env stx .mul [point, scalar]
+  | `(nlexpr| jubjubAdd($left, $right)) =>
+    lowerCurve programName callPrefix env stx .add [left, right]
+  | `(nlexpr| jubjubNeg($point)) => lowerCurve programName callPrefix env stx .neg [point]
+  | `(nlexpr| jubjubX($point)) => lowerCurve programName callPrefix env stx .x [point]
+  | `(nlexpr| jubjubY($point)) => lowerCurve programName callPrefix env stx .y [point]
+  | `(nlexpr| jubjubFromCoordinates($x, $y)) =>
+    lowerCurve programName callPrefix env stx .fromCoordinates [x, y]
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) => do
     let signature ← liftM (witnessSignature function)
     let signatureName := signature.name
@@ -463,6 +512,21 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
           [s!"typed witness reply: {signatureName}"]).eraseDups }
   | _ => throwErrorAt stx "unsupported readable witness expression"
 where
+  lowerCurve (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
+      (operation : Nightlean.Helpers.CurveOp) (arguments : List (TSyntax `nlexpr)) : ExprM Lowered := do
+    let (expected, result) := operation.signature
+    unless arguments.length == expected.length do
+      throwErrorAt stx s!"{operation.operationName} argument count mismatch"
+    let values ← arguments.mapM (lowerExpr programName callPrefix env)
+    for (value, expectedType) in values.zip expected do
+      let .scalar actualType := value.type | throwErrorAt stx "curve operation argument cannot be Unit"
+      unless actualType == expectedType do
+        throwErrorAt stx s!"{operation.operationName} argument type mismatch"
+    let term := Nightlean.Helpers.Term.curve operation (values.map (·.term))
+    pure { mergeLowered (.scalar result) term values with
+      generatedValidity := (values.flatMap (·.generatedValidity) ++
+        if operation == .fromCoordinates then ["Jubjub point coordinate validation"] else []).eraseDups }
+
   lowerArithmetic (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
       (op : ScalarPolicy.Binary) (leftStx rightStx : TSyntax `nlexpr) : ExprM Lowered := do
     let left ← lowerExpr programName callPrefix env leftStx
@@ -521,6 +585,25 @@ private partial def termTerm : Nightlean.Helpers.Term → CommandElabM (TSyntax 
     `(Nightlean.Helpers.Term.witnessCall $(stringTerm site) $(stringTerm name) [$args,*])
   | .poseidon2 domain left right => do
     `(Nightlean.Helpers.Term.poseidon2 $(natTerm domain) $(← termTerm left) $(← termTerm right))
+  | .curve operation arguments => do
+    let operation ← match operation with
+      | .scalarFromNative => `(Nightlean.Helpers.CurveOp.scalarFromNative)
+      | .scalarToNative => `(Nightlean.Helpers.CurveOp.scalarToNative)
+      | .mulGenerator => `(Nightlean.Helpers.CurveOp.mulGenerator)
+      | .mul => `(Nightlean.Helpers.CurveOp.mul)
+      | .add => `(Nightlean.Helpers.CurveOp.add)
+      | .neg => `(Nightlean.Helpers.CurveOp.neg)
+      | .x => `(Nightlean.Helpers.CurveOp.x)
+      | .y => `(Nightlean.Helpers.CurveOp.y)
+      | .fromCoordinates => `(Nightlean.Helpers.CurveOp.fromCoordinates)
+    let arguments ← arguments.mapM termTerm
+    let arguments := arguments.toArray
+    `(Nightlean.Helpers.Term.curve $operation [$arguments,*])
+  | .composite type leaves => do
+    let type ← compositeTypeTerm type
+    let leaves ← leaves.mapM termTerm
+    let leaves := leaves.toArray
+    `(Nightlean.Helpers.Term.composite $type [$leaves,*])
   | .at span value => do
     let span ← quoteSpan span
     `(Nightlean.Helpers.Term.at $span $(← termTerm value))
@@ -691,9 +774,11 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let mut outputName := ""
     let mut outputType : ResultType := .unit
     let mut sawOutput := _root_.Bool.false
-    let mut sawReturn := _root_.Bool.false
+    let mut authoredOutputs : List (String × Ty × Lowered × SourceSpan × Nat) := []
     for (statement, ordinal) in statements.toList.zip (List.range statements.size) do
-      if sawReturn then throwErrorAt statement "no statements may follow the circuit output"
+      let isOutput := statement.raw[0].getAtomVal == "output"
+      if sawOutput && !isOutput then
+        throwErrorAt statement "no statements may follow the circuit outputs"
       match statement with
       | `(noctium_witness_statement| public $id:ident : $type:nltype)
       | `(noctium_witness_statement| private $id:ident : $type:nltype) => do
@@ -776,18 +861,16 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
         generatedValidity := (generatedValidity ++ observationPart.generatedValidity ++ [s!"typed staged private-state value: {field.key}"] ++ value.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
       | `(noctium_witness_statement| output $id:ident : $type:nltype := $value:nlexpr) => do
-        if sawOutput then throwErrorAt id "readable witness circuits support one output"
         let valueName := id.getId.toString
-        if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness output '{valueName}'"
+        if env.any (fun value => value.1 == valueName) || authoredOutputs.any (fun prior => prior.1 == valueName) then
+          throwErrorAt id s!"duplicate readable witness output '{valueName}'"
         let ty ← readScalarTy type
         let sourceExpr := value
         let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' {}
         let value ← coerce sourceExpr lowered ty
-        body := body ++ value.before ++ [.return (some (.at (← spanValue statement) value.term))]
-        outputName := valueName
-        outputType := .scalar ty
+        let outputSpan ← spanValue statement
+        authoredOutputs := authoredOutputs ++ [(valueName, ty, value, outputSpan, ordinal)]
         sawOutput := _root_.Bool.true
-        sawReturn := _root_.Bool.true
         witnesses := uniqueWitnesses (witnesses ++ value.signatures)
         witnessNames := (witnessNames ++ value.witnessNames).eraseDups
         let observationPart := collectExpressionMetadata {entryName := exportName} sourceExpr value.generatedValidity
@@ -795,7 +878,35 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
         generatedValidity := (generatedValidity ++ observationPart.generatedValidity ++ value.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
       | _ => throwErrorAt statement "unsupported readable witness statement"
-    if !sawOutput then body := body ++ [.return none]
+    let compositeId := programNameText ++ ".Output"
+    let compositeType := Types.CompositeType.structure compositeId
+    let compositeFields := authoredOutputs.map fun (fieldName, fieldType, _, fieldSpan, _) =>
+      {name := fieldName, type := Types.CompositeType.scalar fieldType, span := fieldSpan : Types.Field}
+    let declarationSpan ← spanValue stx
+    let compositeEnv : Types.CompositeEnv := if authoredOutputs.length > 1 then
+      {structures := [{id := compositeId, fields := compositeFields, span := declarationSpan}]}
+      else {}
+    if authoredOutputs.isEmpty then
+      body := body ++ [.return none]
+      outputType := .unit
+    else if authoredOutputs.length == 1 then
+      let some (fieldName, fieldType, fieldValue, fieldSpan, _) := authoredOutputs.head?
+        | throwErrorAt stx "readable witness output collection failed"
+      outputName := fieldName
+      outputType := .scalar fieldType
+      body := body ++ fieldValue.before ++ [.return (some (.at fieldSpan fieldValue.term))]
+    else
+      outputName := ""
+      outputType := .composite compositeType
+      let mut outputReferences := []
+      for (fieldName, fieldType, fieldValue, fieldSpan, ordinal) in authoredOutputs do
+        let bindingName := s!"__noctium_output_{ordinal}_{fieldName}"
+        if env.any (fun item => item.1 == bindingName) || authoredOutputs.any (fun item => item.1 == bindingName) then
+          throwErrorAt stx "generated composite output binding collides with a source name"
+        body := body ++ fieldValue.before ++ [
+          .bind bindingName (.scalar fieldType) (.at fieldSpan fieldValue.term)]
+        outputReferences := outputReferences ++ [.ref bindingName]
+      body := body ++ [.return (some (.composite compositeType outputReferences))]
     let observation : ObservationMetadata := {
       entryName := exportName,
       inputs := inputObservations,
@@ -807,7 +918,6 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       generatedValidity := generatedValidity
     }
     let declId : DeclarationId := ⟨0, 0⟩
-    let declarationSpan ← spanValue stx
     let declaration : Nightlean.Helpers.Declaration :=
       { id := declId,
         name := programNameText,
@@ -821,7 +931,8 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         target := declId,
         inputs := inputs,
         span := exportSpan }
-    let program : Program := {declarations := [declaration], exports := [entryExport], witnesses := witnesses}
+    let program : Program := {
+      declarations := [declaration], exports := [entryExport], composites := compositeEnv, witnesses := witnesses}
     let readTypes := (witnesses.filter (·.operation == "private_state.read.v1")).map (·.result)
     if let some expected := readTypes.head? then
       unless readTypes.all (· == expected) do
@@ -841,13 +952,28 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let declarationSpanTerm ← quoteSpan declaration.span
     let idTerm ← `(Nightlean.Helpers.DeclarationId.mk 0 0)
     let declarationResultTerm ← resultTypeTerm declaration.result
+    let compositeEnvTerm ← if authoredOutputs.length > 1 then do
+      let fieldTerms ← compositeFields.mapM fun field => do
+        let fieldType ← match field.type with
+          | .scalar ty => tyTerm ty
+          | _ => throwErrorAt stx "readable witness record outputs require scalar fields"
+        let fieldSpan ← quoteSpan field.span
+        `(Nightlean.Types.Field.mk $(stringTerm field.name)
+          (Nightlean.Types.CompositeType.scalar $fieldType) $fieldSpan)
+      let fieldTerms := fieldTerms.toArray
+      let structureSpan ← quoteSpan declarationSpan
+      let structureTerm ← `(Nightlean.Types.StructDecl.mk $(stringTerm compositeId)
+        [$fieldTerms,*] $structureSpan)
+      `({ structures := [$structureTerm], enumerations := [] : Nightlean.Types.CompositeEnv })
+    else
+      `({ : Nightlean.Types.CompositeEnv })
     let declarationTerm ← `(Nightlean.Helpers.Declaration.mk $idTerm $(stringTerm declaration.name)
       [$parameterTerms,*] [] $declarationResultTerm [$statementTerms,*] _root_.Bool.false $declarationSpanTerm)
     let exportSpanTerm ← quoteSpan entryExport.span
     let exportTerm ← `(Nightlean.Helpers.Export.mk $(stringTerm entryExport.name) $idTerm
       [$inputTerms,*] [] $exportSpanTerm)
     let programTerm ← `(Nightlean.Helpers.Program.mk [{id := 0}] [$declarationTerm]
-      [$exportTerm] {} [$signatureTerms,*])
+      [$exportTerm] $compositeEnvTerm [$signatureTerms,*])
     let metadataTerm ← observationTerm observation
     elabCommand (← `(def $(mkIdent programSyntaxName) : Nightlean.Helpers.Program := $programTerm))
     elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))

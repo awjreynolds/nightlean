@@ -51,6 +51,7 @@ jobs:
           lake env lean tests/NativeByteConversions.lean
           lake env lean tests/NativeByteIndexing.lean
           lake env lean tests/CurveWitness.lean
+          lake env lean tests/CurveHelpers.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean
           lake env lean tests/Issue43MapMembership.lean

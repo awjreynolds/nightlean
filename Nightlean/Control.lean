@@ -33,6 +33,13 @@ private def declaration (program : Program) (id : DeclarationId) (span : SourceS
   | some value => pure value
   | none => fail span "unknown control declaration"
 
+private def portableResultLayout : Types.Layout → Bool
+  | .structure _ fields => fields.all fun (_, item) =>
+      match item with
+      | .scalar .nativeField | .scalar .booleanField | .scalar (.boundedUnsignedField _) => true
+      | _ => false
+  | _ => false
+
 structure Abstract where
   ty : ResultType
   origins : Disclosure.Origins := []
@@ -134,6 +141,10 @@ mutual
       | none => pure (combined (.scalar .bool) [left, ← expression checked scope env span right])
     | .poseidon2 _ a b =>
       pure (combined (.scalar .native) [← expression checked scope env span a, ← expression checked scope env span b])
+    | .curve _ arguments => do
+      let values ← arguments.mapM (expression checked scope env span)
+      let info ← liftD (checked.infer scope (env.map fun (name, value) => (name, value.ty)) span term)
+      pure (combined info.ty values)
     | .witness name ty => pure {ty := .scalar ty, origins := [{name, kind := .provider, span}]}
     | .witnessCall _ name arguments => do
       let values ← arguments.mapM (expression checked scope env span)
@@ -150,7 +161,12 @@ mutual
       let origins := if kind == .witness || kind == .privateState then
         [{name, kind := if kind == .witness then .provider else .privateState, span}] else []
       pure {value with origins := merge value.origins origins}
-    | .composite .. | .project .. | .index .. => liftD (fail span "aggregate control values are unavailable")
+    | .composite type leaves => do
+      let values ← leaves.mapM (expression checked scope env span)
+      let info ← liftD (checked.infer scope (env.map fun (name, value) => (name, value.ty)) span term)
+      unless info.ty == .composite type do liftD (fail span "aggregate control value type mismatch")
+      pure (combined info.ty values)
+    | .project .. | .index .. => liftD (fail span "aggregate control projections are unavailable")
     | .at span value => expression checked scope env span value
 
   private partial def call (checked : Helpers.Prepared) (target : Helpers.Declaration) (arguments : List Abstract) : CheckM Abstract := do
@@ -213,9 +229,15 @@ private def checkPreparedDisclosure (limits : Helpers.Limits) (checked : Helpers
   let program := checked.program
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown control entrypoint"
   if !entry.compositeInputs.isEmpty || program.declarations.any fun declaration =>
-      (match declaration.result with | .composite _ => true | _ => false) ||
-        !declaration.compositeParameters.isEmpty then
-    fail entry.span "aggregate values are not supported by the portable control plan"
+      !declaration.compositeParameters.isEmpty then
+    fail entry.span "aggregate inputs are not supported by the portable control plan"
+  for declaration in program.declarations do
+    if let .composite type := declaration.result then
+      let compiled ← match Types.compileType program.composites type with
+        | .ok value => pure value
+        | .error diagnostic => fail declaration.span diagnostic.message
+      unless portableResultLayout compiled.checked.value do
+        fail declaration.span "portable control aggregate results require supported scalar-field layouts"
   let target ← declaration program entry.target entry.span
   let arguments := entry.inputs.map fun input =>
     ({ty := .scalar input.ty, origins := if input.visibility == .private then
@@ -339,6 +361,10 @@ mutual
     | .disclose _ value => pure (node span "disclose" [("value", ← emitExpression checked scope env span value)])
     | .poseidon2 domain a b => pure (node span "poseidon2" [("domain", toJson (toString domain)),
         ("left", ← emitExpression checked scope env span a), ("right", ← emitExpression checked scope env span b)])
+    | .curve operation arguments => do
+      unless (← get).typed do emitLift (fail span "curve operations require control schema version 2")
+      pure (node span "curve" [("operation", toJson operation.operationName),
+        ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
     | .call name arguments =>
       let types ← emitLift (arguments.mapM fun argument => do pure (← checked.infer scope env span argument).ty)
       let target ← emitLift (checked.resolve scope name types span)

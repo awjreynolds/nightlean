@@ -187,6 +187,12 @@ private partial def analyzeTerm (fuel : Nat) (program : Program) (prepared : Pre
     pure (makeValue info.ty [merge (payloadOrigins left) (payloadOrigins right)]
       (merge left.indexOrigins right.indexOrigins) (merge left.tagOrigins right.tagOrigins)
       (merge left.controlOrigins right.controlOrigins))
+  | .curve _ arguments => do
+    let values ← arguments.mapM (analyzeTerm fuel program prepared scope env span)
+    pure (makeValue info.ty [values.foldl (fun result value => merge result (payloadOrigins value)) []]
+      (values.foldl (fun result value => merge result value.indexOrigins) [])
+      (values.foldl (fun result value => merge result value.tagOrigins) [])
+      (values.foldl (fun result value => merge result value.controlOrigins) []))
   | .cast _ value => do
     let value ← analyzeTerm fuel program prepared scope env span value
     pure (makeValue info.ty [payloadOrigins value] value.indexOrigins value.tagOrigins value.controlOrigins)

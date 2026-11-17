@@ -9,6 +9,106 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "zkir-321")]
 #[test]
+fn witness_backed_curve_helpers_bind_elgamal_outputs_and_reject_a_wrong_key() {
+    use nightlean_runtime::{
+        Plan, check, create_state, field_decimal, field_value, prepare, zkir::IrSource,
+    };
+    use onchain_runtime::state::StateValue;
+    use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine};
+
+    let source =
+        include_str!("fixtures/curve-helpers/321/CurveHelpers.encrypt.witness.control.json");
+    let native_plan: Plan = serde_json::from_str(include_str!(
+        "fixtures/curve-helpers/321/CurveHelpers.encrypt.impact.json"
+    ))
+    .unwrap();
+    let circuit: &[u8] = include_bytes!("fixtures/curve-helpers/321/CurveHelpers.encrypt.zkir");
+    let circuit = IrSource::load(circuit).unwrap();
+    let generator = EmbeddedGroupAffine::generator();
+    let recipient = generator * EmbeddedFr::from(7u64);
+    for key in [7u64, 8] {
+        let inputs = BTreeMap::from([(
+            "recipient".into(),
+            json!({"kind":"jubjubPoint", "x":field_decimal(recipient.x().unwrap()), "y":field_decimal(recipient.y().unwrap())}),
+        )]);
+        let attempt = format!("{key:064x}");
+        let (mut session, plan) = bound_session(source, inputs, &attempt);
+        loop {
+            let status = session.advance().unwrap();
+            if status["status"] != "need_host" {
+                assert_eq!(
+                    status["status"],
+                    if key == 7 { "completed" } else { "failed" },
+                    "{status}"
+                );
+                break;
+            }
+            let request = &status["request"];
+            let value = match request["name"].as_str().unwrap() {
+                "secret" => key,
+                "randomness" => 11,
+                "plaintext" => 3,
+                other => panic!("unexpected provider {other}"),
+            };
+            session
+                .resume_typed(reply(
+                    request,
+                    &attempt,
+                    "value",
+                    Some(json!(value.to_string())),
+                ))
+                .unwrap();
+        }
+        let relation = binding(&plan)["nativeRelation"].clone();
+        if key != 7 {
+            assert!(session.private_completion(&relation).is_err());
+            continue;
+        }
+        let completion = session.private_completion(&relation).unwrap();
+        let native_inputs = serde_json::from_value(completion["inputs"].clone()).unwrap();
+        let initial = create_state(
+            &native_plan,
+            &BTreeMap::from([
+                ("c1x".into(), json!("0")),
+                ("c1y".into(), json!("0")),
+                ("c2x".into(), json!("0")),
+                ("c2y".into(), json!("0")),
+            ]),
+        )
+        .unwrap();
+        let execution = prepare(
+            &native_plan,
+            &native_inputs,
+            &initial,
+            &ledger::structure::INITIAL_PARAMETERS,
+            coin_structure::contract::ContractAddress::default(),
+        )
+        .unwrap();
+        check(&execution, &circuit).unwrap();
+        let StateValue::Array(state) = execution.after.state.get_ref() else {
+            panic!("expected state array")
+        };
+        let c1 = generator * EmbeddedFr::from(11u64);
+        let c2 = generator * EmbeddedFr::from(80u64);
+        for (index, expected) in [
+            c1.x().unwrap(),
+            c1.y().unwrap(),
+            c2.x().unwrap(),
+            c2.y().unwrap(),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let StateValue::Cell(cell) = state.get(index).unwrap() else {
+                panic!("expected ciphertext cell")
+            };
+            assert_eq!(**cell, field_value(expected));
+        }
+    }
+}
+
+#[cfg(feature = "zkir-321")]
+#[test]
 fn typed_curve_witnesses_keep_private_values_and_feed_the_native_relation() {
     use nightlean_runtime::{Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
     use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine};

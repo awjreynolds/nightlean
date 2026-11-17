@@ -1089,7 +1089,8 @@ private partial def collectWitnessTerms (term : Helpers.Term) (result : Array Si
   | .at _ value | .project value _ => collectWitnessTerms value result
   | .select condition yes no | .ite condition yes no =>
     collectWitnessTerms no (collectWitnessTerms yes (collectWitnessTerms condition result))
-  | .call _ values | .witnessCall _ _ values | .composite _ values => values.foldl (fun acc value => collectWitnessTerms value acc) result
+  | .call _ values | .witnessCall _ _ values | .composite _ values | .curve _ values =>
+    values.foldl (fun acc value => collectWitnessTerms value acc) result
   | .unit | .native _ | .bool _ | .uint _ _ | .ref _ => result
 
 private partial def collectWitnessStatements : List Helpers.Statement → Array SignatureValue → Array SignatureValue
