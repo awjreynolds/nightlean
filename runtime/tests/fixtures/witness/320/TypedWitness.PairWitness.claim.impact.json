@@ -1,0 +1,766 @@
+{"state": [{"name": "total", "kind": {"cell": "UIntRange<256>"}}],
+ "schemaVersion": 1,
+ "reads": [{"type": "UIntRange<256>", "name": "expected"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "expected"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "expected"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"value": "0", "tag": "constant"},
+   "alignment": "field"},
+  {"storage": true,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "result.amount"},
+     "type": "UIntRange<256>",
+     "tag": "cast"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "insert", "n": 1}],
+ "nativeCircuitFile": "TypedWitness.PairWitness.claim.zkir",
+ "guards": [],
+ "entrypoint": "claim",
+ "contractName": "TypedWitness.PairWitness",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Native",
+    "name": "result.amount",
+    "expression":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "request.amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "request.okay"},
+       "tag": "let",
+       "name": "$helper2",
+       "body":
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body": {"tag": "reference", "name": "$helper7"}}}}},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper1"},
+          "tag": "let",
+          "name": "$helper3",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper2"},
+           "tag": "let",
+           "name": "$helper4",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper3"},
+            "tag": "let",
+            "name": "$helper5",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper4"},
+             "tag": "let",
+             "name": "$helper6",
+             "body": {"tag": "reference", "name": "$helper8"}}}}},
+         "tag": "let",
+         "name": "$helper10",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "type": "UIntRange<256>",
+           "tag": "cast"},
+          "tag": "let",
+          "name": "$helper11",
+          "body": {"tag": "reference", "name": "$helper9"}}}}}}}},
+   {"visibility": "public",
+    "type": "Native",
+    "name": "result.okay",
+    "expression":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "request.amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "request.okay"},
+       "tag": "let",
+       "name": "$helper2",
+       "body":
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body": {"tag": "reference", "name": "$helper7"}}}}},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper1"},
+          "tag": "let",
+          "name": "$helper3",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper2"},
+           "tag": "let",
+           "name": "$helper4",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper3"},
+            "tag": "let",
+            "name": "$helper5",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper4"},
+             "tag": "let",
+             "name": "$helper6",
+             "body": {"tag": "reference", "name": "$helper8"}}}}},
+         "tag": "let",
+         "name": "$helper10",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "type": "UIntRange<256>",
+           "tag": "cast"},
+          "tag": "let",
+          "name": "$helper11",
+          "body": {"tag": "reference", "name": "$helper10"}}}}}}}}],
+  "name": "TypedWitness.pairRelation",
+  "inputs":
+  [{"visibility": "public", "type": "UIntRange<256>", "name": "expected"},
+   {"visibility": "private", "type": "Native", "name": "request.amount"},
+   {"visibility": "private", "type": "Native", "name": "request.okay"},
+   {"visibility": "private", "type": "Native", "name": "$helper7"},
+   {"visibility": "private", "type": "Native", "name": "$helper8"}],
+  "file": "TypedWitness.pairRelation.zkir",
+  "constraints":
+  [{"tag": "eq",
+    "right":
+    {"yes": {"tag": "reference", "name": "request.amount"},
+     "tag": "select",
+     "no": {"value": "0", "tag": "constant"},
+     "condition": {"value": true, "tag": "bool"}},
+    "left":
+    {"value":
+     {"value":
+      {"yes": {"tag": "reference", "name": "request.amount"},
+       "tag": "select",
+       "no": {"value": "0", "tag": "constant"},
+       "condition": {"value": true, "tag": "bool"}},
+      "type": "UIntRange<256>",
+      "tag": "cast"},
+     "type": "Native",
+     "tag": "cast"}},
+   {"tag": "eq",
+    "right":
+    {"yes": {"tag": "reference", "name": "request.okay"},
+     "tag": "select",
+     "no": {"value": "0", "tag": "constant"},
+     "condition": {"value": true, "tag": "bool"}},
+    "left":
+    {"value":
+     {"value":
+      {"yes": {"tag": "reference", "name": "request.okay"},
+       "tag": "select",
+       "no": {"value": "0", "tag": "constant"},
+       "condition": {"value": true, "tag": "bool"}},
+      "type": "UIntRange<2>",
+      "tag": "cast"},
+     "type": "Native",
+     "tag": "cast"}},
+   {"value": {"tag": "reference", "name": "expected"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "request.amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "request.okay"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper1"},
+        "tag": "let",
+        "name": "$helper3",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper2"},
+         "tag": "let",
+         "name": "$helper4",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper3"},
+          "tag": "let",
+          "name": "$helper5",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper4"},
+           "tag": "let",
+           "name": "$helper6",
+           "body": {"tag": "reference", "name": "$helper7"}}}}},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body": {"tag": "reference", "name": "$helper8"}}}}},
+        "tag": "let",
+        "name": "$helper10",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body":
+            {"tag": "eq",
+             "right":
+             {"yes": {"tag": "reference", "name": "$helper7"},
+              "tag": "select",
+              "no": {"value": "0", "tag": "constant"},
+              "condition": {"value": true, "tag": "bool"}},
+             "left":
+             {"value":
+              {"value":
+               {"yes": {"tag": "reference", "name": "$helper7"},
+                "tag": "select",
+                "no": {"value": "0", "tag": "constant"},
+                "condition": {"value": true, "tag": "bool"}},
+               "type": "UIntRange<256>",
+               "tag": "cast"},
+              "type": "Native",
+              "tag": "cast"}}}}}}}}}}},
+   {"value": {"tag": "reference", "name": "expected"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "request.amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "request.okay"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper1"},
+        "tag": "let",
+        "name": "$helper3",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper2"},
+         "tag": "let",
+         "name": "$helper4",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper3"},
+          "tag": "let",
+          "name": "$helper5",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper4"},
+           "tag": "let",
+           "name": "$helper6",
+           "body": {"tag": "reference", "name": "$helper7"}}}}},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body": {"tag": "reference", "name": "$helper8"}}}}},
+        "tag": "let",
+        "name": "$helper10",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body":
+            {"tag": "eq",
+             "right":
+             {"yes": {"tag": "reference", "name": "$helper8"},
+              "tag": "select",
+              "no": {"value": "0", "tag": "constant"},
+              "condition": {"value": true, "tag": "bool"}},
+             "left":
+             {"value":
+              {"value":
+               {"yes": {"tag": "reference", "name": "$helper8"},
+                "tag": "select",
+                "no": {"value": "0", "tag": "constant"},
+                "condition": {"value": true, "tag": "bool"}},
+               "type": "UIntRange<2>",
+               "tag": "cast"},
+              "type": "Native",
+              "tag": "cast"}}}}}}}}}}},
+   {"value": {"tag": "reference", "name": "expected"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "request.amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "request.okay"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper1"},
+        "tag": "let",
+        "name": "$helper3",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper2"},
+         "tag": "let",
+         "name": "$helper4",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper3"},
+          "tag": "let",
+          "name": "$helper5",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper4"},
+           "tag": "let",
+           "name": "$helper6",
+           "body": {"tag": "reference", "name": "$helper7"}}}}},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body": {"tag": "reference", "name": "$helper8"}}}}},
+        "tag": "let",
+        "name": "$helper10",
+        "body":
+        {"tag": "eq",
+         "right": {"value": true, "tag": "bool"},
+         "left":
+         {"tag": "eq",
+          "right": {"tag": "reference", "name": "$helper0"},
+          "left":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "type": "UIntRange<256>",
+           "tag": "cast"}}}}}}}},
+   {"value": {"tag": "reference", "name": "expected"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "request.amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "request.okay"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper1"},
+        "tag": "let",
+        "name": "$helper3",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper2"},
+         "tag": "let",
+         "name": "$helper4",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper3"},
+          "tag": "let",
+          "name": "$helper5",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper4"},
+           "tag": "let",
+           "name": "$helper6",
+           "body": {"tag": "reference", "name": "$helper7"}}}}},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper3",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper2"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper3"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper4"},
+            "tag": "let",
+            "name": "$helper6",
+            "body": {"tag": "reference", "name": "$helper8"}}}}},
+        "tag": "let",
+        "name": "$helper10",
+        "body":
+        {"tag": "eq",
+         "right": {"value": true, "tag": "bool"},
+         "left":
+         {"value": {"tag": "reference", "name": "$helper10"},
+          "type": "Bool",
+          "tag": "cast"}}}}}}},
+   {"tag": "eq",
+    "right":
+    {"yes":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper0",
+      "body":
+      {"value": {"tag": "reference", "name": "request.amount"},
+       "tag": "let",
+       "name": "$helper1",
+       "body":
+       {"value": {"tag": "reference", "name": "request.okay"},
+        "tag": "let",
+        "name": "$helper2",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper1"},
+          "tag": "let",
+          "name": "$helper3",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper2"},
+           "tag": "let",
+           "name": "$helper4",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper3"},
+            "tag": "let",
+            "name": "$helper5",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper4"},
+             "tag": "let",
+             "name": "$helper6",
+             "body": {"tag": "reference", "name": "$helper7"}}}}},
+         "tag": "let",
+         "name": "$helper9",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper1"},
+           "tag": "let",
+           "name": "$helper3",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper2"},
+            "tag": "let",
+            "name": "$helper4",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper3"},
+             "tag": "let",
+             "name": "$helper5",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper4"},
+              "tag": "let",
+              "name": "$helper6",
+              "body": {"tag": "reference", "name": "$helper8"}}}}},
+          "tag": "let",
+          "name": "$helper10",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper9"},
+            "type": "UIntRange<256>",
+            "tag": "cast"},
+           "tag": "let",
+           "name": "$helper11",
+           "body": {"tag": "reference", "name": "$helper9"}}}}}}},
+     "tag": "select",
+     "no": {"value": "0", "tag": "constant"},
+     "condition": {"value": true, "tag": "bool"}},
+    "left":
+    {"value":
+     {"value":
+      {"yes":
+       {"value": {"tag": "reference", "name": "expected"},
+        "tag": "let",
+        "name": "$helper0",
+        "body":
+        {"value": {"tag": "reference", "name": "request.amount"},
+         "tag": "let",
+         "name": "$helper1",
+         "body":
+         {"value": {"tag": "reference", "name": "request.okay"},
+          "tag": "let",
+          "name": "$helper2",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper1"},
+            "tag": "let",
+            "name": "$helper3",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper2"},
+             "tag": "let",
+             "name": "$helper4",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper3"},
+              "tag": "let",
+              "name": "$helper5",
+              "body":
+              {"value": {"tag": "reference", "name": "$helper4"},
+               "tag": "let",
+               "name": "$helper6",
+               "body": {"tag": "reference", "name": "$helper7"}}}}},
+           "tag": "let",
+           "name": "$helper9",
+           "body":
+           {"value":
+            {"value": {"tag": "reference", "name": "$helper1"},
+             "tag": "let",
+             "name": "$helper3",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper2"},
+              "tag": "let",
+              "name": "$helper4",
+              "body":
+              {"value": {"tag": "reference", "name": "$helper3"},
+               "tag": "let",
+               "name": "$helper5",
+               "body":
+               {"value": {"tag": "reference", "name": "$helper4"},
+                "tag": "let",
+                "name": "$helper6",
+                "body": {"tag": "reference", "name": "$helper8"}}}}},
+            "tag": "let",
+            "name": "$helper10",
+            "body":
+            {"value":
+             {"value": {"tag": "reference", "name": "$helper9"},
+              "type": "UIntRange<256>",
+              "tag": "cast"},
+             "tag": "let",
+             "name": "$helper11",
+             "body": {"tag": "reference", "name": "$helper9"}}}}}}},
+       "tag": "select",
+       "no": {"value": "0", "tag": "constant"},
+       "condition": {"value": true, "tag": "bool"}},
+      "type": "UIntRange<256>",
+      "tag": "cast"},
+     "type": "Native",
+     "tag": "cast"}},
+   {"tag": "eq",
+    "right":
+    {"yes":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper0",
+      "body":
+      {"value": {"tag": "reference", "name": "request.amount"},
+       "tag": "let",
+       "name": "$helper1",
+       "body":
+       {"value": {"tag": "reference", "name": "request.okay"},
+        "tag": "let",
+        "name": "$helper2",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper1"},
+          "tag": "let",
+          "name": "$helper3",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper2"},
+           "tag": "let",
+           "name": "$helper4",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper3"},
+            "tag": "let",
+            "name": "$helper5",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper4"},
+             "tag": "let",
+             "name": "$helper6",
+             "body": {"tag": "reference", "name": "$helper7"}}}}},
+         "tag": "let",
+         "name": "$helper9",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper1"},
+           "tag": "let",
+           "name": "$helper3",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper2"},
+            "tag": "let",
+            "name": "$helper4",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper3"},
+             "tag": "let",
+             "name": "$helper5",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper4"},
+              "tag": "let",
+              "name": "$helper6",
+              "body": {"tag": "reference", "name": "$helper8"}}}}},
+          "tag": "let",
+          "name": "$helper10",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper9"},
+            "type": "UIntRange<256>",
+            "tag": "cast"},
+           "tag": "let",
+           "name": "$helper11",
+           "body": {"tag": "reference", "name": "$helper10"}}}}}}},
+     "tag": "select",
+     "no": {"value": "0", "tag": "constant"},
+     "condition": {"value": true, "tag": "bool"}},
+    "left":
+    {"value":
+     {"value":
+      {"yes":
+       {"value": {"tag": "reference", "name": "expected"},
+        "tag": "let",
+        "name": "$helper0",
+        "body":
+        {"value": {"tag": "reference", "name": "request.amount"},
+         "tag": "let",
+         "name": "$helper1",
+         "body":
+         {"value": {"tag": "reference", "name": "request.okay"},
+          "tag": "let",
+          "name": "$helper2",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper1"},
+            "tag": "let",
+            "name": "$helper3",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper2"},
+             "tag": "let",
+             "name": "$helper4",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper3"},
+              "tag": "let",
+              "name": "$helper5",
+              "body":
+              {"value": {"tag": "reference", "name": "$helper4"},
+               "tag": "let",
+               "name": "$helper6",
+               "body": {"tag": "reference", "name": "$helper7"}}}}},
+           "tag": "let",
+           "name": "$helper9",
+           "body":
+           {"value":
+            {"value": {"tag": "reference", "name": "$helper1"},
+             "tag": "let",
+             "name": "$helper3",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper2"},
+              "tag": "let",
+              "name": "$helper4",
+              "body":
+              {"value": {"tag": "reference", "name": "$helper3"},
+               "tag": "let",
+               "name": "$helper5",
+               "body":
+               {"value": {"tag": "reference", "name": "$helper4"},
+                "tag": "let",
+                "name": "$helper6",
+                "body": {"tag": "reference", "name": "$helper8"}}}}},
+            "tag": "let",
+            "name": "$helper10",
+            "body":
+            {"value":
+             {"value": {"tag": "reference", "name": "$helper9"},
+              "type": "UIntRange<256>",
+              "tag": "cast"},
+             "tag": "let",
+             "name": "$helper11",
+             "body": {"tag": "reference", "name": "$helper10"}}}}}}},
+       "tag": "select",
+       "no": {"value": "0", "tag": "constant"},
+       "condition": {"value": true, "tag": "bool"}},
+      "type": "UIntRange<2>",
+      "tag": "cast"},
+     "type": "Native",
+     "tag": "cast"}}]}}

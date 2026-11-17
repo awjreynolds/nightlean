@@ -2,7 +2,7 @@
 //! Ordinary status/request data belongs to the invocation controller and may reveal private
 //! scheduling. It is not a contract log. DF-00 covers successful scalar return payloads only.
 use crate::{
-    control::{MAX_BYTES, Response, Session},
+    control::{MAX_BYTES, Response, Session, TypedResponse},
     host,
 };
 use serde::Deserialize;
@@ -32,10 +32,20 @@ struct Begin {
     plan: Json,
     inputs: BTreeMap<String, Json>,
     host_context: host::Context,
+    #[serde(default)]
+    trusted_binding_sha256: Option<String>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NativeTargetBegin {
+    abi_version: u32,
+    inputs: BTreeMap<String, Json>,
+    host_context: host::Context,
 }
 struct Bytes {
     bytes: Vec<u8>,
     private: bool,
+    _accounting: Vec<crate::control::AggregateReservation>,
 }
 impl Drop for Bytes {
     fn drop(&mut self) {
@@ -71,7 +81,15 @@ impl Registry {
         self.next = self.next.checked_add(1).ok_or(LIMIT)?;
         Ok(self.next)
     }
-    fn result(&mut self, mut value: Json, private: bool) -> Result<u64, i32> {
+    fn result(&mut self, value: Json, private: bool) -> Result<u64, i32> {
+        self.result_accounted(value, private, Vec::new())
+    }
+    fn result_accounted(
+        &mut self,
+        mut value: Json,
+        private: bool,
+        accounting: Vec<crate::control::AggregateReservation>,
+    ) -> Result<u64, i32> {
         if private && self.results.values().filter(|b| b.private).count() >= MAX_PRIVATE_RESULTS {
             crate::control::wipe_json(&mut value);
             return Err(LIMIT);
@@ -93,7 +111,11 @@ impl Registry {
             }
             return Err(LIMIT);
         }
-        let bytes = Bytes { bytes, private };
+        let bytes = Bytes {
+            bytes,
+            private,
+            _accounting: accounting,
+        };
         let token = self.token()?;
         self.results.insert(token, bytes);
         Ok(token)
@@ -138,8 +160,13 @@ pub unsafe extern "C" fn nightlean_control_begin(
         if begin.abi_version != 1 {
             return Err(INVALID_ARGUMENT);
         }
-        let session = Session::from_json(begin.plan, begin.inputs, begin.host_context)
-            .map_err(|_| INVALID_ARGUMENT)?;
+        let session = Session::from_json_with_binding_sha256(
+            begin.plan,
+            begin.inputs,
+            begin.host_context,
+            begin.trusted_binding_sha256.as_deref(),
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
         with_registry(|r| {
             if r.sessions.len() >= MAX_SESSIONS {
                 return Err(LIMIT);
@@ -151,10 +178,63 @@ pub unsafe extern "C" fn nightlean_control_begin(
         })
     })
 }
-fn action(
+/// # Safety
+/// Plan and begin buffers must stay readable until return. The target token is process-local.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_control_begin_from_native_target(
+    target_context: u64,
+    plan: *const u8,
+    plan_length: usize,
+    begin: *const u8,
+    begin_length: usize,
+    out_session: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_session)? };
+        let plan_bytes = unsafe { input(plan, plan_length)? };
+        let begin: NativeTargetBegin =
+            serde_json::from_slice(unsafe { input(begin, begin_length)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        if begin.abi_version != 1 {
+            return Err(INVALID_ARGUMENT);
+        }
+        let authenticated_target =
+            crate::native_ffi::native_target_context_snapshot(target_context)?;
+        let session = Session::from_authenticated_native_target(
+            plan_bytes,
+            begin.inputs,
+            begin.host_context,
+            authenticated_target,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        with_registry(|r| {
+            if r.sessions.len() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let token = r.token()?;
+            r.sessions.insert(token, session);
+            unsafe { out_session.write(token) };
+            Ok(())
+        })
+    })
+}
+trait ActionValue {
+    fn into_action_parts(self) -> (Json, Vec<crate::control::AggregateReservation>);
+}
+impl ActionValue for Json {
+    fn into_action_parts(self) -> (Json, Vec<crate::control::AggregateReservation>) {
+        (self, Vec::new())
+    }
+}
+impl ActionValue for crate::control::AccountedJson {
+    fn into_action_parts(self) -> (Json, Vec<crate::control::AggregateReservation>) {
+        self.into_parts()
+    }
+}
+fn action<T: ActionValue>(
     session: u64,
     out_result: *mut u64,
-    operation: impl FnOnce(&mut Session) -> Result<Json, i32>,
+    operation: impl FnOnce(&mut Session) -> Result<T, i32>,
     private: bool,
 ) -> i32 {
     guard(|| {
@@ -164,10 +244,64 @@ fn action(
                 return Err(LIMIT);
             }
             let value = operation(r.sessions.get_mut(&session).ok_or(INVALID_HANDLE)?)?;
-            let token = r.result(value, private)?;
+            let (json, accounting) = value.into_action_parts();
+            let token = r.result_accounted(json, private, accounting)?;
             unsafe { out_result.write(token) };
             Ok(())
         })
+    })
+}
+pub(crate) fn peek_completed_invocation(
+    session: u64,
+    context_id: u64,
+    target: &str,
+    entrypoint: &str,
+    control_plan: &Json,
+    binding_bytes: &[u8],
+    actual_relation: &Json,
+) -> Result<crate::control::CompletedInputMap, i32> {
+    with_registry(|r| {
+        r.sessions
+            .get(&session)
+            .ok_or(INVALID_HANDLE)?
+            .peek_completed_invocation(
+                context_id,
+                target,
+                entrypoint,
+                control_plan,
+                binding_bytes,
+                actual_relation,
+            )
+            .map_err(|_| INVALID_STATE)
+    })
+}
+pub(crate) fn take_completed_invocation(
+    session: u64,
+    context_id: u64,
+    control_plan: &Json,
+    binding_bytes: &[u8],
+    actual_relation: &Json,
+    expected_inputs: &crate::control::CompletedInputMap,
+    target: &str,
+    entrypoint: &str,
+) -> Result<crate::control::CompletedInvocation, i32> {
+    with_registry(|r| {
+        let mut source = r.sessions.remove(&session).ok_or(INVALID_HANDLE)?;
+        match source.take_completed_invocation(
+            context_id,
+            control_plan,
+            binding_bytes,
+            actual_relation,
+            expected_inputs,
+            target,
+            entrypoint,
+        ) {
+            Ok(invocation) => Ok(invocation),
+            Err(_) => {
+                r.sessions.insert(session, source);
+                Err(INVALID_STATE)
+            }
+        }
     })
 }
 /// # Safety
@@ -177,7 +311,7 @@ pub unsafe extern "C" fn nightlean_control_advance(session: u64, out_result: *mu
     action(
         session,
         out_result,
-        |s| s.advance().map_err(|_| INVALID_STATE),
+        |s| s.advance_accounted().map_err(|_| INVALID_STATE),
         false,
     )
 }
@@ -203,6 +337,35 @@ pub unsafe extern "C" fn nightlean_control_resume(
                 .get_mut(&session)
                 .ok_or(INVALID_HANDLE)?
                 .resume(response)
+                .map_err(|_| INVALID_RESPONSE)?;
+            let token = r.result(value, false)?;
+            unsafe { out_result.write(token) };
+            Ok(())
+        })
+    })
+}
+/// # Safety
+/// Input and output pointers must satisfy the declared readable/writable lengths.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_control_resume_typed(
+    session: u64,
+    bytes: *const u8,
+    length: usize,
+    out_result: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_result)? };
+        let response: TypedResponse = serde_json::from_slice(unsafe { input(bytes, length)? })
+            .map_err(|_| INVALID_RESPONSE)?;
+        with_registry(|r| {
+            if r.results.len() >= MAX_RESULTS {
+                return Err(LIMIT);
+            }
+            let value = r
+                .sessions
+                .get_mut(&session)
+                .ok_or(INVALID_HANDLE)?
+                .resume_typed(response)
                 .map_err(|_| INVALID_RESPONSE)?;
             let token = r.result(value, false)?;
             unsafe { out_result.write(token) };
@@ -270,7 +433,32 @@ pub unsafe extern "C" fn nightlean_control_private_request(
     action(
         session,
         out_result,
-        |s| s.private_request().map_err(|_| INVALID_STATE),
+        |s| s.private_request_accounted().map_err(|_| INVALID_STATE),
+        true,
+    )
+}
+/// # Safety
+/// The relation buffer and output token must remain valid until return. The returned snapshot is private.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_control_private_completion(
+    session: u64,
+    relation: *const u8,
+    relation_length: usize,
+    out_result: *mut u64,
+) -> i32 {
+    let relation = match unsafe { input(relation, relation_length) }
+        .and_then(|bytes| serde_json::from_slice::<Json>(bytes).map_err(|_| INVALID_ARGUMENT))
+    {
+        Ok(relation) => relation,
+        Err(code) => return code,
+    };
+    action(
+        session,
+        out_result,
+        |s| {
+            s.private_completion_accounted(&relation)
+                .map_err(|_| INVALID_STATE)
+        },
         true,
     )
 }

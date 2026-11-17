@@ -49,6 +49,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Sequential native cell reads](development/sequential-state.md), with source-generated read-after-write fixtures on both runtime profiles. Generic state preservation remains separate proof work.
 - [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) now compile to native circuit leaves with disclosure checks. General aggregate ledger effects remain separate.
 - [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/nightlean-portable-runtime-boundary.md).
+- [Typed source witnesses](development/typed-witnesses.md), including canonical composite calls, source-staged reads, public witness artifacts and the consuming native proof/client handoff.
 - [ZKIR capability research](research/zkir-v3-full-coverage.md), [native inventory](compatibility/zkir-feature-matrix.json) and [ledger capability research](research/midnight-ledger9-capabilities.md). The [raw native guard experiment](research/native-guard-prerequisites.md) records verified prerequisites, with source guard support still gated.
 - [Compact comparison baseline](research/compact-equivalence-baseline.md). Inventory entries are not a completion percentage.
 - [Glossary](../GLOSSARY.md) for the distinctions between circuits, Impact execution, target profiles and ledger state.

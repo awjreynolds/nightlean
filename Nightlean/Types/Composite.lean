@@ -34,7 +34,59 @@ inductive CompositeType where
   | enumeration (id : DeclId)
   | vector (length : Nat) (element : CompositeType)
   | bytes (length : Nat)
-  deriving Repr, BEq
+  deriving Repr
+
+mutual
+  /-- Total structural comparison keeps nested type equality available to kernel proofs. -/
+  def CompositeType.structuralBEq : CompositeType → CompositeType → Bool
+    | .unit, .unit => true
+    | .scalar a, .scalar b => decide (a = b)
+    | .tuple as, .tuple bs => structuralListBEq as bs
+    | .structure a, .structure b => a == b
+    | .enumeration a, .enumeration b => a == b
+    | .vector n a, .vector m b => n == m && structuralBEq a b
+    | .bytes n, .bytes m => n == m
+    | _, _ => false
+  termination_by a _ => sizeOf a
+  decreasing_by all_goals simp_wf <;> omega
+
+  def CompositeType.structuralListBEq : List CompositeType → List CompositeType → Bool
+    | [], [] => true
+    | a :: as, b :: bs => structuralBEq a b && structuralListBEq as bs
+    | _, _ => false
+  termination_by as _ => sizeOf as
+  decreasing_by all_goals simp_wf <;> omega
+end
+
+
+mutual
+  theorem CompositeType.structuralBEq_eq_true (a b : CompositeType) :
+      structuralBEq a b = true ↔ a = b := by
+    cases a <;> cases b <;> simp [structuralBEq]
+    · rename_i as bs
+      exact structuralListBEq_eq_true as bs
+    · rename_i n a m b
+      rw [structuralBEq_eq_true a b]
+      intro _
+      rfl
+  termination_by sizeOf a
+  decreasing_by all_goals simp_wf <;> omega
+
+  theorem CompositeType.structuralListBEq_eq_true (as bs : List CompositeType) :
+      structuralListBEq as bs = true ↔ as = bs := by
+    cases as <;> cases bs <;> simp [structuralListBEq]
+    rename_i a as b bs
+    rw [structuralBEq_eq_true a b, structuralListBEq_eq_true as bs]
+  termination_by sizeOf as
+  decreasing_by all_goals simp_wf <;> omega
+end
+
+instance : BEq CompositeType := ⟨CompositeType.structuralBEq⟩
+
+/-- Structural equality preserves constructor and nominal identity. -/
+instance : LawfulBEq CompositeType where
+  rfl {a} := (CompositeType.structuralBEq_eq_true a a).mpr rfl
+  eq_of_beq {a b} h := (CompositeType.structuralBEq_eq_true a b).mp h
 
 structure Field where
   name : String

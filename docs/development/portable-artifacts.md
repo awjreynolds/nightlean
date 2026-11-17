@@ -2,7 +2,7 @@
 
 The native Rust `nightlean-bundle` tool assembles and verifies a versioned public bundle for one contract entrypoint. Lean still implements compilation and primary lowering. Bundling neither invokes Compact nor executes the circuit, generates a proof or submits a transaction.
 
-The initial supported profile is the unchanged `midnight-ledger-9` default: ledger 9.1.0.1 at `a2b30128ca4b660b73a068e29b56b48ede8c9a74`, native ZKIR 3.2.0 at `446c7fecc6bd41dab99ebe89ab404e9d077d11a9`, and Lean 4.35.0. The separately qualified experimental 3.2.1 profile is not accepted by this first bundle format.
+The default profile stays `midnight-ledger-9`: ledger 9.1.0.1 at `a2b30128ca4b660b73a068e29b56b48ede8c9a74`, native ZKIR 3.2.0 at `446c7fecc6bd41dab99ebe89ab404e9d077d11a9`, and Lean 4.35.0. The [selected 3.2.1 build](zkir-3.2.1-integrated.md) accepts its matching profile and source pins through the same manifest format. Each consumer rejects bundles for the other linked profile.
 
 ## Artifact stages
 
@@ -23,8 +23,12 @@ Required roles are explicit source files, native contract ZKIR, its `.impact.jso
 | ledgerParameters | `parameters/ledger.params` |
 | proverKey, verifierKey | `keys/entrypoint.prover`, `keys/entrypoint.verifier` |
 | toolchain | `provenance/native-zkir.json` |
+| witnessBinding, optional pair | `witness/entrypoint.binding.json` |
+| witnessControl, optional pair | `witness/entrypoint.control.json` |
 
 Each manifest entry records its role, logical name, fixed relative path, byte size and lowercase SHA-256. Logical circuit and plan names preserve the compiler's original filenames even though bundle paths are fixed. The selected plan must name the selected native circuit. Compiler metadata must agree on the contract, entrypoint, state schema, plan name and complete circuit schema. Target/component/source identities must match the supported profile. Public JSON artifacts reject unknown top-level fields.
+
+A selected typed-witness entrypoint requires both optional witness roles. Their logical names preserve the compiler's `.witness.json` and `.witness.control.json` filenames. Verification checks the exact embedded sidecar bytes, source input and signature schemas, ordered fresh-input bindings, actual CALL relation and selected target identity. Unreferenced, incomplete or mismatched pairs reject. Existing bundles without typed witnesses retain the same canonical bytes. See [typed source witnesses](typed-witnesses.md).
 
 ## Build and use
 
@@ -69,13 +73,13 @@ Errors use JSON with stable `error.code` values, including `unsupported_version`
 
 ## Canonical representation and limits
 
-Manifest schema 1 uses UTF-8 compact JSON, object keys in ascending string order, unsigned decimal sizes, lowercase hexadecimal digests and one trailing LF. Entries follow the declared role order (`source`, `circuit`, `plan`, `metadata`, `abi`, `profile`, `ledgerParameters`, `proverKey`, `verifierKey`, `toolchain`), then ascending logical name within a role. The verifier rejects alternate whitespace, unknown manifest fields and noncanonical entry ordering.
+Manifest schema 1 uses UTF-8 compact JSON, object keys in ascending string order, unsigned decimal sizes, lowercase hexadecimal digests and one trailing LF. Entries follow the declared role order (`source`, `circuit`, `plan`, `metadata`, `abi`, `profile`, `ledgerParameters`, `proverKey`, `verifierKey`, `toolchain`, `witnessBinding`, `witnessControl`), then ascending logical name within a role. The verifier rejects alternate whitespace, unknown manifest fields and noncanonical entry ordering.
 
 Logical artifact names use ASCII in this first schema. Physical input paths and source contents still support UTF-8. This restriction follows a reproduced macOS filesystem mismatch: composed `é/A.lean` and decomposed `e\u0301/B.lean` shared one materialized directory, allowing assembly followed by verification failure. Both forms now reject before output creation. General Unicode logical names need a portable encoding or normalization contract in a later schema. This remains an explicit portability gap within the full feature goal. Circuit and plan logical names must still match compiler metadata, so Unicode-generated artifact names also remain unsupported by this first bundler.
 
 There are no timestamps or absolute build paths in the generated manifest. Identical selected bytes and compiler revision produce identical bundles regardless of recipe selection order. This does not establish determinism for the external compiler or key generator. Proof bytes and runtime values are excluded.
 
-Limits are 64 entries, 256 MiB per payload, 1 GiB total payloads and 2 MiB per JSON artifact. Assembly and verification retain bounded payload bytes in memory. These are interface limits, not a hostile filesystem or compiler sandbox. Filesystem inputs must stay under the caller's control during reading. Arbitrary source code or mislabeled binary data still requires a trusted producer.
+Limits are 64 entries, 256 MiB per payload, 1 GiB total payloads and 2 MiB per JSON artifact. The optional witness binding and control roles have smaller read limits of 512 KiB and 1 MiB. Assembly and verification check these role limits before parsing their payloads. They retain bounded payload bytes in memory. These are interface limits, not a hostile filesystem or compiler sandbox. Filesystem inputs must stay under the caller's control during reading. Arbitrary source code or mislabeled binary data still requires a trusted producer.
 
 Known private filenames, including `runtime-config.json`, witness JSON, preimages and private-state snapshots, reject even when selected under a public logical name. Physical input extensions must also match their selected role, such as `.lean`, `.zkir`, `.params`, `.prover` or `.verifier`. Extra bundle files reject. These checks prevent accidental inclusion of known execution files. They do not detect a secret embedded in a source constant, header, renamed binary or permitted program expression. The producer must select public programs and parameters. The tool does not resolve the Lean import closure or validate a build against its declared compiler revision.
 

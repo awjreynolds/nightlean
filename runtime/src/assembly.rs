@@ -24,6 +24,7 @@ use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged
 use sha2::{Digest, Sha256};
 use std::{
     borrow::Cow,
+    collections::BTreeMap,
     fs,
     io::Write,
     path::{Path, PathBuf},
@@ -106,6 +107,55 @@ struct Built {
     guaranteed: usize,
     fallible: usize,
 }
+
+pub(crate) struct PreparedDeployment {
+    pub(crate) intent: NativeIntent,
+    pub(crate) address: String,
+    pub(crate) entrypoint: String,
+}
+
+fn contract_initial_state(
+    plan: &Plan,
+    state: &BTreeMap<String, Json>,
+    operation: &ContractOperation,
+) -> Result<(ContractState<Db>, EntryPointBuf)> {
+    ensure!(
+        !plan.entrypoint.is_empty()
+            && plan.entrypoint.len() <= 128
+            && plan
+                .entrypoint
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            && !plan.entrypoint.as_bytes()[0].is_ascii_digit(),
+        "invalid entrypoint"
+    );
+    let entry = EntryPointBuf(plan.entrypoint.as_bytes().to_vec());
+    let mut initial = ContractState::<Db>::default();
+    initial.data = create_state(plan, state)?;
+    initial.operations = initial.operations.insert(entry.clone(), operation.clone());
+    Ok((initial, entry))
+}
+
+pub(crate) fn prepare_deployment_target(
+    plan: &Plan,
+    state: &BTreeMap<String, Json>,
+    verifier: VerifierKey,
+    ttl: u64,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<PreparedDeployment> {
+    ensure!(ttl > 0, "TTL must be explicit Unix seconds");
+    let operation = ContractOperation::new(Some(verifier), None);
+    let (initial, _) = contract_initial_state(plan, state, &operation)?;
+    let deployment = ContractDeploy::new(rng, initial);
+    let address = hex::encode(deployment.address().0.0);
+    let intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl)).add_deploy(deployment);
+    Ok(PreparedDeployment {
+        intent,
+        address,
+        entrypoint: plan.entrypoint.clone(),
+    })
+}
+
 fn build(
     plan: &Plan,
     config: &Config,
@@ -128,21 +178,28 @@ fn build_with_rng(
     mut rng: &mut (impl Rng + CryptoRng),
 ) -> Result<Built> {
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
-    ensure!(
-        !plan.entrypoint.is_empty()
-            && plan.entrypoint.len() <= 128
-            && plan
-                .entrypoint
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b == b'_')
-            && !plan.entrypoint.as_bytes()[0].is_ascii_digit(),
-        "invalid entrypoint"
-    );
-    let entry = EntryPointBuf(plan.entrypoint.as_bytes().to_vec());
-    let mut initial = ContractState::<Db>::default();
-    initial.data = create_state(plan, &config.state)?;
-    initial.operations = initial.operations.insert(entry.clone(), operation.clone());
+    let (initial, entry) = contract_initial_state(plan, &config.state, &operation)?;
     let deployment = ContractDeploy::new(&mut rng, initial.clone());
+    build_for_deployment(
+        plan, config, parameters, operation, circuit, ttl, initial, entry, deployment, None,
+        &mut rng,
+    )
+}
+
+fn build_for_deployment(
+    plan: &Plan,
+    config: &Config,
+    parameters: &LedgerParameters,
+    operation: ContractOperation,
+    circuit: &IrSource,
+    ttl: u64,
+    initial: ContractState<Db>,
+    entry: EntryPointBuf,
+    deployment: ContractDeploy<Db>,
+    retained_intent: Option<&NativeIntent>,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<Built> {
+    ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     let address = deployment.address();
     // prepare's zero-randomness preimage is diagnostic only. Reuse only its
     // evaluated program and private fields, then repartition for this commitment.
@@ -195,8 +252,11 @@ fn build_with_rng(
         key_location: KeyLocation(Cow::Owned(plan.entrypoint.clone())),
     };
     let ttl = Timestamp::from_secs(ttl);
-    let deploy = NativeIntent::empty(&mut rng, ttl).add_deploy(deployment);
-    let call = NativeIntent::empty(&mut rng, ttl).add_call::<ProofPreimage>(prototype);
+    let deploy = match retained_intent {
+        Some(intent) => intent.clone(),
+        None => NativeIntent::empty(rng, ttl).add_deploy(deployment),
+    };
+    let call = NativeIntent::empty(rng, ttl).add_call::<ProofPreimage>(prototype);
     let checked = real_preimage(&call)?
         .check(circuit)
         .map_err(|_| anyhow!("constructor preimage rejected by official checker"))?;
@@ -220,6 +280,46 @@ fn build_with_rng(
         guaranteed: guaranteed_count,
         fallible: fallible_count,
     })
+}
+
+pub(crate) fn prepare_call_for_target(
+    plan: &Plan,
+    config: &Config,
+    parameters: &LedgerParameters,
+    verifier: VerifierKey,
+    circuit: &IrSource,
+    ttl: u64,
+    target: &PreparedDeployment,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<NativeIntent> {
+    ensure!(
+        target.entrypoint == plan.entrypoint,
+        "native target entrypoint mismatch"
+    );
+    let Some(ContractAction::Deploy(deployment)) = target.intent.actions.iter_deref().next() else {
+        return Err(anyhow!("native target deployment missing"));
+    };
+    ensure!(
+        hex::encode(deployment.address().0.0) == target.address,
+        "native target address mismatch"
+    );
+    let operation = ContractOperation::new(Some(verifier), None);
+    let initial = deployment.initial_state.clone();
+    let entry = EntryPointBuf(plan.entrypoint.as_bytes().to_vec());
+    let built = build_for_deployment(
+        plan,
+        config,
+        parameters,
+        operation,
+        circuit,
+        ttl,
+        initial,
+        entry,
+        (**deployment).clone(),
+        Some(&target.intent),
+        rng,
+    )?;
+    Ok(built.call)
 }
 
 /// In-memory constructor used by the native proof API after authenticating public material.

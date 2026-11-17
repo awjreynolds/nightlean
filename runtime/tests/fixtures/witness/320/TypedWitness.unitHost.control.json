@@ -1,0 +1,33 @@
+{"witnesses":
+ [{"resultType": "Unit",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.unit.v1",
+   "name": "unit",
+   "capability": "unit"}],
+ "types": [],
+ "schemaVersion": 2,
+ "name": "unit",
+ "mode": "host",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Unit",
+   "parameters": [],
+   "name": "unit",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span": {"line": 1, "file": "", "column": 1},
+      "site": "unit-call",
+      "name": "unit",
+      "arguments": []},
+     "tag": "evaluate",
+     "span": {"line": 1, "file": "", "column": 1}},
+    {"value": null,
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0",
+ "binding": null}

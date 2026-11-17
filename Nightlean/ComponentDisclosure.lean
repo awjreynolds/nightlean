@@ -236,6 +236,20 @@ private partial def analyzeTerm (fuel : Nat) (program : Program) (prepared : Pre
         (mergeMany [leftValue.controlOrigins, rightValue.controlOrigins, allOrigins leftValue]))
   | .witness name _ =>
     pure (scalarValue info.ty [{origin := {name, kind := .provider, span}, via := ["provider witness"]}])
+  | .witnessCall _ name arguments => do
+    let arguments ← arguments.mapM (analyzeTerm fuel program prepared scope env span)
+    let signature ← Helpers.witnessSignature program name span
+    let kind := if signature.operation == "private_state.read.v1" then PrivateOriginKind.privateState else .provider
+    let origins := mergeMany (([{origin := {name, kind, span}, via := ["typed provider witness"]}] : Origins) ::
+      arguments.map allOrigins)
+    let width ← match info.ty with
+      | .unit => pure 0
+      | .scalar _ => pure 1
+      | .composite type => pure (← compileType program span type).checked.expandedLeaves
+    pure {
+      type := info.ty
+      components := List.replicate width origins
+      controlOrigins := if width == 0 then origins else []}
   | .call name arguments => do
     let values ← arguments.mapM (analyzeTerm fuel program prepared scope env span)
     let declaration ← prepared.resolve scope name (values.map (·.type)) span

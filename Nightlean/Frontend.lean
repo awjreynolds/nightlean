@@ -3,6 +3,8 @@ import Nightlean.Helpers
 import Nightlean.Helpers.Specialization
 import Nightlean.ComponentDisclosure
 import Nightlean.Control
+import Nightlean.Witness
+import Nightlean.Modules
 import Lean
 
 namespace Nightlean
@@ -30,6 +32,57 @@ initialize contractRegistry : SimplePersistentEnvExtension Name (Array Name) ←
   }
 
 initialize controlRegistry : SimplePersistentEnvExtension Name (Array Name) ←
+  registerSimplePersistentEnvExtension {
+    addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
+    addEntryFn := Array.push
+  }
+
+structure WitnessInfo where
+  circuitName : Name
+  sourceName : Name
+  exportName : String
+  deriving Inhabited
+
+/-- Exact source constants registered as Noctium module definitions. -/
+structure ModuleSourceInfo where
+  sourceName : Name
+  definitionName : Name
+  deriving Inhabited
+
+/-- A module contract declaration retains only source roots. Compiler checks
+re-expand these roots and rebuild their concrete circuits for each invocation. -/
+structure ModuleBuildInfo where
+  contractName : Name
+  requestName : Name
+  deriving Inhabited
+
+structure ModuleCircuitBuildInfo where
+  source : Modules.ModuleCircuitSource
+  declarationName : Name
+  programName : Name
+  program : Helpers.Program
+  circuit : Circuit
+  signatureArtifact : Helpers.Specialization.SignatureArtifact
+
+structure ModuleBuildOutput where
+  specialized : Modules.SpecializedModule
+  contract : Contract
+  programs : List (Name × Name × Helpers.Program)
+  circuits : List ModuleCircuitBuildInfo
+
+initialize witnessRegistry : SimplePersistentEnvExtension WitnessInfo (Array WitnessInfo) ←
+  registerSimplePersistentEnvExtension {
+    addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
+    addEntryFn := Array.push
+  }
+
+initialize moduleSourceRegistry : SimplePersistentEnvExtension ModuleSourceInfo (Array ModuleSourceInfo) ←
+  registerSimplePersistentEnvExtension {
+    addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
+    addEntryFn := Array.push
+  }
+
+initialize moduleBuildRegistry : SimplePersistentEnvExtension ModuleBuildInfo (Array ModuleBuildInfo) ←
   registerSimplePersistentEnvExtension {
     addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
     addEntryFn := Array.push
@@ -508,6 +561,261 @@ open scoped Nightlean
       | .error _ => Lean.Json.null))
     let fullName := (← getCurrNamespace) ++ name.getId
     modifyEnv fun env => controlRegistry.addEntry env fullName
+  | _ => throwUnsupportedSyntax
+
+scoped syntax (name := witnessCircuitCommand) "nightlean_witness_circuit" ident
+  "from" ident "entry" str : command
+
+@[command_elab witnessCircuitCommand] unsafe def elabWitnessCircuit : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_witness_circuit $name:ident from $source:ident entry $exportName:str) =>
+    let namespaceName := (← getCurrNamespace) ++ source.getId
+    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+    let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+    let fullName := (← getCurrNamespace) ++ name.getId
+    let compiled ← match Witness.compile program exportName.getString fullName.toString with
+      | .ok value => pure value
+      | .error diagnostic => failDisclosure diagnostic *> throwError "typed witness compilation failed"
+    let sourceTerm := mkIdent sourceName
+    let fullNameTerm := stringTerm fullName.toString
+    elabCommand (← `(def $name : Nightlean.Circuit :=
+      match Nightlean.Witness.compile $sourceTerm $exportName $fullNameTerm with
+      | .ok value => value.circuit
+      | .error _ => {name := $fullNameTerm, inputs := [], outputs := [], constraints := []}))
+    unsafe checkGeneratedCircuit fullName
+    modifyEnv fun env => circuitRegistry.addEntry env {
+      declName := fullName,
+      inputs := compiled.circuit.inputs.map fun input => (input.name, input.ty),
+      publicInputs := (compiled.circuit.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty),
+      outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
+      sourceProgram? := some (sourceName, exportName.getString)}
+    modifyEnv fun env => witnessRegistry.addEntry env {circuitName := fullName, sourceName, exportName := exportName.getString}
+  | _ => throwUnsupportedSyntax
+
+private def moduleProgramDeclName (contractName : Name) (ordinal : Nat) : Name :=
+  contractName ++ Name.str .anonymous ("__moduleProgram_" ++ toString ordinal)
+
+private def moduleCircuitDeclName (contractName : Name) (outputName : String) : Name :=
+  contractName ++ Name.str .anonymous "__moduleCircuit" ++ Name.str .anonymous outputName
+
+private def moduleCapabilities : Capabilities := {
+  poseidon2 := Bool.true
+  stateCells := Bool.true
+  stateMaps := Bool.true}
+
+/-- Re-read every registered module definition constant before expansion. -/
+unsafe def moduleRegistryForBuild : CommandElabM Modules.Registry := do
+  let mut registry : Modules.Registry := {}
+  for info in moduleSourceRegistry.getState (← getEnv) do
+    let definition ← evalConstCheck Modules.Definition ``Modules.Definition info.definitionName
+    registry ← match registry.register info.sourceName definition with
+      | .ok value => pure value
+      | .error diagnostic => failDisclosure diagnostic *> throwError "module registration failed"
+  pure registry
+
+/-- Re-expand a registered module root from exact source constants. This is
+called by both elaboration and the compiler's mandatory source checks. -/
+unsafe def rebuildModuleBuild (buildInfo : ModuleBuildInfo) : CommandElabM ModuleBuildOutput := do
+  let registry ← moduleRegistryForBuild
+  let request ← evalConstCheck Modules.Request ``Modules.Request buildInfo.requestName
+  let expansion ← match Modules.expand registry request.sourceName request.arguments with
+    | .ok value => pure value
+    | .error diagnostic => failDisclosure diagnostic *> throwError "module expansion failed"
+  let plan ← match expansion.contractPlan expansion.root with
+    | .ok value => pure value
+    | .error diagnostic => failDisclosure diagnostic *> throwError "module contract planning failed"
+  let groups ← match plan.specializationGroups with
+    | .ok value => pure value
+    | .error diagnostic => failDisclosure diagnostic *> throwError "module specialization planning failed"
+  let mut sources : List (Name × Helpers.Specialization.Program) := []
+  for group in groups do
+    let source ← evalConstCheck Helpers.Specialization.Program
+      ``Helpers.Specialization.Program group.sourceProgram
+    sources := sources ++ [(group.sourceProgram, source)]
+  let specialized ← match plan.specializeWithSources {} sources with
+    | .ok value => pure value
+    | .error diagnostic => failDisclosure diagnostic *> throwError "module helper specialization failed"
+  let mut programs : List (Name × Name × Helpers.Program) := []
+  let mut ordinal := 0
+  for (sourceName, batch) in specialized.batches do
+    let programName := moduleProgramDeclName buildInfo.contractName ordinal
+    programs := programs ++ [(sourceName, programName, batch.program)]
+    ordinal := ordinal + 1
+  let mut circuitInfos : List ModuleCircuitBuildInfo := []
+  let mut circuitValues : List Circuit := []
+  for source in plan.circuits do
+    let some (_, programName, program) := programs.find? (·.1 == source.source.program)
+      | throwError "module source program was not specialized"
+    match ComponentDisclosure.checkProgram program source.outputName with
+    | .ok _ => pure ()
+    | .error diagnostic => failDisclosure diagnostic
+    let circuit ← match source.kind with
+      | .witness => do
+        match Witness.compile program source.outputName source.outputName with
+        | .ok compiled => pure compiled.circuit
+        | .error diagnostic => failDisclosure diagnostic *> throwError "module witness compilation failed"
+      | .circuit =>
+        match Helpers.compile program source.outputName with
+        | .ok compiled => pure compiled
+        | .error diagnostic => failDisclosure diagnostic *> throwError "module circuit compilation failed"
+      | _ => throwError "module circuit plan contains a non-circuit member"
+    match Disclosure.circuit circuit with
+    | .ok _ => pure ()
+    | .error diagnostic => failDisclosure diagnostic
+    let some (_, batch) := specialized.batches.find? (·.1 == source.source.program)
+      | throwError "module specialization batch was not retained"
+    let some signatureArtifact := batch.signatureArtifactFor source.outputName
+      | throwError "module specialization signature is missing"
+    let declarationName := moduleCircuitDeclName buildInfo.contractName source.outputName
+    circuitInfos := circuitInfos ++ [{
+      source
+      declarationName
+      programName
+      program
+      circuit
+      signatureArtifact}]
+    circuitValues := circuitValues ++ [circuit]
+  let contract ← match plan.assembleContract buildInfo.contractName.toString circuitValues with
+    | .ok value => pure value
+    | .error diagnostic => failDisclosure diagnostic *> throwError "module contract assembly failed"
+  match contract.validate moduleCapabilities with
+  | .ok _ => pure ()
+  | .error diagnostic => failDisclosure diagnostic
+  match Disclosure.contract contract with
+  | .ok _ => pure ()
+  | .error diagnostic => failDisclosure diagnostic
+  pure {specialized, contract, programs, circuits := circuitInfos}
+
+private partial def nameTerm : Name → CommandElabM (TSyntax `term)
+  | .anonymous => `(Lean.Name.anonymous)
+  | .str parent component => do
+    let parentTerm ← nameTerm parent
+    `(Lean.Name.str $parentTerm $(stringTerm component))
+  | .num parent value => do
+    let parentTerm ← nameTerm parent
+    `(Lean.Name.num $parentTerm $(natTerm value))
+
+private def moduleRegistryTerm : CommandElabM (TSyntax `term) := do
+  let infos := moduleSourceRegistry.getState (← getEnv)
+  let entries ← infos.toList.toArray.mapM fun info => do
+    let sourceName ← nameTerm info.sourceName
+    let definition := mkIdent info.definitionName
+    `( ({sourceName := $sourceName, definition := $definition : Nightlean.Modules.Registered}) )
+  let modules ← `(([$entries,*] : List Nightlean.Modules.Registered))
+  `({modules := $modules : Nightlean.Modules.Registry})
+
+private def moduleSourceProgramsTerm (specialized : Modules.SpecializedModule) :
+    CommandElabM (TSyntax `term) := do
+  let entries ← specialized.batches.toArray.mapM fun (sourceName, _) => do
+    let sourceNameTerm ← nameTerm sourceName
+    let source := mkIdent sourceName
+    `(($sourceNameTerm, $source))
+  `(([$entries,*] : List (Lean.Name × Nightlean.Helpers.Specialization.Program)))
+
+private def moduleSpecializeTerm (buildInfo : ModuleBuildInfo)
+    (specialized : Modules.SpecializedModule) : CommandElabM (TSyntax `term) := do
+  let registry ← moduleRegistryTerm
+  let request := mkIdent buildInfo.requestName
+  let sources ← moduleSourceProgramsTerm specialized
+  `(Nightlean.Modules.specializeRequestWithSources {} {} $registry $request $sources)
+
+private def moduleProgramBodyTerm (specializeTerm : TSyntax `term) (sourceName : Name) :
+    CommandElabM (TSyntax `term) := do
+  let sourceNameTerm ← nameTerm sourceName
+  `(match ($specializeTerm) with
+    | .ok specialized =>
+      match specialized.findBatch $sourceNameTerm with
+      | some batch => batch.program
+      | none => ({} : Nightlean.Helpers.Program)
+    | .error _ => ({} : Nightlean.Helpers.Program))
+
+private def moduleCircuitBodyTerm (source : Modules.ModuleCircuitSource)
+    (programName : Name) : CommandElabM (TSyntax `term) := do
+  let program := mkIdent programName
+  let outputName := stringTerm source.outputName
+  match source.kind with
+  | .witness =>
+    `(match Nightlean.Witness.compile $program $outputName $outputName with
+      | .ok value => value.circuit
+      | .error _ => {name := $outputName, inputs := [], outputs := [], constraints := []})
+  | .circuit =>
+    `(match Nightlean.Helpers.compile $program $outputName with
+      | .ok value => value
+      | .error _ => {name := $outputName, inputs := [], outputs := [], constraints := []})
+  | _ => throwError "module circuit source has an invalid member kind"
+
+scoped syntax (name := moduleSourceCommand) "nightlean_module" "from" ident : command
+
+open scoped Nightlean
+
+@[command_elab moduleSourceCommand] unsafe def elabModuleSource : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_module from $source:ident) => do
+    let sourceName ← liftCoreM <| resolveGlobalConstNoOverload source
+    if moduleSourceRegistry.getState (← getEnv) |>.any (·.sourceName == sourceName) then
+      throwErrorAt source "Noctium module source identity is already registered"
+    let definition ← evalConstCheck Modules.Definition ``Modules.Definition sourceName
+    match Modules.registerDefinition sourceName definition with
+    | .error diagnostic => failDisclosure diagnostic
+    | .ok _ => pure ()
+    modifyEnv fun env => moduleSourceRegistry.addEntry env {
+      sourceName
+      definitionName := sourceName}
+  | _ => throwUnsupportedSyntax
+
+scoped syntax (name := moduleContractCommand) "nightlean_module_contract" ident
+  "from" ident : command
+
+@[command_elab moduleContractCommand] unsafe def elabModuleContract : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_module_contract $name:ident from $requestSource:ident) => do
+    let requestName ← liftCoreM <| resolveGlobalConstNoOverload requestSource
+    let fullName := (← getCurrNamespace) ++ name.getId.eraseMacroScopes
+    if (← getEnv).contains fullName then
+      throwErrorAt name "generated module contract name collides with an existing declaration"
+    let buildInfo : ModuleBuildInfo := {contractName := fullName, requestName}
+    let builtModule ← rebuildModuleBuild buildInfo
+    let specializeTerm ← moduleSpecializeTerm buildInfo builtModule.specialized
+    for (sourceName, programName, _) in builtModule.programs do
+      let programIdent := mkIdent programName
+      if (← getEnv).contains programName then
+        throwErrorAt name "generated module program name collides with an existing declaration"
+      let body ← moduleProgramBodyTerm specializeTerm sourceName
+      elabCommand (← `(def $programIdent : Nightlean.Helpers.Program := $body))
+    for circuitInfo in builtModule.circuits do
+      let circuitIdent := mkIdent circuitInfo.declarationName
+      if (← getEnv).contains circuitInfo.declarationName then
+        throwErrorAt name "generated module circuit name collides with an existing declaration"
+      let body ← moduleCircuitBodyTerm circuitInfo.source circuitInfo.programName
+      elabCommand (← `(def $circuitIdent : Nightlean.Circuit := $body))
+      unsafe checkGeneratedCircuit circuitInfo.declarationName
+      let signatureText := (Lean.toJson circuitInfo.signatureArtifact).pretty
+      modifyEnv fun env => circuitRegistry.addEntry env {
+        declName := circuitInfo.declarationName
+        inputs := circuitInfo.circuit.inputs.map fun input => (input.name, input.ty)
+        publicInputs := (circuitInfo.circuit.inputs.filter (·.visibility == .public)).map
+          fun input => (input.name, input.ty)
+        outputs := circuitInfo.circuit.outputs.map fun item => (item.name, item.ty)
+        sourceProgram? := some (circuitInfo.programName, circuitInfo.source.outputName)
+        specializationArtifact? := some signatureText}
+      if circuitInfo.source.kind == .witness then
+        modifyEnv fun env => witnessRegistry.addEntry env {
+          circuitName := Name.str .anonymous circuitInfo.source.outputName
+          sourceName := circuitInfo.programName
+          exportName := circuitInfo.source.outputName}
+    let circuitTerms := builtModule.circuits.toArray.map fun circuitInfo => mkIdent circuitInfo.declarationName
+    let contractNameText := stringTerm fullName.toString
+    let contractIdent := mkIdent fullName
+    let contractBody ← `(match ($specializeTerm) with
+      | .ok specialized =>
+        match specialized.plan.assembleContract $contractNameText [$circuitTerms,*] with
+        | .ok contract => contract
+        | .error _ => {name := $contractNameText : Nightlean.Contract}
+      | .error _ => {name := $contractNameText : Nightlean.Contract})
+    elabCommand (← `(def $contractIdent : Nightlean.Contract := $contractBody))
+    unsafe checkGeneratedContract fullName
+    modifyEnv fun env => contractRegistry.addEntry env fullName
+    modifyEnv fun env => moduleBuildRegistry.addEntry env buildInfo
   | _ => throwUnsupportedSyntax
 
 end Nightlean

@@ -94,6 +94,149 @@ impl Drop for Fixture {
         let _ = fs::remove_dir_all(&self.root);
     }
 }
+
+fn witness_recipe(fixture: &Fixture) -> Recipe {
+    let relation: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.path("entry.zkir")).unwrap()).unwrap();
+    let binding = json!({
+        "schemaVersion":1,"kind":"typed-witness-bindings","circuitName":"relation","sourceExport":"main",
+        "target":{"kind":"entrypoint","contractName":"Contract","entrypoint":"call",
+            "nativeCircuitFile":"Contract.call.zkir","targetProfile":nightlean_runtime::profile::NAME},
+        "types":[],"signatures":[],"inputBindings":[],"circuitInputs":[],"circuitOutputs":[],"calls":[],
+        "nativeRelation":relation
+    });
+    write_witness_pair(fixture, &binding);
+    let mut metadata: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.path("nightlean.json")).unwrap()).unwrap();
+    metadata["hostWitnessPlans"] = json!([{"circuit":"relation","bindingFile":"Contract.call.witness.json",
+        "controlFile":"Contract.call.witness.control.json","target":"entrypoint","contract":"Contract",
+        "entrypoint":"call","nativeWitnessQualified":false}]);
+    fs::write(fixture.path("nightlean.json"), metadata.to_string()).unwrap();
+    let mut recipe = fixture.recipe();
+    recipe.files.push(fixture.selection(
+        Role::WitnessBinding,
+        "Contract.call.witness.json",
+        "call.witness.json",
+    ));
+    recipe.files.push(fixture.selection(
+        Role::WitnessControl,
+        "Contract.call.witness.control.json",
+        "call.witness.control.json",
+    ));
+    recipe
+}
+
+fn write_witness_pair(fixture: &Fixture, binding: &serde_json::Value) {
+    let text = serde_json::to_string(binding).unwrap();
+    fs::write(fixture.path("call.witness.json"), &text).unwrap();
+    fs::write(
+        fixture.path("call.witness.control.json"),
+        json!({
+            "schemaVersion":2,"kind":"host-control","mode":"native","binding":text,"name":"main",
+            "types":[],"witnesses":[],"inputs":[],"functions":[{"id":"f","name":"main",
+                "parameters":[],"resultType":"Unit","body":[{"tag":"return","value":null}]}],
+            "entry":"f","limits":{"maxSteps":1000}
+        })
+        .to_string(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn retained_typed_witness_pair_is_selected_and_checked() {
+    let fixture = Fixture::new();
+    let recipe = witness_recipe(&fixture);
+    let manifest = artifacts::assemble(recipe, &fixture.path("typed")).unwrap();
+    let manifest_bytes = fs::read(fixture.path("typed/manifest.json")).unwrap();
+    use sha2::{Digest, Sha256};
+    let digest = hex::encode(Sha256::digest(&manifest_bytes));
+    let bundle = artifacts::verify(&fixture.path("typed"), Some(&digest)).unwrap();
+    assert_eq!(
+        bundle.file(Role::WitnessBinding).unwrap(),
+        fs::read(fixture.path("call.witness.json")).unwrap()
+    );
+    assert_eq!(
+        bundle.file(Role::WitnessControl).unwrap(),
+        fs::read(fixture.path("call.witness.control.json")).unwrap()
+    );
+    assert_eq!(manifest.entries.last().unwrap().role, Role::WitnessControl);
+}
+
+#[test]
+fn missing_unreferenced_or_mismatched_witness_pair_rejects() {
+    let fixture = Fixture::new();
+    let mut recipe = witness_recipe(&fixture);
+    recipe
+        .files
+        .retain(|selection| selection.role != Role::WitnessBinding);
+    assert_eq!(
+        failure(artifacts::assemble(recipe, &fixture.path("missing"))),
+        "missing_role"
+    );
+
+    let recipe = witness_recipe(&fixture);
+    let mut metadata: serde_json::Value =
+        serde_json::from_slice(&fs::read(fixture.path("nightlean.json")).unwrap()).unwrap();
+    metadata.as_object_mut().unwrap().remove("hostWitnessPlans");
+    fs::write(fixture.path("nightlean.json"), metadata.to_string()).unwrap();
+    assert_eq!(
+        failure(artifacts::assemble(recipe, &fixture.path("unreferenced"))),
+        "plan_mismatch"
+    );
+
+    for (index, mutation) in ["relation", "input", "target", "unknown"]
+        .into_iter()
+        .enumerate()
+    {
+        let recipe = witness_recipe(&fixture);
+        let mut binding: serde_json::Value =
+            serde_json::from_slice(&fs::read(fixture.path("call.witness.json")).unwrap()).unwrap();
+        match mutation {
+            "relation" => binding["nativeRelation"]["do_communications_commitment"] = json!(false),
+            "input" => {
+                binding["circuitInputs"] =
+                    json!([{"name":"forged","type":"Native","visibility":"private"}])
+            }
+            "target" => binding["target"]["entrypoint"] = json!("different"),
+            _ => binding["unknown"] = json!(true),
+        }
+        write_witness_pair(&fixture, &binding);
+        assert_eq!(
+            failure(artifacts::assemble(
+                recipe,
+                &fixture.path(&format!("mutated-{index}"))
+            )),
+            "plan_mismatch"
+        );
+    }
+}
+
+#[test]
+fn typed_witness_role_bounds_apply_before_json_parse() {
+    let fixture = Fixture::new();
+    let recipe = witness_recipe(&fixture);
+    fs::write(fixture.path("call.witness.json"), vec![b' '; 524_289]).unwrap();
+    assert_eq!(
+        failure(artifacts::assemble(
+            recipe,
+            &fixture.path("oversize-binding")
+        )),
+        "limit_exceeded"
+    );
+    let recipe = witness_recipe(&fixture);
+    fs::write(
+        fixture.path("call.witness.control.json"),
+        vec![b' '; 1_048_577],
+    )
+    .unwrap();
+    assert_eq!(
+        failure(artifacts::assemble(
+            recipe,
+            &fixture.path("oversize-control")
+        )),
+        "limit_exceeded"
+    );
+}
 fn failure<T>(result: artifacts::Result<T>) -> String {
     match result {
         Ok(_) => panic!("expected rejection"),

@@ -1,0 +1,40 @@
+{"witnesses":
+ [{"resultType": "Aggregate:t0",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.empty.v1",
+   "name": "empty",
+   "capability": "empty"}],
+ "types":
+ [{"schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r18:TypedWitness.EmptyNightleanCompositeLayoutV1;1;R18:TypedWitness.Empty0;0;",
+    "schemaVersion": 1,
+    "layout": {"kind": "struct", "id": "TypedWitness.Empty", "fields": []},
+    "counts": {"leaves": 0, "layoutNodes": 1, "expandedNodes": 1}},
+   "id": "t0"}],
+ "schemaVersion": 2,
+ "name": "empty",
+ "mode": "host",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Unit",
+   "parameters": [],
+   "name": "empty",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span": {"line": 1, "file": "", "column": 1},
+      "site": "empty-call",
+      "name": "empty",
+      "arguments": []},
+     "tag": "evaluate",
+     "span": {"line": 1, "file": "", "column": 1}},
+    {"value": null,
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0",
+ "binding": null}

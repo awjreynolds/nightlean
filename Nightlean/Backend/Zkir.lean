@@ -260,7 +260,7 @@ theorem lowerCircuit_instructions (circuit : Circuit) (program : Json)
     rw [equal]
     rfl
 
-private def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
+def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
   for input in entry.circuit.inputs do
     let output := "%input_" ++ input.name
     emit (if input.visibility == .«public» then "public_input" else "private_input")
@@ -303,5 +303,24 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagn
     ("do_communications_commitment", toJson true),
     ("instructions", Json.arr result.instructions)]
   validateProduced entry.span (← Native.expectedEntrypoint state entry) program
+
+/-- Accepted ledger-call JSON retains the exact instruction vector emitted by
+the production body over the actual accepted pruned plan. -/
+theorem lowerEntrypoint_instructions (state : List StateDecl) (entry : Entrypoint)
+    (program : Json) (accepted : lowerEntrypoint state entry = .ok program) :
+    ∃ plan, Impact.lower state (Passes.pruneEntrypoint entry) = .ok plan ∧
+      Native.arrayField program "instructions" =
+        .ok ((lowerEntrypointBody (Passes.pruneEntrypoint entry) plan).run {}).2.instructions := by
+  simp only [lowerEntrypoint, bind, bind_ok] at accepted
+  rcases accepted with ⟨plan, lowered, gate⟩
+  cases produced : (lowerEntrypointBody (Passes.pruneEntrypoint entry) plan).run {} with
+  | mk value result =>
+    simp only [produced] at gate
+    rw [bind_ok] at gate
+    rcases gate with ⟨expected, _, producerAccepted⟩
+    obtain ⟨equal, _⟩ := (validateProduced_ok _ _ _ _).mp producerAccepted
+    refine ⟨plan, lowered, ?_⟩
+    rw [equal, produced]
+    rfl
 
 end Nightlean.Backend.Zkir

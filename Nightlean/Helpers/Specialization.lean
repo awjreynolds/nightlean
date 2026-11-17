@@ -170,6 +170,26 @@ structure Result where
   instances : List Instance
   deriving Repr
 
+/-- One bounded specialization session for a selected set of source exports.
+All roots share the declaration and type caches, and exports are processed by
+name so caller order does not affect generated declaration identities. -/
+structure BatchResult where
+  program : Helpers.Program
+  exportNames : List String
+  sourceExports : List (String × String)
+  instances : List Instance
+  deriving Repr
+
+/-- A requested monomorphic export may override its source export's generic
+arguments and output name. Module expansion uses the source name and arguments
+while keeping generated names tied to declaration identity. -/
+structure ExportRequest where
+  sourceExport : String
+  outputName : String
+  arguments : List Argument
+  span : SourceSpan := {}
+  deriving Repr, Inhabited
+
 private abbrev TypeEnvironment := List (String × Types.CompositeType)
 private abbrev NaturalEnvironment := List (String × Nat)
 
@@ -859,16 +879,39 @@ private def initialOrdinal (program : Program) : Nat :=
 private def sourceNames (program : Program) : List String :=
   program.declarations.map (·.name) ++ program.base.scopes.flatMap (·.values)
 
-/-- Specialize one concrete export into the ordinary monomorphic Helpers.Program.
-The instance cache key is the source declaration identity and every ordered,
-normalized type/natural argument. -/
-def specializeWithLimits (limits : Limits) (source : Program) (exportName : String) :
-    Except Diagnostic Result := do
+/- Specialize requested exports in one bounded session. The declaration and
+type caches are shared across roots. Output names are sorted before expansion,
+so the same request set produces the same generated declaration IDs regardless
+of caller order. -/
+def specializeRequestsWithLimits (limits : Limits) (source : Program)
+    (requests : List ExportRequest) : Except Diagnostic BatchResult := do
+  if requests.isEmpty then fail {} "specialization batch requires at least one export"
   let (declarationCosts, structureCosts) ← preflight limits source
-  let some entry := source.exports.find? (·.name == exportName)
-    | fail {} "unknown generic helper entrypoint"
-  let some targetDeclaration := findDeclaration source entry.target
-    | fail entry.span "unknown generic declaration identity"
+  if requests.length > limits.maxSpecializations then
+    resource {} "specialization batch export count"
+  unless uniqueNames (requests.map (·.outputName)) do
+    fail {} "duplicate output name in specialization batch"
+  let mut remainingNodes := limits.maxSourceNodes
+  let mut entries : List (ExportRequest × Export) := []
+  for request in requests do
+    textLimit request.span request.outputName
+    if request.arguments.length > limits.maxTypeArguments then
+      resource request.span "generic argument count"
+    let used ← scanNodes limits request.span remainingNodes
+      (request.arguments.map SourceNode.argument)
+    remainingNodes := remainingNodes - used
+    let some sourceEntry := source.exports.find? (·.name == request.sourceExport)
+      | fail request.span s!"unknown generic helper entrypoint '{request.sourceExport}'"
+    let some _ := findDeclaration source sourceEntry.target
+      | fail sourceEntry.span "unknown generic declaration identity"
+    let entry : Export := {
+      sourceEntry with
+      name := request.outputName
+      arguments := request.arguments
+      span := request.span}
+    entries := entries ++ [(request, entry)]
+  let orderedEntries := entries.mergeSort fun left right =>
+    decide (left.1.outputName < right.1.outputName)
   let initial : State := {
     source
     declarationCosts
@@ -876,7 +919,11 @@ def specializeWithLimits (limits : Limits) (source : Program) (exportName : Stri
     usedNames := sourceNames source
     nextOrdinal := initialOrdinal source
     remainingSteps := limits.maxExpandedNodes}
-  let action : SpecializeM (Instance × List Nightlean.Input × List Helpers.AggregateInput) := do
+  let action : SpecializeM (List Helpers.Export) := do
+    let mut generatedExports : List Helpers.Export := []
+    for (_, entry) in orderedEntries do
+      let some targetDeclaration := findDeclaration source entry.target
+        | liftM (fail entry.span "unknown generic declaration identity")
       let (keyArguments, typeEnv, naturalEnv) ← bindArguments limits entry.span
         targetDeclaration.parameters entry.arguments [] []
       let targetInstance ← specializeInstance limits entry.span targetDeclaration
@@ -901,21 +948,58 @@ def specializeWithLimits (limits : Limits) (source : Program) (exportName : Stri
             visibility := input.visibility
             span := input.span}
           compositeInputs := compositeInputs ++ [concreteInput]
-      pure (targetInstance, scalarInputs, compositeInputs)
-  let ((targetInstance, scalarInputs, compositeInputs), state) ← action.run initial
-  let generatedExport : Helpers.Export :=
-    ⟨entry.name, targetInstance.target, scalarInputs, compositeInputs, entry.span⟩
+      generatedExports := generatedExports ++ [
+        ⟨entry.name, targetInstance.target, scalarInputs, compositeInputs, entry.span⟩]
+    pure generatedExports
+  let (generatedExports, state) ← action.run initial
   let concreteComposites : Types.CompositeEnv :=
     ⟨source.base.composites.structures ++ state.structures, source.base.composites.enumerations⟩
-  let concrete : Helpers.Program :=
-    ⟨source.base.scopes, state.declarations, [generatedExport], concreteComposites⟩
+  let concrete : Helpers.Program := {
+    source.base with
+    declarations := state.declarations
+    exports := generatedExports
+    composites := concreteComposites}
   let analysisLimits : Helpers.Limits := {maxExpandedNodes := limits.maxExpandedNodes}
   match Helpers.analyzeWithLimits analysisLimits concrete with
   | .error diagnostic => .error diagnostic
-  | .ok _ => pure {program := concrete, exportName := entry.name, instances := state.instances}
+  | .ok _ => pure {
+      program := concrete
+      exportNames := orderedEntries.map (·.1.outputName)
+      sourceExports := orderedEntries.map fun (request, _) =>
+        (request.outputName, request.sourceExport)
+      instances := state.instances}
+
+/-- Select source exports by name while sharing one bounded specialization
+session. Use `specializeRequestsWithLimits` to supply module identities and
+normalized module arguments explicitly. -/
+def specializeBatchWithLimits (limits : Limits) (source : Program)
+    (exportNames : List String) : Except Diagnostic BatchResult := do
+  if exportNames.isEmpty then fail {} "specialization batch requires at least one export"
+  unless uniqueNames exportNames do fail {} "duplicate source export in specialization batch"
+  let mut requests : List ExportRequest := []
+  for exportName in exportNames do
+    let some entry := source.exports.find? (·.name == exportName)
+      | fail {} s!"unknown generic helper entrypoint '{exportName}'"
+    requests := requests ++ [{
+      sourceExport := exportName
+      outputName := exportName
+      arguments := entry.arguments
+      span := entry.span}]
+  specializeRequestsWithLimits limits source requests
+
+/-- Specialize one concrete export into the ordinary monomorphic
+`Helpers.Program`. The single-export API shares the batch implementation. -/
+def specializeWithLimits (limits : Limits) (source : Program) (exportName : String) :
+    Except Diagnostic Result := do
+  let batch ← specializeBatchWithLimits limits source [exportName]
+  pure {program := batch.program, exportName, instances := batch.instances}
 
 def specialize (source : Program) (exportName : String) : Except Diagnostic Result :=
   specializeWithLimits {} source exportName
+
+def specializeBatch (source : Program) (exportNames : List String) :
+    Except Diagnostic BatchResult :=
+  specializeBatchWithLimits {} source exportNames
 
 /-- A versioned signature type stored by the standalone specialization sidecar.
 Natural values and nominal identities use strings to avoid JSON number loss. -/
@@ -991,7 +1075,7 @@ private partial def collectWitnessTerms (term : Helpers.Term) (result : Array Si
   | .at _ value | .project value _ => collectWitnessTerms value result
   | .select condition yes no | .ite condition yes no =>
     collectWitnessTerms no (collectWitnessTerms yes (collectWitnessTerms condition result))
-  | .call _ values | .composite _ values => values.foldl (fun acc value => collectWitnessTerms value acc) result
+  | .call _ values | .witnessCall _ _ values | .composite _ values => values.foldl (fun acc value => collectWitnessTerms value acc) result
   | .unit | .native _ | .bool _ | .uint _ _ | .ref _ => result
 
 private partial def collectWitnessStatements : List Helpers.Statement → Array SignatureValue → Array SignatureValue
@@ -1028,6 +1112,18 @@ def Result.signatureArtifact (result : Result) : SignatureArtifact :=
       result := signatureResult declaration.result
       witnesses := witnessStatements declaration.body}
   {sourceExport := result.exportName, declarations}
+
+/-- Sidecar for one output in a shared batch. The declaration list records the
+full monomorphic program compiled by the batch, so shared helper instances
+appear in each related output artifact without being specialized twice. -/
+def BatchResult.signatureArtifactFor (result : BatchResult) (outputName : String) :
+    Option SignatureArtifact := do
+  let sourceExport ← (result.sourceExports.find? (·.1 == outputName)).map (·.2)
+  let single : Result := {
+    program := result.program
+    exportName := sourceExport
+    instances := result.instances}
+  pure single.signatureArtifact
 
 private def canonicalDecimal (text : String) : Except String Nat := do
   if text.length > (toString ScalarPolicy.maxUint).length then

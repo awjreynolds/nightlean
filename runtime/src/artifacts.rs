@@ -61,6 +61,8 @@ pub enum Role {
     ProverKey,
     VerifierKey,
     Toolchain,
+    WitnessBinding,
+    WitnessControl,
 }
 impl Role {
     fn path(self, name: &str) -> String {
@@ -75,7 +77,17 @@ impl Role {
             Self::ProverKey => "keys/entrypoint.prover".into(),
             Self::VerifierKey => "keys/entrypoint.verifier".into(),
             Self::Toolchain => "provenance/native-zkir.json".into(),
+            Self::WitnessBinding => "witness/entrypoint.binding.json".into(),
+            Self::WitnessControl => "witness/entrypoint.control.json".into(),
         }
+    }
+}
+
+fn file_limit(role: Role) -> u64 {
+    match role {
+        Role::WitnessBinding => 524_288,
+        Role::WitnessControl => 1_048_576,
+        _ => MAX_FILE_BYTES,
     }
 }
 
@@ -229,6 +241,8 @@ fn validate_name(role: Role, name: &str) -> Result<()> {
         Role::ProverKey => name == "entrypoint.prover",
         Role::VerifierKey => name == "entrypoint.verifier",
         Role::Toolchain => name == "native-zkir.json",
+        Role::WitnessBinding => !name.contains('/') && name.ends_with(".witness.json"),
+        Role::WitnessControl => !name.contains('/') && name.ends_with(".witness.control.json"),
     };
     require(
         expected,
@@ -549,6 +563,8 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "deployable",
             "contracts",
             "circuits",
+            "hostWitnessPlans",
+            "hostControlPlans",
         ],
     )?;
     require(
@@ -602,6 +618,7 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         "plan_mismatch",
         "plan circuit schema differs from compiler metadata",
     )?;
+    validate_witness_payloads(payloads, &metadata, &plan, &circuit, circuit_name)?;
     let (abi_name, abi_bytes) = one(payloads, Role::Abi)?;
     if abi_name.ends_with(".h") {
         let header = std::str::from_utf8(abi_bytes)
@@ -634,6 +651,236 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         )?;
     }
     Ok(())
+}
+
+fn validate_witness_payloads(
+    payloads: &Payloads,
+    metadata: &Value,
+    plan: &Value,
+    circuit: &Value,
+    circuit_name: &str,
+) -> Result<()> {
+    if let Some(controls) = metadata.get("hostControlPlans") {
+        let controls = controls
+            .as_array()
+            .ok_or_else(|| error("unsupported_schema", "invalid host control metadata"))?;
+        require(
+            controls.len() <= 256,
+            "limit_exceeded",
+            "too many host control metadata entries",
+        )?;
+        for description in controls {
+            only_fields(description, &["name", "file", "nativeGuardQualified"])?;
+            require(
+                description
+                    .as_object()
+                    .is_some_and(|value| value.len() == 3)
+                    && description["name"]
+                        .as_str()
+                        .is_some_and(|value| !value.is_empty() && value.len() <= 4096)
+                    && description["file"].as_str().is_some_and(|value| {
+                        !value.contains('/')
+                            && value.len() <= 4096
+                            && value.ends_with(".control.json")
+                    })
+                    && description["nativeGuardQualified"] == false,
+                "unsupported_schema",
+                "invalid host control metadata",
+            )?;
+        }
+    }
+    let descriptions = match metadata.get("hostWitnessPlans") {
+        None => &[][..],
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| error("unsupported_schema", "invalid typed witness metadata"))?,
+    };
+    require(
+        descriptions.len() <= 256,
+        "limit_exceeded",
+        "too many typed witness metadata entries",
+    )?;
+    let mut selected = Vec::new();
+    for description in descriptions {
+        let target = description["target"].as_str();
+        let fields: &[&str] = if target == Some("entrypoint") {
+            &[
+                "circuit",
+                "bindingFile",
+                "controlFile",
+                "target",
+                "contract",
+                "entrypoint",
+                "nativeWitnessQualified",
+            ]
+        } else {
+            &[
+                "circuit",
+                "bindingFile",
+                "controlFile",
+                "target",
+                "nativeWitnessQualified",
+            ]
+        };
+        only_fields(description, fields)?;
+        require(
+            description
+                .as_object()
+                .is_some_and(|object| object.len() == fields.len())
+                && matches!(target, Some("entrypoint" | "standalone"))
+                && ["circuit", "bindingFile", "controlFile"].iter().all(|key| {
+                    description[*key]
+                        .as_str()
+                        .is_some_and(|value| !value.is_empty() && value.len() <= 4096)
+                })
+                && description["nativeWitnessQualified"] == false,
+            "unsupported_schema",
+            "invalid typed witness metadata",
+        )?;
+        if target == Some("entrypoint") {
+            require(
+                description["contract"]
+                    .as_str()
+                    .is_some_and(|value| !value.is_empty() && value.len() <= 4096)
+                    && description["entrypoint"]
+                        .as_str()
+                        .is_some_and(|value| !value.is_empty() && value.len() <= 4096),
+                "unsupported_schema",
+                "invalid typed witness target",
+            )?;
+            if description["contract"] == plan["contractName"]
+                && description["entrypoint"] == plan["entrypoint"]
+            {
+                selected.push(description);
+            }
+        }
+    }
+    require(
+        selected.len() <= 1,
+        "plan_mismatch",
+        "ambiguous typed witness entrypoint",
+    )?;
+    let binding_present = payloads.contains_key(&Role::WitnessBinding);
+    let control_present = payloads.contains_key(&Role::WitnessControl);
+    if selected.is_empty() {
+        return require(
+            !binding_present && !control_present,
+            "plan_mismatch",
+            "unreferenced typed witness artifacts",
+        );
+    }
+    let (binding_name, binding) = one(payloads, Role::WitnessBinding)?;
+    let (control_name, control) = one(payloads, Role::WitnessControl)?;
+    require(
+        binding.len() as u64 <= file_limit(Role::WitnessBinding)
+            && control.len() as u64 <= file_limit(Role::WitnessControl),
+        "limit_exceeded",
+        "typed witness artifact exceeds its byte limit",
+    )?;
+    require(
+        selected[0]["bindingFile"] == binding_name
+            && selected[0]["controlFile"] == control_name
+            && selected[0]["circuit"] == plan["circuit"]["name"],
+        "plan_mismatch",
+        "typed witness selection differs from compiler metadata",
+    )?;
+    let binding_value = json(binding)?;
+    require(
+        binding_value["circuitName"] == plan["circuit"]["name"]
+            && binding_value["circuitInputs"] == plan["circuit"]["inputs"],
+        "plan_mismatch",
+        "typed witness source input schema differs from selected plan",
+    )?;
+    let control = json(control)?;
+    crate::control::validate_witness_artifacts(
+        &control,
+        binding,
+        circuit,
+        plan["contractName"].as_str().unwrap_or_default(),
+        plan["entrypoint"].as_str().unwrap_or_default(),
+        circuit_name,
+        crate::profile::NAME,
+    )
+    .map_err(|_| {
+        error(
+            "plan_mismatch",
+            "typed witness relation or input binding mismatch",
+        )
+    })
+}
+
+#[cfg(test)]
+mod witness_source_tests {
+    #[test]
+    fn actual_lean_generated_witness_bindings_match_call_relations() {
+        #[cfg(not(feature = "zkir-321"))]
+        let fixtures: [(&[u8], &[u8], &[u8], &str); 2] = [
+            (
+                include_bytes!(
+                    "../tests/fixtures/witness/320/TypedWitness.ScalarWitness.claim.witness.control.json"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/320/TypedWitness.ScalarWitness.claim.witness.json"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/320/TypedWitness.ScalarWitness.claim.zkir"
+                ),
+                "Scalar",
+            ),
+            (
+                include_bytes!(
+                    "../tests/fixtures/witness/320/TypedWitness.PairWitness.claim.witness.control.json"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/320/TypedWitness.PairWitness.claim.witness.json"
+                ),
+                include_bytes!("../tests/fixtures/witness/320/TypedWitness.PairWitness.claim.zkir"),
+                "Pair",
+            ),
+        ];
+        #[cfg(feature = "zkir-321")]
+        let fixtures: [(&[u8], &[u8], &[u8], &str); 2] = [
+            (
+                include_bytes!(
+                    "../tests/fixtures/witness/321/TypedWitness.ScalarWitness.claim.witness.control.json"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/321/TypedWitness.ScalarWitness.claim.witness.json"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/321/TypedWitness.ScalarWitness.claim.zkir"
+                ),
+                "Scalar",
+            ),
+            (
+                include_bytes!(
+                    "../tests/fixtures/witness/321/TypedWitness.PairWitness.claim.witness.control.json"
+                ),
+                include_bytes!(
+                    "../tests/fixtures/witness/321/TypedWitness.PairWitness.claim.witness.json"
+                ),
+                include_bytes!("../tests/fixtures/witness/321/TypedWitness.PairWitness.claim.zkir"),
+                "Pair",
+            ),
+        ];
+        for (control, binding, relation, kind) in fixtures {
+            let control = serde_json::from_slice(control).unwrap();
+            let relation = serde_json::from_slice(relation).unwrap();
+            let contract = format!("TypedWitness.{kind}Witness");
+            let file = format!("{contract}.claim.zkir");
+            crate::control::validate_witness_artifacts(
+                &control,
+                binding,
+                &relation,
+                &contract,
+                "claim",
+                &file,
+                crate::profile::NAME,
+            )
+            .unwrap();
+        }
+    }
 }
 
 fn validate_manifest(manifest: &Manifest) -> Result<()> {
@@ -725,7 +972,7 @@ fn validate_manifest(manifest: &Manifest) -> Result<()> {
         }
         previous = Some((&entry.role, &entry.name));
         require(
-            entry.size <= MAX_FILE_BYTES && hex_length(&entry.sha256, 64),
+            entry.size <= file_limit(entry.role) && hex_length(&entry.sha256, 64),
             "invalid_manifest",
             "invalid artifact digest or size",
         )?;
@@ -790,7 +1037,7 @@ pub fn assemble(recipe: Recipe, destination: &Path) -> Result<Manifest> {
             "duplicate_path",
             "duplicate public selection",
         )?;
-        let mut bytes = read(&selection.input, MAX_FILE_BYTES)?;
+        let mut bytes = read(&selection.input, file_limit(selection.role))?;
         if selection.role == Role::Toolchain {
             bytes = normalize_toolchain(&bytes)?;
         }

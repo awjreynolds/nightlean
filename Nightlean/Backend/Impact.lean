@@ -77,6 +77,159 @@ private def stateSlot (state : List StateDecl) (name : String) : Except String N
   | some index => pure index
   | none => throw s!"unknown ledger state '{name}'"
 
+/-- One effect in the production ordered ledger plan. The current read count
+fixes generated absence names and therefore belongs to the accumulator. -/
+def appendEffect (state : List StateDecl) (effect : Effect)
+    (plan : Plan) : Except String Plan := do
+  match effect with
+  | .readCell name destination ty =>
+    let slot ← stateSlot state name
+    pure { plan with
+      operations := plan.operations ++ [.dup, .index slot, .popeq (.field (nativeRead ty destination))]
+      reads := plan.reads ++ [{name := destination, ty}] }
+  | .require condition =>
+    pure {plan with guards := plan.guards ++ [condition]}
+  | .requireAbsent name _ key =>
+    let slot ← stateSlot state name
+    let readName := s!"_nightlean_absence_{plan.reads.length}"
+    pure { plan with
+      operations := plan.operations ++ [
+        .dup, .index slot, .push (.field (nativeValue _ key)), .member, .popeq (.bit false)]
+      reads := plan.reads ++ [{name := readName, ty := .bool}]
+      guards := plan.guards ++ [.eq (.ref readName : Expr .bool) (.bool false)] }
+  | .writeCell name _ value =>
+    let slot ← stateSlot state name
+    pure {plan with operations := plan.operations ++ [
+      .push (.field (.native slot)), .push (.field (nativeValue _ value)) true, .insert 1]}
+  | .writeMap name _ _ key value =>
+    let slot ← stateSlot state name
+    pure {plan with operations := plan.operations ++ [
+      .index slot true, .push (.field (nativeValue _ key)),
+      .push (.field (nativeValue _ value)) true, .insert 2]}
+  | .readMap .. => throw "map value reads are not supported by the initial native transcript plan"
+
+def appendEffects (state : List StateDecl) (effects : List Effect)
+    (initial : Plan) : Except String Plan :=
+  effects.foldlM (fun plan effect => appendEffect state effect plan) initial
+
+private def appendPublicInput (input : Input) (plan : Plan) : Plan :=
+  if input.visibility == .«public» then
+    let value := Aligned.field (nativeRead input.ty input.name)
+    { plan with
+      operations := plan.operations ++ [.push value, .popeq value]
+      reads := plan.reads ++ [{name := input.name, ty := input.ty}] }
+  else plan
+
+/-- The exact public-input prefix used before source effects. -/
+def publicInputPlan (inputs : List Input) (initial : Plan := {}) : Plan :=
+  inputs.foldl (fun plan input => appendPublicInput input plan) initial
+
+private def previousPublicInputStep (input : Input) (plan : Plan) : Plan :=
+  if input.visibility == .«public» then
+    let value := Aligned.field (nativeRead input.ty input.name)
+    { plan with
+        operations := plan.operations ++ [.push value, .popeq value]
+        reads := plan.reads ++ [{name := input.name, ty := input.ty}] }
+  else plan
+
+private def previousPublicInputLoop (inputs : List Input) (initial : Plan) : Except String Plan := do
+  let mut plan := initial
+  for input in inputs do
+    plan := previousPublicInputStep input plan
+  pure plan
+
+/-- The old mutable public-input loop equals the production pure prefix for
+all input lists and starting plans. -/
+theorem previousPublicInputLoop_eq_publicInputPlan (inputs : List Input)
+    (initial : Plan) :
+    previousPublicInputLoop inputs initial = .ok (publicInputPlan inputs initial) := by
+  unfold previousPublicInputLoop
+  simp only [bind_pure]
+  change (forIn inputs initial (fun input plan =>
+      (pure (ForInStep.yield (previousPublicInputStep input plan)) : Except String (ForInStep Plan)))) =
+    .ok (publicInputPlan inputs initial)
+  rw [List.forIn_pure_yield_eq_foldl]
+  rfl
+
+/-- The former mutable effect body, retained as a pure reference for the
+kernel equivalence check. -/
+private def previousEffectStep (state : List StateDecl) (effect : Effect)
+    (initial : Plan) : Except String Plan := do
+  let mut plan := initial
+  match effect with
+  | .readCell name destination ty =>
+    let slot ← stateSlot state name
+    plan := { plan with
+      operations := plan.operations ++ [.dup, .index slot, .popeq (.field (nativeRead ty destination))]
+      reads := plan.reads ++ [{name := destination, ty}] }
+  | .require condition =>
+    plan := {plan with guards := plan.guards ++ [condition]}
+  | .requireAbsent name _ key =>
+    let slot ← stateSlot state name
+    let name := s!"_nightlean_absence_{plan.reads.length}"
+    plan := { plan with
+      operations := plan.operations ++ [
+        .dup, .index slot, .push (.field (nativeValue _ key)), .member, .popeq (.bit false)]
+      reads := plan.reads ++ [{name, ty := .bool}]
+      guards := plan.guards ++ [.eq (.ref name : Expr .bool) (.bool false)] }
+  | .writeCell name _ value =>
+    let slot ← stateSlot state name
+    plan := {plan with operations := plan.operations ++ [
+      .push (.field (.native slot)), .push (.field (nativeValue _ value)) true, .insert 1]}
+  | .writeMap name _ _ key value =>
+    let slot ← stateSlot state name
+    plan := {plan with operations := plan.operations ++ [
+      .index slot true, .push (.field (nativeValue _ key)),
+      .push (.field (nativeValue _ value)) true, .insert 2]}
+  | .readMap .. => throw "map value reads are not supported by the initial native transcript plan"
+  pure plan
+
+private def previousEffectLoop (state : List StateDecl) (effects : List Effect)
+    (initial : Plan) : Except String Plan := do
+  let mut plan := initial
+  for effect in effects do
+    plan ← previousEffectStep state effect plan
+  pure plan
+
+private theorem previousEffectStep_eq_appendEffect (state : List StateDecl)
+    (effect : Effect) (plan : Plan) :
+    previousEffectStep state effect plan = appendEffect state effect plan := by
+  cases effect <;> simp [previousEffectStep, appendEffect, stateSlot] <;> rfl
+
+/-- Every old loop result and first failure equals the production effect
+fold, for arbitrary plans, schemas, and ordered effect lists. -/
+theorem previousEffectLoop_eq_appendEffect (state : List StateDecl)
+    (effects : List Effect) (initial : Plan) :
+    previousEffectLoop state effects initial =
+      appendEffects state effects initial := by
+  unfold appendEffects
+  unfold previousEffectLoop
+  simp only [bind_pure]
+  change (forIn effects initial (fun effect plan => do
+      let result ← previousEffectStep state effect plan
+      pure (ForInStep.yield result))) =
+    effects.foldlM (fun plan effect => appendEffect state effect plan) initial
+  have stepEq (effect : Effect) (plan : Plan) :
+      (do let result ← previousEffectStep state effect plan
+          pure (ForInStep.yield result)) =
+        ForInStep.yield <$> previousEffectStep state effect plan := by
+    cases previousEffectStep state effect plan <;> rfl
+  simp only [stepEq]
+  rw [List.forIn_yield_eq_foldlM]
+  simp only [previousEffectStep_eq_appendEffect, Except.map, Functor.map]
+  congr 1
+  funext plan effect
+  cases appendEffect state effect plan <;> rfl
+
+/-- Final production gate for a symbolic native plan. -/
+def finishPlan (entry : Entrypoint) (result : Except String Plan) : Except Diagnostic Plan :=
+  match result with
+  | .ok plan =>
+    match plan.validate entry with
+    | .ok _ => pure plan
+    | .error message => throw {span := entry.span, message}
+  | .error message => throw {span := entry.span, message}
+
 /-- Lower a typed entrypoint to a symbolic native VM program. The state layout
 is a root array with one slot per declaration. Cells, including booleans, use
 Native field alignment. Membership results use the VM's byte-aligned boolean.
@@ -93,48 +246,10 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
     if sourceNames.any (·.startsWith "_nightlean_") then
       throw "source names beginning '_nightlean_' are reserved by the native transcript producer"
     -- Public parameters must appear among Popeq reads consumed by public_input.
-    for input in entry.circuit.inputs do
-      if input.visibility == .«public» then
-        let value := Aligned.field (nativeRead input.ty input.name)
-        plan := { plan with
-          operations := plan.operations ++ [.push value, .popeq value]
-          reads := plan.reads ++ [{name := input.name, ty := input.ty}] }
-    for effect in entry.effects do
-      match effect with
-      | .readCell name destination ty =>
-        let slot ← stateSlot state name
-        plan := { plan with
-          operations := plan.operations ++ [.dup, .index slot, .popeq (.field (nativeRead ty destination))]
-          reads := plan.reads ++ [{name := destination, ty}] }
-      | .require condition =>
-        plan := {plan with guards := plan.guards ++ [condition]}
-      | .requireAbsent name _ key =>
-        let slot ← stateSlot state name
-        let name := s!"_nightlean_absence_{plan.reads.length}"
-        plan := { plan with
-          operations := plan.operations ++ [
-            .dup, .index slot, .push (.field (nativeValue _ key)), .member, .popeq (.bit false)]
-          reads := plan.reads ++ [{name, ty := .bool}]
-          guards := plan.guards ++ [.eq (.ref name : Expr .bool) (.bool false)] }
-      | .writeCell name _ value =>
-        let slot ← stateSlot state name
-        -- Preserve the root container and the slot path for ins 1.
-        plan := {plan with operations := plan.operations ++ [
-          .push (.field (.native slot)), .push (.field (nativeValue _ value)) true, .insert 1]}
-      | .writeMap name _ _ key value =>
-        let slot ← stateSlot state name
-        -- idxp leaves root, slot, map; ins 2 updates map then root.
-        plan := {plan with operations := plan.operations ++ [
-          .index slot true, .push (.field (nativeValue _ key)),
-          .push (.field (nativeValue _ value)) true, .insert 2]}
-      | .readMap .. => throw "map value reads are not supported by the initial native transcript plan"
+    plan := publicInputPlan entry.circuit.inputs plan
+    plan ← appendEffects state entry.effects plan
     pure plan
-  match result with
-  | .ok plan =>
-    match plan.validate entry with
-    | .ok _ => pure plan
-    | .error message => throw {span := entry.span, message}
-  | .error message => throw {span := entry.span, message}
+  finishPlan entry result
 
 private def bytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
 where

@@ -29,6 +29,7 @@ pub const MAX_BYTES: usize = 1_048_576;
 const MAX_DESCRIPTOR: usize = 65_536;
 const MAX_PARAMETERS: usize = 134_217_728;
 const MAX_BUNDLE: u64 = 16 * 1024 * 1024;
+const MAX_RECOVERY_CONTEXT: usize = 1_200_000;
 const MAX_SESSIONS: usize = 8;
 const MAX_RESULTS: usize = 64;
 const MAX_PRIVATE: usize = 16;
@@ -41,6 +42,29 @@ struct Begin {
     abi_version: u32,
     profile: String,
     bundle_directory: PathBuf,
+    trusted_manifest_sha256: String,
+    proof_parameters_sha256: String,
+    k: u8,
+    ttl: u64,
+    proof_service_capability: String,
+    max_response_bytes: usize,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WitnessTargetBegin {
+    abi_version: u32,
+    profile: String,
+    bundle_directory: PathBuf,
+    trusted_manifest_sha256: String,
+    proof_parameters_sha256: String,
+    k: u8,
+    ttl: u64,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WitnessProofBegin {
+    abi_version: u32,
+    profile: String,
     trusted_manifest_sha256: String,
     proof_parameters_sha256: String,
     k: u8,
@@ -75,6 +99,18 @@ struct Session {
     proved: Option<crate::proof::ProvedIntent>,
     deployment: Option<crate::proof::ProvedNativeIntent>,
     client_started: [bool; 2],
+    source_runtime: Option<crate::host::Runtime>,
+    witness_context: Option<u64>,
+}
+struct TargetContext {
+    bundle_directory: PathBuf,
+    target: Arc<crate::proof::WitnessTarget>,
+    reservation: Option<ProofReservation>,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ProofReservation {
+    session: u64,
+    request_id: u64,
 }
 struct Private {
     bytes: Zeroizing<Vec<u8>>,
@@ -83,6 +119,7 @@ struct Private {
 struct Registry {
     next: u64,
     sessions: BTreeMap<u64, Session>,
+    targets: BTreeMap<u64, TargetContext>,
     results: BTreeMap<u64, Vec<u8>>,
     private: BTreeMap<u64, Private>,
     active_work: usize,
@@ -95,6 +132,7 @@ impl Default for Registry {
         Self {
             next: 1 << 62,
             sessions: BTreeMap::new(),
+            targets: BTreeMap::new(),
             results: BTreeMap::new(),
             private: BTreeMap::new(),
             active_work: 0,
@@ -205,6 +243,359 @@ fn pending(session: &Session) -> Result<(), i32> {
     }
 }
 
+pub(crate) fn native_target_context_snapshot(
+    token: u64,
+) -> Result<crate::control::AuthenticatedNativeTarget, i32> {
+    let _work = Work::reserve()?;
+    let (directory, target) = registry(|r| {
+        let context = r.targets.get(&token).ok_or(INVALID_HANDLE)?;
+        if context.reservation.is_some() {
+            return Err(INVALID_STATE);
+        }
+        Ok((
+            context.bundle_directory.clone(),
+            Arc::clone(&context.target),
+        ))
+    })?;
+    let bundle =
+        artifacts::verify_with_limit(&directory, Some(target.manifest_sha256()), MAX_BUNDLE)
+            .map_err(|error| {
+                if error.code == "limit_exceeded" {
+                    LIMIT
+                } else {
+                    INVALID_ARGUMENT
+                }
+            })?;
+    target
+        .authenticated_control_target(token, &bundle)
+        .map_err(|_| INVALID_ARGUMENT)
+}
+
+/// # Safety
+/// All buffers must remain valid until return. State is private initial contract state.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_native_witness_target_begin(
+    descriptor: *const u8,
+    descriptor_len: usize,
+    state_config: *const u8,
+    state_config_len: usize,
+    parameters: *const u8,
+    parameters_len: usize,
+    coins: *const u8,
+    coins_len: usize,
+    out_context: *mut u64,
+    out_result: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            output(out_context)?;
+            output(out_result)?;
+        }
+        let begin: WitnessTargetBegin =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        if begin.abi_version != 1
+            || begin.profile != crate::profile::NAME
+            || begin.bundle_directory.as_os_str().len() > 4096
+            || begin.ttl == 0
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let _work = Work::reserve()?;
+        registry(|r| {
+            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+                Err(LIMIT)
+            } else {
+                Ok(())
+            }
+        })?;
+        let bundle = artifacts::verify_with_limit(
+            &begin.bundle_directory,
+            Some(&begin.trusted_manifest_sha256),
+            MAX_BUNDLE,
+        )
+        .map_err(|error| {
+            if error.code == "limit_exceeded" {
+                LIMIT
+            } else {
+                INVALID_ARGUMENT
+            }
+        })?;
+        let parameters = TrustedParameters::from_bytes(
+            unsafe { input(parameters, parameters_len, MAX_PARAMETERS)? },
+            begin.k,
+            &begin.proof_parameters_sha256,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let mut rng = unsafe { entropy(coins, coins_len)? };
+        let target = Arc::new(
+            crate::proof::WitnessTarget::from_state_config(
+                &bundle,
+                unsafe { input(state_config, state_config_len, MAX_BYTES)? },
+                &parameters,
+                begin.ttl,
+                &mut rng,
+            )
+            .map_err(|_| INVALID_ARGUMENT)?,
+        );
+        let result = encoded(json!({
+            "abiVersion": 1,
+            "status": "target_ready",
+            "profile": crate::profile::NAME,
+            "manifestSha256": target.manifest_sha256(),
+            "contractAddress": target.contract_address(),
+            "entrypoint": target.entrypoint(),
+            "ttl": begin.ttl
+        }))?;
+        registry(|r| {
+            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let context = r.token()?;
+            let result = r.result(result)?;
+            r.targets.insert(
+                context,
+                TargetContext {
+                    bundle_directory: begin.bundle_directory,
+                    target,
+                    reservation: None,
+                },
+            );
+            unsafe {
+                out_context.write(context);
+                out_result.write(result);
+            }
+            Ok(())
+        })
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn nightlean_native_target_context_free(token: u64) -> i32 {
+    guard(|| {
+        registry(|r| {
+            if r.targets
+                .get(&token)
+                .ok_or(INVALID_HANDLE)?
+                .reservation
+                .is_some()
+            {
+                return Err(INVALID_STATE);
+            }
+            r.targets.remove(&token).ok_or(INVALID_HANDLE)?;
+            Ok(())
+        })
+    })
+}
+
+/// # Safety
+/// Descriptor, SRS and entropy buffers must remain valid until return. Private inputs stay in
+/// the completed Control session and are read only after bundle and SRS validation.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_native_begin_from_witness(
+    descriptor: *const u8,
+    descriptor_len: usize,
+    target_context: u64,
+    control_session: u64,
+    parameters: *const u8,
+    parameters_len: usize,
+    coins: *const u8,
+    coins_len: usize,
+    out_session: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_session)? };
+        let begin: WitnessProofBegin =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        if begin.abi_version != 1
+            || begin.profile != crate::profile::NAME
+            || begin.max_response_bytes == 0
+            || begin.max_response_bytes > MAX_BYTES
+            || begin.proof_service_capability.is_empty()
+            || begin.proof_service_capability.len() > 128
+            || !begin
+                .proof_service_capability
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let _work = Work::reserve()?;
+        let (directory, target) = registry(|r| {
+            if r.sessions.len() + r.clients.len() + r.targets.len() > MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let context = r.targets.get(&target_context).ok_or(INVALID_HANDLE)?;
+            if context.reservation.is_some() {
+                return Err(INVALID_STATE);
+            }
+            Ok((
+                context.bundle_directory.clone(),
+                Arc::clone(&context.target),
+            ))
+        })?;
+        if !target.context_matches(&begin.trusted_manifest_sha256, &begin.profile, begin.ttl)
+            || target.k() != begin.k
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let bundle = artifacts::verify_with_limit(
+            &directory,
+            Some(&begin.trusted_manifest_sha256),
+            MAX_BUNDLE,
+        )
+        .map_err(|error| {
+            if error.code == "limit_exceeded" {
+                LIMIT
+            } else {
+                INVALID_ARGUMENT
+            }
+        })?;
+        let parameters = Arc::new(
+            TrustedParameters::from_bytes(
+                unsafe { input(parameters, parameters_len, MAX_PARAMETERS)? },
+                begin.k,
+                &begin.proof_parameters_sha256,
+            )
+            .map_err(|_| INVALID_ARGUMENT)?,
+        );
+        if parameters.sha256() != target.proof_parameters_sha256() {
+            return Err(INVALID_ARGUMENT);
+        }
+        let authenticated_target = target
+            .authenticated_control_target(target_context, &bundle)
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let mut rng = unsafe { entropy(coins, coins_len)? };
+        let mut inputs = crate::control_ffi::peek_completed_invocation(
+            control_session,
+            target_context,
+            &authenticated_target.contract_address,
+            &authenticated_target.entrypoint,
+            &authenticated_target.control_plan,
+            &authenticated_target.binding_bytes,
+            &authenticated_target.relation,
+        )?;
+        let expected_inputs = inputs.try_clone_accounted().map_err(|_| LIMIT)?;
+        let prepared = Arc::new(
+            PreparedProof::from_witness_inputs(
+                &bundle,
+                &target,
+                std::mem::take(&mut inputs.values),
+                begin.ttl,
+                &mut rng,
+            )
+            .map_err(|_| INVALID_ARGUMENT)?,
+        );
+        let (call_address, call_entrypoint) =
+            prepared.call_target().map_err(|_| INVALID_ARGUMENT)?;
+        if call_address != authenticated_target.contract_address
+            || call_entrypoint != authenticated_target.entrypoint
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let payload = prepared
+            .private_request_payload(&parameters, begin.max_response_bytes)
+            .map_err(|_| INVALID_ARGUMENT)?;
+        if payload.len() > MAX_BYTES {
+            return Err(LIMIT);
+        }
+        let public_parameters: ledger::structure::LedgerParameters = serialize::tagged_deserialize(
+            bundle
+                .file(crate::artifacts::Role::LedgerParameters)
+                .map_err(|_| INVALID_ARGUMENT)?,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let deployment = prepared
+            .deployment_intent()
+            .map(|intent| crate::native_client::prove_deployment(intent, &public_parameters))
+            .transpose()
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let reservation = registry(|r| {
+            if r.sessions.len() + r.clients.len() + r.targets.len() > MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let context = r.targets.get(&target_context).ok_or(INVALID_HANDLE)?;
+            if !Arc::ptr_eq(&context.target, &target) || context.reservation.is_some() {
+                return Err(INVALID_STATE);
+            }
+            // The target occupies the slot that the proof session will replace. Reserve
+            // both opaque IDs now so no capacity failure can happen after Control take.
+            let reservation = ProofReservation {
+                session: r.token()?,
+                request_id: r.token()?,
+            };
+            r.targets
+                .get_mut(&target_context)
+                .ok_or(INVALID_HANDLE)?
+                .reservation = Some(reservation);
+            Ok(reservation)
+        })?;
+
+        // Do not hold the native registry mutex while Control takes its own registry lock.
+        // The target reservation blocks free, concurrent proof begins and new Control starts.
+        let completed = match crate::control_ffi::take_completed_invocation(
+            control_session,
+            target_context,
+            &authenticated_target.control_plan,
+            &authenticated_target.binding_bytes,
+            &authenticated_target.relation,
+            &expected_inputs,
+            &authenticated_target.contract_address,
+            &authenticated_target.entrypoint,
+        ) {
+            Ok(completed) => completed,
+            Err(error) => {
+                registry(|r| {
+                    let context = r.targets.get_mut(&target_context).ok_or(INTERNAL)?;
+                    if context.reservation != Some(reservation) {
+                        return Err(INTERNAL);
+                    }
+                    context.reservation = None;
+                    Ok(())
+                })?;
+                return Err(error);
+            }
+        };
+        let crate::control::CompletedInvocation {
+            context_id,
+            mut inputs,
+            runtime,
+        } = completed;
+        for value in inputs.values_mut() {
+            crate::control::wipe_json(value);
+        }
+        registry(|r| {
+            let context = r.targets.get(&target_context).ok_or(INTERNAL)?;
+            if !Arc::ptr_eq(&context.target, &target) || context.reservation != Some(reservation) {
+                return Err(INTERNAL);
+            }
+            r.targets.remove(&target_context);
+            r.sessions.insert(
+                reservation.session,
+                Session {
+                    prepared: Some(prepared),
+                    parameters: Some(parameters),
+                    payload,
+                    request_id: reservation.request_id,
+                    capability: begin.proof_service_capability,
+                    manifest: begin.trusted_manifest_sha256,
+                    max_response: begin.max_response_bytes,
+                    phase: Phase::Pending,
+                    local_started: false,
+                    proved: None,
+                    deployment,
+                    client_started: [false; 2],
+                    source_runtime: Some(runtime),
+                    witness_context: Some(context_id),
+                },
+            );
+            unsafe { out_session.write(reservation.session) };
+            Ok(())
+        })
+    })
+}
+
 /// # Safety
 /// Every pointer must reference the stated readable/writable memory until return. Entropy is 32 fresh secret bytes.
 #[unsafe(no_mangle)]
@@ -242,7 +633,7 @@ pub unsafe extern "C" fn nightlean_native_begin(
         }
         let _work = Work::reserve()?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
+            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
                 Err(LIMIT)
             } else {
                 Ok(())
@@ -297,7 +688,7 @@ pub unsafe extern "C" fn nightlean_native_begin(
             .transpose()
             .map_err(|_| INVALID_ARGUMENT)?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
+            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let token = r.token()?;
@@ -317,6 +708,8 @@ pub unsafe extern "C" fn nightlean_native_begin(
                     proved: None,
                     deployment,
                     client_started: [false; 2],
+                    source_runtime: None,
+                    witness_context: None,
                 },
             );
             unsafe {
@@ -517,6 +910,8 @@ pub extern "C" fn nightlean_native_cancel(session: u64) -> i32 {
             s.payload.zeroize();
             s.prepared = None;
             s.parameters = None;
+            s.source_runtime = None;
+            s.witness_context = None;
             r.revoke_private(session);
             Ok(())
         })
@@ -663,6 +1058,8 @@ mod tests {
                         proved: None,
                         deployment: None,
                         client_started: [false; 2],
+                        source_runtime: None,
+                        witness_context: None,
                     },
                 );
             }
@@ -838,11 +1235,14 @@ pub unsafe extern "C" fn nightlean_client_start(
         let setup = unsafe { input(setup, setup_len, MAX_BYTES)? };
         let _work = Work::reserve()?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
+            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let s = r.sessions.get(&source).ok_or(INVALID_HANDLE)?;
             if !matches!(s.phase, Phase::Complete(_)) || s.client_started[kind as usize] {
+                return Err(INVALID_STATE);
+            }
+            if kind == 1 && s.source_runtime.is_some() {
                 return Err(INVALID_STATE);
             }
             let proved = s.proved.as_ref().ok_or(INVALID_STATE)?;
@@ -879,6 +1279,50 @@ pub unsafe extern "C" fn nightlean_client_start(
         })
     })
 }
+
+/// # Safety
+/// Descriptor and output buffers must remain valid until return. The owned source Runtime is
+/// consumed only after target, descriptor and recovery-envelope checks succeed.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn nightlean_client_start_from_witness(
+    source: u64,
+    descriptor: *const u8,
+    descriptor_len: usize,
+    out_client: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_client)? };
+        let descriptor: crate::native_client::Descriptor =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        let _work = Work::reserve()?;
+        registry(|r| {
+            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let token = r.token()?;
+            let session = r.sessions.get_mut(&source).ok_or(INVALID_HANDLE)?;
+            if !matches!(session.phase, Phase::Complete(_))
+                || session.client_started[1]
+                || session.witness_context.is_none()
+            {
+                return Err(INVALID_STATE);
+            }
+            let proved = session.proved.as_ref().ok_or(INVALID_STATE)?;
+            let contract = crate::native_client::Contract::Proved(proved.native().clone());
+            let driver = crate::native_client::Driver::start_with_runtime(
+                descriptor,
+                &mut session.source_runtime,
+                contract,
+            )
+            .map_err(|_| INVALID_ARGUMENT)?;
+            session.client_started[1] = true;
+            r.clients.insert(token, Some(driver));
+            unsafe { out_client.write(token) };
+            Ok(())
+        })
+    })
+}
 /// # Safety
 /// Descriptor/context and writable output token must remain valid until return. No private witness is required.
 #[unsafe(no_mangle)]
@@ -894,11 +1338,11 @@ pub unsafe extern "C" fn nightlean_client_recover(
         let d =
             serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
                 .map_err(|_| INVALID_ARGUMENT)?;
-        let context = unsafe { input(context, context_len, MAX_BYTES)? };
+        let context = unsafe { input(context, context_len, MAX_RECOVERY_CONTEXT)? };
         let driver =
             crate::native_client::Driver::recover(d, context).map_err(|_| INVALID_ARGUMENT)?;
         registry(|r| {
-            if r.sessions.len() + r.clients.len() >= MAX_SESSIONS {
+            if r.sessions.len() + r.clients.len() + r.targets.len() >= MAX_SESSIONS {
                 return Err(LIMIT);
             }
             let token = r.token()?;

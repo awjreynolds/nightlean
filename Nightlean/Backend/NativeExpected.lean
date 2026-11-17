@@ -22,6 +22,15 @@ theorem inputRequirement_eq (input : Input) :
     inputRequirement input =
       {identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty} := rfl
 
+theorem inputRequirement_function_eq :
+    inputRequirement = (fun input : Input =>
+      ({identifier := "%input_" ++ input.name,
+        visibility := input.visibility, ty := input.ty} : InputRequirement)) := rfl
+
+theorem convert_eq_mapError (span : SourceSpan) (result : Except String α) :
+    convert span result = result.mapError (fun message => {span, message}) := by
+  cases result <;> rfl
+
 theorem inputAliases_eq (inputs : List InputRequirement) :
     inputAliases inputs = inputs.map (fun input => (input.identifier.drop 7 |>.toString, .input input.identifier)) := rfl
 
@@ -43,6 +52,23 @@ theorem collect_eq (env : AliasEnvironment) (values : List (Expr ty)) :
     collect env values = (do
       let results ← values.mapM (normalize env)
       pure (results.map (·.term), results.flatMap (·.bounds), results.flatMap (·.assertions))) := rfl
+
+/-- The exact production normalizer call for one Impact operation. -/
+def collectOperation (span : SourceSpan) (aliases : AliasEnvironment)
+    (operation : Impact.Op) :
+    Except Diagnostic (List Term × List (Term × Nat) × List Term) :=
+  convert span (collect aliases operation.fields)
+
+/-- The production operation fold keeps each normalized Impact opcode in its
+own ordered native public-input group. It also retains field bounds and nested
+assertions in source order. -/
+def collectOperations (span : SourceSpan) (aliases : AliasEnvironment)
+    (operations : List Impact.Op) (initialBounds : List (Term × Nat)) :
+    Except Diagnostic (List (List Term) × List (Term × Nat) × List Term) := do
+  let pieces ← operations.mapM (collectOperation span aliases)
+  pure (pieces.map (fun piece => piece.1),
+    initialBounds ++ pieces.flatMap (fun piece => piece.2.1),
+    pieces.flatMap (fun piece => piece.2.2))
 
 def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
   value.validate {poseidon2 := true}
@@ -74,24 +100,19 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     (plan.reads.drop publicCount).map fun read =>
       {identifier := "%input_" ++ read.name, visibility := .«public», ty := read.ty}
   let mut aliases := inputAliases inputs
-  let mut bounds := []
+  let mut outputBounds := []
   let mut outputAssertions := []
   for output in value.circuit.outputs do
     let result ← convert output.span (normalize aliases output.value)
     aliases := (output.name, result.term) :: aliases
-    bounds := bounds ++ result.bounds
+    outputBounds := outputBounds ++ result.bounds
     outputAssertions := outputAssertions ++ result.assertions
   let (_, constraints, _) ← convert value.span (collect aliases value.circuit.constraints)
   let conditions ← convert value.span (value.circuit.constraints.mapM (normalize aliases))
   let (_, guards, _) ← convert value.span (collect aliases plan.guards)
   let guardConditions ← convert value.span (plan.guards.mapM (normalize aliases))
-  let mut operationAssertions := []
-  let mut groups := []
-  for operation in plan.operations do
-    let (values, requirements, nestedAssertions) ← convert value.span (collect aliases operation.fields)
-    operationAssertions := operationAssertions ++ nestedAssertions
-    groups := groups ++ [values]
-    bounds := bounds ++ requirements
+  let (groups, bounds, operationAssertions) ←
+    collectOperations value.span aliases plan.operations outputBounds
   pure {
     mode := .ledgerCall
     inputs := inputs

@@ -1,0 +1,41 @@
+{"witnesses":
+ [{"resultType": "Aggregate:t0",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.empty.v1",
+   "name": "empty",
+   "capability": "empty"}],
+ "types":
+ [{"schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r18:TypedWitness.EmptyNightleanCompositeLayoutV1;1;R18:TypedWitness.Empty0;0;",
+    "schemaVersion": 1,
+    "layout": {"kind": "struct", "id": "TypedWitness.Empty", "fields": []},
+    "counts": {"leaves": 0, "layoutNodes": 1, "expandedNodes": 1}},
+   "id": "t0"}],
+ "schemaVersion": 2,
+ "name": "empty",
+ "mode": "native",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Unit",
+   "parameters": [],
+   "name": "empty",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span": {"line": 1, "file": "", "column": 1},
+      "site": "empty-call",
+      "name": "empty",
+      "arguments": []},
+     "tag": "evaluate",
+     "span": {"line": 1, "file": "", "column": 1}},
+    {"value": null,
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0",
+ "binding":
+ "{\"calls\":[{\"inputs\":[],\"name\":\"empty\",\"ordinal\":\"0\",\"path\":[\"s0d0\"],\"resultType\":\"Aggregate:t0\",\"site\":\"empty-call\"}],\"circuitInputs\":[],\"circuitName\":\"TypedWitness.emptyRelation\",\"circuitOutputs\":[],\"inputBindings\":[],\"kind\":\"typed-witness-bindings\",\"nativeRelation\":{\"do_communications_commitment\":false,\"inputs\":[],\"instructions\":[{\"cond\":\"0x01\",\"op\":\"assert\"},{\"op\":\"output\",\"vals\":[]}],\"outputs\":[],\"version\":{\"major\":3,\"minor\":2}},\"schemaVersion\":1,\"signatures\":[{\"capability\":\"empty\",\"name\":\"empty\",\"operation\":\"noctium.empty.v1\",\"parameters\":[],\"privateKey\":null,\"resultType\":\"Aggregate:t0\"}],\"sourceExport\":\"empty\",\"target\":{\"kind\":\"standalone\"},\"types\":[{\"id\":\"t0\",\"schema\":{\"counts\":{\"expandedNodes\":1,\"layoutNodes\":1,\"leaves\":0},\"layout\":{\"fields\":[],\"id\":\"TypedWitness.Empty\",\"kind\":\"struct\"},\"schemaVersion\":1,\"typeFingerprint\":\"NightleanCompositeTypeV1;r18:TypedWitness.EmptyNightleanCompositeLayoutV1;1;R18:TypedWitness.Empty0;0;\"}}]}\n"}

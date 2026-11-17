@@ -14,9 +14,10 @@ use ledger::structure::{
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
 use midnight_zk_stdlib::{MidnightPK, Relation, ZkStdLib, ZkStdLibArch};
 use rand::{CryptoRng, Rng};
+use serde_json::Value as Json;
 use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
 use sha2::{Digest, Sha256};
-use std::{cell::RefCell, fmt, io, rc::Rc, sync::Arc};
+use std::{cell::RefCell, collections::BTreeMap, fmt, io, rc::Rc, sync::Arc};
 use transient_crypto::{
     commitment::{Pedersen, PedersenRandomness},
     curve::Fr,
@@ -30,6 +31,195 @@ pub type ProvedNativeIntent = Intent<Signature, ProofMarker, PedersenRandomness,
 pub type PublicProvedNativeIntent = Intent<Signature, ProofMarker, Pedersen, Db>;
 const MAX_RESPONSE: usize = 1_048_576;
 const MAX_PARAMETERS: usize = 134_217_728;
+const MAX_PRIVATE_CONFIG: usize = 1_048_576;
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StateOnly {
+    state: BTreeMap<String, Json>,
+}
+impl Drop for StateOnly {
+    fn drop(&mut self) {
+        for value in self.state.values_mut() {
+            crate::control::wipe_json(value);
+        }
+    }
+}
+
+struct SecretInputs(BTreeMap<String, Json>);
+impl Drop for SecretInputs {
+    fn drop(&mut self) {
+        for value in self.0.values_mut() {
+            crate::control::wipe_json(value);
+        }
+    }
+}
+
+struct SecretConfig(crate::Config);
+impl Drop for SecretConfig {
+    fn drop(&mut self) {
+        for value in self.0.inputs.values_mut() {
+            crate::control::wipe_json(value);
+        }
+    }
+}
+
+/// A one-use target made before source witness execution. The exact deployment nonce and
+/// initial state stay with this value so the later call cannot select a different address.
+pub struct WitnessTarget {
+    manifest: String,
+    contract: String,
+    entrypoint: String,
+    circuit_file: String,
+    k: u8,
+    proof_parameters_sha256: String,
+    ttl: u64,
+    deployment: crate::assembly::PreparedDeployment,
+}
+impl WitnessTarget {
+    /// Prepare the exact deployment target from authenticated public artifacts and private
+    /// initial state. This runs before provider calls and returns only a public target identity.
+    pub fn from_state_config(
+        bundle: &VerifiedBundle,
+        state_config: &[u8],
+        parameters: &TrustedParameters,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        if state_config.len() > MAX_PRIVATE_CONFIG {
+            return Err(Error::Limit);
+        }
+        let manifest = bundle
+            .authenticated_manifest_sha256()
+            .ok_or(Error::UnauthenticatedBundle)?
+            .to_owned();
+        let material = Material::retained(bundle)?;
+        if material.circuit.k() != parameters.k() {
+            return Err(Error::InvalidParameters);
+        }
+        let state: StateOnly =
+            serde_json::from_slice(state_config).map_err(|_| Error::InvalidPrivateInput)?;
+        let plan_bytes = bundle
+            .file(Role::Plan)
+            .map_err(|_| Error::InvalidArtifacts)?;
+        let plan: Plan = serde_json::from_slice(plan_bytes).map_err(|_| Error::InvalidArtifacts)?;
+        let plan_json: Json =
+            serde_json::from_slice(plan_bytes).map_err(|_| Error::InvalidArtifacts)?;
+        let contract = plan_json["contractName"]
+            .as_str()
+            .filter(|name| !name.is_empty())
+            .ok_or(Error::InvalidArtifacts)?
+            .to_owned();
+        let circuit_file = bundle
+            .manifest()
+            .entries
+            .iter()
+            .find(|entry| entry.role == Role::Circuit)
+            .map(|entry| entry.name.clone())
+            .ok_or(Error::InvalidArtifacts)?;
+        let deployment = crate::assembly::prepare_deployment_target(
+            &plan,
+            &state.state,
+            material.verifier,
+            ttl,
+            rng,
+        )
+        .map_err(|_| Error::InvalidPrivateInput)?;
+        let target = Self {
+            manifest,
+            contract,
+            entrypoint: plan.entrypoint,
+            circuit_file,
+            k: material.circuit.k(),
+            proof_parameters_sha256: parameters.sha256().to_owned(),
+            ttl,
+            deployment,
+        };
+        target.authenticated_control_target(0, bundle)?;
+        Ok(target)
+    }
+
+    pub(crate) fn context_matches(&self, manifest: &str, profile: &str, ttl: u64) -> bool {
+        self.manifest == manifest && profile == crate::profile::NAME && self.ttl == ttl
+    }
+
+    pub(crate) fn manifest_sha256(&self) -> &str {
+        &self.manifest
+    }
+
+    pub fn contract_address(&self) -> &str {
+        &self.deployment.address
+    }
+
+    pub fn entrypoint(&self) -> &str {
+        &self.entrypoint
+    }
+
+    pub(crate) fn k(&self) -> u8 {
+        self.k
+    }
+
+    pub(crate) fn proof_parameters_sha256(&self) -> &str {
+        &self.proof_parameters_sha256
+    }
+
+    pub(crate) fn authenticated_control_target(
+        &self,
+        context_id: u64,
+        bundle: &VerifiedBundle,
+    ) -> Result<crate::control::AuthenticatedNativeTarget> {
+        if bundle.authenticated_manifest_sha256() != Some(self.manifest.as_str()) {
+            return Err(Error::BindingMismatch);
+        }
+        let control_plan_bytes = bundle
+            .file(Role::WitnessControl)
+            .map_err(|_| Error::InvalidArtifacts)?
+            .to_vec();
+        let control_plan: Json =
+            serde_json::from_slice(&control_plan_bytes).map_err(|_| Error::InvalidArtifacts)?;
+        let binding_bytes = bundle
+            .file(Role::WitnessBinding)
+            .map_err(|_| Error::InvalidArtifacts)?
+            .to_vec();
+        let relation: Json = serde_json::from_slice(
+            bundle
+                .file(Role::Circuit)
+                .map_err(|_| Error::InvalidArtifacts)?,
+        )
+        .map_err(|_| Error::InvalidArtifacts)?;
+        let selected_plan: Json = serde_json::from_slice(
+            bundle
+                .file(Role::Plan)
+                .map_err(|_| Error::InvalidArtifacts)?,
+        )
+        .map_err(|_| Error::InvalidArtifacts)?;
+        if selected_plan["contractName"] != self.contract
+            || selected_plan["entrypoint"] != self.entrypoint
+            || selected_plan["nativeCircuitFile"] != self.circuit_file
+        {
+            return Err(Error::BindingMismatch);
+        }
+        crate::control::validate_witness_artifacts(
+            &control_plan,
+            &binding_bytes,
+            &relation,
+            &self.contract,
+            &self.entrypoint,
+            &self.circuit_file,
+            crate::profile::NAME,
+        )
+        .map_err(|_| Error::BindingMismatch)?;
+        Ok(crate::control::AuthenticatedNativeTarget {
+            context_id,
+            contract_address: self.contract_address().to_owned(),
+            entrypoint: self.entrypoint.clone(),
+            control_plan,
+            control_plan_bytes,
+            binding_bytes,
+            relation,
+        })
+    }
+}
 
 /// Fixed diagnostics deliberately discard upstream value-bearing causes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,7 +272,8 @@ fn key_payload<T: Tagged>(bytes: &[u8]) -> Result<&[u8]> {
     let mut reader = bytes
         .strip_prefix(prefix.as_bytes())
         .ok_or(Error::InvalidArtifacts)?;
-    let len = u32::deserialize(&mut reader, 0).map_err(|_| Error::InvalidArtifacts)? as usize;
+    let len = <u32 as Deserializable>::deserialize(&mut reader, 0)
+        .map_err(|_| Error::InvalidArtifacts)? as usize;
     if len != reader.len() || len > MAX_PARAMETERS {
         return Err(Error::InvalidArtifacts);
     }
@@ -299,6 +490,7 @@ pub struct PreparedProof {
     material: Material,
     statement: Vec<Fr>,
     activity: Vec<Option<usize>>,
+    required_parameters_sha256: Option<String>,
 }
 impl PreparedProof {
     /// Construct the source-selected call in memory using host-owned cryptographic entropy.
@@ -335,6 +527,61 @@ impl PreparedProof {
         prepared.deployment = Some(deploy);
         Ok(prepared)
     }
+
+    /// Prepare a proof from the exact native source input map and retained deployment target.
+    /// Callers must obtain `inputs` from a completed authenticated Control invocation.
+    pub fn from_witness_inputs(
+        bundle: &VerifiedBundle,
+        target: &WitnessTarget,
+        inputs: BTreeMap<String, Json>,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        let mut inputs = SecretInputs(inputs);
+        if !target.context_matches(
+            bundle.authenticated_manifest_sha256().unwrap_or_default(),
+            crate::profile::NAME,
+            ttl,
+        ) {
+            return Err(Error::BindingMismatch);
+        }
+        target.authenticated_control_target(0, bundle)?;
+        let material = Material::retained(bundle)?;
+        if material.circuit.k() != target.k {
+            return Err(Error::InvalidParameters);
+        }
+        let plan: Plan = serde_json::from_slice(
+            bundle
+                .file(Role::Plan)
+                .map_err(|_| Error::InvalidArtifacts)?,
+        )
+        .map_err(|_| Error::InvalidArtifacts)?;
+        let config = SecretConfig(crate::Config {
+            inputs: std::mem::take(&mut inputs.0),
+            state: BTreeMap::new(),
+            negative_cases: Vec::new(),
+        });
+        let call = crate::assembly::prepare_call_for_target(
+            &plan,
+            &config.0,
+            &material.parameters,
+            material.verifier.clone(),
+            &material.circuit,
+            ttl,
+            &target.deployment,
+            rng,
+        );
+        let call = call.map_err(|_| Error::InvalidPrivateInput)?;
+        let mut prepared = Self::freeze(material, call)?;
+        prepared.deployment = Some(target.deployment.intent.clone());
+        prepared.required_parameters_sha256 = Some(target.proof_parameters_sha256.clone());
+        let (address, entrypoint) = prepared.call_target()?;
+        if address != target.contract_address() || entrypoint != target.entrypoint() {
+            return Err(Error::BindingMismatch);
+        }
+        Ok(prepared)
+    }
+
     /// Re-freeze a host-balanced intent. This first slice accepts one call and no offers/dust.
     /// Native intent inputs contain private witnesses and need private storage.
     pub fn from_intent(bundle: &VerifiedBundle, intent: NativeIntent) -> Result<Self> {
@@ -389,6 +636,7 @@ impl PreparedProof {
             material,
             statement,
             activity,
+            required_parameters_sha256: None,
         };
         result.validate_statement_preimage()?;
         Ok(result)
@@ -417,11 +665,30 @@ impl PreparedProof {
     pub fn deployment_intent(&self) -> Option<&NativeIntent> {
         self.deployment.as_ref()
     }
+    pub(crate) fn call_target(&self) -> Result<(String, String)> {
+        let Some(ContractAction::Call(call)) = self.intent.actions.iter_deref().next() else {
+            return Err(Error::InvalidIntent);
+        };
+        let entrypoint =
+            String::from_utf8(call.entry_point.0.clone()).map_err(|_| Error::InvalidIntent)?;
+        Ok((hex::encode(call.address.0.0), entrypoint))
+    }
     pub fn k(&self) -> u8 {
         self.material.circuit.k()
     }
     pub fn profile(&self) -> &'static str {
         crate::profile::NAME
+    }
+    fn validate_parameters(&self, params: &TrustedParameters) -> Result<()> {
+        if params.k != self.k()
+            || self
+                .required_parameters_sha256
+                .as_deref()
+                .is_some_and(|digest| digest != params.sha256())
+        {
+            return Err(Error::InvalidParameters);
+        }
+        Ok(())
     }
     /// Explicit private serialization for durable retries. Re-proving requires fresh entropy.
     pub fn private_intent_bytes(&self) -> Result<Vec<u8>> {
@@ -437,9 +704,7 @@ impl PreparedProof {
         if max_response_bytes == 0 || max_response_bytes > MAX_RESPONSE {
             return Err(Error::Limit);
         }
-        if params.k != self.k() {
-            return Err(Error::InvalidParameters);
-        }
+        self.validate_parameters(params)?;
         self.validate_statement_preimage()?;
         let mut preimage = self.preimage()?.clone();
         preimage.binding_input = self.statement[0];
@@ -528,9 +793,7 @@ impl PreparedProof {
         {
             return Err(Error::Limit);
         }
-        if params.k != self.k() {
-            return Err(Error::InvalidParameters);
-        }
+        self.validate_parameters(params)?;
         let versioned: ProofVersioned = decode(response).map_err(|_| Error::InvalidResponse)?;
         // The pinned /prove transport version is independent of ledger V3 attachment.
         let ProofVersioned::V2(proof) = versioned else {
@@ -554,9 +817,7 @@ impl PreparedProof {
         if max_response_bytes == 0 || max_response_bytes > MAX_RESPONSE {
             return Err(Error::Limit);
         }
-        if params.k != self.k() {
-            return Err(Error::InvalidParameters);
-        }
+        self.validate_parameters(params)?;
         let outcome = Rc::new(RefCell::new(None));
         let provider = CheckedProvider {
             prepared: self,

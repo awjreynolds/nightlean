@@ -116,22 +116,49 @@ private def circuitSchemaJson (name : Name) (circuit : Circuit) : Json :=
 private def failDiagnostic (d : Diagnostic) : CommandElabM α :=
   throwError "{d.span.file}:{d.span.line}:{d.span.column}: {d.message}"
 
+/-- Rebuild module roots from their registered source constants for each
+compiler inspection. Generated declarations remain convenient names for users,
+but their cached values do not authorize compilation. -/
+private unsafe def rebuildModuleOutputs : CommandElabM (Array (Name × ModuleBuildOutput)) := do
+  let env ← getEnv
+  let mut outputs := #[]
+  for info in moduleBuildRegistry.getState env do
+    unless env.isImportedConst info.contractName do
+      outputs := outputs.push (info.contractName, ← rebuildModuleBuild info)
+  return outputs
+
+private def moduleCircuitFor (outputs : Array (Name × ModuleBuildOutput)) (name : Name) :
+    Option ModuleCircuitBuildInfo :=
+  outputs.toList.flatMap (·.2.circuits) |>.find? (·.declarationName == name)
+
+private def moduleWitnessProgramFor (outputs : Array (Name × ModuleBuildOutput))
+    (info : WitnessInfo) : Option Helpers.Program := do
+  let circuit ← outputs.toList.flatMap (·.2.circuits) |>.find? fun item =>
+    item.source.kind == .witness && item.programName == info.sourceName &&
+      item.source.outputName == info.exportName
+  pure circuit.program
+
 /-- Evaluate only definitions generated and registered by the Nightlean elaborators. -/
-private unsafe def registeredCircuits : CommandElabM (Array (Name × Circuit)) := do
+private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuildOutput)) :
+    CommandElabM (Array (Name × Circuit)) := do
   let env ← getEnv
   let mut circuits := #[]
   for info in circuitRegistry.getState env do
     unless env.isImportedConst info.declName do
-      if let some (sourceName, exportName) := info.sourceProgram? then
-        let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
-        match ComponentDisclosure.checkProgram program exportName with
-        | .ok _ => pure ()
-        | .error d => failDiagnostic d
+      let moduleCircuit := moduleCircuitFor moduleOutputs info.declName
+      if moduleCircuit.isNone then
+        if let some (sourceName, exportName) := info.sourceProgram? then
+          let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+          match ComponentDisclosure.checkProgram program exportName with
+          | .ok _ => pure ()
+          | .error d => failDiagnostic d
       if let some text := info.specializationArtifact? then
         match Helpers.Specialization.parseSignatureArtifactText text with
         | .ok _ => pure ()
         | .error message => throwError "invalid generic specialization signature artifact: {message}"
-      let circuit ← evalConstCheck Circuit ``Circuit info.declName
+      let circuit ← match moduleCircuit with
+        | some fresh => pure fresh.circuit
+        | none => evalConstCheck Circuit ``Circuit info.declName
       match circuit.validate sourceCapabilities with
       | .error d => failDiagnostic d
       | .ok _ =>
@@ -140,12 +167,15 @@ private unsafe def registeredCircuits : CommandElabM (Array (Name × Circuit)) :
         | .ok _ => circuits := circuits.push (info.declName, circuit)
   return circuits
 
-private unsafe def registeredContracts : CommandElabM (Array (Name × Contract)) := do
+private unsafe def registeredContracts (moduleOutputs : Array (Name × ModuleBuildOutput)) :
+    CommandElabM (Array (Name × Contract)) := do
   let env ← getEnv
   let mut contracts := #[]
   for name in contractRegistry.getState env do
     unless env.isImportedConst name do
-      let contract ← evalConstCheck Contract ``Contract name
+      let contract ← match moduleOutputs.toList.find? (·.1 == name) with
+        | some (_, rebuilt) => pure rebuilt.contract
+        | none => evalConstCheck Contract ``Contract name
       match contract.validate sourceCapabilities with
       | .error d => failDiagnostic d
       | .ok _ =>
@@ -169,11 +199,30 @@ private def nativeCircuitFile (contract : Name) (ep : Entrypoint) : String :=
 private def nativePlanFile (contract : Name) (ep : Entrypoint) : String :=
   artifactName contract ++ "." ++ ep.name ++ ".impact.json"
 
-private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
+/-- The exact symbolic plan tree written by the compiler. This pure function
+also gives proof modules a kernel-visible artifact boundary. -/
+def nativePlanJson (profile : TargetProfile) (contractName : Name)
+    (state : List StateDecl) (ep : Entrypoint) (plan : Backend.Impact.Plan) : Json := Id.run do
+  let targetPlanFields := if profile.name == TargetProfile.selected321.name then [
+    ("target", toJson profile.name), ("targetProfile", toJson profile)
+  ] else []
+  return Json.mkObj ([
+    ("schemaVersion", toJson (1 : Nat))] ++ targetPlanFields ++ [
+    ("contractName", toJson contractName.toString),
+    ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile contractName ep)),
+    ("state", toJson (state.map stateJson)),
+    ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
+    ("operations", toJson (plan.operations.map operationJson)),
+    ("reads", toJson (plan.reads.map fun item => Json.mkObj [
+      ("name", toJson item.name), ("type", toJson (typeName item.ty))])),
+    ("guards", toJson (plan.guards.map nativeExpressionJson))])
+
+private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuildOutput)) :
+    CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
   if (← get).messages.hasErrors then
     throwError "cannot export Nightlean artifacts after source elaboration errors"
-  let circuits ← registeredCircuits
-  let contracts ← registeredContracts
+  let circuits ← registeredCircuits moduleOutputs
+  let contracts ← registeredContracts moduleOutputs
   let sourceEnv ← getEnv
   let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
   if circuits.isEmpty && controls.isEmpty then throwError "source contains no Nightlean circuit declarations"
@@ -186,6 +235,10 @@ private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Nam
       unless circuits.any (fun (_, circuit) => circuit.name == ep.circuit.name) do
         throwError "contract entrypoint references imported circuit '{ep.circuit.name}'; include its source declaration in this compilation unit"
   return (circuits, contracts)
+
+private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
+  let moduleOutputs ← rebuildModuleOutputs
+  inspectWithModules moduleOutputs
 
 elab "#nightlean_check" : command => do
   let (circuits, contracts) ← unsafe inspect
@@ -205,11 +258,14 @@ elab "#nightlean_check_target" profileJson:str : command => do
   unsafe checkTarget profile
 
 private def compileArtifacts (directory : String) (profile : TargetProfile) : CommandElabM Unit := do
-  let (circuits, contracts) ← unsafe inspect
+  let moduleOutputs ← unsafe rebuildModuleOutputs
+  let (circuits, contracts) ← unsafe inspectWithModules moduleOutputs
   -- Lower everything before creating output files. Unsupported circuits cannot leave partial output.
   let mut lowered := #[]
   let sourceEnv ← getEnv
   let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
+  let witnesses := (witnessRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·.circuitName)
+  let mut witnessMetadata : Array Json := #[]
   for name in controls do
     validateArtifactName name
     let plan ← unsafe evalConstCheck Json ``Lean.Json name
@@ -221,33 +277,56 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
   for (name, _) in circuits do
     let some info := circuitRegistry.getState (← getEnv) |>.find? (·.declName == name)
       | throwError "missing circuit registry entry for '{name}'"
-    if let some text := info.specializationArtifact? then
+    if let some fresh := moduleCircuitFor moduleOutputs name then
+      lowered := lowered.push (artifactName name ++ ".specialization.json",
+        (Lean.toJson fresh.signatureArtifact).pretty)
+    else if let some text := info.specializationArtifact? then
       let artifact ← match Helpers.Specialization.parseSignatureArtifactText text with
         | .ok artifact => pure artifact
         | .error message => throwError "invalid generic specialization signature artifact: {message}"
       lowered := lowered.push (artifactName name ++ ".specialization.json", (Lean.toJson artifact).pretty)
+  for info in witnesses do
+    let program ← match moduleWitnessProgramFor moduleOutputs info with
+      | some fresh => pure fresh
+      | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
+    let compiled ← match Witness.compile program info.exportName info.circuitName.toString with
+      | .ok value => pure value
+      | .error diagnostic => failDiagnostic diagnostic
+    let witnessPrefix := artifactName info.circuitName
+    lowered := lowered.push (witnessPrefix ++ ".witness.json", compiled.binding.compress)
+    lowered := lowered.push (witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
+    witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson info.circuitName.toString),
+      ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
+      ("target", toJson ("standalone" : String)), ("nativeWitnessQualified", toJson Bool.false)])
   for (name, contract) in contracts do
     for ep in contract.entrypoints do
       let ep := Passes.pruneEntrypoint ep
       match Backend.Zkir.lowerEntrypoint contract.state ep with
       | .error d => failDiagnostic d
-      | .ok json => lowered := lowered.push (nativeCircuitFile name ep, json.pretty)
+      | .ok json =>
+        lowered := lowered.push (nativeCircuitFile name ep, json.pretty)
+        if let some info := witnesses.find? (·.circuitName.toString == ep.circuit.name) then
+          let program ← match moduleWitnessProgramFor moduleOutputs info with
+            | some fresh => pure fresh
+            | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
+          let compiled ← match Witness.compile program info.exportName info.circuitName.toString with
+            | .ok value => pure value
+            | .error diagnostic => failDiagnostic diagnostic
+          let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name
+              (nativeCircuitFile name ep) profile.name with
+            | .ok value => pure value
+            | .error diagnostic => failDiagnostic diagnostic
+          let witnessPrefix := artifactName name ++ "." ++ ep.name
+          lowered := lowered.push (witnessPrefix ++ ".witness.json", compiled.binding.compress)
+          lowered := lowered.push (witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
+          witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson ep.circuit.name),
+            ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
+            ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
+            ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
       let plan ← match Backend.Impact.lower contract.state ep with
         | .error d => failDiagnostic d
         | .ok plan => pure plan
-      let targetPlanFields := if profile.name == TargetProfile.selected321.name then [
-        ("target", toJson profile.name), ("targetProfile", toJson profile)
-      ] else []
-      let planJson := Json.mkObj ([
-        ("schemaVersion", toJson (1 : Nat))] ++ targetPlanFields ++ [
-        ("contractName", toJson name.toString),
-        ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
-        ("state", toJson (contract.state.map stateJson)),
-        ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
-        ("operations", toJson (plan.operations.map operationJson)),
-        ("reads", toJson (plan.reads.map fun item => Json.mkObj [
-          ("name", toJson item.name), ("type", toJson (typeName item.ty))])),
-        ("guards", toJson (plan.guards.map nativeExpressionJson))])
+      let planJson := nativePlanJson profile name contract.state ep plan
       lowered := lowered.push (nativePlanFile name ep, planJson.pretty)
   unless uniqueNames (lowered.toList.map (·.1)) do
     throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
@@ -264,13 +343,14 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
     ("hostControlPlans", toJson (controls.toList.map fun name => Json.mkObj [
       ("name", toJson name.toString), ("file", toJson (artifactName name ++ ".control.json")),
       ("nativeGuardQualified", toJson Bool.false)]))]
+  let witnessFields := if witnessMetadata.isEmpty then [] else [("hostWitnessPlans", Json.arr witnessMetadata)]
   let metadata := Json.mkObj ([
     ("schemaVersion", toJson (1 : Nat)), ("target", toJson profile.name),
     ("targetProfile", toJson profile),
     ("qualification", toJson ("unqualified-relation-and-state-description" : String)),
     ("deployable", toJson Bool.false),
     ("contracts", Json.arr contractMetadata),
-    ("circuits", toJson (circuits.map fun (name, circuit) => circuitSchemaJson name circuit))] ++ controlFields)
+    ("circuits", toJson (circuits.map fun (name, circuit) => circuitSchemaJson name circuit))] ++ controlFields ++ witnessFields)
   let path : System.FilePath := directory
   liftIO <| IO.FS.createDirAll path
   for (name, content) in lowered do

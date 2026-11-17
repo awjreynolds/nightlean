@@ -42,6 +42,22 @@ structure Parameter where
 def Parameter.resultType (parameter : Parameter) : ResultType :=
   .scalar parameter.ty
 
+structure WitnessParameter where
+  name : String
+  type : ResultType
+  deriving Repr
+
+/-- Explicit host identity. Returning a value grants no circuit truth or release authority. -/
+structure WitnessSignature where
+  name : String
+  operation : String
+  capability : String
+  privateKey : Option String := none
+  parameters : List WitnessParameter := []
+  result : ResultType
+  span : SourceSpan := {}
+  deriving Repr
+
 inductive Term where
   | unit
   | native (number : Nat)
@@ -57,6 +73,7 @@ inductive Term where
   | andThen (left right : Term)
   | orElse (left right : Term)
   | witness (name : String) (ty : Ty)
+  | witnessCall (site name : String) (arguments : List Term)
   | poseidon2 (domain : Nat) (left right : Term)
   | call (name : String) (arguments : List Term)
   /-- A checked aggregate assembled from scalar source terms in canonical leaf order. -/
@@ -117,6 +134,7 @@ structure Program where
   declarations : List Declaration := []
   exports : List Export := []
   composites : Types.CompositeEnv := {}
+  witnesses : List WitnessSignature := []
   deriving Repr
 
 private def fail (span : SourceSpan) (message : String) : Except Diagnostic α :=
@@ -166,12 +184,25 @@ private def validateLimits (limits : Limits) : Except Diagnostic Unit := do
 private def textMetadata (text : String) : Except Diagnostic Unit := do
   if text.utf8ByteSize > 1024 then resource {} "metadata text"
 
+def validWitnessIdentifier (name : String) : Bool :=
+  !name.isEmpty && name.utf8ByteSize ≤ 128 && name.toList.all (fun c =>
+    ('a' ≤ c && c ≤ 'z') || ('A' ≤ c && c ≤ 'Z') || ('0' ≤ c && c ≤ '9') || "_-.:".contains c)
+
+def witnessSignature (program : Program) (name : String) (span : SourceSpan := {}) :
+    Except Diagnostic WitnessSignature :=
+  match program.witnesses.find? (·.name == name) with
+  | some signature => pure signature
+  | none => fail span s!"unknown typed witness '{name}'"
+
 private def spanMetadata (span : SourceSpan) : Except Diagnostic Unit := do
   if span.file.utf8ByteSize > 1024 || span.line > 1000000000 || span.column > 1000000000 then
     resource {} "source-span metadata"
 
 private def termMetadata : Term → Except Diagnostic Unit
   | .ref name | .call name _ | .witness name _ | .effect _ name _ => textMetadata name
+  | .witnessCall site name _ => do
+    unless validWitnessIdentifier site && validWitnessIdentifier name do
+      fail {} "invalid typed witness site or provider identity"
   | .at span _ | .disclose span _ => spanMetadata span
   | .project _ (.field name) => textMetadata name
   | .project _ (.enumField variant name) => do textMetadata variant; textMetadata name
@@ -205,7 +236,7 @@ where
         | .composite _ leaves => pure leaves
         | .index value index => pure [value, index]
         | .select c a b | .ite c a b => pure [c, a, b]
-        | .call _ arguments => do
+        | .call _ arguments | .witnessCall _ _ arguments => do
           if arguments.length > limits.maxParameters then resource span "call arguments"
           pure arguments
         | _ => pure []
@@ -246,7 +277,7 @@ where
             | .composite _ leaves => pure leaves
             | .index value index => pure [value, index]
             | .select c a b | .ite c a b => pure [c, a, b]
-            | .call _ arguments => do
+            | .call _ arguments | .witnessCall _ _ arguments => do
               if arguments.length > limits.maxParameters then resource span "call arguments"
               pure arguments
             | _ => pure []
@@ -257,6 +288,37 @@ where
 private structure SourceSize where
   nodes : Nat
   depth : Nat
+
+private def witnessSites (body : List Statement) (fuel : Nat) : Except Diagnostic (List String) :=
+  go fuel (body.map SourceNode.statement) []
+where
+  go : Nat → List SourceNode → List String → Except Diagnostic (List String)
+    | _, [], sites => pure sites
+    | 0, _ :: _, _ => resource {} "typed witness site traversal"
+    | fuel + 1, node :: rest, sites => do
+      match node with
+      | .statement statement =>
+        let children := (statementTerms statement).map SourceNode.term
+        let arms := match statement with
+          | .branch _ yes no => (yes ++ no).map SourceNode.statement
+          | _ => []
+        go fuel (children ++ arms ++ rest) sites
+      | .term term =>
+        let (children, site) := match term with
+          | .witnessCall site _ arguments => (arguments, some site)
+          | .call _ arguments | .composite _ arguments => (arguments, none)
+          | .binary _ a b | .eq a b | .poseidon2 _ a b | .andThen a b | .orElse a b
+          | .index a b => ([a, b], none)
+          | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
+          | .project value _ => ([value], none)
+          | .select c a b | .ite c a b => ([c, a, b], none)
+          | _ => ([], none)
+        let sites ← match site with
+          | none => pure sites
+          | some site => do
+            if sites.contains site then fail {} "duplicate typed witness site in helper declaration"
+            pure (site :: sites)
+        go fuel (children.map SourceNode.term ++ rest) sites
 
 private def checkedComposite (program : Program) (span : SourceSpan)
     (type : Types.CompositeType) : Except Diagnostic Types.CompiledType :=
@@ -300,7 +362,7 @@ private def validateResultType (program : Program) (span : SourceSpan) : ResultT
   | .scalar type => liftError span (type.validate {poseidon2 := true})
   | .composite type => discard (checkedComposite program span type)
 
-private partial def sourceLeafTypes : Types.Layout → List Ty
+partial def sourceLeafTypes : Types.Layout → List Ty
   | .unit => []
   | .scalar .nativeField => [.native]
   | .scalar .booleanField => [.bool]
@@ -313,7 +375,7 @@ private partial def sourceLeafTypes : Types.Layout → List Ty
   | .bytes length _ => List.replicate length .native
   | .enumeration _ _ _ payloadLeaves _ _ => .native :: List.replicate payloadLeaves .native
 
-private partial def sourceLeafPaths : Types.Layout → String → List String
+partial def sourceLeafPaths : Types.Layout → String → List String
   | .unit, _ => []
   | .scalar _, path => [path]
   | .tuple items, path => items.zipIdx.flatMap fun (item, index) =>
@@ -347,6 +409,29 @@ private def sourcePreflight (limits : Limits) (program : Program) :
   if program.declarations.length > limits.maxDeclarations then resource {} "declarations"
   if program.scopes.length > limits.maxScopes then resource {} "scopes"
   if program.exports.length > limits.maxExports then resource {} "exports"
+  if program.witnesses.length > 32 then resource {} "typed witness declarations"
+  unless uniqueNames (program.witnesses.map (·.name)) do fail {} "duplicate typed witness declaration"
+  for signature in program.witnesses do
+    spanMetadata signature.span
+    unless validWitnessIdentifier signature.name && validWitnessIdentifier signature.operation &&
+        signature.operation.endsWith ".v1" && validWitnessIdentifier signature.capability do
+      fail signature.span "invalid typed witness operation or capability identity"
+    if signature.operation == "private_state.stage.v1" || signature.operation == "private_state.compare_exchange.v1" then
+      fail signature.span "private staging and commit operations require the controlled journal lifecycle"
+    if signature.operation == "private_state.read.v1" then
+      let some key := signature.privateKey | fail signature.span "private state reads require an explicit source key"
+      unless !key.isEmpty && key.utf8ByteSize ≤ 128 && !key.startsWith "/" && !key.endsWith "/" &&
+          (key.splitOn "/").all (fun part => validWitnessIdentifier part && part != "." && part != "..") &&
+          signature.parameters.isEmpty do
+        fail signature.span "invalid typed private-state read key or arguments"
+    else if signature.privateKey.isSome then fail signature.span "only private-state reads accept a source key"
+    if signature.parameters.length > limits.maxParameters then resource signature.span "typed witness arguments"
+    unless uniqueNames (signature.parameters.map (·.name)) do fail signature.span "duplicate typed witness argument"
+    for parameter in signature.parameters do
+      unless validWitnessIdentifier parameter.name do fail signature.span "invalid typed witness argument name"
+      if parameter.type == .unit then fail signature.span "typed witness arguments cannot have Unit type"
+      validateResultType program signature.span parameter.type
+    validateResultType program signature.span signature.result
   for scope in program.scopes do
     if scope.id > 18446744073709551615 then resource {} "declaration identity metadata"
     if scope.values.length > limits.maxParameters then resource {} "scope bindings"
@@ -385,11 +470,51 @@ private def sourcePreflight (limits : Limits) (program : Program) :
       validateResultType program declaration.span (declaration.parameterType parameter)
     validateResultType program declaration.span declaration.result
     let (nodes, statements, depth) ← scanBody limits declaration.span available declaration.body
+    discard (witnessSites declaration.body limits.maxSourceNodes)
     available := available - nodes
     sizes := (declaration.id, {
       nodes := 3 * (nodes + declaration.parameters.length + 2)
       depth := 3 * (statements + depth + declaration.parameters.length + 2)}) :: sizes
   pure sizes
+
+/-- Change declaration bodies while preserving program metadata and declaration
+identity. This bridge lets source transformations reuse the checked resolver. -/
+private def mapDeclarationBody (transform : List Statement → List Statement)
+    (declaration : Declaration) : Declaration :=
+  {declaration with body := transform declaration.body}
+
+def mapDeclarationBodies (transform : List Statement → List Statement)
+    (program : Program) : Program :=
+  {program with declarations := program.declarations.map (mapDeclarationBody transform)}
+
+private theorem mapDeclarationBodies_scopes (transform : List Statement → List Statement)
+    (program : Program) : (mapDeclarationBodies transform program).scopes = program.scopes := rfl
+
+private theorem mapDeclarationBodies_declarations (transform : List Statement → List Statement)
+    (program : Program) :
+    (mapDeclarationBodies transform program).declarations =
+      program.declarations.map (mapDeclarationBody transform) := rfl
+
+/-- Finding a declaration by its stable id commutes with mapping its body.
+This keeps entrypoint lookup aligned with the checked helper resolver after a
+source transformation. -/
+theorem mapDeclarationBodies_findDeclarationById
+    (transform : List Statement → List Statement) (program : Program) (id : DeclarationId) :
+    ((mapDeclarationBodies transform program).declarations.find?
+        (fun declaration => declaration.id == id)) =
+      (program.declarations.find? (fun declaration => declaration.id == id)).map
+        (fun declaration => {declaration with body := transform declaration.body}) := by
+  rw [mapDeclarationBodies_declarations]
+  induction program.declarations with
+  | nil => simp
+  | cons declaration rest ih =>
+      by_cases h : declaration.id == id
+      · simp [h, mapDeclarationBody]
+      · simp [h, mapDeclarationBody, ih]
+
+/-- Public admission result for source syntax and resource limits. -/
+def syntacticPreflight (limits : Limits) (program : Program) : Except Diagnostic Unit := do
+  (sourcePreflight limits program).map fun _ => ()
 
 def subtype : ResultType → ResultType → Bool
   | .unit, .unit => true
@@ -406,6 +531,16 @@ private def compatible (arguments : List ResultType) (declaration : Declaration)
     (arguments.zip declaration.parameters).all fun (actual, parameter) =>
       subtype actual (declaration.parameterType parameter)
 
+private def helperCandidate (scope : Nat) (name : String)
+    (arguments : List ResultType) (declaration : Declaration) : Bool :=
+  declaration.id.scope == scope && declaration.name == name && compatible arguments declaration
+
+private def selectCandidates (span : SourceSpan) (name : String) :
+    List Declaration → Except Diagnostic (Option Declaration)
+  | [declaration] => pure (some declaration)
+  | _ :: _ :: _ => fail span s!"ambiguous helper overload '{name}'"
+  | [] => pure none
+
 /-- Search one lexical group at a time. An ambiguous inner group never falls back. -/
 private def resolveUnchecked (program : Program) (scope : Nat) (name : String) (arguments : List ResultType)
     (span : SourceSpan := {}) : Except Diagnostic Declaration := go (program.scopes.length + 1) scope
@@ -416,14 +551,14 @@ where
       let some group := program.scopes.find? (·.id == scope)
         | fail span "unknown helper lexical scope"
       if group.values.contains name then fail span s!"helper '{name}' is hidden by a value binding"
-      let candidates := program.declarations.filter fun declaration =>
-        declaration.id.scope == scope && declaration.name == name && compatible arguments declaration
-      match candidates with
-      | [declaration] => pure declaration
-      | _ :: _ :: _ => fail span s!"ambiguous helper overload '{name}'"
-      | [] => match group.parent with
-        | some parent => go fuel parent
-        | none => fail span s!"no compatible helper overload '{name}'"
+      else
+        let candidates := program.declarations.filter (helperCandidate scope name arguments)
+        match selectCandidates span name candidates with
+        | .error diagnostic => .error diagnostic
+        | .ok (some declaration) => .ok declaration
+        | .ok none => match group.parent with
+          | some parent => go fuel parent
+          | none => fail span s!"no compatible helper overload '{name}'"
 
 def resolveWithLimits (limits : Limits) (program : Program) (scope : Nat) (name : String)
     (arguments : List ResultType) (span : SourceSpan := {}) : Except Diagnostic Declaration := do
@@ -436,6 +571,141 @@ def resolveWithLimits (limits : Limits) (program : Program) (scope : Nat) (name 
 def resolve (program : Program) (scope : Nat) (name : String) (arguments : List ResultType)
     (span : SourceSpan := {}) : Except Diagnostic Declaration :=
   resolveWithLimits {} program scope name arguments span
+
+private theorem helperCandidate_mapDeclarationBody (transform : List Statement → List Statement)
+    (scope : Nat) (name : String) (arguments : List ResultType) (declaration : Declaration) :
+    helperCandidate scope name arguments (mapDeclarationBody transform declaration) =
+      helperCandidate scope name arguments declaration := by
+  cases declaration
+  rfl
+
+private theorem filterHelperCandidates_mapDeclarationBody
+    (transform : List Statement → List Statement) (scope : Nat) (name : String)
+    (arguments : List ResultType) (declarations : List Declaration) :
+    (declarations.map (mapDeclarationBody transform)).filter
+        (helperCandidate scope name arguments) =
+      (declarations.filter (helperCandidate scope name arguments)).map
+        (mapDeclarationBody transform) := by
+  induction declarations with
+  | nil => rfl
+  | cons declaration rest ih =>
+      simp only [List.map_cons, List.filter_cons, helperCandidate_mapDeclarationBody, ih]
+      split <;> rfl
+
+private theorem selectCandidates_mapDeclarationBody
+    (transform : List Statement → List Statement) (span : SourceSpan) (name : String)
+    (declarations : List Declaration) :
+    selectCandidates span name (declarations.map (mapDeclarationBody transform)) =
+      (selectCandidates span name declarations).map (Option.map (mapDeclarationBody transform)) := by
+  cases declarations with
+  | nil => rfl
+  | cons first rest => cases rest with
+    | nil => rfl
+    | cons second tail => rfl
+
+private theorem resolveUnchecked_go_mapDeclarationBodies
+    (transform : List Statement → List Statement) (program : Program)
+    (name : String) (arguments : List ResultType) (span : SourceSpan) :
+    ∀ fuel scope,
+      resolveUnchecked.go (mapDeclarationBodies transform program) name arguments span fuel scope =
+        (resolveUnchecked.go program name arguments span fuel scope).map
+          (mapDeclarationBody transform) := by
+  intro fuel
+  induction fuel with
+  | zero => intro scope; simp [resolveUnchecked.go, fail, Except.map]
+  | succ fuel ih =>
+      intro scope
+      unfold resolveUnchecked.go
+      rw [mapDeclarationBodies_scopes]
+      cases hgroup : program.scopes.find? (fun x => x.id == scope) with
+      | none => simp [hgroup, fail, Except.map, Except.bind]
+      | some group =>
+          cases hhidden : group.values.contains name with
+          | true =>
+              have hmem : name ∈ group.values := List.contains_iff_mem.mp hhidden
+              simp [hgroup, hhidden, hmem, fail, Except.map, Except.bind]
+          | false =>
+              have hmem : name ∉ group.values := by
+                intro h
+                have htrue := List.contains_iff_mem.mpr h
+                rw [hhidden] at htrue
+                cases htrue
+              have hcandidates := filterHelperCandidates_mapDeclarationBody
+                transform scope name arguments program.declarations
+              simp [hgroup, hhidden, hmem]
+              rw [mapDeclarationBodies_declarations]
+              rw [hcandidates]
+              rw [selectCandidates_mapDeclarationBody]
+              let candidates := program.declarations.filter (helperCandidate scope name arguments)
+              cases hselection : selectCandidates span name candidates with
+              | error error => simp [hselection, candidates, fail, Except.map]
+              | ok selected =>
+                  cases selected with
+                  | some declaration => simp [hselection, candidates, mapDeclarationBody, Except.map]
+                  | none =>
+                      cases hparent : group.parent with
+                      | none => simp [hselection, candidates, hparent, fail, Except.map]
+                      | some parent => simp [hselection, candidates, hparent, ih, fail, Except.map]
+
+private theorem resolveUnchecked_mapDeclarationBodies
+    (transform : List Statement → List Statement) (program : Program)
+    (scope : Nat) (name : String) (arguments : List ResultType) (span : SourceSpan) :
+    resolveUnchecked (mapDeclarationBodies transform program) scope name arguments span =
+      (resolveUnchecked program scope name arguments span).map (mapDeclarationBody transform) := by
+  unfold resolveUnchecked
+  rw [mapDeclarationBodies_scopes]
+  exact resolveUnchecked_go_mapDeclarationBodies transform program name arguments span _ _
+
+private theorem sourcePreflight_result_of_admitted (limits : Limits) (program : Program)
+    (admitted : syntacticPreflight limits program = .ok ()) :
+    ∃ sizes, sourcePreflight limits program = .ok sizes := by
+  unfold syntacticPreflight at admitted
+  cases result : sourcePreflight limits program with
+  | error diagnostic =>
+      simp only [result, Except.map] at admitted
+      cases admitted
+  | ok sizes => exact ⟨sizes, rfl⟩
+
+theorem resolveWithLimits_mapDeclarationBodies
+    (limits : Limits) (transform : List Statement → List Statement)
+    (program : Program) (scope : Nat) (name : String)
+    (arguments : List ResultType) (span : SourceSpan := {})
+    (sourceAdmitted : syntacticPreflight limits program = .ok ())
+    (mappedAdmitted : syntacticPreflight limits (mapDeclarationBodies transform program) = .ok ()) :
+    resolveWithLimits limits (mapDeclarationBodies transform program) scope name arguments span =
+      (resolveWithLimits limits program scope name arguments span).map fun declaration =>
+        {declaration with body := transform declaration.body} := by
+  rcases sourcePreflight_result_of_admitted limits program sourceAdmitted with
+    ⟨sourceSizes, sourceResult⟩
+  rcases sourcePreflight_result_of_admitted limits (mapDeclarationBodies transform program) mappedAdmitted with
+    ⟨mappedSizes, mappedResult⟩
+  have hresolve := resolveUnchecked_mapDeclarationBodies transform program scope name arguments span
+  change resolveWithLimits limits (mapDeclarationBodies transform program) scope name arguments span =
+    (resolveWithLimits limits program scope name arguments span).map (mapDeclarationBody transform)
+  unfold resolveWithLimits
+  rw [sourceResult, mappedResult]
+  cases hspan : spanMetadata span with
+  | error diagnostic =>
+      simp [hspan, Except.map, Except.bind, Except.instMonad, Monad.toBind,
+        Bind.bind, Functor.discard, Functor.mapConst, Applicative.toFunctor]
+  | ok spanValue =>
+      cases hname : textMetadata name with
+      | error diagnostic =>
+          simp [hspan, hname, Except.map, Except.bind, Except.instMonad, Monad.toBind,
+            Bind.bind, Functor.discard, Functor.mapConst, Applicative.toFunctor]
+      | ok nameValue =>
+          by_cases harguments : limits.maxParameters < arguments.length
+          · cases hresource : resource span "call arguments" with
+            | error diagnostic =>
+                simp [harguments, hresource, Except.map, Except.bind, Except.instMonad, Monad.toBind,
+                  Bind.bind, Functor.discard, Functor.mapConst, Applicative.toFunctor]
+            | ok unit =>
+                simp [harguments, hresource, hresolve, mapDeclarationBody, Except.map, Except.bind,
+                  Except.instMonad, Monad.toBind, Bind.bind, Functor.discard,
+                  Functor.mapConst, Applicative.toFunctor]
+          · simp [hspan, hname, harguments, hresolve, mapDeclarationBody,
+              Except.map, Except.bind, Except.instMonad, Monad.toBind, Bind.bind,
+              Functor.discard, Functor.mapConst, Applicative.toFunctor]
 
 abbrev Environment := List (String × ResultType)
 
@@ -535,6 +805,13 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
     | .witness _ ty =>
       liftError span (ty.validate {poseidon2 := true})
       pure {ty := .scalar ty, effects := [.witness]}
+    | .witnessCall _ name arguments =>
+      let signature ← witnessSignature program name span
+      let arguments ← arguments.mapM (inferTerm fuel program scope env span)
+      unless arguments.length == signature.parameters.length do fail span "typed witness argument arity mismatch"
+      for (argument, parameter) in arguments.zip signature.parameters do
+        unless subtype argument.ty parameter.type do fail span "typed witness argument type mismatch"
+      pure (combine signature.result arguments [.witness])
     | .poseidon2 domain left right =>
       unless domain < Field.modulus do fail span "noncanonical helper hash domain"
       let left ← inferTerm fuel program scope env span left
@@ -875,12 +1152,28 @@ private def sequence (name : String) (value body : Lowered) : Lowered :=
     constraints := body.constraints.map fun condition => bind condition}
 
 private abbrev LowerEnv := List (String × Lowered)
+structure WitnessCallBinding where
+  ordinal : Nat
+  site : String
+  name : String
+  path : List DeclarationId
+  result : ResultType
+  inputs : List String
+  deriving Repr
+
+structure HostedCircuit where
+  circuit : Circuit
+  calls : List WitnessCallBinding
+  deriving Repr
+
 private structure LowerState where
   next : Nat := 0
   reserved : List String := []
   types : TypeEnv := []
   witnessInputs : List Input := []
   privateOrigins : List (String × PrivateOriginKind) := []
+  witnessCalls : List WitnessCallBinding := []
+  callPath : List DeclarationId := []
   remaining : Nat
   deriving Inhabited
 
@@ -906,7 +1199,7 @@ private def freshTyped (type : Ty) : LowerM String := do
   modify fun state => {state with types := (name, type) :: state.types}
   pure name
 
-private def projectionSlice (layout : Types.Layout) (projection : Types.Projection) :
+def projectionSlice (layout : Types.Layout) (projection : Types.Projection) :
     Except String (Nat × Nat) := do
   match layout, projection with
   | .tuple items, .tupleIndex index =>
@@ -1001,6 +1294,48 @@ mutual
         witnessInputs := state.witnessInputs ++ [{name := inputName, ty, visibility := .private, span}]
         privateOrigins := state.privateOrigins ++ [(inputName, .provider)]}
       pure (scalarValue (ty := ty) (Expr.ref inputName))
+    | .witnessCall site name arguments => do
+      let signature ← liftD (witnessSignature program name span)
+      let arguments ← arguments.mapM (lowerTerm program scope env span)
+      let mut bindings := []
+      let mut constraints := arguments.flatMap (·.constraints)
+      for (argument, parameter) in arguments.zip signature.parameters do
+        let argument ← liftD (coerce span argument parameter.type)
+        for component in components argument do
+          let binding ← freshTyped component.ty
+          bindings := bindings ++ [(binding, component)]
+      let leafTypes ← match signature.result with
+        | .unit => pure []
+        | .scalar type => pure [type]
+        | .composite type => do
+          let compiled ← liftD (checkedComposite program span type)
+          pure (List.replicate compiled.checked.expandedLeaves Ty.native)
+      let mut inputs := []
+      let mut leaves := []
+      for type in leafTypes do
+        let inputName ← freshTyped type
+        inputs := inputs ++ [inputName]
+        leaves := leaves ++ [⟨type, Expr.ref inputName⟩]
+        modify fun state => {state with
+          witnessInputs := state.witnessInputs ++ [{name := inputName, ty := type, visibility := .private, span}]
+          privateOrigins := state.privateOrigins ++ [(inputName,
+            if signature.operation == "private_state.read.v1" then .privateState else .provider)]}
+      let value ← match signature.result with
+        | .unit => pure unitValue
+        | .scalar _ => pure {ty := signature.result, scalar := leaves.headD ⟨.bool, .bool true⟩}
+        | .composite type => do
+          let compiled ← liftD (checkedComposite program span type)
+          let state ← get
+          let checked ← liftD ((Types.checkNativeExpression compiled state.types
+            (leaves.map nativeOfScalar)).mapError fun message => {span, message})
+          constraints := constraints ++ checked.constraints
+          pure (aggregateValue type leaves)
+      modify fun state => {state with witnessCalls := state.witnessCalls ++ [{
+        ordinal := state.witnessCalls.length, site, name, path := state.callPath,
+        result := signature.result, inputs}]}
+      pure (bindings.foldr (fun (binding, component) body =>
+        sequence binding {ty := .scalar component.ty, scalar := component} body)
+          {value with constraints})
     | .poseidon2 domain left right =>
       let left ← lowerTerm program scope env span left
       let right ← lowerTerm program scope env span right
@@ -1081,6 +1416,8 @@ mutual
   private partial def lowerCall (program : Program) (declaration : Declaration)
       (values : List Lowered) (span : SourceSpan) : LowerM Lowered := do
     spendLower span
+    let callerPath := (← get).callPath
+    modify fun state => {state with callPath := callerPath ++ [declaration.id]}
     let mut env := []
     let mut bindings := []
     for (parameter, actual) in declaration.parameters.zip values do
@@ -1098,6 +1435,7 @@ mutual
         | .unit => unitValue
       env := (parameter.name, reference) :: env
     let body ← lowerBody program declaration env declaration.body
+    modify fun state => {state with callPath := callerPath}
     let body := {body with constraints := values.flatMap (·.constraints) ++ body.constraints}
     pure (bindings.foldr (fun (name, value) body =>
       sequence name {ty := .scalar value.ty, scalar := value} body) body)
@@ -1163,7 +1501,7 @@ end
 
 /-- Compilation always performs typing, call-graph/purity analysis and DF-00.
 No caller-supplied summary or disclosure exemption is accepted. -/
-def compileWithLimits (limits : Limits) (program : Program) (entryName : String) : Except Diagnostic Circuit := do
+def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : String) : Except Diagnostic HostedCircuit := do
   let summaries ← analyzeWithLimits limits program
   for summary in summaries do
     if summary.guarded then fail {} "native helper capability unavailable: structured control (CF-02)"
@@ -1238,7 +1576,10 @@ def compileWithLimits (limits : Limits) (program : Program) (entryName : String)
   }
   circuit.validate {poseidon2 := true}
   Disclosure.circuit circuit
-  pure circuit
+  pure {circuit, calls := lowering.witnessCalls}
+
+def compileWithLimits (limits : Limits) (program : Program) (entryName : String) : Except Diagnostic Circuit :=
+  (compileHostedWithLimits limits program entryName).map (·.circuit)
 
 def compile (program : Program) (entryName : String) : Except Diagnostic Circuit :=
   compileWithLimits {} program entryName
@@ -1320,7 +1661,7 @@ mutual
     | .orElse left right =>
       let left ← traceTerm program ctx scope env span left >>= traceScalar span
       if left.number != 0 then pure (some left) else traceTerm program ctx scope env span right
-    | .witness .. => liftM (fail span "registered witness execution requires the portable control runtime")
+    | .witness .. | .witnessCall .. => liftM (fail span "registered witness execution requires the portable control runtime")
     | .disclose _ value => traceTerm program ctx scope env span value
     | .poseidon2 domain left right =>
       let left ← traceTerm program ctx scope env span left >>= traceScalar span

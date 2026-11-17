@@ -106,6 +106,14 @@ fn snapshot_copy(s: &Snapshot) -> Snapshot {
 fn record_copy(r: &RecoveryRecord) -> Result<RecoveryRecord, HostFailure> {
     serde_json::from_slice(&r.private_bytes().map_err(|_| HostFailure)?).map_err(|_| HostFailure)
 }
+fn recovery_host_context(context: &[u8]) -> Result<host::Context, client::Error> {
+    let value: Json = serde_json::from_slice(context).map_err(|_| client::Error::Identity)?;
+    if value.get("recoveryVersion").is_some() {
+        serde_json::from_value(value["context"].clone()).map_err(|_| client::Error::Identity)
+    } else {
+        serde_json::from_value(value).map_err(|_| client::Error::Identity)
+    }
+}
 pub(crate) enum RequestData {
     Snapshot,
     Fund {
@@ -388,8 +396,10 @@ fn restored_runtime(
     context: &[u8],
     attempt: &SubmissionAttempt,
 ) -> Result<host::Runtime, client::Error> {
-    let ctx: host::Context =
+    let context_json: Json =
         serde_json::from_slice(context).map_err(|_| client::Error::Identity)?;
+    let recovery = context_json.get("recoveryVersion").is_some();
+    let ctx = recovery_host_context(context)?;
     let journal: Json = serde_json::from_slice(attempt.record().journal_bytes())
         .map_err(|_| client::Error::Identity)?;
     if journal["attemptId"] != ctx.attempt_id
@@ -398,11 +408,11 @@ fn restored_runtime(
     {
         return Err(client::Error::Identity);
     }
-    let target = journal["contractAddress"]
+    let target: String = journal["contractAddress"]
         .as_str()
         .ok_or(client::Error::Identity)?
         .into();
-    let entry = journal["entrypoint"]
+    let entry: String = journal["entrypoint"]
         .as_str()
         .ok_or(client::Error::Identity)?
         .into();
@@ -417,8 +427,16 @@ fn restored_runtime(
             )
         })
         .collect();
-    let mut runtime = host::Runtime::new(ctx, &BTreeMap::new(), target, entry)
-        .map_err(|_| client::Error::Identity)?;
+    let mut runtime = if recovery {
+        host::Runtime::from_recovery_context(context_json).map_err(|_| client::Error::Identity)?
+    } else {
+        host::Runtime::new(ctx, &BTreeMap::new(), target.clone(), entry.clone())
+            .map_err(|_| client::Error::Identity)?
+    };
+    if !runtime.has_target(&target, &entry) {
+        return Err(client::Error::Identity);
+    }
+    let typed_registry = runtime.typed_registry().cloned();
     for (key, write) in journal["writes"]
         .as_object()
         .ok_or(client::Error::Identity)?
@@ -427,19 +445,24 @@ fn restored_runtime(
             .iter()
             .find(|(_, prefix, stage)| *stage && key.starts_with(prefix))
             .ok_or(client::Error::Identity)?;
-        runtime
-            .stage(host::Stage {
-                abi_version: 1,
-                operation: host::STAGE.into(),
-                capability: cap.0.clone(),
-                key: key.clone(),
-                ty: write["type"]
-                    .as_str()
-                    .ok_or(client::Error::Identity)?
-                    .into(),
-                value: write["value"].clone(),
-            })
-            .map_err(|_| client::Error::Identity)?;
+        let stage = host::Stage {
+            abi_version: if typed_registry.is_some() { 2 } else { 1 },
+            operation: host::STAGE.into(),
+            capability: cap.0.clone(),
+            key: key.clone(),
+            ty: write["type"]
+                .as_str()
+                .ok_or(client::Error::Identity)?
+                .into(),
+            value: write["value"].clone(),
+        };
+        if let Some(registry) = &typed_registry {
+            runtime
+                .stage_typed(stage, registry)
+                .map_err(|_| client::Error::Identity)?;
+        } else {
+            runtime.stage(stage).map_err(|_| client::Error::Identity)?;
+        }
     }
     runtime
         .execution_finished(true)
@@ -547,8 +570,7 @@ async fn step(
                     &adapter,
                 )
                 .await?;
-                let ctx: host::Context =
-                    serde_json::from_slice(&state.context).map_err(|_| client::Error::Identity)?;
+                let ctx = recovery_host_context(&state.context)?;
                 state.attempt = Some(SubmissionAttempt::new(
                     bound,
                     &ctx.attempt_id,
@@ -556,8 +578,7 @@ async fn step(
                 )?);
             }
             Command::Reload => {
-                let ctx: host::Context =
-                    serde_json::from_slice(&state.context).map_err(|_| client::Error::Identity)?;
+                let ctx = recovery_host_context(&state.context)?;
                 let attempt = SubmissionAttempt::recover(&adapter, &ctx.attempt_id).await?;
                 if attempt.transaction().policy() != &state.policy {
                     return Err(client::Error::Network);
@@ -638,15 +659,20 @@ pub(crate) struct Driver {
     cancel_prepare: bool,
 }
 impl Driver {
+    fn validate_descriptor(descriptor: &Descriptor) -> Result<(), client::Error> {
+        descriptor.policy.validate()?;
+        if descriptor.abi_version != 1 || !descriptor.capabilities.validate() {
+            return Err(client::Error::Policy);
+        }
+        Ok(())
+    }
+
     pub fn start(
         descriptor: Descriptor,
         setup_bytes: &[u8],
         contract: Contract,
     ) -> Result<Self, client::Error> {
-        descriptor.policy.validate()?;
-        if descriptor.abi_version != 1 || !descriptor.capabilities.validate() {
-            return Err(client::Error::Policy);
-        }
+        Self::validate_descriptor(&descriptor)?;
         let setup: Setup =
             serde_json::from_slice(setup_bytes).map_err(|_| client::Error::Identity)?;
         let raw: Json = serde_json::from_slice(setup_bytes).map_err(|_| client::Error::Identity)?;
@@ -662,6 +688,40 @@ impl Driver {
         runtime
             .execution_finished(true)
             .map_err(|_| client::Error::State)?;
+        let policy = descriptor.policy.clone();
+        Ok(Self::new(
+            descriptor,
+            State {
+                policy,
+                contract: Some(contract),
+                runtime: Some(runtime),
+                attempt: None,
+                context,
+                receipt: None,
+                durable: false,
+                cancelled: false,
+            },
+        ))
+    }
+
+    pub(crate) fn start_with_runtime(
+        descriptor: Descriptor,
+        runtime: &mut Option<host::Runtime>,
+        contract: Contract,
+    ) -> Result<Self, client::Error> {
+        Self::validate_descriptor(&descriptor)?;
+        let (target, entrypoint) = address(&contract)?;
+        let source_runtime = runtime.as_ref().ok_or(client::Error::State)?;
+        if !source_runtime.has_target(&target, &entrypoint) {
+            return Err(client::Error::Identity);
+        }
+        let context_value = source_runtime
+            .recovery_context()
+            .map_err(|_| client::Error::Identity)?;
+        let context = Zeroizing::new(
+            serde_json::to_vec(&context_value).map_err(|_| client::Error::Identity)?,
+        );
+        let runtime = runtime.take().ok_or(client::Error::State)?;
         let policy = descriptor.policy.clone();
         Ok(Self::new(
             descriptor,
@@ -700,8 +760,7 @@ impl Driver {
         if descriptor.abi_version != 1 || !descriptor.capabilities.validate() {
             return Err(client::Error::Policy);
         }
-        let _: host::Context =
-            serde_json::from_slice(context).map_err(|_| client::Error::Identity)?;
+        recovery_host_context(context)?;
         let policy = descriptor.policy.clone();
         let mut driver = Self::new(
             descriptor,
@@ -941,6 +1000,210 @@ impl Driver {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base_crypto::{hash::HashOutput, time::Timestamp};
+    use rand::{Rng, SeedableRng, rngs::StdRng};
+    use storage::arena::Sp;
+
+    fn witness_test_contract() -> (Contract, String) {
+        use ledger::structure::{ContractAction, ContractDeploy, Intent};
+        let mut rng = StdRng::from_seed([19; 32]);
+        let deployment = ContractDeploy {
+            initial_state: onchain_runtime::state::ContractState::<crate::Db>::default(),
+            nonce: HashOutput([3; 32]),
+        };
+        let address = hex::encode(deployment.address().0.0);
+        let intent: ProvedNativeIntent = Intent {
+            actions: vec![ContractAction::Deploy(Sp::new(deployment))].into(),
+            guaranteed_unshielded_offer: None,
+            fallible_unshielded_offer: None,
+            dust_actions: None,
+            binding_commitment: rng.r#gen(),
+            ttl: Timestamp::from_secs(2_000_000_000),
+        };
+        (
+            Contract::Deployment {
+                intent,
+                entrypoint: "claim".into(),
+            },
+            address,
+        )
+    }
+
+    fn witness_test_runtime(target: &str) -> host::Runtime {
+        let context: host::Context = serde_json::from_slice(include_bytes!(
+            "../tests/fixtures/private-state/context.json"
+        ))
+        .unwrap();
+        let private_inputs = BTreeMap::from([("left".into(), "UIntRange<256>".into())]);
+        let mut runtime =
+            host::Runtime::new(context, &private_inputs, target.into(), "claim".into()).unwrap();
+        runtime
+            .stage(host::Stage {
+                abi_version: 1,
+                operation: host::STAGE.into(),
+                capability: "store".into(),
+                key: "claims/receipt".into(),
+                ty: "UIntRange<256>".into(),
+                value: json!("5"),
+            })
+            .unwrap();
+        runtime.execution_finished(true).unwrap();
+        runtime
+    }
+
+    fn witness_test_descriptor() -> Descriptor {
+        Descriptor {
+            abi_version: 1,
+            policy: NetworkPolicy {
+                network_id: "undeployed".into(),
+                genesis: "8".repeat(64),
+                spec_version: 1,
+                transaction_version: 4,
+                profile: crate::profile::NAME.into(),
+                max_dust: 1,
+            },
+            capabilities: Capabilities {
+                chain: "chain".into(),
+                funding: "wallet".into(),
+                signing: "signer".into(),
+                journal: "store".into(),
+            },
+        }
+    }
+
+    #[test]
+    fn witness_driver_rejects_target_mismatch_without_consuming_source_runtime() {
+        let (contract, address) = witness_test_contract();
+        let mut source = Some(witness_test_runtime(&"b".repeat(64)));
+        assert!(
+            Driver::start_with_runtime(witness_test_descriptor(), &mut source, contract,).is_err()
+        );
+        assert!(source.is_some());
+
+        let (contract, _) = witness_test_contract();
+        let mut source = Some(witness_test_runtime(&address));
+        let mut invalid_descriptor = witness_test_descriptor();
+        invalid_descriptor.abi_version = 2;
+        assert!(Driver::start_with_runtime(invalid_descriptor, &mut source, contract).is_err());
+        assert!(source.is_some());
+
+        let (contract, _) = witness_test_contract();
+        let mut driver =
+            Driver::start_with_runtime(witness_test_descriptor(), &mut source, contract).unwrap();
+        assert!(source.is_none());
+        let recovery: Json =
+            serde_json::from_slice(&driver.state.as_ref().unwrap().context).unwrap();
+        assert_eq!(recovery["recoveryVersion"], 1);
+        assert_eq!(recovery["target"], address);
+        assert_eq!(recovery["entrypoint"], "claim");
+        let attempt_id = recovery["context"]["attemptId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let runtime = driver.state.as_mut().unwrap().runtime.as_mut().unwrap();
+        runtime
+            .notify(host::Notice {
+                abi_version: 1,
+                event: "bind".into(),
+                attempt_id: attempt_id.clone(),
+                transaction_id: "c".repeat(64),
+            })
+            .unwrap();
+        let journal = runtime.private_journal().unwrap();
+        assert_eq!(journal["transactionId"], "c".repeat(64));
+        assert_eq!(journal["contractAddress"], address);
+        assert_eq!(journal["writes"]["claims/receipt"]["value"], "5");
+        assert!(
+            runtime
+                .notify(host::Notice {
+                    abi_version: 1,
+                    event: "bind".into(),
+                    attempt_id: attempt_id.clone(),
+                    transaction_id: "d".repeat(64),
+                })
+                .is_err()
+        );
+        assert_eq!(runtime.private_journal().unwrap(), journal);
+
+        for event in ["persisted", "submitted", "accepted"] {
+            let request_cas = runtime
+                .notify(host::Notice {
+                    abi_version: 1,
+                    event: event.into(),
+                    attempt_id: attempt_id.clone(),
+                    transaction_id: "c".repeat(64),
+                })
+                .unwrap();
+            assert_eq!(request_cas, event == "accepted");
+        }
+        runtime.begin_cas(17).unwrap();
+        let cas_request = runtime.private_arguments().unwrap();
+        assert_eq!(cas_request["journal"]["transactionId"], "c".repeat(64));
+        assert_eq!(
+            cas_request["journal"]["writes"]["claims/receipt"]["value"],
+            "5"
+        );
+        runtime
+            .finish_cas(
+                17,
+                Some(host::CAS),
+                Some("store"),
+                Some(host::CAS_SCHEMA),
+                json!({
+                    "attemptId": attempt_id,
+                    "transactionId": "c".repeat(64),
+                    "journalDigest": journal["journalDigest"],
+                    "outcome": "committed",
+                    "baseRevision": journal["baseRevision"],
+                    "revision": "r1"
+                }),
+            )
+            .unwrap();
+        assert!(runtime.private_journal().is_err());
+    }
+
+    #[test]
+    fn typed_recovery_envelope_keeps_the_original_host_attempt_identity() {
+        let context: Json = serde_json::from_slice(include_bytes!(
+            "../tests/fixtures/private-state/context.json"
+        ))
+        .unwrap();
+        let envelope = json!({
+            "recoveryVersion": 1,
+            "context": context,
+            "typed": true,
+            "typedInputs": ["lookup"],
+            "typedSchemas": [],
+            "target": "a".repeat(64),
+            "entrypoint": "claim"
+        });
+        let bytes = serde_json::to_vec(&envelope).unwrap();
+        let restored = recovery_host_context(&bytes).unwrap();
+        assert_eq!(restored.attempt_id, "a".repeat(64));
+        assert_eq!(restored.namespace, "wallet_A");
+        assert_eq!(restored.base_revision, "r0");
+    }
+
+    #[test]
+    fn recover_accepts_typed_witness_context_envelope() {
+        let context: Json = serde_json::from_slice(include_bytes!(
+            "../tests/fixtures/private-state/context.json"
+        ))
+        .unwrap();
+        let envelope = json!({
+            "recoveryVersion": 1,
+            "context": context,
+            "typed": true,
+            "typedInputs": ["lookup"],
+            "typedSchemas": [],
+            "target": "a".repeat(64),
+            "entrypoint": "claim"
+        });
+        let bytes = serde_json::to_vec(&envelope).unwrap();
+        let driver = Driver::recover(witness_test_descriptor(), &bytes).unwrap();
+        assert!(driver.task.is_some());
+    }
+
     #[test]
     fn new_wire_identities_and_budgets_are_lossless_decimal_strings() {
         let policy = NetworkPolicy {

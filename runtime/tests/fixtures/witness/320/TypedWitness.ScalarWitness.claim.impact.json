@@ -1,0 +1,132 @@
+{"state": [{"name": "total", "kind": {"cell": "UIntRange<256>"}}],
+ "schemaVersion": 1,
+ "reads": [{"type": "UIntRange<256>", "name": "expected"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "expected"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "expected"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"value": "0", "tag": "constant"},
+   "alignment": "field"},
+  {"storage": true,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "result"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "insert", "n": 1}],
+ "nativeCircuitFile": "TypedWitness.ScalarWitness.claim.zkir",
+ "guards": [],
+ "entrypoint": "claim",
+ "contractName": "TypedWitness.ScalarWitness",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "UIntRange<256>",
+    "name": "result",
+    "expression":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "seed"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"value": "1", "tag": "uint", "maximum": "255"},
+       "tag": "let",
+       "name": "$helper2",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper3"},
+        "tag": "let",
+        "name": "$helper4",
+        "body":
+        {"tag": "assertThen",
+         "condition":
+         {"tag": "eq",
+          "right": {"value": "1", "tag": "uint", "maximum": "255"},
+          "left": {"tag": "reference", "name": "$helper4"}},
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper1"},
+           "tag": "let",
+           "name": "$helper5",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper6"},
+            "tag": "let",
+            "name": "$helper7",
+            "body":
+            {"tag": "assertThen",
+             "condition":
+             {"tag": "eq",
+              "right": {"value": "1", "tag": "uint", "maximum": "255"},
+              "left": {"tag": "reference", "name": "$helper7"}},
+             "body":
+             {"value": {"tag": "reference", "name": "$helper5"},
+              "tag": "let",
+              "name": "$helper8",
+              "body": {"tag": "reference", "name": "$helper9"}}}}},
+          "tag": "let",
+          "name": "$helper10",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper1"},
+            "tag": "let",
+            "name": "$helper11",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper12"},
+             "tag": "let",
+             "name": "$helper13",
+             "body":
+             {"tag": "assertThen",
+              "condition":
+              {"tag": "eq",
+               "right": {"value": "1", "tag": "uint", "maximum": "255"},
+               "left": {"tag": "reference", "name": "$helper13"}},
+              "body":
+              {"value": {"tag": "reference", "name": "$helper11"},
+               "tag": "let",
+               "name": "$helper14",
+               "body": {"tag": "reference", "name": "$helper15"}}}}},
+           "tag": "let",
+           "name": "$helper16",
+           "body":
+           {"tag": "assertThen",
+            "condition":
+            {"tag": "eq",
+             "right": {"tag": "reference", "name": "$helper0"},
+             "left": {"tag": "reference", "name": "$helper10"}},
+            "body":
+            {"tag": "assertThen",
+             "condition":
+             {"tag": "eq",
+              "right": {"tag": "reference", "name": "$helper0"},
+              "left": {"tag": "reference", "name": "$helper16"}},
+             "body":
+             {"value": {"tag": "reference", "name": "$helper16"},
+              "tag": "let",
+              "name": "$helper17",
+              "body": {"tag": "reference", "name": "$helper0"}}}}}}}}}}}}],
+  "name": "TypedWitness.scalarRelation",
+  "inputs":
+  [{"visibility": "public", "type": "UIntRange<256>", "name": "expected"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "seed"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "$helper3"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "$helper6"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "$helper9"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "$helper12"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "$helper15"}],
+  "file": "TypedWitness.scalarRelation.zkir",
+  "constraints": []}}

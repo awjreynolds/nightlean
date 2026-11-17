@@ -1,4 +1,6 @@
 import Nightlean.Helpers
+import Nightlean.ComponentDisclosure
+import Nightlean.Types.ValueSchema
 import Lean
 
 namespace Nightlean.Control
@@ -132,6 +134,11 @@ mutual
     | .poseidon2 _ a b =>
       pure (combined (.scalar .native) [← expression checked scope env span a, ← expression checked scope env span b])
     | .witness name ty => pure {ty := .scalar ty, origins := [{name, kind := .provider, span}]}
+    | .witnessCall _ name arguments => do
+      let values ← arguments.mapM (expression checked scope env span)
+      let signature ← liftD (Helpers.witnessSignature checked.program name span)
+      let origins := merge [{name, kind := .provider, span}] (values.flatMap (·.origins))
+      pure {combined signature.result values with origins}
     | .call name arguments =>
       let arguments ← arguments.mapM (expression checked scope env span)
       let target ← liftD (checked.resolve scope name (arguments.map (·.ty)) span)
@@ -257,6 +264,8 @@ private structure EmitState where
   remaining : Nat
   witnesses : List (String × Ty) := []
   bytes : Nat := 1048576
+  typed : Bool := false
+  types : List (String × Types.CompiledType) := []
   deriving Inhabited
 private abbrev EmitM := StateT EmitState (Except Diagnostic)
 
@@ -272,6 +281,32 @@ private def emitSpend (span : SourceSpan) : EmitM Unit := do
   chargeBytes (512 + 6 * span.file.utf8ByteSize)
 
 private def emitLift (value : Except Diagnostic α) : EmitM α := liftM value
+
+private def emitType (checked : Helpers.Prepared) (span : SourceSpan) (type : ResultType) : EmitM String := do
+  match type with
+  | .unit | .scalar _ => pure (typeName type)
+  | .composite type =>
+    let compiled ← match Types.compileType checked.program.composites type with
+      | .ok value => pure value
+      | .error diagnostic => emitLift (fail span diagnostic.message)
+    if let some (id, _) := (← get).types.find? (fun item => item.2.fingerprint == compiled.fingerprint) then
+      pure ("Aggregate:" ++ id)
+    else
+      let state ← get
+      if state.types.length >= 128 then emitLift (fail span "typed control schema limit exceeded")
+      let schema ← emitLift (liftError span (Types.schemaJson compiled))
+      chargeBytes (128 + schema.compress.utf8ByteSize)
+      let id := s!"t{state.types.length}"
+      modify fun state => {state with types := state.types ++ [(id, compiled)]}
+      pure ("Aggregate:" ++ id)
+
+private def projectionJson : Types.Projection → Json
+  | .tupleIndex index => Json.mkObj [("kind", toJson ("tupleIndex" : String)), ("index", toJson (toString index))]
+  | .field name => Json.mkObj [("kind", toJson ("field" : String)), ("name", toJson name)]
+  | .vectorIndex index => Json.mkObj [("kind", toJson ("vectorIndex" : String)), ("index", toJson (toString index))]
+  | .byteIndex index => Json.mkObj [("kind", toJson ("byteIndex" : String)), ("index", toJson (toString index))]
+  | .enumField variant name => Json.mkObj [("kind", toJson ("enumField" : String)),
+      ("variant", toJson variant), ("name", toJson name)]
 
 mutual
   private partial def emitExpression (checked : Helpers.Prepared) (scope : Nat) (env : Helpers.Environment)
@@ -306,6 +341,7 @@ mutual
       pure (node span "call" [("function", toJson (idName target.id)),
         ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
     | .witness name ty =>
+      if (← get).typed then emitLift (fail span "typed control plans require declared witnessCall providers")
       unless hostName name do emitLift (fail span "invalid control witness provider name")
       chargeBytes (6 * name.utf8ByteSize)
       let state ← get
@@ -316,8 +352,26 @@ mutual
         chargeBytes (512 + 6 * name.utf8ByteSize)
         modify fun state => {state with witnesses := state.witnesses ++ [(name, ty)]}
       pure (node span "witness" [("name", toJson name), ("type", toJson (typeName (.scalar ty)))])
+    | .witnessCall site name arguments =>
+      unless (← get).typed do emitLift (fail span "typed witness calls require control schema version 2")
+      chargeBytes (6 * (site.utf8ByteSize + name.utf8ByteSize))
+      pure (node span "witnessCall" [("site", toJson site), ("name", toJson name),
+        ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
     | .effect .. => emitLift (fail span "portable control capability unavailable: labelled effect fixture")
-    | .composite .. | .project .. | .index .. => emitLift (fail span "aggregate control values are unavailable")
+    | .composite type leaves =>
+      unless (← get).typed do emitLift (fail span "aggregate control values require schema version 2")
+      pure (node span "composite" [("type", toJson (← emitType checked span (.composite type))),
+        ("leaves", toJson (← leaves.mapM (emitExpression checked scope env span)))])
+    | .project value projection =>
+      unless (← get).typed do emitLift (fail span "aggregate control values require schema version 2")
+      let info ← emitLift (checked.infer scope env span (.project value projection))
+      pure (node span "project" [("value", ← emitExpression checked scope env span value),
+        ("projection", projectionJson projection), ("type", toJson (← emitType checked span info.ty))])
+    | .index value index =>
+      unless (← get).typed do emitLift (fail span "aggregate control values require schema version 2")
+      let info ← emitLift (checked.infer scope env span (.index value index))
+      pure (node span "index" [("value", ← emitExpression checked scope env span value),
+        ("index", ← emitExpression checked scope env span index), ("type", toJson (← emitType checked span info.ty))])
     | .at span value => emitExpression checked scope env span value
 
   private partial def emitBody (checked : Helpers.Prepared) (target : Helpers.Declaration) (env : Helpers.Environment)
@@ -332,7 +386,7 @@ mutual
           chargeBytes (6 * name.utf8ByteSize)
           let value ← emitExpression checked target.id.scope env target.span value
           env := (name, ty) :: env
-          pure (node target.span "bind" [("name", toJson name), ("type", toJson (typeName ty)), ("value", value)])
+          pure (node target.span "bind" [("name", toJson name), ("type", toJson (← emitType checked target.span ty)), ("value", value)])
         | .evaluate value => pure (node target.span "evaluate" [("value", ← emitExpression checked target.id.scope env target.span value)])
         | .assert condition => pure (node target.span "assert" [("condition", ← emitExpression checked target.id.scope env target.span condition)])
         | .return value => pure (node target.span "return" [("value", ← match value with
@@ -352,7 +406,7 @@ end
 
 /-- Portable host-only plan. Named calls reference a function table and never
 copy callee subtrees. Native guarded lowering remains gated until CF-02. -/
-def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
+private def compileScalarWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
     (maxPlanBytes : Nat := 1048576) : Except Diagnostic Json := do
   if maxPlanBytes > 1048576 then fail {} "control byte limit exceeds hard policy"
   let checked ← Helpers.prepareWithLimits limits program
@@ -392,6 +446,83 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
     ("limits", Json.mkObj [("maxSteps", toJson limits.maxExecutionSteps)])]
   if plan.compress.utf8ByteSize > maxPlanBytes then fail entry.span "control plan byte limit exceeded"
   pure plan
+
+/-- Typed private execution shares helper checking and component disclosure.
+Native circuit binding is supplied only by Witness.compile after actual lowering. -/
+def compileTypedWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
+    (maxPlanBytes : Nat := 1048576) : Except Diagnostic Json := do
+  if maxPlanBytes > 1048576 then fail {} "control byte limit exceeds hard policy"
+  let checked ← Helpers.prepareWithLimits limits program
+  ComponentDisclosure.checkProgram program entryName
+  let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown control entrypoint"
+  let target ← declaration program entry.target entry.span
+  let functions := program.declarations.filter fun value => checked.summaries.any (·.id == value.id)
+  let emit : EmitM (List Json × List Json × List Json) := do
+    chargeBytes (1024 + 6 * entry.name.utf8ByteSize)
+    let mut inputValues := []
+    let mut scalarInputs := entry.inputs
+    let mut aggregateInputs := entry.compositeInputs
+    for parameter in target.parameters do
+      let (name, type, visibility, span) ← match target.parameterType parameter with
+        | .scalar _ => do
+          let some input := scalarInputs.head? | emitLift (fail entry.span "typed input signature mismatch")
+          scalarInputs := scalarInputs.drop 1
+          pure (input.name, ResultType.scalar input.ty, input.visibility, input.span)
+        | .composite _ => do
+          let some input := aggregateInputs.head? | emitLift (fail entry.span "typed input signature mismatch")
+          aggregateInputs := aggregateInputs.drop 1
+          pure (input.name, ResultType.composite input.type, input.visibility, input.span)
+        | .unit => emitLift (fail entry.span "helper parameters cannot have unit type")
+      emitLift (portableName span name)
+      chargeBytes (512 + 6 * name.utf8ByteSize)
+      inputValues := inputValues ++ [Json.mkObj [("name", toJson name),
+        ("type", toJson (← emitType checked span type)),
+        ("visibility", toJson (if visibility == .public then "public" else "private"))]]
+    unless scalarInputs.isEmpty && aggregateInputs.isEmpty do emitLift (fail entry.span "typed input signature mismatch")
+    let mut signatures := []
+    for signature in program.witnesses do
+      chargeBytes (512 + 6 * (signature.name.utf8ByteSize + signature.operation.utf8ByteSize + signature.capability.utf8ByteSize))
+      let mut parameters := []
+      for parameter in signature.parameters do
+        chargeBytes (128 + 6 * parameter.name.utf8ByteSize)
+        parameters := parameters ++ [Json.mkObj [("name", toJson parameter.name),
+          ("type", toJson (← emitType checked signature.span parameter.type))]]
+      signatures := signatures ++ [Json.mkObj [("name", toJson signature.name),
+        ("operation", toJson signature.operation), ("capability", toJson signature.capability),
+        ("privateKey", toJson signature.privateKey),
+        ("parameters", toJson parameters), ("resultType", toJson (← emitType checked signature.span signature.result))]]
+    let mut values := []
+    for function in functions do
+      emitLift (portableName function.span function.name)
+      chargeBytes (512 + 6 * function.name.utf8ByteSize)
+      let mut parameters := []
+      for parameter in function.parameters do
+        emitLift (portableName function.span parameter.name)
+        chargeBytes (128 + 6 * parameter.name.utf8ByteSize)
+        parameters := parameters ++ [Json.mkObj [("name", toJson parameter.name),
+          ("type", toJson (← emitType checked function.span (function.parameterType parameter)))]]
+      let resultType ← emitType checked function.span function.result
+      let env := function.parameters.map fun parameter => (parameter.name, function.parameterType parameter)
+      let body ← emitBody checked function env function.body
+      values := values ++ [Json.mkObj [("id", toJson (idName function.id)), ("name", toJson function.name),
+        ("parameters", toJson parameters), ("resultType", toJson resultType), ("body", toJson body)]]
+    pure (inputValues, signatures, values)
+  let ((inputs, signatures, functions), state) ← emit.run
+    {remaining := limits.maxExecutionSteps, bytes := maxPlanBytes, typed := true}
+  let types ← state.types.mapM fun (id, compiled) => do
+    pure (Json.mkObj [("id", toJson id), ("schema", ← liftError entry.span (Types.schemaJson compiled))])
+  let plan := Json.mkObj [("schemaVersion", toJson (2 : Nat)), ("kind", toJson ("host-control" : String)),
+    ("mode", toJson ("host" : String)), ("binding", Json.null), ("name", toJson entry.name),
+    ("inputs", toJson inputs), ("witnesses", toJson signatures), ("types", toJson types),
+    ("functions", toJson functions), ("entry", toJson (idName entry.target)),
+    ("limits", Json.mkObj [("maxSteps", toJson limits.maxExecutionSteps)])]
+  if plan.compress.utf8ByteSize > maxPlanBytes then fail entry.span "control plan byte limit exceeded"
+  pure plan
+
+def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
+    (maxPlanBytes : Nat := 1048576) : Except Diagnostic Json :=
+  if program.witnesses.isEmpty then compileScalarWithLimits limits program entryName maxPlanBytes
+  else compileTypedWithLimits limits program entryName maxPlanBytes
 
 def compile (program : Program) (entryName : String) : Except Diagnostic Json :=
   compileWithLimits {} program entryName

@@ -1,11 +1,15 @@
-//! Host-only structured execution. This plan never authenticates native proof or ledger guards.
-use crate::{ScalarType, Value, canonical_field, host, input_value, max_uint, scalars};
+//! Version 1 plans use host policy. Version 2 plans bind typed source execution to retained artifacts.
+//! This interpreter enforces source disclosure and control checks. Native proof verification remains in the proof module.
+use crate::{ScalarType, Value, canonical_field, host, input_value, max_uint, scalars, witness};
 use anyhow::{Result, anyhow, bail, ensure};
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
+    ops::{Deref, DerefMut},
     sync::Arc,
+    sync::atomic::{AtomicU64, AtomicUsize, Ordering},
 };
 use zeroize::Zeroize;
 
@@ -16,27 +20,90 @@ const MAX_DEPTH: usize = 128;
 const MAX_FUNCTIONS: usize = 256;
 const MAX_ARGUMENTS: usize = 64;
 const MAX_WITNESSES: usize = 32;
+const MAX_AGGREGATE_JSON_NODES: usize = 65_536;
+const MAX_AGGREGATE_VALUE_BYTES: usize = 2 * MAX_BYTES;
+const MAX_SESSION_AGGREGATE_BYTES: usize = 4 * MAX_BYTES;
+const MAX_COMPLETED_INPUT_BYTES: usize = MAX_BYTES;
+const AGGREGATE_MATERIALIZATION_ENTRY_OVERHEAD: usize = 256;
+static NEXT_TYPED_REQUEST_ID: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Type {
-    Unit,
-    Scalar(ScalarType),
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct InvocationTarget {
+    pub contract_address: String,
+    pub entrypoint: String,
 }
-impl Type {
-    fn parse(text: &str) -> Result<Self> {
-        if text == "Unit" {
-            Ok(Self::Unit)
-        } else {
-            Ok(Self::Scalar(ScalarType::parse(text)?))
-        }
+pub(crate) struct AuthenticatedNativeTarget {
+    pub context_id: u64,
+    pub contract_address: String,
+    pub entrypoint: String,
+    pub control_plan: Json,
+    pub control_plan_bytes: Vec<u8>,
+    pub binding_bytes: Vec<u8>,
+    pub relation: Json,
+}
+impl InvocationTarget {
+    fn validate(&self) -> Result<()> {
+        ensure!(
+            self.contract_address.len() == 64
+                && self
+                    .contract_address
+                    .bytes()
+                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+            "invalid invocation contract address"
+        );
+        ensure!(
+            host_identifier(&self.entrypoint),
+            "invalid invocation entrypoint"
+        );
+        Ok(())
     }
+}
+
+type Type = witness::Type;
+
+fn parse_type(text: &str, registry: &witness::Registry) -> Result<Type> {
+    if text == "Unit" {
+        Ok(Type::Unit)
+    } else if text.starts_with("Aggregate:") {
+        ensure!(registry.contains(text), "unknown control aggregate type");
+        Ok(Type::Aggregate(text.to_owned()))
+    } else {
+        Ok(Type::Scalar(ScalarType::parse(text)?))
+    }
+}
+
+impl Type {
     fn coerce(&self, mut value: Tracked) -> Result<Tracked> {
-        value.known = known_cast(self, value.known.take());
-        value.value = match (self, value.value) {
-            (Self::Unit, None) => None,
-            (Self::Scalar(ty), Some(value)) => Some(value.cast(ty)?),
-            _ => bail!("control value type mismatch"),
-        };
+        match self {
+            Self::Unit => {
+                ensure!(
+                    value.value.is_none() && value.aggregate.is_none(),
+                    "control value type mismatch"
+                );
+                value.known = Some(None);
+            }
+            Self::Scalar(ty) => {
+                ensure!(value.aggregate.is_none(), "control value type mismatch");
+                value.value = Some(
+                    value
+                        .value
+                        .take()
+                        .ok_or_else(|| anyhow!("control scalar required"))?
+                        .cast(ty)?,
+                );
+                value.known = known_cast(self, value.known.take());
+            }
+            Self::Aggregate(token) => {
+                ensure!(value.value.is_none(), "control value type mismatch");
+                let aggregate = value
+                    .aggregate
+                    .as_mut()
+                    .ok_or_else(|| anyhow!("control aggregate required"))?;
+                ensure!(&aggregate.token == token, "control aggregate type mismatch");
+                value.known = None;
+            }
+        }
         Ok(value)
     }
 }
@@ -144,6 +211,23 @@ enum ExprKind {
     Hash(String, Arc<Expr>, Arc<Expr>),
     Call(String, Vec<Arc<Expr>>),
     Witness(String),
+    WitnessCall {
+        name: String,
+        site: String,
+        arguments: Vec<Arc<Expr>>,
+    },
+    Composite {
+        token: String,
+        leaves: Vec<Arc<Expr>>,
+    },
+    Project {
+        value: Arc<Expr>,
+        projection: witness::Projection,
+    },
+    Index {
+        value: Arc<Expr>,
+        index: Arc<Expr>,
+    },
 }
 #[derive(Clone)]
 enum Stmt {
@@ -169,13 +253,21 @@ struct Function {
     signature: Signature,
     body: Arc<Block>,
     calls: Vec<String>,
+    witness_sites: BTreeSet<String>,
     nodes: usize,
     depth: usize,
 }
 struct Plan {
+    schema_version: u32,
+    mode: Option<String>,
     functions: BTreeMap<String, Arc<Function>>,
     inputs: Vec<(String, String, bool)>,
     witnesses: BTreeMap<String, String>,
+    signatures: BTreeMap<String, witness::WitnessSignature>,
+    registry: witness::Registry,
+    binding: Option<Json>,
+    native_relation: Option<Json>,
+    bound_calls: Vec<Json>,
     entry: String,
     name: String,
     max_steps: usize,
@@ -183,9 +275,13 @@ struct Plan {
 struct Parser<'a> {
     signatures: &'a BTreeMap<String, Signature>,
     witnesses: &'a BTreeMap<String, String>,
+    typed_witnesses: &'a BTreeMap<String, witness::WitnessSignature>,
+    registry: &'a witness::Registry,
+    schema_version: u32,
     nodes: usize,
     deepest: usize,
     calls: Vec<String>,
+    witness_sites: BTreeSet<String>,
 }
 impl Parser<'_> {
     fn tick(&mut self, depth: usize) -> Result<()> {
@@ -236,7 +332,7 @@ impl Parser<'_> {
             }
             "cast" => {
                 shape(v, &["tag", "type", "value"], true)?;
-                let target = Type::parse(text(v, "type")?)?;
+                let target = parse_type(text(v, "type")?, self.registry)?;
                 scalar_type(&target)?;
                 let x = self.expr(field(v, "value")?, env, depth + 1)?;
                 scalar_type(&x.ty)?;
@@ -359,6 +455,10 @@ impl Parser<'_> {
                 (sig.result, ExprKind::Call(id, args))
             }
             "witness" => {
+                ensure!(
+                    self.schema_version == 1,
+                    "legacy witness expression in v2 plan"
+                );
                 shape(v, &["tag", "name", "type"], true)?;
                 let n = name(text(v, "name")?)?;
                 ensure!(host_identifier(&n), "invalid control witness identifier");
@@ -368,6 +468,143 @@ impl Parser<'_> {
                     "control witness schema mismatch"
                 );
                 (Type::Scalar(ScalarType::parse(t)?), ExprKind::Witness(n))
+            }
+            "witnessCall" => {
+                ensure!(
+                    self.schema_version == 2,
+                    "typed witness call requires v2 plan"
+                );
+                shape(v, &["tag", "name", "site", "arguments"], true)?;
+                let witness_name = text(v, "name")?.to_owned();
+                let site = name(text(v, "site")?)?;
+                ensure!(host_identifier(&site), "invalid control witness call site");
+                ensure!(
+                    self.witness_sites.insert(site.clone()),
+                    "duplicate control witness site"
+                );
+                let signature = self
+                    .typed_witnesses
+                    .get(&witness_name)
+                    .ok_or_else(|| anyhow!("unknown typed witness signature"))?
+                    .clone();
+                let raw = list(v, "arguments")?;
+                ensure!(
+                    raw.len() == signature.parameters.len(),
+                    "control witness arity"
+                );
+                let arguments = raw
+                    .iter()
+                    .map(|argument| self.expr(argument, env, depth + 1))
+                    .collect::<Result<Vec<_>>>()?;
+                for (argument, parameter) in arguments.iter().zip(&signature.parameters) {
+                    let expected = parse_type(&parameter.type_token, self.registry)?;
+                    ensure!(
+                        subtype(&argument.ty, &expected),
+                        "control witness argument type"
+                    );
+                }
+                let result = parse_type(&signature.result_type, self.registry)?;
+                (
+                    result,
+                    ExprKind::WitnessCall {
+                        name: witness_name,
+                        site,
+                        arguments,
+                    },
+                )
+            }
+            "composite" => {
+                ensure!(
+                    self.schema_version == 2,
+                    "composite expression requires v2 plan"
+                );
+                shape(v, &["tag", "type", "leaves"], true)?;
+                let ty = parse_type(text(v, "type")?, self.registry)?;
+                let Type::Aggregate(token) = ty else {
+                    bail!("composite expression requires aggregate type")
+                };
+                let raw = list(v, "leaves")?;
+                let leaf_types = self.registry.leaf_types(&token)?;
+                ensure!(
+                    raw.len() == leaf_types.len(),
+                    "control aggregate leaf count"
+                );
+                let leaves = raw
+                    .iter()
+                    .map(|leaf| self.expr(leaf, env, depth + 1))
+                    .collect::<Result<Vec<_>>>()?;
+                for (leaf, expected) in leaves.iter().zip(leaf_types) {
+                    ensure!(
+                        leaf.ty == parse_type(&expected, self.registry)?,
+                        "control aggregate leaf type"
+                    );
+                }
+                (
+                    Type::Aggregate(token.clone()),
+                    ExprKind::Composite { token, leaves },
+                )
+            }
+            "project" => {
+                ensure!(
+                    self.schema_version == 2,
+                    "aggregate projection requires v2 plan"
+                );
+                shape(v, &["tag", "value", "projection", "type"], true)?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                let Type::Aggregate(token) = &value.ty else {
+                    bail!("aggregate projection requires aggregate value")
+                };
+                let projected = text(v, "type")?.to_owned();
+                let projected_type = parse_type(&projected, self.registry)?;
+                let raw = field(v, "projection")?;
+                let kind = text(raw, "kind")?.to_owned();
+                let (index, field_name, variant) = match kind.as_str() {
+                    "tupleIndex" | "vectorIndex" | "byteIndex" => {
+                        shape(raw, &["kind", "index"], false)?;
+                        (Some(canonical_index(text(raw, "index")?)?), None, None)
+                    }
+                    "field" => {
+                        shape(raw, &["kind", "name"], false)?;
+                        (None, Some(name(text(raw, "name")?)?), None)
+                    }
+                    "enumField" => {
+                        shape(raw, &["kind", "variant", "name"], false)?;
+                        (
+                            None,
+                            Some(name(text(raw, "name")?)?),
+                            Some(name(text(raw, "variant")?)?),
+                        )
+                    }
+                    _ => bail!("unsupported aggregate projection"),
+                };
+                let projection = witness::Projection {
+                    kind,
+                    index,
+                    name: field_name,
+                    variant,
+                    type_token: projected.clone(),
+                };
+                let (actual, _) = self.registry.projection_type(token, &projection)?;
+                ensure!(actual == projected, "control projection result type");
+                (projected_type, ExprKind::Project { value, projection })
+            }
+            "index" => {
+                ensure!(self.schema_version == 2, "aggregate index requires v2 plan");
+                shape(v, &["tag", "value", "index", "type"], true)?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                let Type::Aggregate(token) = &value.ty else {
+                    bail!("aggregate index requires aggregate value")
+                };
+                let index = self.expr(field(v, "index")?, env, depth + 1)?;
+                ensure!(
+                    matches!(scalar_type(&index.ty)?, ScalarType::UInt(_)),
+                    "aggregate index must be bounded unsigned"
+                );
+                let projected = text(v, "type")?.to_owned();
+                let projected_type = parse_type(&projected, self.registry)?;
+                let actual = self.registry.index_type(token)?;
+                ensure!(actual == projected, "control index result type");
+                (projected_type, ExprKind::Index { value, index })
             }
             _ => bail!("unsupported control expression"),
         };
@@ -390,7 +627,7 @@ impl Parser<'_> {
                     shape(value, &["tag", "name", "type", "value"], true)?;
                     let n = name(text(value, "name")?)?;
                     ensure!(!env.contains_key(&n), "duplicate control local");
-                    let t = Type::parse(text(value, "type")?)?;
+                    let t = parse_type(text(value, "type")?, self.registry)?;
                     let x = self.expr(field(value, "value")?, &env, depth + 1)?;
                     ensure!(subtype(&x.ty, &t), "control binding type");
                     env.insert(n.clone(), t.clone());
@@ -443,7 +680,7 @@ impl Parser<'_> {
                 "stage" => {
                     shape(value, &["tag", "capability", "key", "type", "value"], true)?;
                     let t = text(value, "type")?.to_owned();
-                    let target = Type::Scalar(ScalarType::parse(&t)?);
+                    let target = parse_type(&t, self.registry)?;
                     let x = self.expr(field(value, "value")?, &env, depth + 1)?;
                     ensure!(subtype(&x.ty, &target), "control private stage type");
                     {
@@ -463,7 +700,7 @@ impl Parser<'_> {
         Ok(Arc::new(block))
     }
 }
-fn parse_parameters(v: &Json) -> Result<Vec<(String, Type)>> {
+fn parse_parameters(v: &Json, registry: &witness::Registry) -> Result<Vec<(String, Type)>> {
     let values = list(v, "parameters")?;
     ensure!(values.len() <= MAX_ARGUMENTS, "control parameter limit");
     let mut names = BTreeSet::new();
@@ -473,10 +710,107 @@ fn parse_parameters(v: &Json) -> Result<Vec<(String, Type)>> {
             shape(v, &["name", "type"], false)?;
             let n = name(text(v, "name")?)?;
             ensure!(names.insert(n.clone()), "duplicate control parameter");
-            let t = Type::Scalar(ScalarType::parse(text(v, "type")?)?);
+            let t = parse_type(text(v, "type")?, registry)?;
             Ok((n, t))
         })
         .collect()
+}
+fn canonical_index(text: &str) -> Result<usize> {
+    ensure!(
+        !text.is_empty()
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "noncanonical control index"
+    );
+    text.parse::<usize>()
+        .map_err(|_| anyhow!("control index out of range"))
+}
+fn canonical_u64(text: &str) -> Result<u64> {
+    ensure!(
+        !text.is_empty()
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "noncanonical control request id"
+    );
+    text.parse::<u64>()
+        .map_err(|_| anyhow!("control request id out of range"))
+}
+fn witness_signature(v: &Json, registry: &witness::Registry) -> Result<witness::WitnessSignature> {
+    shape(
+        v,
+        &[
+            "name",
+            "operation",
+            "capability",
+            "privateKey",
+            "parameters",
+            "resultType",
+        ],
+        false,
+    )?;
+    let signature_name = name(text(v, "name")?)?;
+    let operation = text(v, "operation")?.to_owned();
+    let capability = text(v, "capability")?.to_owned();
+    let private_key = if field(v, "privateKey")?.is_null() {
+        None
+    } else {
+        let key = text(v, "privateKey")?.to_owned();
+        ensure!(host_key(&key), "invalid typed witness private key");
+        Some(key)
+    };
+    ensure!(
+        host_identifier(&signature_name) && host_identifier(&capability),
+        "invalid typed witness identity"
+    );
+    ensure!(
+        host_identifier(&operation) && operation.ends_with(".v1"),
+        "invalid typed witness operation"
+    );
+    ensure!(
+        operation != host::STAGE && operation != host::CAS,
+        "private state journal operations are reserved for source effects"
+    );
+    let mut parameter_names = BTreeSet::new();
+    let mut parameters = Vec::new();
+    for parameter in list(v, "parameters")? {
+        shape(parameter, &["name", "type"], false)?;
+        let parameter_name = name(text(parameter, "name")?)?;
+        ensure!(
+            host_identifier(&parameter_name) && parameter_names.insert(parameter_name.clone()),
+            "invalid or duplicate typed witness parameter"
+        );
+        let type_token = text(parameter, "type")?.to_owned();
+        parse_type(&type_token, registry)?;
+        parameters.push(witness::Parameter {
+            name: parameter_name,
+            type_token,
+        });
+    }
+    ensure!(
+        parameters.len() <= MAX_ARGUMENTS,
+        "typed witness parameter limit"
+    );
+    if operation == host::READ {
+        ensure!(
+            private_key.is_some() && parameters.is_empty(),
+            "private state witness requires a fixed source key"
+        );
+    } else {
+        ensure!(
+            private_key.is_none(),
+            "private key is restricted to private state reads"
+        );
+    }
+    let result_type = text(v, "resultType")?.to_owned();
+    parse_type(&result_type, registry)?;
+    Ok(witness::WitnessSignature {
+        name: signature_name,
+        operation,
+        capability,
+        private_key,
+        parameters,
+        result_type,
+    })
 }
 fn raw_preflight(value: &Json) -> Result<()> {
     let mut work = vec![(value, 0usize)];
@@ -514,31 +848,457 @@ fn raw_preflight(value: &Json) -> Result<()> {
     Ok(())
 }
 
+fn validate_relation_inputs(
+    relation: &Json,
+    circuit_inputs: &BTreeMap<String, (String, String)>,
+) -> Result<()> {
+    let version = field(relation, "version")?;
+    ensure!(
+        field(version, "major")?.as_u64() == Some(3)
+            && field(version, "minor")?.as_u64() == Some(2),
+        "invalid native relation version"
+    );
+    let instructions = list(relation, "instructions")?;
+    let mut declared = BTreeMap::new();
+    let mut bit_constraints = BTreeMap::<String, Vec<u64>>::new();
+    let mut aliases = BTreeMap::<String, String>::new();
+    let mut pending_constraints = Vec::new();
+    for instruction in instructions {
+        let operation = text(instruction, "op")?;
+        if matches!(operation, "public_input" | "private_input") {
+            let output = text(instruction, "output")?;
+            let input_name = output
+                .strip_prefix("%input_")
+                .ok_or_else(|| anyhow!("invalid native input operation"))?;
+            ensure!(
+                text(instruction, "type")? == "Scalar<BLS12-381>",
+                "unsupported native circuit input type"
+            );
+            let visibility = if operation == "public_input" {
+                "public"
+            } else {
+                "private"
+            };
+            ensure!(
+                declared
+                    .insert(input_name.to_owned(), visibility.to_owned())
+                    .is_none(),
+                "duplicate native relation input"
+            );
+        } else if operation == "constrain_bits" {
+            if let (Some(input), Some(bits)) = (
+                instruction.get("val").and_then(Json::as_str),
+                instruction.get("bits").and_then(Json::as_u64),
+            ) {
+                pending_constraints.push((input.to_owned(), bits));
+            }
+        } else if operation == "cond_select" {
+            let selected = match instruction.get("bit").and_then(Json::as_str) {
+                Some("0x01") => instruction.get("a").and_then(Json::as_str),
+                Some("0x00") => instruction.get("b").and_then(Json::as_str),
+                _ => None,
+            };
+            if let (Some(output), Some(selected)) =
+                (instruction.get("output").and_then(Json::as_str), selected)
+            {
+                aliases.insert(output.to_owned(), selected.to_owned());
+            }
+        }
+    }
+    for (mut value, bits) in pending_constraints {
+        let mut steps = 0usize;
+        while let Some(next) = aliases.get(&value) {
+            value = next.clone();
+            steps += 1;
+            ensure!(steps <= instructions.len(), "cyclic native input alias");
+        }
+        if let Some(input) = value.strip_prefix("%input_") {
+            bit_constraints
+                .entry(input.to_owned())
+                .or_default()
+                .push(bits);
+        }
+    }
+    ensure!(
+        declared.len() == circuit_inputs.len()
+            && declared.iter().all(|(name, visibility)| {
+                circuit_inputs
+                    .get(name)
+                    .is_some_and(|(ty, expected_visibility)| {
+                        expected_visibility == visibility && ScalarType::parse(ty).is_ok()
+                    })
+            }),
+        "native relation input map differs from witness binding"
+    );
+    for (name, (type_token, _)) in circuit_inputs {
+        let required_bits = match ScalarType::parse(type_token)? {
+            ScalarType::Native => None,
+            ScalarType::Bool => Some(1),
+            ScalarType::UInt(maximum) => Some(maximum.bits().max(1)),
+        };
+        if let Some(bits) = required_bits {
+            ensure!(
+                bit_constraints
+                    .get(name)
+                    .is_some_and(|values| values.contains(&bits)),
+                "native relation does not constrain the declared witness input width"
+            );
+        }
+    }
+    Ok(())
+}
+
+fn validate_native_binding(
+    binding: &Json,
+    plan_name: &str,
+    entry: &str,
+    signatures: &BTreeMap<String, witness::WitnessSignature>,
+    signature_jsons: &[Json],
+    type_declarations: &[Json],
+    source_inputs: &[(String, String, bool)],
+    functions: &BTreeMap<String, Arc<Function>>,
+    registry: &witness::Registry,
+) -> Result<Vec<Json>> {
+    shape(
+        binding,
+        &[
+            "schemaVersion",
+            "kind",
+            "circuitName",
+            "sourceExport",
+            "target",
+            "types",
+            "inputBindings",
+            "nativeRelation",
+            "circuitInputs",
+            "circuitOutputs",
+            "signatures",
+            "calls",
+        ],
+        false,
+    )?;
+    ensure!(
+        field(binding, "schemaVersion")?.as_u64() == Some(1)
+            && text(binding, "kind")? == "typed-witness-bindings"
+            && text(binding, "sourceExport")? == plan_name,
+        "invalid native witness binding identity"
+    );
+    name(text(binding, "circuitName")?)?;
+    ensure!(
+        field(binding, "nativeRelation")?.is_object(),
+        "invalid native relation binding"
+    );
+    ensure!(
+        field(binding, "signatures")? == &Json::Array(signature_jsons.to_vec()),
+        "native witness signature mismatch"
+    );
+    ensure!(
+        field(binding, "types")? == &Json::Array(type_declarations.to_vec()),
+        "native witness aggregate type mismatch"
+    );
+    match text(field(binding, "target")?, "kind")? {
+        "standalone" => shape(field(binding, "target")?, &["kind"], false)?,
+        "entrypoint" => {
+            let target = field(binding, "target")?;
+            shape(
+                target,
+                &[
+                    "kind",
+                    "contractName",
+                    "entrypoint",
+                    "nativeCircuitFile",
+                    "targetProfile",
+                ],
+                false,
+            )?;
+            for key in [
+                "contractName",
+                "entrypoint",
+                "nativeCircuitFile",
+                "targetProfile",
+            ] {
+                ensure!(
+                    host_identifier(text(target, key)?),
+                    "invalid native target identity"
+                );
+            }
+        }
+        _ => bail!("invalid native target identity"),
+    }
+
+    let mut circuit_inputs = BTreeMap::new();
+    for input in list(binding, "circuitInputs")? {
+        shape(input, &["name", "type", "visibility"], false)?;
+        let input_name = name(text(input, "name")?)?;
+        let input_type = text(input, "type")?.to_owned();
+        scalar_type(&parse_type(&input_type, registry)?)?;
+        let visibility = text(input, "visibility")?;
+        ensure!(
+            ["public", "private"].contains(&visibility)
+                && circuit_inputs
+                    .insert(input_name, (input_type, visibility.to_owned()))
+                    .is_none(),
+            "invalid or duplicate native circuit input"
+        );
+    }
+    ensure!(circuit_inputs.len() <= 4096, "native circuit input limit");
+    let mut output_names = BTreeSet::new();
+    for output in list(binding, "circuitOutputs")? {
+        shape(output, &["name", "type"], false)?;
+        let output_name = name(text(output, "name")?)?;
+        scalar_type(&parse_type(text(output, "type")?, registry)?)?;
+        ensure!(
+            output_names.insert(output_name),
+            "duplicate native circuit output"
+        );
+    }
+
+    let calls = list(binding, "calls")?;
+    ensure!(
+        calls.len() <= MAX_NODES,
+        "native witness call binding limit"
+    );
+    let mut expected_inputs = BTreeMap::<String, (String, String)>::new();
+    let input_bindings = list(binding, "inputBindings")?;
+    ensure!(
+        input_bindings.len() == source_inputs.len(),
+        "native source input binding count"
+    );
+    for ((source_name, source_type, is_private), input_binding) in
+        source_inputs.iter().zip(input_bindings)
+    {
+        shape(input_binding, &["name", "type", "inputs"], false)?;
+        ensure!(
+            text(input_binding, "name")? == source_name
+                && text(input_binding, "type")? == source_type,
+            "native source input binding mismatch"
+        );
+        let expected_leaf_types = registry.leaf_types(source_type)?;
+        let bound_names = list(input_binding, "inputs")?;
+        ensure!(
+            bound_names.len() == expected_leaf_types.len(),
+            "native source input leaf count"
+        );
+        for (input_name, leaf_type) in bound_names.iter().zip(expected_leaf_types) {
+            let input_name = input_name
+                .as_str()
+                .ok_or_else(|| anyhow!("invalid native source input binding"))?;
+            let visibility = if *is_private { "private" } else { "public" };
+            ensure!(
+                expected_inputs
+                    .insert(
+                        input_name.to_owned(),
+                        (leaf_type.clone(), visibility.to_owned())
+                    )
+                    .is_none(),
+                "duplicate native source input leaf"
+            );
+            let Some((actual_type, visibility)) = circuit_inputs.get(input_name) else {
+                bail!("unknown native source circuit input")
+            };
+            ensure!(
+                (actual_type == &leaf_type || actual_type == "Native")
+                    && visibility == if *is_private { "private" } else { "public" },
+                "native source leaf does not match its circuit input"
+            );
+        }
+    }
+    for (ordinal, call) in calls.iter().enumerate() {
+        shape(
+            call,
+            &["ordinal", "site", "path", "name", "resultType", "inputs"],
+            false,
+        )?;
+        ensure!(
+            canonical_index(text(call, "ordinal")?)? == ordinal,
+            "native witness call ordinal mismatch"
+        );
+        let site = text(call, "site")?;
+        let call_name = text(call, "name")?;
+        let signature = signatures
+            .get(call_name)
+            .ok_or_else(|| anyhow!("unknown bound witness signature"))?;
+        ensure!(
+            host_identifier(site) && text(call, "resultType")? == signature.result_type,
+            "native witness call signature mismatch"
+        );
+        let path = list(call, "path")?;
+        ensure!(
+            !path.is_empty() && path.len() <= 64,
+            "invalid native witness call path"
+        );
+        let path = path
+            .iter()
+            .map(Json::as_str)
+            .collect::<Option<Vec<_>>>()
+            .ok_or_else(|| anyhow!("invalid native witness call path"))?;
+        ensure!(
+            path.first() == Some(&entry),
+            "native witness path entry mismatch"
+        );
+        for id in &path {
+            ensure!(
+                functions.contains_key(*id),
+                "unknown native witness path function"
+            );
+        }
+        for pair in path.windows(2) {
+            ensure!(
+                functions[pair[0]]
+                    .calls
+                    .iter()
+                    .any(|child| child == pair[1]),
+                "invalid native witness call path"
+            );
+        }
+        ensure!(
+            functions[*path.last().unwrap()]
+                .witness_sites
+                .contains(site),
+            "native witness call site mismatch"
+        );
+        let result_type = parse_type(&signature.result_type, registry)?;
+        let leaf_types = match result_type {
+            Type::Unit => vec![],
+            Type::Scalar(_) => vec![signature.result_type.clone()],
+            Type::Aggregate(ref token) => registry.leaf_types(token)?,
+        };
+        let inputs = list(call, "inputs")?;
+        ensure!(
+            inputs.len() == leaf_types.len(),
+            "native witness input binding arity"
+        );
+        for (input, leaf_type) in inputs.iter().zip(leaf_types) {
+            let input = input
+                .as_str()
+                .ok_or_else(|| anyhow!("invalid native witness input binding"))?;
+            ensure!(
+                expected_inputs
+                    .insert(input.to_owned(), (leaf_type.clone(), "private".into()))
+                    .is_none(),
+                "duplicate native witness leaf binding"
+            );
+            let Some((actual_type, visibility)) = circuit_inputs.get(input) else {
+                bail!("unknown native witness circuit input")
+            };
+            ensure!(
+                (actual_type == &leaf_type || actual_type == "Native") && visibility == "private",
+                "native witness leaf is not a matching private circuit input"
+            );
+        }
+    }
+    for (id, function) in functions {
+        for site in &function.witness_sites {
+            ensure!(
+                calls.iter().any(|call| {
+                    text(call, "site").ok() == Some(site.as_str())
+                        && list(call, "path")
+                            .ok()
+                            .and_then(|path| path.last())
+                            .and_then(Json::as_str)
+                            == Some(id.as_str())
+                }),
+                "unbound native witness call site"
+            );
+        }
+    }
+    ensure!(
+        expected_inputs.len() == circuit_inputs.len()
+            && expected_inputs
+                .iter()
+                .all(|(name, (semantic_type, visibility))| {
+                    circuit_inputs
+                        .get(name)
+                        .is_some_and(|(declared_type, declared_visibility)| {
+                            (declared_type == semantic_type || declared_type == "Native")
+                                && declared_visibility == visibility
+                        })
+                }),
+        "unbound native circuit input"
+    );
+    validate_relation_inputs(field(binding, "nativeRelation")?, &expected_inputs)?;
+    Ok(calls.to_vec())
+}
+
 impl Plan {
-    fn parse(v: &Json) -> Result<Self> {
+    fn parse(v: &Json, expected_binding_sha256: Option<&str>) -> Result<Self> {
         raw_preflight(v)?;
         ensure!(
             serde_json::to_vec(v)?.len() <= MAX_BYTES,
             "control plan byte limit"
         );
-        shape(
-            v,
-            &[
-                "schemaVersion",
-                "kind",
-                "name",
-                "inputs",
-                "witnesses",
-                "functions",
-                "entry",
-                "limits",
-            ],
-            false,
-        )?;
+        let schema_version = field(v, "schemaVersion")?
+            .as_u64()
+            .and_then(|value| u32::try_from(value).ok())
+            .ok_or_else(|| anyhow!("invalid control schema version"))?;
+        match schema_version {
+            1 => {
+                shape(
+                    v,
+                    &[
+                        "schemaVersion",
+                        "kind",
+                        "name",
+                        "inputs",
+                        "witnesses",
+                        "functions",
+                        "entry",
+                        "limits",
+                    ],
+                    false,
+                )?;
+                ensure!(
+                    expected_binding_sha256.is_none(),
+                    "unexpected witness binding digest"
+                );
+            }
+            2 => shape(
+                v,
+                &[
+                    "schemaVersion",
+                    "kind",
+                    "name",
+                    "types",
+                    "mode",
+                    "binding",
+                    "inputs",
+                    "witnesses",
+                    "functions",
+                    "entry",
+                    "limits",
+                ],
+                false,
+            )?,
+            _ => bail!("unsupported control schema"),
+        }
         ensure!(
-            field(v, "schemaVersion")?.as_u64() == Some(1) && text(v, "kind")? == "host-control",
+            text(v, "kind")? == "host-control",
             "unsupported control schema"
         );
+
+        let mut registry = witness::Registry::default();
+        let type_declarations = if schema_version == 2 {
+            list(v, "types")?.clone()
+        } else {
+            Vec::new()
+        };
+        if schema_version == 2 {
+            ensure!(
+                type_declarations.len() <= 256,
+                "control aggregate type limit"
+            );
+            let mut type_names = BTreeSet::new();
+            for declaration in &type_declarations {
+                shape(declaration, &["id", "schema"], false)?;
+                let id = name(text(declaration, "id")?)?;
+                ensure!(
+                    host_identifier(&id) && type_names.insert(id.clone()),
+                    "invalid or duplicate aggregate type token"
+                );
+                let bytes = serde_json::to_vec(field(declaration, "schema")?)?;
+                registry.register_json(&format!("Aggregate:{id}"), &bytes)?;
+            }
+        }
         shape(field(v, "limits")?, &["maxSteps"], false)?;
         let max_steps = field(field(v, "limits")?, "maxSteps")?
             .as_u64()
@@ -558,7 +1318,7 @@ impl Plan {
             let n = name(text(input, "name")?)?;
             ensure!(names.insert(n.clone()), "duplicate control input");
             let t = text(input, "type")?.to_owned();
-            ScalarType::parse(&t)?;
+            parse_type(&t, &registry)?;
             let visibility = text(input, "visibility")?;
             ensure!(
                 ["public", "private"].contains(&visibility),
@@ -567,20 +1327,35 @@ impl Plan {
             inputs.push((n, t, visibility == "private"));
         }
         let mut witnesses = BTreeMap::new();
+        let mut typed_witnesses = BTreeMap::new();
+        let mut signature_jsons = Vec::new();
         ensure!(
             list(v, "witnesses")?.len() <= MAX_WITNESSES,
             "control witness limit"
         );
-        for witness in list(v, "witnesses")? {
-            shape(witness, &["name", "type"], true)?;
-            let n = name(text(witness, "name")?)?;
-            ensure!(host_identifier(&n), "invalid control witness identifier");
-            let t = text(witness, "type")?.to_owned();
-            ScalarType::parse(&t)?;
-            ensure!(
-                witnesses.insert(n, t).is_none(),
-                "duplicate control witness"
-            );
+        if schema_version == 1 {
+            for witness in list(v, "witnesses")? {
+                shape(witness, &["name", "type"], true)?;
+                let n = name(text(witness, "name")?)?;
+                ensure!(host_identifier(&n), "invalid control witness identifier");
+                let t = text(witness, "type")?.to_owned();
+                ScalarType::parse(&t)?;
+                ensure!(
+                    witnesses.insert(n, t).is_none(),
+                    "duplicate control witness"
+                );
+            }
+        } else {
+            for signature_json in list(v, "witnesses")? {
+                let signature = witness_signature(signature_json, &registry)?;
+                ensure!(
+                    typed_witnesses
+                        .insert(signature.name.clone(), signature)
+                        .is_none(),
+                    "duplicate typed witness signature"
+                );
+                signature_jsons.push(signature_json.clone());
+            }
         }
         let raw = list(v, "functions")?;
         ensure!(
@@ -593,8 +1368,8 @@ impl Plan {
             let id = name(text(f, "id")?)?;
             name(text(f, "name")?)?;
             let signature = Signature {
-                parameters: parse_parameters(f)?,
-                result: Type::parse(text(f, "resultType")?)?,
+                parameters: parse_parameters(f, &registry)?,
+                result: parse_type(text(f, "resultType")?, &registry)?,
             };
             ensure!(
                 signatures.insert(id, signature).is_none(),
@@ -608,7 +1383,7 @@ impl Plan {
         ensure!(sig.parameters.len() == inputs.len(), "control entry arity");
         for ((_, t, _), (_, expected)) in inputs.iter().zip(&sig.parameters) {
             ensure!(
-                subtype(&Type::Scalar(ScalarType::parse(t)?), expected),
+                subtype(&parse_type(t, &registry)?, expected),
                 "control entry type"
             );
         }
@@ -621,9 +1396,13 @@ impl Plan {
             let mut parser = Parser {
                 signatures: &signatures,
                 witnesses: &witnesses,
+                typed_witnesses: &typed_witnesses,
+                registry: &registry,
+                schema_version,
                 nodes: 0,
                 deepest: 0,
                 calls: vec![],
+                witness_sites: BTreeSet::new(),
             };
             let body = parser.block(list(f, "body")?, &env, &signature.result, 1)?;
             ensure!(
@@ -632,15 +1411,19 @@ impl Plan {
             );
             total += parser.nodes;
             ensure!(total <= MAX_NODES, "control source node limit");
+            let calls = parser.calls;
+            let witness_sites = parser.witness_sites;
+            let nodes = parser.nodes;
+            let deepest = parser.deepest;
             functions.insert(
                 id,
                 Arc::new(Function {
-                    nodes: 3 * (parser.nodes + signature.parameters.len() + 2),
-                    depth: 3
-                        * (body.statements.len() + parser.deepest + signature.parameters.len() + 2),
+                    nodes: 3 * (nodes + signature.parameters.len() + 2),
+                    depth: 3 * (body.statements.len() + deepest + signature.parameters.len() + 2),
                     signature,
                     body,
-                    calls: parser.calls,
+                    calls,
+                    witness_sites,
                 }),
             );
         }
@@ -685,15 +1468,116 @@ impl Plan {
             &mut BTreeMap::new(),
             &mut 0,
         )?;
+        let mode = if schema_version == 2 {
+            Some(text(v, "mode")?.to_owned())
+        } else {
+            None
+        };
+        let (binding, native_relation, bound_calls) = match (schema_version, mode.as_deref()) {
+            (1, None) => (None, None, vec![]),
+            (2, Some("host")) => {
+                ensure!(
+                    field(v, "binding")?.is_null() && expected_binding_sha256.is_none(),
+                    "host control plan must not carry native bindings"
+                );
+                (None, None, vec![])
+            }
+            (2, Some("native")) => {
+                let raw_binding = field(v, "binding")?
+                    .as_str()
+                    .ok_or_else(|| anyhow!("native control plan requires witness binding"))?;
+                let expected = expected_binding_sha256
+                    .ok_or_else(|| anyhow!("trusted witness binding digest required"))?;
+                ensure!(
+                    expected.len() == 64
+                        && expected
+                            .bytes()
+                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+                    "invalid trusted witness binding digest"
+                );
+                let actual = hex::encode(Sha256::digest(raw_binding.as_bytes()));
+                ensure!(actual == expected, "witness binding digest mismatch");
+                let parsed: Json = serde_json::from_str(raw_binding)
+                    .map_err(|_| anyhow!("invalid native witness binding"))?;
+                let bound_calls = validate_native_binding(
+                    &parsed,
+                    text(v, "name")?,
+                    &entry,
+                    &typed_witnesses,
+                    &signature_jsons,
+                    &type_declarations,
+                    &inputs,
+                    &functions,
+                    &registry,
+                )?;
+                let native_relation = field(&parsed, "nativeRelation")?.clone();
+                (Some(parsed), Some(native_relation), bound_calls)
+            }
+            _ => bail!("invalid control execution mode"),
+        };
         Ok(Self {
+            schema_version,
+            mode,
             functions,
             inputs,
             witnesses,
+            signatures: typed_witnesses,
+            registry,
+            binding,
+            native_relation,
+            bound_calls,
             entry,
             name: name(text(v, "name")?)?,
             max_steps: max_steps as usize,
         })
     }
+}
+
+pub(crate) fn validate_witness_artifacts(
+    control_plan: &Json,
+    binding_bytes: &[u8],
+    relation: &Json,
+    contract: &str,
+    entrypoint: &str,
+    circuit_file: &str,
+    profile: &str,
+) -> Result<()> {
+    ensure!(
+        binding_bytes.len() <= 524_288,
+        "typed witness binding byte limit"
+    );
+    let binding_text = std::str::from_utf8(binding_bytes)
+        .map_err(|_| anyhow!("typed witness binding is not UTF-8"))?;
+    ensure!(
+        field(control_plan, "binding")?.as_str() == Some(binding_text),
+        "typed witness binding bytes differ from control plan"
+    );
+    let digest = hex::encode(Sha256::digest(binding_bytes));
+    let parsed = Plan::parse(control_plan, Some(&digest))?;
+    ensure!(
+        parsed.schema_version == 2
+            && parsed.mode.as_deref() == Some("native")
+            && parsed.native_relation.as_ref() == Some(relation),
+        "typed witness relation mismatch"
+    );
+    let binding = parsed
+        .binding
+        .as_ref()
+        .ok_or_else(|| anyhow!("missing typed witness binding"))?;
+    ensure!(
+        field(binding, "nativeRelation")? == relation,
+        "typed witness relation mismatch"
+    );
+    let target = field(binding, "target")?;
+    ensure!(
+        text(target, "kind")? == "entrypoint"
+            && text(target, "contractName")? == contract
+            && text(target, "entrypoint")? == entrypoint
+            && text(target, "nativeCircuitFile")? == circuit_file
+            && text(target, "targetProfile")? == profile,
+        "typed witness native target mismatch"
+    );
+    Ok(())
 }
 
 // Unknown is distinct from known unit. Constants never invoke host effects.
@@ -823,7 +1707,12 @@ impl Abstractor<'_> {
                 }
                 known_merge(flow.returns)
             }
-            ExprKind::Witness(_) | ExprKind::Hash(_, _, _) => None,
+            ExprKind::Witness(_)
+            | ExprKind::WitnessCall { .. }
+            | ExprKind::Composite { .. }
+            | ExprKind::Project { .. }
+            | ExprKind::Index { .. }
+            | ExprKind::Hash(_, _, _) => None,
         })
     }
     fn body(&mut self, body: &Block, initial: &Constants, result: &Type) -> Result<AbstractFlow> {
@@ -875,14 +1764,288 @@ impl Abstractor<'_> {
 #[derive(Clone)]
 struct Tracked {
     value: Option<Value>,
+    aggregate: Option<AggregateValue>,
     taint: bool,
+    control_taint: bool,
+    leaf_taints: Arc<Vec<bool>>,
     known: Known,
+}
+#[derive(Clone)]
+struct AggregateValue {
+    token: String,
+    payload: Arc<AggregatePayload>,
+}
+struct AggregatePayload {
+    value: Json,
+    budget: Arc<AggregateBudget>,
+    charge: usize,
+}
+struct AggregateBudget {
+    used: AtomicUsize,
+    limit: usize,
+    per_value_limit: usize,
+    node_limit: usize,
+}
+impl AggregateBudget {
+    fn new(limit: usize) -> Arc<Self> {
+        Self::with_limits(limit, MAX_AGGREGATE_VALUE_BYTES, MAX_AGGREGATE_JSON_NODES)
+    }
+    fn with_limits(limit: usize, per_value_limit: usize, node_limit: usize) -> Arc<Self> {
+        Arc::new(Self {
+            used: AtomicUsize::new(0),
+            limit,
+            per_value_limit,
+            node_limit,
+        })
+    }
+    fn reserve(&self, amount: usize) -> Result<()> {
+        self.used
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |used| {
+                used.checked_add(amount)
+                    .filter(|total| *total <= self.limit)
+            })
+            .map(|_| ())
+            .map_err(|_| anyhow!("control aggregate value budget exceeded"))
+    }
+    fn release(&self, amount: usize) {
+        let previous = self.used.fetch_sub(amount, Ordering::AcqRel);
+        debug_assert!(previous >= amount);
+    }
+}
+pub(crate) struct AggregateReservation {
+    budget: Arc<AggregateBudget>,
+    charge: usize,
+}
+impl AggregateReservation {
+    fn new(budget: &Arc<AggregateBudget>, charge: usize) -> Result<Self> {
+        budget.reserve(charge)?;
+        Ok(Self {
+            budget: Arc::clone(budget),
+            charge,
+        })
+    }
+}
+impl Drop for AggregateReservation {
+    fn drop(&mut self) {
+        self.budget.release(self.charge);
+    }
+}
+/// JSON output that keeps its aggregate materialization charge until the value is dropped.
+pub struct AccountedJson {
+    value: Json,
+    reservations: Vec<AggregateReservation>,
+}
+impl std::fmt::Debug for AccountedJson {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_tuple("AccountedJson")
+            .field(&"[redacted]")
+            .finish()
+    }
+}
+impl AccountedJson {
+    pub(crate) fn new(value: Json, reservations: Vec<AggregateReservation>) -> Self {
+        Self {
+            value,
+            reservations,
+        }
+    }
+    pub fn as_json(&self) -> &Json {
+        &self.value
+    }
+    pub(crate) fn into_parts(mut self) -> (Json, Vec<AggregateReservation>) {
+        let value = std::mem::replace(&mut self.value, Json::Null);
+        let reservations = std::mem::take(&mut self.reservations);
+        (value, reservations)
+    }
+}
+impl Deref for AccountedJson {
+    type Target = Json;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+impl PartialEq for AccountedJson {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+impl Drop for AccountedJson {
+    fn drop(&mut self) {
+        wipe_json(&mut self.value);
+    }
+}
+pub(crate) struct CompletedInputMap {
+    pub values: BTreeMap<String, Json>,
+    reservation: AggregateReservation,
+}
+impl CompletedInputMap {
+    pub(crate) fn try_clone_accounted(&self) -> Result<Self> {
+        let reservation =
+            AggregateReservation::new(&self.reservation.budget, self.reservation.charge)?;
+        Ok(Self {
+            values: self.values.clone(),
+            reservation,
+        })
+    }
+}
+impl Deref for CompletedInputMap {
+    type Target = BTreeMap<String, Json>;
+    fn deref(&self) -> &Self::Target {
+        &self.values
+    }
+}
+impl DerefMut for CompletedInputMap {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.values
+    }
+}
+impl PartialEq for CompletedInputMap {
+    fn eq(&self, other: &Self) -> bool {
+        self.values == other.values
+    }
+}
+impl Drop for CompletedInputMap {
+    fn drop(&mut self) {
+        for value in self.values.values_mut() {
+            wipe_json(value);
+        }
+    }
+}
+impl AggregatePayload {
+    fn from_borrowed(value: &Json, budget: &Arc<AggregateBudget>) -> Result<Arc<Self>> {
+        let charge = aggregate_json_charge(value, budget.node_limit, budget.per_value_limit)?;
+        budget.reserve(charge)?;
+        Ok(Arc::new(Self {
+            value: value.clone(),
+            budget: Arc::clone(budget),
+            charge,
+        }))
+    }
+    fn from_owned(mut value: Json, budget: &Arc<AggregateBudget>) -> Result<Arc<Self>> {
+        let charge = match aggregate_json_charge(&value, budget.node_limit, budget.per_value_limit)
+        {
+            Ok(charge) => charge,
+            Err(error) => {
+                wipe_json(&mut value);
+                return Err(error);
+            }
+        };
+        if charge > budget.per_value_limit {
+            wipe_json(&mut value);
+            bail!("control aggregate value limit exceeded");
+        }
+        if let Err(error) = budget.reserve(charge) {
+            wipe_json(&mut value);
+            return Err(error);
+        }
+        Ok(Arc::new(Self {
+            value,
+            budget: Arc::clone(budget),
+            charge,
+        }))
+    }
+}
+impl Drop for AggregatePayload {
+    fn drop(&mut self) {
+        wipe_json(&mut self.value);
+        self.budget.release(self.charge);
+    }
+}
+fn aggregate_json_charge(value: &Json, node_limit: usize, byte_limit: usize) -> Result<usize> {
+    // Charge a conservative retained-storage estimate before cloning borrowed trees.
+    // Arc keeps later source references and environment copies from duplicating the payload.
+    let mut pending = vec![value];
+    let mut nodes = 0usize;
+    let mut charge = 0usize;
+    while let Some(value) = pending.pop() {
+        nodes = nodes
+            .checked_add(1)
+            .ok_or_else(|| anyhow!("control aggregate node count overflow"))?;
+        ensure!(
+            nodes <= node_limit,
+            "control aggregate JSON node limit exceeded"
+        );
+        charge = charge
+            .checked_add(std::mem::size_of::<Json>() + 32)
+            .ok_or_else(|| anyhow!("control aggregate size overflow"))?;
+        match value {
+            Json::String(text) => {
+                charge = charge
+                    .checked_add(
+                        text.len()
+                            .checked_mul(2)
+                            .ok_or_else(|| anyhow!("control aggregate size overflow"))?,
+                    )
+                    .ok_or_else(|| anyhow!("control aggregate size overflow"))?;
+            }
+            Json::Array(values) => {
+                ensure!(
+                    pending
+                        .len()
+                        .checked_add(values.len())
+                        .is_some_and(|count| count <= node_limit - nodes),
+                    "control aggregate JSON node limit exceeded"
+                );
+                pending.extend(values);
+            }
+            Json::Object(values) => {
+                ensure!(
+                    pending
+                        .len()
+                        .checked_add(values.len())
+                        .is_some_and(|count| count <= node_limit - nodes),
+                    "control aggregate JSON node limit exceeded"
+                );
+                for (key, child) in values {
+                    let key_charge = key
+                        .len()
+                        .checked_mul(2)
+                        .and_then(|bytes| bytes.checked_add(48))
+                        .ok_or_else(|| anyhow!("control aggregate size overflow"))?;
+                    charge = charge
+                        .checked_add(key_charge)
+                        .ok_or_else(|| anyhow!("control aggregate size overflow"))?;
+                    pending.push(child);
+                }
+            }
+            Json::Null | Json::Bool(_) | Json::Number(_) => {}
+        }
+        ensure!(
+            charge <= byte_limit,
+            "control aggregate value limit exceeded"
+        );
+    }
+    Ok(charge.max(1))
+}
+fn json_map_materialization_charge(values: &BTreeMap<String, Json>) -> Result<usize> {
+    let mut charge = 0usize;
+    for (key, value) in values {
+        let key_charge = key
+            .len()
+            .checked_mul(2)
+            .and_then(|bytes| bytes.checked_add(AGGREGATE_MATERIALIZATION_ENTRY_OVERHEAD))
+            .ok_or_else(|| anyhow!("control materialization size overflow"))?;
+        let value_charge = aggregate_json_charge(value, MAX_AGGREGATE_JSON_NODES, MAX_BYTES)?;
+        charge = charge
+            .checked_add(key_charge)
+            .and_then(|total| total.checked_add(value_charge))
+            .ok_or_else(|| anyhow!("control materialization size overflow"))?;
+        ensure!(
+            charge <= MAX_BYTES,
+            "control materialization limit exceeded"
+        );
+    }
+    Ok(charge.max(1))
 }
 impl Tracked {
     fn unit() -> Self {
         Self {
             value: None,
+            aggregate: None,
             taint: false,
+            control_taint: false,
+            leaf_taints: Arc::new(vec![]),
             known: Some(None),
         }
     }
@@ -894,14 +2057,146 @@ impl Tracked {
         };
         Self {
             value: Some(value),
+            aggregate: None,
             taint,
+            control_taint: false,
+            leaf_taints: Arc::new(vec![]),
             known,
         }
+    }
+    fn aggregate(
+        token: String,
+        payload: Arc<AggregatePayload>,
+        leaf_taints: Vec<bool>,
+        control_taint: bool,
+    ) -> Self {
+        Self {
+            value: None,
+            aggregate: Some(AggregateValue { token, payload }),
+            taint: false,
+            control_taint,
+            leaf_taints: Arc::new(leaf_taints),
+            known: None,
+        }
+    }
+    fn is_tainted(&self) -> bool {
+        self.taint || self.control_taint || self.leaf_taints.iter().any(|taint| *taint)
+    }
+    fn add_control_taint(&mut self, taint: bool) {
+        self.control_taint |= taint;
+        if taint {
+            self.known = None;
+        }
+    }
+    fn disclose(&mut self) {
+        self.taint = false;
+        self.control_taint = false;
+        Arc::make_mut(&mut self.leaf_taints).fill(false);
+        self.known = if self.aggregate.is_some() {
+            None
+        } else {
+            Some(self.value.clone())
+        };
+    }
+    fn public_json(&self) -> Json {
+        self.value
+            .as_ref()
+            .map(Value::public_json)
+            .or_else(|| {
+                self.aggregate
+                    .as_ref()
+                    .map(|value| value.payload.value.clone())
+            })
+            .unwrap_or(Json::Null)
+    }
+    fn canonical_json(&self, ty: &Type) -> Result<Json> {
+        match ty {
+            Type::Unit => Ok(json!({"kind":"unit"})),
+            Type::Scalar(_) => self
+                .value
+                .as_ref()
+                .map(Value::public_json)
+                .ok_or_else(|| anyhow!("control scalar required")),
+            Type::Aggregate(token) => {
+                let aggregate = self
+                    .aggregate
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("control aggregate required"))?;
+                ensure!(&aggregate.token == token, "control aggregate type mismatch");
+                Ok(aggregate.payload.value.clone())
+            }
+        }
+    }
+    fn materialization_charge(&self, key_bytes: usize) -> Result<usize> {
+        let value_charge = self
+            .aggregate
+            .as_ref()
+            .map(|value| value.payload.charge)
+            .unwrap_or(0);
+        value_charge
+            .checked_add(
+                key_bytes
+                    .checked_mul(2)
+                    .ok_or_else(|| anyhow!("control materialization size overflow"))?,
+            )
+            .and_then(|charge| charge.checked_add(AGGREGATE_MATERIALIZATION_ENTRY_OVERHEAD))
+            .ok_or_else(|| anyhow!("control materialization size overflow"))
     }
     fn boolean(&self) -> Result<bool> {
         match self.value {
             Some(Value::Bool(b)) => Ok(b),
             _ => bail!("control Boolean required"),
+        }
+    }
+}
+fn reserve_witness_arguments(
+    budget: &Arc<AggregateBudget>,
+    values: &[Tracked],
+    parameters: &[witness::Parameter],
+) -> Result<AggregateReservation> {
+    ensure!(
+        values.len() == parameters.len(),
+        "typed witness argument count"
+    );
+    let mut charge = 0usize;
+    for (value, parameter) in values.iter().zip(parameters) {
+        charge = charge
+            .checked_add(value.materialization_charge(parameter.name.len())?)
+            .ok_or_else(|| anyhow!("typed witness argument size overflow"))?;
+        ensure!(
+            charge <= MAX_BYTES,
+            "typed witness argument materialization limit exceeded"
+        );
+    }
+    AggregateReservation::new(budget, charge)
+}
+fn tracked_from_json(
+    registry: &witness::Registry,
+    token: &str,
+    value: &Json,
+    private: bool,
+    aggregate_budget: &Arc<AggregateBudget>,
+) -> Result<Tracked> {
+    match parse_type(token, registry)? {
+        Type::Unit => {
+            registry.validate(token, value)?;
+            let mut tracked = Tracked::unit();
+            tracked.control_taint = private;
+            Ok(tracked)
+        }
+        Type::Scalar(_) => {
+            registry.validate(token, value)?;
+            Ok(Tracked::scalar(input_value(token, value)?, private))
+        }
+        Type::Aggregate(aggregate_token) => {
+            let payload = AggregatePayload::from_borrowed(value, aggregate_budget)?;
+            let leaves = registry.flatten_leaves(token, &payload.value)?;
+            Ok(Tracked::aggregate(
+                aggregate_token,
+                payload,
+                vec![private; leaves.len()],
+                private && leaves.is_empty(),
+            ))
         }
     }
 }
@@ -923,7 +2218,7 @@ enum Task {
     Discard,
     Assert,
     Return(Type, bool),
-    Boundary(Type, bool),
+    Boundary(Type, bool, Option<String>),
     Finish,
     Branch(
         Arc<Block>,
@@ -936,6 +2231,12 @@ enum Task {
         Arc<Expr>,
     ),
     Stage(String, String, String),
+    WitnessArgs(String, String, Vec<Arc<Expr>>, usize, Vec<Tracked>, Env),
+    WitnessArgValue(String, String, Vec<Arc<Expr>>, usize, Vec<Tracked>, Env),
+    Composite(String, Vec<Arc<Expr>>, usize, Vec<Tracked>, Env),
+    CompositeValue(String, Vec<Arc<Expr>>, usize, Vec<Tracked>, Env),
+    Project(witness::Projection, String),
+    Index(String),
 }
 pub(crate) fn wipe_json(value: &mut Json) {
     match value {
@@ -961,11 +2262,85 @@ impl Drop for Response {
         wipe_json(&mut self.value);
     }
 }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TypedResponse {
+    pub protocol_version: u32,
+    pub request_id: String,
+    pub attempt_id: String,
+    pub outcome: String,
+    pub operation: String,
+    pub capability: String,
+    pub schema: String,
+    #[serde(default, deserialize_with = "present_json")]
+    pub value: Option<Json>,
+    pub error: Option<TypedProviderError>,
+}
+fn present_json<'de, D>(deserializer: D) -> std::result::Result<Option<Json>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Json::deserialize(deserializer).map(Some)
+}
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct TypedProviderError {
+    pub code: String,
+}
+impl Drop for TypedResponse {
+    fn drop(&mut self) {
+        if let Some(value) = &mut self.value {
+            wipe_json(value);
+        }
+    }
+}
 struct Pending {
     id: u64,
     name: String,
     ty: String,
     request: Json,
+    typed: Option<TypedInvocation>,
+}
+#[derive(Clone)]
+struct TypedInvocation {
+    ordinal: usize,
+    name: String,
+    site: String,
+    path: Vec<String>,
+    argument_charge: usize,
+}
+enum WitnessValue {
+    PublicScalarOrUnit(Json),
+    Aggregate(Arc<AggregatePayload>),
+}
+impl WitnessValue {
+    fn as_json(&self) -> &Json {
+        match self {
+            Self::PublicScalarOrUnit(value) => value,
+            Self::Aggregate(payload) => &payload.value,
+        }
+    }
+}
+impl Drop for WitnessValue {
+    fn drop(&mut self) {
+        if let Self::PublicScalarOrUnit(value) = self {
+            wipe_json(value);
+        }
+    }
+}
+struct WitnessRecord {
+    invocation: TypedInvocation,
+    result_type: String,
+    value: WitnessValue,
+}
+struct SecretInputs(BTreeMap<String, Json>, Arc<AggregateBudget>, usize);
+impl Drop for SecretInputs {
+    fn drop(&mut self) {
+        for value in self.0.values_mut() {
+            wipe_json(value);
+        }
+        self.1.release(self.2);
+    }
 }
 enum Phase {
     Ready,
@@ -977,6 +2352,9 @@ enum Phase {
 /// A source-only invocation. No acceptance/commit notices or native proof API is exposed.
 pub struct Session {
     plan: Plan,
+    source_plan: Json,
+    invocation_target: Option<InvocationTarget>,
+    native_target_context_id: Option<u64>,
     host: Option<host::Runtime>,
     tasks: Vec<Task>,
     values: Vec<Tracked>,
@@ -986,7 +2364,21 @@ pub struct Session {
     remaining: usize,
     trace: Vec<String>,
     invocation_writes: BTreeMap<String, Json>,
+    completed_phase_reservation: Option<AggregateReservation>,
     continuation_taint: bool,
+    function_path: Vec<String>,
+    witness_records: Vec<WitnessRecord>,
+    bound_call_cursor: usize,
+    source_inputs: SecretInputs,
+    aggregate_budget: Arc<AggregateBudget>,
+    invocation_write_reservations: BTreeMap<String, AggregateReservation>,
+    completed_result_charge: Option<usize>,
+    runtime_consumed: bool,
+}
+pub(crate) struct CompletedInvocation {
+    pub context_id: u64,
+    pub inputs: CompletedInputMap,
+    pub runtime: host::Runtime,
 }
 impl Session {
     pub fn from_json(
@@ -994,43 +2386,151 @@ impl Session {
         inputs: BTreeMap<String, Json>,
         context: host::Context,
     ) -> Result<Self> {
-        let plan = Plan::parse(&plan)?;
+        Self::from_json_with_binding_sha256(plan, inputs, context, None)
+    }
+    pub fn from_json_with_binding_sha256(
+        plan: Json,
+        inputs: BTreeMap<String, Json>,
+        context: host::Context,
+        expected_binding_sha256: Option<&str>,
+    ) -> Result<Self> {
+        Self::from_json_with_invocation_target(plan, inputs, context, expected_binding_sha256, None)
+    }
+    pub fn from_json_with_invocation_target(
+        plan: Json,
+        inputs: BTreeMap<String, Json>,
+        context: host::Context,
+        expected_binding_sha256: Option<&str>,
+        invocation_target: Option<InvocationTarget>,
+    ) -> Result<Self> {
+        raw_preflight(&plan)?;
         ensure!(
-            inputs.len() == plan.inputs.len(),
+            serde_json::to_vec(&plan)?.len() <= MAX_BYTES,
+            "control plan byte limit"
+        );
+        let source_plan = plan.clone();
+        let plan = Plan::parse(&plan, expected_binding_sha256)?;
+        let host_target = if plan.schema_version == 2 && plan.mode.as_deref() == Some("native") {
+            let target = invocation_target
+                .as_ref()
+                .ok_or_else(|| anyhow!("native witness invocation target required"))?;
+            target.validate()?;
+            let binding_target = field(
+                plan.binding
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("missing native witness binding"))?,
+                "target",
+            )?;
+            if text(binding_target, "kind")? == "entrypoint" {
+                ensure!(
+                    text(binding_target, "entrypoint")? == target.entrypoint,
+                    "native witness invocation entrypoint mismatch"
+                );
+            } else {
+                ensure!(
+                    text(binding_target, "kind")? == "standalone",
+                    "invalid native witness target"
+                );
+                ensure!(
+                    target.entrypoint == plan.name,
+                    "standalone witness source identity mismatch"
+                );
+            }
+            (target.contract_address.clone(), target.entrypoint.clone())
+        } else {
+            ensure!(
+                invocation_target.is_none(),
+                "invocation target is restricted to native witness plans"
+            );
+            (plan.name.clone(), plan.entry.clone())
+        };
+        let aggregate_budget = AggregateBudget::new(MAX_SESSION_AGGREGATE_BYTES);
+        let mut source_inputs = SecretInputs(inputs, Arc::clone(&aggregate_budget), 0);
+        let source_input_charge = plan
+            .inputs
+            .iter()
+            .try_fold(0usize, |total, (name, ty, _)| {
+                let Type::Aggregate(_) = parse_type(ty, &plan.registry)? else {
+                    return Ok(total);
+                };
+                let value = source_inputs
+                    .0
+                    .get(name)
+                    .ok_or_else(|| anyhow!("missing control input"))?;
+                let charge = aggregate_json_charge(
+                    value,
+                    aggregate_budget.node_limit,
+                    aggregate_budget.per_value_limit,
+                )?;
+                total
+                    .checked_add(charge)
+                    .ok_or_else(|| anyhow!("control aggregate input size overflow"))
+            })?;
+        aggregate_budget.reserve(source_input_charge)?;
+        source_inputs.2 = source_input_charge;
+        ensure!(
+            source_inputs.0.len() == plan.inputs.len(),
             "control input schema mismatch"
         );
-        ensure!(
-            plan.witnesses
-                .keys()
-                .all(|n| context.providers.iter().any(|p| &p.input == n)),
-            "control witness requires registered provider"
-        );
-        let host = host::Runtime::new(
-            context,
-            &plan.witnesses,
-            plan.name.clone(),
-            plan.entry.clone(),
-        )?;
+        let host = if plan.schema_version == 1 {
+            ensure!(
+                plan.witnesses
+                    .keys()
+                    .all(|n| context.providers.iter().any(|p| &p.input == n)),
+                "control witness requires registered provider"
+            );
+            host::Runtime::new(
+                context,
+                &plan.witnesses,
+                plan.name.clone(),
+                plan.entry.clone(),
+            )?
+        } else {
+            let private_inputs = plan.signatures.keys().cloned().collect::<Vec<_>>();
+            host::Runtime::new_typed(
+                context,
+                &private_inputs,
+                host_target.0.clone(),
+                host_target.1.clone(),
+                &plan.registry,
+            )?
+        };
         let signature = &plan.functions[&plan.entry].signature;
         let mut env = BTreeMap::new();
         for ((input, ty, private), (parameter, target)) in
             plan.inputs.iter().zip(&signature.parameters)
         {
-            let value = input_value(
-                ty,
-                inputs
-                    .get(input)
-                    .ok_or_else(|| anyhow!("missing control input"))?,
-            )?;
-            env.insert(
-                parameter.clone(),
-                target.coerce(Tracked::scalar(value, *private))?,
-            );
+            let raw = source_inputs
+                .0
+                .get(input)
+                .ok_or_else(|| anyhow!("missing control input"))?;
+            let parsed = parse_type(ty, &plan.registry)?;
+            let value = match parsed {
+                Type::Unit => {
+                    plan.registry.validate(ty, raw)?;
+                    let mut value = Tracked::unit();
+                    value.control_taint = *private;
+                    value
+                }
+                Type::Scalar(_) => Tracked::scalar(input_value(ty, raw)?, *private),
+                Type::Aggregate(token) => {
+                    plan.registry.validate(ty, raw)?;
+                    let leaf_values = plan.registry.flatten_leaves(ty, raw)?;
+                    Tracked::aggregate(
+                        token,
+                        AggregatePayload::from_borrowed(raw, &aggregate_budget)?,
+                        vec![*private; leaf_values.len()],
+                        *private && leaf_values.is_empty(),
+                    )
+                }
+            };
+            env.insert(parameter.clone(), target.coerce(value)?);
         }
         let function = &plan.functions[&plan.entry];
+        let function_path = vec![plan.entry.clone()];
         let tasks = vec![
             Task::Finish,
-            Task::Boundary(signature.result.clone(), false),
+            Task::Boundary(signature.result.clone(), false, None),
             Task::Body(
                 function.body.clone(),
                 0,
@@ -1042,6 +2542,9 @@ impl Session {
         let remaining = plan.max_steps;
         Ok(Self {
             plan,
+            source_plan,
+            invocation_target,
+            native_target_context_id: None,
             host: Some(host),
             tasks,
             values: vec![],
@@ -1051,8 +2554,154 @@ impl Session {
             remaining,
             trace: vec![],
             invocation_writes: BTreeMap::new(),
+            completed_phase_reservation: None,
             continuation_taint: false,
+            function_path,
+            witness_records: Vec::new(),
+            bound_call_cursor: 0,
+            source_inputs,
+            aggregate_budget,
+            invocation_write_reservations: BTreeMap::new(),
+            completed_result_charge: None,
+            runtime_consumed: false,
         })
+    }
+    pub(crate) fn from_authenticated_native_target(
+        control_plan_bytes: &[u8],
+        inputs: BTreeMap<String, Json>,
+        context: host::Context,
+        target: AuthenticatedNativeTarget,
+    ) -> Result<Self> {
+        ensure!(target.context_id != 0, "invalid native target context id");
+        ensure!(
+            control_plan_bytes == target.control_plan_bytes,
+            "control plan bytes differ from authenticated bundle"
+        );
+        let control_plan: Json = serde_json::from_slice(control_plan_bytes)?;
+        ensure!(
+            control_plan == target.control_plan,
+            "control plan differs from authenticated bundle"
+        );
+        let binding_sha256 = hex::encode(Sha256::digest(&target.binding_bytes));
+        let invocation_target = InvocationTarget {
+            contract_address: target.contract_address,
+            entrypoint: target.entrypoint,
+        };
+        let mut session = Self::from_json_with_invocation_target(
+            control_plan,
+            inputs,
+            context,
+            Some(&binding_sha256),
+            Some(invocation_target),
+        )?;
+        session.validate_public_witness_artifacts(
+            &target.control_plan,
+            &target.binding_bytes,
+            &target.relation,
+        )?;
+        session.native_target_context_id = Some(target.context_id);
+        Ok(session)
+    }
+    pub(crate) fn validate_public_witness_artifacts(
+        &self,
+        control_plan: &Json,
+        binding_bytes: &[u8],
+        actual_relation: &Json,
+    ) -> Result<()> {
+        ensure!(
+            self.plan.schema_version == 2 && self.plan.mode.as_deref() == Some("native"),
+            "native witness handoff requires a bound v2 plan"
+        );
+        ensure!(
+            self.source_plan == *control_plan,
+            "control plan differs from authenticated bundle"
+        );
+        let embedded_binding = self.source_plan["binding"]
+            .as_str()
+            .ok_or_else(|| anyhow!("missing native witness binding"))?;
+        ensure!(
+            embedded_binding.as_bytes() == binding_bytes,
+            "witness binding bytes differ from authenticated bundle"
+        );
+        ensure!(
+            self.plan.native_relation.as_ref() == Some(actual_relation),
+            "native witness relation mismatch"
+        );
+        let invocation_target = self
+            .invocation_target
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing frozen native invocation target"))?;
+        let binding_target = field(
+            self.plan
+                .binding
+                .as_ref()
+                .ok_or_else(|| anyhow!("missing native witness binding"))?,
+            "target",
+        )?;
+        if text(binding_target, "kind")? == "entrypoint" {
+            ensure!(
+                text(binding_target, "entrypoint")? == invocation_target.entrypoint,
+                "frozen invocation entrypoint differs from source binding"
+            );
+        }
+        Ok(())
+    }
+    pub(crate) fn peek_completed_invocation(
+        &self,
+        context_id: u64,
+        target: &str,
+        entrypoint: &str,
+        control_plan: &Json,
+        binding_bytes: &[u8],
+        actual_relation: &Json,
+    ) -> Result<CompletedInputMap> {
+        self.validate_frozen_target(context_id, target, entrypoint)?;
+        self.validate_public_witness_artifacts(control_plan, binding_bytes, actual_relation)?;
+        self.completed_native_inputs(actual_relation)
+    }
+    pub(crate) fn take_completed_invocation(
+        &mut self,
+        context_id: u64,
+        control_plan: &Json,
+        binding_bytes: &[u8],
+        actual_relation: &Json,
+        expected_inputs: &CompletedInputMap,
+        target: &str,
+        entrypoint: &str,
+    ) -> Result<CompletedInvocation> {
+        self.validate_frozen_target(context_id, target, entrypoint)?;
+        self.validate_public_witness_artifacts(control_plan, binding_bytes, actual_relation)?;
+        let inputs = self.completed_native_inputs(actual_relation)?;
+        ensure!(
+            inputs.values == expected_inputs.values,
+            "native witness input map changed after proof preparation"
+        );
+        let runtime = self.take_completed_host_runtime(actual_relation, target, entrypoint)?;
+        Ok(CompletedInvocation {
+            context_id,
+            inputs,
+            runtime,
+        })
+    }
+    fn validate_frozen_target(
+        &self,
+        context_id: u64,
+        target: &str,
+        entrypoint: &str,
+    ) -> Result<()> {
+        ensure!(
+            self.native_target_context_id == Some(context_id),
+            "native target context mismatch"
+        );
+        let frozen = self
+            .invocation_target
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing frozen native invocation target"))?;
+        ensure!(
+            target == frozen.contract_address && entrypoint == frozen.entrypoint,
+            "native witness invocation target changed"
+        );
+        Ok(())
     }
     fn pop(&mut self) -> Result<Tracked> {
         self.values
@@ -1064,12 +2713,17 @@ impl Session {
             key.zeroize();
             wipe_json(&mut value);
         }
+        self.invocation_write_reservations.clear();
     }
     fn reject(&mut self) {
         self.clear_writes();
         self.tasks.clear();
         self.values.clear();
         self.pending = None;
+        for value in self.source_inputs.0.values_mut() {
+            wipe_json(value);
+        }
+        self.witness_records.clear();
         if let Some(mut host) = self.host.take() {
             let _ = host.cancel();
         }
@@ -1078,37 +2732,321 @@ impl Session {
     pub fn private_trace(&self) -> Json {
         json!({"protocolVersion":1,"events":self.trace})
     }
-    pub fn private_request(&self) -> Result<Json> {
+    pub(crate) fn completed_native_inputs(
+        &self,
+        actual_relation: &Json,
+    ) -> Result<CompletedInputMap> {
+        ensure!(
+            matches!(self.phase, Phase::Complete(_))
+                && self.plan.schema_version == 2
+                && self.plan.mode.as_deref() == Some("native")
+                && !self.runtime_consumed,
+            "native witness inputs require a completed bound execution"
+        );
+        ensure!(
+            self.plan.native_relation.as_ref() == Some(actual_relation),
+            "native witness relation mismatch"
+        );
+        ensure!(
+            self.bound_call_cursor == self.plan.bound_calls.len()
+                && self.witness_records.len() == self.plan.bound_calls.len(),
+            "native witness call sequence is incomplete"
+        );
+        let binding = self
+            .plan
+            .binding
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing native witness binding"))?;
+        let input_descriptors = list(binding, "circuitInputs")?;
+        let mut output_bytes = 0usize;
+        for input in input_descriptors {
+            let name = text(input, "name")?;
+            let ty = text(input, "type")?;
+            let input_charge = name
+                .len()
+                .checked_mul(2)
+                .and_then(|bytes| bytes.checked_add(ty.len()))
+                .and_then(|bytes| bytes.checked_add(256))
+                .ok_or_else(|| anyhow!("native witness input map size overflow"))?;
+            output_bytes = output_bytes
+                .checked_add(input_charge)
+                .ok_or_else(|| anyhow!("native witness input map size overflow"))?;
+            ensure!(
+                output_bytes <= MAX_COMPLETED_INPUT_BYTES,
+                "native witness input map size limit exceeded"
+            );
+        }
+        let transient_charge = output_bytes
+            .checked_mul(2)
+            .ok_or_else(|| anyhow!("native witness input map size overflow"))?;
+        let transient_reservation =
+            AggregateReservation::new(&self.aggregate_budget, transient_charge)?;
+        let retained_reservation = AggregateReservation::new(&self.aggregate_budget, output_bytes)?;
+        let circuit_input_types = input_descriptors
+            .iter()
+            .map(|input| Ok((text(input, "name")?, text(input, "type")?)))
+            .collect::<Result<BTreeMap<_, _>>>()?;
+        let native_leaf = |name: &str, value: Json| -> Result<Json> {
+            ensure!(
+                circuit_input_types.contains_key(name),
+                "unknown native circuit input"
+            );
+            if circuit_input_types[name] == "Native" {
+                match value {
+                    Json::Bool(value) => Ok(Json::String(if value { "1" } else { "0" }.into())),
+                    Json::String(_) => Ok(value),
+                    _ => bail!("native circuit input is not a canonical field value"),
+                }
+            } else {
+                Ok(value)
+            }
+        };
+        let mut circuit_values = BTreeMap::new();
+        for input_binding in list(binding, "inputBindings")? {
+            let source_name = text(input_binding, "name")?;
+            let source_type = text(input_binding, "type")?;
+            let source_value = self
+                .source_inputs
+                .0
+                .get(source_name)
+                .ok_or_else(|| anyhow!("missing native source input"))?;
+            let leaves = self
+                .plan
+                .registry
+                .flatten_leaves(source_type, source_value)?;
+            let output_names = list(input_binding, "inputs")?;
+            ensure!(
+                leaves.len() == output_names.len(),
+                "native source input binding mismatch"
+            );
+            for (name, value) in output_names.iter().zip(leaves) {
+                let name = name
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid native source input name"))?;
+                ensure!(
+                    circuit_values
+                        .insert(name.to_owned(), native_leaf(name, value)?)
+                        .is_none(),
+                    "duplicate native circuit input value"
+                );
+            }
+        }
+        for (index, (record, call)) in self
+            .witness_records
+            .iter()
+            .zip(&self.plan.bound_calls)
+            .enumerate()
+        {
+            ensure!(
+                record.invocation.ordinal == index
+                    && text(call, "ordinal")? == index.to_string()
+                    && text(call, "site")? == record.invocation.site
+                    && text(call, "name")? == record.invocation.name
+                    && list(call, "path")?
+                        == &record
+                            .invocation
+                            .path
+                            .iter()
+                            .cloned()
+                            .map(Json::String)
+                            .collect::<Vec<_>>()
+                    && text(call, "resultType")? == record.result_type,
+                "native witness call binding mismatch"
+            );
+            let leaves = self
+                .plan
+                .registry
+                .flatten_leaves(&record.result_type, record.value.as_json())?;
+            let output_names = list(call, "inputs")?;
+            ensure!(
+                leaves.len() == output_names.len(),
+                "native witness result binding mismatch"
+            );
+            for (name, value) in output_names.iter().zip(leaves) {
+                let name = name
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid native witness input name"))?;
+                ensure!(
+                    circuit_values
+                        .insert(name.to_owned(), native_leaf(name, value)?)
+                        .is_none(),
+                    "duplicate native circuit input value"
+                );
+            }
+        }
+        let circuit_names = list(binding, "circuitInputs")?
+            .iter()
+            .map(|input| text(input, "name").map(str::to_owned))
+            .collect::<Result<BTreeSet<_>>>()?;
+        ensure!(
+            circuit_values.len() == circuit_names.len()
+                && circuit_values
+                    .keys()
+                    .all(|name| circuit_names.contains(name)),
+            "native circuit input map is incomplete"
+        );
+        drop(transient_reservation);
+        Ok(CompletedInputMap {
+            values: circuit_values,
+            reservation: retained_reservation,
+        })
+    }
+    /// Private host handoff data. The caller must treat the returned circuit inputs and writes as secret.
+    /// Compatibility API for callers that own the returned snapshot outside the session budget.
+    /// Use `private_completion_accounted` when the caller needs the materialization charge to live
+    /// with the returned private value.
+    pub fn private_completion(&mut self, actual_relation: &Json) -> Result<Json> {
+        Ok(self
+            .private_completion_accounted(actual_relation)?
+            .into_parts()
+            .0)
+    }
+    /// Returns private completion data with both copy charges held until drop.
+    pub fn private_completion_accounted(
+        &mut self,
+        actual_relation: &Json,
+    ) -> Result<AccountedJson> {
+        let inputs = self.completed_native_inputs(actual_relation)?;
+        let input_reservation =
+            AggregateReservation::new(&self.aggregate_budget, inputs.reservation.charge)?;
+        let write_charge = json_map_materialization_charge(&self.invocation_writes)?;
+        let write_reservation = AggregateReservation::new(&self.aggregate_budget, write_charge)?;
+        let completion = json!({
+            "protocolVersion": 2,
+            "kind": "typed-witness-inputs",
+            "circuitName": field(self.plan.binding.as_ref().unwrap(), "circuitName")?,
+            "target": field(self.plan.binding.as_ref().unwrap(), "target")?,
+            "inputs": inputs.values,
+            "hostWrites": self.invocation_writes,
+        });
+        Ok(AccountedJson::new(
+            completion,
+            vec![input_reservation, write_reservation],
+        ))
+    }
+    pub(crate) fn take_completed_host_runtime(
+        &mut self,
+        actual_relation: &Json,
+        target: &str,
+        entrypoint: &str,
+    ) -> Result<host::Runtime> {
+        ensure!(
+            self.plan.native_relation.as_ref() == Some(actual_relation),
+            "native witness relation mismatch"
+        );
+        let binding = self
+            .plan
+            .binding
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing native witness binding"))?;
+        let frozen = self
+            .invocation_target
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing frozen native invocation target"))?;
+        ensure!(
+            target == frozen.contract_address && entrypoint == frozen.entrypoint,
+            "native witness invocation target changed"
+        );
+        ensure!(
+            text(field(binding, "target")?, "kind")? == "entrypoint"
+                && text(field(binding, "target")?, "entrypoint")? == entrypoint,
+            "native witness entrypoint mismatch"
+        );
+        let runtime = self
+            .host
+            .as_mut()
+            .ok_or_else(|| anyhow!("native witness runtime already consumed"))?;
+        ensure!(
+            runtime.has_target(target, entrypoint),
+            "native witness runtime target changed"
+        );
+        runtime.execution_finished(true)?;
+        let runtime = self
+            .host
+            .take()
+            .ok_or_else(|| anyhow!("native witness runtime already consumed"))?;
+        self.runtime_consumed = true;
+        for value in self.source_inputs.0.values_mut() {
+            wipe_json(value);
+        }
+        self.witness_records.clear();
+        Ok(runtime)
+    }
+    /// Compatibility API for callers that own the returned snapshot outside the session budget.
+    /// Use `private_request_accounted` when the caller needs the charge to live with the result.
+    pub fn private_request(&mut self) -> Result<Json> {
+        Ok(self.private_request_accounted()?.into_parts().0)
+    }
+    /// Returns a private request whose materialization charge follows the value until drop.
+    pub fn private_request_accounted(&mut self) -> Result<AccountedJson> {
         ensure!(
             matches!(self.phase, Phase::Waiting),
             "invalid control lifecycle state"
         );
+        let write_charge = json_map_materialization_charge(&self.invocation_writes)?;
+        let argument_charge = self
+            .pending
+            .as_ref()
+            .and_then(|pending| pending.typed.as_ref())
+            .map(|invocation| invocation.argument_charge)
+            .unwrap_or(0);
+        let charge = write_charge
+            .checked_add(argument_charge)
+            .and_then(|total| total.checked_add(AGGREGATE_MATERIALIZATION_ENTRY_OVERHEAD * 2))
+            .ok_or_else(|| anyhow!("control private request size overflow"))?;
+        ensure!(
+            charge <= MAX_BYTES,
+            "control private request materialization limit exceeded"
+        );
+        let reservation = AggregateReservation::new(&self.aggregate_budget, charge)?;
         let mut request = self
             .host
             .as_ref()
             .ok_or_else(|| anyhow!("invalid control lifecycle state"))?
             .private_arguments()?;
         request["invocationWrites"] = json!(self.invocation_writes);
-        Ok(request)
+        Ok(AccountedJson::new(request, vec![reservation]))
     }
     pub fn stage(&mut self, stage: host::Stage) -> Result<()> {
+        ensure!(
+            self.plan.schema_version == 1,
+            "manual writes are disabled for source-bound v2 plans"
+        );
+        self.stage_from_source(stage, None)
+    }
+    fn stage_from_source(
+        &mut self,
+        stage: host::Stage,
+        reservation: Option<AggregateReservation>,
+    ) -> Result<()> {
         ensure!(
             matches!(self.phase, Phase::Ready | Phase::Waiting),
             "invalid control lifecycle state"
         );
         let key = stage.key.clone();
+        let reservation_key = key.clone();
         let mut value = json!({"type":stage.ty,"value":stage.value});
-        let staged = self
-            .host
-            .as_mut()
-            .ok_or_else(|| anyhow!("invalid control lifecycle state"))?
-            .stage(stage);
+        let staged = if self.plan.schema_version == 1 {
+            self.host
+                .as_mut()
+                .ok_or_else(|| anyhow!("invalid control lifecycle state"))?
+                .stage(stage)
+        } else {
+            self.host
+                .as_mut()
+                .ok_or_else(|| anyhow!("invalid control lifecycle state"))?
+                .stage_typed(stage, &self.plan.registry)
+        };
         if let Err(error) = staged {
             wipe_json(&mut value);
             return Err(error.into());
         }
         if let Some(mut old) = self.invocation_writes.insert(key, value) {
             wipe_json(&mut old);
+        }
+        if let Some(reservation) = reservation {
+            self.invocation_write_reservations
+                .insert(reservation_key, reservation);
         }
         self.trace.push("stage".into());
         Ok(())
@@ -1122,6 +3060,10 @@ impl Session {
             if let Some(mut host) = self.host.take() {
                 host.cancel()?;
             }
+            for value in self.source_inputs.0.values_mut() {
+                wipe_json(value);
+            }
+            self.witness_records.clear();
             self.phase = Phase::Cancelled;
         }
         Ok(json!({"abiVersion":1,"status":"cancelled"}))
@@ -1156,38 +3098,177 @@ impl Session {
         self.phase = Phase::Ready;
         Ok(json!({"abiVersion":1,"status":"ready"}))
     }
+    pub fn resume_typed(&mut self, response: TypedResponse) -> Result<Json> {
+        ensure!(
+            matches!(self.phase, Phase::Waiting),
+            "invalid control lifecycle state"
+        );
+        let (pending_id, invocation, expected_attempt) = {
+            let pending = self
+                .pending
+                .as_ref()
+                .ok_or_else(|| anyhow!("invalid control lifecycle state"))?;
+            let invocation = pending
+                .typed
+                .as_ref()
+                .ok_or_else(|| anyhow!("typed response for legacy control request"))?;
+            (
+                pending.id,
+                invocation.clone(),
+                text(&pending.request, "attemptId")?.to_owned(),
+            )
+        };
+        let signature = self
+            .plan
+            .signatures
+            .get(&invocation.name)
+            .ok_or_else(|| anyhow!("unknown pending typed witness"))?;
+        let request_id = canonical_u64(&response.request_id)?;
+        ensure!(
+            request_id.to_string() == response.request_id
+                && response.protocol_version == 2
+                && request_id == pending_id
+                && response.attempt_id == expected_attempt
+                && response.operation == signature.operation
+                && response.capability == signature.capability
+                && response.schema == signature.result_type,
+            "invalid typed control host response"
+        );
+        match response.outcome.as_str() {
+            "error" => {
+                ensure!(response.value.is_none(), "invalid typed provider failure");
+                let error = response
+                    .error
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("missing typed provider error"))?;
+                ensure!(
+                    error.code == "provider_failed",
+                    "invalid typed provider error"
+                );
+                self.reject();
+                Ok(self.advance()?)
+            }
+            "value" => {
+                ensure!(response.error.is_none(), "invalid typed provider result");
+                let raw = response
+                    .value
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("missing typed provider value"))?;
+                let result = tracked_from_json(
+                    &self.plan.registry,
+                    &signature.result_type,
+                    raw,
+                    true,
+                    &self.aggregate_budget,
+                )?;
+                if self.plan.mode.as_deref() == Some("native") {
+                    let bound = self
+                        .plan
+                        .bound_calls
+                        .get(invocation.ordinal)
+                        .ok_or_else(|| anyhow!("missing native witness call binding"))?;
+                    let leaf_values = self
+                        .plan
+                        .registry
+                        .flatten_leaves(&signature.result_type, raw)?;
+                    ensure!(
+                        list(bound, "inputs")?.len() == leaf_values.len(),
+                        "native witness response shape mismatch"
+                    );
+                }
+                let record_value = match parse_type(&signature.result_type, &self.plan.registry)? {
+                    Type::Aggregate(_) => WitnessValue::Aggregate(AggregatePayload::from_borrowed(
+                        raw,
+                        &self.aggregate_budget,
+                    )?),
+                    Type::Unit | Type::Scalar(_) => WitnessValue::PublicScalarOrUnit(raw.clone()),
+                };
+                let completed = self
+                    .host
+                    .as_mut()
+                    .ok_or_else(|| anyhow!("invalid control host state"))?
+                    .finish_typed_input(
+                        &invocation.name,
+                        pending_id,
+                        Some(&response.attempt_id),
+                        Some(&response.operation),
+                        Some(&response.capability),
+                        Some(&response.schema),
+                        raw,
+                        &self.plan.registry,
+                    )?;
+                let mut completed = completed;
+                ensure!(
+                    completed == *raw,
+                    "typed host returned a different canonical witness value"
+                );
+                wipe_json(&mut completed);
+                self.witness_records.push(WitnessRecord {
+                    invocation: invocation.clone(),
+                    result_type: signature.result_type.clone(),
+                    value: record_value,
+                });
+                self.values.push(result);
+                self.pending = None;
+                self.phase = Phase::Ready;
+                Ok(json!({"abiVersion":2,"status":"ready"}))
+            }
+            _ => bail!("invalid typed control host outcome"),
+        }
+    }
+    /// Compatibility API for callers that own the returned snapshot outside the session budget.
+    /// Use `advance_accounted` for bounded source-execution and C ABI paths.
     pub fn advance(&mut self) -> Result<Json> {
+        Ok(self.advance_accounted()?.into_parts().0)
+    }
+    /// Returns the next control result with aggregate materialization charged until drop.
+    pub fn advance_accounted(&mut self) -> Result<AccountedJson> {
         match &self.phase {
             Phase::Waiting => {
-                return Ok(
+                return Ok(AccountedJson::new(
                     json!({"abiVersion":1,"status":"need_host","request":self.pending.as_ref().ok_or_else(||anyhow!("invalid control pending state"))?.request}),
-                );
+                    Vec::new(),
+                ));
             }
-            Phase::Complete(v) => return Ok(v.clone()),
+            Phase::Complete(v) => {
+                let reservations = self
+                    .completed_result_charge
+                    .map(|charge| AggregateReservation::new(&self.aggregate_budget, charge))
+                    .transpose()?
+                    .into_iter()
+                    .collect();
+                return Ok(AccountedJson::new(v.clone(), reservations));
+            }
             Phase::Failed => {
-                return Ok(
+                return Ok(AccountedJson::new(
                     json!({"abiVersion":1,"status":"failed","error":{"code":"execution_rejected"}}),
-                );
+                    Vec::new(),
+                ));
             }
-            Phase::Cancelled => return Ok(json!({"abiVersion":1,"status":"cancelled"})),
+            Phase::Cancelled => {
+                return Ok(AccountedJson::new(
+                    json!({"abiVersion":1,"status":"cancelled"}),
+                    Vec::new(),
+                ));
+            }
             Phase::Ready => {}
         }
         while let Some(task) = self.tasks.pop() {
             if self.remaining == 0 {
                 self.reject();
-                return self.advance();
+                return self.advance_accounted();
             }
             self.remaining -= 1;
             if self.step(task).is_err() {
                 self.reject();
-                return self.advance();
+                return self.advance_accounted();
             }
             if !matches!(self.phase, Phase::Ready) {
-                return self.advance();
+                return self.advance_accounted();
             }
         }
         self.reject();
-        self.advance()
+        self.advance_accounted()
     }
     fn known_expression(&mut self, expression: &Expr, env: &Env) -> Result<Known> {
         Abstractor {
@@ -1272,32 +3353,71 @@ impl Session {
                         name: n.clone(),
                         ty: self.plan.witnesses[n].clone(),
                         request,
+                        typed: None,
                     });
                     self.trace.push(format!("witness:{n}"));
                     self.phase = Phase::Waiting;
+                }
+                ExprKind::WitnessCall {
+                    name,
+                    site,
+                    arguments,
+                } => {
+                    self.tasks.push(Task::WitnessArgs(
+                        name.clone(),
+                        site.clone(),
+                        arguments.clone(),
+                        0,
+                        vec![],
+                        env,
+                    ));
+                }
+                ExprKind::Composite { token, leaves } => {
+                    self.tasks.push(Task::Composite(
+                        token.clone(),
+                        leaves.clone(),
+                        0,
+                        vec![],
+                        env,
+                    ));
+                }
+                ExprKind::Project { value, projection } => {
+                    self.tasks
+                        .push(Task::Project(projection.clone(), expr.ty.token()));
+                    self.tasks.push(Task::Eval(value.clone(), env));
+                }
+                ExprKind::Index { value, index } => {
+                    self.tasks.push(Task::Index(expr.ty.token()));
+                    self.tasks.push(Task::Eval(index.clone(), env.clone()));
+                    self.tasks.push(Task::Eval(value.clone(), env));
                 }
             },
             Task::Unary(ty, disclose) => {
                 let value = self.pop()?;
                 let mut value = ty.coerce(value)?;
                 if disclose {
-                    value.taint = false;
-                    value.known = Some(value.value.clone());
+                    value.disclose();
                 }
                 self.values.push(value);
             }
             Task::Merge(ty, taint) => {
                 let value = self.pop()?;
                 let mut value = ty.coerce(value)?;
-                value.taint |= taint;
+                value.add_control_taint(taint);
                 self.values.push(value);
             }
             Task::Binary(op, ty) => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                let taint = a.taint || b.taint;
-                let a = a.value.ok_or_else(|| anyhow!("control scalar required"))?;
-                let b = b.value.ok_or_else(|| anyhow!("control scalar required"))?;
+                let taint = a.is_tainted() || b.is_tainted();
+                let a = a
+                    .value
+                    .clone()
+                    .ok_or_else(|| anyhow!("control scalar required"))?;
+                let b = b
+                    .value
+                    .clone()
+                    .ok_or_else(|| anyhow!("control scalar required"))?;
                 let value = match scalar_type(&ty)? {
                     ScalarType::Native => {
                         let a = a.cast(&ScalarType::Native)?.field_encoding()?;
@@ -1325,7 +3445,7 @@ impl Session {
             Task::Eq(ty) => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                let taint = a.taint || b.taint;
+                let taint = a.is_tainted() || b.is_tainted();
                 let a = ty.coerce(a)?;
                 let b = ty.coerce(b)?;
                 self.values
@@ -1334,13 +3454,15 @@ impl Session {
             Task::Hash(domain) => {
                 let b = self.pop()?;
                 let a = self.pop()?;
-                let taint = a.taint || b.taint;
+                let taint = a.is_tainted() || b.is_tainted();
                 let a = a
                     .value
+                    .clone()
                     .ok_or_else(|| anyhow!("control hash scalar"))?
                     .field_encoding()?;
                 let b = b
                     .value
+                    .clone()
                     .ok_or_else(|| anyhow!("control hash scalar"))?
                     .field_encoding()?;
                 let value =
@@ -1353,16 +3475,18 @@ impl Session {
                 let yes = self.pop()?;
                 let c = self.pop()?;
                 let bit = c.boolean()?;
-                let taint = c.taint || yes.taint || no.taint;
+                let taint = c.is_tainted() || yes.is_tainted() || no.is_tainted();
                 let mut value = ty.coerce(if bit { yes } else { no })?;
-                value.taint = taint;
+                value.add_control_taint(taint);
                 self.values.push(value);
             }
             Task::Choose(yes, no, ty, env, condition) => {
                 let c = self.pop()?;
                 let known = self.known_expression(&condition, &env)?;
-                self.tasks
-                    .push(Task::Merge(ty, c.taint && known_bool(&known).is_none()));
+                self.tasks.push(Task::Merge(
+                    ty,
+                    c.is_tainted() && known_bool(&known).is_none(),
+                ));
                 self.tasks
                     .push(Task::Eval(if c.boolean()? { yes } else { no }, env));
             }
@@ -1371,8 +3495,10 @@ impl Session {
                 if left.boolean()? == or {
                     self.values.push(left);
                 } else {
-                    self.tasks
-                        .push(Task::Merge(Type::Scalar(ScalarType::Bool), left.taint));
+                    self.tasks.push(Task::Merge(
+                        Type::Scalar(ScalarType::Bool),
+                        left.is_tainted(),
+                    ));
                     self.tasks.push(Task::Eval(right, env));
                 }
             }
@@ -1391,9 +3517,11 @@ impl Session {
                     for ((n, t), v) in function.signature.parameters.iter().zip(values) {
                         local.insert(n.clone(), t.coerce(v)?);
                     }
+                    self.function_path.push(id.clone());
                     self.tasks.push(Task::Boundary(
                         function.signature.result.clone(),
                         self.continuation_taint,
+                        Some(id.clone()),
                     ));
                     self.continuation_taint = false;
                     self.tasks.push(Task::Body(
@@ -1411,6 +3539,278 @@ impl Session {
                 values.push(value);
                 self.tasks
                     .push(Task::Args(id, args, index + 1, values, env));
+            }
+            Task::WitnessArgs(name, site, arguments, index, values, env) => {
+                if index < arguments.len() {
+                    self.tasks.push(Task::WitnessArgValue(
+                        name,
+                        site,
+                        arguments.clone(),
+                        index,
+                        values,
+                        env.clone(),
+                    ));
+                    self.tasks.push(Task::Eval(arguments[index].clone(), env));
+                } else {
+                    let signature = self
+                        .plan
+                        .signatures
+                        .get(&name)
+                        .ok_or_else(|| anyhow!("unknown typed witness signature"))?;
+                    ensure!(
+                        values.len() == signature.parameters.len(),
+                        "typed witness argument count"
+                    );
+                    let _argument_reservation = reserve_witness_arguments(
+                        &self.aggregate_budget,
+                        &values,
+                        &signature.parameters,
+                    )?;
+                    let mut arguments_json = serde_json::Map::new();
+                    for (value, parameter) in values.iter().zip(&signature.parameters) {
+                        let expected = parse_type(&parameter.type_token, &self.plan.registry)?;
+                        let value = expected.coerce(value.clone())?;
+                        arguments_json
+                            .insert(parameter.name.clone(), value.canonical_json(&expected)?);
+                    }
+                    let path = self.function_path.clone();
+                    let ordinal = self.bound_call_cursor;
+                    let invocation = TypedInvocation {
+                        ordinal,
+                        name: name.clone(),
+                        site: site.clone(),
+                        path: path.clone(),
+                        argument_charge: _argument_reservation.charge,
+                    };
+                    if self.plan.mode.as_deref() == Some("native") {
+                        let expected = self
+                            .plan
+                            .bound_calls
+                            .get(ordinal)
+                            .ok_or_else(|| anyhow!("unexpected native witness call"))?;
+                        ensure!(
+                            text(expected, "ordinal")? == ordinal.to_string()
+                                && text(expected, "site")? == site
+                                && text(expected, "name")? == name
+                                && list(expected, "path")?
+                                    == &path.iter().cloned().map(Json::String).collect::<Vec<_>>()
+                                && text(expected, "resultType")? == signature.result_type,
+                            "native witness call order or source path mismatch"
+                        );
+                    }
+                    let request_id = NEXT_TYPED_REQUEST_ID
+                        .try_update(Ordering::Relaxed, Ordering::Relaxed, |current| {
+                            current.checked_add(1)
+                        })
+                        .map_err(|_| anyhow!("control request id exhausted"))?;
+                    let mut arguments_value = Json::Object(arguments_json);
+                    let request_result = self
+                        .host
+                        .as_mut()
+                        .ok_or_else(|| anyhow!("invalid control host state"))?
+                        .begin_typed_input(
+                            &name,
+                            request_id,
+                            signature,
+                            &arguments_value,
+                            &self.plan.registry,
+                        );
+                    wipe_json(&mut arguments_value);
+                    let request = request_result?
+                        .ok_or_else(|| anyhow!("typed witness requires provider"))?;
+                    self.bound_call_cursor += 1;
+                    self.pending = Some(Pending {
+                        id: request_id,
+                        name: name.clone(),
+                        ty: signature.result_type.clone(),
+                        request,
+                        typed: Some(invocation),
+                    });
+                    self.trace.push(format!("witness:{name}"));
+                    self.phase = Phase::Waiting;
+                }
+            }
+            Task::WitnessArgValue(name, site, arguments, index, mut values, env) => {
+                let value = self.pop()?;
+                values.push(value);
+                self.tasks.push(Task::WitnessArgs(
+                    name,
+                    site,
+                    arguments,
+                    index + 1,
+                    values,
+                    env,
+                ));
+            }
+            Task::Composite(token, leaves, index, values, env) => {
+                if index < leaves.len() {
+                    self.tasks.push(Task::CompositeValue(
+                        token,
+                        leaves.clone(),
+                        index,
+                        values,
+                        env.clone(),
+                    ));
+                    self.tasks.push(Task::Eval(leaves[index].clone(), env));
+                } else {
+                    let leaf_json = values
+                        .iter()
+                        .zip(self.plan.registry.leaf_types(&token)?)
+                        .map(|(value, expected)| {
+                            ensure!(
+                                value.aggregate.is_none(),
+                                "nested aggregate leaf unsupported by control composite"
+                            );
+                            let ty = parse_type(&expected, &self.plan.registry)?;
+                            value.canonical_json(&ty)
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    let value = self.plan.registry.from_leaves(&token, &leaf_json)?;
+                    let taints = values.iter().map(Tracked::is_tainted).collect::<Vec<_>>();
+                    let control_taint = values.is_empty() && self.continuation_taint;
+                    let payload = AggregatePayload::from_owned(value, &self.aggregate_budget)?;
+                    self.values
+                        .push(Tracked::aggregate(token, payload, taints, control_taint));
+                }
+            }
+            Task::CompositeValue(token, leaves, index, mut values, env) => {
+                values.push(self.pop()?);
+                self.tasks
+                    .push(Task::Composite(token, leaves, index + 1, values, env));
+            }
+            Task::Project(projection, expected_type) => {
+                let aggregate = self.pop()?;
+                let source = aggregate
+                    .aggregate
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("control projection aggregate required"))?;
+                let (actual_type, value, range) = self.plan.registry.project_with_range(
+                    &source.token,
+                    &source.payload.value,
+                    &projection,
+                )?;
+                ensure!(
+                    actual_type == expected_type,
+                    "control projection type changed"
+                );
+                let projected = parse_type(&actual_type, &self.plan.registry)?;
+                let enum_taint = projection.kind == "enumField"
+                    && aggregate.leaf_taints.first().copied().unwrap_or(false);
+                match projected {
+                    Type::Unit => {
+                        let mut result = tracked_from_json(
+                            &self.plan.registry,
+                            &actual_type,
+                            &value,
+                            false,
+                            &self.aggregate_budget,
+                        )?;
+                        result.control_taint = aggregate.control_taint || enum_taint;
+                        self.values.push(result);
+                    }
+                    Type::Scalar(_) => {
+                        let mut result = tracked_from_json(
+                            &self.plan.registry,
+                            &actual_type,
+                            &value,
+                            false,
+                            &self.aggregate_budget,
+                        )?;
+                        result.taint = aggregate
+                            .leaf_taints
+                            .get(range.start)
+                            .copied()
+                            .unwrap_or(false);
+                        result.control_taint = aggregate.control_taint || enum_taint;
+                        if result.is_tainted() {
+                            result.known = None;
+                        }
+                        self.values.push(result);
+                    }
+                    Type::Aggregate(token) => {
+                        let leaf_taints = aggregate
+                            .leaf_taints
+                            .get(range)
+                            .ok_or_else(|| anyhow!("invalid aggregate projection range"))?
+                            .to_vec();
+                        let payload = AggregatePayload::from_owned(value, &self.aggregate_budget)?;
+                        self.values.push(Tracked::aggregate(
+                            token,
+                            payload,
+                            leaf_taints,
+                            aggregate.control_taint || enum_taint,
+                        ));
+                    }
+                }
+            }
+            Task::Index(expected_type) => {
+                let index_value = self.pop()?;
+                let index_taint = index_value.is_tainted();
+                let aggregate = self.pop()?;
+                let source = aggregate
+                    .aggregate
+                    .as_ref()
+                    .ok_or_else(|| anyhow!("control index aggregate required"))?;
+                let Some(Value::UInt { number, .. }) = index_value.value.as_ref() else {
+                    bail!("control index must be bounded unsigned")
+                };
+                let index = number
+                    .to_string()
+                    .parse::<usize>()
+                    .map_err(|_| anyhow!("control index out of range"))?;
+                let (actual_type, value, range) = self.plan.registry.index_with_range(
+                    &source.token,
+                    &source.payload.value,
+                    index,
+                )?;
+                ensure!(actual_type == expected_type, "control index type changed");
+                let projected = parse_type(&actual_type, &self.plan.registry)?;
+                match projected {
+                    Type::Unit => {
+                        let mut result = tracked_from_json(
+                            &self.plan.registry,
+                            &actual_type,
+                            &value,
+                            false,
+                            &self.aggregate_budget,
+                        )?;
+                        result.control_taint = aggregate.control_taint || index_taint;
+                        self.values.push(result);
+                    }
+                    Type::Scalar(_) => {
+                        let mut result = tracked_from_json(
+                            &self.plan.registry,
+                            &actual_type,
+                            &value,
+                            false,
+                            &self.aggregate_budget,
+                        )?;
+                        result.taint = aggregate
+                            .leaf_taints
+                            .get(range.start)
+                            .copied()
+                            .unwrap_or(false);
+                        result.control_taint = aggregate.control_taint || index_taint;
+                        if result.is_tainted() {
+                            result.known = None;
+                        }
+                        self.values.push(result);
+                    }
+                    Type::Aggregate(token) => {
+                        let leaf_taints = aggregate
+                            .leaf_taints
+                            .get(range)
+                            .ok_or_else(|| anyhow!("invalid aggregate index range"))?
+                            .to_vec();
+                        let payload = AggregatePayload::from_owned(value, &self.aggregate_budget)?;
+                        self.values.push(Tracked::aggregate(
+                            token,
+                            payload,
+                            leaf_taints,
+                            aggregate.control_taint || index_taint,
+                        ));
+                    }
+                }
             }
             Task::Body(body, index, env, control, result) => {
                 if let Some(stmt) = body.statements.get(index) {
@@ -1503,9 +3903,15 @@ impl Session {
             }
             Task::Return(ty, control) => {
                 let mut value = ty.coerce(self.pop()?)?;
-                value.taint |= control || self.continuation_taint;
+                value.add_control_taint(control || self.continuation_taint);
                 while let Some(task) = self.tasks.pop() {
-                    if let Task::Boundary(_, outer_taint) = task {
+                    if let Task::Boundary(_, outer_taint, function_id) = task {
+                        if let Some(function_id) = function_id {
+                            ensure!(
+                                self.function_path.pop().as_deref() == Some(function_id.as_str()),
+                                "invalid control call path"
+                            );
+                        }
                         self.continuation_taint = outer_taint;
                         self.values.push(value);
                         return Ok(());
@@ -1513,30 +3919,63 @@ impl Session {
                 }
                 bail!("invalid control return boundary")
             }
-            Task::Boundary(ty, outer_taint) => {
+            Task::Boundary(ty, outer_taint, function_id) => {
+                if let Some(function_id) = function_id {
+                    ensure!(
+                        self.function_path.pop().as_deref() == Some(function_id.as_str()),
+                        "invalid control call path"
+                    );
+                }
                 let mut value = Tracked::unit();
-                value.taint = self.continuation_taint;
+                value.add_control_taint(self.continuation_taint);
                 self.continuation_taint = outer_taint;
                 self.values.push(ty.coerce(value)?);
             }
             Task::Finish => {
                 let value = self.pop()?;
+                if self.plan.mode.as_deref() == Some("native") {
+                    ensure!(
+                        self.bound_call_cursor == self.plan.bound_calls.len()
+                            && self.witness_records.len() == self.plan.bound_calls.len(),
+                        "native witness call sequence is incomplete"
+                    );
+                }
+                let legacy_unit_result = self.plan.schema_version == 1
+                    && self.plan.functions[&self.plan.entry].signature.result == Type::Unit
+                    && value.value.is_none()
+                    && value.aggregate.is_none();
                 ensure!(
-                    value.value.is_none() || !value.taint,
+                    legacy_unit_result || !value.is_tainted(),
                     "undisclosed control output"
                 );
-                let actual = value
-                    .value
-                    .as_ref()
-                    .map(|v| Type::Scalar(v.scalar_type()))
-                    .unwrap_or(Type::Unit);
+                let actual = match (&value.value, &value.aggregate) {
+                    (Some(value), None) => Type::Scalar(value.scalar_type()),
+                    (None, Some(aggregate)) => Type::Aggregate(aggregate.token.clone()),
+                    (None, None) => Type::Unit,
+                    _ => bail!("invalid control result value"),
+                };
                 ensure!(
                     actual == self.plan.functions[&self.plan.entry].signature.result,
                     "control exported value type mismatch"
                 );
-                let result = value.value.map(|v| v.public_json()).unwrap_or(Json::Null);
+                let result_charge = if value.aggregate.is_some() {
+                    let charge = value.materialization_charge(0)?;
+                    ensure!(
+                        charge <= MAX_BYTES,
+                        "control public result materialization limit exceeded"
+                    );
+                    Some(charge)
+                } else {
+                    None
+                };
+                let result_reservation = result_charge
+                    .map(|charge| AggregateReservation::new(&self.aggregate_budget, charge))
+                    .transpose()?;
+                let result = value.public_json();
                 self.phase =
                     Phase::Complete(json!({"abiVersion":1,"status":"completed","result":result}));
+                self.completed_result_charge = result_charge;
+                self.completed_phase_reservation = result_reservation;
                 self.tasks.clear();
                 self.values.clear();
             }
@@ -1548,7 +3987,7 @@ impl Session {
                     fuel: &mut self.remaining,
                 };
                 let known = abstractor.expression(&condition, &constants)?;
-                let guard = c.taint && known_bool(&known).is_none();
+                let guard = c.is_tainted() && known_bool(&known).is_none();
                 let may_return = !abstractor
                     .body(&yes, &constants, &result)?
                     .returns
@@ -1576,18 +4015,33 @@ impl Session {
             }
             Task::Stage(capability, key, ty) => {
                 let value = self.pop()?;
-                let value = Type::Scalar(ScalarType::parse(&ty)?)
-                    .coerce(value)?
-                    .value
-                    .ok_or_else(|| anyhow!("control stage scalar"))?;
-                self.stage(host::Stage {
-                    abi_version: 1,
-                    operation: host::STAGE.into(),
-                    capability,
-                    key,
-                    ty,
-                    value: value.public_json(),
-                })?;
+                let stage_type = parse_type(&ty, &self.plan.registry)?;
+                let value = stage_type.coerce(value)?;
+                let reservation = if self.plan.schema_version == 2 {
+                    let charge = value
+                        .materialization_charge(key.len())?
+                        .checked_mul(2)
+                        .ok_or_else(|| anyhow!("control stage size overflow"))?;
+                    ensure!(
+                        charge <= MAX_BYTES,
+                        "control stage materialization limit exceeded"
+                    );
+                    Some(AggregateReservation::new(&self.aggregate_budget, charge)?)
+                } else {
+                    None
+                };
+                let value = value.canonical_json(&stage_type)?;
+                self.stage_from_source(
+                    host::Stage {
+                        abi_version: if self.plan.schema_version == 1 { 1 } else { 2 },
+                        operation: host::STAGE.into(),
+                        capability,
+                        key,
+                        ty,
+                        value,
+                    },
+                    reservation,
+                )?;
             }
         }
         ensure!(
@@ -1601,5 +4055,490 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         self.clear_writes();
+    }
+}
+
+#[cfg(test)]
+mod aggregate_budget_tests {
+    use super::{AggregateBudget, AggregatePayload, Tracked, reserve_witness_arguments};
+    use serde_json::json;
+    use std::sync::Arc;
+
+    #[test]
+    fn aggregate_aliases_share_one_retained_payload_charge() {
+        let budget = AggregateBudget::with_limits(512, 512, 16);
+        let value = json!({"kind":"struct","fields":{"secret":"987654321"}});
+        let payload = AggregatePayload::from_borrowed(&value, &budget).unwrap();
+        let charged = budget.used.load(std::sync::atomic::Ordering::Acquire);
+        assert!(charged > 0);
+        let alias = Arc::clone(&payload);
+        drop(payload);
+        assert_eq!(
+            budget.used.load(std::sync::atomic::Ordering::Acquire),
+            charged
+        );
+        drop(alias);
+        assert_eq!(budget.used.load(std::sync::atomic::Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn aggregate_node_and_storage_caps_reject_before_retaining_values() {
+        let node_budget = AggregateBudget::with_limits(4096, 4096, 2);
+        let too_many_nodes = json!([{"value":0}]);
+        assert!(AggregatePayload::from_borrowed(&too_many_nodes, &node_budget).is_err());
+        assert_eq!(
+            node_budget.used.load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+
+        let storage_budget = AggregateBudget::with_limits(4096, 96, 16);
+        let too_large = json!({"value":"a string larger than the configured test storage bound"});
+        assert!(AggregatePayload::from_borrowed(&too_large, &storage_budget).is_err());
+        assert_eq!(
+            storage_budget
+                .used
+                .load(std::sync::atomic::Ordering::Acquire),
+            0
+        );
+    }
+
+    #[test]
+    fn aliased_witness_arguments_reserve_total_copy_charge_before_materialization() {
+        let budget = AggregateBudget::with_limits(512, 512, 16);
+        let value = json!({"kind":"struct","fields":{"secret":"123456789"}});
+        let payload = AggregatePayload::from_borrowed(&value, &budget).unwrap();
+        let tracked = Tracked::aggregate("Aggregate:Claim".into(), payload, vec![false], false);
+        let values = vec![tracked.clone(), tracked];
+        let parameters = vec![
+            crate::witness::Parameter {
+                name: "left".into(),
+                type_token: "Aggregate:Claim".into(),
+            },
+            crate::witness::Parameter {
+                name: "right".into(),
+                type_token: "Aggregate:Claim".into(),
+            },
+        ];
+        let before = budget.used.load(std::sync::atomic::Ordering::Acquire);
+        assert!(reserve_witness_arguments(&budget, &values, &parameters).is_err());
+        assert_eq!(
+            budget.used.load(std::sync::atomic::Ordering::Acquire),
+            before
+        );
+    }
+}
+
+#[cfg(test)]
+mod completed_invocation_tests {
+    use super::{AuthenticatedNativeTarget, InvocationTarget, Session, TypedResponse};
+    use crate::{control::Plan, host};
+    use serde_json::{Value as Json, json};
+    use sha2::{Digest, Sha256};
+    use std::collections::{BTreeMap, BTreeSet};
+    use std::sync::atomic::Ordering;
+
+    #[cfg(feature = "zkir-320")]
+    const SOURCE_PLAN: &str = include_str!(
+        "../tests/fixtures/witness/320/TypedWitness.ScalarWitness.claim.witness.control.json"
+    );
+    #[cfg(feature = "zkir-321")]
+    const SOURCE_PLAN: &str = include_str!(
+        "../tests/fixtures/witness/321/TypedWitness.ScalarWitness.claim.witness.control.json"
+    );
+    #[cfg(feature = "zkir-320")]
+    const PAIR_PLAN: &str = include_str!(
+        "../tests/fixtures/witness/320/TypedWitness.PairWitness.claim.witness.control.json"
+    );
+    #[cfg(feature = "zkir-321")]
+    const PAIR_PLAN: &str = include_str!(
+        "../tests/fixtures/witness/321/TypedWitness.PairWitness.claim.witness.control.json"
+    );
+
+    fn source_context(plan: &Plan, attempt_id: &str) -> host::Context {
+        let mut operations = BTreeMap::<String, host::Operation>::new();
+        let mut providers = Vec::new();
+        let mut capability_map = BTreeMap::<String, (String, BTreeSet<String>)>::new();
+        for signature in plan.signatures.values() {
+            let mut argument_schema = signature
+                .parameters
+                .iter()
+                .map(|parameter| (parameter.name.clone(), parameter.type_token.clone()))
+                .collect::<BTreeMap<_, _>>();
+            if signature.operation == host::READ {
+                argument_schema.insert("key".into(), "Key".into());
+            }
+            operations.insert(
+                signature.operation.clone(),
+                host::Operation {
+                    operation: signature.operation.clone(),
+                    argument_schema,
+                    result_schema: signature.result_type.clone(),
+                },
+            );
+            let prefix = signature
+                .private_key
+                .as_deref()
+                .map(|key| {
+                    format!(
+                        "{}/",
+                        key.rsplit_once('/').map(|(root, _)| root).unwrap_or(key)
+                    )
+                })
+                .unwrap_or_else(|| "lookup/".into());
+            let entry = capability_map
+                .entry(signature.capability.clone())
+                .or_insert_with(|| (prefix.clone(), BTreeSet::new()));
+            assert_eq!(entry.0, prefix);
+            entry.1.insert(signature.operation.clone());
+            if signature.private_key.is_some() {
+                entry.1.insert(host::STAGE.into());
+            }
+            providers.push(host::Provider {
+                input: signature.name.clone(),
+                operation: signature.operation.clone(),
+                capability: signature.capability.clone(),
+                arguments: signature
+                    .private_key
+                    .as_ref()
+                    .map(|key| BTreeMap::from([("key".into(), json!(key))]))
+                    .unwrap_or_default(),
+            });
+        }
+        capability_map
+            .entry("commit".into())
+            .or_insert_with(|| ("cache/".into(), BTreeSet::new()))
+            .1
+            .insert(host::CAS.into());
+        capability_map
+            .entry("private".into())
+            .or_insert_with(|| ("cache/".into(), BTreeSet::new()))
+            .1
+            .insert(host::STAGE.into());
+        let capabilities = capability_map
+            .into_iter()
+            .map(|(id, (key_prefix, operations))| host::Capability {
+                id,
+                namespace: "nightlean".into(),
+                key_prefix,
+                operations: operations.into_iter().collect(),
+            })
+            .collect();
+        host::Context {
+            protocol_version: 1,
+            namespace: "nightlean".into(),
+            base_revision: "fixture-r0".into(),
+            attempt_id: attempt_id.into(),
+            capabilities,
+            operations: operations.into_values().collect(),
+            providers,
+            commit_capability: "commit".into(),
+            limits: host::Limits::default(),
+        }
+    }
+
+    fn complete_source(session: &mut Session, attempt_id: &str) {
+        for _ in 0..64 {
+            let status = session.advance().unwrap();
+            if status["status"] == "completed" {
+                return;
+            }
+            assert_eq!(status["status"], "need_host");
+            let request = &status["request"];
+            let value = match request["name"].as_str().unwrap() {
+                "cache" => {
+                    session.private_request().unwrap()["invocationWrites"]["cache/last"]["value"]
+                        .clone()
+                }
+                "lookup" => json!("14"),
+                other => panic!("unexpected provider {other}"),
+            };
+            let response: TypedResponse = serde_json::from_value(json!({
+                "protocolVersion":2,
+                "requestId":request["requestId"],
+                "attemptId":attempt_id,
+                "outcome":"value",
+                "operation":request["operation"],
+                "capability":request["capability"],
+                "schema":request["schema"],
+                "value":value,
+            }))
+            .unwrap();
+            session.resume_typed(response).unwrap();
+        }
+        panic!("control source call sequence exceeded test bound");
+    }
+
+    #[test]
+    fn completed_handoff_rejects_changed_map_and_target_without_consuming_runtime() {
+        let control_plan: Json = serde_json::from_str(SOURCE_PLAN).unwrap();
+        let plan_bytes = serde_json::to_vec(&control_plan).unwrap();
+        let binding_text = control_plan["binding"].as_str().unwrap();
+        let binding_bytes = binding_text.as_bytes().to_vec();
+        let binding: Json = serde_json::from_str(binding_text).unwrap();
+        let relation = binding["nativeRelation"].clone();
+        let digest = hex::encode(Sha256::digest(binding_bytes.as_slice()));
+        let parsed = Plan::parse(&control_plan, Some(&digest)).unwrap();
+        let attempt = "b".repeat(64);
+        let address = "a".repeat(64);
+        let context_id = 17;
+        let target = AuthenticatedNativeTarget {
+            context_id,
+            contract_address: address.clone(),
+            entrypoint: "claim".into(),
+            control_plan,
+            control_plan_bytes: plan_bytes.clone(),
+            binding_bytes: binding_bytes.clone(),
+            relation: relation.clone(),
+        };
+        let mut session = Session::from_authenticated_native_target(
+            &plan_bytes,
+            BTreeMap::from([
+                ("expected".into(), json!("14")),
+                ("seed".into(), json!("7")),
+            ]),
+            source_context(&parsed, &attempt),
+            target,
+        )
+        .unwrap();
+        let waiting = session.advance().unwrap();
+        assert_eq!(waiting["status"], "need_host");
+        let waiting_budget = session.aggregate_budget.used.load(Ordering::Acquire);
+        for _ in 0..4 {
+            let private = session.private_request_accounted().unwrap();
+            assert_eq!(private.as_json()["arguments"]["key"], "cache/last");
+            assert!(session.aggregate_budget.used.load(Ordering::Acquire) > waiting_budget);
+            drop(private);
+            assert_eq!(
+                session.aggregate_budget.used.load(Ordering::Acquire),
+                waiting_budget
+            );
+        }
+        complete_source(&mut session, &attempt);
+        let complete_budget = session.aggregate_budget.used.load(Ordering::Acquire);
+        for _ in 0..3 {
+            let private = session.private_completion_accounted(&relation).unwrap();
+            assert_eq!(private.as_json()["kind"], "typed-witness-inputs");
+            assert!(session.aggregate_budget.used.load(Ordering::Acquire) > complete_budget);
+            drop(private);
+            assert_eq!(
+                session.aggregate_budget.used.load(Ordering::Acquire),
+                complete_budget
+            );
+        }
+        let budget_after_execution = session
+            .aggregate_budget
+            .used
+            .load(std::sync::atomic::Ordering::Acquire);
+        for _ in 0..3 {
+            drop(
+                session
+                    .peek_completed_invocation(
+                        context_id,
+                        &address,
+                        "claim",
+                        &session.source_plan,
+                        &binding_bytes,
+                        &relation,
+                    )
+                    .unwrap(),
+            );
+        }
+        assert_eq!(
+            session
+                .aggregate_budget
+                .used
+                .load(std::sync::atomic::Ordering::Acquire),
+            budget_after_execution
+        );
+        let expected = session
+            .peek_completed_invocation(
+                context_id,
+                &address,
+                "claim",
+                &session.source_plan,
+                &binding_bytes,
+                &relation,
+            )
+            .unwrap();
+        let source_plan = session.source_plan.clone();
+
+        let mut changed = expected.try_clone_accounted().unwrap();
+        *changed.values_mut().next().unwrap() = json!("13");
+        assert!(
+            session
+                .take_completed_invocation(
+                    context_id,
+                    &source_plan,
+                    &binding_bytes,
+                    &relation,
+                    &changed,
+                    &address,
+                    "claim",
+                )
+                .is_err()
+        );
+        assert!(
+            session
+                .take_completed_invocation(
+                    context_id + 1,
+                    &source_plan,
+                    &binding_bytes,
+                    &relation,
+                    &expected,
+                    &address,
+                    "claim",
+                )
+                .is_err()
+        );
+        assert!(
+            session
+                .take_completed_invocation(
+                    context_id,
+                    &source_plan,
+                    &binding_bytes,
+                    &relation,
+                    &expected,
+                    &"c".repeat(64),
+                    "claim",
+                )
+                .is_err()
+        );
+        assert!(
+            session
+                .take_completed_invocation(
+                    context_id,
+                    &source_plan,
+                    &binding_bytes,
+                    &relation,
+                    &expected,
+                    &address,
+                    "other",
+                )
+                .is_err()
+        );
+        let retried = session
+            .peek_completed_invocation(
+                context_id,
+                &address,
+                "claim",
+                &session.source_plan,
+                &binding_bytes,
+                &relation,
+            )
+            .unwrap();
+        assert_eq!(&retried.values, &expected.values);
+
+        let completed = session
+            .take_completed_invocation(
+                context_id,
+                &source_plan,
+                &binding_bytes,
+                &relation,
+                &expected,
+                &address,
+                "claim",
+            )
+            .unwrap();
+        assert!(completed.runtime.has_target(&address, "claim"));
+        assert!(
+            session
+                .take_completed_invocation(
+                    context_id,
+                    &source_plan,
+                    &binding_bytes,
+                    &relation,
+                    &expected,
+                    &address,
+                    "claim",
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn aggregate_advance_results_hold_their_reservation_until_drop() {
+        let plan: Json = serde_json::from_str(PAIR_PLAN).unwrap();
+        let binding_text = plan["binding"].as_str().unwrap();
+        let binding: Json = serde_json::from_str(binding_text).unwrap();
+        let digest = hex::encode(Sha256::digest(binding_text.as_bytes()));
+        let attempt = "c".repeat(64);
+        let target = InvocationTarget {
+            contract_address: "a".repeat(64),
+            entrypoint: "claim".into(),
+        };
+        let mut session = Session::from_json_with_invocation_target(
+            plan.clone(),
+            BTreeMap::from([
+                ("expected".into(), json!("14")),
+                (
+                    "request".into(),
+                    json!({
+                        "kind":"struct",
+                        "id":"TypedWitness.Pair",
+                        "fields":[
+                            {"name":"amount","value":{"kind":"uint","maximum":"255","value":"7"}},
+                            {"name":"okay","value":{"kind":"bool","value":true}}
+                        ]
+                    }),
+                ),
+            ]),
+            source_context(&Plan::parse(&plan, Some(&digest)).unwrap(), &attempt),
+            Some(&digest),
+            Some(target),
+        )
+        .unwrap();
+
+        let pending = session.advance().unwrap();
+        let response: TypedResponse = serde_json::from_value(json!({
+            "protocolVersion":2,
+            "requestId":pending["request"]["requestId"],
+            "attemptId":attempt,
+            "outcome":"value",
+            "operation":pending["request"]["operation"],
+            "capability":pending["request"]["capability"],
+            "schema":pending["request"]["schema"],
+            "value":{
+                "kind":"struct",
+                "id":"TypedWitness.Pair",
+                "fields":[
+                    {"name":"amount","value":{"kind":"uint","maximum":"255","value":"14"}},
+                    {"name":"okay","value":{"kind":"bool","value":true}}
+                ]
+            }
+        }))
+        .unwrap();
+        session.resume_typed(response).unwrap();
+
+        let output = session.advance_accounted().unwrap();
+        assert_eq!(output["status"], "completed");
+        assert_eq!(output["result"]["kind"], "struct");
+        let charge = session.completed_result_charge.unwrap();
+        let baseline = session.aggregate_budget.used.load(Ordering::Acquire) - charge;
+        assert_eq!(
+            session.aggregate_budget.used.load(Ordering::Acquire),
+            baseline + charge
+        );
+        drop(output);
+        assert_eq!(
+            session.aggregate_budget.used.load(Ordering::Acquire),
+            baseline
+        );
+
+        for _ in 0..3 {
+            let output = session.advance_accounted().unwrap();
+            assert_eq!(output["result"]["kind"], "struct");
+            assert_eq!(
+                session.aggregate_budget.used.load(Ordering::Acquire),
+                baseline + charge
+            );
+            drop(output);
+            assert_eq!(
+                session.aggregate_budget.used.load(Ordering::Acquire),
+                baseline
+            );
+        }
+        let relation = binding["nativeRelation"].clone();
+        let completion = session.private_completion(&relation).unwrap();
+        assert_eq!(completion["inputs"]["$helper7"], "14");
     }
 }

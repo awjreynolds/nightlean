@@ -1,0 +1,269 @@
+{
+  "schemaVersion": 1,
+  "source": "tests/WitnessSource.lean",
+  "sourceSha256": "cc8bca1c7c09d4dd2565a29b8a037b45e21fa5519a320775caab00ed0fae8508",
+  "leanVersion": "4.35.0",
+  "scope": "Actual compiler-generated public circuits, plans, typed witness signatures and invocation bindings. No invocation values, keys, proving parameters or journals.",
+  "profiles": [
+    {
+      "profile": "320",
+      "files": [
+        {
+          "file": "TypedWitness.PairWitness.claim.impact.json",
+          "bytes": 25719,
+          "sha256": "833ab88d3fb99aa4888055c84ca52261f234dda9a3e2e11f2abd2cadd87f15ea"
+        },
+        {
+          "file": "TypedWitness.PairWitness.claim.witness.control.json",
+          "bytes": 9578,
+          "sha256": "e79ac9d6b9952403d2319fee903e635f06d3a7a9281c21c1726846bffa574a8f"
+        },
+        {
+          "file": "TypedWitness.PairWitness.claim.witness.json",
+          "bytes": 4790,
+          "sha256": "60dfdcc7c33b54f70c9cf9f9b8ec27a27575ba441c66fcd0da79edc8acdf3cd8"
+        },
+        {
+          "file": "TypedWitness.PairWitness.claim.zkir",
+          "bytes": 3707,
+          "sha256": "ded047d1c22a8819ba7a748a5dd9268b6c9d6a9af83293d6286899b0c844c64a"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.impact.json",
+          "bytes": 4768,
+          "sha256": "3af5b0e8ae37965f6bad553131d7f47f70299691b7b9286e3a8de62e30241d63"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.witness.control.json",
+          "bytes": 10235,
+          "sha256": "343da9cf944e623f2db15d5eaafa25163ff029babb1deddf5a62129854d33ace"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.witness.json",
+          "bytes": 4297,
+          "sha256": "e401b424a3829b67a338070f75579511b3bb42ea261e95f063af2706b159987b"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.zkir",
+          "bytes": 2745,
+          "sha256": "2633a900cefbc639c58b1fea4b8b003c145f637854543239ac832c243a45a0f7"
+        },
+        {
+          "file": "TypedWitness.emptyHost.control.json",
+          "bytes": 1131,
+          "sha256": "035b3ae11121c4d748e5f3321c0af31dd862008e287153d38da9b49debdfad6b"
+        },
+        {
+          "file": "TypedWitness.emptyRelation.witness.control.json",
+          "bytes": 2220,
+          "sha256": "b1e369761ea3d3a23ecab1c69e1f707c8231de470d05335195ca5c6cea2b6390"
+        },
+        {
+          "file": "TypedWitness.emptyRelation.witness.json",
+          "bytes": 951,
+          "sha256": "0126a88695e72403d063bf2e8f84f97fd235fc51eb507745b47c7d835596e410"
+        },
+        {
+          "file": "TypedWitness.emptyRelation.zkir",
+          "bytes": 193,
+          "sha256": "0f6dac9fee54579a4a0fc2088e7cb6f9aeb004b482b0bd6394a2a977fd262f32"
+        },
+        {
+          "file": "TypedWitness.pairHost.control.json",
+          "bytes": 3896,
+          "sha256": "94d9d3700150e0eb188b7c4bea05395142509d52daf0378e75aaa9467400325e"
+        },
+        {
+          "file": "TypedWitness.pairRelation.witness.control.json",
+          "bytes": 8864,
+          "sha256": "7bf77bda6014a9b56558701e1f4e65ecee94521bfb8f519ec520c0c9f2eecd13"
+        },
+        {
+          "file": "TypedWitness.pairRelation.witness.json",
+          "bytes": 4158,
+          "sha256": "4d1799dbf1d44da58b87823dafb6a571f0e6f9e998ecdeec0f17a16f0b106418"
+        },
+        {
+          "file": "TypedWitness.pairRelation.zkir",
+          "bytes": 3098,
+          "sha256": "73ee9852a083121b7a3818b945e7df66999a084b2523c078478ebd7076aeeb89"
+        },
+        {
+          "file": "TypedWitness.scalarHost.control.json",
+          "bytes": 5194,
+          "sha256": "bb0c9e63f621cad815872f2de67c70ebbd6d293f609c0318cda3b262ce1c4675"
+        },
+        {
+          "file": "TypedWitness.scalarRelation.witness.control.json",
+          "bytes": 9522,
+          "sha256": "143bdf1024a74749f9ba650628d8872d81f514fac5464043cbaf2af7d719bb26"
+        },
+        {
+          "file": "TypedWitness.scalarRelation.witness.json",
+          "bytes": 3662,
+          "sha256": "b7d7ae6f1c7a166df9c27f38f4074811ae6731e8df1a82c1331845c13ffa285f"
+        },
+        {
+          "file": "TypedWitness.scalarRelation.zkir",
+          "bytes": 2136,
+          "sha256": "df8ffa10ff72fd464a0349e42da0d6a21bf26e95570f59da20328f59a8dd4521"
+        },
+        {
+          "file": "TypedWitness.unitHost.control.json",
+          "bytes": 789,
+          "sha256": "519482c895e1eae43462f38567a8bcc54d0f3f6c049f97a60376e3335b5f7f20"
+        },
+        {
+          "file": "TypedWitness.unitRelation.witness.control.json",
+          "bytes": 1539,
+          "sha256": "5d112c527a6b579d831c7684d55da42038b212bcfcb79c3549d58552c23b08d1"
+        },
+        {
+          "file": "TypedWitness.unitRelation.witness.json",
+          "bytes": 644,
+          "sha256": "03c50beb447e18e78c5b6d5d5a60b330f544376ca9371e8c618abd6d6dcef586"
+        },
+        {
+          "file": "TypedWitness.unitRelation.zkir",
+          "bytes": 193,
+          "sha256": "0f6dac9fee54579a4a0fc2088e7cb6f9aeb004b482b0bd6394a2a977fd262f32"
+        },
+        {
+          "file": "nightlean.json",
+          "bytes": 33488,
+          "sha256": "171e587e600496f2e0d3592d0306a409c0aa8516af3ab4fd5854e8d469573808"
+        }
+      ]
+    },
+    {
+      "profile": "321",
+      "files": [
+        {
+          "file": "TypedWitness.PairWitness.claim.impact.json",
+          "bytes": 26296,
+          "sha256": "e18e53119f7711e6c17c09857112a98df4c9c1db58a410b51495b859ed09a570"
+        },
+        {
+          "file": "TypedWitness.PairWitness.claim.witness.control.json",
+          "bytes": 9589,
+          "sha256": "d04813c86e954fb58aad9006236464d4e7e866bd6375a79f006788e0b6f8b537"
+        },
+        {
+          "file": "TypedWitness.PairWitness.claim.witness.json",
+          "bytes": 4801,
+          "sha256": "daf5464981dd8aa195b799cb71ab723b43d7e806d0df997232ab68e089093f2e"
+        },
+        {
+          "file": "TypedWitness.PairWitness.claim.zkir",
+          "bytes": 3707,
+          "sha256": "ded047d1c22a8819ba7a748a5dd9268b6c9d6a9af83293d6286899b0c844c64a"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.impact.json",
+          "bytes": 5345,
+          "sha256": "0510799d2c7d7e647c1b5e593063964f4fc446c339ab4670ef45ec79161cfc31"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.witness.control.json",
+          "bytes": 10246,
+          "sha256": "d3af07dc7d3c8afcba3b1685079a48760b815ecd8f34f7a1a50219d12249dfd6"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.witness.json",
+          "bytes": 4308,
+          "sha256": "130d5471a12610fe0b8ad73300fb4d00c6ca480835c1b28daadf9a49d0f102a5"
+        },
+        {
+          "file": "TypedWitness.ScalarWitness.claim.zkir",
+          "bytes": 2745,
+          "sha256": "2633a900cefbc639c58b1fea4b8b003c145f637854543239ac832c243a45a0f7"
+        },
+        {
+          "file": "TypedWitness.emptyHost.control.json",
+          "bytes": 1131,
+          "sha256": "035b3ae11121c4d748e5f3321c0af31dd862008e287153d38da9b49debdfad6b"
+        },
+        {
+          "file": "TypedWitness.emptyRelation.witness.control.json",
+          "bytes": 2220,
+          "sha256": "b1e369761ea3d3a23ecab1c69e1f707c8231de470d05335195ca5c6cea2b6390"
+        },
+        {
+          "file": "TypedWitness.emptyRelation.witness.json",
+          "bytes": 951,
+          "sha256": "0126a88695e72403d063bf2e8f84f97fd235fc51eb507745b47c7d835596e410"
+        },
+        {
+          "file": "TypedWitness.emptyRelation.zkir",
+          "bytes": 193,
+          "sha256": "0f6dac9fee54579a4a0fc2088e7cb6f9aeb004b482b0bd6394a2a977fd262f32"
+        },
+        {
+          "file": "TypedWitness.pairHost.control.json",
+          "bytes": 3896,
+          "sha256": "94d9d3700150e0eb188b7c4bea05395142509d52daf0378e75aaa9467400325e"
+        },
+        {
+          "file": "TypedWitness.pairRelation.witness.control.json",
+          "bytes": 8864,
+          "sha256": "7bf77bda6014a9b56558701e1f4e65ecee94521bfb8f519ec520c0c9f2eecd13"
+        },
+        {
+          "file": "TypedWitness.pairRelation.witness.json",
+          "bytes": 4158,
+          "sha256": "4d1799dbf1d44da58b87823dafb6a571f0e6f9e998ecdeec0f17a16f0b106418"
+        },
+        {
+          "file": "TypedWitness.pairRelation.zkir",
+          "bytes": 3098,
+          "sha256": "73ee9852a083121b7a3818b945e7df66999a084b2523c078478ebd7076aeeb89"
+        },
+        {
+          "file": "TypedWitness.scalarHost.control.json",
+          "bytes": 5194,
+          "sha256": "bb0c9e63f621cad815872f2de67c70ebbd6d293f609c0318cda3b262ce1c4675"
+        },
+        {
+          "file": "TypedWitness.scalarRelation.witness.control.json",
+          "bytes": 9522,
+          "sha256": "143bdf1024a74749f9ba650628d8872d81f514fac5464043cbaf2af7d719bb26"
+        },
+        {
+          "file": "TypedWitness.scalarRelation.witness.json",
+          "bytes": 3662,
+          "sha256": "b7d7ae6f1c7a166df9c27f38f4074811ae6731e8df1a82c1331845c13ffa285f"
+        },
+        {
+          "file": "TypedWitness.scalarRelation.zkir",
+          "bytes": 2136,
+          "sha256": "df8ffa10ff72fd464a0349e42da0d6a21bf26e95570f59da20328f59a8dd4521"
+        },
+        {
+          "file": "TypedWitness.unitHost.control.json",
+          "bytes": 789,
+          "sha256": "519482c895e1eae43462f38567a8bcc54d0f3f6c049f97a60376e3335b5f7f20"
+        },
+        {
+          "file": "TypedWitness.unitRelation.witness.control.json",
+          "bytes": 1539,
+          "sha256": "5d112c527a6b579d831c7684d55da42038b212bcfcb79c3549d58552c23b08d1"
+        },
+        {
+          "file": "TypedWitness.unitRelation.witness.json",
+          "bytes": 644,
+          "sha256": "03c50beb447e18e78c5b6d5d5a60b330f544376ca9371e8c618abd6d6dcef586"
+        },
+        {
+          "file": "TypedWitness.unitRelation.zkir",
+          "bytes": 193,
+          "sha256": "0f6dac9fee54579a4a0fc2088e7cb6f9aeb004b482b0bd6394a2a977fd262f32"
+        },
+        {
+          "file": "nightlean.json",
+          "bytes": 33768,
+          "sha256": "ac8656feb37c037ce111b3eb1b2f4614713865a0aa5c6c8afe35274871ef3a2c"
+        }
+      ]
+    }
+  ]
+}

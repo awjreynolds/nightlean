@@ -61,7 +61,8 @@ extern "C" {
    Hard stop/deadline enforcement requires a host worker policy. In-flight work
    still occupies its resource slot after cancel/free, until its call returns.
 
-   Limits: 8 sessions, 2 live prepare/prove/verification calls, 64 ordinary result
+   Limits: 8 combined proof sessions, witness target contexts and client sessions,
+   2 live prepare/prove/verification calls, 64 ordinary result
    tokens, 16 private tokens, 1MiB private config/request/proof/result, 64KiB public
    descriptor/reply metadata, 16MiB declared bundle payload, 128MiB SRS. The
    bundle cap is this ABI host/resource policy, not a compiler capability ceiling
@@ -93,6 +94,48 @@ int32_t nightlean_native_result_free(uint64_t);
 int32_t nightlean_native_private_length(uint64_t,size_t*);
 int32_t nightlean_native_private_copy(uint64_t,uint8_t*,size_t,size_t*);
 int32_t nightlean_native_private_free(uint64_t);
+
+/* Typed source witness handoff, additive to phase A. Prepare a target before source
+   providers run. The helper authenticates the selected bundle and SRS, reads only
+   private initial contract state, creates the deployment nonce once, and retains
+   the exact deployment under an opaque process-local context token. Private state
+   JSON is strict: {"state":{...}}. The ordinary result reports the frozen address
+   and entrypoint. Control begins through nightlean_control_begin_from_native_target
+   using this token and the exact retained witness.control.json bytes.
+
+   Target descriptor: {"abiVersion":1,"profile":"<profile>",
+     "bundleDirectory":"<selected bundle>","trustedManifestSha256":"<pin>",
+     "proofParametersSha256":"<SRS pin>","k":9,"ttl":2000000000}.
+   Target preparation validates bundle and SRS before reading state. Supply 32 fresh
+   entropy bytes. The target context is one-use and must be freed if abandoned.
+   During synchronous proof preparation, target free returns INVALID_STATE while
+   the native registry reserves that context; retry free after the call returns.
+
+   begin_from_witness accepts no circuit-input map or arbitrary Runtime. It obtains
+   all canonical original inputs and ordered witness leaves from the completed
+   Control session, builds Config.inputs inside Rust, prepares against the retained
+   exact deployment, and consumes Control plus target only after every proof input
+   and target check passes. Pre-take validation failures retain a completed Control
+   session and target for retry. If Control is canceled or freed during preparation,
+   the target reservation is released and a fresh Control invocation is required.
+   Once take succeeds, canceling the proof session drops its owned source Runtime.
+   The proof descriptor omits bundleDirectory,
+   since the target context pins the selected bundle:
+     {"abiVersion":1,"profile":"<profile>",
+      "trustedManifestSha256":"<same pin>","proofParametersSha256":"<SRS pin>",
+      "k":9,"ttl":2000000000,"proofServiceCapability":"host.prover",
+      "maxResponseBytes":1048576}.
+   The source Runtime remains owned by the completed proof session. Deployment
+   client start uses the existing fresh Setup path and leaves source writes untouched.
+   `nightlean_client_start_from_witness` consumes the exact source Runtime for the
+   proved CALL and persists its typed recovery envelope through the existing SDK60
+   journal, finality and CAS lifecycle. */
+int32_t nightlean_native_witness_target_begin(const uint8_t*,size_t,
+  const uint8_t*,size_t,const uint8_t*,size_t,const uint8_t*,size_t,
+  uint64_t*,uint64_t*);
+int32_t nightlean_native_target_context_free(uint64_t);
+int32_t nightlean_native_begin_from_witness(const uint8_t*,size_t,uint64_t,uint64_t,
+  const uint8_t*,size_t,const uint8_t*,size_t,uint64_t*);
 /* Phase B: explicit pull/resume SDK60 client extension. Existing phase-A calls
    above keep their original behavior. Only Rust-owned futures/objects survive
    calls. No foreign callback, stack frame or buffer is retained.
@@ -150,6 +193,7 @@ int32_t nightlean_native_private_free(uint64_t);
    private host transport, not a contract observation. Free service/result tokens.
    No blanket native-allocation zeroization is promised. */
 int32_t nightlean_client_start(uint64_t,uint32_t,const uint8_t*,size_t,const uint8_t*,size_t,uint64_t*);
+int32_t nightlean_client_start_from_witness(uint64_t,const uint8_t*,size_t,uint64_t*);
 int32_t nightlean_client_recover(const uint8_t*,size_t,const uint8_t*,size_t,uint64_t*);
 int32_t nightlean_client_command(uint64_t,const uint8_t*,size_t,uint64_t*);
 int32_t nightlean_client_advance(uint64_t,uint64_t*);

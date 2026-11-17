@@ -1,0 +1,6 @@
+{"version": {"minor": 2, "major": 3},
+ "outputs": [],
+ "instructions":
+ [{"op": "assert", "cond": "0x01"}, {"vals": [], "op": "output"}],
+ "inputs": [],
+ "do_communications_commitment": false}

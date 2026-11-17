@@ -706,6 +706,9 @@ pub mod assembly;
 
 /// Scoped host providers and private journal transport.
 pub mod host;
+pub mod witness;
+/// Owned source witness execution, native proof and client handoff.
+pub mod witness_execution;
 /// Pure private-state lifecycle model.
 pub mod lifecycle;
 

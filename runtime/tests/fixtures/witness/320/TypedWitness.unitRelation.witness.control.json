@@ -1,0 +1,34 @@
+{"witnesses":
+ [{"resultType": "Unit",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.unit.v1",
+   "name": "unit",
+   "capability": "unit"}],
+ "types": [],
+ "schemaVersion": 2,
+ "name": "unit",
+ "mode": "native",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs": [],
+ "functions":
+ [{"resultType": "Unit",
+   "parameters": [],
+   "name": "unit",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span": {"line": 1, "file": "", "column": 1},
+      "site": "unit-call",
+      "name": "unit",
+      "arguments": []},
+     "tag": "evaluate",
+     "span": {"line": 1, "file": "", "column": 1}},
+    {"value": null,
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d0",
+ "binding":
+ "{\"calls\":[{\"inputs\":[],\"name\":\"unit\",\"ordinal\":\"0\",\"path\":[\"s0d0\"],\"resultType\":\"Unit\",\"site\":\"unit-call\"}],\"circuitInputs\":[],\"circuitName\":\"TypedWitness.unitRelation\",\"circuitOutputs\":[],\"inputBindings\":[],\"kind\":\"typed-witness-bindings\",\"nativeRelation\":{\"do_communications_commitment\":false,\"inputs\":[],\"instructions\":[{\"cond\":\"0x01\",\"op\":\"assert\"},{\"op\":\"output\",\"vals\":[]}],\"outputs\":[],\"version\":{\"major\":3,\"minor\":2}},\"schemaVersion\":1,\"signatures\":[{\"capability\":\"unit\",\"name\":\"unit\",\"operation\":\"noctium.unit.v1\",\"parameters\":[],\"privateKey\":null,\"resultType\":\"Unit\"}],\"sourceExport\":\"unit\",\"target\":{\"kind\":\"standalone\"},\"types\":[]}\n"}

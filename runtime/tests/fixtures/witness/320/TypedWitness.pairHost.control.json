@@ -1,0 +1,121 @@
+{"witnesses":
+ [{"resultType": "Aggregate:t0",
+   "privateKey": null,
+   "parameters": [{"type": "Aggregate:t0", "name": "request"}],
+   "operation": "noctium.pair.v1",
+   "name": "pair",
+   "capability": "pair"}],
+ "types":
+ [{"schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r17:TypedWitness.PairNightleanCompositeLayoutV1;1;R17:TypedWitness.Pair2;f6:amountsU255;f4:okaysB0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "TypedWitness.Pair",
+     "fields":
+     [{"name": "amount",
+       "layout":
+       {"leaf": {"maximum": "255", "kind": "uint"}, "kind": "scalar"}},
+      {"name": "okay",
+       "layout": {"leaf": {"kind": "bool"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}},
+   "id": "t0"}],
+ "schemaVersion": 2,
+ "name": "pair",
+ "mode": "host",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs":
+ [{"visibility": "public", "type": "UIntRange<256>", "name": "expected"},
+  {"visibility": "private", "type": "Aggregate:t0", "name": "request"}],
+ "functions":
+ [{"resultType": "Aggregate:t0",
+   "parameters": [{"type": "Aggregate:t0", "name": "request"}],
+   "name": "fetchPair",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span": {"line": 1, "file": "", "column": 1},
+      "site": "fetch-pair",
+      "name": "pair",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 1, "file": "", "column": 1},
+        "name": "request"}]},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]},
+  {"resultType": "Aggregate:t0",
+   "parameters":
+   [{"type": "UIntRange<256>", "name": "expected"},
+    {"type": "Aggregate:t0", "name": "request"}],
+   "name": "claimPair",
+   "id": "s0d1",
+   "body":
+   [{"value":
+     {"tag": "call",
+      "span": {"line": 1, "file": "", "column": 1},
+      "function": "s0d0",
+      "arguments":
+      [{"tag": "reference",
+        "span": {"line": 1, "file": "", "column": 1},
+        "name": "request"}]},
+     "type": "Aggregate:t0",
+     "tag": "bind",
+     "span": {"line": 1, "file": "", "column": 1},
+     "name": "answer"},
+    {"tag": "assert",
+     "span": {"line": 1, "file": "", "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span": {"line": 1, "file": "", "column": 1},
+      "right":
+      {"tag": "reference",
+       "span": {"line": 1, "file": "", "column": 1},
+       "name": "expected"},
+      "left":
+      {"value":
+       {"tag": "reference",
+        "span": {"line": 1, "file": "", "column": 1},
+        "name": "answer"},
+       "type": "UIntRange<256>",
+       "tag": "project",
+       "span": {"line": 1, "file": "", "column": 1},
+       "projection": {"name": "amount", "kind": "field"}}}},
+    {"tag": "assert",
+     "span": {"line": 1, "file": "", "column": 1},
+     "condition":
+     {"value":
+      {"tag": "reference",
+       "span": {"line": 1, "file": "", "column": 1},
+       "name": "answer"},
+      "type": "Bool",
+      "tag": "project",
+      "span": {"line": 1, "file": "", "column": 1},
+      "projection": {"name": "okay", "kind": "field"}}},
+    {"value":
+     {"value":
+      {"tag": "reference",
+       "span": {"line": 1, "file": "", "column": 1},
+       "name": "answer"},
+      "type": "UIntRange<256>",
+      "tag": "project",
+      "span": {"line": 1, "file": "", "column": 1},
+      "projection": {"name": "amount", "kind": "field"}},
+     "type": "UIntRange<256>",
+     "tag": "stage",
+     "span": {"line": 1, "file": "", "column": 1},
+     "key": "cache/last",
+     "capability": "private"},
+    {"value":
+     {"value":
+      {"tag": "reference",
+       "span": {"line": 1, "file": "", "column": 1},
+       "name": "answer"},
+      "tag": "disclose",
+      "span": {"line": 1, "file": "", "column": 1}},
+     "tag": "return",
+     "span": {"line": 1, "file": "", "column": 1}}]}],
+ "entry": "s0d1",
+ "binding": null}

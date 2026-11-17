@@ -1,5 +1,5 @@
 //! Canonical composite schema/value transport. Compiler layout construction remains Lean.
-use anyhow::{Result, anyhow, bail, ensure};
+use anyhow::{anyhow, bail, ensure, Result};
 use num_bigint::BigUint;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
@@ -381,6 +381,20 @@ pub struct Schema {
     measures: Vec<Counts>,
     root: usize,
     fingerprint: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct Projection {
+    pub kind: String,
+    pub index: Option<usize>,
+    pub name: Option<String>,
+    pub variant: Option<String>,
+}
+
+pub struct ProjectedValue {
+    pub value: Vec<u8>,
+    pub leaf_range: std::ops::Range<usize>,
+    pub type_key: String,
 }
 fn valid_segment(name: &str) -> bool {
     let mut chars = name.bytes();
@@ -1058,6 +1072,458 @@ impl Schema {
             "aggregate flattening count mismatch"
         );
         Ok(leaves)
+    }
+
+    pub fn validate_value_json(&self, json: &[u8]) -> Result<()> {
+        self.flatten_value(json).map(|_| ())
+    }
+
+    pub fn leaf_types(&self) -> Result<Vec<String>> {
+        let mut pending = vec![self.root];
+        let mut result = Vec::with_capacity(self.counts().leaves);
+        while let Some(index) = pending.pop() {
+            ensure!(
+                pending.len() <= MAX_NODES * 2,
+                "aggregate type traversal limit exceeded"
+            );
+            match &self.nodes[index] {
+                LayoutNode::Unit => {}
+                LayoutNode::Scalar(Leaf::Native) => result.push("Native".to_owned()),
+                LayoutNode::Scalar(Leaf::Bool) => result.push("Bool".to_owned()),
+                LayoutNode::Scalar(Leaf::UInt(maximum)) => {
+                    result.push(format!("UIntRange<{}>", maximum + BigUint::from(1u8)))
+                }
+                LayoutNode::Tuple(items) => pending.extend(items.iter().rev().copied()),
+                LayoutNode::Struct { fields, .. } => {
+                    pending.extend(fields.iter().rev().map(|field| field.layout));
+                }
+                LayoutNode::Vector { length, element } => {
+                    ensure!(
+                        *length <= MAX_LEAVES,
+                        "aggregate vector leaf limit exceeded"
+                    );
+                    for _ in 0..*length {
+                        pending.push(*element);
+                    }
+                }
+                LayoutNode::Bytes { length } => {
+                    ensure!(
+                        result
+                            .len()
+                            .checked_add(*length)
+                            .is_some_and(|count| count <= MAX_LEAVES),
+                        "aggregate leaf type limit exceeded"
+                    );
+                    result.extend(std::iter::repeat_n("Native".to_owned(), *length));
+                }
+                LayoutNode::Enum { payload, .. } => {
+                    ensure!(
+                        result
+                            .len()
+                            .checked_add(1 + *payload)
+                            .is_some_and(|count| count <= MAX_LEAVES),
+                        "aggregate leaf type limit exceeded"
+                    );
+                    result.extend(std::iter::repeat_n("Native".to_owned(), 1 + *payload));
+                }
+            }
+            ensure!(
+                result.len() <= MAX_LEAVES,
+                "aggregate leaf type limit exceeded"
+            );
+        }
+        ensure!(
+            result.len() == self.counts().leaves,
+            "aggregate leaf type count mismatch"
+        );
+        Ok(result)
+    }
+
+    pub fn flatten_leaves_json(&self, json: &[u8]) -> Result<Vec<serde_json::Value>> {
+        let numbers = self.flatten_value(json)?;
+        let types = self.leaf_types()?;
+        ensure!(
+            numbers.len() == types.len(),
+            "aggregate leaf type count mismatch"
+        );
+        numbers
+            .into_iter()
+            .zip(types)
+            .map(|(number, ty)| match ty.as_str() {
+                "Native" => Ok(serde_json::Value::String(number.to_str_radix(10))),
+                "Bool" => {
+                    ensure!(
+                        number <= BigUint::from(1u8),
+                        "noncanonical aggregate Boolean"
+                    );
+                    Ok(serde_json::Value::Bool(number == BigUint::from(1u8)))
+                }
+                _ => Ok(serde_json::Value::String(number.to_str_radix(10))),
+            })
+            .collect()
+    }
+
+    pub fn from_leaf_json(&self, leaves: &[serde_json::Value]) -> Result<Vec<u8>> {
+        let types = self.leaf_types()?;
+        ensure!(leaves.len() == types.len(), "aggregate leaf count mismatch");
+        let modulus = decimal(crate::MODULUS)?;
+        let wire_capacity = MAGIC
+            .len()
+            .checked_add(8)
+            .and_then(|size| size.checked_add(self.fingerprint.len()))
+            .and_then(|size| size.checked_add(leaves.len().checked_mul(32)?))
+            .ok_or_else(|| anyhow!("aggregate wire size overflow"))?;
+        ensure!(
+            wire_capacity <= MAX_TRANSPORT_BYTES,
+            "aggregate wire transport limit exceeded"
+        );
+        let mut wire = zeroize::Zeroizing::new(Vec::with_capacity(wire_capacity));
+        wire.extend_from_slice(MAGIC);
+        wire.extend_from_slice(
+            &u32::try_from(self.fingerprint.len())
+                .map_err(|_| anyhow!("aggregate fingerprint length overflow"))?
+                .to_le_bytes(),
+        );
+        wire.extend_from_slice(self.fingerprint.as_bytes());
+        wire.extend_from_slice(
+            &u32::try_from(leaves.len())
+                .map_err(|_| anyhow!("aggregate leaf count overflow"))?
+                .to_le_bytes(),
+        );
+        for (leaf, ty) in leaves.iter().zip(types) {
+            let number = match ty.as_str() {
+                "Bool" => BigUint::from(u8::from(
+                    leaf.as_bool()
+                        .ok_or_else(|| anyhow!("expected aggregate Boolean leaf"))?,
+                )),
+                _ => {
+                    let text = leaf
+                        .as_str()
+                        .ok_or_else(|| anyhow!("expected aggregate decimal leaf"))?;
+                    decimal(text)?
+                }
+            };
+            ensure!(number < modulus, "aggregate leaf outside the native field");
+            let mut bytes = zeroize::Zeroizing::new(number.to_bytes_le());
+            ensure!(bytes.len() <= 32, "aggregate field leaf too large");
+            bytes.resize(32, 0);
+            wire.extend_from_slice(&bytes);
+        }
+        ensure!(
+            wire.len() <= MAX_TRANSPORT_BYTES,
+            "aggregate wire transport limit exceeded"
+        );
+        self.decode_wire(&wire)
+    }
+
+    fn node_type_key(&self, root: usize) -> Result<String> {
+        enum Task {
+            Node(usize),
+            Text(String),
+        }
+        let mut pending = vec![Task::Node(root)];
+        let mut output = String::new();
+        let mut visits = 0usize;
+        while let Some(task) = pending.pop() {
+            visits = visits
+                .checked_add(1)
+                .ok_or_else(|| anyhow!("aggregate type key overflow"))?;
+            ensure!(
+                visits <= MAX_NODES * 4,
+                "aggregate type key traversal limit exceeded"
+            );
+            match task {
+                Task::Text(text) => output.push_str(&text),
+                Task::Node(index) => match &self.nodes[index] {
+                    LayoutNode::Unit => output.push('u'),
+                    LayoutNode::Scalar(Leaf::Native) => output.push_str("sN"),
+                    LayoutNode::Scalar(Leaf::Bool) => output.push_str("sB"),
+                    LayoutNode::Scalar(Leaf::UInt(maximum)) => {
+                        output.push_str(&format!("sU{};", maximum.to_str_radix(10)));
+                    }
+                    LayoutNode::Tuple(items) => {
+                        output.push_str(&format!("T{}[", items.len()));
+                        pending.push(Task::Text("]".to_owned()));
+                        for (index, item) in items.iter().enumerate().rev() {
+                            pending.push(Task::Node(*item));
+                            if index != 0 {
+                                pending.push(Task::Text(",".to_owned()));
+                            }
+                        }
+                    }
+                    LayoutNode::Struct { id, fields } => {
+                        output.push_str(&format!("S{}:{}{{", id.len(), id));
+                        pending.push(Task::Text("}".to_owned()));
+                        for (index, field) in fields.iter().enumerate().rev() {
+                            pending.push(Task::Node(field.layout));
+                            pending.push(Task::Text(format!(
+                                "{}:{}=",
+                                field.name.len(),
+                                field.name
+                            )));
+                            if index != 0 {
+                                pending.push(Task::Text(",".to_owned()));
+                            }
+                        }
+                    }
+                    LayoutNode::Vector { length, element } => {
+                        output.push_str(&format!("V{length}["));
+                        pending.push(Task::Node(*element));
+                        pending.push(Task::Text("]".to_owned()));
+                    }
+                    LayoutNode::Bytes { length } => output.push_str(&format!("B{length}")),
+                    LayoutNode::Enum {
+                        id,
+                        variants,
+                        payload,
+                    } => {
+                        output.push_str(&format!("E{}:{}:{payload}{{", id.len(), id));
+                        pending.push(Task::Text("}".to_owned()));
+                        for (variant_index, variant) in variants.iter().enumerate().rev() {
+                            pending.push(Task::Text("}".to_owned()));
+                            for (field_index, field) in variant.fields.iter().enumerate().rev() {
+                                pending.push(Task::Node(field.layout));
+                                pending.push(Task::Text(format!(
+                                    "{}:{}=",
+                                    field.name.len(),
+                                    field.name
+                                )));
+                                if field_index != 0 {
+                                    pending.push(Task::Text(",".to_owned()));
+                                }
+                            }
+                            pending.push(Task::Text(format!(
+                                "{}:{}{{",
+                                variant.name.len(),
+                                variant.name
+                            )));
+                            if variant_index != 0 {
+                                pending.push(Task::Text(",".to_owned()));
+                            }
+                        }
+                    }
+                },
+            }
+            ensure!(
+                output.len() <= MAX_TRANSPORT_BYTES,
+                "aggregate type key exceeds transport limit"
+            );
+        }
+        Ok(output)
+    }
+
+    fn projection_node(&self, projection: &Projection) -> Result<(Option<usize>, usize, String)> {
+        let root = &self.nodes[self.root];
+        match (projection.kind.as_str(), root) {
+            ("tupleIndex", LayoutNode::Tuple(items)) => {
+                let index = projection
+                    .index
+                    .ok_or_else(|| anyhow!("missing aggregate tuple index"))?;
+                let child = *items
+                    .get(index)
+                    .ok_or_else(|| anyhow!("aggregate tuple index out of bounds"))?;
+                let offset = items[..index]
+                    .iter()
+                    .map(|item| self.measures[*item].leaves)
+                    .sum();
+                Ok((Some(child), offset, self.node_type_key(child)?))
+            }
+            ("field", LayoutNode::Struct { fields, .. }) => {
+                let name = projection
+                    .name
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("missing aggregate field name"))?;
+                let index = fields
+                    .iter()
+                    .position(|field| field.name == name)
+                    .ok_or_else(|| anyhow!("unknown aggregate struct field"))?;
+                let child = fields[index].layout;
+                let offset = fields[..index]
+                    .iter()
+                    .map(|field| self.measures[field.layout].leaves)
+                    .sum();
+                Ok((Some(child), offset, self.node_type_key(child)?))
+            }
+            ("vectorIndex", LayoutNode::Vector { length, element }) => {
+                let index = projection
+                    .index
+                    .ok_or_else(|| anyhow!("missing aggregate vector index"))?;
+                ensure!(index < *length, "aggregate vector index out of bounds");
+                let offset = index
+                    .checked_mul(self.measures[*element].leaves)
+                    .ok_or_else(|| anyhow!("aggregate vector offset overflow"))?;
+                Ok((Some(*element), offset, self.node_type_key(*element)?))
+            }
+            ("byteIndex", LayoutNode::Bytes { length }) => {
+                let index = projection
+                    .index
+                    .ok_or_else(|| anyhow!("missing aggregate byte index"))?;
+                ensure!(index < *length, "aggregate byte index out of bounds");
+                Ok((None, index, "sU255;".to_owned()))
+            }
+            ("enumField", LayoutNode::Enum { variants, .. }) => {
+                let variant_name = projection
+                    .variant
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("missing aggregate enum variant"))?;
+                let field_name = projection
+                    .name
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("missing aggregate enum field"))?;
+                let variant = variants
+                    .iter()
+                    .find(|variant| variant.name == variant_name)
+                    .ok_or_else(|| anyhow!("unknown aggregate enum variant"))?;
+                let index = variant
+                    .fields
+                    .iter()
+                    .position(|field| field.name == field_name)
+                    .ok_or_else(|| anyhow!("unknown aggregate enum field"))?;
+                let child = variant.fields[index].layout;
+                let offset = 1 + variant.fields[..index]
+                    .iter()
+                    .map(|field| self.measures[field.layout].leaves)
+                    .sum::<usize>();
+                Ok((Some(child), offset, self.node_type_key(child)?))
+            }
+            _ => bail!("aggregate projection kind and source type mismatch"),
+        }
+    }
+
+    fn projection_descriptor(&self, projection: &Projection) -> Result<(usize, usize, String)> {
+        let (node, start, key) = self.projection_node(projection)?;
+        Ok((node.map_or(usize::MAX, |index| index), start, key))
+    }
+
+    pub fn projection_type(
+        &self,
+        projection: &Projection,
+    ) -> Result<(String, std::ops::Range<usize>)> {
+        let (node, start, key) = self.projection_descriptor(projection)?;
+        let count = if node == usize::MAX {
+            1
+        } else {
+            self.measures[node].leaves
+        };
+        Ok((key, start..start + count))
+    }
+
+    pub fn index_projection(&self, index: usize) -> Result<Projection> {
+        let kind = match self.nodes[self.root] {
+            LayoutNode::Vector { .. } => "vectorIndex",
+            LayoutNode::Bytes { .. } => "byteIndex",
+            _ => bail!("aggregate indexing requires a vector or bytes"),
+        };
+        Ok(Projection {
+            kind: kind.to_owned(),
+            index: Some(index),
+            name: None,
+            variant: None,
+        })
+    }
+
+    pub fn indexed_type_key(&self) -> Result<String> {
+        match self.nodes[self.root] {
+            LayoutNode::Vector { element, .. } => self.node_type_key(element),
+            LayoutNode::Bytes { .. } => Ok("sU255;".to_owned()),
+            _ => bail!("aggregate indexing requires a vector or bytes"),
+        }
+    }
+
+    pub fn root_type_key(&self) -> Result<String> {
+        self.node_type_key(self.root)
+    }
+
+    pub fn projection_value_json(
+        &self,
+        json: &[u8],
+        projection: &Projection,
+    ) -> Result<ProjectedValue> {
+        self.project_value_json(json, projection)
+    }
+
+    pub fn project_value_json(
+        &self,
+        json: &[u8],
+        projection: &Projection,
+    ) -> Result<ProjectedValue> {
+        let leaves = self.flatten_value(json)?;
+        let (child, start, type_key) = self.projection_node(projection)?;
+        let leaf_count = child.map_or(1, |index| self.measures[index].leaves);
+        ensure!(
+            start
+                .checked_add(leaf_count)
+                .is_some_and(|end| end <= leaves.len()),
+            "aggregate projection range outside value"
+        );
+        let selected_json = if projection.kind == "byteIndex" {
+            let value: serde_json::Value = serde_json::from_slice(json)?;
+            let index = projection
+                .index
+                .ok_or_else(|| anyhow!("missing aggregate byte index"))?;
+            let number = value
+                .get("values")
+                .and_then(serde_json::Value::as_array)
+                .and_then(|items| items.get(index))
+                .and_then(serde_json::Value::as_u64)
+                .ok_or_else(|| anyhow!("invalid aggregate byte value"))?;
+            serde_json::json!({"kind":"uint","maximum":"255","value":number.to_string()})
+        } else {
+            let value: serde_json::Value = serde_json::from_slice(json)?;
+            let index = projection.index;
+            match projection.kind.as_str() {
+                "tupleIndex" => {
+                    let index = index.ok_or_else(|| anyhow!("missing tuple index"))?;
+                    value
+                        .get("items")
+                        .and_then(serde_json::Value::as_array)
+                        .and_then(|items| items.get(index))
+                        .cloned()
+                        .ok_or_else(|| anyhow!("invalid aggregate tuple value"))?
+                }
+                "vectorIndex" => {
+                    let index = index.ok_or_else(|| anyhow!("missing vector index"))?;
+                    value
+                        .get("items")
+                        .and_then(serde_json::Value::as_array)
+                        .and_then(|items| items.get(index))
+                        .cloned()
+                        .ok_or_else(|| anyhow!("invalid aggregate vector value"))?
+                }
+                "field" | "enumField" => {
+                    let fields = value
+                        .get("fields")
+                        .and_then(serde_json::Value::as_array)
+                        .ok_or_else(|| anyhow!("invalid aggregate fields"))?;
+                    let name = projection
+                        .name
+                        .as_deref()
+                        .ok_or_else(|| anyhow!("missing field name"))?;
+                    if projection.kind == "enumField" {
+                        ensure!(
+                            value.get("variant").and_then(serde_json::Value::as_str)
+                                == projection.variant.as_deref(),
+                            "aggregate enum variant mismatch"
+                        );
+                    }
+                    fields
+                        .iter()
+                        .find(|field| {
+                            field.get("name").and_then(serde_json::Value::as_str) == Some(name)
+                        })
+                        .and_then(|field| field.get("value"))
+                        .cloned()
+                        .ok_or_else(|| anyhow!("unknown aggregate field value"))?
+                }
+                _ => bail!("unsupported aggregate projection"),
+            }
+        };
+        let encoded = serde_json::to_vec(&selected_json)?;
+        Ok(ProjectedValue {
+            value: encoded,
+            leaf_range: start..start + leaf_count,
+            type_key,
+        })
     }
     pub fn encode_json_value(&self, json: &[u8]) -> Result<Vec<u8>> {
         let leaves = self.flatten_value(json)?;
