@@ -306,6 +306,10 @@ pub struct Read {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Instruction {
+    Guarded {
+        guard: Expr,
+        operation: Box<Instruction>,
+    },
     Dup,
     Index {
         slot: u32,
@@ -327,6 +331,19 @@ pub enum Instruction {
     Insert {
         n: u8,
     },
+}
+
+/// Number of transcript fields in one statically scheduled Impact group.
+/// Inactive guarded writes use only this shape metadata, never their payloads.
+fn impact_field_count(instruction: &Instruction) -> Result<usize> {
+    Ok(match instruction {
+        Instruction::Dup | Instruction::Member | Instruction::Insert { .. } => 1,
+        Instruction::Index { key: None, .. } => 4,
+        Instruction::Index { key: Some(_), .. } => 7,
+        Instruction::Push { .. } => 5,
+        Instruction::Popeq { .. } => 4,
+        Instruction::Guarded { .. } => bail!("nested guarded native operation is unsupported"),
+    })
 }
 #[derive(Clone, Deserialize)]
 pub struct Config {
@@ -518,6 +535,8 @@ fn advance_native_state_prefix(
 }
 pub struct Execution {
     pub program: Program,
+    /// Exact source schedule returned by the checked native Impact groups.
+    pub activity_schedule: Vec<Option<usize>>,
     pub after: QueryContext<Db>,
     pub guaranteed: Option<Transcript<Db>>,
     pub fallible: Option<Transcript<Db>>,
@@ -540,9 +559,40 @@ pub fn prepare(
     let mut read_index = 0usize;
     let mut previous_index = None;
     let mut has_written = false;
+    let mut activity_schedule = Vec::with_capacity(plan.operations.len());
     for i in &plan.operations {
+        let instruction = match i {
+            Instruction::Guarded { guard, operation } => {
+                ensure!(
+                    matches!(
+                        operation.as_ref(),
+                        Instruction::Index { push_path: true, .. }
+                            | Instruction::Push { .. }
+                            | Instruction::Insert { .. }
+                    ),
+                    "guarded native reads and non-write operations are unsupported"
+                );
+                let active = evaluate(guard, &env)?.boolean()?;
+                activity_schedule.push(if active {
+                    None
+                } else {
+                    Some(impact_field_count(operation.as_ref())?)
+                });
+                if !active {
+                    continue;
+                }
+                operation.as_ref()
+            }
+            _ => {
+                activity_schedule.push(None);
+                i
+            }
+        };
         let mut current_index = None;
-        let op = match i {
+        let op = match instruction {
+            Instruction::Guarded { .. } => {
+                bail!("nested guarded native operation is unsupported")
+            }
             Instruction::Dup => Op::Dup { n: 0 },
             Instruction::Index { slot, push_path, key } => {
                 let map_key = key
@@ -637,10 +687,14 @@ pub fn prepare(
         };
         previous_index = current_index;
         program.push(op);
-        if matches!(i, Instruction::Insert { .. }) {
+        if matches!(instruction, Instruction::Insert { .. }) {
             mutation_boundary = program.len();
         }
     }
+    ensure!(
+        activity_schedule.len() == plan.operations.len(),
+        "native activity schedule does not match source operations"
+    );
     ensure!(read_index == plan.reads.len(), "read schema mismatch");
     context.query(&program, None, cost).map_err(|_| {
         anyhow!("native state transcript rejected (spent nullifier or state mismatch)")
@@ -709,6 +763,7 @@ pub fn prepare(
     };
     Ok(Execution {
         program,
+        activity_schedule,
         after,
         guaranteed,
         fallible,
@@ -721,8 +776,12 @@ pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usi
         .check(circuit)
         .map_err(|_| anyhow!("native circuit assertion or preimage check failed"))?;
     ensure!(
-        active.len() == execution.program.len(),
-        "activity metadata does not match native operations"
+        active == execution.activity_schedule,
+        "activity metadata does not match source operation guards"
+    );
+    ensure!(
+        active.iter().filter(|skip| skip.is_none()).count() == execution.program.len(),
+        "active activity groups do not match native operations"
     );
     Ok(active)
 }

@@ -113,15 +113,21 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   let guardConditions ← convert value.span (plan.guards.mapM (normalize aliases))
   let (groups, bounds, operationAssertions) ←
     collectOperations value.span aliases plan.operations outputBounds
+  let activityGuards := if plan.activityGuards.isEmpty then
+      List.replicate groups.length none else plan.activityGuards
+  let guardResults ← activityGuards.mapM fun guard => match guard with
+    | none => pure ({term := .constant 1} : Normalized)
+    | some guard => convert value.span (normalize aliases guard)
   pure {
     mode := .ledgerCall
     inputs := inputs
     groups := groups
+    groupGuards := guardResults.map (·.term)
     returns := []
     assertions := conditions.flatMap (fun result => result.assertions ++ [result.term]) ++
       outputAssertions ++ guardConditions.flatMap (fun result => result.assertions ++ [result.term]) ++
-      operationAssertions
-    bounds := bounds ++ constraints ++ guards
+      operationAssertions ++ guardResults.flatMap (·.assertions)
+    bounds := bounds ++ constraints ++ guards ++ guardResults.flatMap (·.bounds)
   }
 
 end Nightlean.Backend.Native

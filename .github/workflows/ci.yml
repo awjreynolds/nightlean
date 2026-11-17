@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   lean:
-    name: Lean compiler and map-read POC
+    name: Lean compiler and contract examples
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -32,5 +32,8 @@ jobs:
           use-github-cache: false
       - name: Build the POC compiler
         run: lake build noctium Nightlean.Compiler
-      - name: Check the source contract example
-        run: lake env lean tests/Issue68MapReads.lean
+      - name: Check source contract examples
+        run: |
+          lake env lean tests/Issue68MapReads.lean
+          lake env lean tests/Issue43ConditionalWrites.lean
+          lake env lean examples/openzeppelin/PublicSupply.lean

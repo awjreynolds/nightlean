@@ -48,6 +48,9 @@ structure Read where
 
 structure Plan where
   operations : List Op := []
+  /-- Optional source activity guard per opcode group. Empty means all groups
+  are active, preserving historical plans. -/
+  activityGuards : List (Option (Expr .bool)) := []
   reads : List Read := []
   guards : List (Expr .bool) := []
   deriving Repr
@@ -63,6 +66,10 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
     (plan.reads.drop publicCount).map (fun read => (read.name, read.ty))
   for field in plan.fields do field.validate {poseidon2 := true} env
   for guard in plan.guards do guard.validate {poseidon2 := true} env
+  unless plan.activityGuards.isEmpty || plan.activityGuards.length == plan.operations.length do
+    throw "native activity guard schedule length mismatch"
+  for guard in plan.activityGuards do
+    if let some guard := guard then guard.validate {poseidon2 := true} env
 
 private def nativeValue : (ty : Ty) → Expr ty → Scalar
   | .native, value => value
@@ -120,6 +127,33 @@ def appendEffect (state : List StateDecl) (effect : Effect)
 def appendEffects (state : List StateDecl) (effects : List Effect)
     (initial : Plan) : Except String Plan :=
   effects.foldlM (fun plan effect => appendEffect state effect plan) initial
+
+/-- Lower one source effect and bind its generated opcode groups to the exact
+source activity guard. Operations before the first guard retain implicit true. -/
+private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
+    (guard : Option (Expr .bool)) (plan : Plan) : Except String Plan := do
+  let before := plan.operations.length
+  let result ← appendEffect state effect plan
+  let added := result.operations.length - before
+  if guard.isSome && added == 0 then
+    throw "native guards are supported only on cell and map writes"
+  if guard.isNone && plan.activityGuards.isEmpty then
+    pure result
+  else
+    let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
+      else plan.activityGuards
+    pure {result with activityGuards := priorGuards ++ List.replicate added guard}
+
+/-- Lower ordered effects while keeping optional activity guards aligned with
+each emitted opcode group. -/
+def appendEffectsGuarded (state : List StateDecl) (effects : List Effect)
+    (guards : List (Option (Expr .bool))) (initial : Plan) : Except String Plan := do
+  unless guards.isEmpty || guards.length == effects.length do
+    throw "effect guard metadata length mismatch"
+  let mut plan := initial
+  for (effect, index) in effects.zipIdx do
+    plan ← appendEffectWithActivity state effect (guards[index]?.getD none) plan
+  pure plan
 
 private def appendPublicInput (input : Input) (plan : Plan) : Plan :=
   if input.visibility == .«public» then
@@ -261,7 +295,7 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
       throw "source names beginning '_nightlean_' are reserved by the native transcript producer"
     -- Public parameters must appear among Popeq reads consumed by public_input.
     plan := publicInputPlan entry.circuit.inputs plan
-    plan ← appendEffects state entry.effects plan
+    plan ← appendEffectsGuarded state entry.effects entry.effectGuards plan
     pure plan
   finishPlan entry result
 

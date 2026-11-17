@@ -192,6 +192,60 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       if (entries.lookup key).isSome then throw "state map key already present"
   pure next
 
+/-- Execute the source effect schedule with optional write activity guards.
+False guards skip write payload evaluation and state mutation. -/
+def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
+    (guards : List (Option (Expr .bool))) (env : EvalEnv)
+    (state : LedgerState) : Except String LedgerState := do
+  unless guards.isEmpty || guards.length == effects.length do
+    throw "effect guard metadata length mismatch"
+  if guards.isEmpty then
+    runEffects ctx effects env state
+  else do
+    let mut env := env
+    let mut next := state
+    for (effect, index) in effects.zipIdx do
+      let active ← match guards[index]? with
+        | some (some condition) => condition.eval ctx env
+        | _ => pure true
+      if active then
+        match effect with
+        | .readCell name destination ty =>
+          let some raw := next.cells.lookup name | throw s!"missing state cell '{name}'"
+          let some value := raw.as ty | throw s!"state cell type mismatch '{name}'"
+          if !canonical ctx ty value then throw s!"noncanonical state cell '{name}'"
+          env := (destination, Value.pack ty value) :: env
+        | .readMap name destination keyTy valueTy key =>
+          let key := Value.pack keyTy (← key.eval ctx env)
+          let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
+          let some raw := entries.lookup key | throw s!"missing map key in '{name}'"
+          let some value := raw.as valueTy | throw s!"state map value type mismatch '{name}'"
+          if !canonical ctx valueTy value then throw s!"noncanonical state map value '{name}'"
+          env := (destination, Value.pack valueTy value) :: env
+        | .require condition =>
+          if !(← condition.eval ctx env) then throw "state transition guard failed"
+        | .writeCell name ty value =>
+          let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
+          if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
+          next := {next with cells := updateAssoc name (Value.pack ty (← value.eval ctx env)) next.cells}
+        | .writeMap name keyTy valueTy key value =>
+          let key := Value.pack keyTy (← key.eval ctx env)
+          let value := Value.pack valueTy (← value.eval ctx env)
+          let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
+          for (oldKey, oldValue) in entries do
+            if (oldKey.as keyTy).isNone || (oldValue.as valueTy).isNone then
+              throw s!"state map type mismatch '{name}'"
+          next := {next with maps := updateAssoc name (updateAssoc key value entries) next.maps}
+        | .requireAbsent name keyTy key =>
+          let key := Value.pack keyTy (← key.eval ctx env)
+          let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
+          if (entries.lookup key).isSome then throw "state map key already present"
+      else
+        match effect with
+        | .writeCell .. | .writeMap .. => pure ()
+        | _ => throw "native guards are supported only on cell and map writes"
+    pure next
+
 /-- This is a specification evaluator, not a substitute for ledger proof checks. -/
 def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
     (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
@@ -199,7 +253,7 @@ def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
   | .error diagnostic => throw diagnostic.message
   | .ok _ => pure ()
   let outputs ← entry.circuit.run ctx env
-  let next ← runEffects ctx entry.effects (outputs ++ env) state
+  let next ← runEffectsWithGuards ctx entry.effects entry.effectGuards (outputs ++ env) state
   pure (outputs, next)
 
 /-- A small optimization whose correctness does not depend on the backend or hash. -/

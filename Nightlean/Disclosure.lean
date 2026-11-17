@@ -111,6 +111,13 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     env := env ++ [(output.name, [])]
   for (effect, index) in value.effects.zipIdx do
     let span := value.effectSpans[index]?.getD value.span
+    let activityControl ← match value.effectGuardAt index, effect with
+      | none, _ => pure []
+      | some condition, .writeCell .. | some condition, .writeMap .. =>
+        expression env span condition
+      | some _, _ =>
+        throw {span, message := "native guards are supported only on cell and map writes"}
+    let activeControl := merge control activityControl
     match effect with
     | .readCell state destination _ =>
       checkSink {description := s!"public cell read '{state}'", span} [] control
@@ -122,12 +129,12 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .require condition => discard (expression env span condition)
     | .writeCell state _ payload =>
       checkSink {description := s!"public cell write '{state}'", span}
-        (← expression env span payload) control
+        (← expression env span payload) activeControl
     | .writeMap state _ _ key payload =>
       checkSink {description := s!"public map write key '{state}'", span}
-        (← expression env span key) control
+        (← expression env span key) activeControl
       checkSink {description := s!"public map write value '{state}'", span}
-        (← expression env span payload) control
+        (← expression env span payload) activeControl
     | .requireAbsent state _ key =>
       checkSink {description := s!"public map query path '{state}'", span}
         (← expression env span key) control

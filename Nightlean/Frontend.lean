@@ -129,6 +129,8 @@ scoped syntax "require" nlexpr : nleffect
 scoped syntax "absent" ident "[" nlexpr "]" : nleffect
 scoped syntax "write" ident ":=" nlexpr : nleffect
 scoped syntax "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
+scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
+scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 
 declare_syntax_cat nlentry
 scoped syntax "entry" ident "uses" ident "where" nleffect* "end" : nlentry
@@ -406,8 +408,17 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
         let mut env ← addReferences [] (info.inputs ++ info.outputs)
         let mut effectTerms : Array (TSyntax `term) := #[]
         let mut effectSpans : Array (TSyntax `term) := #[]
+        let mut effectGuardTerms : Array (TSyntax `term) := #[]
         for effect in effects do
           effectSpans := effectSpans.push (← spanTerm effect)
+          let guardExpression? : Option (TSyntax `nlexpr) := match effect with
+            | `(nleffect| when $condition:nlexpr write $state:ident := $value:nlexpr) => some condition
+            | `(nleffect| when $condition:nlexpr insert $state:ident [ $key:nlexpr ] := $value:nlexpr) => some condition
+            | _ => none
+          let guardTerm ← match guardExpression? with
+            | none => `(none)
+            | some condition => `(some $(← checkedExpression env condition .bool))
+          effectGuardTerms := effectGuardTerms.push guardTerm
           match effect with
           | `(nleffect| require $value:nlexpr) =>
             effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
@@ -431,6 +442,11 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
               | throwErrorAt state "write requires a declared state cell"
             effectTerms := effectTerms.push (← `(Nightlean.Effect.writeCell
               $(stringTerm state.getId.toString) $(← tyTerm ty) $(← checkedExpression env value ty)))
+          | `(nleffect| when $condition:nlexpr write $state:ident := $value:nlexpr) =>
+            let some (.cell ty) := schema.lookup state.getId.toString
+              | throwErrorAt state "guarded write requires a declared state cell"
+            effectTerms := effectTerms.push (← `(Nightlean.Effect.writeCell
+              $(stringTerm state.getId.toString) $(← tyTerm ty) $(← checkedExpression env value ty)))
           | `(nleffect| absent $state:ident [ $key:nlexpr ]) =>
             let some (.map kt _) := schema.lookup state.getId.toString
               | throwErrorAt state "absent requires a declared state map"
@@ -442,9 +458,15 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
             effectTerms := effectTerms.push (← `(Nightlean.Effect.writeMap
               $(stringTerm state.getId.toString) $(← tyTerm kt) $(← tyTerm vt)
               $(← checkedExpression env key kt) $(← checkedExpression env value vt)))
+          | `(nleffect| when $condition:nlexpr insert $state:ident [ $key:nlexpr ] := $value:nlexpr) =>
+            let some (.map kt vt) := schema.lookup state.getId.toString
+              | throwErrorAt state "guarded insert requires a declared state map"
+            effectTerms := effectTerms.push (← `(Nightlean.Effect.writeMap
+              $(stringTerm state.getId.toString) $(← tyTerm kt) $(← tyTerm vt)
+              $(← checkedExpression env key kt) $(← checkedExpression env value vt)))
           | _ => throwErrorAt effect "unsupported Nightlean state effect"
         let circuitTerm := mkIdent info.declName
-        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$effectTerms,*], span := $(← spanTerm entryStx), effectSpans := [$effectSpans,*] : Nightlean.Entrypoint }))
+        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$effectTerms,*], span := $(← spanTerm entryStx), effectSpans := [$effectSpans,*], effectGuards := [$effectGuardTerms,*] : Nightlean.Entrypoint }))
       | _ => throwErrorAt entryStx "unsupported Nightlean entrypoint"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId

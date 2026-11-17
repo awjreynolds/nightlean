@@ -205,10 +205,14 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let guardText ← stringField instruction "guard"
     let guard ← operand state guardText
     requireBoolean guard
-    ensure (guard.term == .constant 1)
-      "guarded Impact is unsupported until source control/totalization/binding rules are qualified"
     let values ← arguments state instruction "inputs"
     let some group := expected.groups[state.groupCount]? | throw "unexpected native activity group"
+    let expectedGuard ← if expected.groupGuards.isEmpty then pure (.constant 1) else
+      match expected.groupGuards[state.groupCount]? with
+      | some guard => pure guard
+      | none => throw "source activity guard schedule is incomplete"
+    ensure (guard.term == expectedGuard)
+      "native Impact guard differs from the source-derived activity guard"
     ensure (values.map (·.term) == group) "native transcript activity grouping/payload mismatch"
     pure {state with groupCount := state.groupCount + 1}
   | "output" =>
@@ -241,6 +245,8 @@ def checkBound (state : State) (term : Term) (maximum : Nat) : Except String Uni
 /-- Validate a generated Native-scalar program against an independently derived
 typed statement/schedule. This does not authenticate a raw caller's Expected. -/
 def validate (expected : Expected) (program : Json) : Except String Unit := do
+  ensure (expected.groupGuards.isEmpty || expected.groupGuards.length == expected.groups.length)
+    "source activity guard schedule length mismatch"
   fields program ["version", "inputs", "outputs", "do_communications_commitment", "instructions"]
   let version ← program.getObjVal? "version"
   fields version ["major", "minor"]

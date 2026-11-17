@@ -5,9 +5,37 @@ operators to the typed helper source model. Portable host execution uses the
 Rust continuation machine and a separate C ABI. Node is unnecessary for source
 compilation, callback execution and the C++ adapter.
 
-Native proof and ledger lowering of these structured guards stays unavailable
+Native proof and ledger lowering of general structured guards stays unavailable
 until CF-02. The old eager scalar `select` keeps its existing semantics. Host
 execution establishes no theorem about native guarded proof soundness.
+
+## Bounded native write guards
+
+Issue 43 now has a narrow source-to-checker slice for scalar state writes:
+
+```lean
+when disclose(enabled) write balance := nextBalance
+when disclose(enabled) insert allowances[account] := amount
+```
+
+The compiler binds each write's Impact groups to the source guard. A private
+guard must be disclosed because the active update changes the public ledger
+transcript. The selected ZKIR 3.2.1 native checker accepts both active and
+inactive cases and checks the full activity vector. The Rust materializer skips
+inactive payload evaluation and state changes.
+
+This slice supports guarded scalar cell and map writes only. Guarded reads and
+guarded `require` effects fail validation. Guarded payloads with potentially
+partial evaluation, including unsigned underflow, `assertThen`, and unsafe
+narrowing casts, also fail validation until their native constraints use the
+same activity guard. The selected-321 check lives in
+`tests/Issue43ConditionalWrites.lean` and
+`runtime/tests/conditional_writes.rs`.
+
+Proof creation remains gated. The proof SDK still rejects skipped activity
+groups until it binds post-proof `Noop` attachment, statement inputs, and gas
+accounting to the checked schedule. This checker result does not close issue 43,
+qualify a proof path, or cover general structured branches.
 
 ## Authoring and compilation
 

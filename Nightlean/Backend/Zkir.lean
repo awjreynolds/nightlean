@@ -188,6 +188,9 @@ def lowerExpr : Expr ty → LowerM String
 def bindPublic (values : List String) : LowerM Unit :=
   emit "impact" [("guard", toJson ("0x01" : String)), ("inputs", toJson values)]
 
+def bindPublicGuarded (guard : Expr .bool) (values : List String) : LowerM Unit := do
+  emit "impact" [("guard", toJson (← lowerExpr guard)), ("inputs", toJson values)]
+
 def lowerBody (c : Circuit) : LowerM Unit := do
   for input in c.inputs do
     let output := "%input_" ++ input.name
@@ -282,8 +285,9 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
     emit "assert" [("cond", toJson (← lowerExpr condition))]
   -- The ledger consumes one activity/skip entry per VM opcode. Flattening
   -- these groups preserves field values but breaks transaction proving.
-  for operation in plan.operations do
-    bindPublic (← operation.fields.mapM lowerExpr)
+  for (operation, index) in plan.operations.zipIdx do
+    let guard := ((plan.activityGuards[index]?).getD none).getD (.bool true)
+    bindPublicGuarded guard (← operation.fields.mapM lowerExpr)
   -- Contract outputs are named values used in state effects. The transaction
   -- call has empty explicit return value; all disclosed values are in transcript.
   emit "output" [("vals", toJson ([] : List String))]

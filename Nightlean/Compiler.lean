@@ -74,7 +74,7 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   | .field expression => [("alignment", toJson ("field" : String)), ("expression", nativeExpressionJson expression)]
   | .bit b => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson (.bool b))]
 
-private def operationJson : Backend.Impact.Op → Json
+private def operationJsonBare : Backend.Impact.Op → Json
   | .dup => Json.mkObj [("op", toJson ("dup" : String))]
   | .index slot pushPath => Json.mkObj [("op", toJson ("index" : String)),
       ("slot", toJson slot), ("pushPath", toJson pushPath)]
@@ -85,6 +85,16 @@ private def operationJson : Backend.Impact.Op → Json
   | .popeq value => Json.mkObj ([("op", toJson ("popeq" : String))] ++ alignedJson value)
   | .member => Json.mkObj [("op", toJson ("member" : String))]
   | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
+
+private def operationJson (activityGuard : Option (Expr .bool))
+    (operation : Backend.Impact.Op) : Json :=
+  let encoded := operationJsonBare operation
+  match activityGuard with
+  | none => encoded
+  | some guard => Json.mkObj [
+      ("op", toJson ("guarded" : String)),
+      ("guard", nativeExpressionJson guard),
+      ("operation", encoded)]
 
 private def effectJson : Effect → Json
   | .readCell state destination ty => Json.mkObj [("op", toJson ("readCell" : String)),
@@ -99,6 +109,15 @@ private def effectJson : Effect → Json
       ("state", toJson state), ("key", expressionJson key), ("value", expressionJson value)]
   | .requireAbsent state _ key => Json.mkObj [("op", toJson ("requireAbsent" : String)),
       ("state", toJson state), ("key", expressionJson key)]
+
+private def guardedEffectJson (guard : Option (Expr .bool)) (effect : Effect) : Json :=
+  let encoded := effectJson effect
+  match guard with
+  | none => encoded
+  | some condition => Json.mkObj [
+      ("op", toJson ("guarded" : String)),
+      ("guard", expressionJson condition),
+      ("effect", encoded)]
 
 private def stateJson (state : StateDecl) : Json :=
   let kind := match state.kind with
@@ -215,7 +234,8 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile contractName ep)),
     ("state", toJson (state.map stateJson)),
     ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
-    ("operations", toJson (plan.operations.map operationJson)),
+    ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
+      operationJson (plan.activityGuards[index]?.getD none) operation)),
     ("reads", toJson (plan.reads.map fun item => Json.mkObj [
       ("name", toJson item.name), ("type", toJson (typeName item.ty))])),
     ("guards", toJson (plan.guards.map nativeExpressionJson))])
@@ -341,7 +361,8 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
       ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
       ("nativePlanFile", toJson (nativePlanFile name ep)),
       ("nativeCircuitQualified", toJson Bool.false),
-      ("effects", toJson (ep.effects.map effectJson))]))]
+      ("effects", toJson (ep.effects.zipIdx.map fun (effect, index) =>
+        guardedEffectJson (ep.effectGuards[index]?.getD none) effect))]))]
   let controlFields := if controls.isEmpty then [] else [
     ("hostControlPlans", toJson (controls.toList.map fun name => Json.mkObj [
       ("name", toJson name.toString), ("file", toJson (artifactName name ++ ".control.json")),

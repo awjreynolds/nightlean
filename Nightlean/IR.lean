@@ -47,6 +47,26 @@ inductive Expr : Ty → Type where
   | poseidon2 (domain : Nat) (a b : Expr .native) : Expr .native
   deriving Repr
 
+/-- shortcut: Guarded writes reject expressions whose evaluation can fail until
+their native range/assertion constraints use the same activity guard. -/
+def Expr.partialForGuardedWrite : Expr ty → Bool
+  | .native _ | .bool _ | .uint _ _ | .ref _ => false
+  | .add a b | .mul a b | .sub a b | .uadd a b | .umul a b | .eq a b =>
+      a.partialForGuardedWrite || b.partialForGuardedWrite
+  | .usub _ _ => true
+  | .cast target (source := source) value =>
+      value.partialForGuardedWrite || match target, source with
+        | .uint _, .native => true
+        | .uint maximum, .uint sourceMaximum => sourceMaximum > maximum
+        | .uint maximum, .bool => maximum < 1
+        | _, _ => false
+  | .letE _ value body => value.partialForGuardedWrite || body.partialForGuardedWrite
+  | .assertE _ _ => true
+  | .disclose _ value => value.partialForGuardedWrite
+  | .select condition yes no =>
+      condition.partialForGuardedWrite || yes.partialForGuardedWrite || no.partialForGuardedWrite
+  | .poseidon2 _ a b => a.partialForGuardedWrite || b.partialForGuardedWrite
+
 structure Input where
   name : String
   ty : Ty
@@ -101,7 +121,13 @@ structure Entrypoint where
   effects : List Effect := []
   span : SourceSpan := {}
   effectSpans : List SourceSpan := []
+  /-- Optional activity guards aligned with `effects`. Only cell/map writes
+  accept a guard. An empty list preserves the legacy all-active schedule. -/
+  effectGuards : List (Option (Expr .bool)) := []
   deriving Repr
+
+def Entrypoint.effectGuardAt (entry : Entrypoint) (index : Nat) : Option (Expr .bool) :=
+  (entry.effectGuards[index]?).getD none
 
 structure Contract where
   name : String
@@ -226,6 +252,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
+  unless e.effectGuards.isEmpty || e.effectGuards.length == e.effects.length do
+    throw {span := e.span, message := "effect guard metadata length mismatch"}
   -- Typing permits private operands. Mandatory disclosure analysis decides
   -- whether their value/control dependence is authorized at a public sink.
   let mut env := e.circuit.inputs.map fun i => (i.name, i.ty)
@@ -233,7 +261,21 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
     if (e.circuit.inputs.find? (·.name == output.name)).isSome then
       throw {span := output.span, message := s!"output '{output.name}' shadows a circuit input"}
     env := env ++ [(output.name, output.ty)]
-  for effect in e.effects do
+  for (effect, index) in e.effects.zipIdx do
+    let span := e.effectSpans[index]?.getD e.span
+    if let some condition := e.effectGuardAt index then
+      match condition.validate caps env with
+      | .error message => throw {span, message}
+      | .ok _ => pure ()
+      match effect with
+      | .writeCell _ _ value =>
+        if value.partialForGuardedWrite then
+          throw {span := span, message := "guarded write payload contains a partial expression; native activity-gated constraints are unavailable"}
+      | .writeMap _ _ _ key value =>
+        if key.partialForGuardedWrite || value.partialForGuardedWrite then
+          throw {span := span, message := "guarded write payload contains a partial expression; native activity-gated constraints are unavailable"}
+      | _ =>
+        throw {span := span, message := "native guards are supported only on cell and map writes"}
     let result : Except String (Option (String × Ty)) := do
       match effect with
       | .readCell state destination ty =>

@@ -157,6 +157,9 @@ structure Expected where
   mode : ProducerMode
   inputs : List InputRequirement
   groups : List (List Term)
+  /-- Exact source-derived Impact guard per group. Empty preserves all-active
+  relations produced before activity guards were introduced. -/
+  groupGuards : List Term := []
   returns : List Term
   assertions : List Term
   bounds : List (Term × Nat)

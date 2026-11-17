@@ -26,7 +26,7 @@ inductive Precondition where
   deriving Repr, BEq, DecidableEq
 
 inductive GuardRule where
-  | noGuard | unguardedInputOnly | alwaysActiveImpactOnly
+  | noGuard | unguardedInputOnly | sourceBoundImpactActivity
   deriving Repr, BEq, DecidableEq
 
 inductive BindingRule where
@@ -149,7 +149,7 @@ def instructionSupport (opcode : String) : Except String Support :=
     scalar .nativeInput .declaredInputOrigin .transcriptInput .matchingNativeSignature .unguardedInputOnly
       .expectedInputSchema ["guard", "type", "output"]
   | "impact" => .supported <|
-    scalar .nativeVector .publicBindingSink .transcriptBinding .nativeBoolean .alwaysActiveImpactOnly
+    scalar .nativeVector .publicBindingSink .transcriptBinding .nativeBoolean .sourceBoundImpactActivity
       .exactActivityGroup ["guard", "inputs"]
   | "output" => .supported <|
     scalar .nativeOutput .returnValue .returnValue .matchingNativeSignature .noGuard
