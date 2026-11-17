@@ -4692,9 +4692,9 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-17",
-    "sourceCommit": "bf5f35ce8584528cc5cb4d7e3d11248a84baac11",
+    "sourceCommit": "4bf0eaaa735aa70c582e1b8dab32af69a3bb9676",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 24,
+    "registeredOpcodeCount": 27,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4719,9 +4719,12 @@
       "ec_mul",
       "from_coordinates",
       "into_coordinates",
-      "inv"
+      "inv",
+      "to_bytes",
+      "from_bytes",
+      "bytes_from_natives"
     ],
-    "notExposedOpcodeCount": 23,
+    "notExposedOpcodeCount": 20,
     "notExposedOpcodes": [
       "copy",
       "hash_to_curve",
@@ -4741,11 +4744,8 @@
       "and",
       "or",
       "xor",
-      "to_bytes",
-      "from_bytes",
       "reverse",
-      "bytes_into_natives",
-      "bytes_from_natives"
+      "bytes_into_natives"
     ],
     "explicitNativeValueTypes": [
       "Native",
@@ -4778,7 +4778,7 @@
     ],
     "minimumChecksPolicy": "One focused source/native example per feature group and one completed-token localnet demonstration. Deeper assurance remains tracked separately.",
     "restrictedInternalValueTypes": [
-      "Bytes32 result from persistent_hash, consumed through modern encode; general Bytes(n) support remains unqualified"
+      "Bytes32 from persistent hashes, typed serialization and bounded native-chunk reconstruction; general Bytes(n) support remains unqualified"
     ],
     "persistentHashEvidence": {
       "source": "tests/Issue70PersistentHash.lean",
@@ -4811,6 +4811,12 @@
       "native": "runtime/tests/native_inverse.rs",
       "implementationCommit": "bf5f35ce8584528cc5cb4d7e3d11248a84baac11",
       "scope": "Native and JubjubScalar field inversion. Mandatory nonzero assertions retain zero rejection for discarded results. Inactive guarded inverses use typed one. Build and one selected-3.2.1 native smoke check pass. This is modular field arithmetic, not UInt division. Other prime-field types and helper/control inverse routes remain unimplemented. No new keys, proofs, deployments or broad regression campaign."
+    },
+    "byteConversionEvidence": {
+      "source": "tests/NativeByteConversions.lean",
+      "native": "runtime/tests/native_byte_conversions.rs",
+      "implementationCommit": "4bf0eaaa735aa70c582e1b8dab32af69a3bb9676",
+      "scope": "Modern to_bytes/from_bytes for Native, JubjubScalar and JubjubPoint, plus bytes_from_natives for exactly32 bytes with low31/highByte packing. Field decoding reduces modulo the target prime. Point decoding requires canonical prime-subgroup compressed encoding. Discarded invalid point decodes still reject, inactive guards use canonical identity bytes, and private origins propagate. Build and one selected-3.2.1 native smoke passed. General byte lengths, other curves and helper/control conversions remain open. No broad regression, keys, proofs or deployments."
     }
   }
 }

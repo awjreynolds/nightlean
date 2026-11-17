@@ -96,6 +96,19 @@ complete token remain separate work. Seeds in the fixture are public test data.
 Fresh, secret production seeds remain a wallet obligation. No new keys, proofs
 or deployments were generated.
 
+[`tests/NativeByteConversions.lean`](../../tests/NativeByteConversions.lean)
+adds `toBytes32(value)` and `fromBytes32(Type, bytes)` for Native, JubjubScalar
+and JubjubPoint. Fields serialize as canonical little-endian bytes and decode
+with explicit modular reduction. Points use canonical compressed bytes, with
+subgroup validation. This compressed representation differs from the affine
+point preimage used by `persistentHashPoint`.
+
+Raw inputs and computed byte values use the same bounded native-chunk bridge.
+Discarded malformed point decodes still reject. Inactive guarded decodes use
+the canonical identity encoding, not zero-filled bytes. Compilation and one
+focused selected-3.2.1 native smoke passed. Other byte lengths, other curves
+and helper/control conversion routes remain outside this slice.
+
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).
 It rebuilds the public-supply extension's two accounting blocks with 128-bit
