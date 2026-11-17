@@ -39,4 +39,5 @@ jobs:
           lake env lean tests/Issue43EmptyActivity.lean
           lake env lean tests/Issue43MapMembership.lean
           lake env lean tests/Issue43GuardedPartialWrites.lean
+          lake env lean tests/Issue43GuardedReads.lean
           lake env lean examples/openzeppelin/PublicSupply.lean

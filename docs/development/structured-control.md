@@ -24,21 +24,23 @@ transcript. The selected ZKIR 3.2.1 native checker accepts both active and
 inactive cases and checks the full activity vector. The Rust materializer skips
 inactive payload evaluation and state changes.
 
-This slice supports guarded scalar cell and map writes, plus unguarded scalar
-map membership reads that bind the native Bool result:
+This slice supports guarded scalar cell and map writes, guarded scalar cell,
+map-value and membership reads, plus unguarded map membership reads:
 
 ```lean
 member balances[account] as present
 when disclose(eq(present, false)) insert balances[account] := amount
 ```
 
-The materializer gathers the result from the native `Member` opcode after the
-ordered write prefix. ZKIR binds the byte-aligned Bool read into the public
-transcript, so a forged membership result fails the relation check. Guarded
-reads remain unavailable. The selected-321 checks live in
+The materializer gathers membership from the native `Member` opcode after the
+ordered write prefix. An inactive guarded read binds its canonical zero or
+false value without evaluating its map key or touching a missing path. ZKIR
+uses the source guard on the read input and asserts that an inactive read equals
+its default. The selected-321 checks live in
 `tests/Issue43ConditionalWrites.lean` and
 `runtime/tests/conditional_writes.rs`, and in
-`tests/Issue43MapMembership.lean` and `runtime/tests/map_membership.rs`.
+`tests/Issue43MapMembership.lean` and `runtime/tests/map_membership.rs`, plus
+`tests/Issue43GuardedReads.lean` and `runtime/tests/guarded_reads.rs`.
 
 Guarded writes and `require` also support partial scalar expressions. Inactive
 unsigned subtraction, narrowing casts and inline `assertThen` use safe native
@@ -67,10 +69,11 @@ statement. One changed skipped statement field rejects the proof. See the
 The private-only, all-inactive source case also proves and attaches with zero
 original VM operations. Its skipped fields use an empty native transcript
 container, without a dummy source input.
-General structured branches and guarded reads remain open in issue 43. The new
-partial-expression fixture has source/native checker evidence. The separate
-real proof fixtures above cover conditional writes and Noop attachment. This
-evidence includes no ledger deployment.
+General structured branches and guarded reads over nested aggregate values
+remain open in issue 43. The partial-expression and guarded-read fixtures have
+source/native checker evidence. The separate real proof fixtures above cover
+conditional writes and Noop attachment. This evidence includes no ledger
+deployment.
 
 ## Authoring and compilation
 

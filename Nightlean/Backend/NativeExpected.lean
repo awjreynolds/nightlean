@@ -96,7 +96,7 @@ native ledger interpretation remain separately tested/proved obligations. -/
 def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Diagnostic Expected := do
   let plan ← Impact.lower state value
   let publicCount := (value.circuit.inputs.filter (·.visibility == .«public»)).length
-  let inputs := value.circuit.inputs.map inputRequirement ++
+  let mut inputs := value.circuit.inputs.map inputRequirement ++
     (plan.reads.drop publicCount).map fun read =>
       {identifier := "%input_" ++ read.name, visibility := .«public», ty := read.ty}
   let mut aliases := inputAliases inputs
@@ -107,6 +107,20 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     aliases := (output.name, result.term) :: aliases
     outputBounds := outputBounds ++ result.bounds
     outputAssertions := outputAssertions ++ result.assertions
+  let mut readAssertions := []
+  let mut readBounds := []
+  for (read, index) in (plan.reads.drop publicCount).zipIdx do
+    if let some guard := read.guard then
+      let result ← convert value.span (normalize aliases guard)
+      let inputIndex := value.circuit.inputs.length + index
+      inputs := inputs.zipIdx.map fun (input, position) =>
+        if position == inputIndex then {input with activityGuard := some result.term} else input
+      readAssertions := readAssertions ++ result.assertions
+      readBounds := readBounds ++ result.bounds
+    if let some condition := read.inactiveDefaultConstraint then
+      let result ← convert value.span (normalize aliases condition)
+      readAssertions := readAssertions ++ result.assertions ++ [result.term]
+      readBounds := readBounds ++ result.bounds
   let (_, constraints, _) ← convert value.span (collect aliases value.circuit.constraints)
   let conditions ← convert value.span (value.circuit.constraints.mapM (normalize aliases))
   let (_, guards, _) ← convert value.span (collect aliases plan.guards)
@@ -125,9 +139,10 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     groupGuards := guardResults.map (·.term)
     returns := []
     assertions := conditions.flatMap (fun result => result.assertions ++ [result.term]) ++
-      outputAssertions ++ guardConditions.flatMap (fun result => result.assertions ++ [result.term]) ++
+      outputAssertions ++ readAssertions ++
+      guardConditions.flatMap (fun result => result.assertions ++ [result.term]) ++
       operationAssertions ++ guardResults.flatMap (·.assertions)
-    bounds := bounds ++ constraints ++ guards ++ guardResults.flatMap (·.bounds)
+    bounds := bounds ++ constraints ++ readBounds ++ guards ++ guardResults.flatMap (·.bounds)
   }
 
 end Nightlean.Backend.Native

@@ -97,7 +97,7 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
         _ => bail!("unsupported alignment"),
     }
 }
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "tag", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Expr {
     Constant {
@@ -303,6 +303,8 @@ pub struct Read {
     pub name: String,
     #[serde(rename = "type")]
     pub ty: String,
+    #[serde(default)]
+    pub guard: Option<Expr>,
 }
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase", deny_unknown_fields)]
@@ -344,6 +346,16 @@ fn impact_field_count(instruction: &Instruction) -> Result<usize> {
         Instruction::Push { .. } => 5,
         Instruction::Popeq { .. } => 4,
         Instruction::Guarded { .. } => bail!("nested guarded native operation is unsupported"),
+    })
+}
+fn inactive_read_value(ty: &str) -> Result<Value> {
+    Ok(match ScalarType::parse(ty)? {
+        ScalarType::Native => Value::Native(Fr::from(0u64)),
+        ScalarType::Bool => Value::Bool(false),
+        ScalarType::UInt(maximum) => Value::UInt {
+            number: BigUint::from(0u8),
+            maximum,
+        },
     })
 }
 #[derive(Clone, Deserialize)]
@@ -607,16 +619,28 @@ pub fn prepare(
     let mut has_written = false;
     let mut activity_schedule = Vec::with_capacity(plan.operations.len());
     for i in &plan.operations {
+        let mut instruction_guard = None;
         let instruction = match i {
             Instruction::Guarded { guard, operation } => {
                 ensure!(
                     matches!(
                         operation.as_ref(),
-                        Instruction::Index { push_path: true, .. }
+                        Instruction::Dup
+                            | Instruction::Index {
+                                push_path: false,
+                                ..
+                            }
+                            | Instruction::Push { storage: false, .. }
+                            | Instruction::Popeq { .. }
+                            | Instruction::Member
+                            | Instruction::Index {
+                                push_path: true,
+                                ..
+                            }
                             | Instruction::Push { .. }
                             | Instruction::Insert { .. }
                     ),
-                    "guarded native reads and non-write operations are unsupported"
+                    "guarded native operation has an unsupported shape"
                 );
                 let active = evaluate(guard, &env)?.boolean()?;
                 activity_schedule.push(if active {
@@ -625,8 +649,41 @@ pub fn prepare(
                     Some(impact_field_count(operation.as_ref())?)
                 });
                 if !active {
+                    if let Instruction::Popeq {
+                        expression,
+                        alignment,
+                    } = operation.as_ref()
+                    {
+                        let read = plan
+                            .reads
+                            .get(read_index)
+                            .ok_or_else(|| anyhow!("missing read schema for inactive read"))?;
+                        ensure!(
+                            read.guard.as_ref() == Some(guard),
+                            "inactive read guard differs from the source read schema"
+                        );
+                        let read_reference = match expression {
+                            Expr::Reference { name } => Some(name),
+                            Expr::Cast { ty, value } if ty == "Native" => match value.as_ref() {
+                                Expr::Reference { name } => Some(name),
+                                _ => None,
+                            },
+                            _ => None,
+                        };
+                        ensure!(
+                            read_reference == Some(&read.name),
+                            "inactive read result differs from the source read schema"
+                        );
+                        ensure!(
+                            matches!(alignment.as_str(), "field" | "bit"),
+                            "unsupported inactive read alignment"
+                        );
+                        read_index += 1;
+                        env.insert(read.name.clone(), inactive_read_value(&read.ty)?);
+                    }
                     continue;
                 }
+                instruction_guard = Some(guard);
                 operation.as_ref()
             }
             _ => {
@@ -640,7 +697,11 @@ pub fn prepare(
                 bail!("nested guarded native operation is unsupported")
             }
             Instruction::Dup => Op::Dup { n: 0 },
-            Instruction::Index { slot, push_path, key } => {
+            Instruction::Index {
+                slot,
+                push_path,
+                key,
+            } => {
                 let map_key = key
                     .as_ref()
                     .map(|key| evaluate(key, &env)?.field())
@@ -682,6 +743,10 @@ pub fn prepare(
                     .reads
                     .get(read_index)
                     .ok_or_else(|| anyhow!("missing read schema"))?;
+                ensure!(
+                    read.guard.as_ref() == instruction_guard,
+                    "active read guard differs from the source read schema"
+                );
                 read_index += 1;
                 let read_reference = match expression {
                     Expr::Reference { name } => Some(name),

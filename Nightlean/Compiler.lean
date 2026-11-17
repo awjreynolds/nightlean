@@ -240,8 +240,11 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
-    ("reads", toJson (plan.reads.map fun item => Json.mkObj [
-      ("name", toJson item.name), ("type", toJson (typeName item.ty))])),
+    ("reads", toJson (plan.reads.map fun item => Json.mkObj ([
+      ("name", toJson item.name), ("type", toJson (typeName item.ty))] ++
+      (match item.guard with
+        | none => []
+        | some guard => [("guard", nativeExpressionJson guard)])))),
     ("guards", toJson (plan.guards.map nativeExpressionJson))])
 
 private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuildOutput)) :

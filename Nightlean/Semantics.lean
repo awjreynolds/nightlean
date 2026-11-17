@@ -201,8 +201,8 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       if (entries.lookup key).isSome then throw "state map key already present"
   pure next
 
-/-- Execute source effects with optional write and require guards. False guards
-skip write payload evaluation or the requirement condition. -/
+/-- Execute source effects with optional scalar read/write and require guards.
+Inactive reads bind their canonical zero without touching state or keys. -/
 def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
     (guards : List (Option (Expr .bool))) (env : EvalEnv)
     (state : LedgerState) : Except String LedgerState := do
@@ -217,8 +217,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
       let guard := guards[index]?.getD none
       if guard.isSome then
         match effect with
-        | .writeCell .. | .writeMap .. | .require .. => pure ()
-        | _ => throw "native guards are supported only on writes and require effects"
+        | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. => pure ()
+        | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
         | _ => pure true
@@ -265,8 +265,22 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
           if (entries.lookup key).isSome then throw "state map key already present"
       else
         match effect with
+        | .readCell _ destination ty =>
+          let zero : ty.Denote := match ty with
+            | .native => 0
+            | .bool => false
+            | .uint _ => 0
+          env := (destination, Value.pack ty zero) :: env
+        | .readMap _ destination _ ty _ =>
+          let zero : ty.Denote := match ty with
+            | .native => 0
+            | .bool => false
+            | .uint _ => 0
+          env := (destination, Value.pack ty zero) :: env
+        | .readMember _ destination .. =>
+          env := (destination, .bool false) :: env
         | .writeCell .. | .writeMap .. | .require .. => pure ()
-        | _ => throw "native guards are supported only on writes and require effects"
+        | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
     pure next
 
 /-- This is a specification evaluator, not a substitute for ledger proof checks. -/

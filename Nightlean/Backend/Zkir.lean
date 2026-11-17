@@ -279,8 +279,13 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
   let publicCount := (entry.circuit.inputs.filter (·.visibility == .«public»)).length
   for read in plan.reads.drop publicCount do
     let output := "%input_" ++ read.name
-    emit "public_input" [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+    let activity ← match read.guard with
+      | none => pure Json.null
+      | some guard => pure (toJson (← lowerExpr guard))
+    emit "public_input" [("guard", activity), ("type", nativeType), ("output", toJson output)]
     constrainType read.ty output
+    if let some condition := read.inactiveDefaultConstraint then
+      emit "assert" [("cond", toJson (← lowerExpr condition))]
   for condition in plan.guards do
     emit "assert" [("cond", toJson (← lowerExpr condition))]
   -- The ledger consumes one activity/skip entry per VM opcode. Flattening

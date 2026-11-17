@@ -135,10 +135,19 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
   fields instruction ("op" :: descriptor.fields)
   match opcode with
   | "public_input" | "private_input" =>
-    ensure ((← instruction.getObjVal? "guard") == Json.null)
-      "preprocessing-only input guards are unsupported; they do not constrain circuit activation"
     nativeType (← instruction.getObjVal? "type")
     let some required := expected.inputs[state.inputCount]? | throw "unexpected native transcript input"
+    match required.activityGuard with
+    | none =>
+      ensure ((← instruction.getObjVal? "guard") == Json.null)
+        "unexpected native input activity guard"
+    | some expectedGuard =>
+      ensure (expected.mode == .ledgerCall && opcode == "public_input" &&
+        required.visibility == .«public»)
+        "conditional inputs require a source-bound public ledger read"
+      let guard ← operand state (← stringField instruction "guard")
+      requireBoolean guard
+      ensure (guard.term == expectedGuard) "native read activity guard mismatch"
     let output ← stringField instruction "output"
     ensure (output == required.identifier &&
       opcode == (if required.visibility == .«public» then "public_input" else "private_input"))

@@ -135,6 +135,9 @@ scoped syntax "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
+scoped syntax "when" nlexpr "read" ident "as" ident : nleffect
+scoped syntax "when" nlexpr "read" ident "[" nlexpr "]" "as" ident : nleffect
+scoped syntax "when" nlexpr "member" ident "[" nlexpr "]" "as" ident : nleffect
 
 declare_syntax_cat nlentry
 scoped syntax "entry" ident "uses" ident "where" nleffect* "end" : nlentry
@@ -433,6 +436,9 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
             | `(nleffect| when $condition:nlexpr write $state:ident := $value:nlexpr) => some condition
             | `(nleffect| when $condition:nlexpr insert $state:ident [ $key:nlexpr ] := $value:nlexpr) => some condition
             | `(nleffect| when $condition:nlexpr require $value:nlexpr) => some condition
+            | `(nleffect| when $condition:nlexpr read $state:ident as $dest:ident) => some condition
+            | `(nleffect| when $condition:nlexpr read $state:ident [ $key:nlexpr ] as $dest:ident) => some condition
+            | `(nleffect| when $condition:nlexpr member $state:ident [ $key:nlexpr ] as $dest:ident) => some condition
             | _ => none
           let guardTerm ← match guardExpression? with
             | none => `(none)
@@ -443,6 +449,29 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
             effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
           | `(nleffect| when $_:nlexpr require $value:nlexpr) =>
             effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
+          | `(nleffect| when $_:nlexpr read $state:ident as $dest:ident) =>
+            let some (.cell ty) := schema.lookup state.getId.toString
+              | throwErrorAt state "read requires a declared state cell"
+            ensureFresh env dest
+            effectTerms := effectTerms.push (← `(Nightlean.Effect.readCell
+              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString) $(← tyTerm ty)))
+            env ← addReferences env [(dest.getId.toString, ty)]
+          | `(nleffect| when $_:nlexpr read $state:ident [ $key:nlexpr ] as $dest:ident) =>
+            let some (.map keyTy valueTy) := schema.lookup state.getId.toString
+              | throwErrorAt state "map read requires a declared state map"
+            ensureFresh env dest
+            effectTerms := effectTerms.push (← `(Nightlean.Effect.readMap
+              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString)
+              $(← tyTerm keyTy) $(← tyTerm valueTy) $(← checkedExpression env key keyTy)))
+            env ← addReferences env [(dest.getId.toString, valueTy)]
+          | `(nleffect| when $_:nlexpr member $state:ident [ $key:nlexpr ] as $dest:ident) =>
+            let some (.map keyTy valueTy) := schema.lookup state.getId.toString
+              | throwErrorAt state "membership requires a declared state map"
+            ensureFresh env dest
+            effectTerms := effectTerms.push (← `(Nightlean.Effect.readMember
+              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString)
+              $(← tyTerm keyTy) $(← tyTerm valueTy) $(← checkedExpression env key keyTy)))
+            env ← addReferences env [(dest.getId.toString, .bool)]
           | `(nleffect| read $state:ident as $dest:ident) =>
             let some (.cell ty) := schema.lookup state.getId.toString
               | throwErrorAt state "read requires a declared state cell"

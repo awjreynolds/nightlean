@@ -47,7 +47,16 @@ def Op.fields : Op → List Scalar
 structure Read where
   name : String
   ty : Ty
+  /-- Source guard for a conditionally bound read. Inactive reads use zero. -/
+  guard : Option (Expr .bool) := none
   deriving Repr
+
+def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
+  read.guard.map fun guard => match read.ty with
+    | .native => .eq (.ref read.name) (.select guard (.ref read.name) (.native 0))
+    | .bool => .eq (.ref read.name) (.select guard (.ref read.name) (.bool false))
+    | .uint maximum => .eq (.ref read.name)
+        (.select guard (.ref read.name) (.uint maximum 0))
 
 structure Plan where
   operations : List Op := []
@@ -73,6 +82,8 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
     throw "native activity guard schedule length mismatch"
   for guard in plan.activityGuards do
     if let some guard := guard then guard.validate {poseidon2 := true} env
+  for read in plan.reads do
+    if let some guard := read.guard then guard.validate {poseidon2 := true} env
 
 private def nativeValue : (ty : Ty) → Expr ty → Scalar
   | .native, value => value
@@ -229,14 +240,30 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.writeMap name keyTy valueTy
         (totalizeActivityValue condition avoid key)
         (totalizeActivityValue condition avoid value))
+    | some condition, .readMap name destination keyTy valueTy key =>
+      pure (.readMap name destination keyTy valueTy
+        (totalizeActivityValue condition (expressionNames key) key))
+    | some condition, .readMember name destination keyTy valueTy key =>
+      pure (.readMember name destination keyTy valueTy
+        (totalizeActivityValue condition (expressionNames key) key))
+    | some _, .readCell .. => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
-    | some _, _ => throw "native guards are supported only on cell/map writes and require effects"
+    | some _, _ => throw "native guards are supported only on scalar reads, writes, and require effects"
   let before := plan.operations.length
   let result ← appendEffect state loweredEffect plan
   let added := result.operations.length - before
   match guard, effect with
   | some _, .require _ => pure result
+  | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember .. =>
+    let readIndex := plan.reads.length
+    let some read := result.reads[readIndex]? | throw "guarded read did not append a read binding"
+    let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
+    let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
+      else plan.activityGuards
+    pure {result with
+      reads := reads
+      activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .writeCell .. | some condition, .writeMap .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
@@ -246,7 +273,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     else
       let priorGuards := plan.activityGuards
       pure {result with activityGuards := priorGuards ++ List.replicate added none}
-  | some _, _ => throw "native guards are supported only on cell/map writes and require effects"
+  | some _, _ => throw "native guards are supported only on scalar reads, writes, and require effects"
 
 /-- Lower ordered effects while keeping optional activity guards aligned with
 each emitted opcode group. -/

@@ -145,6 +145,8 @@ structure InputRequirement where
   identifier : String
   visibility : Visibility
   ty : Ty
+  /-- Conditional transcript consumption is allowed only for source-bound public reads. -/
+  activityGuard : Option Term := none
   deriving Repr
 
 inductive ProducerMode where

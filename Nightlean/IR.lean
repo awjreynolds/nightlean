@@ -102,8 +102,8 @@ structure Entrypoint where
   effects : List Effect := []
   span : SourceSpan := {}
   effectSpans : List SourceSpan := []
-  /-- Optional activity guards aligned with `effects`. Cell/map writes and
-  require effects accept a guard. An empty list preserves the legacy schedule. -/
+  /-- Optional activity guards aligned with `effects`. Scalar reads, writes,
+  and require effects accept a guard. An empty list preserves legacy behavior. -/
   effectGuards : List (Option (Expr .bool)) := []
   deriving Repr
 
@@ -249,10 +249,10 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span, message}
       | .ok _ => pure ()
       match effect with
-      | .writeCell .. | .writeMap .. => pure ()
+      | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. => pure ()
       | .require _ => pure ()
       | _ =>
-        throw {span := span, message := "native guards are supported only on writes and require effects"}
+        throw {span := span, message := "native guards are supported only on scalar reads, writes, and require effects"}
     let result : Except String (Option (String × Ty)) := do
       match effect with
       | .readCell state destination ty =>

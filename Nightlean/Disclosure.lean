@@ -113,25 +113,32 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     let span := value.effectSpans[index]?.getD value.span
     let activityControl ← match value.effectGuardAt index, effect with
       | none, _ => pure []
+      | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
       | some condition, .writeCell .. | some condition, .writeMap .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
         pure []
       | some _, _ =>
-        throw {span, message := "native guards are supported only on writes and require effects"}
+        throw {span, message := "native guards are supported only on scalar reads, writes, and require effects"}
     let activeControl := merge control activityControl
     match effect with
     | .readCell state destination _ =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public state read guard '{state}'", span} [] activeControl
       checkSink {description := s!"public cell read '{state}'", span} [] control
       env := env ++ [(destination, [])]
     | .readMap state destination _ _ key =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public map read guard '{state}'", span} [] activeControl
       checkSink {description := s!"public map read path '{state}'", span}
-        (← expression env span key) control
+        (← expression env span key) activeControl
       env := env ++ [(destination, [])]
     | .readMember state destination _ _ key =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public map membership guard '{state}'", span} [] activeControl
       checkSink {description := s!"public map membership path '{state}'", span}
-        (← expression env span key) control
+        (← expression env span key) activeControl
       env := env ++ [(destination, [])]
     | .require condition => discard (expression env span condition)
     | .writeCell state _ payload =>
