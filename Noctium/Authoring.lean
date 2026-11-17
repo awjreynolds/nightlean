@@ -91,7 +91,7 @@ declare_syntax_cat noctium_witness_parameter
 scoped syntax ident ":" nltype : noctium_witness_parameter
 declare_syntax_cat noctium_witness_result
 scoped syntax nltype : noctium_witness_result
-scoped syntax "Unit" : noctium_witness_result
+scoped syntax ident : noctium_witness_result
 scoped syntax (name := noctiumWitnessDeclarationCommand) "noctium_witness" ident
   "(" noctium_witness_parameter,* ")" ":" noctium_witness_result : command
 
@@ -628,10 +628,12 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
     let parameterNames := parameters.map (·.name)
     unless uniqueStrings parameterNames do throwErrorAt name "duplicate witness parameter"
     let result ← match result with
+      | `(noctium_witness_result| $unitType:ident) => do
+        unless unitType.getId == `Unit do
+          throwErrorAt unitType "only Unit or a supported scalar witness result is allowed"
+        pure .unit
       | `(noctium_witness_result| $type:nltype) => .scalar <$> readScalarTy type
-      | _ =>
-        if result.raw[0].getAtomVal == "Unit" then pure .unit
-        else throwErrorAt result "unsupported witness result"
+      | _ => throwErrorAt result "unsupported witness result"
     let signatureSpan ← spanValue name
     let signature : WitnessSignature :=
       { name := signatureName,

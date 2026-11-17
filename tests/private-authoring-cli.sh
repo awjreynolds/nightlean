@@ -14,6 +14,11 @@ done
 cat > "$scratch/private-release.lean" <<'LEAN'
 import Noctium.Frontend
 open scoped Noctium
+def ordinaryLeanUnit : Unit := ()
+noctium_witness noop() : Unit
+noctium_witness_circuit unitCall where
+  witness noop()
+end
 noctium_private_state Wallet where
   cell saved : UInt 8
 end
