@@ -24,6 +24,13 @@ inductive Expr : Ty → Type where
   /-- SHA-256 over the pinned FAB Bytes32 alignment, using native ZKIR
   persistent_hash and returning a typed Bytes32 digest. -/
   | persistentHash32 (value : Expr (.bytes 32)) : Expr (.bytes 32)
+  /-- A canonical source-time Bytes32 value. The frontend pads UTF-8 bytes on
+  the right and validation checks the resulting 32 byte values. -/
+  | bytes32Literal (values : List Nat) : Expr (.bytes 32)
+  /-- SHA-256 over an ordered, bounded vector of FAB-aligned Bytes32 values. -/
+  | persistentHashVector32 (values : List (Expr (.bytes 32))) : Expr (.bytes 32)
+  /-- SHA-256 over the canonical 32-byte little-endian Native field encoding. -/
+  | persistentHashNative (value : Expr .native) : Expr (.bytes 32)
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -201,6 +208,8 @@ structure Capabilities where
   select : Bool := true
   poseidon2 : Bool := false
   persistentHash32 : Bool := false
+  persistentHashVector32 : Bool := false
+  persistentHashNative : Bool := false
   stateCells : Bool := false
   stateMaps : Bool := false
   deriving Repr
@@ -236,6 +245,17 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless index < 32 do throw "Bytes32 byte index is out of range"
   | .persistentHash32 value => do
     unless caps.persistentHash32 do throw "target lacks qualified Bytes32 persistent-hash support"
+    value.validate caps env
+  | .bytes32Literal values => do
+    unless values.length == 32 && values.all (· ≤ 255) do
+      throw "Bytes32 literal must contain exactly 32 byte values"
+  | .persistentHashVector32 values => do
+    unless caps.persistentHashVector32 do throw "target lacks qualified Bytes32-vector persistent-hash support"
+    unless values.length ≥ 1 && values.length ≤ 32 do
+      throw "persistent hash vector must contain 1 to 32 Bytes32 values"
+    for value in values do value.validate caps env
+  | .persistentHashNative value => do
+    unless caps.persistentHashNative do throw "target lacks qualified Native persistent-hash support"
     value.validate caps env
   | .ref name => do
     ty.validate caps

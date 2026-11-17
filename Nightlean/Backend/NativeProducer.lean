@@ -155,6 +155,22 @@ private def bytes32Alignment : Json := Json.arr #[Json.mkObj [
   ("tag", toJson ("atom" : String)),
   ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson (32 : Nat))])]]
 
+private def bytes32Atom : Json := Json.mkObj [
+  ("tag", toJson ("atom" : String)),
+  ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson (32 : Nat))])]
+
+private def nativeFieldAlignment : Json := Json.arr #[Json.mkObj [
+  ("tag", toJson ("atom" : String)),
+  ("value", Json.mkObj [("tag", toJson ("field" : String))])]]
+
+private def alignedBytes32Pairs : List Fact → Except String (List (Term × Term))
+  | [] => pure []
+  | highByte :: low31 :: rest => do
+    ensure (highByte.maximum ≤ 255 && low31.maximum ≤ 2 ^ (31 * 8) - 1)
+      "Bytes32 persistent_hash operands lack byte-aligned range constraints"
+    pure ((highByte.term, low31.term) :: (← alignedBytes32Pairs rest))
+  | _ => throw "Bytes32 persistent_hash requires two fields per aligned value"
+
 def validateInstruction (expected : Expected) (state : State) (instruction : Json) : Except String State := do
   let opcode ← stringField instruction "op"
   let descriptor ← requireInstruction opcode
@@ -233,16 +249,25 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     else pure state
   | "persistent_hash" => do
     let alignment ← instruction.getObjVal? "alignment"
-    ensure (alignment == bytes32Alignment) "persistent_hash requires the exact Bytes32 FAB alignment"
     let values ← nativeArguments state instruction "inputs"
-    let (highByte, low31) ← match values with
-      | [highByte, low31] => pure (highByte, low31)
-      | _ => throw "Bytes32 persistent_hash requires exactly two aligned field operands"
-    ensure (values.all (·.valueType == .native)) "persistent_hash operands must be native fields"
-    ensure (highByte.maximum ≤ 255 && low31.maximum ≤ 2 ^ (31 * 8) - 1)
-      "Bytes32 persistent_hash operands lack byte-aligned range constraints"
-    let fact ← combine (persistentHash32Term highByte.term low31.term)
-      (Field.modulus - 1) values
+    let term ← if alignment == bytes32Alignment then do
+        let pairs ← alignedBytes32Pairs values
+        match pairs with
+        | [pair] => pure (persistentHashVector32Term [pair])
+        | _ => throw "Bytes32 persistent_hash requires exactly two aligned field operands"
+      else if alignment == nativeFieldAlignment then do
+        match values with
+        | [value] => pure (persistentHashNativeTerm value.term)
+        | _ => throw "Native persistent_hash requires exactly one field operand"
+      else do
+        let atoms ← alignment.getArr?
+        ensure (atoms.size ≥ 1 && atoms.size ≤ 32 && atoms.all (· == bytes32Atom))
+          "persistent_hash supports only a bounded vector of Bytes32 FAB values"
+        ensure (values.length == atoms.size * 2)
+          "Bytes32 vector persistent_hash requires two fields per aligned value"
+        let pairs ← alignedBytes32Pairs values
+        pure (persistentHashVector32Term pairs)
+    let fact ← combine term (Field.modulus - 1) values
     let output ← stringField instruction "output"
     define state output {fact with valueType := .bytes32}
   | "encode" => do

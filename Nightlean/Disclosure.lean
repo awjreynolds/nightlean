@@ -41,6 +41,12 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .native _ | .bool _ | .uint _ _ => pure []
   | .bytesField value _ | .bytesAt value _ => origins env value
   | .persistentHash32 value => origins env value
+  | .bytes32Literal _ => pure []
+  | .persistentHashVector32 values => do
+    let mut result : Origins := []
+    for value in values do result := merge result (← origins env value)
+    pure result
+  | .persistentHashNative value => origins env value
   | .ref name => match env.lookup name with
     | some result => pure result
     | none => .error s!"missing disclosure origin rule for reference '{name}'"
@@ -65,6 +71,12 @@ private def expression (env : Environment) (span : SourceSpan) (value : Expr ty)
   match origins env value with
   | .ok result => .ok result
   | .error message => .error {span, message}
+
+private theorem expression_bool (env : Environment) (span : SourceSpan) (bit : Bool) :
+    expression env span (.bool bit) = .ok [] := by
+  unfold expression
+  rw [origins.eq_2]
+  rfl
 
 private def pathExpression (env : Environment) (span : SourceSpan)
     (keys : List PathKey) : Except Diagnostic Origins := do
@@ -101,7 +113,10 @@ def checkConstraints (env : Environment) (span : SourceSpan) :
 
 theorem checkConstraints_literal (env : Environment) (span : SourceSpan) (bit : Bool)
     (rest : List (Expr .bool)) :
-    checkConstraints env span (.bool bit :: rest) = checkConstraints env span rest := by rfl
+    checkConstraints env span (.bool bit :: rest) = checkConstraints env span rest := by
+  change (do discard (expression env span (.bool bit)); checkConstraints env span rest) = _
+  rw [expression_bool]
+  simp [Except.map, Except.bind, Bind.bind, Functor.discard, Functor.mapConst]
 
 def circuit (value : Circuit) (control : Origins := []) : Except Diagnostic Unit := do
   let env ← inputEnvironment value

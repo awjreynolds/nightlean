@@ -88,6 +88,18 @@ the exact FAB-aligned fields: the high byte, then the packed low 31 bytes. -/
 def persistentHash32Term (highByte low31 : Term) : Term :=
   .unary "persistent_hash32" (.bytes [highByte, low31])
 
+/-- A one-element Bytes32 vector has the same FAB alignment as one Bytes32.
+Larger vectors bind their element count and ordered aligned field pairs. -/
+def persistentHashVector32Term (fields : List (Term × Term)) : Term :=
+  match fields with
+  | [field] => persistentHash32Term field.1 field.2
+  | _ => .unary s!"persistent_hash_vector32:{fields.length}"
+      (.hash (fields.flatMap fun (highByte, low31) => [highByte, low31]))
+
+/-- Native persistent-hash consumes one canonical aligned field. -/
+def persistentHashNativeTerm (value : Term) : Term :=
+  .unary "persistent_hash_native" value
+
 /-- Modern Encode output chunk terms. Index 0 is low31 and index 1 is highByte. -/
 def encodedHashChunkTerm (digest : Term) (index : Nat) : Term :=
   .unary (if index == 0 then "encode_bytes32_low31" else "encode_bytes32_highByte") digest
@@ -98,6 +110,23 @@ private def bytesFieldTerms (terms : List Term) (index : Nat) : Except String (L
   | 0 => pure (terms.drop 31)
   | 1 => pure (terms.take 31)
   | _ => throw "Bytes32 field chunk index is out of range"
+
+private def persistentHashDigest : Term → Bool
+  | .unary opcode _ => opcode == "persistent_hash32" || opcode == "persistent_hash_native" ||
+      opcode.startsWith "persistent_hash_vector32:"
+  | _ => false
+
+private def alignedBytes32Fields (value : Normalized) : Except String (Term × Term) := do
+  match value.term with
+  | .bytes terms => do
+    unless terms.length == 32 do throw "Bytes32 source term has wrong byte count"
+    let some highByte := terms[31]? | throw "Bytes32 source term has no high byte"
+    let low31 ← bytesFieldTerms terms 1
+    pure (highByte, packByteTerms low31)
+  | term =>
+    if persistentHashDigest term then
+      pure (encodedHashChunkTerm term 1, encodedHashChunkTerm term 0)
+    else throw "Bytes32 normalization lost byte identity"
 
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
   {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
@@ -128,44 +157,55 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .native value => pure {term := .constant value}
   | .bool value => pure (requireSourceType .bool (.constant (if value then 1 else 0)) [])
   | .uint maximum value => pure (requireSourceType (.uint maximum) (.constant value) [])
+  | .bytes32Literal values => pure {term := .bytes (values.map Term.constant)}
   | .bytesField value index => do
     let normalized ← normalize env value
     match normalized.term with
-    | .unary "persistent_hash32" _ =>
-      match index with
-      | 0 =>
-        let term := encodedHashChunkTerm normalized.term 1
-        pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
-      | 1 =>
-        let term := encodedHashChunkTerm normalized.term 0
-        pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
-      | _ => throw "Bytes32 field chunk index is out of range"
-    | .bytes terms => do
-      let chunk ← bytesFieldTerms terms index
-      let term := packByteTerms chunk
-      pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
-    | _ => throw "Bytes32 normalization lost byte identity"
+    | term =>
+      if persistentHashDigest term then
+        match index with
+        | 0 =>
+          let chunk := encodedHashChunkTerm normalized.term 1
+          pure {term := chunk, bounds := normalized.bounds, assertions := normalized.assertions}
+        | 1 =>
+          let chunk := encodedHashChunkTerm normalized.term 0
+          pure {term := chunk, bounds := normalized.bounds, assertions := normalized.assertions}
+        | _ => throw "Bytes32 field chunk index is out of range"
+      else
+        match term with
+        | .bytes terms => do
+          let chunk ← bytesFieldTerms terms index
+          let term := packByteTerms chunk
+          pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
+        | _ => throw "Bytes32 normalization lost byte identity"
   | .bytesAt value index => do
     let normalized ← normalize env value
     match normalized.term with
-    | .unary "persistent_hash32" _ => throw "byteAt on a computed persistentHash32 digest is unsupported"
-    | .bytes terms => do
-      let some term := terms[index]? | throw "Bytes32 byte index is out of range"
-      pure {term := term, bounds := normalized.bounds ++ [(term, 255)], assertions := normalized.assertions}
-    | _ => throw "Bytes32 normalization lost byte identity"
+    | term =>
+      if persistentHashDigest term then
+        throw "byteAt on a computed persistent-hash digest is unsupported"
+      else
+        match term with
+        | .bytes terms => do
+          let some term := terms[index]? | throw "Bytes32 byte index is out of range"
+          pure {term := term, bounds := normalized.bounds ++ [(term, 255)], assertions := normalized.assertions}
+        | _ => throw "Bytes32 normalization lost byte identity"
   | .persistentHash32 value => do
     let normalized ← normalize env value
-    let (highByte, low31) ← match normalized.term with
-      | .bytes terms => do
-        unless terms.length == 32 do throw "Bytes32 source term has wrong byte count"
-        let some high := terms[31]? | throw "Bytes32 source term has no high byte"
-        let low ← bytesFieldTerms terms 1
-        pure (high, packByteTerms low)
-      | .unary "persistent_hash32" _ =>
-        pure (encodedHashChunkTerm normalized.term 1, encodedHashChunkTerm normalized.term 0)
-      | _ => throw "persistentHash32 source lost Bytes32 identity"
+    let (highByte, low31) ← alignedBytes32Fields normalized
     let term := persistentHash32Term highByte low31
     pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .persistentHashVector32 values => do
+    let normalized ← values.mapM (normalize env)
+    let fields ← normalized.mapM alignedBytes32Fields
+    let term := persistentHashVector32Term fields
+    let bounds := (normalized.map (fun item => item.bounds)).flatten
+    let assertions := (normalized.map (fun item => item.assertions)).flatten
+    pure {term, bounds, assertions}
+  | .persistentHashNative value => do
+    let normalized ← normalize env value
+    let term := persistentHashNativeTerm normalized.term
+    pure {term := term, bounds := normalized.bounds, assertions := normalized.assertions}
   | .ref name => do
     let some term := env.lookup name | throw s!"unbound native source symbol '{name}'"
     pure (requireSourceType ty term [])
@@ -246,6 +286,6 @@ structure Expected where
 
 theorem normalize_disclosure_erasure (env : AliasEnvironment) (span : SourceSpan) (value : Expr ty) :
     normalize env (.disclose span value) = normalize env value := by
-  rw [normalize.eq_18]
+  rw [normalize.eq_21]
 
 end Nightlean.Backend.Native

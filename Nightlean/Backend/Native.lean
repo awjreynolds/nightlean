@@ -7,11 +7,11 @@ def inventoryRevision : String := "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
 inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
-  | persistentHash32 | encodeBytes32
+  | persistentHash32 | persistentHashPreimage | encodeBytes32
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
-  | canonicalNative | fabBytes32Hash | bytes32EncodingChunks
+  | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -24,7 +24,7 @@ inductive EffectRule where
 
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
-  | alignedBytes32 | typedBytes32Input
+  | alignedBytes32 | alignedHashPreimage | typedBytes32Input
   deriving Repr, BEq, DecidableEq
 
 inductive GuardRule where
@@ -149,9 +149,9 @@ def instructionSupport (opcode : String) : Except String Support :=
   | "transient_hash" => .supported <|
     scalar .nativeVector .propagateAll .pure .canonicalNative .noGuard .none ["inputs", "output"]
   | "persistent_hash" => .supported <|
-    let descriptor := scalar .persistentHash32 .propagateAll .pure .alignedBytes32 .noGuard .sourceHashTerm
+    let descriptor := scalar .persistentHashPreimage .propagateAll .pure .alignedHashPreimage .noGuard .sourceHashTerm
       ["alignment", "inputs", "output"]
-    {descriptor with encoding := .fabBytes32Hash}
+    {descriptor with encoding := .fabAlignedHashPreimage}
   | "encode" => .supported <|
     let descriptor := scalar .encodeBytes32 .propagateAll .pure .typedBytes32Input .noGuard .encodedHashChunks
       ["input", "outputs"]

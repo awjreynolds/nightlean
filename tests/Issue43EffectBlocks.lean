@@ -88,7 +88,7 @@ private def issue43UndisclosedParentWrite : Entrypoint :=
 nightlean_circuit issue43BranchLocalEscapeRelation where
 end
 
-/-- error: unknown Nightlean value 'branchLocal' -/
+/-- error: unknown Noctium value 'branchLocal' -/
 #guard_msgs in
 nightlean_contract Issue43BranchLocalEscape where
   cell marker : Native

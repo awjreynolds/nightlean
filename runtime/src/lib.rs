@@ -159,6 +159,18 @@ pub enum Expr {
     PersistentHash32 {
         value: Box<Expr>,
     },
+    #[serde(rename = "bytes32Literal")]
+    Bytes32Literal {
+        values: Vec<u8>,
+    },
+    #[serde(rename = "persistentHashVector32")]
+    PersistentHashVector32 {
+        values: Vec<Expr>,
+    },
+    #[serde(rename = "persistentHashNative")]
+    PersistentHashNative {
+        value: Box<Expr>,
+    },
     Let {
         name: String,
         value: Box<Expr>,
@@ -193,6 +205,18 @@ pub enum Expr {
     },
 }
 pub type Environment = BTreeMap<String, Value>;
+fn persistent_hash(value: AlignedValue) -> Result<Value> {
+    let mut fields = Vec::new();
+    value.value_only_field_repr(&mut fields);
+    let decoded = value
+        .alignment
+        .parse_field_repr(&fields)
+        .ok_or_else(|| anyhow!("invalid persistent hash alignment"))?;
+    let mut bytes = zeroize::Zeroizing::new(Vec::new());
+    ValueReprAlignedValue(decoded).binary_repr(&mut *bytes);
+    Ok(Value::Bytes(Sha256::digest(bytes.as_slice()).to_vec()))
+}
+
 pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
     let result = match expr {
         Expr::Uint { maximum, value } => scalars::unsigned_literal(maximum, value)?,
@@ -261,17 +285,29 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 maximum: BigUint::from(255u16),
             }
         }
+        Expr::Bytes32Literal { values } => {
+            ensure!(
+                values.len() == 32,
+                "Bytes32 literal must contain exactly 32 bytes"
+            );
+            Value::Bytes(values.clone())
+        }
         Expr::PersistentHash32 { value } => {
-            let value = aligned(&evaluate(value, env)?, "bytes32")?;
-            let mut fields = Vec::new();
-            value.value_only_field_repr(&mut fields);
-            let decoded = value
-                .alignment
-                .parse_field_repr(&fields)
-                .ok_or_else(|| anyhow!("invalid persistent hash byte alignment"))?;
-            let mut bytes = zeroize::Zeroizing::new(Vec::new());
-            ValueReprAlignedValue(decoded).binary_repr(&mut *bytes);
-            Value::Bytes(Sha256::digest(bytes.as_slice()).to_vec())
+            persistent_hash(aligned(&evaluate(value, env)?, "bytes32")?)?
+        }
+        Expr::PersistentHashVector32 { values } => {
+            ensure!(
+                (1..=32).contains(&values.len()),
+                "persistent hash vector must contain 1 to 32 Bytes32 values"
+            );
+            let parts = values
+                .iter()
+                .map(|value| aligned(&evaluate(value, env)?, "bytes32"))
+                .collect::<Result<Vec<_>>>()?;
+            persistent_hash(AlignedValue::concat(&parts))?
+        }
+        Expr::PersistentHashNative { value } => {
+            persistent_hash(field_value(evaluate(value, env)?.field()?))?
         }
         Expr::Add { left, right } => {
             Value::Native(evaluate(left, env)?.field()? + evaluate(right, env)?.field()?)

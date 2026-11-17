@@ -3,6 +3,10 @@ import Nightlean.Backend.NativeMeaning
 
 namespace Nightlean.Backend.Native
 
+private def hashCapabilities : Capabilities :=
+  {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
+    persistentHashNative := true}
+
 private def inputRequirement (input : Input) : InputRequirement :=
   {identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}
 
@@ -77,7 +81,7 @@ def collectOperations (span : SourceSpan) (aliases : AliasEnvironment)
     pieces.flatMap (fun piece => piece.2.2))
 
 def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
-  value.validate {poseidon2 := true, persistentHash32 := true}
+  value.validate hashCapabilities
   Disclosure.circuit value
   let inputs := value.inputs.flatMap Input.requirements
   let aliases := sourceInputAliases value.inputs

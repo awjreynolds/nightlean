@@ -114,6 +114,9 @@ scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
+scoped syntax "bytes32(" str ")" : nlexpr
+scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 
 declare_syntax_cat nlcstmt
 scoped syntax "public" ident ":" nltype : nlcstmt
@@ -183,7 +186,7 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
     | .error message => throwErrorAt stx message
     | _ => throwErrorAt stx "invalid unsigned range"
   | `(nltype| Bytes32) => pure (.bytes 32)
-  | _ => throwErrorAt stx "unsupported Nightlean type"
+  | _ => throwErrorAt stx "unsupported Noctium type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .native => `(Nightlean.Ty.native)
@@ -193,6 +196,36 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
+
+private partial def natListTerm : List Nat → CommandElabM (TSyntax `term)
+  | [] => `(([] : List Nat))
+  | value :: rest => do
+    let tail ← natListTerm rest
+    `($(natTerm value) :: $tail)
+
+private partial def exprListTerm : List (TSyntax `term) → CommandElabM (TSyntax `term)
+  | [] => `(([] : List (Nightlean.Expr (Nightlean.Ty.bytes 32))))
+  | value :: rest => do
+    let tail ← exprListTerm rest
+    `($value :: $tail)
+
+private partial def pathKeyListTerm : List (TSyntax `term) → CommandElabM (TSyntax `term)
+  | [] => `(([] : List Nightlean.PathKey))
+  | value :: rest => do
+    let tail ← pathKeyListTerm rest
+    `($value :: $tail)
+
+private partial def stringListTerm : List (TSyntax `term) → CommandElabM (TSyntax `term)
+  | [] => `(([] : List String))
+  | value :: rest => do
+    let tail ← stringListTerm rest
+    `($value :: $tail)
+
+private partial def nativeExprListTerm : List (TSyntax `term) → CommandElabM (TSyntax `term)
+  | [] => `(([] : List (Nightlean.Expr Nightlean.Ty.native)))
+  | value :: rest => do
+    let tail ← nativeExprListTerm rest
+    `($value :: $tail)
 
 private def spanTerm (stx : Syntax) : CommandElabM (TSyntax `term) := do
   let fileMap ← getFileMap
@@ -208,17 +241,17 @@ private def coerceExpression (stx : Syntax) (found target : Ty) (value : TSyntax
   if found == target then return value
   match found, target with
   | .uint m, .uint n =>
-    unless m ≤ n do throwErrorAt stx "Nightlean expression type mismatch; use an explicit narrowing cast"
+    unless m ≤ n do throwErrorAt stx "Noctium expression type mismatch; use an explicit narrowing cast"
     `(Nightlean.Expr.cast $(← tyTerm target) $value)
   | .uint _, .native => `(Nightlean.Expr.cast Nightlean.Ty.native $value)
-  | _, _ => throwErrorAt stx "Nightlean expression type mismatch"
+  | _, _ => throwErrorAt stx "Noctium expression type mismatch"
 
 private def commonType (stx : Syntax) (left right : Ty) : CommandElabM Ty := do
   if left == right then return left
   match left, right with
   | .uint m, .uint n => pure (.uint (max m n))
   | .native, .uint _ | .uint _, .native => pure .native
-  | _, _ => throwErrorAt stx "Nightlean expression type mismatch"
+  | _, _ => throwErrorAt stx "Noctium expression type mismatch"
 
 /-- A new partial scalar operation must execute even beneath a total wrapper.
 Mark every subtraction conservatively, including total native-field subtraction. -/
@@ -234,6 +267,9 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
+  | `(nlexpr| persistentHashVector32([$values,*])) =>
+    values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| select($c, $a, $b)) =>
     hasPartialScalar c || hasPartialScalar a || hasPartialScalar b
   | _ => Bool.false
@@ -244,7 +280,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| $id:ident) =>
     match env.find? (fun p => p.1 == id.getId.toString) with
     | some (_, ty, value) => pure (ty, value)
-    | none => throwErrorAt id "unknown Nightlean value '{id.getId}'"
+    | none => throwErrorAt id "unknown Noctium value '{id.getId}'"
   | `(nlexpr| $n:num) => pure (.native, ← `(Nightlean.Expr.native $n))
   | `(nlexpr| true) => pure (.bool, ← `(Nightlean.Expr.bool Bool.true))
   | `(nlexpr| false) => pure (.bool, ← `(Nightlean.Expr.bool Bool.false))
@@ -309,7 +345,28 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless valueTy == .bytes 32 do
       throwErrorAt stx "persistentHash32 requires a Bytes32 expression"
     pure (.bytes 32, ← `(Nightlean.Expr.persistentHash32 $value))
-  | _ => throwErrorAt stx "unsupported Nightlean expression"
+  | `(nlexpr| bytes32($literal:str)) => do
+    let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
+    if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
+    let padded := bytes ++ List.replicate (32 - bytes.length) 0
+    let values ← natListTerm padded
+    pure (.bytes 32, ← `(Nightlean.Expr.bytes32Literal $values))
+  | `(nlexpr| persistentHashVector32([$values,*])) => do
+    let expressions ← values.getElems.toList.mapM fun value => do
+      let (valueTy, value) ← expression env value
+      unless valueTy == .bytes 32 do
+        throwErrorAt value "persistentHashVector32 accepts only Bytes32 elements"
+      pure value
+    unless expressions.length ≥ 1 && expressions.length ≤ 32 do
+      throwErrorAt stx "persistentHashVector32 requires 1 to 32 Bytes32 elements"
+    let valueList ← exprListTerm expressions
+    pure (.bytes 32, ← `(Nightlean.Expr.persistentHashVector32 $valueList))
+  | `(nlexpr| persistentHashNative($value)) => do
+    let (valueTy, value) ← expression env value
+    unless valueTy == .native do
+      throwErrorAt stx "persistentHashNative requires a Native field expression"
+    pure (.bytes 32, ← `(Nightlean.Expr.persistentHashNative $value))
+  | _ => throwErrorAt stx "unsupported Noctium expression"
 where
   expected (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) : CommandElabM (TSyntax `term) := do
     if let .uint maximum := ty then
@@ -365,8 +422,7 @@ private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
     pure ((← `(Nightlean.PathKey.mk $(← tyTerm keyTy) $lowered)) :: tail, result)
 
 private def pathKeysTerm (keys : List (TSyntax `term)) : CommandElabM (TSyntax `term) := do
-  let keyTerms := keys.toArray
-  let list ← `([$keyTerms,*])
+  let list ← pathKeyListTerm keys
   `(($list : List Nightlean.PathKey))
 
 private def treeStateSchema (schema : List (String × StateKind)) (storage : TSyntax `ident) :
@@ -377,7 +433,7 @@ private def treeStateSchema (schema : List (String × StateKind)) (storage : TSy
 
 private def ensureFresh (env : Bindings) (id : TSyntax `ident) : CommandElabM Unit := do
   if env.any (fun p => p.1 == id.getId.toString) then
-    throwErrorAt id "duplicate Nightlean value '{id.getId}'"
+    throwErrorAt id "duplicate Noctium value '{id.getId}'"
 
 private def failDisclosure (diagnostic : Diagnostic) : CommandElabM Unit :=
   throwError "{diagnostic.span.file}:{diagnostic.span.line}:{diagnostic.span.column}: {diagnostic.message}"
@@ -433,14 +489,14 @@ private unsafe def checkGeneratedContract (name : Name) : CommandElabM Unit := d
         constraints := constraints.push (← checkedExpression env value .bool)
       | `(nlcstmt| output $id:ident : $ty:nltype := $value:nlexpr) =>
         if outputInfo.any (fun p => p.1 == id.getId.toString) || inputInfo.any (fun p => p.1 == id.getId.toString) then
-          throwErrorAt id "duplicate Nightlean output '{id.getId}'"
+          throwErrorAt id "duplicate Noctium output '{id.getId}'"
         let t ← readTy ty
         let tt ← tyTerm t
         let value ← checkedExpression env value t
         let span ← spanTerm stmt
         outputs := outputs.push (← `({ name := $(stringTerm id.getId.toString), ty := $tt, value := $value, span := $span : Nightlean.Output }))
         outputInfo := outputInfo ++ [(id.getId.toString, t)]
-      | _ => throwErrorAt stmt "unsupported Nightlean circuit statement"
+      | _ => throwErrorAt stmt "unsupported Noctium circuit statement"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId
     elabCommand (← `(def $name : Nightlean.Circuit := { name := $(stringTerm fullName.toString), inputs := [$inputs,*], outputs := [$outputs,*], constraints := [$constraints,*], span := $span }))
@@ -549,8 +605,7 @@ private def elaborateTreeRead (storage destination : TSyntax `ident) (key : TSyn
         pure candidate
       updated ← bindReadName updated sourceName internalName .native
       internalNames := internalNames ++ [internalName]
-    let destinationTerms := internalNames.toArray.map stringTerm
-    let destinationsRaw ← `([$destinationTerms,*])
+    let destinationsRaw ← stringListTerm (internalNames.map stringTerm)
     let destinations ← `(($destinationsRaw : List String))
     let typeTerm ← `(Nightlean.Types.CompositeType.structure $(stringTerm typeId))
     let term ← `(Nightlean.Effect.readCompositePath
@@ -681,9 +736,8 @@ private def elaborateEffect (schema : List (String × StateKind))
       throwErrorAt payload "composite write field count does not match its checked layout"
     let lowered ← values.mapM fun value => checkedExpression state.env value Ty.native
     let keys ← pathKeysTerm path
-    let loweredTerms := lowered.toArray
     let nativeTy ← tyTerm Ty.native
-    let valueListRaw ← `([$loweredTerms,*])
+    let valueListRaw ← nativeExprListTerm lowered
     let valueList ← `(($valueListRaw : List (Nightlean.Expr $nativeTy)))
     let typeTerm ← match type with
       | .structure id => `(Nightlean.Types.CompositeType.structure $(stringTerm id))
@@ -710,7 +764,7 @@ private def elaborateEffect (schema : List (String × StateKind))
     let term ← `(Nightlean.Effect.requireAbsent
       $(stringTerm storage.getId.toString) $(← tyTerm keyTy) $loweredKey)
     state := {state with terms := state.terms.push term}
-  | _ => throwErrorAt effect "unsupported Nightlean state effect"
+  | _ => throwErrorAt effect "unsupported Noctium state effect"
   pure state
 
 private partial def elaborateStatements (schema : List (String × StateKind))
@@ -740,7 +794,7 @@ private partial def elaborateStatements (schema : List (String × StateKind))
       let afterElse ← elaborateStatements schema elsePath (depth + 1) elseStatements
         {afterThen with env := branchEnv}
       state := {afterElse with env := branchEnv}
-    | _ => throwErrorAt statement "unsupported Nightlean state statement"
+    | _ => throwErrorAt statement "unsupported Noctium state statement"
   pure state
 
 @[command_elab contractCommand] def elabContract : CommandElab := fun stx => do
@@ -798,8 +852,8 @@ private partial def elaborateStatements (schema : List (String × StateKind))
               (Nightlean.LedgerValueType.map $outerTerm
                 (Nightlean.LedgerValueType.map $innerTerm
                   (Nightlean.LedgerValueType.scalar $valueTerm)))))
-        | _ => throwErrorAt state "unsupported Nightlean state declaration"
-      if schema.any (fun p => p.1 == id.getId.toString) then throwErrorAt id "duplicate Nightlean state"
+        | _ => throwErrorAt state "unsupported Noctium state declaration"
+      if schema.any (fun p => p.1 == id.getId.toString) then throwErrorAt id "duplicate Noctium state"
       schema := schema ++ [(id.getId.toString, kind)]
       stateTerms := stateTerms.push (← `({ name := $(stringTerm id.getId.toString), kind := $term, span := $(← spanTerm state) : Nightlean.StateDecl }))
     let mut entryTerms : Array (TSyntax `term) := #[]
@@ -807,19 +861,19 @@ private partial def elaborateStatements (schema : List (String × StateKind))
     for entryStx in entries do
       match entryStx with
       | `(nlentry| entry $id:ident uses $circuit:ident where $statements:nlstatement* end) =>
-        if entryNames.contains id.getId then throwErrorAt id "duplicate Nightlean entrypoint"
+        if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
         entryNames := id.getId :: entryNames
         let registry := circuitRegistry.getState (← getEnv)
         let fullName := (← getCurrNamespace) ++ circuit.getId
         let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
-          | throwErrorAt circuit "entrypoint requires a registered Nightlean circuit"
+          | throwErrorAt circuit "entrypoint requires a registered Noctium circuit"
         let env ← addReferences [] (info.inputs ++ info.outputs)
         let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
         let initial : EntryEffects := {env, usedLocalNames := reserved}
         let lowered ← elaborateStatements schema none 0 statements initial
         let circuitTerm := mkIdent info.declName
         entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Nightlean.Entrypoint }))
-      | _ => throwErrorAt entryStx "unsupported Nightlean entrypoint"
+      | _ => throwErrorAt entryStx "unsupported Noctium entrypoint"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId
     elabCommand (← `(def $name : Nightlean.Contract := {name := $(stringTerm fullName.toString), state := [$stateTerms,*], entrypoints := [$entryTerms,*], span := $span }))
@@ -983,6 +1037,9 @@ private def moduleCircuitDeclName (contractName : Name) (outputName : String) : 
 
 private def moduleCapabilities : Capabilities := {
   poseidon2 := Bool.true
+  persistentHash32 := Bool.true
+  persistentHashVector32 := Bool.true
+  persistentHashNative := Bool.true
   stateCells := Bool.true
   stateMaps := Bool.true}
 

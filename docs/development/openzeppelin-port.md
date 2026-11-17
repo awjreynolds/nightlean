@@ -19,25 +19,36 @@ Different instruction sequences and constraint counts are acceptable.
 | Ledger-backed getter returns | totalSupply, balanceOf and isRegistered | Entrypoint returns are currently empty. Typed outputs checked after ledger effects and actual native CALL return binding remain in [issue 50](https://github.com/awjreynolds/noctium/issues/50). Public transcript reads supply state evidence, not returned function values. |
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Mixed records, lists and the full Counter ADT remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
-| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | The first issue70 slice adds `persistentHash32(Bytes32) -> Bytes32` as untagged SHA-256, explicit disclosure at a state-key sink, and `persistent_hash` plus modern `encode` lowering with pinned Bytes32 alignment. Byte projections from a computed digest, domain-separated preimages, curve operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
+| Jubjub and cryptographic source operations | ElGamal balances, key registration and account identifiers | The issue70 source surface keeps `persistentHash32(Bytes32) -> Bytes32` and adds `bytes32("tag")`, ordered `persistentHashVector32` preimages (1 to 32 values), and `persistentHashNative(Native)`. Each hash result needs explicit disclosure at a ledger-key sink. Lowering uses native `persistent_hash` and modern `encode` with pinned FAB alignment. Byte projections from a computed digest, curve operations and typed CALL returns remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
 | Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Build after the required feature paths work. |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
 The token workload does not exercise every native instruction.
 
-The account-ID hash slice has a source-derived selected-3.2.1 native test in
+The account-ID slice has a source-derived selected-3.2.1 native test in
 `runtime/tests/persistent_hash.rs`. It checks independent SHA-256 vectors for
-32 zero bytes and the byte sequence `00..1f`, exact byte-aligned ledger keys,
-replacement of an existing key, and preservation of a second key. A wrong
-expected key and an altered private transcript fail. The source fixture also
-rejects a hash key without explicit disclosure. Hashing preserves private
-origin labels. This slice generates no keys, proofs or deployment.
+32 zero bytes and `00..1f`, exact byte-aligned ledger keys, replacement of an
+existing key and preservation of a second key. A wrong expected key and an
+altered private transcript fail. The source fixture rejects a hash key without
+explicit disclosure. Hashing preserves private-origin labels.
 
-The preimage is exactly one Bytes32 value without a domain tag, matching the
-reference account-ID function. It is not the domain-separated tuple hashing
-needed by the remaining token operations. Modern native `encode` converts the
-typed digest to two field chunks for FAB ledger alignment. A computed digest
-does not masquerade as 32 byte leaves.
+`tests/Issue70HashPreimages.lean` exercises ordered two-value and four-value
+preimages, right-padded UTF-8 tags, a nested Native-field hash, and explicit
+disclosure at both state-key sinks. Vector hashing has a 1-to-32 element source
+limit. Each Bytes32 value uses its pinned FAB alignment, while a Native value
+uses one canonical field encoded as 32 little-endian bytes. This source path
+covers the token's domain-separated account-key and credit-key preimages. It
+does not implement curve operations or typed CALL returns. Modern `encode`
+converts each typed digest to two field chunks for ledger-key alignment. A
+computed digest does not act as 32 byte leaves.
+
+The selected-3.2.1 native test `runtime/tests/hash_preimages.rs` matches independent
+SHA-256 vectors for two secrets, preserves all four resulting ledger keys, and
+rejects reversed tag order and a changed private count. The source rejects
+undisclosed vector and Native hashes, malformed lengths and changed alignment.
+The fixture releases test digests to exercise ledger binding. Token encryption
+key derivation must keep its secret hash private and disclose only the public
+key. This slice generates no keys, proofs or deployment.
 
 The first source component is
 [`examples/openzeppelin/PublicSupply.lean`](../../examples/openzeppelin/PublicSupply.lean).

@@ -97,6 +97,20 @@ private def bytesFieldChunk (length chunkIndex : Nat) (values : List Nat) : Nat 
     result := result + value * 256 ^ index
   return result
 
+private def nativeFieldBytesLE (value : Nat) : List Nat :=
+  go value 32
+where
+  go (remaining : Nat) : Nat → List Nat
+    | 0 => []
+    | count + 1 => remaining % 256 :: go (remaining / 256) count
+
+private def evaluatePersistentHash (ctx : EvalContext) (preimage : List Nat) :
+    Except String (List Nat) := do
+  let result ← ctx.persistentHash32 preimage
+  if result.length != 32 || !result.all (· ≤ 255) then
+    throw "persistent-hash oracle returned a malformed Bytes32 digest"
+  pure result
+
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/
 def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty.Denote
@@ -108,6 +122,9 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     let values ← value.eval ctx env
     let result := bytesFieldChunk length index values
     if result < ctx.modulus then pure result else .error "noncanonical packed byte field"
+  | .bytes32Literal values =>
+    if values.length == 32 && values.all (· ≤ 255) then pure values
+    else .error "Bytes32 literal must contain exactly 32 byte values"
   | .bytesAt value index => do
     let values ← value.eval ctx env
     match values[index]? with
@@ -115,10 +132,16 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     | none => .error "Bytes32 byte index is out of range"
   | .persistentHash32 value => do
     let input ← value.eval ctx env
-    let result ← ctx.persistentHash32 input
-    if result.length != 32 || !result.all (· ≤ 255) then
-      throw "persistent-hash oracle returned a malformed Bytes32 digest"
-    pure result
+    evaluatePersistentHash ctx input
+  | .persistentHashVector32 values => do
+    if values.length < 1 || values.length > 32 then
+      throw "persistent hash vector must contain 1 to 32 Bytes32 values"
+    let mut preimage := []
+    for value in values do preimage := preimage ++ (← value.eval ctx env)
+    evaluatePersistentHash ctx preimage
+  | .persistentHashNative value => do
+    let field ← value.eval ctx env
+    evaluatePersistentHash ctx (nativeFieldBytesLE field)
   | .ref name => do
     let some raw := env.lookup name | throw s!"missing value '{name}'"
     let some value := raw.as ty | throw s!"value type mismatch for '{name}'"
@@ -177,10 +200,15 @@ def runConstraints (ctx : EvalContext) (env : EvalEnv) : List (Expr .bool) → E
     | .ok true => runConstraints ctx env rest
 
 theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSpan) (value : Expr ty) :
-    (Expr.disclose span value).eval ctx env = value.eval ctx env := by rfl
+    (Expr.disclose span value).eval ctx env = value.eval ctx env := by
+  rw [Expr.eval.eq_20]
+
+private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
+  {nativeModulus := ctx.modulus, poseidon2 := true, persistentHash32 := true,
+    persistentHashVector32 := true, persistentHashNative := true}
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
-  match c.validate {nativeModulus := ctx.modulus, poseidon2 := true, persistentHash32 := true} with
+  match c.validate (evaluationCapabilities ctx) with
   | .error diagnostic => throw diagnostic.message
   | .ok _ => pure ()
   if !uniqueNames (env.map Prod.fst) then throw "duplicate input value"

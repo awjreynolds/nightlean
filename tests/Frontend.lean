@@ -23,20 +23,20 @@ end
 #guard arithmeticRelation.inputs.length == 2
 #guard ArithmeticContract.entrypoints.length == 1
 
-/-- error: unknown Nightlean value 'missing' -/
+/-- error: unknown Noctium value 'missing' -/
 #guard_msgs in
 nightlean_circuit unknownValue where
   output result : Native := missing
 end
 
-/-- error: Nightlean expression type mismatch -/
+/-- error: Noctium expression type mismatch -/
 #guard_msgs in
 nightlean_circuit wrongType where
   public flag : Bool
   output result : Native := flag
 end
 
-/-- error: duplicate Nightlean value 'same' -/
+/-- error: duplicate Noctium value 'same' -/
 #guard_msgs in
 nightlean_circuit duplicateInput where
   public same : Native
@@ -62,14 +62,14 @@ end
 #guard arithmeticRelation.inputs.map (·.visibility) == [Nightlean.Visibility.public, Nightlean.Visibility.private]
 #guard arithmeticRelation.span.line == 4
 
-/-- error: duplicate Nightlean output 'value' -/
+/-- error: duplicate Noctium output 'value' -/
 #guard_msgs in
 nightlean_circuit shadowInput where
   public value : Native
   output value : Native := value
 end
 
-/-- error: Nightlean expression type mismatch -/
+/-- error: Noctium expression type mismatch -/
 #guard_msgs in
 nightlean_circuit wrongSelectCondition where
   public value : Native

@@ -206,7 +206,7 @@ nightlean_circuit badConstant where
   output value : UInt 8 := 256
 end
 
-/-- error: Nightlean expression type mismatch; use an explicit narrowing cast -/
+/-- error: Noctium expression type mismatch; use an explicit narrowing cast -/
 #guard_msgs in
 nightlean_circuit implicitNarrowing where
   private wide : UInt 16

@@ -8,6 +8,7 @@ open Lean Elab Command
 
 private def sourceCapabilities : Capabilities :=
   { poseidon2 := Bool.true, persistentHash32 := Bool.true,
+    persistentHashVector32 := Bool.true, persistentHashNative := Bool.true,
     stateCells := Bool.true, stateMaps := Bool.true }
 
 private def typeName : Ty → String
@@ -26,6 +27,12 @@ private def expressionJson : Expr ty → Json
   | .bytesAt value index => Json.mkObj [("byteAt", Json.mkObj [
       ("value", expressionJson value), ("index", toJson index)])]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
+      ("value", expressionJson value)]
+  | .bytes32Literal values => Json.mkObj [("tag", toJson ("bytes32Literal" : String)),
+      ("values", toJson values)]
+  | .persistentHashVector32 values => Json.mkObj [("tag", toJson ("persistentHashVector32" : String)),
+      ("values", toJson (values.map expressionJson))]
+  | .persistentHashNative value => Json.mkObj [("tag", toJson ("persistentHashNative" : String)),
       ("value", expressionJson value)]
   | .ref name => Json.mkObj [("ref", toJson name)]
   | .add a b => Json.mkObj [("add", toJson [expressionJson a, expressionJson b])]
@@ -57,6 +64,12 @@ private def nativeExpressionJson : Expr ty → Json
   | .bytesAt value index => Json.mkObj [("tag", toJson ("byteAt" : String)),
       ("value", nativeExpressionJson value), ("index", toJson index)]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
+      ("value", nativeExpressionJson value)]
+  | .bytes32Literal values => Json.mkObj [("tag", toJson ("bytes32Literal" : String)),
+      ("values", toJson values)]
+  | .persistentHashVector32 values => Json.mkObj [("tag", toJson ("persistentHashVector32" : String)),
+      ("values", toJson (values.map nativeExpressionJson))]
+  | .persistentHashNative value => Json.mkObj [("tag", toJson ("persistentHashNative" : String)),
       ("value", nativeExpressionJson value)]
   | .ref name => Json.mkObj [("tag", toJson ("reference" : String)), ("name", toJson name)]
   | .add a b => binary "add" (nativeExpressionJson a) (nativeExpressionJson b)
@@ -335,12 +348,12 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
 private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuildOutput)) :
     CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
   if (← get).messages.hasErrors then
-    throwError "cannot export Nightlean artifacts after source elaboration errors"
+    throwError "cannot export Noctium artifacts after source elaboration errors"
   let circuits ← registeredCircuits moduleOutputs
   let contracts ← registeredContracts moduleOutputs
   let sourceEnv ← getEnv
   let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
-  if circuits.isEmpty && controls.isEmpty then throwError "source contains no Nightlean circuit declarations"
+  if circuits.isEmpty && controls.isEmpty then throwError "source contains no Noctium circuit declarations"
   for name in controls do validateArtifactName name
   for (name, _) in circuits do validateArtifactName name
   for (name, contract) in contracts do
