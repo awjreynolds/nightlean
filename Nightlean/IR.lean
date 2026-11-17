@@ -324,8 +324,10 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     a.validate caps env
     b.validate caps env
   | .cast target (source := source) value => do
-    if target.isBytes || source.isBytes || target.isJubjub || source.isJubjub then
-      throw "byte strings and Jubjub values do not support scalar casts"
+    if target.isBytes || source.isBytes then
+      throw "byte strings do not support scalar casts"
+    if target.isJubjub || source.isJubjub then
+      throw "Jubjub values do not support scalar casts"
     target.validate caps
     value.validate caps env
   | .letE (source := source) name value body => do
