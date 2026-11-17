@@ -178,11 +178,16 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .bytes32Literal values => pure {term := .bytes (values.map Term.constant)}
   | .bytesField value index => do
     let normalized ← normalize env value
-    let (highByte, low31) ← splitBytes32Fields normalized.term
-    let term ← match index with
-      | 0 => pure highByte
-      | 1 => pure low31
-      | _ => throw "Bytes32 field chunk index is out of range"
+    let term ← match normalized.term with
+      | .bytes terms => do
+        let chunk ← bytesFieldTerms terms index
+        pure (packByteTerms chunk)
+      | other => do
+        let (highByte, low31) ← splitBytes32Fields other
+        match index with
+        | 0 => pure highByte
+        | 1 => pure low31
+        | _ => throw "Bytes32 field chunk index is out of range"
     pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
   | .bytesAt value index => do
     let normalized ← normalize env value
