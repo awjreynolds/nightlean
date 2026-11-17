@@ -18,7 +18,7 @@ use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged
 use sha2::{Digest, Sha256};
 use std::{cell::RefCell, fmt, io, rc::Rc, sync::Arc};
 use transient_crypto::{
-    commitment::PedersenRandomness,
+    commitment::{Pedersen, PedersenRandomness},
     curve::Fr,
     proofs::{
         KeyLocation, ParamsProver, ParamsProverProvider, ParamsVerifier, Proof, ProofPreimage,
@@ -27,6 +27,7 @@ use transient_crypto::{
 };
 
 pub type ProvedNativeIntent = Intent<Signature, ProofMarker, PedersenRandomness, Db>;
+pub type PublicProvedNativeIntent = Intent<Signature, ProofMarker, Pedersen, Db>;
 const MAX_RESPONSE: usize = 1_048_576;
 const MAX_PARAMETERS: usize = 134_217_728;
 
@@ -426,6 +427,83 @@ impl PreparedProof {
     pub fn private_intent_bytes(&self) -> Result<Vec<u8>> {
         encode(&self.intent)
     }
+    /// Retain an explicit private service request without retaining a future or callback.
+    /// The preimage uses the same frozen binding checked by the native intent prover.
+    pub fn private_request_payload(
+        &self,
+        params: &TrustedParameters,
+        max_response_bytes: usize,
+    ) -> Result<zeroize::Zeroizing<Vec<u8>>> {
+        if max_response_bytes == 0 || max_response_bytes > MAX_RESPONSE {
+            return Err(Error::Limit);
+        }
+        if params.k != self.k() {
+            return Err(Error::InvalidParameters);
+        }
+        self.validate_statement_preimage()?;
+        let mut preimage = self.preimage()?.clone();
+        preimage.binding_input = self.statement[0];
+        ProofRequest {
+            preimage: &preimage,
+            material: &self.material.native,
+            prover: &self.material.prover,
+            parameters: params,
+            max_response_bytes,
+            expected_statement: &self.statement,
+        }
+        .private_wire_payload()
+    }
+    /// Resume a pulled service request through the same verifier and native attachment path.
+    pub async fn attach_response(
+        &self,
+        params: &TrustedParameters,
+        response: &[u8],
+        max_response_bytes: usize,
+    ) -> Result<ProvedIntent> {
+        struct Supplied<'a>(&'a [u8]);
+        impl ProofService for Supplied<'_> {
+            async fn prove(
+                &self,
+                _: ProofRequest<'_>,
+            ) -> std::result::Result<Vec<u8>, ServiceError> {
+                Ok(self.0.to_vec())
+            }
+        }
+        if response.is_empty() || response.len() > max_response_bytes {
+            return Err(Error::Limit);
+        }
+        self.prove(
+            &Supplied(response),
+            params,
+            max_response_bytes,
+            futures::future::pending(),
+        )
+        .await
+    }
+    /// Explicit local service adapter for a host worker with fresh host-owned entropy.
+    /// Returns the service V2 encoding, separate from the verified attached ledger V3 result.
+    pub async fn local_response(
+        &self,
+        params: &TrustedParameters,
+        max_response_bytes: usize,
+        rng: impl Rng + CryptoRng,
+    ) -> Result<Vec<u8>> {
+        let proved = self
+            .prove(
+                &LocalProver::new(rng),
+                params,
+                max_response_bytes,
+                futures::future::pending(),
+            )
+            .await?;
+        let Some(ContractAction::Call(call)) = proved.native().actions.iter_deref().next() else {
+            return Err(Error::Attachment);
+        };
+        let ProofVersioned::V3(proof) = &call.proof else {
+            return Err(Error::Attachment);
+        };
+        encode(&ProofVersioned::V2(proof.clone()))
+    }
     /// Verify a versioned service response against this frozen call, retained key and trusted SRS.
     /// This does not attach, sign or submit anything.
     pub fn verify_response(
@@ -543,6 +621,24 @@ impl ProvedIntent {
     }
     pub fn serialized(&self) -> &[u8] {
         &self.bytes
+    }
+    /// Public proof result. The private unsealed binding randomness is replaced by its commitment.
+    /// This projection supplies neither funding nor the sealed transaction binding proof.
+    pub fn public_serialized(&self) -> Result<Vec<u8>> {
+        let intent: PublicProvedNativeIntent = Intent {
+            guaranteed_unshielded_offer: self.intent.guaranteed_unshielded_offer.clone(),
+            fallible_unshielded_offer: self.intent.fallible_unshielded_offer.clone(),
+            actions: self.intent.actions.clone(),
+            dust_actions: self.intent.dust_actions.clone(),
+            ttl: self.intent.ttl,
+            binding_commitment: self.intent.binding_commitment.into(),
+        };
+        let bytes = encode(&intent)?;
+        let decoded: PublicProvedNativeIntent = decode(&bytes)?;
+        if encode(&decoded)? != bytes {
+            return Err(Error::Attachment);
+        }
+        Ok(bytes)
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

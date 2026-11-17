@@ -21,12 +21,14 @@ use transient_crypto::curve::Fr;
 struct Response {
     bytes: Vec<u8>,
     calls: Cell<usize>,
+    payload_digest: Cell<Option<[u8; 32]>>,
 }
 impl Response {
     fn new(bytes: Vec<u8>) -> Self {
         Self {
             bytes,
             calls: Cell::new(0),
+            payload_digest: Cell::new(None),
         }
     }
 }
@@ -35,6 +37,8 @@ impl ProofService for Response {
         self.calls.set(self.calls.get() + 1);
         let payload = request.private_wire_payload().map_err(|_| ServiceError)?;
         assert!(!payload.is_empty());
+        self.payload_digest
+            .set(Some(Sha256::digest(&payload).into()));
         Ok(self.bytes.clone())
     }
 }
@@ -340,9 +344,40 @@ fn actual_source_claim_proves_verifies_and_attaches_without_subprocesses() {
         panic!("expected native ledger V3 proof")
     };
     let wire = encoded(&ProofVersioned::V2(proof.clone()));
-    assert!(
-        block_on(prepared.prove(&Response::new(wire.clone()), &params, 1_048_576, pending()))
-            .is_ok()
+    let public_bytes = proved.public_serialized().unwrap();
+    let public: nightlean_runtime::proof::PublicProvedNativeIntent =
+        tagged_deserialize(public_bytes.as_slice()).unwrap();
+    assert_eq!(encoded(&public), public_bytes);
+    assert_eq!(
+        public.binding_commitment,
+        proved.native().binding_commitment.into()
+    );
+    let ContractAction::Call(public_call) = public.actions.iter_deref().next().unwrap() else {
+        panic!("expected public call")
+    };
+    assert_eq!(
+        public_call
+            .public_inputs(public.binding_commitment)
+            .unwrap(),
+        call.public_inputs(proved.native().binding_commitment.into())
+            .unwrap()
+    );
+    let pulled = prepared
+        .private_request_payload(&params, 1_048_576)
+        .unwrap();
+    let replay = Response::new(wire.clone());
+    assert!(block_on(prepared.prove(&replay, &params, 1_048_576, pending())).is_ok());
+    assert_eq!(
+        replay.payload_digest.get(),
+        Some(Sha256::digest(&pulled).into())
+    );
+    let attached = block_on(prepared.attach_response(&params, &wire, 1_048_576)).unwrap();
+    assert_eq!(attached.serialized(), proved.serialized());
+    println!(
+        "native_bridge_sizes payload={} response={} attached={}",
+        pulled.len(),
+        wire.len(),
+        attached.serialized().len()
     );
     // The entropy-owning local adapter is one-use. A retry needs a fresh adapter.
     assert_eq!(

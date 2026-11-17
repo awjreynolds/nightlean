@@ -934,6 +934,20 @@ fn reject_extra_files(root: &Path, manifest: &Manifest) -> Result<()> {
 /// Verify before use, then execute retained bytes. A trusted digest authenticates the manifest.
 /// Without a trusted digest or signature, an attacker could replace the entire unsigned bundle.
 pub fn verify(root: &Path, trusted_manifest_sha256: Option<&str>) -> Result<VerifiedBundle> {
+    verify_with_limit(root, trusted_manifest_sha256, MAX_TOTAL_BYTES)
+}
+/// Apply a host payload budget after manifest authentication, before reading any payload.
+/// This narrows resource policy without changing the compiler or other bundle consumers.
+pub fn verify_with_limit(
+    root: &Path,
+    trusted_manifest_sha256: Option<&str>,
+    max_total_bytes: u64,
+) -> Result<VerifiedBundle> {
+    require(
+        max_total_bytes > 0 && max_total_bytes <= MAX_TOTAL_BYTES,
+        "limit_exceeded",
+        "unsupported host payload budget",
+    )?;
     no_symlinks(root)?;
     let manifest_data = read(&root.join("manifest.json"), MAX_JSON_BYTES)?;
     if let Some(expected) = trusted_manifest_sha256 {
@@ -955,6 +969,11 @@ pub fn verify(root: &Path, trusted_manifest_sha256: Option<&str>) -> Result<Veri
         manifest_bytes(&manifest)? == manifest_data,
         "noncanonical_manifest",
         "manifest must use canonical JSON bytes",
+    )?;
+    require(
+        manifest.entries.iter().map(|entry| entry.size).sum::<u64>() <= max_total_bytes,
+        "limit_exceeded",
+        "bundle exceeds host payload budget",
     )?;
     let mut payloads = Payloads::new();
     for entry in &manifest.entries {

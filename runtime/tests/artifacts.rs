@@ -563,3 +563,34 @@ fn present_nonstring_plan_target_never_falls_back_to_legacy_profile() {
         assert!(!fixture.path("bad-target-type").exists());
     }
 }
+
+#[test]
+fn host_payload_budget_rejects_authenticated_total_before_payload_reads() {
+    let fixture = Fixture::new();
+    let manifest = fixture.assemble("bounded");
+    let bytes = artifacts::manifest_bytes(&manifest).unwrap();
+    let pin = artifacts::digest(&bytes);
+    let root = fixture.path("bounded");
+    let total = manifest.entries.iter().map(|e| e.size).sum::<u64>();
+    assert!(artifacts::verify_with_limit(&root, Some(&pin), total).is_ok());
+    for entry in &manifest.entries {
+        fs::remove_file(root.join(&entry.path)).unwrap();
+    }
+    assert_eq!(
+        failure(artifacts::verify_with_limit(&root, Some(&pin), total - 1)),
+        "limit_exceeded"
+    );
+    assert_eq!(
+        failure(artifacts::verify_with_limit(
+            &root,
+            Some(&"0".repeat(64)),
+            total - 1
+        )),
+        "manifest_digest_mismatch"
+    );
+    assert_eq!(
+        failure(artifacts::verify_with_limit(&root, Some(&pin), total)),
+        "io_error"
+    );
+    assert_eq!(failure(artifacts::verify(&root, Some(&pin))), "io_error");
+}
