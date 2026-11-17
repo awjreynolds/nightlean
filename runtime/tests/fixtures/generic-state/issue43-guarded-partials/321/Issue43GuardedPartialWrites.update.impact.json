@@ -1,0 +1,227 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "underflowed", "kind": {"cell": "UIntRange<256>"}},
+  {"name": "narrowed", "kind": {"cell": "UIntRange<8>"}},
+  {"name": "asserted", "kind": {"cell": "UIntRange<8>"}},
+  {"name": "shadowed", "kind": {"cell": "UIntRange<256>"}},
+  {"name": "valid", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "reads": [],
+ "operations":
+ [{"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "body":
+      {"tag": "usub",
+       "right":
+       {"yes": {"tag": "reference", "name": "right"},
+        "tag": "select",
+        "no": {"value": "0", "tag": "uint", "maximum": "255"},
+        "condition":
+        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+       "maximum": "255",
+       "left":
+       {"yes": {"tag": "reference", "name": "left"},
+        "tag": "select",
+        "no": {"value": "0", "tag": "uint", "maximum": "255"},
+        "condition":
+        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "1", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "body":
+      {"value":
+       {"yes": {"tag": "reference", "name": "wide"},
+        "tag": "select",
+        "no": {"value": "0", "tag": "constant"},
+        "condition":
+        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+       "type": "UIntRange<8>",
+       "tag": "cast"}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "2", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxxxx",
+      "body":
+      {"tag": "assertThen",
+       "condition":
+       {"yes": {"tag": "reference", "name": "approved"},
+        "tag": "select",
+        "no": {"value": true, "tag": "bool"},
+        "condition":
+        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxx"}},
+       "body": {"value": "7", "tag": "uint", "maximum": "7"}}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "3", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "body":
+      {"value": {"value": true, "tag": "bool"},
+       "tag": "let",
+       "name": "enabled",
+       "body":
+       {"tag": "usub",
+        "right":
+        {"yes": {"tag": "reference", "name": "right"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "uint", "maximum": "255"},
+         "condition":
+         {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+        "maximum": "255",
+        "left":
+        {"yes": {"tag": "reference", "name": "left"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "uint", "maximum": "255"},
+         "condition":
+         {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}}}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "4", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxxx",
+     "body":
+     {"tag": "add",
+      "right": {"value": "2", "tag": "constant"},
+      "left": {"value": "1", "tag": "constant"}}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "enabled"}}],
+ "nativeCircuitFile": "Issue43GuardedPartialWrites.update.zkir",
+ "guards":
+ [{"value": {"tag": "reference", "name": "checkEnabled"},
+   "tag": "let",
+   "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+   "body":
+   {"yes":
+    {"tag": "assertThen",
+     "condition":
+     {"yes": {"tag": "reference", "name": "approved"},
+      "tag": "select",
+      "no": {"value": true, "tag": "bool"},
+      "condition":
+      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}},
+     "body": {"value": true, "tag": "bool"}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}],
+ "entrypoint": "update",
+ "contractName": "Issue43GuardedPartialWrites",
+ "circuit":
+ {"outputs": [],
+  "name": "issue43GuardedPartialWrites",
+  "inputs":
+  [{"visibility": "private", "type": "Bool", "name": "enabled"},
+   {"visibility": "private", "type": "Bool", "name": "checkEnabled"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "left"},
+   {"visibility": "private", "type": "UIntRange<256>", "name": "right"},
+   {"visibility": "private", "type": "Native", "name": "wide"},
+   {"visibility": "private", "type": "Bool", "name": "approved"}],
+  "file": "issue43GuardedPartialWrites.zkir",
+  "constraints": []}}

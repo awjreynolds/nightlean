@@ -90,6 +90,84 @@ private def stateSlot (state : List StateDecl) (name : String) : Except String N
   | some index => pure index
   | none => throw s!"unknown ledger state '{name}'"
 
+private def expressionNames : Expr ty → List String
+  | .native _ | .bool _ | .uint _ _ => []
+  | .ref name => [name]
+  | .add left right => expressionNames left ++ expressionNames right
+  | .mul left right => expressionNames left ++ expressionNames right
+  | .sub left right => expressionNames left ++ expressionNames right
+  | .uadd left right => expressionNames left ++ expressionNames right
+  | .usub left right => expressionNames left ++ expressionNames right
+  | .umul left right => expressionNames left ++ expressionNames right
+  | .cast _ value => expressionNames value
+  | .letE name value body => name :: (expressionNames value ++ expressionNames body)
+  | .assertE condition body => expressionNames condition ++ expressionNames body
+  | .disclose _ value => expressionNames value
+  | .eq left right => expressionNames left ++ expressionNames right
+  | .select condition yes no =>
+    expressionNames condition ++ expressionNames yes ++ expressionNames no
+  | .poseidon2 _ left right => expressionNames left ++ expressionNames right
+
+private def freshActivityName (names : List String) : String :=
+  let longest := names.foldl (fun length name => max length name.length) 0
+  "_nightlean_activity_guard_" ++ String.ofList (List.replicate (longest + 1) 'x')
+
+private def zeroValue : (ty : Ty) → Expr ty
+  | .native => .native 0
+  | .bool => .bool false
+  | .uint maximum => .uint maximum 0
+
+private def castMayFail (target source : Ty) : Bool :=
+  match target, source with
+  | .uint _, .native => true
+  | .uint maximum, .uint sourceMaximum => sourceMaximum > maximum
+  | .uint maximum, .bool => maximum < 1
+  | _, _ => false
+
+/-- Replace every partial scalar operation with a safe inactive computation.
+The native source guard is a collision-free outer let binding, so nested source
+lets cannot capture its references. Eager selects still evaluate both arms. -/
+private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
+  | .native value => .native value
+  | .bool value => .bool value
+  | .uint maximum value => .uint maximum value
+  | .ref name => .ref name
+  | .add left right => .add (totalizeUnder guard left) (totalizeUnder guard right)
+  | .mul left right => .mul (totalizeUnder guard left) (totalizeUnder guard right)
+  | .sub left right => .sub (totalizeUnder guard left) (totalizeUnder guard right)
+  | .uadd left right => .uadd (totalizeUnder guard left) (totalizeUnder guard right)
+  | .usub (m := m) (n := n) left right =>
+    .usub
+      (.select guard (totalizeUnder guard left) (.uint m 0))
+      (.select guard (totalizeUnder guard right) (.uint n 0))
+  | .umul left right => .umul (totalizeUnder guard left) (totalizeUnder guard right)
+  | .cast target (source := source) value =>
+    let value := totalizeUnder guard value
+    if castMayFail target source then
+      .cast target (.select guard value (zeroValue source))
+    else .cast target value
+  | .letE name value body =>
+    .letE name (totalizeUnder guard value) (totalizeUnder guard body)
+  | .assertE condition body =>
+    .assertE (.select guard (totalizeUnder guard condition) (.bool true))
+      (totalizeUnder guard body)
+  | .disclose span value => .disclose span (totalizeUnder guard value)
+  | .eq left right => .eq (totalizeUnder guard left) (totalizeUnder guard right)
+  | .select condition yes no =>
+    .select (totalizeUnder guard condition) (totalizeUnder guard yes) (totalizeUnder guard no)
+  | .poseidon2 domain left right =>
+    .poseidon2 domain (totalizeUnder guard left) (totalizeUnder guard right)
+
+private def totalizeActivityValue (guard : Expr .bool) (avoid : List String)
+    (value : Expr ty) : Expr ty :=
+  let name := freshActivityName (avoid ++ expressionNames guard ++ expressionNames value)
+  .letE name guard (totalizeUnder (.ref name) value)
+
+private def totalizeActivityCondition (guard condition : Expr .bool) : Expr .bool :=
+  let name := freshActivityName (expressionNames guard ++ expressionNames condition)
+  .letE name guard
+    (.select (.ref name) (totalizeUnder (.ref name) condition) (.bool true))
+
 /-- One effect in the production ordered ledger plan. The current read count
 fixes generated absence names and therefore belongs to the accumulator. -/
 def appendEffect (state : List StateDecl) (effect : Effect)
@@ -138,23 +216,37 @@ def appendEffects (state : List StateDecl) (effects : List Effect)
     (initial : Plan) : Except String Plan :=
   effects.foldlM (fun plan effect => appendEffect state effect plan) initial
 
-/-- Lower one source effect and bind its generated opcode groups to the exact
-source activity guard. Operations before the first guard retain implicit true. -/
+/-- Lower one source effect. Writes bind their opcode groups to the activity
+guard. Guarded requirements become assertions with no VM operation groups. -/
 private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     (guard : Option (Expr .bool)) (plan : Plan) : Except String Plan := do
+  let loweredEffect ← match guard, effect with
+    | none, _ => pure effect
+    | some condition, .writeCell name ty value =>
+      pure (.writeCell name ty (totalizeActivityValue condition [] value))
+    | some condition, .writeMap name keyTy valueTy key value =>
+      let avoid := expressionNames key ++ expressionNames value
+      pure (.writeMap name keyTy valueTy
+        (totalizeActivityValue condition avoid key)
+        (totalizeActivityValue condition avoid value))
+    | some condition, .require required =>
+      pure (.require (totalizeActivityCondition condition required))
+    | some _, _ => throw "native guards are supported only on cell/map writes and require effects"
   let before := plan.operations.length
-  let result ← appendEffect state effect plan
+  let result ← appendEffect state loweredEffect plan
   let added := result.operations.length - before
-  if guard.isSome then
-    match effect with
-    | .writeCell .. | .writeMap .. => pure ()
-    | _ => throw "native guards are supported only on cell and map writes"
-  if guard.isNone && plan.activityGuards.isEmpty then
-    pure result
-  else
+  match guard, effect with
+  | some _, .require _ => pure result
+  | some condition, .writeCell .. | some condition, .writeMap .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
-    pure {result with activityGuards := priorGuards ++ List.replicate added guard}
+    pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
+  | none, _ =>
+    if plan.activityGuards.isEmpty then pure result
+    else
+      let priorGuards := plan.activityGuards
+      pure {result with activityGuards := priorGuards ++ List.replicate added none}
+  | some _, _ => throw "native guards are supported only on cell/map writes and require effects"
 
 /-- Lower ordered effects while keeping optional activity guards aligned with
 each emitted opcode group. -/

@@ -1,0 +1,82 @@
+import Nightlean.Backend.Impact
+import Nightlean.Backend.Zkir
+import Nightlean.Frontend
+
+open scoped Nightlean
+open Nightlean
+
+nightlean_circuit issue43GuardedPartialWrites where
+  private enabled : Bool
+  private checkEnabled : Bool
+  private left : UInt 8
+  private right : UInt 8
+  private wide : Native
+  private approved : Bool
+end
+
+nightlean_contract Issue43GuardedPartialWrites where
+  cell underflowed : UInt 8
+  cell narrowed : UInt 3
+  cell asserted : UInt 3
+  cell shadowed : UInt 8
+  cell valid : Native
+  entry update uses issue43GuardedPartialWrites where
+    when disclose(enabled) write underflowed := disclose(sub(left, right))
+    when disclose(enabled) write narrowed := disclose(cast(UInt 3, wide))
+    when disclose(enabled) write asserted := disclose(assertThen(approved, uint(7)))
+    when disclose(enabled) write shadowed := disclose(let enabled := true in sub(left, right))
+    when disclose(enabled) write valid := disclose(add(1, 2))
+    when disclose(checkEnabled) require assertThen(approved, true)
+  end
+end
+
+private def issue43PartialEntry : Entrypoint :=
+  match Issue43GuardedPartialWrites.entrypoints with
+  | ep :: _ => ep
+  | _ => {name := "missing", circuit := {name := "missing"}}
+
+private def issue43PartialContext : EvalContext := {
+  modulus := Field.modulus
+  poseidon2 := fun _ _ _ => .error "unused by this fixture"
+}
+
+private def issue43PartialInputs (enabled checkEnabled : _root_.Bool)
+    (left right wide : Nat) (approved : _root_.Bool) : EvalEnv := [
+  ("enabled", .bool enabled),
+  ("checkEnabled", .bool checkEnabled),
+  ("left", .uint 255 left),
+  ("right", .uint 255 right),
+  ("wide", .native wide),
+  ("approved", .bool approved)]
+
+private def issue43PartialInitial : LedgerState := {
+  cells := [
+    ("underflowed", .uint 255 0),
+    ("narrowed", .uint 7 0),
+    ("asserted", .uint 7 0),
+    ("shadowed", .uint 255 0),
+    ("valid", .native 0)]
+}
+
+#guard match issue43PartialEntry.run issue43PartialContext
+    (issue43PartialInputs _root_.Bool.false _root_.Bool.false 1 2 8 _root_.Bool.false)
+    issue43PartialInitial with
+  | .ok (outputs, after) => outputs.isEmpty && after == issue43PartialInitial
+  | .error _ => Bool.false
+
+#guard match issue43PartialEntry.run issue43PartialContext
+    (issue43PartialInputs _root_.Bool.true _root_.Bool.true 3 2 3 _root_.Bool.true)
+    issue43PartialInitial with
+  | .ok (outputs, after) => outputs.isEmpty &&
+      after.cells.lookup "underflowed" == some (.uint 255 1) &&
+      after.cells.lookup "narrowed" == some (.uint 7 3) &&
+      after.cells.lookup "asserted" == some (.uint 7 7) &&
+      after.cells.lookup "shadowed" == some (.uint 255 1) &&
+      after.cells.lookup "valid" == some (.native 3)
+  | .error _ => Bool.false
+
+#guard match Backend.Impact.lower Issue43GuardedPartialWrites.state issue43PartialEntry with
+  | .ok plan => plan.guards.length == 1 &&
+      plan.activityGuards.length == plan.operations.length &&
+      plan.activityGuards.any Option.isSome
+  | .error _ => Bool.false

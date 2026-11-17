@@ -115,8 +115,11 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | none, _ => pure []
       | some condition, .writeCell .. | some condition, .writeMap .. =>
         expression env span condition
+      | some condition, .require _ =>
+        discard (expression env span condition)
+        pure []
       | some _, _ =>
-        throw {span, message := "native guards are supported only on cell and map writes"}
+        throw {span, message := "native guards are supported only on writes and require effects"}
     let activeControl := merge control activityControl
     match effect with
     | .readCell state destination _ =>

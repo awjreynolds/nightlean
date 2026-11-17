@@ -99,6 +99,8 @@ scoped syntax ident : nlexpr
 scoped syntax num : nlexpr
 scoped syntax "true" : nlexpr
 scoped syntax "false" : nlexpr
+scoped syntax "let" ident ":=" nlexpr "in" nlexpr : nlexpr
+scoped syntax "assertThen(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "add(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "mul(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "sub(" nlexpr "," nlexpr ")" : nlexpr
@@ -132,6 +134,7 @@ scoped syntax "write" ident ":=" nlexpr : nleffect
 scoped syntax "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
+scoped syntax "when" nlexpr "require" nlexpr : nleffect
 
 declare_syntax_cat nlentry
 scoped syntax "entry" ident "uses" ident "where" nleffect* "end" : nlentry
@@ -195,6 +198,9 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   match stx with
   | `(nlexpr| cast($_:nltype, $_:nlexpr)) => Bool.true
   | `(nlexpr| sub($_:nlexpr, $_:nlexpr)) => Bool.true
+  | `(nlexpr| assertThen($_:nlexpr, $_:nlexpr)) => Bool.true
+  | `(nlexpr| let $_:ident := $value:nlexpr in $body:nlexpr) =>
+    hasPartialScalar value || hasPartialScalar body
   | `(nlexpr| disclose($value)) => hasPartialScalar value
   | `(nlexpr| add($a, $b)) | `(nlexpr| mul($a, $b))
   | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
@@ -213,6 +219,17 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| $n:num) => pure (.native, ← `(Nightlean.Expr.native $n))
   | `(nlexpr| true) => pure (.bool, ← `(Nightlean.Expr.bool Bool.true))
   | `(nlexpr| false) => pure (.bool, ← `(Nightlean.Expr.bool Bool.false))
+  | `(nlexpr| let $id:ident := $value:nlexpr in $body:nlexpr) => do
+    let (valueTy, value) ← expression env value
+    let typeTerm ← tyTerm valueTy
+    let valueRef ← `(Nightlean.Expr.ref (ty := $typeTerm) $(stringTerm id.getId.toString))
+    let bodyEnv := (id.getId.toString, valueTy, valueRef) :: env
+    let (bodyTy, body) ← expression bodyEnv body
+    pure (bodyTy, ← `(Nightlean.Expr.letE $(stringTerm id.getId.toString) $value $body))
+  | `(nlexpr| assertThen($condition, $body)) => do
+    let condition ← expected env condition .bool
+    let (bodyTy, body) ← expression env body
+    pure (bodyTy, ← `(Nightlean.Expr.assertE $condition $body))
   | `(nlexpr| uint($n:num)) =>
     match ScalarPolicy.validate (.uint n.getNat) with
     | .error message => throwErrorAt stx message
@@ -415,6 +432,7 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
           let guardExpression? : Option (TSyntax `nlexpr) := match effect with
             | `(nleffect| when $condition:nlexpr write $state:ident := $value:nlexpr) => some condition
             | `(nleffect| when $condition:nlexpr insert $state:ident [ $key:nlexpr ] := $value:nlexpr) => some condition
+            | `(nleffect| when $condition:nlexpr require $value:nlexpr) => some condition
             | _ => none
           let guardTerm ← match guardExpression? with
             | none => `(none)
@@ -422,6 +440,8 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
           effectGuardTerms := effectGuardTerms.push guardTerm
           match effect with
           | `(nleffect| require $value:nlexpr) =>
+            effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
+          | `(nleffect| when $_:nlexpr require $value:nlexpr) =>
             effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
           | `(nleffect| read $state:ident as $dest:ident) =>
             let some (.cell ty) := schema.lookup state.getId.toString

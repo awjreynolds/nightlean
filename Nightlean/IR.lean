@@ -47,26 +47,6 @@ inductive Expr : Ty → Type where
   | poseidon2 (domain : Nat) (a b : Expr .native) : Expr .native
   deriving Repr
 
-/-- shortcut: Guarded writes reject expressions whose evaluation can fail until
-their native range/assertion constraints use the same activity guard. -/
-def Expr.partialForGuardedWrite : Expr ty → Bool
-  | .native _ | .bool _ | .uint _ _ | .ref _ => false
-  | .add a b | .mul a b | .sub a b | .uadd a b | .umul a b | .eq a b =>
-      a.partialForGuardedWrite || b.partialForGuardedWrite
-  | .usub _ _ => true
-  | .cast target (source := source) value =>
-      value.partialForGuardedWrite || match target, source with
-        | .uint _, .native => true
-        | .uint maximum, .uint sourceMaximum => sourceMaximum > maximum
-        | .uint maximum, .bool => maximum < 1
-        | _, _ => false
-  | .letE _ value body => value.partialForGuardedWrite || body.partialForGuardedWrite
-  | .assertE _ _ => true
-  | .disclose _ value => value.partialForGuardedWrite
-  | .select condition yes no =>
-      condition.partialForGuardedWrite || yes.partialForGuardedWrite || no.partialForGuardedWrite
-  | .poseidon2 _ a b => a.partialForGuardedWrite || b.partialForGuardedWrite
-
 structure Input where
   name : String
   ty : Ty
@@ -122,8 +102,8 @@ structure Entrypoint where
   effects : List Effect := []
   span : SourceSpan := {}
   effectSpans : List SourceSpan := []
-  /-- Optional activity guards aligned with `effects`. Only cell/map writes
-  accept a guard. An empty list preserves the legacy all-active schedule. -/
+  /-- Optional activity guards aligned with `effects`. Cell/map writes and
+  require effects accept a guard. An empty list preserves the legacy schedule. -/
   effectGuards : List (Option (Expr .bool)) := []
   deriving Repr
 
@@ -269,14 +249,10 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span, message}
       | .ok _ => pure ()
       match effect with
-      | .writeCell _ _ value =>
-        if value.partialForGuardedWrite then
-          throw {span := span, message := "guarded write payload contains a partial expression; native activity-gated constraints are unavailable"}
-      | .writeMap _ _ _ key value =>
-        if key.partialForGuardedWrite || value.partialForGuardedWrite then
-          throw {span := span, message := "guarded write payload contains a partial expression; native activity-gated constraints are unavailable"}
+      | .writeCell .. | .writeMap .. => pure ()
+      | .require _ => pure ()
       | _ =>
-        throw {span := span, message := "native guards are supported only on cell and map writes"}
+        throw {span := span, message := "native guards are supported only on writes and require effects"}
     let result : Except String (Option (String × Ty)) := do
       match effect with
       | .readCell state destination ty =>

@@ -35,13 +35,29 @@ when disclose(eq(present, false)) insert balances[account] := amount
 The materializer gathers the result from the native `Member` opcode after the
 ordered write prefix. ZKIR binds the byte-aligned Bool read into the public
 transcript, so a forged membership result fails the relation check. Guarded
-reads and guarded `require` effects fail validation. Guarded payloads with
-potentially partial evaluation, including unsigned underflow, `assertThen`,
-and unsafe narrowing casts, also fail validation until their native
-constraints use the same activity guard. The selected-321 checks live in
+reads remain unavailable. The selected-321 checks live in
 `tests/Issue43ConditionalWrites.lean` and
 `runtime/tests/conditional_writes.rs`, and in
 `tests/Issue43MapMembership.lean` and `runtime/tests/map_membership.rs`.
+
+Guarded writes and `require` also support partial scalar expressions. Inactive
+unsigned subtraction, narrowing casts and inline `assertThen` use safe native
+defaults. Active expressions retain their original rejection behavior. The
+compiler captures activity under a fresh name before transforming nested
+`let` expressions, so local shadowing preserves the original guard. Disclosure
+checks still run on the original source value and control.
+
+```lean
+when disclose(enabled) write quota := disclose(sub(left, right))
+when disclose(enabled) require assertThen(approved, true)
+```
+
+One focused native test covers inactive failures, corresponding active
+rejections, valid active writes and nested name shadowing. Its source is
+`tests/Issue43GuardedPartialWrites.lean`, with native checks in
+`runtime/tests/guarded_partials.rs`. Eager `select` keeps eager evaluation inside
+an active expression. Guarded assertions retain the existing successful-value
+disclosure scope, without a failure-channel privacy claim.
 
 The selected-3.2.1 inactive conditional-write fixture also passes real native
 proof construction and verified attachment. The SDK freezes a preview of native
@@ -51,8 +67,10 @@ statement. One changed skipped statement field rejects the proof. See the
 The private-only, all-inactive source case also proves and attaches with zero
 original VM operations. Its skipped fields use an empty native transcript
 container, without a dummy source input.
-General structured branches, guarded reads and partial-expression totalization
-remain open in issue 43. This evidence includes no ledger deployment.
+General structured branches and guarded reads remain open in issue 43. The new
+partial-expression fixture has source/native checker evidence. The separate
+real proof fixtures above cover conditional writes and Noop attachment. This
+evidence includes no ledger deployment.
 
 ## Authoring and compilation
 

@@ -65,8 +65,8 @@ private def issue43Partial : Entrypoint :=
 #guard match issue43Partial.validate
     {poseidon2 := Bool.true, stateCells := Bool.true, stateMaps := Bool.true}
     Issue43ConditionalWrites.state with
-  | .error diagnostic => diagnostic.message.startsWith "guarded write payload contains a partial expression"
-  | .ok _ => Bool.false
+  | .ok _ => Bool.true
+  | .error _ => Bool.false
 
 #guard match Backend.Zkir.lowerEntrypoint
     Issue43ConditionalWrites.state issue43Entry with

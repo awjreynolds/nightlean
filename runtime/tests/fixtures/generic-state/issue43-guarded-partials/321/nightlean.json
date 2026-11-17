@@ -1,0 +1,88 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "schemaVersion": 1,
+ "qualification": "unqualified-relation-and-state-description",
+ "deployable": false,
+ "contracts":
+ [{"state":
+   [{"name": "underflowed", "kind": {"cell": "UIntRange<256>"}},
+    {"name": "narrowed", "kind": {"cell": "UIntRange<8>"}},
+    {"name": "asserted", "kind": {"cell": "UIntRange<8>"}},
+    {"name": "shadowed", "kind": {"cell": "UIntRange<256>"}},
+    {"name": "valid", "kind": {"cell": "Native"}}],
+   "name": "Issue43GuardedPartialWrites",
+   "entrypoints":
+   [{"nativePlanFile": "Issue43GuardedPartialWrites.update.impact.json",
+     "nativeCircuitQualified": false,
+     "nativeCircuitFile": "Issue43GuardedPartialWrites.update.zkir",
+     "name": "update",
+     "effects":
+     [{"op": "guarded",
+       "guard": {"ref": "enabled"},
+       "effect":
+       {"value": {"usub": [{"ref": "left"}, {"ref": "right"}]},
+        "state": "underflowed",
+        "op": "writeCell"}},
+      {"op": "guarded",
+       "guard": {"ref": "enabled"},
+       "effect":
+       {"value": {"cast": {"value": {"ref": "wide"}, "type": "UIntRange<8>"}},
+        "state": "narrowed",
+        "op": "writeCell"}},
+      {"op": "guarded",
+       "guard": {"ref": "enabled"},
+       "effect":
+       {"value":
+        {"assertThen":
+         [{"ref": "approved"}, {"uint": {"value": "7", "maximum": "7"}}]},
+        "state": "asserted",
+        "op": "writeCell"}},
+      {"op": "guarded",
+       "guard": {"ref": "enabled"},
+       "effect":
+       {"value":
+        {"let":
+         {"value": {"bool": true},
+          "name": "enabled",
+          "body": {"usub": [{"ref": "left"}, {"ref": "right"}]}}},
+        "state": "shadowed",
+        "op": "writeCell"}},
+      {"op": "guarded",
+       "guard": {"ref": "enabled"},
+       "effect":
+       {"value": {"add": [{"native": "1"}, {"native": "2"}]},
+        "state": "valid",
+        "op": "writeCell"}},
+      {"op": "guarded",
+       "guard": {"ref": "checkEnabled"},
+       "effect":
+       {"op": "require",
+        "condition": {"assertThen": [{"ref": "approved"}, {"bool": true}]}}}],
+     "circuit": "issue43GuardedPartialWrites"}]}],
+ "circuits":
+ [{"outputs": [],
+   "name": "issue43GuardedPartialWrites",
+   "inputs":
+   [{"visibility": "private", "type": "Bool", "name": "enabled"},
+    {"visibility": "private", "type": "Bool", "name": "checkEnabled"},
+    {"visibility": "private", "type": "UIntRange<256>", "name": "left"},
+    {"visibility": "private", "type": "UIntRange<256>", "name": "right"},
+    {"visibility": "private", "type": "Native", "name": "wide"},
+    {"visibility": "private", "type": "Bool", "name": "approved"}],
+   "file": "issue43GuardedPartialWrites.zkir",
+   "constraints": []}]}
