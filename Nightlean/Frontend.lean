@@ -5,6 +5,7 @@ import Nightlean.ComponentDisclosure
 import Nightlean.Control
 import Nightlean.Witness
 import Nightlean.Modules
+import Nightlean.Backend.Impact
 import Lean
 
 namespace Nightlean
@@ -139,8 +140,12 @@ scoped syntax "when" nlexpr "read" ident "as" ident : nleffect
 scoped syntax "when" nlexpr "read" ident "[" nlexpr "]" "as" ident : nleffect
 scoped syntax "when" nlexpr "member" ident "[" nlexpr "]" "as" ident : nleffect
 
+declare_syntax_cat nlstatement
+scoped syntax nleffect : nlstatement
+scoped syntax "if" nlexpr "then" "{" nlstatement* "}" "else" "{" nlstatement* "}" : nlstatement
+
 declare_syntax_cat nlentry
-scoped syntax "entry" ident "uses" ident "where" nleffect* "end" : nlentry
+scoped syntax "entry" ident "uses" ident "where" nlstatement* "end" : nlentry
 scoped syntax (name := contractCommand) "nightlean_contract" ident "where" nlstate* nlentry* "end" : command
 
 open scoped Nightlean
@@ -397,6 +402,176 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
     env := (name, ty, ← `(@Nightlean.Expr.ref $(← tyTerm ty) $(stringTerm name))) :: env
   pure env
 
+private def addReferenceAs (env : Bindings) (sourceName internalName : String) (ty : Ty) :
+    CommandElabM Bindings := do
+  pure ((sourceName, ty, ← `(@Nightlean.Expr.ref $(← tyTerm ty) $(stringTerm internalName))) :: env)
+
+private structure EntryEffects where
+  env : Bindings
+  terms : Array (TSyntax `term) := #[]
+  spans : Array (TSyntax `term) := #[]
+  guards : Array (TSyntax `term) := #[]
+  nextLocal : Nat := 0
+  usedLocalNames : List String := []
+
+private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `nlexpr) :=
+  match effect with
+  | `(nleffect| when $condition:nlexpr write $_state:ident := $_value:nlexpr) => some condition
+  | `(nleffect| when $condition:nlexpr insert $_state:ident [ $_key:nlexpr ] := $_value:nlexpr) => some condition
+  | `(nleffect| when $condition:nlexpr require $_value:nlexpr) => some condition
+  | `(nleffect| when $condition:nlexpr read $_state:ident as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr read $_state:ident [ $_key:nlexpr ] as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr member $_state:ident [ $_key:nlexpr ] as $_dest:ident) => some condition
+  | _ => none
+
+private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
+    (effect : TSyntax `nleffect) : CommandElabM (TSyntax `term) := do
+  let explicit ← match explicitEffectGuard effect with
+    | none => pure none
+    | some condition => pure (some (← checkedExpression env condition .bool))
+  match parent, explicit with
+  | none, none => `(none)
+  | none, some condition => `(some $condition)
+  | some parent, none => `(some $parent)
+  | some parent, some condition =>
+    `(some (Nightlean.Backend.Impact.activityGuardWithin $parent $condition))
+
+private def chooseBranchLocalName (env : Bindings) (used : List String) (next : Nat) :
+    String × Nat := Id.run do
+  let mut candidateIndex := next
+  let mut candidate := s!"nightlean_if_local_{candidateIndex}"
+  while env.any (fun binding => binding.1 == candidate) || used.contains candidate do
+    candidateIndex := candidateIndex + 1
+    candidate := s!"nightlean_if_local_{candidateIndex}"
+  return (candidate, candidateIndex + 1)
+
+private partial def syntaxIdentifiers : Syntax → List String
+  | .ident _ _ name _ => [name.toString]
+  | .node _ _ arguments => arguments.toList.flatMap syntaxIdentifiers
+  | _ => []
+
+private def freshReadName (depth : Nat) (state : EntryEffects) (destination : TSyntax `ident) :
+    CommandElabM (String × EntryEffects) := do
+  ensureFresh state.env destination
+  let sourceName := destination.getId.toString
+  if depth == 0 then return (sourceName, state)
+  let (internalName, nextLocal) :=
+    chooseBranchLocalName state.env state.usedLocalNames state.nextLocal
+  return (internalName, {state with nextLocal, usedLocalNames := internalName :: state.usedLocalNames})
+
+private def bindReadName (state : EntryEffects) (sourceName internalName : String) (ty : Ty) :
+    CommandElabM EntryEffects := do
+  let env ← if sourceName == internalName then addReferences state.env [(sourceName, ty)]
+    else addReferenceAs state.env sourceName internalName ty
+  pure {state with env}
+
+private def elaborateEffect (schema : List (String × StateKind))
+    (parent : Option (TSyntax `term)) (depth : Nat) (state : EntryEffects)
+    (effect : TSyntax `nleffect) : CommandElabM EntryEffects := do
+  let guard ← effectGuardTerm state.env parent effect
+  let span ← spanTerm effect
+  let mut state := {state with
+    spans := state.spans.push span
+    guards := state.guards.push guard}
+  match effect with
+  | `(nleffect| require $value:nlexpr) =>
+    let condition ← checkedExpression state.env value .bool
+    let term ← `(Nightlean.Effect.require $condition)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| when $_:nlexpr require $value:nlexpr) =>
+    let condition ← checkedExpression state.env value .bool
+    let term ← `(Nightlean.Effect.require $condition)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| when $_:nlexpr read $storage:ident as $destination:ident)
+  | `(nleffect| read $storage:ident as $destination:ident) => do
+    let some (.cell ty) := schema.lookup storage.getId.toString
+      | throwErrorAt storage "read requires a declared state cell"
+    let (readName, updated) ← freshReadName depth state destination
+    let term ← `(Nightlean.Effect.readCell
+      $(stringTerm storage.getId.toString) $(stringTerm readName) $(← tyTerm ty))
+    state := {updated with terms := updated.terms.push term}
+    state ← bindReadName state destination.getId.toString readName ty
+  | `(nleffect| when $_:nlexpr read $storage:ident [ $key:nlexpr ] as $destination:ident)
+  | `(nleffect| read $storage:ident [ $key:nlexpr ] as $destination:ident) => do
+    let some (.map keyTy valueTy) := schema.lookup storage.getId.toString
+      | throwErrorAt storage "map read requires a declared state map"
+    let (readName, updated) ← freshReadName depth state destination
+    let loweredKey ← checkedExpression updated.env key keyTy
+    let term ← `(Nightlean.Effect.readMap
+      $(stringTerm storage.getId.toString) $(stringTerm readName)
+      $(← tyTerm keyTy) $(← tyTerm valueTy) $loweredKey)
+    state := {updated with terms := updated.terms.push term}
+    state ← bindReadName state destination.getId.toString readName valueTy
+  | `(nleffect| when $_:nlexpr member $storage:ident [ $key:nlexpr ] as $destination:ident)
+  | `(nleffect| member $storage:ident [ $key:nlexpr ] as $destination:ident) => do
+    let some (.map keyTy valueTy) := schema.lookup storage.getId.toString
+      | throwErrorAt storage "membership requires a declared state map"
+    let (readName, updated) ← freshReadName depth state destination
+    let loweredKey ← checkedExpression updated.env key keyTy
+    let term ← `(Nightlean.Effect.readMember
+      $(stringTerm storage.getId.toString) $(stringTerm readName)
+      $(← tyTerm keyTy) $(← tyTerm valueTy) $loweredKey)
+    state := {updated with terms := updated.terms.push term}
+    state ← bindReadName state destination.getId.toString readName .bool
+  | `(nleffect| write $storage:ident := $value:nlexpr)
+  | `(nleffect| when $_:nlexpr write $storage:ident := $value:nlexpr) => do
+    let some (.cell ty) := schema.lookup storage.getId.toString
+      | throwErrorAt storage "write requires a declared state cell"
+    let loweredValue ← checkedExpression state.env value ty
+    let term ← `(Nightlean.Effect.writeCell
+      $(stringTerm storage.getId.toString) $(← tyTerm ty) $loweredValue)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| insert $storage:ident [ $key:nlexpr ] := $value:nlexpr)
+  | `(nleffect| when $_:nlexpr insert $storage:ident [ $key:nlexpr ] := $value:nlexpr) => do
+    let some (.map keyTy valueTy) := schema.lookup storage.getId.toString
+      | throwErrorAt storage "insert requires a declared state map"
+    let loweredKey ← checkedExpression state.env key keyTy
+    let loweredValue ← checkedExpression state.env value valueTy
+    let term ← `(Nightlean.Effect.writeMap
+      $(stringTerm storage.getId.toString) $(← tyTerm keyTy) $(← tyTerm valueTy)
+      $loweredKey $loweredValue)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| absent $storage:ident [ $key:nlexpr ]) => do
+    if depth > 0 then throwErrorAt effect "absent queries inside if/else blocks are unsupported"
+    let some (.map keyTy _) := schema.lookup storage.getId.toString
+      | throwErrorAt storage "absent requires a declared state map"
+    let loweredKey ← checkedExpression state.env key keyTy
+    let term ← `(Nightlean.Effect.requireAbsent
+      $(stringTerm storage.getId.toString) $(← tyTerm keyTy) $loweredKey)
+    state := {state with terms := state.terms.push term}
+  | _ => throwErrorAt effect "unsupported Nightlean state effect"
+  pure state
+
+private partial def elaborateStatements (schema : List (String × StateKind))
+    (parent : Option (TSyntax `term)) (depth : Nat)
+    (statements : Array (TSyntax `nlstatement)) (initial : EntryEffects) :
+    CommandElabM EntryEffects := do
+  let mut state := initial
+  for statement in statements do
+    match statement with
+    | `(nlstatement| $effect:nleffect) =>
+      state ← elaborateEffect schema parent depth state effect
+    | `(nlstatement| if $condition:nlexpr then { $thenStatements:nlstatement* }
+        else { $elseStatements:nlstatement* }) => do
+      let condition ← checkedExpression state.env condition .bool
+      let parentExpression ← match parent with
+        | some expression => pure expression
+        | none => `(Nightlean.Expr.bool Bool.true)
+      let thenPath : Option (TSyntax `term) := some (←
+        `(Nightlean.Backend.Impact.activityGuardWithin
+          $parentExpression $condition))
+      let negated ← `(Nightlean.Expr.eq $condition (Nightlean.Expr.bool Bool.false))
+      let elsePath : Option (TSyntax `term) := some (←
+        `(Nightlean.Backend.Impact.activityGuardWithin
+          $parentExpression $negated))
+      let branchEnv := state.env
+      let afterThen ← elaborateStatements schema thenPath (depth + 1) thenStatements state
+      let afterElse ← elaborateStatements schema elsePath (depth + 1) elseStatements
+        {afterThen with env := branchEnv}
+      state := {afterElse with env := branchEnv}
+    | _ => throwErrorAt statement "unsupported Nightlean state statement"
+  pure state
+
 @[command_elab contractCommand] def elabContract : CommandElab := fun stx => do
   match stx with
   | `(nightlean_contract $name:ident where $states:nlstate* $entries:nlentry* end) =>
@@ -419,112 +594,19 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
     let mut entryNames : List Name := []
     for entryStx in entries do
       match entryStx with
-      | `(nlentry| entry $id:ident uses $circuit:ident where $effects:nleffect* end) =>
+      | `(nlentry| entry $id:ident uses $circuit:ident where $statements:nlstatement* end) =>
         if entryNames.contains id.getId then throwErrorAt id "duplicate Nightlean entrypoint"
         entryNames := id.getId :: entryNames
         let registry := circuitRegistry.getState (← getEnv)
         let fullName := (← getCurrNamespace) ++ circuit.getId
         let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
           | throwErrorAt circuit "entrypoint requires a registered Nightlean circuit"
-        let mut env ← addReferences [] (info.inputs ++ info.outputs)
-        let mut effectTerms : Array (TSyntax `term) := #[]
-        let mut effectSpans : Array (TSyntax `term) := #[]
-        let mut effectGuardTerms : Array (TSyntax `term) := #[]
-        for effect in effects do
-          effectSpans := effectSpans.push (← spanTerm effect)
-          let guardExpression? : Option (TSyntax `nlexpr) := match effect with
-            | `(nleffect| when $condition:nlexpr write $state:ident := $value:nlexpr) => some condition
-            | `(nleffect| when $condition:nlexpr insert $state:ident [ $key:nlexpr ] := $value:nlexpr) => some condition
-            | `(nleffect| when $condition:nlexpr require $value:nlexpr) => some condition
-            | `(nleffect| when $condition:nlexpr read $state:ident as $dest:ident) => some condition
-            | `(nleffect| when $condition:nlexpr read $state:ident [ $key:nlexpr ] as $dest:ident) => some condition
-            | `(nleffect| when $condition:nlexpr member $state:ident [ $key:nlexpr ] as $dest:ident) => some condition
-            | _ => none
-          let guardTerm ← match guardExpression? with
-            | none => `(none)
-            | some condition => `(some $(← checkedExpression env condition .bool))
-          effectGuardTerms := effectGuardTerms.push guardTerm
-          match effect with
-          | `(nleffect| require $value:nlexpr) =>
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
-          | `(nleffect| when $_:nlexpr require $value:nlexpr) =>
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.require $(← checkedExpression env value .bool)))
-          | `(nleffect| when $_:nlexpr read $state:ident as $dest:ident) =>
-            let some (.cell ty) := schema.lookup state.getId.toString
-              | throwErrorAt state "read requires a declared state cell"
-            ensureFresh env dest
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.readCell
-              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString) $(← tyTerm ty)))
-            env ← addReferences env [(dest.getId.toString, ty)]
-          | `(nleffect| when $_:nlexpr read $state:ident [ $key:nlexpr ] as $dest:ident) =>
-            let some (.map keyTy valueTy) := schema.lookup state.getId.toString
-              | throwErrorAt state "map read requires a declared state map"
-            ensureFresh env dest
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.readMap
-              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString)
-              $(← tyTerm keyTy) $(← tyTerm valueTy) $(← checkedExpression env key keyTy)))
-            env ← addReferences env [(dest.getId.toString, valueTy)]
-          | `(nleffect| when $_:nlexpr member $state:ident [ $key:nlexpr ] as $dest:ident) =>
-            let some (.map keyTy valueTy) := schema.lookup state.getId.toString
-              | throwErrorAt state "membership requires a declared state map"
-            ensureFresh env dest
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.readMember
-              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString)
-              $(← tyTerm keyTy) $(← tyTerm valueTy) $(← checkedExpression env key keyTy)))
-            env ← addReferences env [(dest.getId.toString, .bool)]
-          | `(nleffect| read $state:ident as $dest:ident) =>
-            let some (.cell ty) := schema.lookup state.getId.toString
-              | throwErrorAt state "read requires a declared state cell"
-            ensureFresh env dest
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.readCell
-              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString) $(← tyTerm ty)))
-            env ← addReferences env [(dest.getId.toString, ty)]
-          | `(nleffect| read $state:ident [ $key:nlexpr ] as $dest:ident) =>
-            let some (.map keyTy valueTy) := schema.lookup state.getId.toString
-              | throwErrorAt state "map read requires a declared state map"
-            ensureFresh env dest
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.readMap
-              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString)
-              $(← tyTerm keyTy) $(← tyTerm valueTy) $(← checkedExpression env key keyTy)))
-            env ← addReferences env [(dest.getId.toString, valueTy)]
-          | `(nleffect| member $state:ident [ $key:nlexpr ] as $dest:ident) =>
-            let some (.map keyTy valueTy) := schema.lookup state.getId.toString
-              | throwErrorAt state "membership requires a declared state map"
-            ensureFresh env dest
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.readMember
-              $(stringTerm state.getId.toString) $(stringTerm dest.getId.toString)
-              $(← tyTerm keyTy) $(← tyTerm valueTy) $(← checkedExpression env key keyTy)))
-            env ← addReferences env [(dest.getId.toString, .bool)]
-          | `(nleffect| write $state:ident := $value:nlexpr) =>
-            let some (.cell ty) := schema.lookup state.getId.toString
-              | throwErrorAt state "write requires a declared state cell"
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.writeCell
-              $(stringTerm state.getId.toString) $(← tyTerm ty) $(← checkedExpression env value ty)))
-          | `(nleffect| when $condition:nlexpr write $state:ident := $value:nlexpr) =>
-            let some (.cell ty) := schema.lookup state.getId.toString
-              | throwErrorAt state "guarded write requires a declared state cell"
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.writeCell
-              $(stringTerm state.getId.toString) $(← tyTerm ty) $(← checkedExpression env value ty)))
-          | `(nleffect| absent $state:ident [ $key:nlexpr ]) =>
-            let some (.map kt _) := schema.lookup state.getId.toString
-              | throwErrorAt state "absent requires a declared state map"
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.requireAbsent
-              $(stringTerm state.getId.toString) $(← tyTerm kt) $(← checkedExpression env key kt)))
-          | `(nleffect| insert $state:ident [ $key:nlexpr ] := $value:nlexpr) =>
-            let some (.map kt vt) := schema.lookup state.getId.toString
-              | throwErrorAt state "insert requires a declared state map"
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.writeMap
-              $(stringTerm state.getId.toString) $(← tyTerm kt) $(← tyTerm vt)
-              $(← checkedExpression env key kt) $(← checkedExpression env value vt)))
-          | `(nleffect| when $condition:nlexpr insert $state:ident [ $key:nlexpr ] := $value:nlexpr) =>
-            let some (.map kt vt) := schema.lookup state.getId.toString
-              | throwErrorAt state "guarded insert requires a declared state map"
-            effectTerms := effectTerms.push (← `(Nightlean.Effect.writeMap
-              $(stringTerm state.getId.toString) $(← tyTerm kt) $(← tyTerm vt)
-              $(← checkedExpression env key kt) $(← checkedExpression env value vt)))
-          | _ => throwErrorAt effect "unsupported Nightlean state effect"
+        let env ← addReferences [] (info.inputs ++ info.outputs)
+        let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
+        let initial : EntryEffects := {env, usedLocalNames := reserved}
+        let lowered ← elaborateStatements schema none 0 statements initial
         let circuitTerm := mkIdent info.declName
-        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$effectTerms,*], span := $(← spanTerm entryStx), effectSpans := [$effectSpans,*], effectGuards := [$effectGuardTerms,*] : Nightlean.Entrypoint }))
+        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Nightlean.Entrypoint }))
       | _ => throwErrorAt entryStx "unsupported Nightlean entrypoint"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId

@@ -69,11 +69,25 @@ statement. One changed skipped statement field rejects the proof. See the
 The private-only, all-inactive source case also proves and attaches with zero
 original VM operations. Its skipped fields use an empty native transcript
 container, without a dummy source input.
-General structured branches and guarded reads over nested aggregate values
-remain open in issue 43. The partial-expression and guarded-read fixtures have
-source/native checker evidence. The separate real proof fixtures above cover
-conditional writes and Noop attachment. This evidence includes no ledger
-deployment.
+The native source surface now accepts nested effect blocks:
+
+```lean
+if disclose(enabled) then {
+  read balance as current
+  write selected := current
+} else {
+  write selected := 0
+}
+```
+
+Both arms are checked. Read locals stay inside their branch, and both arms may
+reuse the same source name. Nested conditions are totalized under their parent
+guard, so an inactive narrowing cast or assertion does not execute. `absent`
+queries inside blocks remain unsupported. This package has one selected-3.2.1
+native checker fixture at `tests/Issue43EffectBlocks.lean` and
+`runtime/tests/effect_blocks.rs`. General `Helpers.Statement.branch` and witness
+integration still need their own native path. These checks do not add ledger
+deployment evidence.
 
 ## Authoring and compilation
 

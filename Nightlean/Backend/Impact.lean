@@ -179,6 +179,14 @@ private def totalizeActivityCondition (guard condition : Expr .bool) : Expr .boo
   .letE name guard
     (.select (.ref name) (totalizeUnder (.ref name) condition) (.bool true))
 
+/-- Evaluate a nested branch condition only when its enclosing branch is active.
+The inactive arm becomes false, and partial condition expressions are totalized
+under the captured parent guard before eager `select` lowering. -/
+def activityGuardWithin (parent condition : Expr .bool) : Expr .bool :=
+  let name := freshActivityName (expressionNames parent ++ expressionNames condition)
+  .letE name parent
+    (.select (.ref name) (totalizeUnder (.ref name) condition) (.bool false))
+
 /-- One effect in the production ordered ledger plan. The current read count
 fixes generated absence names and therefore belongs to the accumulator. -/
 def appendEffect (state : List StateDecl) (effect : Effect)

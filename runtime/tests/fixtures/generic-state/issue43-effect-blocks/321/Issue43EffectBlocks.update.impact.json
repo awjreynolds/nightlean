@@ -1,0 +1,714 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "left", "kind": {"cell": "Native"}},
+  {"name": "right", "kind": {"cell": "Native"}},
+  {"name": "selected", "kind": {"cell": "Native"}},
+  {"name": "nested", "kind": {"cell": "Native"}},
+  {"name": "final", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "reads":
+ [{"type": "Native", "name": "wide"},
+  {"type": "Native",
+   "name": "nightlean_if_local_0",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "choose"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"type": "Native",
+   "name": "nightlean_if_local_1",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"type": "Native", "name": "observedAfter"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "wide"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "wide"},
+   "alignment": "field"},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "choose"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation": {"slot": 0, "pushPath": false, "op": "index"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "choose"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"op": "popeq",
+    "expression": {"tag": "reference", "name": "nightlean_if_local_0"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "choose"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "2", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "choose"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxx",
+      "body":
+      {"yes": {"tag": "reference", "name": "choose"},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"tag": "reference", "name": "nightlean_if_local_0"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "choose"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "choose"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "3", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value":
+    {"value": {"value": true, "tag": "bool"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxx",
+     "body":
+     {"yes": {"tag": "reference", "name": "choose"},
+      "tag": "select",
+      "no": {"value": false, "tag": "bool"},
+      "condition":
+      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right":
+      {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+       "type": "UIntRange<8>",
+       "tag": "cast"},
+      "left":
+      {"value":
+       {"yes": {"tag": "reference", "name": "wide"},
+        "tag": "select",
+        "no": {"value": "0", "tag": "constant"},
+        "condition":
+        {"tag": "reference",
+         "name":
+         "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+       "type": "UIntRange<8>",
+       "tag": "cast"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference",
+      "name":
+      "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value":
+      {"value": {"value": true, "tag": "bool"},
+       "tag": "let",
+       "name": "_nightlean_activity_guard_xxxxxxx",
+       "body":
+       {"yes": {"tag": "reference", "name": "choose"},
+        "tag": "select",
+        "no": {"value": false, "tag": "bool"},
+        "condition":
+        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "body":
+      {"yes":
+       {"tag": "eq",
+        "right":
+        {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+         "type": "UIntRange<8>",
+         "tag": "cast"},
+        "left":
+        {"value":
+         {"yes": {"tag": "reference", "name": "wide"},
+          "tag": "select",
+          "no": {"value": "0", "tag": "constant"},
+          "condition":
+          {"tag": "reference",
+           "name":
+           "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+         "type": "UIntRange<8>",
+         "tag": "cast"}},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference",
+        "name":
+        "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+     "tag": "let",
+     "name":
+     "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"value": "31", "tag": "constant"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value":
+    {"value": {"value": true, "tag": "bool"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxx",
+     "body":
+     {"yes": {"tag": "reference", "name": "choose"},
+      "tag": "select",
+      "no": {"value": false, "tag": "bool"},
+      "condition":
+      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right":
+      {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+       "type": "UIntRange<8>",
+       "tag": "cast"},
+      "left":
+      {"value":
+       {"yes": {"tag": "reference", "name": "wide"},
+        "tag": "select",
+        "no": {"value": "0", "tag": "constant"},
+        "condition":
+        {"tag": "reference",
+         "name":
+         "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+       "type": "UIntRange<8>",
+       "tag": "cast"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference",
+      "name":
+      "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value":
+    {"value": {"value": true, "tag": "bool"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxx",
+     "body":
+     {"yes": {"tag": "reference", "name": "choose"},
+      "tag": "select",
+      "no": {"value": false, "tag": "bool"},
+      "condition":
+      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right":
+      {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+       "type": "UIntRange<8>",
+       "tag": "cast"},
+      "left":
+      {"value":
+       {"yes": {"tag": "reference", "name": "wide"},
+        "tag": "select",
+        "no": {"value": "0", "tag": "constant"},
+        "condition":
+        {"tag": "reference",
+         "name":
+         "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+       "type": "UIntRange<8>",
+       "tag": "cast"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference",
+      "name":
+      "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "3", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value":
+    {"value": {"value": true, "tag": "bool"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxx",
+     "body":
+     {"yes": {"tag": "reference", "name": "choose"},
+      "tag": "select",
+      "no": {"value": false, "tag": "bool"},
+      "condition":
+      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "left":
+       {"value":
+        {"yes": {"tag": "reference", "name": "wide"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "reference",
+          "name":
+          "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+        "type": "UIntRange<8>",
+        "tag": "cast"}}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference",
+      "name":
+      "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value":
+      {"value": {"value": true, "tag": "bool"},
+       "tag": "let",
+       "name": "_nightlean_activity_guard_xxxxxxx",
+       "body":
+       {"yes": {"tag": "reference", "name": "choose"},
+        "tag": "select",
+        "no": {"value": false, "tag": "bool"},
+        "condition":
+        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "body":
+      {"yes":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left":
+        {"tag": "eq",
+         "right":
+         {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+          "type": "UIntRange<8>",
+          "tag": "cast"},
+         "left":
+         {"value":
+          {"yes": {"tag": "reference", "name": "wide"},
+           "tag": "select",
+           "no": {"value": "0", "tag": "constant"},
+           "condition":
+           {"tag": "reference",
+            "name":
+            "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+          "type": "UIntRange<8>",
+          "tag": "cast"}}},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference",
+        "name":
+        "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+     "tag": "let",
+     "name":
+     "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"value": "32", "tag": "constant"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value":
+    {"value": {"value": true, "tag": "bool"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxx",
+     "body":
+     {"yes": {"tag": "reference", "name": "choose"},
+      "tag": "select",
+      "no": {"value": false, "tag": "bool"},
+      "condition":
+      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "left":
+       {"value":
+        {"yes": {"tag": "reference", "name": "wide"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "reference",
+          "name":
+          "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+        "type": "UIntRange<8>",
+        "tag": "cast"}}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference",
+      "name":
+      "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value":
+    {"value": {"value": true, "tag": "bool"},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxx",
+     "body":
+     {"yes": {"tag": "reference", "name": "choose"},
+      "tag": "select",
+      "no": {"value": false, "tag": "bool"},
+      "condition":
+      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"value": {"value": "3", "tag": "uint", "maximum": "3"},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "left":
+       {"value":
+        {"yes": {"tag": "reference", "name": "wide"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "reference",
+          "name":
+          "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}},
+        "type": "UIntRange<8>",
+        "tag": "cast"}}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference",
+      "name":
+      "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}}},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation": {"slot": 1, "pushPath": false, "op": "index"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"op": "popeq",
+    "expression": {"tag": "reference", "name": "nightlean_if_local_1"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "2", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxx",
+      "body":
+      {"yes":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "choose"}},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"tag": "reference", "name": "nightlean_if_local_1"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "3", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_nightlean_activity_guard_xxxxxxx",
+      "body":
+      {"yes":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "choose"}},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}},
+     "tag": "let",
+     "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"value": "42", "tag": "constant"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_nightlean_activity_guard_xxxxxxx",
+    "body":
+    {"yes":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left": {"tag": "reference", "name": "choose"}},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxx"}}}},
+  {"op": "dup"},
+  {"slot": 2, "pushPath": false, "op": "index"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "observedAfter"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"value": "4", "tag": "constant"},
+   "alignment": "field"},
+  {"storage": true,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "observedAfter"},
+   "alignment": "field"},
+  {"op": "insert", "n": 1}],
+ "nativeCircuitFile": "Issue43EffectBlocks.update.zkir",
+ "guards": [],
+ "entrypoint": "update",
+ "contractName": "Issue43EffectBlocks",
+ "circuit":
+ {"outputs": [],
+  "name": "issue43EffectBlocks",
+  "inputs":
+  [{"visibility": "private", "type": "Bool", "name": "choose"},
+   {"visibility": "public", "type": "Native", "name": "wide"}],
+  "file": "issue43EffectBlocks.zkir",
+  "constraints": []}}

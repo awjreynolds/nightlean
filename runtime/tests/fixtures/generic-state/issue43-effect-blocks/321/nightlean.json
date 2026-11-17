@@ -1,0 +1,184 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "schemaVersion": 1,
+ "qualification": "unqualified-relation-and-state-description",
+ "deployable": false,
+ "contracts":
+ [{"state":
+   [{"name": "left", "kind": {"cell": "Native"}},
+    {"name": "right", "kind": {"cell": "Native"}},
+    {"name": "selected", "kind": {"cell": "Native"}},
+    {"name": "nested", "kind": {"cell": "Native"}},
+    {"name": "final", "kind": {"cell": "Native"}}],
+   "name": "Issue43EffectBlocks",
+   "entrypoints":
+   [{"nativePlanFile": "Issue43EffectBlocks.update.impact.json",
+     "nativeCircuitQualified": false,
+     "nativeCircuitFile": "Issue43EffectBlocks.update.zkir",
+     "name": "update",
+     "effects":
+     [{"op": "guarded",
+       "guard":
+       {"let":
+        {"value": {"bool": true},
+         "name": "_nightlean_activity_guard_xxxxxxx",
+         "body":
+         {"select":
+          [{"ref": "_nightlean_activity_guard_xxxxxxx"},
+           {"ref": "choose"},
+           {"bool": false}]}}},
+       "effect":
+       {"type": "Native",
+        "state": "left",
+        "op": "readCell",
+        "destination": "nightlean_if_local_0"}},
+      {"op": "guarded",
+       "guard":
+       {"let":
+        {"value": {"bool": true},
+         "name": "_nightlean_activity_guard_xxxxxxx",
+         "body":
+         {"select":
+          [{"ref": "_nightlean_activity_guard_xxxxxxx"},
+           {"ref": "choose"},
+           {"bool": false}]}}},
+       "effect":
+       {"value": {"ref": "nightlean_if_local_0"},
+        "state": "selected",
+        "op": "writeCell"}},
+      {"op": "guarded",
+       "guard":
+       {"let":
+        {"value":
+         {"let":
+          {"value": {"bool": true},
+           "name": "_nightlean_activity_guard_xxxxxxx",
+           "body":
+           {"select":
+            [{"ref": "_nightlean_activity_guard_xxxxxxx"},
+             {"ref": "choose"},
+             {"bool": false}]}}},
+         "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+         "body":
+         {"select":
+          [{"ref":
+            "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+           {"eq":
+            [{"cast":
+              {"value":
+               {"select":
+                [{"ref":
+                  "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+                 {"ref": "wide"},
+                 {"native": "0"}]},
+               "type": "UIntRange<8>"}},
+             {"cast":
+              {"value": {"uint": {"value": "3", "maximum": "3"}},
+               "type": "UIntRange<8>"}}]},
+           {"bool": false}]}}},
+       "effect":
+       {"value": {"native": "31"}, "state": "nested", "op": "writeCell"}},
+      {"op": "guarded",
+       "guard":
+       {"let":
+        {"value":
+         {"let":
+          {"value": {"bool": true},
+           "name": "_nightlean_activity_guard_xxxxxxx",
+           "body":
+           {"select":
+            [{"ref": "_nightlean_activity_guard_xxxxxxx"},
+             {"ref": "choose"},
+             {"bool": false}]}}},
+         "name": "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+         "body":
+         {"select":
+          [{"ref":
+            "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+           {"eq":
+            [{"eq":
+              [{"cast":
+                {"value":
+                 {"select":
+                  [{"ref":
+                    "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"},
+                   {"ref": "wide"},
+                   {"native": "0"}]},
+                 "type": "UIntRange<8>"}},
+               {"cast":
+                {"value": {"uint": {"value": "3", "maximum": "3"}},
+                 "type": "UIntRange<8>"}}]},
+             {"bool": false}]},
+           {"bool": false}]}}},
+       "effect":
+       {"value": {"native": "32"}, "state": "nested", "op": "writeCell"}},
+      {"op": "guarded",
+       "guard":
+       {"let":
+        {"value": {"bool": true},
+         "name": "_nightlean_activity_guard_xxxxxxx",
+         "body":
+         {"select":
+          [{"ref": "_nightlean_activity_guard_xxxxxxx"},
+           {"eq": [{"ref": "choose"}, {"bool": false}]},
+           {"bool": false}]}}},
+       "effect":
+       {"type": "Native",
+        "state": "right",
+        "op": "readCell",
+        "destination": "nightlean_if_local_1"}},
+      {"op": "guarded",
+       "guard":
+       {"let":
+        {"value": {"bool": true},
+         "name": "_nightlean_activity_guard_xxxxxxx",
+         "body":
+         {"select":
+          [{"ref": "_nightlean_activity_guard_xxxxxxx"},
+           {"eq": [{"ref": "choose"}, {"bool": false}]},
+           {"bool": false}]}}},
+       "effect":
+       {"value": {"ref": "nightlean_if_local_1"},
+        "state": "selected",
+        "op": "writeCell"}},
+      {"op": "guarded",
+       "guard":
+       {"let":
+        {"value": {"bool": true},
+         "name": "_nightlean_activity_guard_xxxxxxx",
+         "body":
+         {"select":
+          [{"ref": "_nightlean_activity_guard_xxxxxxx"},
+           {"eq": [{"ref": "choose"}, {"bool": false}]},
+           {"bool": false}]}}},
+       "effect":
+       {"value": {"native": "42"}, "state": "nested", "op": "writeCell"}},
+      {"type": "Native",
+       "state": "selected",
+       "op": "readCell",
+       "destination": "observedAfter"},
+      {"value": {"ref": "observedAfter"}, "state": "final", "op": "writeCell"}],
+     "circuit": "issue43EffectBlocks"}]}],
+ "circuits":
+ [{"outputs": [],
+   "name": "issue43EffectBlocks",
+   "inputs":
+   [{"visibility": "private", "type": "Bool", "name": "choose"},
+    {"visibility": "public", "type": "Native", "name": "wide"}],
+   "file": "issue43EffectBlocks.zkir",
+   "constraints": []}]}
