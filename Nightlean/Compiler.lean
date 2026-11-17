@@ -127,6 +127,10 @@ private unsafe def registeredCircuits : CommandElabM (Array (Name × Circuit)) :
         match ComponentDisclosure.checkProgram program exportName with
         | .ok _ => pure ()
         | .error d => failDiagnostic d
+      if let some text := info.specializationArtifact? then
+        match Helpers.Specialization.parseSignatureArtifactText text with
+        | .ok _ => pure ()
+        | .error message => throwError "invalid generic specialization signature artifact: {message}"
       let circuit ← evalConstCheck Circuit ``Circuit info.declName
       match circuit.validate sourceCapabilities with
       | .error d => failDiagnostic d
@@ -214,6 +218,14 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
     match Backend.Zkir.lowerCircuit circuit with
     | .error d => failDiagnostic d
     | .ok json => lowered := lowered.push (artifactName name ++ ".zkir", json.pretty)
+  for (name, _) in circuits do
+    let some info := circuitRegistry.getState (← getEnv) |>.find? (·.declName == name)
+      | throwError "missing circuit registry entry for '{name}'"
+    if let some text := info.specializationArtifact? then
+      let artifact ← match Helpers.Specialization.parseSignatureArtifactText text with
+        | .ok artifact => pure artifact
+        | .error message => throwError "invalid generic specialization signature artifact: {message}"
+      lowered := lowered.push (artifactName name ++ ".specialization.json", (Lean.toJson artifact).pretty)
   for (name, contract) in contracts do
     for ep in contract.entrypoints do
       let ep := Passes.pruneEntrypoint ep

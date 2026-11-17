@@ -1,0 +1,8 @@
+[
+  {"id":"GEN-15-ADD","circuit":"genericAddSmall","private":["7","8"],"publicInputs":["15","15"],"publicReads":["15"],"activityGroups":2,"accepted":true},
+  {"id":"GEN-15-WRONG-OUTPUT","circuit":"genericAddSmall","private":["7","8"],"publicInputs":["14","15"],"publicReads":["14"],"activityGroups":2,"accepted":false},
+  {"id":"GEN-15-OUT-OF-RANGE","circuit":"genericAddSmall","private":["16","0"],"publicInputs":["16","16"],"publicReads":["16"],"activityGroups":2,"accepted":false},
+  {"id":"GEN-255-ADD","circuit":"genericAddWide","private":["100","155"],"publicInputs":["255","255"],"publicReads":["255"],"activityGroups":2,"accepted":true},
+  {"id":"GEN-255-WRONG-OUTPUT","circuit":"genericAddWide","private":["100","155"],"publicInputs":["254","255"],"publicReads":["254"],"activityGroups":2,"accepted":false},
+  {"id":"GEN-255-OUT-OF-RANGE","circuit":"genericAddWide","private":["256","0"],"publicInputs":["256","256"],"publicReads":["256"],"activityGroups":2,"accepted":false}
+]

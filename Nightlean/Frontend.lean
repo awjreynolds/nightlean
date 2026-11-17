@@ -1,5 +1,6 @@
 import Nightlean.Disclosure
 import Nightlean.Helpers
+import Nightlean.Helpers.Specialization
 import Nightlean.ComponentDisclosure
 import Nightlean.Control
 import Lean
@@ -14,6 +15,7 @@ structure CircuitInfo where
   publicInputs : List (String × Ty)
   outputs : List (String × Ty)
   sourceProgram? : Option (Name × String) := none
+  specializationArtifact? : Option String := none
   deriving Inhabited
 
 initialize circuitRegistry : SimplePersistentEnvExtension CircuitInfo (Array CircuitInfo) ←
@@ -421,6 +423,55 @@ open scoped Nightlean
       publicInputs := (value.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty)
       outputs := value.outputs.map fun item => (item.name, item.ty)
       sourceProgram? := some (sourceName, exportName.getString)
+    }
+  | _ => throwUnsupportedSyntax
+
+/-- Compile a generic source export into one registered monomorphic helper program.
+The compiler later checks this generated concrete program again. -/
+scoped syntax (name := genericHelperCircuitCommand) "nightlean_generic_circuit" ident
+  "from" ident "entry" str : command
+
+open scoped Nightlean
+
+@[command_elab genericHelperCircuitCommand] unsafe def elabGenericHelperCircuit : CommandElab := fun stx => do
+  match stx with
+  | `(nightlean_generic_circuit $name:ident from $source:ident entry $exportName:str) => do
+    let sourceName ← liftCoreM <| resolveGlobalConstNoOverload source
+    let sourceProgram ← evalConstCheck Helpers.Specialization.Program
+      ``Helpers.Specialization.Program sourceName
+    let specialized ← match Helpers.Specialization.specialize sourceProgram exportName.getString with
+      | .ok result => pure result
+      | .error diagnostic => failDisclosure diagnostic *> throwError "generic helper specialization failed"
+    match ComponentDisclosure.checkProgram specialized.program specialized.exportName with
+    | .ok _ => pure ()
+    | .error diagnostic => failDisclosure diagnostic
+    let value ← match Helpers.compile specialized.program specialized.exportName with
+      | .ok value => pure value
+      | .error diagnostic => failDisclosure diagnostic *> throwError "generic helper compilation failed"
+    let fullName := (← getCurrNamespace) ++ name.getId.eraseMacroScopes
+    let programName := fullName ++ `specializedProgram
+    if (← getEnv).contains programName then
+      throwErrorAt name "generated specialized program name collides with an existing declaration"
+    let sourceTerm := mkIdent sourceName
+    let programIdent := mkIdent programName
+    elabCommand (← `(def $programIdent : Nightlean.Helpers.Program :=
+      match Nightlean.Helpers.Specialization.specialize $sourceTerm $exportName with
+      | .ok result => result.program
+      | .error _ => {}))
+    let programTerm := mkIdent programName
+    elabCommand (← `(def $name : Nightlean.Circuit :=
+      match Nightlean.Helpers.compile $programTerm $exportName with
+      | .ok value => {value with name := $(stringTerm fullName.toString)}
+      | .error _ => {name := $(stringTerm fullName.toString)}))
+    checkGeneratedCircuit fullName
+    let signatureText := (Lean.toJson specialized.signatureArtifact).pretty
+    modifyEnv fun env => circuitRegistry.addEntry env {
+      declName := fullName
+      inputs := value.inputs.map fun input => (input.name, input.ty)
+      publicInputs := (value.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty)
+      outputs := value.outputs.map fun item => (item.name, item.ty)
+      sourceProgram? := some (programName, specialized.exportName)
+      specializationArtifact? := some signatureText
     }
   | _ => throwUnsupportedSyntax
 
