@@ -31,6 +31,6 @@ jobs:
           use-mathlib-cache: false
           use-github-cache: false
       - name: Build the POC compiler
-        run: lake build noctium
+        run: lake build noctium Nightlean.Compiler
       - name: Check the source contract example
         run: lake env lean tests/Issue68MapReads.lean
