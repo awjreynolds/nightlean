@@ -18,6 +18,25 @@ The library retains the authenticated bundle bytes. Proof services do not resolv
 
 Authentication does not imply valid native key encoding. Before native key initialization, the loader checks bounded outer and inner degrees against the retained circuit, verifier architecture against the circuit's selected chips, exact commitment counts and byte lengths, and fixed/permutation polynomial dimensions. The proving key must embed the exact canonical retained IR relation. Checked native raw decoding validates proving-key points and scalars. The initialized typed proving key stays retained for local proving, avoiding the upstream unchecked key reader. Raw key payloads are capped at 128 MiB. These checks reject malformed authenticated public material before private configuration parsing. Trusted key generation and the cryptographic correspondence between retained keys and circuit remain external assumptions.
 
+## Multi-entrypoint POC
+
+The multi-entrypoint POC uses `ContractBundleSet` and
+`WitnessContractTarget::from_state_config` to retain a complete operation map
+and one deployment address. `target.start_deployment_client` starts that
+deployment through the native client. After finalized receipt validation and
+private journal commit, `WitnessClient::current_state_context` issues an opaque
+one-use state token. `target.operation` selects an operation with its own trusted
+parameters and fresh call TTL. `WitnessInvocation::begin_contract_operation`
+checks those identities before source callbacks, then
+`prepare_contract_proof` retains the same invocation runtime for proof and client
+handoff. Later calls use current state at the original address.
+
+This path has a selected-3.2.1/localnet-feature build and a focused
+operation/successor binding test. It has not yet completed the multi-operation
+localnet demonstration in issue 67. Recovery-loaded clients do not restore state
+tokens and fail closed. The token identifies a validated checkpoint, without a
+new latest-state RPC check. Guarded proof activity remains rejected.
+
 ## Native phase and statement
 
 The pinned ledger's `Intent::prove` checks circuit activity, rewrites skipped transcript groups, derives binding from the resulting call and the parent intent commitment, then requests a proof with the exact binding override. Nightlean invokes this method instead of reproducing its private binding hash. This bounded API rejects skipped groups before invoking it. The adapter checks the supplied override against `ContractCall::public_inputs(parent_binding_commitment)` and replaces the proof preimage's binding input before handing the request to the host.

@@ -9,7 +9,7 @@ use crate::{
     funding::{SealedTransaction, UnsealedTransaction},
     host,
     lifecycle::Phase,
-    proof::ProvedNativeIntent,
+    proof::{ContractStateBinding, CurrentStateContext, ProvedNativeIntent},
 };
 use futures::{Future, channel::oneshot, task::noop_waker};
 use serde::Deserialize;
@@ -25,6 +25,9 @@ use std::{
 };
 use zeroize::Zeroizing;
 const MAX_REQUESTS: usize = 1024;
+fn require(condition: bool, error: client::Error) -> Result<(), client::Error> {
+    if condition { Ok(()) } else { Err(error) }
+}
 static NEXT_REQUEST: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -389,6 +392,8 @@ struct State {
     attempt: Option<SubmissionAttempt>,
     context: Zeroizing<Vec<u8>>,
     receipt: Option<FinalizedReceipt>,
+    state_binding: Option<ContractStateBinding>,
+    context_issued: bool,
     durable: bool,
     cancelled: bool,
 }
@@ -698,10 +703,28 @@ impl Driver {
                 attempt: None,
                 context,
                 receipt: None,
+                state_binding: None,
+                context_issued: false,
                 durable: false,
                 cancelled: false,
             },
         ))
+    }
+
+    pub(crate) fn start_with_state_binding(
+        descriptor: Descriptor,
+        setup_bytes: &[u8],
+        contract: Contract,
+        binding: ContractStateBinding,
+    ) -> Result<Self, client::Error> {
+        Self::validate_state_binding(&contract, &binding)?;
+        let mut driver = Self::start(descriptor, setup_bytes, contract)?;
+        driver
+            .state
+            .as_mut()
+            .ok_or(client::Error::State)?
+            .state_binding = Some(binding);
+        Ok(driver)
     }
 
     pub(crate) fn start_with_runtime(
@@ -732,10 +755,46 @@ impl Driver {
                 attempt: None,
                 context,
                 receipt: None,
+                state_binding: None,
+                context_issued: false,
                 durable: false,
                 cancelled: false,
             },
         ))
+    }
+
+    pub(crate) fn start_with_runtime_and_binding(
+        descriptor: Descriptor,
+        runtime: &mut Option<host::Runtime>,
+        contract: Contract,
+        binding: ContractStateBinding,
+    ) -> Result<Self, client::Error> {
+        Self::validate_state_binding(&contract, &binding)?;
+        let mut driver = Self::start_with_runtime(descriptor, runtime, contract)?;
+        driver
+            .state
+            .as_mut()
+            .ok_or(client::Error::State)?
+            .state_binding = Some(binding);
+        Ok(driver)
+    }
+
+    fn validate_state_binding(
+        contract: &Contract,
+        binding: &ContractStateBinding,
+    ) -> Result<(), client::Error> {
+        let (address, operation) = address(contract)?;
+        let deployment = matches!(contract, Contract::Deployment { .. });
+        require(
+            binding.matches_target(&address, &operation)
+                && binding.matches_event(deployment)
+                && if deployment {
+                    binding.current_state_bytes().is_none()
+                } else {
+                    binding.current_state_bytes().is_some()
+                },
+            client::Error::Identity,
+        )
     }
     fn new(descriptor: Descriptor, mut state: State) -> Self {
         state.policy = descriptor.policy.clone();
@@ -771,6 +830,8 @@ impl Driver {
                 attempt: None,
                 context: Zeroizing::new(context.to_vec()),
                 receipt: None,
+                state_binding: None,
+                context_issued: false,
                 durable: false,
                 cancelled: false,
             },
@@ -994,6 +1055,48 @@ impl Driver {
             .ok_or(client::Error::State)?
             .contract_state
             .clone())
+    }
+
+    pub fn current_state_context(&mut self) -> Result<CurrentStateContext, client::Error> {
+        let state = self.state.as_mut().ok_or(client::Error::State)?;
+        require(!state.context_issued, client::Error::State)?;
+        let binding = state.state_binding.as_ref().ok_or(client::Error::State)?;
+        let attempt = state.attempt.as_ref().ok_or(client::Error::State)?;
+        let receipt = state.receipt.as_ref().ok_or(client::Error::Receipt)?;
+        let transaction = attempt.transaction();
+        transaction.check_receipt(receipt)?;
+        require(
+            state.durable && attempt.phase()? == Phase::Committed,
+            client::Error::State,
+        )?;
+        let cas = attempt.record().cas_receipt().ok_or(client::Error::State)?;
+        require(
+            cas.committed && &cas.identity == attempt.record().identity(),
+            client::Error::Receipt,
+        )?;
+        if let Some(runtime) = &state.runtime {
+            require(
+                runtime.matches_cas(cas.committed, &cas.revision),
+                client::Error::Receipt,
+            )?;
+        } else {
+            return Err(client::Error::State);
+        }
+        let deployment = transaction.event() == client::ContractEvent::Deploy;
+        let journal_identity = attempt.record().identity();
+        let checkpoint =
+            serde_json::to_vec(&(receipt, journal_identity, cas, binding.context_identity()))
+                .map_err(|_| client::Error::Identity)?;
+        let context = binding
+            .admit_committed_state(
+                &receipt.contract_state,
+                transaction.expected_state(),
+                &crate::artifacts::digest(&checkpoint),
+                deployment,
+            )
+            .map_err(|_| client::Error::Receipt)?;
+        state.context_issued = true;
+        Ok(context)
     }
 }
 
@@ -1258,6 +1361,8 @@ mod tests {
             attempt: Some(attempt),
             context: Zeroizing::new(Vec::new()),
             receipt: None,
+            state_binding: None,
+            context_issued: false,
             durable: false,
             cancelled: false,
         };

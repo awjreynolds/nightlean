@@ -2,7 +2,7 @@
 //! This API proves a frozen single-call intent. It does not fund, sign, or submit transactions.
 use crate::{
     Db, Plan,
-    artifacts::{Role, VerifiedBundle},
+    artifacts::{ContractBundleSet, Role, VerifiedBundle},
     assembly::NativeIntent,
     zkir::IrSource,
 };
@@ -13,6 +13,7 @@ use ledger::structure::{
 };
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
 use midnight_zk_stdlib::{MidnightPK, Relation, ZkStdLib, ZkStdLibArch};
+use onchain_runtime::state::{ContractOperation, ContractState};
 use rand::{CryptoRng, Rng};
 use serde_json::Value as Json;
 use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
@@ -32,6 +33,7 @@ pub type PublicProvedNativeIntent = Intent<Signature, ProofMarker, Pedersen, Db>
 const MAX_RESPONSE: usize = 1_048_576;
 const MAX_PARAMETERS: usize = 134_217_728;
 const MAX_PRIVATE_CONFIG: usize = 1_048_576;
+const MAX_NATIVE_STATE: usize = 1_048_576;
 
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -76,6 +78,468 @@ pub struct WitnessTarget {
     ttl: u64,
     deployment: crate::assembly::PreparedDeployment,
 }
+
+/// Authenticated complete operation map and its one retained deployment identity.
+/// Per-operation parameters and call TTLs are selected separately.
+pub struct WitnessContractTarget {
+    inner: Arc<WitnessContractInner>,
+}
+
+struct WitnessContractInner {
+    bundles: ContractBundleSet,
+    deployment: crate::assembly::PreparedOperationMapDeployment,
+    deployment_identity: String,
+    state_schema_sha256: String,
+}
+
+/// An operation-specific target. It binds its own circuit degree and trusted SRS before
+/// source callbacks begin, while sharing the original deployment address and operation map.
+pub struct ContractOperationTarget {
+    inner: Arc<WitnessContractInner>,
+    operation: String,
+    manifest: String,
+    k: u8,
+    proof_parameters_sha256: String,
+    ttl: u64,
+}
+
+/// Opaque current state admitted by the native client after its receipt and private commit.
+/// The token is moved into one source invocation and cannot be cloned or reconstructed publicly.
+pub struct CurrentStateContext {
+    contract_set_identity: String,
+    deployment_identity: String,
+    state_schema_sha256: String,
+    address: String,
+    identity: String,
+    state_bytes: Vec<u8>,
+    state: ContractState<Db>,
+}
+
+/// Private binding carried from prepared source call through client receipt validation.
+#[derive(Clone)]
+pub(crate) struct ContractStateBinding {
+    contract_set_identity: String,
+    deployment_identity: String,
+    state_schema_sha256: String,
+    address: String,
+    operation: String,
+    context_identity: String,
+    current_state_sha256: Option<String>,
+    current_state: Option<Vec<u8>>,
+    expected_state: Vec<u8>,
+    deployment: bool,
+}
+
+impl WitnessContractTarget {
+    /// Authenticate every retained operation verifier and freeze one complete-map deployment.
+    pub fn from_state_config(
+        bundles: ContractBundleSet,
+        state_config: &[u8],
+        deployment_ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        if state_config.len() > MAX_PRIVATE_CONFIG {
+            return Err(Error::Limit);
+        }
+        let state: StateOnly =
+            serde_json::from_slice(state_config).map_err(|_| Error::InvalidPrivateInput)?;
+        let (first_name, first_bundle) = bundles.iter().next().ok_or(Error::InvalidArtifacts)?;
+        let plan_bytes = first_bundle
+            .file(Role::Plan)
+            .map_err(|_| Error::InvalidArtifacts)?;
+        let plan: Plan = serde_json::from_slice(plan_bytes).map_err(|_| Error::InvalidArtifacts)?;
+        let plan_json: Json =
+            serde_json::from_slice(plan_bytes).map_err(|_| Error::InvalidArtifacts)?;
+        let contract = plan_json["contractName"]
+            .as_str()
+            .filter(|name| *name == bundles.contract_name())
+            .ok_or(Error::BindingMismatch)?;
+        if plan.entrypoint != first_name {
+            return Err(Error::BindingMismatch);
+        }
+        let schema_bytes =
+            serde_json::to_vec(&plan_json["state"]).map_err(|_| Error::InvalidArtifacts)?;
+        let state_schema_sha256 = hex::encode(Sha256::digest(&schema_bytes));
+
+        let expected_operations = bundles
+            .iter()
+            .map(|(name, _)| name.to_owned())
+            .collect::<Vec<_>>();
+        let mut operations = Vec::with_capacity(expected_operations.len());
+        for (name, bundle) in bundles.iter() {
+            let material = Material::retained(bundle)?;
+            let selected_plan: Json = serde_json::from_slice(
+                bundle
+                    .file(Role::Plan)
+                    .map_err(|_| Error::InvalidArtifacts)?,
+            )
+            .map_err(|_| Error::InvalidArtifacts)?;
+            if material.entrypoint != name
+                || selected_plan["contractName"] != contract
+                || selected_plan["entrypoint"] != name
+                || serde_json::to_vec(&selected_plan["state"])
+                    .map_err(|_| Error::InvalidArtifacts)?
+                    != schema_bytes
+            {
+                return Err(Error::BindingMismatch);
+            }
+            operations.push((
+                name.to_owned(),
+                ContractOperation::new(Some(material.verifier), None),
+            ));
+        }
+        let deployment = crate::assembly::prepare_operation_map_deployment_target(
+            &plan,
+            contract,
+            &state.state,
+            &expected_operations,
+            operations,
+            deployment_ttl,
+            rng,
+        )
+        .map_err(|_| Error::InvalidPrivateInput)?;
+        let deployment_identity = hex::encode(Sha256::digest(encode(deployment.intent())?));
+        Ok(Self {
+            inner: Arc::new(WitnessContractInner {
+                bundles,
+                deployment,
+                deployment_identity,
+                state_schema_sha256,
+            }),
+        })
+    }
+
+    pub fn contract_address(&self) -> &str {
+        self.inner.deployment.address()
+    }
+
+    pub fn identity(&self) -> &str {
+        self.inner.bundles.identity()
+    }
+
+    /// Select one operation with its own trusted parameters and fresh native call TTL.
+    pub fn operation(
+        &self,
+        operation: &str,
+        parameters: &TrustedParameters,
+        ttl: u64,
+    ) -> Result<ContractOperationTarget> {
+        if ttl == 0 {
+            return Err(Error::InvalidIntent);
+        }
+        let bundle = self
+            .inner
+            .bundles
+            .operation(operation)
+            .ok_or(Error::BindingMismatch)?;
+        let material = Material::retained(bundle)?;
+        if material.entrypoint != operation || material.circuit.k() != parameters.k() {
+            return Err(Error::InvalidParameters);
+        }
+        let plan: Json = serde_json::from_slice(
+            bundle
+                .file(Role::Plan)
+                .map_err(|_| Error::InvalidArtifacts)?,
+        )
+        .map_err(|_| Error::InvalidArtifacts)?;
+        if plan["contractName"] != self.inner.bundles.contract_name()
+            || plan["entrypoint"] != operation
+        {
+            return Err(Error::BindingMismatch);
+        }
+        Ok(ContractOperationTarget {
+            inner: self.inner.clone(),
+            operation: operation.to_owned(),
+            manifest: bundle
+                .authenticated_manifest_sha256()
+                .ok_or(Error::UnauthenticatedBundle)?
+                .to_owned(),
+            k: material.circuit.k(),
+            proof_parameters_sha256: parameters.sha256().to_owned(),
+            ttl,
+        })
+    }
+
+    pub(crate) fn deployment_intent(&self) -> &NativeIntent {
+        self.inner.deployment.intent()
+    }
+
+    pub(crate) fn deployment_bundle(&self) -> Result<&VerifiedBundle> {
+        self.inner
+            .bundles
+            .iter()
+            .next()
+            .map(|(_, bundle)| bundle)
+            .ok_or(Error::InvalidArtifacts)
+    }
+
+    pub(crate) fn deployment_binding(&self, operation: &str) -> Result<ContractStateBinding> {
+        let bundle = self
+            .inner
+            .bundles
+            .operation(operation)
+            .ok_or(Error::BindingMismatch)?;
+        let deployment = self
+            .inner
+            .deployment
+            .intent()
+            .actions
+            .iter_deref()
+            .next()
+            .ok_or(Error::InvalidIntent)?;
+        let ContractAction::Deploy(deployment) = deployment else {
+            return Err(Error::InvalidIntent);
+        };
+        let expected_state = encode(&deployment.initial_state)?;
+        Ok(ContractStateBinding {
+            contract_set_identity: self.identity().to_owned(),
+            deployment_identity: self.inner.deployment_identity.clone(),
+            state_schema_sha256: self.inner.state_schema_sha256.clone(),
+            address: self.contract_address().to_owned(),
+            operation: operation.to_owned(),
+            context_identity: digest_parts(&[
+                self.identity().as_bytes(),
+                self.inner.deployment_identity.as_bytes(),
+                operation.as_bytes(),
+                bundle
+                    .authenticated_manifest_sha256()
+                    .ok_or(Error::UnauthenticatedBundle)?
+                    .as_bytes(),
+            ]),
+            current_state_sha256: None,
+            current_state: None,
+            expected_state,
+            deployment: true,
+        })
+    }
+}
+
+impl ContractOperationTarget {
+    pub fn operation(&self) -> &str {
+        &self.operation
+    }
+
+    pub fn contract_address(&self) -> &str {
+        self.inner.deployment.address()
+    }
+
+    pub(crate) fn bundle(&self) -> Result<&VerifiedBundle> {
+        self.inner
+            .bundles
+            .operation(&self.operation)
+            .ok_or(Error::BindingMismatch)
+    }
+
+    pub(crate) fn authenticated_control_target(
+        &self,
+        context_id: u64,
+    ) -> Result<crate::control::AuthenticatedNativeTarget> {
+        let bundle = self.bundle()?;
+        if bundle.authenticated_manifest_sha256() != Some(self.manifest.as_str()) {
+            return Err(Error::BindingMismatch);
+        }
+        let target = authenticated_control_target(
+            context_id,
+            bundle,
+            &self.inner.bundles.contract_name(),
+            &self.operation,
+            bundle
+                .manifest()
+                .entries
+                .iter()
+                .find(|entry| entry.role == Role::Circuit)
+                .map(|entry| entry.name.as_str())
+                .ok_or(Error::InvalidArtifacts)?,
+            self.contract_address(),
+        )?;
+        Ok(target)
+    }
+
+    pub(crate) fn context_matches(&self, state: &CurrentStateContext) -> bool {
+        let Ok(initial) = deployment_operations(self.inner.deployment.intent()) else {
+            return false;
+        };
+        state.contract_set_identity == self.inner.bundles.identity()
+            && state.deployment_identity == self.inner.deployment_identity
+            && state.state_schema_sha256 == self.inner.state_schema_sha256
+            && state.address == self.contract_address()
+            && state.state.operations == initial.operations
+    }
+
+    pub(crate) fn parameters_sha256(&self) -> &str {
+        &self.proof_parameters_sha256
+    }
+
+    pub(crate) fn ttl(&self) -> u64 {
+        self.ttl
+    }
+
+    pub(crate) fn k(&self) -> u8 {
+        self.k
+    }
+
+    pub(crate) fn contract_set_identity(&self) -> &str {
+        self.inner.bundles.identity()
+    }
+
+    pub(crate) fn deployment_identity(&self) -> &str {
+        &self.inner.deployment_identity
+    }
+
+    pub(crate) fn state_schema_sha256(&self) -> &str {
+        &self.inner.state_schema_sha256
+    }
+
+    fn selected_material(&self) -> Result<Material> {
+        let material = Material::retained(self.bundle()?)?;
+        if material.entrypoint != self.operation || material.circuit.k() != self.k {
+            return Err(Error::BindingMismatch);
+        }
+        Ok(material)
+    }
+}
+
+impl ContractStateBinding {
+    /// Native client calls this only after BoundTransaction receipt validation, exact state
+    /// comparison, finality, and the required private journal commit.
+    pub(crate) fn admit_committed_state(
+        &self,
+        state_bytes: &[u8],
+        expected_state: &[u8],
+        checkpoint_identity: &str,
+        deployment: bool,
+    ) -> Result<CurrentStateContext> {
+        let current_state_sha256 = self
+            .current_state
+            .as_deref()
+            .map(|current| hex::encode(Sha256::digest(current)));
+        if state_bytes.len() > MAX_NATIVE_STATE
+            || state_bytes != expected_state
+            || state_bytes != self.expected_state
+            || deployment != self.deployment
+            || checkpoint_identity.len() != 64
+            || (!self.deployment
+                && current_state_sha256.as_deref() != self.current_state_sha256.as_deref())
+            || !checkpoint_identity
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+        {
+            return Err(Error::BindingMismatch);
+        }
+        let state: ContractState<Db> = decode(state_bytes)?;
+        if encode(&state)? != state_bytes {
+            return Err(Error::BindingMismatch);
+        }
+        let state_sha256 = hex::encode(Sha256::digest(state_bytes));
+        let identity = digest_parts(&[
+            self.contract_set_identity.as_bytes(),
+            self.deployment_identity.as_bytes(),
+            self.address.as_bytes(),
+            self.state_schema_sha256.as_bytes(),
+            state_sha256.as_bytes(),
+            checkpoint_identity.as_bytes(),
+        ]);
+        Ok(CurrentStateContext {
+            contract_set_identity: self.contract_set_identity.clone(),
+            deployment_identity: self.deployment_identity.clone(),
+            state_schema_sha256: self.state_schema_sha256.clone(),
+            address: self.address.clone(),
+            identity,
+            state_bytes: state_bytes.to_vec(),
+            state,
+        })
+    }
+
+    pub(crate) fn current_state_bytes(&self) -> Option<&[u8]> {
+        self.current_state.as_deref()
+    }
+
+    pub(crate) fn context_identity(&self) -> &str {
+        &self.context_identity
+    }
+
+    pub(crate) fn matches_event(&self, deployment: bool) -> bool {
+        self.deployment == deployment
+    }
+
+    pub(crate) fn matches_target(&self, address: &str, operation: &str) -> bool {
+        self.address == address && self.operation == operation
+    }
+}
+
+fn digest_parts(parts: &[&[u8]]) -> String {
+    let mut hash = Sha256::new();
+    for part in parts {
+        hash.update((part.len() as u64).to_le_bytes());
+        hash.update(part);
+    }
+    hex::encode(hash.finalize())
+}
+
+fn deployment_operations(intent: &NativeIntent) -> Result<ContractState<Db>> {
+    let Some(ContractAction::Deploy(deployment)) = intent.actions.iter_deref().next() else {
+        return Err(Error::InvalidIntent);
+    };
+    Ok(deployment.initial_state.clone())
+}
+
+fn authenticated_control_target(
+    context_id: u64,
+    bundle: &VerifiedBundle,
+    contract: &str,
+    entrypoint: &str,
+    circuit_file: &str,
+    address: &str,
+) -> Result<crate::control::AuthenticatedNativeTarget> {
+    let control_plan_bytes = bundle
+        .file(Role::WitnessControl)
+        .map_err(|_| Error::InvalidArtifacts)?
+        .to_vec();
+    let control_plan: Json =
+        serde_json::from_slice(&control_plan_bytes).map_err(|_| Error::InvalidArtifacts)?;
+    let binding_bytes = bundle
+        .file(Role::WitnessBinding)
+        .map_err(|_| Error::InvalidArtifacts)?
+        .to_vec();
+    let relation: Json = serde_json::from_slice(
+        bundle
+            .file(Role::Circuit)
+            .map_err(|_| Error::InvalidArtifacts)?,
+    )
+    .map_err(|_| Error::InvalidArtifacts)?;
+    let selected_plan: Json = serde_json::from_slice(
+        bundle
+            .file(Role::Plan)
+            .map_err(|_| Error::InvalidArtifacts)?,
+    )
+    .map_err(|_| Error::InvalidArtifacts)?;
+    if selected_plan["contractName"] != contract
+        || selected_plan["entrypoint"] != entrypoint
+        || selected_plan["nativeCircuitFile"] != circuit_file
+    {
+        return Err(Error::BindingMismatch);
+    }
+    crate::control::validate_witness_artifacts(
+        &control_plan,
+        &binding_bytes,
+        &relation,
+        contract,
+        entrypoint,
+        circuit_file,
+        crate::profile::NAME,
+    )
+    .map_err(|_| Error::BindingMismatch)?;
+    Ok(crate::control::AuthenticatedNativeTarget {
+        context_id,
+        contract_address: address.to_owned(),
+        entrypoint: entrypoint.to_owned(),
+        control_plan,
+        control_plan_bytes,
+        binding_bytes,
+        relation,
+    })
+}
+
 impl WitnessTarget {
     /// Prepare the exact deployment target from authenticated public artifacts and private
     /// initial state. This runs before provider calls and returns only a public target identity.
@@ -171,53 +635,14 @@ impl WitnessTarget {
         if bundle.authenticated_manifest_sha256() != Some(self.manifest.as_str()) {
             return Err(Error::BindingMismatch);
         }
-        let control_plan_bytes = bundle
-            .file(Role::WitnessControl)
-            .map_err(|_| Error::InvalidArtifacts)?
-            .to_vec();
-        let control_plan: Json =
-            serde_json::from_slice(&control_plan_bytes).map_err(|_| Error::InvalidArtifacts)?;
-        let binding_bytes = bundle
-            .file(Role::WitnessBinding)
-            .map_err(|_| Error::InvalidArtifacts)?
-            .to_vec();
-        let relation: Json = serde_json::from_slice(
-            bundle
-                .file(Role::Circuit)
-                .map_err(|_| Error::InvalidArtifacts)?,
-        )
-        .map_err(|_| Error::InvalidArtifacts)?;
-        let selected_plan: Json = serde_json::from_slice(
-            bundle
-                .file(Role::Plan)
-                .map_err(|_| Error::InvalidArtifacts)?,
-        )
-        .map_err(|_| Error::InvalidArtifacts)?;
-        if selected_plan["contractName"] != self.contract
-            || selected_plan["entrypoint"] != self.entrypoint
-            || selected_plan["nativeCircuitFile"] != self.circuit_file
-        {
-            return Err(Error::BindingMismatch);
-        }
-        crate::control::validate_witness_artifacts(
-            &control_plan,
-            &binding_bytes,
-            &relation,
+        authenticated_control_target(
+            context_id,
+            bundle,
             &self.contract,
             &self.entrypoint,
             &self.circuit_file,
-            crate::profile::NAME,
+            self.contract_address(),
         )
-        .map_err(|_| Error::BindingMismatch)?;
-        Ok(crate::control::AuthenticatedNativeTarget {
-            context_id,
-            contract_address: self.contract_address().to_owned(),
-            entrypoint: self.entrypoint.clone(),
-            control_plan,
-            control_plan_bytes,
-            binding_bytes,
-            relation,
-        })
     }
 }
 
@@ -491,6 +916,7 @@ pub struct PreparedProof {
     statement: Vec<Fr>,
     activity: Vec<Option<usize>>,
     required_parameters_sha256: Option<String>,
+    contract_binding: Option<ContractStateBinding>,
 }
 impl PreparedProof {
     /// Construct the source-selected call in memory using host-owned cryptographic entropy.
@@ -582,6 +1008,68 @@ impl PreparedProof {
         Ok(prepared)
     }
 
+    pub(crate) fn from_contract_witness_inputs(
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Json>,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        let mut inputs = SecretInputs(inputs);
+        if !target.context_matches(current) {
+            return Err(Error::BindingMismatch);
+        }
+        let material = target.selected_material()?;
+        let bundle = target.bundle()?;
+        if bundle.authenticated_manifest_sha256() != Some(target.manifest.as_str()) {
+            return Err(Error::BindingMismatch);
+        }
+        let plan: Plan = serde_json::from_slice(
+            bundle
+                .file(Role::Plan)
+                .map_err(|_| Error::InvalidArtifacts)?,
+        )
+        .map_err(|_| Error::InvalidArtifacts)?;
+        let config = SecretConfig(crate::Config {
+            inputs: std::mem::take(&mut inputs.0),
+            state: BTreeMap::new(),
+            negative_cases: Vec::new(),
+        });
+        let (call, predicted) = crate::assembly::prepare_call_for_current_state(
+            &plan,
+            &target.inner.bundles.contract_name(),
+            &target.operation,
+            &config.0,
+            &material.parameters,
+            ContractOperation::new(Some(material.verifier.clone()), None),
+            &material.circuit,
+            target.ttl,
+            &target.inner.deployment,
+            &current.state,
+            rng,
+        )
+        .map_err(|_| Error::InvalidPrivateInput)?;
+        let expected_state = encode(&predicted)?;
+        let mut prepared = Self::freeze(material, call)?;
+        prepared.required_parameters_sha256 = Some(target.proof_parameters_sha256.clone());
+        let (address, entrypoint) = prepared.call_target()?;
+        if address != target.contract_address() || entrypoint != target.operation {
+            return Err(Error::BindingMismatch);
+        }
+        prepared.contract_binding = Some(ContractStateBinding {
+            contract_set_identity: target.contract_set_identity().to_owned(),
+            deployment_identity: target.deployment_identity().to_owned(),
+            state_schema_sha256: target.state_schema_sha256().to_owned(),
+            address,
+            operation: entrypoint,
+            context_identity: current.identity.clone(),
+            current_state_sha256: Some(hex::encode(Sha256::digest(&current.state_bytes))),
+            current_state: Some(current.state_bytes.clone()),
+            expected_state,
+            deployment: false,
+        });
+        Ok(prepared)
+    }
+
     /// Re-freeze a host-balanced intent. This first slice accepts one call and no offers/dust.
     /// Native intent inputs contain private witnesses and need private storage.
     pub fn from_intent(bundle: &VerifiedBundle, intent: NativeIntent) -> Result<Self> {
@@ -637,6 +1125,7 @@ impl PreparedProof {
             statement,
             activity,
             required_parameters_sha256: None,
+            contract_binding: None,
         };
         result.validate_statement_preimage()?;
         Ok(result)
@@ -866,6 +1355,7 @@ impl PreparedProof {
         Ok(ProvedIntent {
             intent: decoded,
             bytes,
+            contract_binding: self.contract_binding.clone(),
         })
     }
 }
@@ -875,6 +1365,7 @@ impl PreparedProof {
 pub struct ProvedIntent {
     intent: ProvedNativeIntent,
     bytes: Vec<u8>,
+    contract_binding: Option<ContractStateBinding>,
 }
 impl ProvedIntent {
     pub fn native(&self) -> &ProvedNativeIntent {
@@ -882,6 +1373,9 @@ impl ProvedIntent {
     }
     pub fn serialized(&self) -> &[u8] {
         &self.bytes
+    }
+    pub(crate) fn contract_binding(&self) -> Option<&ContractStateBinding> {
+        self.contract_binding.as_ref()
     }
     /// Public proof result. The private unsealed binding randomness is replaced by its commitment.
     /// This projection supplies neither funding nor the sealed transaction binding proof.
@@ -1062,6 +1556,38 @@ mod tests {
     use super::*;
     use futures::{executor::block_on, future::pending};
     use rand::rngs::OsRng;
+
+    #[test]
+    fn contract_state_binding_rejects_wrong_operation_and_successor() {
+        let state = ContractState::<Db>::default();
+        let expected = encode(&state).unwrap();
+        let binding = ContractStateBinding {
+            contract_set_identity: "11".repeat(32),
+            deployment_identity: "22".repeat(32),
+            state_schema_sha256: "33".repeat(32),
+            address: "44".repeat(32),
+            operation: "apply".into(),
+            context_identity: "55".repeat(32),
+            current_state_sha256: Some(hex::encode(Sha256::digest(&expected))),
+            current_state: Some(expected.clone()),
+            expected_state: expected.clone(),
+            deployment: false,
+        };
+        assert!(binding.matches_target("44".repeat(32).as_str(), "apply"));
+        assert!(!binding.matches_target("44".repeat(32).as_str(), "claim"));
+        let token = binding
+            .admit_committed_state(&expected, &expected, &"aa".repeat(32), false)
+            .unwrap();
+        assert_eq!(token.state_bytes, expected);
+        let mut wrong_successor = expected.clone();
+        wrong_successor.push(0);
+        assert!(
+            binding
+                .admit_committed_state(&wrong_successor, &wrong_successor, &"aa".repeat(32), false,)
+                .is_err()
+        );
+    }
+
     #[test]
     #[ignore = "requires authenticated real source bundle, private inputs, SRS and another retained VK"]
     fn real_crypto_rejects_each_statement_field_and_wrong_key() {

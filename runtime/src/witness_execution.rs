@@ -13,7 +13,8 @@ use crate::{
     host,
     native_client::{self, Command, Contract, Descriptor, Driver, ServiceReply},
     proof::{
-        self, PreparedProof, ProofService, ProvedIntent, ProvedNativeIntent, TrustedParameters,
+        self, ContractOperationTarget, CurrentStateContext, PreparedProof, ProofService,
+        ProvedIntent, ProvedNativeIntent, TrustedParameters, WitnessContractTarget,
     },
 };
 use futures::Future;
@@ -108,6 +109,8 @@ impl Drop for SecretInputs {
 /// A running host-neutral source witness invocation bound to one authenticated bundle target.
 pub struct WitnessExecution {
     target: Option<proof::WitnessTarget>,
+    contract_target: Option<ContractOperationTarget>,
+    current_state: Option<CurrentStateContext>,
     session: Option<control::Session>,
     context_id: u64,
     ttl: u64,
@@ -177,10 +180,59 @@ impl WitnessExecution {
             contract_address: target.contract_address().to_owned(),
             entrypoint: target.entrypoint().to_owned(),
             target: Some(target),
+            contract_target: None,
+            current_state: None,
             session: Some(session),
             context_id,
             ttl,
             proof_parameters_sha256: parameters.sha256().to_owned(),
+        })
+    }
+
+    /// Begin a complete-contract operation after the native client admits its exact current
+    /// state. Public target, SRS, operation, address, and state checks run before callbacks.
+    pub fn begin_contract_operation(
+        target: ContractOperationTarget,
+        current_state: CurrentStateContext,
+        source_inputs: BTreeMap<String, Json>,
+        host_context: host::Context,
+        parameters: &TrustedParameters,
+    ) -> Result<Self> {
+        let mut source_inputs = SecretInputs(source_inputs);
+        if parameters.sha256() != target.parameters_sha256()
+            || parameters.k() != target.k()
+            || !target.context_matches(&current_state)
+        {
+            return Err(Error::Proof(proof::Error::BindingMismatch));
+        }
+        let context_id = next_context_id()?;
+        let authenticated = target
+            .authenticated_control_target(context_id)
+            .map_err(Error::Proof)?;
+        let bundle = target.bundle().map_err(Error::Proof)?;
+        let plan_bytes = bundle
+            .file(Role::WitnessControl)
+            .map_err(|_| Error::InvalidArtifacts)?;
+        let session = control::Session::from_authenticated_native_target(
+            plan_bytes,
+            std::mem::take(&mut source_inputs.0),
+            host_context,
+            authenticated,
+        )
+        .map_err(|_| Error::InvalidSource)?;
+        let ttl = target.ttl();
+        let contract_address = target.contract_address().to_owned();
+        let entrypoint = target.operation().to_owned();
+        Ok(Self {
+            target: None,
+            contract_target: Some(target),
+            current_state: Some(current_state),
+            session: Some(session),
+            context_id,
+            ttl,
+            proof_parameters_sha256: parameters.sha256().to_owned(),
+            contract_address,
+            entrypoint,
         })
     }
 
@@ -226,6 +278,8 @@ impl WitnessExecution {
             .map_err(|_| Error::InvalidSource)?;
         self.session = None;
         self.target = None;
+        self.contract_target = None;
+        self.current_state = None;
         Ok(result)
     }
 
@@ -303,6 +357,106 @@ impl WitnessExecution {
             contract_address: self.contract_address.clone(),
             entrypoint: self.entrypoint.clone(),
         })
+    }
+
+    /// Freeze an authenticated contract-set CALL from this exact completed source invocation.
+    pub fn prepare_contract_proof(
+        &mut self,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<WitnessProof> {
+        let target = self.contract_target.as_ref().ok_or(Error::State)?;
+        let current_state = self.current_state.as_ref().ok_or(Error::State)?;
+        let session = self.session.as_mut().ok_or(Error::State)?;
+        if target.ttl() != self.ttl
+            || target.parameters_sha256() != self.proof_parameters_sha256
+            || !target.context_matches(current_state)
+        {
+            return Err(Error::Proof(proof::Error::BindingMismatch));
+        }
+        let authenticated = target
+            .authenticated_control_target(self.context_id)
+            .map_err(Error::Proof)?;
+        let mut inputs = session
+            .peek_completed_invocation(
+                self.context_id,
+                &authenticated.contract_address,
+                &authenticated.entrypoint,
+                &authenticated.control_plan,
+                &authenticated.binding_bytes,
+                &authenticated.relation,
+            )
+            .map_err(|_| Error::InvalidSource)?;
+        let expected_inputs = inputs
+            .try_clone_accounted()
+            .map_err(|_| Error::ResourceLimit)?;
+        let prepared = PreparedProof::from_contract_witness_inputs(
+            target,
+            current_state,
+            std::mem::take(&mut inputs.values),
+            rng,
+        )
+        .map_err(Error::Proof)?;
+        let completed = session
+            .take_completed_invocation(
+                self.context_id,
+                &authenticated.control_plan,
+                &authenticated.binding_bytes,
+                &authenticated.relation,
+                &expected_inputs,
+                &authenticated.contract_address,
+                &authenticated.entrypoint,
+            )
+            .map_err(|_| Error::InvalidSource)?;
+        let runtime = completed.runtime;
+        self.session = None;
+        self.contract_target = None;
+        self.current_state = None;
+        Ok(WitnessProof {
+            prepared: Some(prepared),
+            deployment: None,
+            runtime: Some(runtime),
+            proof_parameters_sha256: self.proof_parameters_sha256.clone(),
+            contract_address: self.contract_address.clone(),
+            entrypoint: self.entrypoint.clone(),
+        })
+    }
+}
+
+impl WitnessContractTarget {
+    /// Prove and start the one retained operation-map deployment. The setup Runtime belongs to
+    /// this deployment client, while each later source CALL gets its own Runtime and journal.
+    pub fn start_deployment_client(
+        &self,
+        operation: &str,
+        descriptor_json: &[u8],
+        setup_json: &[u8],
+    ) -> Result<WitnessClient> {
+        let binding = self.deployment_binding(operation).map_err(Error::Proof)?;
+        let bundle = self.deployment_bundle().map_err(Error::Proof)?;
+        let parameter_bytes = bundle
+            .file(Role::LedgerParameters)
+            .map_err(|_| Error::InvalidArtifacts)?;
+        let mut reader = parameter_bytes;
+        let parameters: ledger::structure::LedgerParameters =
+            serialize::tagged_deserialize(&mut reader).map_err(|_| Error::InvalidArtifacts)?;
+        if !reader.is_empty() {
+            return Err(Error::InvalidArtifacts);
+        }
+        let intent = native_client::prove_deployment(self.deployment_intent(), &parameters)
+            .map_err(Error::Client)?;
+        let descriptor: Descriptor =
+            serde_json::from_slice(descriptor_json).map_err(|_| Error::InvalidClientDescriptor)?;
+        let driver = Driver::start_with_state_binding(
+            descriptor,
+            setup_json,
+            Contract::Deployment {
+                intent,
+                entrypoint: operation.to_owned(),
+            },
+            binding,
+        )
+        .map_err(Error::Client)?;
+        Ok(WitnessClient { driver })
     }
 }
 
@@ -439,8 +593,12 @@ impl WitnessProvedCall {
         let descriptor: Descriptor =
             serde_json::from_slice(descriptor_json).map_err(|_| Error::InvalidClientDescriptor)?;
         let contract = Contract::Proved(self.proved.native().clone());
-        let driver = Driver::start_with_runtime(descriptor, &mut self.runtime, contract)
-            .map_err(Error::Client)?;
+        let driver = if let Some(binding) = self.proved.contract_binding().cloned() {
+            Driver::start_with_runtime_and_binding(descriptor, &mut self.runtime, contract, binding)
+        } else {
+            Driver::start_with_runtime(descriptor, &mut self.runtime, contract)
+        }
+        .map_err(Error::Client)?;
         self.runtime = None;
         Ok(WitnessClient { driver })
     }
@@ -547,5 +705,11 @@ impl WitnessClient {
 
     pub fn detachable(&self) -> bool {
         self.driver.detachable()
+    }
+
+    /// Return the next opaque state token after this client verifies finality and commits its
+    /// private journal. Recovery-loaded clients lack this in-memory contract binding.
+    pub fn current_state_context(&mut self) -> Result<CurrentStateContext> {
+        self.driver.current_state_context().map_err(Error::Client)
     }
 }
