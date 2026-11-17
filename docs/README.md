@@ -20,7 +20,7 @@ The compiler-only quick start requires Git and the pinned Lean toolchain. Native
 
 1. Build the [independent native ZKIR toolchain](development/native-toolchain.md).
 2. Prepare [retained public bundles](development/portable-artifacts.md) and an [isolated localnet](../scripts/localnet/README.md).
-3. Use the [Rust client and its qualification test](development/native-client.md), or the optional [JavaScript development harness](development/native-contract.md).
+3. Use the [Rust client and its qualification test](development/native-client.md). Linked C/C++ hosts also have a [qualified native proof ABI](development/native-proof-abi.md), with foreign transaction lifecycle work still in progress. The [JavaScript development harness](development/native-contract.md) is optional.
 4. Compare the retained evidence for the [native claim](development/native-localnet.md), [bounded scalars](development/unsigned-localnet.md) and [selected 3.2.1 profile](development/zkir-3.2.1-integrated.md).
 
 Keep private invocation files separate from public artifacts. Receipt reports identify their tested program, source revision and target profile. A passing example does not qualify the full capability inventory.

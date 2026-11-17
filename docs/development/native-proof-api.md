@@ -2,7 +2,7 @@
 
 The Rust library builds and proves the current source private claim in process. Applications do not need Node, Compact, a shell command or a toolkit subprocess for this proof stage. `nightlean_runtime::proof` uses the selected pinned native ZKIR implementation and the official ledger's typed proof attachment path.
 
-This API covers one frozen contract call with no offers or dust actions. Inactive/skipped public transcript groups are rejected. Funding, signing, submission, receipt validation, mobile/WASM qualification and the full C ABI are separate work. A locally verified proof establishes the retained verifier key's relation for the exact native statement. This is not a general theorem connecting Lean source, compiler output and generated keys. `compiled_verified` stays false.
+This Rust API covers one frozen contract call with no offers or dust actions. Inactive/skipped public transcript groups are rejected. The published C ABI provides a separate phase A native proof interface; it also stops before funding, signing, submission, receipt validation or journal persistence. Mobile/WASM SDKs remain unqualified. A locally verified proof establishes the retained verifier key's relation for the exact native statement. This is not a general theorem connecting Lean source, compiler output and generated keys. `compiled_verified` stays false. See [native proof ABI phase A](native-proof-abi.md) for the C ABI guide and qualification evidence.
 
 ## Application sequence
 

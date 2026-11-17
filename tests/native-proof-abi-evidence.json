@@ -1,0 +1,119 @@
+{
+  "scope": "Issue 61 phase A native proof ABI only. Funding, signing, submission, receipts, and journal persistence remain phase B work.",
+  "implementation": {
+    "commit": "26c29789413f63ad3d926f8fb89c081fb12583f3",
+    "tree": "9a165ed8ab4acb655982b6d17b34fd42eae1af4c",
+    "qualificationEvidenceSha256": "3031691cc2fdbc05af0300517d6eabb6bdb8a164d19f6897d19d932b4e910cd5",
+    "independentReportSha256": "fce9d6b638448e6d6ec3b069db89a03cbf498b5ab94bf0a5bc84c01ae2393e79",
+    "all77TrackedRuntimeBlobsAndModesMatchImplementation": true,
+    "sourceSha256": {
+      "runtime/src/proof.rs": "5f16cb7599e9e3861c8c4c537cff3aad4ae465f366be869ce5a6dd41ead3ff1b",
+      "runtime/src/native_ffi.rs": "02d43c613bd65c192e6ca790d95affbb20f2c757419c767ca19971a19d402522",
+      "runtime/src/artifacts.rs": "24128793b4dfc9cc83bc6ff464254ff8c51bcb99fef8c10cdb8e8d235c328f73",
+      "runtime/src/lib.rs": "2fb53b56a10e1ebec171a1e9eee98efd843b1c2fa77484920c5d9efe7679980c",
+      "runtime/include/nightlean_native.h": "b1b0ae517090aa6addb3e6dcc349c7df5e36ca74248885710ae7f824f2005c65",
+      "runtime/tests/native_proof.rs": "4b66deb6000b3e5a7995c9b312697f4598ba28d9ea2761f4988c330252f765b4",
+      "runtime/tests/native_ffi.rs": "c722988c7a98261cd6ac8ee7fa9b2755d1132ef8d656764aa04a6356bd083ead",
+      "runtime/tests/native_cpp_smoke.cpp": "bce7e67a252725ce663ab1da50bce7f0b19ca8c38e8182544024390ab9a93f3a",
+      "runtime/tests/artifacts.rs": "31dfb79e22040152e3568c5d8448225ff246024668f81f908e18846dbca4056a"
+    }
+  },
+  "profiles": {
+    "320": {
+      "featureSelection": "default zkir-320",
+      "workerOrdinarySuite": { "passed": 109, "failed": 0, "ignored": 7 },
+      "workerRealRustProofAndAbi": { "passed": 6, "failed": 0 },
+      "workerLinkedCpp": {
+        "positiveAndAdversarialProofReplies": true,
+        "publicIntentSha256": "e5044c443a4362170c14c3b313ddf94daf5290d56d3a5731fdcb00a4972541cd"
+      },
+      "workerRunLogSha256": {
+        "rustReal": "2ee1682f70dfc9b65a126fe8094ef06b3bf998fcc30074d3016edd974944d091",
+        "library": "2581ac32d121951ab2bdbad6e39a9413f4b50ae9c111d6d56a481f38584f6040",
+        "cppLink": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "cppReal": "e6cfa05d49cffb8c643734ef75335b055b1d0fad0a74c0a5577dcd106f407a6a",
+        "regression": "601d5c3dc0f64eed4b9374632c61f654ae4d1b1d18b20387f8379d63dc29b8fb"
+      },
+      "independentRealRustProofAndAbi": { "passed": 6, "failed": 0 },
+      "independentLiveWorkAccounting": { "passed": 1 },
+      "independentEarlyArtifactBudget": { "passed": 1 },
+      "independentLinkedCpp": {
+        "linked": true,
+        "positiveAndAdversarialProofReplies": true,
+        "publicIntentSha256": "3235d559cda72341eb9c7206a0e4ec762745f0674fcb1ced6fe2d669fcc25d77"
+      },
+      "independentRunLogSha256": {
+        "rustReal": "e8914e97e4126971107b412703427039a65a37c62865a50b104a6655d39736ac",
+        "library": "920a11a6319878b4ff9c5885296b1f396af7f1ef80b3dad2ba8e24d671d2cc88",
+        "liveWork": "fc333f70bd0988d27379184119bf13ec6b61c72a53125751d5f2ae53db773149",
+        "artifactBudget": "1eab6e3f499e0a01a49d8b13955433de6172f75dcbfa2457433b741d0aa23068",
+        "cppLink": "af4563c7c32b303ccd0e896e720326a4d801dd3db02a9e332ae7a1490ae0e637",
+        "cppReal": "262412ed82d55c762e9f77dcf761bee62cc5a347b7ad6e7b4d5b4187d72b1542"
+      }
+    },
+    "321": {
+      "featureSelection": "--no-default-features --features zkir-321",
+      "workerOrdinarySuite": { "passed": 110, "failed": 0, "ignored": 7 },
+      "workerRealRustProofAndAbi": { "passed": 6, "failed": 0 },
+      "workerLinkedCpp": {
+        "positiveAndAdversarialProofReplies": true,
+        "publicIntentSha256": "c19bbbb787762aa0ead9551f1017c4d854387eaeb6520617b7fdf3872df55ea7"
+      },
+      "workerRunLogSha256": {
+        "rustReal": "65003b9846780a2c1a8f136bbed1cfd1dbfe71d2fff88526f54ef14e007ade45",
+        "library": "c84ee144cf086166f813f73cb1d5963454a50ae9c111d6d56a481f38584f6040",
+        "cppLink": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "cppReal": "2c08ec6145a9d32e46e1873c1fc893d4a4c181911ab7c7d8e6119761629ce625",
+        "regression": "cfe9d9f160922b9a55d368fa08d12d54a60e94470468c3aef3c3917a1c072c41"
+      },
+      "independentRealRustProofAndAbi": { "passed": 6, "failed": 0 },
+      "independentLiveWorkAccounting": { "passed": 1 },
+      "independentEarlyArtifactBudget": { "passed": 1 },
+      "independentLinkedCpp": {
+        "linked": true,
+        "positiveAndAdversarialProofReplies": true,
+        "publicIntentSha256": "768ffc3c6f06cba882160d5161927c4a7c0846e2dff4d0926ee4b672288185c7"
+      },
+      "independentRunLogSha256": {
+        "rustReal": "a9eba3c618b3d65715ef7e0be867536c9cdb6a2bb975a957da7ce5755e31bb72",
+        "library": "cd26425abfd34e161302da7f4343751b2ffbddf5b7d0edb628973da95c8fd23d",
+        "liveWork": "b146aecfd4b41e9397e0af67a27c17cb7c3c251c6aeb100f9d40a545d3516f22",
+        "artifactBudget": "2793574b3faef6eef0a6450bbf96710d101074bbc81c8eda6155859e2b92d2a2",
+        "cppLink": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "cppReal": "d3ba3e2d75167db297901b6ed7a14ec9868f1551cdf20f753f375f76ae0698c7"
+      }
+    }
+  },
+  "bounds": {
+    "sessions": 8,
+    "liveWork": 2,
+    "ordinaryTokens": 64,
+    "privateTokens": 16,
+    "privateConfigRequestResponseResultBytes": 1048576,
+    "descriptorAndReplyMetadataBytes": 65536,
+    "declaredBundlePayloadBytes": 16777216,
+    "srsBytes": 134217728
+  },
+  "measuredClaimSizesBytes": {
+    "privateRequest": 456374,
+    "response": 3852,
+    "privateAttachedIntent": 4433,
+    "publicProjection": 4429
+  },
+  "publicIntentProjection": "Pedersen commitment replaces private Pedersen randomness; typed unsealed ProvedIntent remains inside the bounded session until free.",
+  "hostResponsibilities": [
+    "trusted manifest and SRS digests",
+    "source certificate authority and native implementation/key generation trust",
+    "SRS ceremony relations",
+    "service privacy and endpoint authorization",
+    "fresh cryptographic entropy",
+    "response allocation limits and hard CPU stop policy"
+  ],
+  "qualificationLimitations": [
+    "No funding, signing, submission, receipt, or journal ABI qualification.",
+    "No TypeScript or mobile SDK qualification.",
+    "No full native source or whole-compiler audit claim.",
+    "Ordinary worker suite results and independent qualification results are distinct runs."
+  ],
+  "publicationPolicy": "Contains safe aggregate results and public source, evidence, and report hashes only. Private fixture contents and raw environment values are omitted."
+}
