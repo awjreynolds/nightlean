@@ -4717,13 +4717,23 @@
         "../../tests/ByteHashes.lean",
         "../../runtime/tests/byte_hashes.rs"
       ]
+    },
+    {
+      "issue": 25,
+      "commit": "c59d074",
+      "scope": "Eager typed Boolean gates with canonical Bool-only constants, local Native/Bool bridges and preserved source ABI. Focused source, native-checker and real witness Session checks pass. No new keys/proofs/deployment or formal witness-preservation claim.",
+      "refs": [
+        "../development/boolean-gates.md",
+        "../../tests/BooleanGates.lean",
+        "../../runtime/tests/native_boolean_gates.rs"
+      ]
     }
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "229de02440c3da0e328888f3e27826293360243a",
-    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded fixed-byte values, persistent hashing and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 33,
+    "sourceCommit": "c59d0748cd1af9532d2c64ca5fc4a14ccf0e83e7",
+    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded fixed-byte values, persistent hashing, typed Boolean gates and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
+    "registeredOpcodeCount": 37,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4757,7 +4767,11 @@
       "slice",
       "concat",
       "sha512",
-      "keccak256"
+      "keccak256",
+      "load_constant",
+      "and",
+      "or",
+      "xor"
     ],
     "notExposedOpcodeCount": 14,
     "notExposedOpcodes": [
@@ -4770,10 +4784,6 @@
       "bytes32_from_low_high",
       "div_mod_power_of_two",
       "reconstitute_field",
-      "load_constant",
-      "and",
-      "or",
-      "xor",
       "bytes_into_natives"
     ],
     "explicitNativeValueTypes": [
@@ -4810,7 +4820,8 @@
     "minimumChecksPolicy": "Until feature implementation is complete: build changed code and run one focused source/native example per feature group with necessary rejection coverage. Reuse existing evidence. Defer broad regressions, new proof/key generation and deployment campaigns. Run one completed-token localnet demonstration.",
     "restrictedInternalValueTypes": [
       "Bytes(n), 1 through 1024, reconstructed from checked Native chunks for fixed-byte operators. Source Bytes0 erases to zero fields because native Bytes0 is not representable. Complete overload/proof/ledger qualification remains open.",
-      "Byte from a constant-index fixed-byte nth projection, converted to Native by one-output Encode; no standalone Byte inputs or general Byte arithmetic"
+      "Byte from a constant-index fixed-byte nth projection, converted to Native by one-output Encode; no standalone Byte inputs or general Byte arithmetic",
+      "Bool constants and eager AND/OR/XOR operands, bridged from the existing constrained Native 0/1 source ABI and encoded back to Native outputs. Other Bool and load_constant overloads remain unqualified."
     ],
     "persistentHashEvidence": {
       "source": "tests/Issue70PersistentHash.lean",
@@ -5005,6 +5016,17 @@
       "emptyInput": "Direct native hash opcodes accept empty FAB alignment/operands. Official checking and circuit sizing passed. No native Bytes0 value or compiler constant substitution is required. An empty-preimage private assertion remains enforced.",
       "focusedChecks": "Empty/abc/64-byte inputs, 31/32/33-byte boundaries, typed digest returns and SHA512 output composition. Changed final input byte, false private guard, SHA3 substitution, malformed producer alignment/count/range, wrong source types and bad oracle digests reject. One real host Session hash case passed.",
       "limits": "No new keys/proofs/deployment for these primitives. Mixed FAB source overloads, other curves, full profile/SDK qualification and compiler-wide preservation remain open."
+    },
+    "booleanGateEvidence": {
+      "source": "tests/BooleanGates.lean",
+      "native": "runtime/tests/native_boolean_gates.rs",
+      "guide": "../development/boolean-gates.md",
+      "scope": "Eager source boolAnd/boolOr/boolXor, actual native Bool constants and operands, Native-to-Bool select bridge and one-field Bool Encode. Existing Boolean input/output encodings and short-circuit witness controls remain unchanged.",
+      "constantCodec": "load_constant qualifies only canonical single-field Bool encodings zero/one. Other native constant codecs remain unsupported.",
+      "focusedChecks": "Four input combinations, nested XOR parity, altered output binding, false private RHS assertions under false-AND/true-OR, capability/type/disclosure rejection and malformed native producer operands/constants. One real control Session checks eager evaluation and rejects invalid types/arity.",
+      "limits": "No new keys, proofs or deployment. Full typed Boolean overloads, other constant codecs and compiler-wide preservation remain open. The separate formal witness semantics has pre-existing byte/curve gaps and needs reconciliation with all new primitives under issue 21.",
+      "implementationCommit": "c59d0748cd1af9532d2c64ca5fc4a14ccf0e83e7",
+      "nativeCheckerRuntimeSeconds": 0.03
     }
   }
 }
