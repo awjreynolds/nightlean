@@ -1,20 +1,20 @@
-import Nightlean.Helpers.Specialization
-import Nightlean.ComponentDisclosure
-import Nightlean.Backend.Zkir
+import Noctium.Helpers.Specialization
+import Noctium.ComponentDisclosure
+import Noctium.Backend.Zkir
 
-namespace Nightlean.GenericSpecializationTests
-open Nightlean
-open Nightlean.Helpers
-open Nightlean.Helpers.Specialization
+namespace Noctium.GenericSpecializationTests
+open Noctium
+open Noctium.Helpers
+open Noctium.Helpers.Specialization
 
-private abbrev GType := Nightlean.Helpers.Specialization.GenericType
-private abbrev GArg := Nightlean.Helpers.Specialization.Argument
-private abbrev GTerm := Nightlean.Helpers.Specialization.Term
-private abbrev GStmt := Nightlean.Helpers.Specialization.Statement
-private abbrev GDecl := Nightlean.Helpers.Specialization.Declaration
-private abbrev GInput := Nightlean.Helpers.Specialization.ExportInput
-private abbrev GExport := Nightlean.Helpers.Specialization.Export
-private abbrev GProgram := Nightlean.Helpers.Specialization.Program
+private abbrev GType := Noctium.Helpers.Specialization.GenericType
+private abbrev GArg := Noctium.Helpers.Specialization.Argument
+private abbrev GTerm := Noctium.Helpers.Specialization.Term
+private abbrev GStmt := Noctium.Helpers.Specialization.Statement
+private abbrev GDecl := Noctium.Helpers.Specialization.Declaration
+private abbrev GInput := Noctium.Helpers.Specialization.ExportInput
+private abbrev GExport := Noctium.Helpers.Specialization.Export
+private abbrev GProgram := Noctium.Helpers.Specialization.Program
 
 private def messageContains (value : Except Diagnostic α) (text : String) : Bool :=
   match value with
@@ -583,4 +583,4 @@ private def providerProgram (release : Bool) (type : GType := .native) : GProgra
   | .error _ => true
   | .ok _ => false
 
-end Nightlean.GenericSpecializationTests
+end Noctium.GenericSpecializationTests

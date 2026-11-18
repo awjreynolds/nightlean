@@ -4,7 +4,7 @@ Checked 2026-11-16. This report tracks [Establish semantic-preservation and back
 
 ## Kernel-checked compiler transformation
 
-`Nightlean.Passes.pruneCircuit` removes only constraints of the form `Expr.bool true`. It leaves inputs, outputs, source locations, other constraints, and their order unchanged. `pruneEntrypoint` applies this transformation to its circuit while preserving every state effect.
+`Noctium.Passes.pruneCircuit` removes only constraints of the form `Expr.bool true`. It leaves inputs, outputs, source locations, other constraints, and their order unchanged. `pruneEntrypoint` applies this transformation to its circuit while preserving every state effect.
 
 Lean checks these complete equality statements without added axioms or `sorry`:
 

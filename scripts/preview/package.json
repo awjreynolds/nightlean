@@ -1,5 +1,5 @@
 {
-  "name": "nightlean-preview-wallet",
+  "name": "noctium-preview-wallet",
   "private": true,
   "type": "module",
   "dependencies": {

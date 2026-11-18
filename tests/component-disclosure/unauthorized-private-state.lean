@@ -1,5 +1,5 @@
-import Nightlean.Frontend
-open Nightlean Nightlean.Helpers
+import Noctium.Frontend
+open Noctium Noctium.Helpers
 
 def privateStatePayloadType : Types.CompositeType := Types.CompositeType.structure "Demo.Payload"
 def privateStatePayloadParameter : Parameter := {name := "payload", ty := Ty.native}
@@ -22,5 +22,5 @@ def privateStateProgram : Program := {
   exports := [privateStateLeakExport]
 }
 
-open scoped Nightlean
-nightlean_component_circuit privateStateLeak from privateStateProgram entry "leak"
+open scoped Noctium
+noctium_component_circuit privateStateLeak from privateStateProgram entry "leak"

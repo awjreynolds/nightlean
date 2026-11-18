@@ -30,7 +30,7 @@ noctium_contract NativeByteIndexing where
 end
 
 -- Selecting a digest byte retains its private source origin.
-#guard !(Nightlean.Disclosure.circuit {
+#guard !(Noctium.Disclosure.circuit {
   name := "byteLeak"
   inputs := [{name := "payload", ty := .bytes 32, visibility := .private}]
   outputs := [{name := "leaked", ty := .uint 255, value := .bytesAt (.persistentHash32 (.ref "payload")) 0}]

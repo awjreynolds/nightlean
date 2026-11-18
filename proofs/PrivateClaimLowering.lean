@@ -1,12 +1,12 @@
 import proofs.PrivateClaim
-import Nightlean.Backend.Zkir
-import Nightlean.Verification.NativeRelation
-import Nightlean.Verification.NativeRelationJson
+import Noctium.Backend.Zkir
+import Noctium.Verification.NativeRelation
+import Noctium.Verification.NativeRelationJson
 
 set_option maxRecDepth 10000
 set_option maxHeartbeats 4000000
 
-namespace Nightlean.PrivateClaimLowering
+namespace Noctium.PrivateClaimLowering
 open PrivateClaimProofs Verification.NativeRelation
 
 private def ref := Operand.reference
@@ -498,4 +498,4 @@ theorem fixture_native_nonvacuity :
 #print axioms decoded_eligible_complete
 #print axioms eligible_source_complete
 
-end Nightlean.PrivateClaimLowering
+end Noctium.PrivateClaimLowering

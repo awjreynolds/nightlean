@@ -1,6 +1,6 @@
 # Native private artifact assembler
 
-`nightlean-assemble` builds unbalanced deployment and call intents directly in Rust. It consumes Lean compiler outputs and the pinned native Midnight key/ledger formats. No JavaScript evaluator, Node subprocess, proof service or network call participates in assembly.
+`noctium-assemble` builds unbalanced deployment and call intents directly in Rust. It consumes Lean compiler outputs and the pinned native Midnight key/ledger formats. No JavaScript evaluator, Node subprocess, proof service or network call participates in assembly.
 
 The assembler emits the same directory layout used by the native toolkit qualification flow. These are private execution artifacts. `call-intent.bin`, `constructor-preimage.bin` and `runtime-config.json` contain witness material and do not belong in a public compiler bundle.
 
@@ -9,8 +9,8 @@ The assembler emits the same directory layout used by the native toolkit qualifi
 The high-level path verifies a public bundle against a trusted manifest digest before opening private configuration:
 
 ```sh
-cargo build --manifest-path runtime/Cargo.toml --locked --bin nightlean-assemble
-runtime/target/debug/nightlean-assemble \
+cargo build --manifest-path runtime/Cargo.toml --locked --bin noctium-assemble
+runtime/target/debug/noctium-assemble \
   --bundle PUBLIC_BUNDLE_DIRECTORY --manifest-sha256 TRUSTED_MANIFEST_SHA256 \
   --config PRIVATE_CONFIG.json --ttl-unix UNIX_SECONDS NEW_PRIVATE_DIRECTORY
 ```
@@ -24,8 +24,8 @@ Rust callers first use `artifacts::verify(directory, Some(trusted_digest))`, the
 The existing lower-level interface remains available for callers who already control and trust every selected input:
 
 ```sh
-cargo build --manifest-path runtime/Cargo.toml --locked --bin nightlean-assemble
-runtime/target/debug/nightlean-assemble \
+cargo build --manifest-path runtime/Cargo.toml --locked --bin noctium-assemble
+runtime/target/debug/noctium-assemble \
   SOURCE_PLAN.json ENTRYPOINT.zkir KEY.prover KEY.verifier NEW_PRIVATE_DIRECTORY \
   --ledger-params LEDGER.params --config PRIVATE_CONFIG.json --ttl-unix UNIX_SECONDS
 ```
@@ -83,14 +83,14 @@ The native CLI replay check now runs both `prepare` and the official circuit che
 For a state fetched from the ledger, use:
 
 ```sh
-nightlean-runtime PRIVATE_ARTIFACT_DIRECTORY --check-state FETCHED_STATE.bin --expect-rejection
+noctium-runtime PRIVATE_ARTIFACT_DIRECTORY --check-state FETCHED_STATE.bin --expect-rejection
 ```
 
 This mode decodes the supplied `ContractState`, then requires execution or official checking to reject against its data. It returns public JSON containing `rejected: true`, the supplied state digest and an unchanged-state check. An accepted execution exits unsuccessfully, as do file, parse, trailing-byte and input-schema failures. The mode does not reconstruct `config.state` or load the golden initial/predicted state files. The `supplied_state` integration test exercises these distinctions through the executable.
 
 The original private one-time claim also passed real-key native assembly with 21 guaranteed operations, k9, no fallible operations and predicted state SHA-256 `d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3`. Its reassembled directory passed the native runtime's five invalid cases and replay check, with no Node invocation or additional deployment.
 
-The `verified_assembly` real-key qualification test is opt-in because its key bundle and private execution configuration are external fixtures. Set `NIGHTLEAN_TEST_BUNDLE`, `NIGHTLEAN_TEST_MANIFEST_SHA256` and `NIGHTLEAN_TEST_PRIVATE_CONFIG`, then run:
+The `verified_assembly` real-key qualification test is opt-in because its key bundle and private execution configuration are external fixtures. Set `NOCTIUM_TEST_BUNDLE`, `NOCTIUM_TEST_MANIFEST_SHA256` and `NOCTIUM_TEST_PRIVATE_CONFIG`, then run:
 
 ```sh
 cargo test --manifest-path runtime/Cargo.toml --locked --test verified_assembly -- --ignored

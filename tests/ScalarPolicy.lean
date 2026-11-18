@@ -1,6 +1,6 @@
-import Nightlean.ScalarPolicy
+import Noctium.ScalarPolicy
 
-open Nightlean.ScalarPolicy
+open Noctium.ScalarPolicy
 
 private def kindResult (value : Except String Kind) : Option Kind :=
   match value with
@@ -33,7 +33,7 @@ private def resultValue (value : Except String Value) : Option (Kind × Nat) :=
 #guard resultValue (evaluate .add ⟨.uint 255, 255⟩ ⟨.uint 255, 255⟩) == some (.uint 510, 510)
 #guard resultValue (evaluate .mul ⟨.uint 255, 255⟩ ⟨.uint 255, 255⟩) == some (.uint 65025, 65025)
 #guard resultValue (evaluate .sub ⟨.uint 255, 3⟩ ⟨.uint 255, 5⟩) == none
-#guard resultValue (evaluate .sub ⟨.native, 0⟩ ⟨.native, 1⟩) == some (.native, Nightlean.Field.modulus - 1)
+#guard resultValue (evaluate .sub ⟨.native, 0⟩ ⟨.native, 1⟩) == some (.native, Noctium.Field.modulus - 1)
 #guard resultValue (cast ⟨.bool, 1⟩ (.uint 0)) == none
 #guard resultValue (cast ⟨.uint 255, 2⟩ .bool) == some (.bool, 1)
 #guard resultValue (cast ⟨.native, 256⟩ (.uint 255)) == none

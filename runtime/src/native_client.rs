@@ -942,7 +942,7 @@ impl Driver {
                         if let Some(runtime) = state.runtime.as_mut() {
                             if runtime.cancel().is_err() {
                                 self.last =
-                                    json!({"status":"step_error","error":"nightlean_client_State"});
+                                    json!({"status":"step_error","error":"noctium_client_State"});
                                 self.state = Some(state);
                                 self.task = None;
                                 self.mode = None;

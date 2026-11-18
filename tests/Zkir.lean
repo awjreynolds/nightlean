@@ -1,7 +1,7 @@
-import Nightlean.Backend.Zkir
+import Noctium.Backend.Zkir
 
-open Nightlean
-open Nightlean.Backend.Zkir
+open Noctium
+open Noctium.Backend.Zkir
 
 def lowererFixture : Circuit := {
   name := "hash_claim_relation"
@@ -27,7 +27,7 @@ def main : IO Unit := do
   match lowerCircuit noncanonical with
   | .ok _ => throw (IO.userError "noncanonical field constant accepted")
   | .error _ => pure ()
-  let hash : Nightlean.Expr .native := .poseidon2 1 (.native 42) (.native 7)
+  let hash : Noctium.Expr .native := .poseidon2 1 (.native 42) (.native 7)
   let shared : Circuit := { name := "shared", constraints := [.eq hash hash] }
   match lowerCircuit shared with
   | .error d => throw (IO.userError d.message)

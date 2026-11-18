@@ -5,10 +5,10 @@ import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 
 const releases = {
-  '3.2.0': { revision: '446c7fecc6bd41dab99ebe89ab404e9d077d11a9', cliVersion: '3.2.0', directory: '/private/tmp/nightlean-native-zkir' },
+  '3.2.0': { revision: '446c7fecc6bd41dab99ebe89ab404e9d077d11a9', cliVersion: '3.2.0', directory: '/private/tmp/noctium-native-zkir' },
   // The official 3.2.1 tag retains 3.2.0 in zkir/Cargo.toml. Preserve that upstream
   // provenance rather than rewriting source or treating the CLI banner as the release identity.
-  '3.2.1': { revision: '7a51b3385bbf4bce3604df87a7c70867c9ab43c0', cliVersion: '3.2.0', directory: '/private/tmp/nightlean-native-zkir-321' },
+  '3.2.1': { revision: '7a51b3385bbf4bce3604df87a7c70867c9ab43c0', cliVersion: '3.2.0', directory: '/private/tmp/noctium-native-zkir-321' },
 };
 let requestedVersion = '3.2.0';
 let requestedDirectory;
@@ -30,8 +30,8 @@ const { revision, cliVersion } = releases[requestedVersion];
 const repository = 'https://github.com/midnightntwrk/midnight-zkir';
 const rust = '1.100.0';
 const directory = resolve(requestedDirectory ?? releases[requestedVersion].directory);
-const source = resolve(process.env.NIGHTLEAN_ZKIR_SOURCE ?? join(directory, 'source'));
-const cargo = process.env.NIGHTLEAN_CARGO ?? 'cargo';
+const source = resolve(process.env.NOCTIUM_ZKIR_SOURCE ?? join(directory, 'source'));
+const cargo = process.env.NOCTIUM_CARGO ?? 'cargo';
 const env = { ...process.env, CARGO_BUILD_JOBS: process.env.CARGO_BUILD_JOBS ?? '4' };
 function run(command, args, cwd, capture = false) {
   return new Promise((resolvePromise, reject) => {

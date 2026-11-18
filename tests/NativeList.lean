@@ -1,6 +1,6 @@
 import Noctium.Frontend
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
 
 open scoped Noctium
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cli="$PWD/.lake/build/bin/nightlean"
+cli="$PWD/.lake/build/bin/noctium"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
@@ -17,9 +17,9 @@ reject() {
 }
 
 cat > "$scratch/private-data.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit unauthorized where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit unauthorized where
   private secret : Native
   output result : Native := secret
 end
@@ -29,9 +29,9 @@ grep -F 'private-data.lean:4:3' "$scratch/private-data-error" > /dev/null
 grep -F 'private-data.lean:5:3' "$scratch/private-data-error" > /dev/null
 
 cat > "$scratch/private-hash.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit unauthorized where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit unauthorized where
   private secret : Native
   output digest : Native := poseidon2(1, secret, 0)
 end
@@ -39,9 +39,9 @@ LEAN
 reject private-hash "public output 'digest'"
 
 cat > "$scratch/private-predicate.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit unauthorized where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit unauthorized where
   private flag : Bool
   output result : Native := select(flag, 1, 0)
 end
@@ -49,9 +49,9 @@ LEAN
 reject private-predicate "undisclosed private parameter 'flag'"
 
 cat > "$scratch/payload-only.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit unauthorized where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit unauthorized where
   private flag : Bool
   output result : Native := select(flag, disclose(1), 0)
 end
@@ -59,9 +59,9 @@ LEAN
 reject payload-only "undisclosed private parameter 'flag'"
 
 cat > "$scratch/unrelated-release.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit unauthorized where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit unauthorized where
   private flag : Bool
   let released : Bool := disclose(flag)
   output first : Native := select(released, 1, 0)
@@ -71,12 +71,12 @@ LEAN
 reject unrelated-release "public output 'second'"
 
 cat > "$scratch/private-query.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit localRelation where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit localRelation where
   private key : Native
 end
-nightlean_contract unauthorized where
+noctium_contract unauthorized where
   map values : Native => Bool
   entry apply uses localRelation where
     absent values[key]
@@ -86,12 +86,12 @@ LEAN
 reject private-query "public map query path 'values'"
 
 cat > "$scratch/private-write.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit localRelation where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit localRelation where
   private flag : Bool
 end
-nightlean_contract unauthorized where
+noctium_contract unauthorized where
   cell value : Native
   entry apply uses localRelation where
     write value := select(flag, disclose(1), 0)
@@ -101,12 +101,12 @@ LEAN
 reject private-write "public cell write 'value'"
 
 cat > "$scratch/unsupported-guard.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit localRelation where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit localRelation where
   private flag : Bool
 end
-nightlean_contract unsupported where
+noctium_contract unsupported where
   cell value : Native
   entry apply uses localRelation where
     if flag then
@@ -124,7 +124,7 @@ import {join} from 'node:path';
 import {ok,deepStrictEqual} from 'node:assert/strict';
 const directory=process.argv[2];
 for(const file of readdirSync(directory))ok(!readFileSync(join(directory,file),'utf8').includes('disclose'));
-const metadata=JSON.parse(readFileSync(join(directory,'nightlean.json')));
+const metadata=JSON.parse(readFileSync(join(directory,'noctium.json')));
 deepStrictEqual(metadata.circuits.length,2);
 deepStrictEqual(metadata.circuits[0].outputs[0].expression,{tag:'reference',name:'secret'});
 JS

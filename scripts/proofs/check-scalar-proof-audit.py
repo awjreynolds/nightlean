@@ -11,8 +11,8 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-SOUNDNESS = "Nightlean.Verification.ScalarTranslation.lowerCircuit_sound"
-COMPLETENESS = "Nightlean.Verification.ScalarTranslation.lowerCircuit_complete"
+SOUNDNESS = "Noctium.Verification.ScalarTranslation.lowerCircuit_sound"
+COMPLETENESS = "Noctium.Verification.ScalarTranslation.lowerCircuit_complete"
 FIXTURE = "ScalarAuditFixtures"
 
 
@@ -33,14 +33,14 @@ def main() -> int:
         parser.error("external model and digest must be supplied together")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    run(["lake", "build", "Nightlean.Verification.ScalarTranslation", "Nightlean.Verification.ScalarExportAudit"])
-    with tempfile.TemporaryDirectory(prefix="nightlean-scalar-role-tests-") as directory:
+    run(["lake", "build", "Noctium.Verification.ScalarTranslation", "Noctium.Verification.ScalarExportAudit"])
+    with tempfile.TemporaryDirectory(prefix="noctium-scalar-role-tests-") as directory:
         scratch = Path(directory)
         source = scratch / "source" / "ScalarAuditFixtures.lean"
         imports = scratch / "imports"
         source.parent.mkdir(parents=True)
         imports.mkdir()
-        source.write_text(f'''import Nightlean.Verification.ScalarTranslation
+        source.write_text(f'''import Noctium.Verification.ScalarTranslation
 import Lean
 namespace {FIXTURE}
 open Lean Elab Command in
@@ -72,7 +72,7 @@ end {FIXTURE}
             return path
 
         baseline = export("baseline-model.ndjson", [SOUNDNESS, COMPLETENESS,
-            "propext", "Classical.choice", "Quot.sound"], "Nightlean.Verification.ScalarTranslation")
+            "propext", "Classical.choice", "Quot.sound"], "Noctium.Verification.ScalarTranslation")
         trusted = output / "trusted-model.ndjson"
         trusted.write_bytes(args.trusted_model_export.read_bytes() if args.trusted_model_export else baseline.read_bytes())
         pin = args.trusted_model_sha256 or hashlib.sha256(trusted.read_bytes()).hexdigest()

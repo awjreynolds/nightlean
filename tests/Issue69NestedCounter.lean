@@ -1,16 +1,16 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue69NestedCounter where
+noctium_circuit issue69NestedCounter where
   private owner : Bytes32
   private spender : Bytes32
 end
 
-nightlean_contract Issue69NestedCounter where
+noctium_contract Issue69NestedCounter where
   tree epochs : Bytes32 => Bytes32 => UInt 64
   entry bump uses issue69NestedCounter where
     member epochs[disclose(owner)] as ownerPresent

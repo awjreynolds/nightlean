@@ -1,4 +1,4 @@
-// Source-generated circuits checked with raw witnesses, bypassing the Nightlean evaluator.
+// Source-generated circuits checked with raw witnesses, bypassing the Noctium evaluator.
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
@@ -21,7 +21,7 @@ function scaleCompact(value){
 }
 const vector=values=>Buffer.concat([scaleCompact(values.length),...values.map(scaleCompact)]);
 function preimage(test){
- const key=Buffer.from('nightlean/scalars/conformance');
+ const key=Buffer.from('noctium/scalars/conformance');
  return Buffer.concat([Buffer.from('midnight:proof-preimage:'),vector([]),
   vector(test.private),vector(test.publicInputs),vector(test.publicReads),scaleCompact(42),
   Buffer.from([0]),scaleCompact(key.length),key]);

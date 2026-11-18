@@ -11,7 +11,7 @@ lake exe noctium compile tests/modules/Native.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
   --output "$scratch/second"
 diff -r "$scratch/first" "$scratch/second"
-node - "$scratch/first/nightlean.json" <<'JS'
+node - "$scratch/first/noctium.json" <<'JS'
 const fs = require('node:fs');
 const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
 const [contract] = manifest.contracts;

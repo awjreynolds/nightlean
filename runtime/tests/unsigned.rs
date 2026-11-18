@@ -1,5 +1,5 @@
 mod common;
-use nightlean_runtime::{
+use noctium_runtime::{
     Expr, Plan, ScalarType, Value, canonical_field, canonical_unsigned, create_state, environment,
     evaluate, max_uint,
 };
@@ -188,7 +188,7 @@ fn unsigned_equality_and_eager_selection_reject_type_confusion() {
 #[test]
 fn source_generated_unsigned_plan_passes_official_checker() {
     let p: Plan = serde_json::from_value(common::unsigned_json()).unwrap();
-    let ir = nightlean_runtime::zkir::IrSource::load(
+    let ir = noctium_runtime::zkir::IrSource::load(
         include_bytes!("fixtures/unsigned/circuit.zkir").as_slice(),
     )
     .unwrap();
@@ -200,18 +200,18 @@ fn source_generated_unsigned_plan_passes_official_checker() {
     let state = create_state(&p, &BTreeMap::from([("total".into(), json!("0"))])).unwrap();
     let params = &ledger::structure::INITIAL_PARAMETERS;
     let address = coin_structure::contract::ContractAddress::default();
-    let execution = nightlean_runtime::prepare(&p, &inputs, &state, params, address).unwrap();
-    assert_eq!(nightlean_runtime::check(&execution, &ir).unwrap().len(), 8);
+    let execution = noctium_runtime::prepare(&p, &inputs, &state, params, address).unwrap();
+    assert_eq!(noctium_runtime::check(&execution, &ir).unwrap().len(), 8);
     let mut wrong = inputs.clone();
     wrong.insert("expected".into(), json!("509"));
-    let wrong_execution = nightlean_runtime::prepare(&p, &wrong, &state, params, address).unwrap();
-    assert!(nightlean_runtime::check(&wrong_execution, &ir).is_err());
+    let wrong_execution = noctium_runtime::prepare(&p, &wrong, &state, params, address).unwrap();
+    assert!(noctium_runtime::check(&wrong_execution, &ir).is_err());
     let mut out_of_range = inputs.clone();
     out_of_range.insert("left".into(), json!("256"));
-    assert!(nightlean_runtime::prepare(&p, &out_of_range, &state, params, address).is_err());
+    assert!(noctium_runtime::prepare(&p, &out_of_range, &state, params, address).is_err());
     assert!(
-        nightlean_runtime::prepare(&p, &inputs, &execution.after.state, params, address)
-            .and_then(|e| nightlean_runtime::check(&e, &ir))
+        noctium_runtime::prepare(&p, &inputs, &execution.after.state, params, address)
+            .and_then(|e| noctium_runtime::check(&e, &ir))
             .is_err()
     );
 }

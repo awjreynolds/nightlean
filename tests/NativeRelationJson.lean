@@ -1,10 +1,10 @@
 import Lean
-import Nightlean.Verification.NativeRelationJson
+import Noctium.Verification.NativeRelationJson
 
 namespace NativeRelationJsonTests
 
 open Lean
-open Nightlean.Verification.NativeRelation
+open Noctium.Verification.NativeRelation
 
 private def nativeType : Json := toJson ("Scalar<BLS12-381>" : String)
 
@@ -43,7 +43,7 @@ private def fixture : Json := root [
   instruction "output" [("vals", toJson (["%v1"] : List String))]]
 
 private def fails (json : Json) : Bool :=
-  match Nightlean.Verification.NativeRelationJson.decode json with
+  match Noctium.Verification.NativeRelationJson.decode json with
   | .error _ => true
   | .ok _ => false
 
@@ -56,7 +56,7 @@ private def witness (name : String) : Scalar :=
 /-- This checks the exact fixture shape and ordered observations, without
 turning the finite test into a generic encoder/decoder theorem. -/
 private def fixturePreserved : Bool :=
-  match Nightlean.Verification.NativeRelationJson.decode fixture with
+  match Noctium.Verification.NativeRelationJson.decode fixture with
   | .error _ => false
   | .ok program =>
     let instructionOrder := match program.instructions with
@@ -88,14 +88,14 @@ private def fixturePreserved : Bool :=
 
 -- A finite fixture round trip exercises the executable encoder and decoder.
 -- It is not a generic round-trip theorem for arbitrary Program values.
-#guard match Nightlean.Verification.NativeRelationJson.decode fixture with
-  | .ok program => (Nightlean.Verification.NativeRelationJson.encode program).compress == fixture.compress
+#guard match Noctium.Verification.NativeRelationJson.decode fixture with
+  | .ok program => (Noctium.Verification.NativeRelationJson.encode program).compress == fixture.compress
   | .error _ => false
 
-#guard match Nightlean.Verification.NativeRelationJson.decode
+#guard match Noctium.Verification.NativeRelationJson.decode
     (root [] (outputs := Json.arr #[nativeType, nativeType]) (commitment := toJson true)) with
   | .ok program => program.outputArity == 2 && program.communicationsCommitment &&
-      (Nightlean.Verification.NativeRelationJson.encode program).compress ==
+      (Noctium.Verification.NativeRelationJson.encode program).compress ==
         (root [] (outputs := Json.arr #[nativeType, nativeType]) (commitment := toJson true)).compress
   | .error _ => false
 

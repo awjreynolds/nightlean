@@ -6,7 +6,7 @@ This is a scoped two-run property. It does not prove secrecy of the declared pub
 
 ## Exact policy and observer
 
-`proofs/PrivateClaimNativePrivacy.lean` defines a typed native policy whose source field is exactly `Nightlean.PrivateClaimVerification.policy`. The native observer identity is `successfulClaimPublicTranscriptV1`, its scope is `successfulOnly`, and the actual claim has no additional authorized private release. `NativePrivacyObligation policy` includes exact policy equality in its type. A changed scope, release policy or functional theorem cannot substitute for the required privacy theorem.
+`proofs/PrivateClaimNativePrivacy.lean` defines a typed native policy whose source field is exactly `Noctium.PrivateClaimVerification.policy`. The native observer identity is `successfulClaimPublicTranscriptV1`, its scope is `successfulOnly`, and the actual claim has no additional authorized private release. `NativePrivacyObligation policy` includes exact policy equality in its type. A changed scope, release policy or functional theorem cannot substitute for the required privacy theorem.
 
 The public observer includes:
 
@@ -82,7 +82,7 @@ An independent trusted model export and digest are supported through `--trusted-
 
 `NativePrivacy.ExactArtifactBinding` exposes the remaining byte/build obligations: the actual parser must map retained bytes to the certified trees, and the authenticated build predicate must bind those bytes to the reviewed source identity. `exact_artifact_composition` joins those future arguments to the decoded bound-privacy obligation. No byte/build certificate inhabitant is supplied by this original foundation package. The parser and build predicate must themselves be pinned and qualified by issue 56. This interface does not authenticate UTF-8 bytes, import provenance, a compiler executable or keys.
 
-Retained development evidence lives under `.nightlean/audits/private-claim-privacy/`. The portable summary is `tests/private-claim-privacy-evidence.json`. The summary reports the policy, observer, exclusions, host/binding premises, required assumptions, rejected mutations and pending issue 56/57 links.
+Retained development evidence lives under `.noctium/audits/private-claim-privacy/`. The portable summary is `tests/private-claim-privacy-evidence.json`. The summary reports the policy, observer, exclusions, host/binding premises, required assumptions, rejected mutations and pending issue 56/57 links.
 
 ## Native sample scope
 

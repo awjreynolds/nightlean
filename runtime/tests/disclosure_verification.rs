@@ -1,5 +1,5 @@
 //! Real native verification, separate from evaluator/preprocessing checks.
-use nightlean_runtime::canonical_field;
+use noctium_runtime::canonical_field;
 use serialize::tagged_deserialize;
 use sha2::{Digest, Sha256};
 use std::{fs, path::PathBuf};
@@ -9,8 +9,8 @@ use transient_crypto::proofs::{ParamsVerifier, Proof, VerifierKey};
 #[ignore = "requires source-generated disclosure keys, native proof and pinned k5 parameters"]
 fn authorized_release_proof_binds_every_public_field() {
     let directory = PathBuf::from(
-        std::env::var_os("NIGHTLEAN_DISCLOSURE_FIXTURE")
-            .expect("set NIGHTLEAN_DISCLOSURE_FIXTURE to the qualified material directory"),
+        std::env::var_os("NOCTIUM_DISCLOSURE_FIXTURE")
+            .expect("set NOCTIUM_DISCLOSURE_FIXTURE to the qualified material directory"),
     );
     let key_bytes = fs::read(directory.join("authorizedRelease.verifier")).unwrap();
     let mut key_reader = key_bytes.as_slice();

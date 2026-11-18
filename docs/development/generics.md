@@ -2,10 +2,10 @@
 
 Bounded type and natural specialization extends the Lean source helper
 compiler. The pass turns one generic export into an ordinary monomorphic
-`Nightlean.Helpers.Program`. Existing helper analysis, component disclosure,
+`Noctium.Helpers.Program`. Existing helper analysis, component disclosure,
 compilation and native lowering then process that concrete program.
 
-The source API is `Nightlean.Helpers.Specialization.Program`. It declares
+The source API is `Noctium.Helpers.Specialization.Program`. It declares
 parameter kinds, generic helper declarations, nominal generic structs,
 transparent aliases and concrete exports. Generic calls use declaration IDs,
 not names. A source export supplies ordered type and natural arguments. Runtime
@@ -22,9 +22,9 @@ Use `noctium_generic_circuit` to register one selected export as a regular
 circuit:
 
 ```lean
-import Nightlean.Compiler
+import Noctium.Compiler
 open scoped Noctium
-open Nightlean.Helpers.Specialization
+open Noctium.Helpers.Specialization
 
 private def genericProgram : Program := ...
 
@@ -35,7 +35,7 @@ The frontend stores the generated concrete program and its versioned signature
 sidecar. Compiler checks run again over that same program during compilation.
 The additive sidecar uses schema version 1 and writes natural values and source
 or generated identity integers as canonical decimal strings. Existing
-`nightlean.json` and aggregate schemas stay unchanged. The sidecar records typed
+`noctium.json` and aggregate schemas stay unchanged. The sidecar records typed
 witness signatures as compile-time metadata. [General typed witness execution](https://github.com/awjreynolds/noctium/issues/62)
 is separate runtime work.
 
@@ -83,11 +83,11 @@ in a temporary directory, then run six valid and rejecting cases through the
 official 3.2.1 checker:
 
 ```sh
-OUT=/private/tmp/nightlean-generic46
+OUT=/private/tmp/noctium-generic46
 lake exe noctium compile tests/generics/Native.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json --output "$OUT"
 node scripts/zkir/check-scalar-cases.mjs "$OUT" \
-  /private/tmp/nightlean-zkir321-wasm/package/midnight_zkir_wasm_fs.js \
+  /private/tmp/noctium-zkir321-wasm/package/midnight_zkir_wasm_fs.js \
   tests/generics/cases.json
 ```
 
@@ -97,18 +97,18 @@ generation, repeat either proof in a temporary output directory:
 
 ```sh
 mkdir -p "$OUT/keys"
-MIDNIGHT_PP=/private/tmp/nightlean-proof-params \
-  /private/tmp/nightlean-native-zkir-321/bin/zkir compile \
+MIDNIGHT_PP=/private/tmp/noctium-proof-params \
+  /private/tmp/noctium-native-zkir-321/bin/zkir compile \
   "$OUT/genericAddSmall.zkir" \
   "$OUT/keys/genericAddSmall.prover" "$OUT/keys/genericAddSmall.verifier"
-MIDNIGHT_PP=/private/tmp/nightlean-proof-params \
-  /private/tmp/nightlean-native-zkir-321/bin/zkir compile \
+MIDNIGHT_PP=/private/tmp/noctium-proof-params \
+  /private/tmp/noctium-native-zkir-321/bin/zkir compile \
   "$OUT/genericAddWide.zkir" \
   "$OUT/keys/genericAddWide.prover" "$OUT/keys/genericAddWide.verifier"
 node tests/generics/prove-native.mjs "$OUT" \
-  /private/tmp/nightlean-zkir321-wasm/package/midnight_zkir_wasm_fs.js genericAddSmall
+  /private/tmp/noctium-zkir321-wasm/package/midnight_zkir_wasm_fs.js genericAddSmall
 node tests/generics/prove-native.mjs "$OUT" \
-  /private/tmp/nightlean-zkir321-wasm/package/midnight_zkir_wasm_fs.js genericAddWide
+  /private/tmp/noctium-zkir321-wasm/package/midnight_zkir_wasm_fs.js genericAddWide
 ```
 
 The runner checks the official 3.2.1 preimage, uses the native service at

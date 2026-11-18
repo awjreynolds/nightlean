@@ -1,8 +1,8 @@
-import Nightlean.Frontend
-import Nightlean.Modules
+import Noctium.Frontend
+import Noctium.Modules
 
-open scoped Nightlean
-open Nightlean.Helpers.Specialization
+open scoped Noctium
+open Noctium.Helpers.Specialization
 
 def moduleIdentityProgram : Program := {
   declarations := [{
@@ -19,14 +19,14 @@ def moduleIdentityProgram : Program := {
     inputs := [{name := "value", type := .parameter "T", visibility := .public}]}]
 }
 
-private def moduleBalance : Nightlean.Modules.Member := {
+private def moduleBalance : Noctium.Modules.Member := {
   id := 0
   name := "balance"
   kind := .state
   visibility := .«public»
   stateSchema? := some (.cell (.parameter "T"))}
 
-private def moduleUpdateCircuit : Nightlean.Modules.Member := {
+private def moduleUpdateCircuit : Noctium.Modules.Member := {
   id := 1
   name := "updateCircuit"
   kind := .circuit
@@ -36,13 +36,13 @@ private def moduleUpdateCircuit : Nightlean.Modules.Member := {
     exportName := "update"
     arguments := [.typeParameter "T", .naturalParameter "N"]}}
 
-private def moduleUpdateEntry : Nightlean.Modules.Member := {
+private def moduleUpdateEntry : Noctium.Modules.Member := {
   id := 2
   name := "update"
   kind := .entrypoint
   visibility := .«public»}
 
-def genericLedgerModule : Nightlean.Modules.Definition := {
+def genericLedgerModule : Noctium.Modules.Definition := {
   parameters := [⟨"N", .natural⟩, ⟨"T", .type⟩]
   members := [moduleBalance, moduleUpdateCircuit, moduleUpdateEntry]
   entrypoints := [{
@@ -55,9 +55,9 @@ def genericLedgerModule : Nightlean.Modules.Definition := {
     {name := "update", target := .localMember 2}]
 }
 
-nightlean_module from genericLedgerModule
+noctium_module from genericLedgerModule
 
-def moduleContractRoot : Nightlean.Modules.Definition := {
+def moduleContractRoot : Noctium.Modules.Definition := {
   imports := [
     {viewName := "first", target := `genericLedgerModule,
       arguments := [.naturalValue 2, .typeValue (.scalar .native)], selections := [
@@ -80,10 +80,10 @@ def moduleContractRoot : Nightlean.Modules.Definition := {
     {name := "differentUpdate", target := .importedMember "different" "update"}]
 }
 
-nightlean_module from moduleContractRoot
+noctium_module from moduleContractRoot
 
-def moduleContractRequest : Nightlean.Modules.Request := {
+def moduleContractRequest : Noctium.Modules.Request := {
   sourceName := `moduleContractRoot
   arguments := []}
 
-nightlean_module_contract ModuleLedger from moduleContractRequest
+noctium_module_contract ModuleLedger from moduleContractRequest

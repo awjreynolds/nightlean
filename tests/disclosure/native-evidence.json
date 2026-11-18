@@ -49,5 +49,12 @@
     "timing/failure channels",
     "whole-program noninterference",
     "end-to-end source-to-native preservation"
-  ]
+  ],
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "81f73024a20b97370823c05602d013349163f20ea3e140662aca68afdc32dcae",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/disclosure/native-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/disclosure/native-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Historical record with labels normalized for display. Retained hashes qualify the original recorded source and implementation commits, not the current renamed source tree."
 }

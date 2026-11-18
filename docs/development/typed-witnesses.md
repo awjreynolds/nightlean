@@ -162,14 +162,14 @@ Drive `advance`, `private_request` and `resume_typed` until source execution com
 
 [`runtime/tests/witness_execution_public.rs`](../../runtime/tests/witness_execution_public.rs) compiles against public crate APIs alone. Its integration test requires authenticated retained artifacts and public proving parameters, supplied through the environment. It covers source callbacks, corrected retries, invocation mismatch, changed SRS, local proving and the consuming client handoff.
 
-The additive C entrypoints live in [`nightlean_native.h`](../../runtime/include/nightlean_native.h) and [`nightlean_control.h`](../../runtime/include/nightlean_control.h):
+The additive C entrypoints live in [`noctium_native.h`](../../runtime/include/noctium_native.h) and [`noctium_control.h`](../../runtime/include/noctium_control.h):
 
-1. `nightlean_native_witness_target_begin` creates the bounded target context from authenticated artifacts, state-only configuration and explicit entropy.
-2. `nightlean_control_begin_from_native_target` loads the retained plan and freezes the context identity, address and entrypoint before any provider call or stage.
+1. `noctium_native_witness_target_begin` creates the bounded target context from authenticated artifacts, state-only configuration and explicit entropy.
+2. `noctium_control_begin_from_native_target` loads the retained plan and freezes the context identity, address and entrypoint before any provider call or stage.
 3. Advance the Control session and answer typed requests. Replies carry protocol version, process-unique decimal request ID, attempt ID, operation, capability and schema. Invalid replies retain suspension. Explicit provider failure aborts the invocation.
-4. `nightlean_native_begin_from_witness` obtains the complete canonical input map from the completed Control session. It accepts no caller-supplied replacement input map or arbitrary journal. Artifact, context, target and input checks precede consumption.
+4. `noctium_native_begin_from_witness` obtains the complete canonical input map from the completed Control session. It accepts no caller-supplied replacement input map or arbitrary journal. Artifact, context, target and input checks precede consumption.
 5. Verify and attach the proof through the existing native proof API. The completed proof session retains the actual source Runtime.
-6. Deploy through the existing kind-0 client path using a separate deployment namespace. Deployment leaves source CALL writes untouched. `nightlean_client_start_from_witness` consumes the source Runtime for the proved CALL and follows the existing funding, approval, submission, finality and private CAS lifecycle.
+6. Deploy through the existing kind-0 client path using a separate deployment namespace. Deployment leaves source CALL writes untouched. `noctium_client_start_from_witness` consumes the source Runtime for the proved CALL and follows the existing funding, approval, submission, finality and private CAS lifecycle.
 
 A rejected handoff preserves a completed invocation for corrected retry. After successful consumption, cancellation belongs to the native proof or client owner. It discards that owned invocation. It does not restore the old Control session or interrupt arbitrary native CPU work.
 
@@ -187,7 +187,7 @@ ledger integration and process recovery still in issue 67.
 
 ## Assurance scope
 
-The source model in [`Nightlean/Witness/Semantics.lean`](../../Nightlean/Witness/Semantics.lean) separates private source stages from the erased constraint computation. Its execution gate records a witness tape and replays frozen results rather than rerunning providers after erasing writes. Formal claims must identify their checked theorem, admitted source fragment and host assumptions.
+The source model in [`Noctium/Witness/Semantics.lean`](../../Noctium/Witness/Semantics.lean) separates private source stages from the erased constraint computation. Its execution gate records a witness tape and replays frozen results rather than rerunning providers after erasing writes. Formal claims must identify their checked theorem, admitted source fragment and host assumptions.
 
 `recordInvocation_replayInvocation_matches` connects the actual recording and replay entrypoints. For source runs admitted by the host-boundary trace, and successful compiler/input/tape validation, replay returns the same result or terminal error, ordered tape and cursor. Replay preserves its initial private store and leaves its journal empty. `validateCompleteInputMap_preserves_bindings` separately ties accepted canonical values to the exact original and fresh input names in circuit schema order. These facts do not prove general Helpers-to-circuit preservation.
 

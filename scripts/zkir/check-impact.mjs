@@ -16,7 +16,7 @@ const hash = values => ledger.valueToBigInt(ledger.transientHash(
   values.map(() => atom), values.flatMap(ledger.bigIntToValue)));
 
 // This public test fixture uses secret=42, campaign=7, siblings=[17,23],
-// directions=[false,true]. Domain tags are Nightlean choices, not ledger constants.
+// directions=[false,true]. Domain tags are Noctium choices, not ledger constants.
 const secret = 42n;
 const campaign = 7n;
 const leaf = hash([1n, secret, campaign]);
@@ -55,7 +55,7 @@ assert.deepEqual(reads.map(v => ledger.valueToBigInt(v.value)),
 
 const preimage = (ops = operations, witness = secret) =>
   ledger.proofDataIntoSerializedPreimage(empty, empty, ops,
-    [witness, 17n, 23n, 0n, 1n].map(field), 'nightlean/direct-impact');
+    [witness, 17n, 23n, 0n, 1n].map(field), 'noctium/direct-impact');
 const accepted = await zkir.check(preimage(), provider);
 assert.equal(accepted.length, operations.length,
   'the ledger needs one activity group per native VM operation');

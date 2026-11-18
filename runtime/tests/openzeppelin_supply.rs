@@ -1,7 +1,7 @@
 //! Lean port of the pinned OpenZeppelin public-supply accounting blocks.
 #![cfg(feature = "zkir-321")]
 
-use nightlean_runtime::{Db, Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
+use noctium_runtime::{Db, Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
 use onchain_runtime::state::{ChargedState, StateValue};
 use serde_json::json;
 use std::collections::BTreeMap;

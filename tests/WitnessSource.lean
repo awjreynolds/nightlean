@@ -1,7 +1,7 @@
-import Nightlean.Frontend
+import Noctium.Frontend
 
-open Nightlean Nightlean.Helpers
-open scoped Nightlean
+open Noctium Noctium.Helpers
+open scoped Noctium
 
 namespace TypedWitness
 
@@ -33,9 +33,9 @@ def scalarProgram : Program := {
     {name := "seed", ty := .uint 255, visibility := .private}]}]
 }
 
-nightlean_witness_circuit scalarRelation from scalarProgram entry "scalar"
+noctium_witness_circuit scalarRelation from scalarProgram entry "scalar"
 
-nightlean_contract ScalarWitness where
+noctium_contract ScalarWitness where
   cell total : UInt 8
   entry claim uses scalarRelation where
     write total := result
@@ -67,9 +67,9 @@ def pairProgram : Program := {
       compositeInputs := [{name := "request", type := pairType, visibility := .private}]}]
 }
 
-nightlean_witness_circuit pairRelation from pairProgram entry "pair"
+noctium_witness_circuit pairRelation from pairProgram entry "pair"
 
-nightlean_contract PairWitness where
+noctium_contract PairWitness where
   cell total : UInt 8
   entry claim uses pairRelation where
     write total := cast(UInt 8, result.amount)
@@ -86,7 +86,7 @@ def emptyProgram : Program := {
   exports := [{name := "empty", target := ⟨0, 0⟩}]
 }
 
-nightlean_witness_circuit emptyRelation from emptyProgram entry "empty"
+noctium_witness_circuit emptyRelation from emptyProgram entry "empty"
 
 def unitProgram : Program := {
   witnesses := [{name := "unit", operation := "noctium.unit.v1", capability := "unit", result := .unit}]
@@ -95,12 +95,12 @@ def unitProgram : Program := {
   exports := [{name := "unit", target := ⟨0, 0⟩}]
 }
 
-nightlean_witness_circuit unitRelation from unitProgram entry "unit"
+noctium_witness_circuit unitRelation from unitProgram entry "unit"
 
-nightlean_control scalarHost from scalarProgram entry "scalar"
-nightlean_control pairHost from pairProgram entry "pair"
-nightlean_control emptyHost from emptyProgram entry "empty"
-nightlean_control unitHost from unitProgram entry "unit"
+noctium_control scalarHost from scalarProgram entry "scalar"
+noctium_control pairHost from pairProgram entry "pair"
+noctium_control emptyHost from emptyProgram entry "empty"
+noctium_control unitHost from unitProgram entry "unit"
 
 #guard (Witness.compile scalarProgram "scalar").isOk
 #guard (Witness.compile pairProgram "pair").isOk

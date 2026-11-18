@@ -90,5 +90,12 @@
     "full ZKIR v3 capability coverage",
     "public network acceptance",
     "formal end-to-end compiler correctness"
-  ]
+  ],
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "8254b7c5f44dcf4cd453284f8bc00e09d012ea4e7bf2901b5a09adadc34cdeec",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/scalars/localnet-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/scalars/localnet-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Historical record with labels normalized for display. Retained hashes qualify the original recorded source and implementation commits, not the current renamed source tree."
 }

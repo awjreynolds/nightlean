@@ -1,1 +1,95 @@
-{"compiler":{"implementation":"Lean4","sourceRevision":"b1afd9f4afa9525a5031820ab7eeaaddbee7e299","toolchain":"leanprover/lean4:v4.35.0"},"entries":[{"name":"tests/WitnessSource.lean","path":"source/tests/WitnessSource.lean","role":"source","sha256":"cc8bca1c7c09d4dd2565a29b8a037b45e21fa5519a320775caab00ed0fae8508","size":6923},{"name":"TypedWitness.ScalarWitness.claim.zkir","path":"circuit/entrypoint.zkir","role":"circuit","sha256":"2633a900cefbc639c58b1fea4b8b003c145f637854543239ac832c243a45a0f7","size":2745},{"name":"TypedWitness.ScalarWitness.claim.impact.json","path":"plan/entrypoint.impact.json","role":"plan","sha256":"0510799d2c7d7e647c1b5e593063964f4fc446c339ab4670ef45ec79161cfc31","size":5345},{"name":"nightlean.json","path":"schema/nightlean.json","role":"metadata","sha256":"ac8656feb37c037ce111b3eb1b2f4614713865a0aa5c6c8afe35274871ef3a2c","size":33768},{"name":"abi.schema.json","path":"schema/abi.schema.json","role":"abi","sha256":"41f15edf437b8bce0cfa0e4e23bad6e01fd586ca6e6fd27826bf98dc5d1481fb","size":61},{"name":"target.json","path":"profile/target.json","role":"profile","sha256":"02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093","size":528},{"name":"ledger.params","path":"parameters/ledger.params","role":"ledgerParameters","sha256":"6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679","size":791},{"name":"entrypoint.prover","path":"keys/entrypoint.prover","role":"proverKey","sha256":"6562daef72e883e917da3c1b717153e4be9e79b596625311ef476b9db9b3fba8","size":114299},{"name":"entrypoint.verifier","path":"keys/entrypoint.verifier","role":"verifierKey","sha256":"68158626b25f84549786a1b5f75d993b1a9ae02853e8a1dd4bc3fd08befc8482","size":1353},{"name":"native-zkir.json","path":"provenance/native-zkir.json","role":"toolchain","sha256":"dccec8838ddd4739ef31f5a3268aef62ea7e8eff498fe8b875ab1ed763dc663b","size":529},{"name":"TypedWitness.ScalarWitness.claim.witness.json","path":"witness/entrypoint.binding.json","role":"witnessBinding","sha256":"130d5471a12610fe0b8ad73300fb4d00c6ca480835c1b28daadf9a49d0f102a5","size":4308},{"name":"TypedWitness.ScalarWitness.claim.witness.control.json","path":"witness/entrypoint.control.json","role":"witnessControl","sha256":"d3af07dc7d3c8afcba3b1685079a48760b815ecd8f34f7a1a50219d12249dfd6","size":10246}],"kind":"nightlean-public-entrypoint-bundle","ledgerRevision":"a2b30128ca4b660b73a068e29b56b48ede8c9a74","profile":"midnight-ledger-9-zkir-3.2.1","schemaVersion":1,"stages":["lean-compilation","native-key-generation","public-bundle-assembly"],"zkirRevision":"7a51b3385bbf4bce3604df87a7c70867c9ab43c0"}
+{
+  "recordKind": "historical-public-bundle-manifest-summary",
+  "historicalStatus": "entry hashes identify the original bundle only",
+  "kind": "noctium-public-entrypoint-bundle",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "compilerSourceRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+  "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+  "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+  "entries": [
+    {
+      "name": "tests/WitnessSource.lean",
+      "role": "source",
+      "sha256": "cc8bca1c7c09d4dd2565a29b8a037b45e21fa5519a320775caab00ed0fae8508",
+      "size": 6923
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.zkir",
+      "role": "circuit",
+      "sha256": "2633a900cefbc639c58b1fea4b8b003c145f637854543239ac832c243a45a0f7",
+      "size": 2745
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.impact.json",
+      "role": "plan",
+      "sha256": "0510799d2c7d7e647c1b5e593063964f4fc446c339ab4670ef45ec79161cfc31",
+      "size": 5345
+    },
+    {
+      "name": "noctium.json",
+      "role": "metadata",
+      "sha256": "ac8656feb37c037ce111b3eb1b2f4614713865a0aa5c6c8afe35274871ef3a2c",
+      "size": 33768
+    },
+    {
+      "name": "abi.schema.json",
+      "role": "abi",
+      "sha256": "41f15edf437b8bce0cfa0e4e23bad6e01fd586ca6e6fd27826bf98dc5d1481fb",
+      "size": 61
+    },
+    {
+      "name": "target.json",
+      "role": "profile",
+      "sha256": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093",
+      "size": 528
+    },
+    {
+      "name": "ledger.params",
+      "role": "ledgerParameters",
+      "sha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
+      "size": 791
+    },
+    {
+      "name": "entrypoint.prover",
+      "role": "proverKey",
+      "sha256": "6562daef72e883e917da3c1b717153e4be9e79b596625311ef476b9db9b3fba8",
+      "size": 114299
+    },
+    {
+      "name": "entrypoint.verifier",
+      "role": "verifierKey",
+      "sha256": "68158626b25f84549786a1b5f75d993b1a9ae02853e8a1dd4bc3fd08befc8482",
+      "size": 1353
+    },
+    {
+      "name": "native-zkir.json",
+      "role": "toolchain",
+      "sha256": "dccec8838ddd4739ef31f5a3268aef62ea7e8eff498fe8b875ab1ed763dc663b",
+      "size": 529
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.witness.json",
+      "role": "witnessBinding",
+      "sha256": "130d5471a12610fe0b8ad73300fb4d00c6ca480835c1b28daadf9a49d0f102a5",
+      "size": 4308
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.witness.control.json",
+      "role": "witnessControl",
+      "sha256": "d3af07dc7d3c8afcba3b1685079a48760b815ecd8f34f7a1a50219d12249dfd6",
+      "size": 10246
+    }
+  ],
+  "stages": [
+    "lean-compilation",
+    "native-key-generation",
+    "public-bundle-assembly"
+  ],
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "8281374014c8a1901a6399be5fb792d03acf1350fd7483233594fd7b81a1fb73",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/witness62-public/bundles/321-scalar.manifest.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/witness62-public/bundles/321-scalar.manifest.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
+}

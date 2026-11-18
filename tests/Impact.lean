@@ -1,9 +1,9 @@
-import Nightlean.Backend.Impact
-import Nightlean.Claim
-import Nightlean.Backend.Zkir
+import Noctium.Backend.Impact
+import Noctium.Claim
+import Noctium.Backend.Zkir
 
-open Nightlean
-open Nightlean.Backend.Impact
+open Noctium
+open Noctium.Backend.Impact
 
 def main (args : List String) : IO Unit := do
   let ctx : EvalContext := {
@@ -22,7 +22,7 @@ def main (args : List String) : IO Unit := do
   unless plan.reads.length == 6 && plan.guards.length == 3 do
     throw (IO.userError "transcript read/guard count mismatch")
   if args == ["--zkir"] then
-    match Nightlean.Backend.Zkir.lowerEntrypoint contract.state entry with
+    match Noctium.Backend.Zkir.lowerEntrypoint contract.state entry with
     | .error d => throw (IO.userError d.message)
     | .ok json => IO.println json.compress
     return

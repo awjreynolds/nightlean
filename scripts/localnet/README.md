@@ -1,6 +1,6 @@
 # Isolated Noctium development chain
 
-The launcher uses the cached released Midnight node, native Rust toolkit, Proof Server 9, Indexer 4.4.101, and official Node.js relay images. The relay uses only Node's TCP API. Native contract funding and submission invoke the Rust toolkit executable. These commands do not invoke a source-language compiler or JavaScript contract adapter. The launcher creates only `nightlean-dev` containers and an internal network with the same name. Existing AuthZK containers and chains stay untouched.
+The launcher uses the cached released Midnight node, native Rust toolkit, Proof Server 9, Indexer 4.4.101, and official Node.js relay images. The relay uses only Node's TCP API. Native contract funding and submission invoke the Rust toolkit executable. These commands do not invoke a source-language compiler or JavaScript contract adapter. The launcher creates only `noctium-dev` containers and an internal network with the same name. Existing AuthZK containers and chains stay untouched.
 
 ```sh
 node scripts/localnet/stack.mjs up
@@ -20,11 +20,11 @@ Host endpoints bind loopback only:
 
 The public development genesis is `0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d`. The qualified runtime is `2001100`, transaction version `4`, network `undeployed`. The launcher checks the genesis and waits for node block one, proof-server health, and indexer readiness. Each container has a two-CPU and 3 GiB limit. The proof server allows two concurrent jobs.
 
-The writable proof parameter cache defaults to `/private/tmp/nightlean-proof-params`. The shared AuthZK cache is never mounted writable. Set `NIGHTLEAN_PROOF_CACHE` to another dedicated cache directory to run elsewhere. To bootstrap from public parameter files already verified by the pinned official toolchain, supply read-only source directories:
+The writable proof parameter cache defaults to `/private/tmp/noctium-proof-params`. The shared AuthZK cache is never mounted writable. Set `NOCTIUM_PROOF_CACHE` to another dedicated cache directory to run elsewhere. To bootstrap from public parameter files already verified by the pinned official toolchain, supply read-only source directories:
 
 ```sh
-NIGHTLEAN_PROOF_CACHE_SOURCE=/path/to/verified-public-parameters \
-NIGHTLEAN_PROOF_CACHE_EXTRA_SOURCE="$HOME/.cache/midnight/zk-params" \
+NOCTIUM_PROOF_CACHE_SOURCE=/path/to/verified-public-parameters \
+NOCTIUM_PROOF_CACHE_EXTRA_SOURCE="$HOME/.cache/midnight/zk-params" \
 node scripts/localnet/stack.mjs up
 ```
 
@@ -53,7 +53,7 @@ node scripts/localnet/receipt.mjs TX_HASH CONTRACT_ADDRESS ContractDeploy FROM_B
 node scripts/localnet/receipt.mjs TX_HASH CONTRACT_ADDRESS ContractCall FROM_BLOCK
 ```
 
-The observer uses the SDK helper's locked Polkadot API install. Set `NIGHTLEAN_WALLET_DEPENDENCIES` if that install lives outside `scripts/preview`. It requires the exact local genesis and runtime, a canonical finalized block, one matching ledger `TxApplied`, a matching contract event in the same extrinsic, and `midnight.sendMnTransaction`. A partial ledger outcome fails. The initial private-claim receipts are recorded in [`localnet-receipts.json`](../../docs/development/localnet-receipts.json).
+The observer uses the SDK helper's locked Polkadot API install. Set `NOCTIUM_WALLET_DEPENDENCIES` if that install lives outside `scripts/preview`. It requires the exact local genesis and runtime, a canonical finalized block, one matching ledger `TxApplied`, a matching contract event in the same extrinsic, and `midnight.sendMnTransaction`. A partial ledger outcome fails. The initial private-claim receipts are recorded in [`localnet-receipts.json`](../../docs/development/localnet-receipts.json).
 
 The setup follows the released local profile inspected in the sibling AuthZK project, especially `backend/preprod/release-smoke.mjs` and `backend/adapter/local.mjs`. Public upstream references: [Ledger 9](https://docs.midnight.network/relnotes/ledger-9), [proof-server installation](https://docs.midnight.network/getting-started/installation), and [local wallet funding](https://docs.midnight.network/guides/node-server-wallet).
 

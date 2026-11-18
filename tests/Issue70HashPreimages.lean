@@ -1,20 +1,20 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.NativeExpected
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.NativeExpected
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 open Lean
 
-nightlean_circuit issue70HashPreimages where
+noctium_circuit issue70HashPreimages where
   private secret : Bytes32
   private count : Native
   public expectedKey : Bytes32
   public expectedCredit : Bytes32
 end
 
-nightlean_contract Issue70HashPreimages where
+noctium_contract Issue70HashPreimages where
   map registered : Bytes32 => Bool
   entry register uses issue70HashPreimages where
     insert registered[disclose(persistentHashVector32([bytes32("ElGamal:secretToScalar"), secret]))] := true

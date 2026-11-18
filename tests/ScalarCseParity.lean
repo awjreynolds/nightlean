@@ -1,6 +1,6 @@
-import Nightlean.Backend.Zkir
+import Noctium.Backend.Zkir
 
-open Nightlean
+open Noctium
 
 private def name : String := "a\"\\b,(\"x\", \"y\")💠"
 private def left : Expr .native := .ref name

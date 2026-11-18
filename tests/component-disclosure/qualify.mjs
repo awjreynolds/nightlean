@@ -36,7 +36,7 @@ function compact(value) {
 }
 const vector = values => Buffer.concat([compact(values.length), ...values.map(compact)]);
 function preimage(privateInputs, publicOutputs) {
-  const location = Buffer.from('nightlean/component-disclosure/qualification');
+  const location = Buffer.from('noctium/component-disclosure/qualification');
   return Buffer.concat([Buffer.from('midnight:proof-preimage:'), vector([]), vector(privateInputs),
     vector(publicOutputs), vector([]), compact(42), Buffer.from([0]), compact(location.length), location]);
 }
@@ -67,7 +67,7 @@ const evidence = {
   changedProviderWitnessRejected: true
 };
 if (mode === 'prove') {
-  const server = new URL(process.env.NIGHTLEAN_PROOF_SERVER ?? 'http://127.0.0.1:16300');
+  const server = new URL(process.env.NOCTIUM_PROOF_SERVER ?? 'http://127.0.0.1:16300');
   assert.ok(['http:', 'https:'].includes(server.protocol) &&
     ['127.0.0.1', 'localhost', '[::1]'].includes(server.hostname) && !server.username && !server.password);
   const response = await fetch(new URL('/prove', server), {method: 'POST',

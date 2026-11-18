@@ -2,7 +2,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-cli="$PWD/.lake/build/bin/nightlean"
+cli="$PWD/.lake/build/bin/noctium"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
@@ -21,12 +21,12 @@ diff -r "$scratch/first" "$scratch/second"
 test -f "$scratch/first/claimRelation.zkir"
 test -f "$scratch/first/PrivateClaim.claim.zkir"
 test -f "$scratch/first/PrivateClaim.claim.impact.json"
-test -f "$scratch/first/nightlean.json"
-grep -F '"deployable": false' "$scratch/first/nightlean.json" > /dev/null
-grep -F '"ledger": "9.1.0.1"' "$scratch/first/nightlean.json" > /dev/null
-grep -F '"nativeCircuitFile": "PrivateClaim.claim.zkir"' "$scratch/first/nightlean.json" > /dev/null
-grep -F '"nativeCircuitQualified": false' "$scratch/first/nightlean.json" > /dev/null
-grep -F '"nativePlanFile": "PrivateClaim.claim.impact.json"' "$scratch/first/nightlean.json" > /dev/null
+test -f "$scratch/first/noctium.json"
+grep -F '"deployable": false' "$scratch/first/noctium.json" > /dev/null
+grep -F '"ledger": "9.1.0.1"' "$scratch/first/noctium.json" > /dev/null
+grep -F '"nativeCircuitFile": "PrivateClaim.claim.zkir"' "$scratch/first/noctium.json" > /dev/null
+grep -F '"nativeCircuitQualified": false' "$scratch/first/noctium.json" > /dev/null
+grep -F '"nativePlanFile": "PrivateClaim.claim.impact.json"' "$scratch/first/noctium.json" > /dev/null
 lake env lean --run tests/Impact.lean --zkir > "$scratch/reference.zkir"
 node --input-type=module - "$scratch/first/PrivateClaim.claim.zkir" "$scratch/reference.zkir" <<'JS'
 import { readFileSync } from 'node:fs';
@@ -47,29 +47,29 @@ deepStrictEqual(plan.operations[0], { op: 'push', storage: false, alignment: 'fi
 deepStrictEqual(plan.circuit.inputs.find(value => value.name === 'secret').visibility, 'private');
 deepStrictEqual(plan.circuit.outputs[0].expression, { tag: 'reference', name: 'suppliedNullifier' });
 ok(plan.circuit.constraints.length > 0);
-deepStrictEqual(plan.reads.map(value => value.name), ['root', 'campaign', 'suppliedNullifier', 'storedRoot', 'storedCampaign', '_nightlean_absence_5']);
+deepStrictEqual(plan.reads.map(value => value.name), ['root', 'campaign', 'suppliedNullifier', 'storedRoot', 'storedCampaign', '_noctium_absence_5']);
 JS
 
 cat > "$scratch/later-error.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit valid where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit valid where
   public value : Native
   output result : Native := value
 end
-nightlean_circuit invalid where
+noctium_circuit invalid where
   private secret : Native
   assert secret
 end
 LEAN
 expect_failure "$cli" compile "$scratch/later-error.lean" --output "$scratch/later-output"
-grep -F 'Nightlean expression type mismatch' "$scratch/stdout" > /dev/null
+grep -F 'Noctium expression type mismatch' "$scratch/stdout" > /dev/null
 test ! -e "$scratch/later-output"
 
 cat > "$scratch/traversal.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit «../escape» where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit «../escape» where
   public value : Native
   output result : Native := value
 end
@@ -80,13 +80,13 @@ test ! -e "$scratch/traversal-output"
 test ! -e "$scratch/escape.zkir"
 
 cat > "$scratch/entry-traversal.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit relation where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit relation where
   public value : Native
   output result : Native := value
 end
-nightlean_contract SafeContract where
+noctium_contract SafeContract where
   entry «../escape» uses relation where
   end
 end
@@ -96,15 +96,15 @@ grep -F 'not a safe artifact filename' "$scratch/stdout" > /dev/null
 test ! -e "$scratch/entry-traversal-output"
 
 cat > "$scratch/collision.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
+import Noctium.Frontend
+open scoped Noctium
 namespace Collision
-nightlean_circuit claim where
+noctium_circuit claim where
   public value : Native
   output result : Native := value
 end
 end Collision
-nightlean_contract Collision where
+noctium_contract Collision where
   entry claim uses Collision.claim where
   end
 end
@@ -115,13 +115,13 @@ test ! -e "$scratch/collision-output"
 
 cat > "$scratch/imported.lean" <<'LEAN'
 import examples.PrivateClaim
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit localRelation where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit localRelation where
   public value : Native
   output result : Native := value
 end
-nightlean_contract ImportedCircuitContract where
+noctium_contract ImportedCircuitContract where
   entry claim uses claimRelation where
   end
 end
@@ -136,7 +136,7 @@ grep -F 'references imported circuit' "$scratch/stdout" > /dev/null
 test ! -e "$scratch/imported-output"
 
 cat > "$scratch/empty.lean" <<'LEAN'
-import Nightlean.Frontend
+import Noctium.Frontend
 LEAN
 expect_failure "$cli" check "$scratch/empty.lean"
 expect_failure "$cli" check "$scratch/missing.lean"

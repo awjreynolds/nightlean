@@ -1,4 +1,4 @@
-//! Native execution of the bounded Nightlean plan schema. No process or JavaScript API.
+//! Native execution of the bounded Noctium plan schema. No process or JavaScript API.
 use crate::zkir::IrSource;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};

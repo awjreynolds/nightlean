@@ -8,7 +8,7 @@ This package qualifies the standalone `claimRelation.zkir` scalar relation. It d
 
 ## Independent model and source binding
 
-`Nightlean/Verification/NativeRelation.lean` defines canonical BLS12-381 scalars as `Fin Field.modulus`, typed operands, instruction constraints and ordered observations. An SSA witness is an arbitrary function from names to canonical scalars. It is not a source evaluation result, a `NativeExpected` normalization or a compiler-generated witness by definition.
+`Noctium/Verification/NativeRelation.lean` defines canonical BLS12-381 scalars as `Fin Field.modulus`, typed operands, instruction constraints and ordered observations. An SSA witness is an arbitrary function from names to canonical scalars. It is not a source evaluation result, a `NativeExpected` normalization or a compiler-generated witness by definition.
 
 `CircuitSatisfies` requires every instruction constraint, the exact ordered public/private input streams and the exact ordered public Impact groups. `Satisfies` additionally records host output observations. The distinction matters: upstream standalone `Output` appends host outputs but does not add a public proof instance when communications commitment is disabled. The actual claim's final Impact group independently authenticates its returned nullifier. The strongest soundness theorem assumes only `CircuitSatisfies` and derives the actual return's equality to that final public group.
 
@@ -59,7 +59,7 @@ The certificate covers the quoted JSON tree. Correspondence between original UTF
 
 Two valid native tree mutations must fail their checked certificate: swapping the first selector's arms and removing the root assertion. Module/import errors do not count. The regression requires an error at the actual kernel equality check. It exports the relevant proof/certificate closure, inspects actual exported axiom declarations and safe-definition flags, then replays the closure using `leanchecker --from-export`.
 
-A public [qualification summary](../../tests/private-claim-lowering-evidence.json) records the checked theorem/certificate export and native fixture observations. Retained development evidence lives under `.nightlean/audits/private-claim-lowering/`. The current source SHA256 is `5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771`. The fresh standalone artifact SHA256 is `c3a8c9aad701302d54e630961ff159a97e5957e699ae6fc14cc7d5aa78d3395c`. The checked export is about 38 MiB. All required theorem and certificate dependencies use only `propext`, `Classical.choice` and `Quot.sound`. Export hashes are recorded per run. These development hashes are not an authenticated release certificate.
+A public [qualification summary](../../tests/private-claim-lowering-evidence.json) records the checked theorem/certificate export and native fixture observations. Retained development evidence lives under `.noctium/audits/private-claim-lowering/`. The current source SHA256 is `5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771`. The fresh standalone artifact SHA256 is `c3a8c9aad701302d54e630961ff159a97e5957e699ae6fc14cc7d5aa78d3395c`. The checked export is about 38 MiB. All required theorem and certificate dependencies use only `propext`, `Classical.choice` and `Quot.sound`. Export hashes are recorded per run. These development hashes are not an authenticated release certificate.
 
 ## Native model qualification
 
@@ -68,7 +68,7 @@ Use the pinned official checker separately from the proofs:
 ```sh
 node tests/private-claim-lowering-checker.mjs \
   /path/to/official-3.2.1/midnight_zkir_wasm_fs.js \
-  .nightlean/audits/private-claim-lowering/emitted/claimRelation.zkir
+  .noctium/audits/private-claim-lowering/emitted/claimRelation.zkir
 ```
 
 An optional third argument points to the matching native CLI. It generates fresh keys and requests a standalone proof from the existing loopback proof server at `127.0.0.1:16300`, which verifies before returning success. This submits no ledger transaction.

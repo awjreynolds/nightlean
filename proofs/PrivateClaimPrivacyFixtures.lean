@@ -1,7 +1,7 @@
 import proofs.PrivateClaimNativePrivacy
 import tests.Verification
 
-namespace Nightlean.PrivateClaimPrivacyFixtures
+namespace Noctium.PrivateClaimPrivacyFixtures
 open Verification Verification.NativeRelation Verification.NativeState Verification.NativePrivacy
 
 /-- Reuse DF-00's explicitly authorized source release, adding its exact typed
@@ -75,4 +75,4 @@ theorem equal_hash_release_does_not_identify_secret :
 #print axioms authorized_release_privacy
 #print axioms successful_scope_has_failure_counterexample
 #print axioms constant_under_private_control_rejected
-end Nightlean.PrivateClaimPrivacyFixtures
+end Noctium.PrivateClaimPrivacyFixtures

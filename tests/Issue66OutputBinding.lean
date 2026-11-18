@@ -1,21 +1,21 @@
-import Nightlean.Frontend
-import Nightlean.Backend.Zkir
-import Nightlean.Verification.NativeRelationJson
-import Nightlean.Verification.GenericStateOps
-import Nightlean.Verification.GenericStateInputValues
-import Nightlean.Verification.GenericStateEncoding
+import Noctium.Frontend
+import Noctium.Backend.Zkir
+import Noctium.Verification.NativeRelationJson
+import Noctium.Verification.GenericStateOps
+import Noctium.Verification.GenericStateInputValues
+import Noctium.Verification.GenericStateEncoding
 
-open scoped Nightlean
-open Nightlean Nightlean.Verification
-open Nightlean.Verification.NativeRelation
-open Nightlean.Verification.NativeState
+open scoped Noctium
+open Noctium Noctium.Verification
+open Noctium.Verification.NativeRelation
+open Noctium.Verification.NativeState
 
-nightlean_circuit issue66OutputCircuit where
+noctium_circuit issue66OutputCircuit where
   public supplied : Native
   output selected : Native := add(supplied, 1)
 end
 
-nightlean_contract Issue66OutputState where
+noctium_contract Issue66OutputState where
   cell counter : Native
   entry apply uses issue66OutputCircuit where
     write counter := selected

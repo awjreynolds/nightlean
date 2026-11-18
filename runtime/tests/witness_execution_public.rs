@@ -1,7 +1,7 @@
 //! Public Rust ownership path. The ignored end-to-end test uses the same functional bundle and
 //! SRS as the native client qualification, while compiling against public crate APIs only.
 use futures::executor::block_on;
-use nightlean_runtime::{
+use noctium_runtime::{
     artifacts::{self, Role, VerifiedBundle},
     control::TypedResponse,
     host::{self, Capability, Context, Limits, Operation, Provider},
@@ -25,11 +25,11 @@ fn required_env(name: &str) -> String {
 }
 
 fn fixture() -> (VerifiedBundle, TrustedParameters) {
-    let root = required_env("NIGHTLEAN_WITNESS_PUBLIC_BUNDLE");
-    let manifest = required_env("NIGHTLEAN_WITNESS_PUBLIC_MANIFEST_SHA256");
+    let root = required_env("NOCTIUM_WITNESS_PUBLIC_BUNDLE");
+    let manifest = required_env("NOCTIUM_WITNESS_PUBLIC_MANIFEST_SHA256");
     let bundle = artifacts::verify(root.as_ref(), Some(&manifest)).unwrap();
-    let bytes = std::fs::read(required_env("NIGHTLEAN_WITNESS_PUBLIC_PARAMETERS")).unwrap();
-    let digest = required_env("NIGHTLEAN_WITNESS_PUBLIC_PARAMETERS_SHA256");
+    let bytes = std::fs::read(required_env("NOCTIUM_WITNESS_PUBLIC_PARAMETERS")).unwrap();
+    let digest = required_env("NOCTIUM_WITNESS_PUBLIC_PARAMETERS_SHA256");
     let parameters = TrustedParameters::from_bytes(&bytes, 7, &digest).unwrap();
     (bundle, parameters)
 }
@@ -58,7 +58,7 @@ fn same_degree_alternate_parameters(source: &[u8]) -> Vec<u8> {
 }
 
 fn alternate_parameters() -> TrustedParameters {
-    let source = std::fs::read(required_env("NIGHTLEAN_WITNESS_PUBLIC_ALT_PARAMETERS")).unwrap();
+    let source = std::fs::read(required_env("NOCTIUM_WITNESS_PUBLIC_ALT_PARAMETERS")).unwrap();
     let bytes = same_degree_alternate_parameters(&source);
     let digest = hex::encode(Sha256::digest(&bytes));
     TrustedParameters::from_bytes(&bytes, 7, &digest).unwrap()
@@ -127,20 +127,20 @@ fn source_context(plan: &Json, attempt_id: &str) -> Context {
         .into_iter()
         .map(|(id, (key_prefix, operations))| Capability {
             id,
-            namespace: "nightlean".into(),
+            namespace: "noctium".into(),
             key_prefix,
             operations: operations.into_iter().collect(),
         })
         .collect::<Vec<_>>();
     capabilities.push(Capability {
         id: "commit".into(),
-        namespace: "nightlean".into(),
+        namespace: "noctium".into(),
         key_prefix: "cache/".into(),
         operations: vec![host::CAS.into()],
     });
     Context {
         protocol_version: 1,
-        namespace: "nightlean".into(),
+        namespace: "noctium".into(),
         base_revision: "preview-r0".into(),
         attempt_id: attempt_id.into(),
         capabilities,
@@ -202,7 +202,7 @@ fn descriptor() -> Json {
     json!({
         "abiVersion": 1,
         "policy": {
-            "networkId": "nightlean-test",
+            "networkId": "noctium-test",
             "genesis": "8".repeat(64),
             "specVersion": 2001100,
             "transactionVersion": 4,
@@ -221,12 +221,12 @@ fn descriptor() -> Json {
 fn deployment_context(attempt_id: &str) -> Context {
     Context {
         protocol_version: 1,
-        namespace: "nightlean-deploy".into(),
+        namespace: "noctium-deploy".into(),
         base_revision: "deployment-r0".into(),
         attempt_id: attempt_id.into(),
         capabilities: vec![Capability {
             id: "commit".into(),
-            namespace: "nightlean-deploy".into(),
+            namespace: "noctium-deploy".into(),
             key_prefix: "deploy/".into(),
             operations: vec![host::CAS.into()],
         }],

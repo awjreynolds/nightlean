@@ -1,8 +1,8 @@
 # Direct ledger transcript conformance
 
 The Lean native backend compiles the private claim relation and state guards
-without Compact. `Nightlean.Backend.Impact.lower` builds a symbolic native VM
-plan. `Nightlean.Backend.Zkir.lowerEntrypoint` binds its complete field encoding,
+without Compact. `Noctium.Backend.Impact.lower` builds a symbolic native VM
+plan. `Noctium.Backend.Zkir.lowerEntrypoint` binds its complete field encoding,
 including opcodes, alignments, keys, read results, and write values.
 The relation emits one Impact group for each native VM operation. The checker
 returns one activity entry per group, which transaction proving consumes in
@@ -23,7 +23,7 @@ parameters. A state read alone does not enforce either comparison.
 Run from the repository root with the pinned Lean toolchain:
 
 ```sh
-lake build Nightlean.Backend.Zkir Nightlean.Claim
+lake build Noctium.Backend.Zkir Noctium.Claim
 mkdir -p build/direct-impact
 lake env lean --run tests/Impact.lean > build/direct-impact/operations.json
 lake env lean --run tests/Impact.lean --zkir > build/direct-impact/claim.zkir

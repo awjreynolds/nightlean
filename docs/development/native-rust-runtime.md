@@ -59,12 +59,12 @@ The artifact directory used by the probe contains `source-plan.json`, `runtime-c
 The verified isolated toolchain command was:
 
 ```sh
-RUSTUP_HOME=/private/tmp/nightlean-rustup \
-CARGO_HOME=/private/tmp/nightlean-cargo \
-CARGO_TARGET_DIR=/private/tmp/nightlean-rust-runtime-target \
-/private/tmp/nightlean-cargo/bin/cargo +1.100.0 run \
+RUSTUP_HOME=/private/tmp/noctium-rustup \
+CARGO_HOME=/private/tmp/noctium-cargo \
+CARGO_TARGET_DIR=/private/tmp/noctium-rust-runtime-target \
+/private/tmp/noctium-cargo/bin/cargo +1.100.0 run \
   --manifest-path runtime/Cargo.toml --locked -- \
-  /private/tmp/nightlean-native-actual-source/final-artifacts
+  /private/tmp/noctium-native-actual-source/final-artifacts
 ```
 
 An optional `--write-checker-preimage PRIVATE_FILE` writes the diagnostic preimage to a new file with mode 0600 on Unix. The file contains witness values and stays outside the public artifact bundle. The CLI refuses overwriting an existing file and does not print witnesses or their raw serialization.

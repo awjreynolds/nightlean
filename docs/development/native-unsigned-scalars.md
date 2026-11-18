@@ -1,6 +1,6 @@
 # Native unsigned scalar slice
 
-The Rust evaluator and C ABI implement the scalar rules in `Nightlean/ScalarPolicy.lean`. This extends the existing Native/Bool representation. It adds no Compact runtime or compiler dependency.
+The Rust evaluator and C ABI implement the scalar rules in `Noctium/ScalarPolicy.lean`. This extends the existing Native/Bool representation. It adds no Compact runtime or compiler dependency.
 
 Normalized plan types use `UIntRange<N>`, with a canonical decimal exclusive bound `1 <= N <= 2^248`. Runtime values use canonical decimal JSON strings in `[0,N)`. JSON numbers, signed strings, redundant leading zeroes and string booleans reject. The inclusive maximum is `N-1`. The supported source forms UInt width and UIntRange bound normalize before reaching the runtime. User-defined type aliases remain outside this slice.
 
@@ -30,9 +30,9 @@ The bounded ZKIR whitelist now includes `neg`, `not`, `constrain_eq`, `constrain
 The linked C++ harness also executes this source-generated fixture through typed providers. Reuse the qualified native fixture's parameters/address to prepare both public envelopes:
 
 ```sh
-python3 runtime/tests/prepare_abi_fixture.py "$QUALIFIED_ARTIFACTS" /tmp/nightlean-abi-public.json
-python3 runtime/tests/prepare_abi_fixture.py "$QUALIFIED_ARTIFACTS" /tmp/nightlean-abi-unsigned.json --unsigned-fixture
-env -i PATH=/usr/bin:/bin /tmp/nightlean-cpp-smoke /tmp/nightlean-abi-public.json /tmp/nightlean-abi-unsigned.json
+python3 runtime/tests/prepare_abi_fixture.py "$QUALIFIED_ARTIFACTS" /tmp/noctium-abi-public.json
+python3 runtime/tests/prepare_abi_fixture.py "$QUALIFIED_ARTIFACTS" /tmp/noctium-abi-unsigned.json --unsigned-fixture
+env -i PATH=/usr/bin:/bin /tmp/noctium-cpp-smoke /tmp/noctium-abi-public.json /tmp/noctium-abi-unsigned.json
 ```
 
 Build/link commands are in [native-runtime-abi.md](native-runtime-abi.md). The unsigned test supplies both private values from C++, verifies canonical/range/type response rejection, and obtains public result 510 after official checking. The original claim and its invalid/replay checks remain the Native/Bool regression.

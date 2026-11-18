@@ -1,6 +1,6 @@
-import Nightlean.Semantics
+import Noctium.Semantics
 
-open Nightlean
+open Noctium
 
 private def caps : Capabilities := {stateCells := true, stateMaps := true}
 private def ctx : EvalContext := {

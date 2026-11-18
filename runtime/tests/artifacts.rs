@@ -1,4 +1,4 @@
-use nightlean_runtime::artifacts::{
+use noctium_runtime::artifacts::{
     self, ContractBundleSet, Manifest, Recipe, Role, Selection, VerifiedBundle,
 };
 use serde_json::{Value, json};
@@ -15,23 +15,23 @@ struct Fixture {
 impl Fixture {
     fn new() -> Self {
         let root = std::env::temp_dir().join(format!(
-            "nightlean-artifact-tests-{}-{}",
+            "noctium-artifact-tests-{}-{}",
             std::process::id(),
             NEXT.fetch_add(1, Ordering::Relaxed)
         ));
         fs::create_dir(&root).unwrap();
         let root = fs::canonicalize(root).unwrap();
         let fixture = Self { root };
-        fs::write(fixture.path("Contract.lean"), b"import Nightlean\n").unwrap();
+        fs::write(fixture.path("Contract.lean"), b"import Noctium\n").unwrap();
         fs::write(fixture.path("entry.zkir"), json!({"version":{"major":3,"minor":2},"do_communications_commitment":true,"instructions":[]}).to_string()).unwrap();
         let circuit = json!({"name":"relation","file":"relation.zkir","inputs":[],"outputs":[],"constraints":[]});
         fs::write(fixture.path("entry.impact.json"), json!({"schemaVersion":1,"nativeCircuitFile":"Contract.call.zkir","contractName":"Contract","entrypoint":"call","operations":[],"reads":[],"state":[],"circuit":circuit}).to_string()).unwrap();
-        let profile = nightlean_runtime::profile::target_json();
+        let profile = noctium_runtime::profile::target_json();
         fs::write(fixture.path("target.json"), profile.to_string()).unwrap();
-        fs::write(fixture.path("nightlean.json"), json!({"schemaVersion":1,"target":nightlean_runtime::profile::NAME,"targetProfile":profile,"contracts":[{"name":"Contract","state":[],"entrypoints":[{"name":"call","circuit":"relation","nativeCircuitFile":"Contract.call.zkir","nativePlanFile":"Contract.call.impact.json"}]}],"circuits":[circuit]}).to_string()).unwrap();
+        fs::write(fixture.path("noctium.json"), json!({"schemaVersion":1,"target":noctium_runtime::profile::NAME,"targetProfile":profile,"contracts":[{"name":"Contract","state":[],"entrypoints":[{"name":"call","circuit":"relation","nativeCircuitFile":"Contract.call.zkir","nativePlanFile":"Contract.call.impact.json"}]}],"circuits":[circuit]}).to_string()).unwrap();
         fs::write(
-            fixture.path("nightlean_runtime.h"),
-            b"#define NIGHTLEAN_ABI_VERSION 1u\nint nightlean_session_begin(void);\n",
+            fixture.path("noctium_runtime.h"),
+            b"#define NOCTIUM_ABI_VERSION 1u\nint noctium_session_begin(void);\n",
         )
         .unwrap();
         fs::write(fixture.path("ledger.params"), b"public ledger parameters").unwrap();
@@ -46,15 +46,15 @@ impl Fixture {
             let mut plan: serde_json::Value =
                 serde_json::from_slice(&fs::read(fixture.path("entry.impact.json")).unwrap())
                     .unwrap();
-            plan["target"] = json!(nightlean_runtime::profile::NAME);
+            plan["target"] = json!(noctium_runtime::profile::NAME);
             plan["targetProfile"] = profile;
             fs::write(fixture.path("entry.impact.json"), plan.to_string()).unwrap();
             let mut tool: serde_json::Value =
                 serde_json::from_slice(&fs::read(fixture.path("tool.json")).unwrap()).unwrap();
-            tool["revision"] = json!(nightlean_runtime::profile::REVISION);
-            tool["requestedVersion"] = json!(nightlean_runtime::profile::RELEASE);
-            tool["releaseLabel"] = json!(nightlean_runtime::profile::RELEASE);
-            tool["expectedCliVersion"] = json!(nightlean_runtime::profile::CRATE_VERSION);
+            tool["revision"] = json!(noctium_runtime::profile::REVISION);
+            tool["requestedVersion"] = json!(noctium_runtime::profile::RELEASE);
+            tool["releaseLabel"] = json!(noctium_runtime::profile::RELEASE);
+            tool["expectedCliVersion"] = json!(noctium_runtime::profile::CRATE_VERSION);
             fs::write(fixture.path("tool.json"), tool.to_string()).unwrap();
         }
         fixture
@@ -70,8 +70,8 @@ impl Fixture {
                 self.selection(Role::Source, "examples/Contract.lean", "Contract.lean"),
                 self.selection(Role::Circuit, "Contract.call.zkir", "entry.zkir"),
                 self.selection(Role::Plan, "Contract.call.impact.json", "entry.impact.json"),
-                self.selection(Role::Metadata, "nightlean.json", "nightlean.json"),
-                self.selection(Role::Abi, "nightlean_runtime.h", "nightlean_runtime.h"),
+                self.selection(Role::Metadata, "noctium.json", "noctium.json"),
+                self.selection(Role::Abi, "noctium_runtime.h", "noctium_runtime.h"),
                 self.selection(Role::Profile, "target.json", "target.json"),
                 self.selection(Role::LedgerParameters, "ledger.params", "ledger.params"),
                 self.selection(Role::ProverKey, "entrypoint.prover", "entry.prover"),
@@ -113,7 +113,7 @@ impl Fixture {
             serde_json::from_slice(&fs::read(self.path("entry.impact.json")).unwrap()).unwrap();
         let circuit = base["circuit"].clone();
         let mut metadata: Value =
-            serde_json::from_slice(&fs::read(self.path("nightlean.json")).unwrap()).unwrap();
+            serde_json::from_slice(&fs::read(self.path("noctium.json")).unwrap()).unwrap();
         metadata["contracts"][0]["state"] = state.clone();
         metadata["contracts"][0]["entrypoints"] = json!(
             operations
@@ -126,7 +126,7 @@ impl Fixture {
                 }))
                 .collect::<Vec<_>>()
         );
-        fs::write(self.path("nightlean.json"), metadata.to_string()).unwrap();
+        fs::write(self.path("noctium.json"), metadata.to_string()).unwrap();
         for operation in operations {
             let circuit_name = format!("Contract.{operation}.zkir");
             let plan_name = format!("Contract.{operation}.impact.json");
@@ -147,7 +147,7 @@ impl Fixture {
             fs::write(self.path(&plan_name), plan.to_string()).unwrap();
         }
         metadata["circuits"] = json!([circuit]);
-        fs::write(self.path("nightlean.json"), metadata.to_string()).unwrap();
+        fs::write(self.path("noctium.json"), metadata.to_string()).unwrap();
     }
     fn verified_operation(
         &self,
@@ -179,17 +179,17 @@ fn witness_recipe(fixture: &Fixture) -> Recipe {
     let binding = json!({
         "schemaVersion":1,"kind":"typed-witness-bindings","circuitName":"relation","sourceExport":"main",
         "target":{"kind":"entrypoint","contractName":"Contract","entrypoint":"call",
-            "nativeCircuitFile":"Contract.call.zkir","targetProfile":nightlean_runtime::profile::NAME},
+            "nativeCircuitFile":"Contract.call.zkir","targetProfile":noctium_runtime::profile::NAME},
         "types":[],"signatures":[],"inputBindings":[],"circuitInputs":[],"circuitOutputs":[],"calls":[],
         "nativeRelation":relation
     });
     write_witness_pair(fixture, &binding);
     let mut metadata: serde_json::Value =
-        serde_json::from_slice(&fs::read(fixture.path("nightlean.json")).unwrap()).unwrap();
+        serde_json::from_slice(&fs::read(fixture.path("noctium.json")).unwrap()).unwrap();
     metadata["hostWitnessPlans"] = json!([{"circuit":"relation","bindingFile":"Contract.call.witness.json",
         "controlFile":"Contract.call.witness.control.json","target":"entrypoint","contract":"Contract",
         "entrypoint":"call","nativeWitnessQualified":false}]);
-    fs::write(fixture.path("nightlean.json"), metadata.to_string()).unwrap();
+    fs::write(fixture.path("noctium.json"), metadata.to_string()).unwrap();
     let mut recipe = fixture.recipe();
     recipe.files.push(fixture.selection(
         Role::WitnessBinding,
@@ -254,9 +254,9 @@ fn missing_unreferenced_or_mismatched_witness_pair_rejects() {
 
     let recipe = witness_recipe(&fixture);
     let mut metadata: serde_json::Value =
-        serde_json::from_slice(&fs::read(fixture.path("nightlean.json")).unwrap()).unwrap();
+        serde_json::from_slice(&fs::read(fixture.path("noctium.json")).unwrap()).unwrap();
     metadata.as_object_mut().unwrap().remove("hostWitnessPlans");
-    fs::write(fixture.path("nightlean.json"), metadata.to_string()).unwrap();
+    fs::write(fixture.path("noctium.json"), metadata.to_string()).unwrap();
     assert_eq!(
         failure(artifacts::assemble(recipe, &fixture.path("unreferenced"))),
         "plan_mismatch"
@@ -361,7 +361,7 @@ fn assembly_is_canonical_order_independent_and_retains_verified_bytes() {
     .unwrap();
     assert_eq!(
         bundle.source("examples/Contract.lean").unwrap(),
-        b"import Nightlean\n"
+        b"import Noctium\n"
     );
     assert_eq!(
         failure(artifacts::assemble(
@@ -704,8 +704,8 @@ fn symlinks_in_sources_payloads_or_bundle_roots_reject() {
 fn manifest_consumer_rejects_other_linked_native_profile() {
     let fixture = Fixture::new();
     let mut manifest = fixture.assemble("selected");
-    assert_eq!(manifest.zkir_revision, nightlean_runtime::profile::REVISION);
-    assert_eq!(manifest.profile, nightlean_runtime::profile::NAME);
+    assert_eq!(manifest.zkir_revision, noctium_runtime::profile::REVISION);
+    assert_eq!(manifest.profile, noctium_runtime::profile::NAME);
     manifest.profile = if cfg!(feature = "zkir-321") {
         "midnight-ledger-9"
     } else {
@@ -985,7 +985,7 @@ fn contract_bundle_set_requires_shared_authority_metadata_source_and_parameters(
     );
     fs::write(
         fixture.path("Contract.lean"),
-        b"import Nightlean\n-- changed source\n",
+        b"import Noctium\n-- changed source\n",
     )
     .unwrap();
     let second = fixture.verified_operation(
@@ -1098,10 +1098,10 @@ fn selected_entrypoint_association_mismatch_rejects_before_set_creation() {
     let operations = ["claim", "claimAlias"];
     fixture.configure_operations(&operations, &json!([]));
     let mut metadata: Value =
-        serde_json::from_slice(&fs::read(fixture.path("nightlean.json")).unwrap()).unwrap();
+        serde_json::from_slice(&fs::read(fixture.path("noctium.json")).unwrap()).unwrap();
     metadata["contracts"][0]["entrypoints"][0]["nativeCircuitFile"] =
         json!("Contract.claimAlias.zkir");
-    fs::write(fixture.path("nightlean.json"), metadata.to_string()).unwrap();
+    fs::write(fixture.path("noctium.json"), metadata.to_string()).unwrap();
     assert_eq!(
         failure(artifacts::assemble(
             fixture.operation_recipe("claim", &"c".repeat(40)),

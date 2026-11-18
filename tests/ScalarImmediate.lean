@@ -1,8 +1,8 @@
-import Nightlean.Verification.ScalarImmediate
+import Noctium.Verification.ScalarImmediate
 
 namespace ScalarImmediateTests
 
-open Nightlean Nightlean.Backend Nightlean.Verification
+open Noctium Noctium.Backend Noctium.Verification
 
 example : Zkir.fieldImmediate 0 = "0x00" := by decide
 example : Zkir.fieldImmediate 1 = "0x01" := by decide
@@ -31,8 +31,8 @@ example (state : Native.State) (number : Nat) (canonical : number < Field.modulu
       .ok {term := .constant number, maximum := number} :=
   ScalarImmediate.operand_fieldImmediate_exact state number canonical
 
-#print axioms Nightlean.Verification.ScalarImmediate.fieldImmediate_exact
-#print axioms Nightlean.Verification.ScalarImmediate.decode_fieldImmediate_exact
-#print axioms Nightlean.Verification.ScalarImmediate.decodeOperand_fieldImmediate_exact
+#print axioms Noctium.Verification.ScalarImmediate.fieldImmediate_exact
+#print axioms Noctium.Verification.ScalarImmediate.decode_fieldImmediate_exact
+#print axioms Noctium.Verification.ScalarImmediate.decodeOperand_fieldImmediate_exact
 
 end ScalarImmediateTests

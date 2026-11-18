@@ -1,7 +1,7 @@
 #![cfg(all(feature = "localnet", feature = "zkir-321"))]
 //! Public-only adversarial joins against real audited source/key/deployment fixtures.
 use futures::executor::block_on;
-use nightlean_runtime::{
+use noctium_runtime::{
     Db,
     artifacts::{self, Role},
     deployment_audit::{self as audit, DeploymentRecord, Specification},
@@ -179,7 +179,7 @@ fn actual_public_identity_join_rejects_refreshed_manifests_and_revision_mutants(
         let mut bad = native.clone();
         let mut init = spec.initialization.clone();
         init.insert("acceptedRoot".into(), json!("0"));
-        bad.data = nightlean_runtime::create_state(&material.plan, &init).unwrap();
+        bad.data = noctium_runtime::create_state(&material.plan, &init).unwrap();
         assert!(
             material
                 .check_initial(&audit::encode(&bad).unwrap())

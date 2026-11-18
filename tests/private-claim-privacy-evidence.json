@@ -16,7 +16,7 @@
   "compiledContractVerified": false,
   "compilerBuildAuthenticated": false,
   "deployedIdentityAuthenticated": false,
-  "developmentEvidenceDirectory": ".nightlean/audits/private-claim-privacy/",
+  "developmentEvidenceDirectory": ".noctium/audits/private-claim-privacy/",
   "excludedObservables": [
     "rejected outcomes",
     "termination",
@@ -98,13 +98,13 @@
   ],
   "observer": "successfulClaimPublicTranscriptV1",
   "planSha256": "178c375ebbd2ea424a732b928d42b4f04c26159ab5cf3c1b8f83ad62b9664c42",
-  "policy": "Nightlean.PrivateClaimNativePrivacy.policy",
+  "policy": "Noctium.PrivateClaimNativePrivacy.policy",
   "policyMutantsRejected": [
     "WrongScope",
     "WrongRelease",
     "FunctionalOnly"
   ],
-  "privacyProof": "Nightlean.PrivateClaimNativePrivacy.privacy",
+  "privacyProof": "Noctium.PrivateClaimNativePrivacy.privacy",
   "proofByteZeroKnowledgeProved": false,
   "proofExportSha256": "5142efdcb62dd8efbae14f18e81a6245bf7f036651ce44716e464e68e191cb73",
   "remainingRequiredLinks": [
@@ -115,7 +115,7 @@
   "snapshot": {
     "base": "a3b61dc525291877dc094a4e247f22f01fe15211",
     "overlayFiles": [
-      "Nightlean/Verification/NativePrivacy.lean",
+      "Noctium/Verification/NativePrivacy.lean",
       "proofs/PrivateClaimNativePrivacy.lean",
       "proofs/PrivateClaimPrivacyFixtures.lean",
       "scripts/proofs/AuditNativePrivacyExport.lean",
@@ -124,7 +124,7 @@
       "docs/development/private-claim-native-privacy-proofs.md"
     ],
     "overlaySha256": {
-      "Nightlean/Verification/NativePrivacy.lean": "2266ed16b67ffe03fafbc3f5ea6cd9da2688f7c8941743719a6757752b6fa0ea",
+      "Noctium/Verification/NativePrivacy.lean": "2266ed16b67ffe03fafbc3f5ea6cd9da2688f7c8941743719a6757752b6fa0ea",
       "docs/development/private-claim-native-privacy-proofs.md": "26e81d10ec5c1d2ad008b63a5d4b44536ca0c3e6fd0e3233e4934e77f0805710",
       "proofs/PrivateClaimNativePrivacy.lean": "1b701490910919e75a9ea53e714f3f3b7e4105ac4dbf8db68062b4ccb278d769",
       "proofs/PrivateClaimPrivacyFixtures.lean": "91d35b42f85583f12a909f1a5b5524d8493e6d18f3bb6df739eae0ef5ad7b9ee",
@@ -134,7 +134,7 @@
     },
     "worktreeUnpublishedNonPrivacyChangesIncluded": false
   },
-  "sourcePolicy": "Nightlean.PrivateClaimVerification.policy",
+  "sourcePolicy": "Noctium.PrivateClaimVerification.policy",
   "sourceSha256": "5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771",
   "specificationReviewVerified": false,
   "staleChangedSourceRejected": true,
@@ -151,13 +151,20 @@
     "exactArtifactByteBuildBindingVerified": false,
     "nativePrivacyChecked": true,
     "observer": "successfulClaimPublicTranscriptV1",
-    "policy": "Nightlean.PrivateClaimNativePrivacy.policy",
-    "privacyProof": "Nightlean.PrivateClaimNativePrivacy.privacy",
+    "policy": "Noctium.PrivateClaimNativePrivacy.policy",
+    "privacyProof": "Noctium.PrivateClaimNativePrivacy.privacy",
     "proofByteZeroKnowledgeProved": false,
     "scope": "successful-valid-executions-only",
     "sourceFunctionalChecked": true,
-    "sourcePolicy": "Nightlean.PrivateClaimVerification.policy",
+    "sourcePolicy": "Noctium.PrivateClaimVerification.policy",
     "sourcePrivacyChecked": true,
     "status": "native-scoped-privacy-checked"
-  }
+  },
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "b0c4bdf3762d52aad4c0fc4d00df35c6358b908d758495024e44f08506116507",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/private-claim-privacy-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/private-claim-privacy-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

@@ -13,7 +13,7 @@ export async function observeLocalReceipt({ txHash, address, event, fromBlock })
   txHash = txHash.toLowerCase();
   address = address.toLowerCase().replace(/^0x/, '');
   if (!hashPattern.test(txHash) || !/^[0-9a-f]{64}$/.test(address) || !['ContractDeploy', 'ContractCall'].includes(event)) throw new Error('Invalid expected transaction, address, or event');
-  const dependencies = resolve(process.env.NIGHTLEAN_WALLET_DEPENDENCIES ?? fileURLToPath(new URL('../preview/', import.meta.url)));
+  const dependencies = resolve(process.env.NOCTIUM_WALLET_DEPENDENCIES ?? fileURLToPath(new URL('../preview/', import.meta.url)));
   const require = createRequire(join(dependencies, 'package.json'));
   const { ApiPromise, WsProvider } = require('@polkadot/api');
   const provider = new WsProvider('ws://127.0.0.1:19944', false, {}, 5000);

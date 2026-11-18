@@ -10,9 +10,9 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-NS = "Nightlean.PrivateClaimVerification"
+NS = "Noctium.PrivateClaimVerification"
 MODULE = "proofs.PrivateClaimVerification"
-MODEL_ROOTS = ["Nightlean.Verification.FunctionalObligation", "Nightlean.Verification.PrivacyObligation",
+MODEL_ROOTS = ["Noctium.Verification.FunctionalObligation", "Noctium.Verification.PrivacyObligation",
                f"{NS}.policy", "PrivateClaimAuditNegative.wrongPolicy", "propext", "Classical.choice", "Quot.sound"]
 
 
@@ -25,7 +25,7 @@ def run(args: list[str], env: dict[str, str] | None = None, stdin: str | None = 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / ".nightlean/audits/private-claim-source")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / ".noctium/audits/private-claim-source")
     parser.add_argument("--trusted-model-export", type=Path)
     parser.add_argument("--trusted-model-sha256")
     args = parser.parse_args()
@@ -33,8 +33,8 @@ def main() -> int:
         parser.error("external model export and SHA256 must be supplied together")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    run(["lake", "build", "Nightlean", "Nightlean.Frontend", "Nightlean.Verification.ExportAudit"])
-    with tempfile.TemporaryDirectory(prefix="nightlean-private-claim-audit-") as directory:
+    run(["lake", "build", "Noctium", "Noctium.Frontend", "Noctium.Verification.ExportAudit"])
+    with tempfile.TemporaryDirectory(prefix="noctium-private-claim-audit-") as directory:
         scratch = Path(directory)
         imports = scratch / "imports"
         for subdir in ["examples", "proofs"]:
@@ -65,7 +65,7 @@ def main() -> int:
         (output / "direct-axioms.txt").write_text(report)
         assert report.count("depends on axioms: [propext, Classical.choice, Quot.sound]") == 2, report
         negative = '''import proofs.PrivateClaimVerification
-open Nightlean Nightlean.Verification Nightlean.PrivateClaimVerification
+open Noctium Noctium.Verification Noctium.PrivateClaimVerification
 namespace PrivateClaimAuditNegative
 def wrongPolicy : AuditPolicy :=
   {policy with subject := {subject with specification := {specification with postcondition := fun _ _ _ _ _ => True}}}

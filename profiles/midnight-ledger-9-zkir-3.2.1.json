@@ -4,7 +4,7 @@
   "name": "midnight-ledger-9-zkir-3.2.1",
   "qualification": "native-claim-localnet-qualified-only",
   "defaultTargetChanged": false,
-  "acceptedByNightleanTargetSelector": false,
+  "acceptedByNoctiumTargetSelector": false,
   "ledger": "9.1.0.1",
   "zkir": "3.2.1",
   "circuits": "7.3.0",

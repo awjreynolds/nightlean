@@ -1,13 +1,13 @@
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit emptyCircuit where
+noctium_circuit emptyCircuit where
 end
 
-nightlean_contract OrderedState where
+noctium_contract OrderedState where
   cell counter : Native
   cell untouched : Native
   cell flag : Bool

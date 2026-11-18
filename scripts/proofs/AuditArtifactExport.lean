@@ -1,8 +1,8 @@
-import Nightlean.Verification.ArtifactCertificate
+import Noctium.Verification.ArtifactCertificate
 import Lean.Replay
 import LeanExport.Parse
 
-open Lean Nightlean.Verification Nightlean.Verification.ArtifactCertificate
+open Lean Noctium.Verification Noctium.Verification.ArtifactCertificate
 
 private def load (path : System.FilePath) : IO LeanExport.ExportedEnv := do
   unless (← path.metadata).byteSize ≤ 96 * 1024 * 1024 do throw <| IO.userError "export_limit"
@@ -97,13 +97,13 @@ def main (args : List String) : IO UInt32 := do
     let authorityBytes ← IO.FS.readFile authorityPath
     let .ok authority := Json.parse authorityBytes | throw <| IO.userError "invalid_trusted_authority"
     for root in Audit.approvedAxioms ++ [``ArtifactBytes.parse, ``Authenticated, ``selectedProfile,
-        ← name "Nightlean.PrivateClaimArtifacts.Certified",
-        ← name "Nightlean.PrivateClaimArtifacts.FunctionalPreservation",
-        ← name "Nightlean.PrivateClaimArtifacts.EligibleCompleteness",
-        ← name "Nightlean.PrivateClaimNativePrivacy.NativePrivacyObligation",
-        ← name "Nightlean.PrivateClaimNativePrivacy.policy",
-        ← name "Nightlean.PrivateClaimNativePrivacy.actualObserve",
-        ← name "Nightlean.PrivateClaimVerification.policy"] do
+        ← name "Noctium.PrivateClaimArtifacts.Certified",
+        ← name "Noctium.PrivateClaimArtifacts.FunctionalPreservation",
+        ← name "Noctium.PrivateClaimArtifacts.EligibleCompleteness",
+        ← name "Noctium.PrivateClaimNativePrivacy.NativePrivacyObligation",
+        ← name "Noctium.PrivateClaimNativePrivacy.policy",
+        ← name "Noctium.PrivateClaimNativePrivacy.actualObserve",
+        ← name "Noctium.PrivateClaimVerification.policy"] do
       unless model.constMap.contains root do throw <| IO.userError s!"missing_trusted_model_root: {root}"
     let environment ← replay model.constMap candidate.constMap
     let certificateNamespace := "PrivateClaimArtifactCertificate."
@@ -120,19 +120,19 @@ def main (args : List String) : IO UInt32 := do
         (← bytesTerm (System.FilePath.mk candidateDirectory / file)) s!"retained_byte_mismatch: {file}"
       equality environment (← bytesTerm (System.FilePath.mk candidateDirectory / file))
         (← bytesTerm (System.FilePath.mk expectedDirectory / file)) s!"trusted_build_byte_mismatch: {file}"
-    let certified ← name "Nightlean.PrivateClaimArtifacts.Certified"
+    let certified ← name "Noctium.PrivateClaimArtifacts.Certified"
     let required := mkAppN (mkConst certified) #[mkConst authorityName, mkConst buildName, mkConst sourceName,
       mkConst (← name (certificateNamespace ++ "standaloneBytes")), mkConst (← name (certificateNamespace ++ "planBytes")),
       mkConst (← name (certificateNamespace ++ "callBytes")), mkConst (← name (certificateNamespace ++ "profileBytes"))]
     let mut axioms ← proof environment (← name (certificateNamespace ++ "certified")) required
-    for (policyText, proofText, role) in [("Nightlean.PrivateClaimVerification.policy", "Nightlean.PrivateClaimVerification.functional", Audit.Role.functional),
-        ("Nightlean.PrivateClaimVerification.policy", "Nightlean.PrivateClaimVerification.privacy", Audit.Role.privacy)] do
+    for (policyText, proofText, role) in [("Noctium.PrivateClaimVerification.policy", "Noctium.PrivateClaimVerification.functional", Audit.Role.functional),
+        ("Noctium.PrivateClaimVerification.policy", "Noctium.PrivateClaimVerification.privacy", Audit.Role.privacy)] do
       match Audit.check environment (← name policyText) (← name proofText) role with
       | .ok registration => axioms := axioms ++ registration.axioms
       | .error error => throw <| IO.userError error
-    let nativePolicy ← name "Nightlean.PrivateClaimNativePrivacy.policy"
-    let nativeObligation ← name "Nightlean.PrivateClaimNativePrivacy.NativePrivacyObligation"
-    axioms := axioms ++ (← proof environment (← name "Nightlean.PrivateClaimNativePrivacy.privacy")
+    let nativePolicy ← name "Noctium.PrivateClaimNativePrivacy.policy"
+    let nativeObligation ← name "Noctium.PrivateClaimNativePrivacy.NativePrivacyObligation"
+    axioms := axioms ++ (← proof environment (← name "Noctium.PrivateClaimNativePrivacy.privacy")
       (mkApp (mkConst nativeObligation) (mkConst nativePolicy)))
     let expectedBinding := mkAppN (mkConst ``NativePrivacy.ExactArtifactBinding) #[
       mkConst ``ArtifactBytes.Bytes, mkConst ``BuildIdentity, mkConst sourceName,
@@ -141,17 +141,17 @@ def main (args : List String) : IO UInt32 := do
       mkApp (mkConst ``ArtifactBytes.tree) (mkConst (← name (certificateNamespace ++ "callBytes"))),
       mkConst buildName, mkConst ``ArtifactBytes.parse, mkApp (mkConst ``Authenticated) (mkConst authorityName)]
     axioms := axioms ++ (← proof environment (← name (certificateNamespace ++ "binding")) expectedBinding)
-    let functionalObligation ← name "Nightlean.PrivateClaimArtifacts.FunctionalPreservation"
+    let functionalObligation ← name "Noctium.PrivateClaimArtifacts.FunctionalPreservation"
     let functionalExpected := mkApp2 (mkConst functionalObligation)
       (mkApp (mkConst ``ArtifactBytes.tree) (mkConst (← name (certificateNamespace ++ "planBytes"))))
       (mkApp (mkConst ``ArtifactBytes.tree) (mkConst (← name (certificateNamespace ++ "callBytes"))))
     axioms := axioms ++ (← proof environment (← name (certificateNamespace ++ "functional")) functionalExpected)
-    let completeObligation ← name "Nightlean.PrivateClaimArtifacts.EligibleCompleteness"
+    let completeObligation ← name "Noctium.PrivateClaimArtifacts.EligibleCompleteness"
     let completeExpected := mkApp2 (mkConst completeObligation)
       (mkApp (mkConst ``ArtifactBytes.tree) (mkConst (← name (certificateNamespace ++ "planBytes"))))
       (mkApp (mkConst ``ArtifactBytes.tree) (mkConst (← name (certificateNamespace ++ "callBytes"))))
     axioms := axioms ++ (← proof environment (← name (certificateNamespace ++ "complete")) completeExpected)
-    let privacyObligation ← name "Nightlean.PrivateClaimNativePrivacy.DecodedPrivacyObligation"
+    let privacyObligation ← name "Noctium.PrivateClaimNativePrivacy.DecodedPrivacyObligation"
     let privacyExpected := mkApp2 (mkConst privacyObligation)
       (mkApp (mkConst ``ArtifactBytes.tree) (mkConst (← name (certificateNamespace ++ "planBytes"))))
       (mkApp (mkConst ``ArtifactBytes.tree) (mkConst (← name (certificateNamespace ++ "callBytes"))))

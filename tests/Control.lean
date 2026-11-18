@@ -1,5 +1,5 @@
-import Nightlean.Control
-open Nightlean Nightlean.Helpers
+import Noctium.Control
+open Noctium Noctium.Helpers
 
 private def accepted (value : Except α β) : Bool := match value with | .ok _ => true | _ => false
 private def errorContains (value : Except Diagnostic α) (text : String) : Bool :=

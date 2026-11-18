@@ -1,7 +1,7 @@
 #![cfg(feature = "zkir-321")]
 
 use base_crypto::fab::AlignedValue;
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, Instruction, MODULUS, Plan, check, create_state, field_decimal, prepare, zkir::IrSource,
 };
 use num_bigint::BigUint;

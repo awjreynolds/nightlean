@@ -1,8 +1,8 @@
-import Nightlean.Types.ValueSchema
-import Nightlean.Types.ValueViews
-import Nightlean.Types.ValueExpressions
+import Noctium.Types.ValueSchema
+import Noctium.Types.ValueViews
+import Noctium.Types.ValueExpressions
 
-open Nightlean Nightlean.Types
+open Noctium Noctium.Types
 
 def aggregateEnvironment : CompositeEnv := {
   structures := [

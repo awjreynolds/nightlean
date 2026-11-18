@@ -6,7 +6,7 @@ Proof-backed functional correctness should be a required release property. A suc
 
 ## Verified baseline and tools
 
-An isolated source export of the pinned Noctium commit built `Nightlean.Passes` and `Nightlean.Claim` successfully using `lake build Nightlean.Passes Nightlean.Claim`. The experiment ran outside the repository at `/private/tmp/nightlean-proof-baseline-bfda641`. All 18 theorem declarations in ScalarPolicy, Semantics, Passes and Claim were inspected with `#print axioms`.
+An isolated source export of the pinned Noctium commit built `Noctium.Passes` and `Noctium.Claim` successfully using `lake build Noctium.Passes Noctium.Claim`. The experiment ran outside the repository at `/private/tmp/noctium-proof-baseline-bfda641`. All 18 theorem declarations in ScalarPolicy, Semantics, Passes and Claim were inspected with `#print axioms`.
 
 | Existing proof | Established fact | Missing link |
 | --- | --- | --- |
@@ -17,7 +17,7 @@ An isolated source export of the pinned Noctium commit built `Nightlean.Passes` 
 | Passes' six theorems | The implemented pruning pass preserves validation and executable circuit/entrypoint evaluation, including errors | Correctness of Impact/ZKIR lowering and serialization |
 | Claim.marked_isSpent | The separate markSpent function makes isSpent true | Successful Claim.contract execution uses the same update, preserves unrelated state and rejects a second claim |
 
-The first five ScalarPolicy theorems have no axiom dependencies. `exclusive_addition_maximum` uses `propext` and `Quot.sound`. The Semantics results use `propext`, with `Quot.sound` also appearing in the underflow results. All six Passes results use `propext` and `Quot.sound`. `Claim.marked_isSpent` also uses `Classical.choice`. These are observed dependencies, not a requirement to eliminate ordinary classical reasoning. Sources: [ScalarPolicy](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Nightlean/ScalarPolicy.lean), [Semantics](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Nightlean/Semantics.lean), [Passes](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Nightlean/Passes.lean), [Claim](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Nightlean/Claim.lean).
+The first five ScalarPolicy theorems have no axiom dependencies. `exclusive_addition_maximum` uses `propext` and `Quot.sound`. The Semantics results use `propext`, with `Quot.sound` also appearing in the underflow results. All six Passes results use `propext` and `Quot.sound`. `Claim.marked_isSpent` also uses `Classical.choice`. These are observed dependencies, not a requirement to eliminate ordinary classical reasoning. Sources: [ScalarPolicy](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Noctium/ScalarPolicy.lean), [Semantics](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Noctium/Semantics.lean), [Passes](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Noctium/Passes.lean), [Claim](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Noctium/Claim.lean).
 
 The existing semantics parameterizes Poseidon through `EvalContext.poseidon2`. An arbitrary supplied oracle is not a proof of the native hash implementation or its cryptographic properties. `runEffects` describes tentative state and returns no successor on error. This proves neither external callback rollback nor native ledger atomicity. The claim builder and the surface example are distinct declarations. A theorem about `Claim.contract` does not automatically cover `examples/PrivateClaim.lean`.
 
@@ -25,12 +25,12 @@ The installed toolchain contains `leanchecker` and `leanexport`. These concrete 
 
 ```sh
 lake env lean BaselineAxioms.lean
-lake env leanexport Nightlean.Passes Nightlean.Claim -- \
-  Nightlean.Passes.pruneEntrypoint_run \
-  Nightlean.Claim.marked_isSpent \
-  Nightlean.unsigned_underflow_modulo_rejected > baseline-proof-closure.ndjson
+lake env leanexport Noctium.Passes Noctium.Claim -- \
+  Noctium.Passes.pruneEntrypoint_run \
+  Noctium.Claim.marked_isSpent \
+  Noctium.unsigned_underflow_modulo_rejected > baseline-proof-closure.ndjson
 lake env leanchecker --from-export baseline-proof-closure.ndjson
-lake env leanchecker --fresh Nightlean.Claim
+lake env leanchecker --fresh Noctium.Claim
 ```
 
 The exported dependency closure contains 118,156 NDJSON records and 6,140,307 bytes. SHA-256: `39bd26f973fc5eb352f8933633770f64cc34912a61c4ef29d4437529bdf4da88`. Replay returned exit 0 and reported acceptance by the default Lean kernel. The fresh-module replay also completed with exit 0. This verifies those declarations relative to their axioms. It does not verify the full compiler.
@@ -53,7 +53,7 @@ A scratch experiment reproduced these outcomes:
 | `by sorry` | `sorryAx` |
 | `by admit` | `sorryAx` |
 
-The probe compiled with warnings for sorry/admit and exit 0. Exporting the last four constructions and running `leanchecker --from-export` also returned exit 0. This is expected: the kernel checks proofs relative to declared axioms. Acceptance alone does not establish an acceptable assumption set. The probe stayed under `/private/tmp/nightlean-proof-audit-435` and introduced no repository axiom.
+The probe compiled with warnings for sorry/admit and exit 0. Exporting the last four constructions and running `leanchecker --from-export` also returned exit 0. This is expected: the kernel checks proofs relative to declared axioms. Acceptance alone does not establish an acceptable assumption set. The probe stayed under `/private/tmp/noctium-proof-audit-435` and introduced no repository axiom.
 
 In this Lean version, native evaluation creates a new axiom for each asserted computation. Searching only for historical names such as `Lean.trustCompiler` or `Lean.ofReduceBool` is insufficient. `native_decide` and `decide +native` share this path. The native helper also underlies uses by other tactics, including `bv_decide`. Inspect the resulting proof dependencies, not a blacklist of tactic spellings. Ordinary `decide` and `decide +kernel` construct proofs checked through reduction. Sources: [native evaluation](https://github.com/leanprover/lean4/blob/eb6cafb7290e8bd5f2937522d8d804f58f02bafc/src/Lean/Meta/Native.lean#L30), [Decide](https://github.com/leanprover/lean4/blob/eb6cafb7290e8bd5f2937522d8d804f58f02bafc/src/Lean/Elab/Tactic/Decide.lean).
 
@@ -84,9 +84,9 @@ Lean's official guidance distinguishes kernel replay, axiom review and trusted t
 
 For the circuit relation, prove both the sound direction needed for security and a completeness direction needed for usability. Native satisfaction must imply source acceptance, and valid source executions must admit the required target execution under explicit oracle and representation assumptions. A one-way theorem with an impossible target relation would make every claim reject and still satisfy soundness.
 
-For ordered state effects, preserve read values, state schema identities, operation order, failure conditions and final state. Relate source state to the actual Impact state representation. Bind opcode groups, skip/activity structure, alignments, key paths, read results and write values to the proof's public transcript. The current lowerer explicitly treats opcode grouping and communications commitment as relevant. These are theorem obligations, not metadata details. Sources: [Impact lowering](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Nightlean/Backend/Impact.lean), [ZKIR lowering](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Nightlean/Backend/Zkir.lean).
+For ordered state effects, preserve read values, state schema identities, operation order, failure conditions and final state. Relate source state to the actual Impact state representation. Bind opcode groups, skip/activity structure, alignments, key paths, read results and write values to the proof's public transcript. The current lowerer explicitly treats opcode grouping and communications commitment as relevant. These are theorem obligations, not metadata details. Sources: [Impact lowering](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Noctium/Backend/Impact.lean), [ZKIR lowering](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Noctium/Backend/Zkir.lean).
 
-The current compiler obtains registered circuits/contracts through unsafe `evalConstCheck`. Even a proved Lean lowering function does not prove its native execution or the bytes written by an executable. Close this boundary with a checked artifact certificate: the decoded emitted bytes equal the target object related by the preservation theorem to the exact registered contract. A proof-producing translation validator with a proved soundness theorem is an acceptable implementation route. A Boolean validator evaluated through native_decide would reintroduce the compiler trust axiom. Source: [Compiler registration and emission](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Nightlean/Compiler.lean).
+The current compiler obtains registered circuits/contracts through unsafe `evalConstCheck`. Even a proved Lean lowering function does not prove its native execution or the bytes written by an executable. Close this boundary with a checked artifact certificate: the decoded emitted bytes equal the target object related by the preservation theorem to the exact registered contract. A proof-producing translation validator with a proved soundness theorem is an acceptable implementation route. A Boolean validator evaluated through native_decide would reintroduce the compiler trust axiom. Source: [Compiler registration and emission](https://github.com/awjreynolds/noctium/blob/bfda641375c8b2e67d43b71f112833794ec72a55/Noctium/Compiler.lean).
 
 Existing public bundles establish selected-file integrity and schema associations against an authenticated external digest. Their documentation expressly excludes semantic equivalence, build attestations and deployed-key agreement. Extend this format, rather than relabel its existing hash checks as proof preservation. Source: [portable artifact boundary](../development/portable-artifacts.md).
 

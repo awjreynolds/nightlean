@@ -1,5 +1,5 @@
 //! Exercise actual emitted CALL constraints independently of provider and host checks.
-use nightlean_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
+use noctium_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
 use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
 use transient_crypto::curve::Fr;

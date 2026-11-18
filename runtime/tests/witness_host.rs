@@ -1,4 +1,4 @@
-use nightlean_runtime::{
+use noctium_runtime::{
     ScalarType,
     host::{self, Capability, Context, Limits, Operation, Provider},
     witness::{Parameter, Projection, Registry, Type, WitnessSignature},
@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 fn native_struct_schema(id: &str) -> Vec<u8> {
     let fingerprint = format!(
-        "NightleanCompositeTypeV1;r{}:{}NightleanCompositeLayoutV1;1;R{}:{}1;f1:xsN0;",
+        "NoctiumCompositeTypeV1;r{}:{}NoctiumCompositeLayoutV1;1;R{}:{}1;f1:xsN0;",
         id.len(),
         id,
         id.len(),
@@ -45,7 +45,7 @@ fn registry() -> Registry {
 fn fixed_vector_schema() -> Vec<u8> {
     serde_json::to_vec(&json!({
         "schemaVersion":1,
-        "typeFingerprint":"NightleanCompositeTypeV1;v2;sU255;NightleanCompositeLayoutV1;0;0;",
+        "typeFingerprint":"NoctiumCompositeTypeV1;v2;sU255;NoctiumCompositeLayoutV1;0;0;",
         "layout":{"kind":"vector","length":2,"element":{"kind":"scalar","leaf":{"kind":"uint","maximum":"255"}}},
         "counts":{"leaves":2,"expandedNodes":3,"layoutNodes":2}
     })).unwrap()
@@ -54,7 +54,7 @@ fn fixed_vector_schema() -> Vec<u8> {
 fn fixed_bytes_schema() -> Vec<u8> {
     serde_json::to_vec(&json!({
         "schemaVersion":1,
-        "typeFingerprint":"NightleanCompositeTypeV1;b2;NightleanCompositeLayoutV1;0;0;",
+        "typeFingerprint":"NoctiumCompositeTypeV1;b2;NoctiumCompositeLayoutV1;0;0;",
         "layout":{"kind":"bytes","length":2},
         "counts":{"leaves":2,"expandedNodes":3,"layoutNodes":1}
     }))

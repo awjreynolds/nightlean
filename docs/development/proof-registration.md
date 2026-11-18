@@ -1,6 +1,6 @@
 # Source proof registration and audit policy
 
-`Nightlean/Verification.lean` defines typed functional and privacy obligations for an actual source contract and a finite entrypoint index. Authors use ordinary Lean definitions, theorem terms, tactics and libraries. The registration command checks the resulting proposition and proof dependencies, rather than approving particular tactic spellings.
+`Noctium/Verification.lean` defines typed functional and privacy obligations for an actual source contract and a finite entrypoint index. Authors use ordinary Lean definitions, theorem terms, tactics and libraries. The registration command checks the resulting proposition and proof dependencies, rather than approving particular tactic spellings.
 
 This is PA-01, the source-proof foundation. It does not certify native lowering, emitted bytes, keys, deployment or host execution. Every audit result sets `compiledContractVerified` to false. Those required bridges remain in the [proof audit chain](../research/lean-proof-audit-chain.md).
 
@@ -20,8 +20,8 @@ The separate enabled predicate matters. An authorization requirement belongs in 
 An `AuditPolicy` binds the subject and privacy specification. `FunctionalObligation policy` and `PrivacyObligation policy` are distinct propositions. A theorem of `True`, a proof about another contract/specification, or a functional proof supplied as a privacy proof fails the expected-type check.
 
 ```lean
-#nightlean_register_functional myCorrectness for reviewedPolicy
-#nightlean_register_privacy myPrivacy for reviewedPolicy
+#noctium_register_functional myCorrectness for reviewedPolicy
+#noctium_register_privacy myPrivacy for reviewedPolicy
 ```
 
 These commands create provisional authoring metadata. They do not establish the review authority of `reviewedPolicy`. The separate data-export audit must apply an independently trusted model pin.
@@ -48,8 +48,8 @@ The producer exports public proof data using the pinned official tools:
 
 ```sh
 lake env leanexport Your.Proof.Module -- \
-  Nightlean.Verification.FunctionalObligation \
-  Nightlean.Verification.PrivacyObligation Your.policy \
+  Noctium.Verification.FunctionalObligation \
+  Noctium.Verification.PrivacyObligation Your.policy \
   propext Classical.choice Quot.sound > model.ndjson
 lake env leanexport Your.Proof.Module -- \
   Your.functional Your.privacy > proofs.ndjson
@@ -58,7 +58,7 @@ lake env leanexport Your.Proof.Module -- \
 Module loading and theorem elaboration belong in the producer's controlled build environment. The auditor accepts exports as data:
 
 ```sh
-lake build Nightlean.Verification.ExportAudit
+lake build Noctium.Verification.ExportAudit
 python3 scripts/proofs/audit-source-proof.py \
   --model-export model.ndjson --proof-export proofs.ndjson \
   --trusted-model-sha256 "$REVIEWED_MODEL_SHA256" \

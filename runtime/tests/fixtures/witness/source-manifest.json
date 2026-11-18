@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "source": "tests/WitnessSource.lean",
-  "sourceSha256": "cc8bca1c7c09d4dd2565a29b8a037b45e21fa5519a320775caab00ed0fae8508",
+  "sourceSha256": "98e31359bd2b419f8cc6e09b2c858fe80fda389afcd2d6d1a3e47570037780e3",
   "leanVersion": "4.35.0",
   "scope": "Actual compiler-generated public circuits, plans, typed witness signatures and invocation bindings. No invocation values, keys, proving parameters or journals.",
   "profiles": [
@@ -15,13 +15,13 @@
         },
         {
           "file": "TypedWitness.PairWitness.claim.witness.control.json",
-          "bytes": 9578,
-          "sha256": "e79ac9d6b9952403d2319fee903e635f06d3a7a9281c21c1726846bffa574a8f"
+          "bytes": 9570,
+          "sha256": "70784a0c342fbca6a01060fec43cc66ae119387bac119c612bda1971a42e0f70"
         },
         {
           "file": "TypedWitness.PairWitness.claim.witness.json",
-          "bytes": 4790,
-          "sha256": "60dfdcc7c33b54f70c9cf9f9b8ec27a27575ba441c66fcd0da79edc8acdf3cd8"
+          "bytes": 4786,
+          "sha256": "a278c137da8d5157152fccd32e547d1372129b9b0f344b84c9fcdb91d0097a2d"
         },
         {
           "file": "TypedWitness.PairWitness.claim.zkir",
@@ -50,18 +50,18 @@
         },
         {
           "file": "TypedWitness.emptyHost.control.json",
-          "bytes": 1131,
-          "sha256": "035b3ae11121c4d748e5f3321c0af31dd862008e287153d38da9b49debdfad6b"
+          "bytes": 1127,
+          "sha256": "2b32cb945875abaa0c8cefdd92acf1ad9173d30eeaa8f0e1ba9a288b349f037f"
         },
         {
           "file": "TypedWitness.emptyRelation.witness.control.json",
-          "bytes": 2220,
-          "sha256": "b1e369761ea3d3a23ecab1c69e1f707c8231de470d05335195ca5c6cea2b6390"
+          "bytes": 2212,
+          "sha256": "f949ef7d2fdfe58f4e2b1174aacb5e7e4cf68d0c4d4a7cca41b81286344fbb73"
         },
         {
           "file": "TypedWitness.emptyRelation.witness.json",
-          "bytes": 951,
-          "sha256": "0126a88695e72403d063bf2e8f84f97fd235fc51eb507745b47c7d835596e410"
+          "bytes": 947,
+          "sha256": "8081386f898877cde3a58b09c9f770dc1b82412bde713320c425642322085726"
         },
         {
           "file": "TypedWitness.emptyRelation.zkir",
@@ -70,18 +70,18 @@
         },
         {
           "file": "TypedWitness.pairHost.control.json",
-          "bytes": 3896,
-          "sha256": "94d9d3700150e0eb188b7c4bea05395142509d52daf0378e75aaa9467400325e"
+          "bytes": 3892,
+          "sha256": "0f189f08b65f39407f2243f83e082187a0d33305062a46c14b057e3198d3764f"
         },
         {
           "file": "TypedWitness.pairRelation.witness.control.json",
-          "bytes": 8864,
-          "sha256": "7bf77bda6014a9b56558701e1f4e65ecee94521bfb8f519ec520c0c9f2eecd13"
+          "bytes": 8856,
+          "sha256": "5ae591e808360fa6fb612fdc4e973c4d11f3dfd8b6f62b4297c5b84853b0ef04"
         },
         {
           "file": "TypedWitness.pairRelation.witness.json",
-          "bytes": 4158,
-          "sha256": "4d1799dbf1d44da58b87823dafb6a571f0e6f9e998ecdeec0f17a16f0b106418"
+          "bytes": 4154,
+          "sha256": "c619e7460a004ffe43f54fab90af6c869a0fc4add05a13c696bed58486dbed2f"
         },
         {
           "file": "TypedWitness.pairRelation.zkir",
@@ -129,7 +129,7 @@
           "sha256": "0f6dac9fee54579a4a0fc2088e7cb6f9aeb004b482b0bd6394a2a977fd262f32"
         },
         {
-          "file": "nightlean.json",
+          "file": "noctium.json",
           "bytes": 33488,
           "sha256": "171e587e600496f2e0d3592d0306a409c0aa8516af3ab4fd5854e8d469573808"
         }
@@ -145,13 +145,13 @@
         },
         {
           "file": "TypedWitness.PairWitness.claim.witness.control.json",
-          "bytes": 9589,
-          "sha256": "d04813c86e954fb58aad9006236464d4e7e866bd6375a79f006788e0b6f8b537"
+          "bytes": 9581,
+          "sha256": "eeec42e99311c10e10ded9325c9e1e36e93fe6a5f2fdfd87939cfc17d8b63517"
         },
         {
           "file": "TypedWitness.PairWitness.claim.witness.json",
-          "bytes": 4801,
-          "sha256": "daf5464981dd8aa195b799cb71ab723b43d7e806d0df997232ab68e089093f2e"
+          "bytes": 4797,
+          "sha256": "0ef9805c26ba0c471f49b4d841b64b90fe046b38bcef18b9ac66b5e461922602"
         },
         {
           "file": "TypedWitness.PairWitness.claim.zkir",
@@ -180,18 +180,18 @@
         },
         {
           "file": "TypedWitness.emptyHost.control.json",
-          "bytes": 1131,
-          "sha256": "035b3ae11121c4d748e5f3321c0af31dd862008e287153d38da9b49debdfad6b"
+          "bytes": 1127,
+          "sha256": "2b32cb945875abaa0c8cefdd92acf1ad9173d30eeaa8f0e1ba9a288b349f037f"
         },
         {
           "file": "TypedWitness.emptyRelation.witness.control.json",
-          "bytes": 2220,
-          "sha256": "b1e369761ea3d3a23ecab1c69e1f707c8231de470d05335195ca5c6cea2b6390"
+          "bytes": 2212,
+          "sha256": "f949ef7d2fdfe58f4e2b1174aacb5e7e4cf68d0c4d4a7cca41b81286344fbb73"
         },
         {
           "file": "TypedWitness.emptyRelation.witness.json",
-          "bytes": 951,
-          "sha256": "0126a88695e72403d063bf2e8f84f97fd235fc51eb507745b47c7d835596e410"
+          "bytes": 947,
+          "sha256": "8081386f898877cde3a58b09c9f770dc1b82412bde713320c425642322085726"
         },
         {
           "file": "TypedWitness.emptyRelation.zkir",
@@ -200,18 +200,18 @@
         },
         {
           "file": "TypedWitness.pairHost.control.json",
-          "bytes": 3896,
-          "sha256": "94d9d3700150e0eb188b7c4bea05395142509d52daf0378e75aaa9467400325e"
+          "bytes": 3892,
+          "sha256": "0f189f08b65f39407f2243f83e082187a0d33305062a46c14b057e3198d3764f"
         },
         {
           "file": "TypedWitness.pairRelation.witness.control.json",
-          "bytes": 8864,
-          "sha256": "7bf77bda6014a9b56558701e1f4e65ecee94521bfb8f519ec520c0c9f2eecd13"
+          "bytes": 8856,
+          "sha256": "5ae591e808360fa6fb612fdc4e973c4d11f3dfd8b6f62b4297c5b84853b0ef04"
         },
         {
           "file": "TypedWitness.pairRelation.witness.json",
-          "bytes": 4158,
-          "sha256": "4d1799dbf1d44da58b87823dafb6a571f0e6f9e998ecdeec0f17a16f0b106418"
+          "bytes": 4154,
+          "sha256": "c619e7460a004ffe43f54fab90af6c869a0fc4add05a13c696bed58486dbed2f"
         },
         {
           "file": "TypedWitness.pairRelation.zkir",
@@ -259,7 +259,7 @@
           "sha256": "0f6dac9fee54579a4a0fc2088e7cb6f9aeb004b482b0bd6394a2a977fd262f32"
         },
         {
-          "file": "nightlean.json",
+          "file": "noctium.json",
           "bytes": 33768,
           "sha256": "ac8656feb37c037ce111b3eb1b2f4614713865a0aa5c6c8afe35274871ef3a2c"
         }

@@ -1,4 +1,4 @@
-// Qualify the official release checker against Nightlean's existing native claim adapter.
+// Qualify the official release checker against Noctium's existing native claim adapter.
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
 import {resolve,join} from 'node:path';

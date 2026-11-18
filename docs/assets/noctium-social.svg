@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
   <title id="title">Noctium: contract proofs and the full native Midnight capability goal</title>
-  <desc id="description">Research preview. Project goals include every instruction and value type in native ZKIR v3, Midnight ledger state, cryptography, composition, events and assets, a Lean contract language with generics, bounded control, private state and guarded disclosure, and Rust, C/C++, TypeScript/WASM, Kotlin and Swift host SDKs. Published evidence covers claim-specific proofs, exact artifacts, Rust and C/C++ private-claim proving, transactions and recovery on localnet. Current source/native examples include guarded state effects, nested maps, Native-field records, memo Lists, Bytes8 Counter operations and Bytes32 account hashes, ordered domain-separated vector hashes and canonical Native-field hashes. Typed Jubjub examples check byte-derived keys, ElGamal binding and ECDH memo recovery against native execution, not a new proof or deployment. The selected claim has qualified deployed identity. Generic scalar lowerer soundness and completeness are proved. Frontend preservation, broader native proofs and capability coverage remain open. These goals are not a claim of full delivered coverage.</desc>
+  <desc id="description">Research preview. Project goals include every instruction and value type in native ZKIR v3, Midnight ledger state, cryptography, composition, events and assets, a Lean contract language with generics, bounded control, private state and guarded disclosure, and Rust, C/C++, TypeScript/WASM, Kotlin and Swift host SDKs. Published evidence covers claim-specific proofs, exact artifacts, Rust and C/C++ private-claim proving, transactions and recovery on localnet. Current source/native examples include guarded state effects, nested maps, Native-field records, memo Lists, Bytes8 Counter operations and Bytes32 account hashes, ordered domain-separated vector hashes and canonical Native-field hashes. Typed Jubjub examples check byte-derived keys, ElGamal binding and ECDH memo recovery against native execution, not a new proof or deployment. Historical selected-claim evidence has qualified deployed identity at its recorded source commit. Namespace migration is not a new deployment qualification. Generic scalar lowerer soundness and completeness are proved. Frontend preservation, broader native proofs and capability coverage remain open. These goals are not a claim of full delivered coverage.</desc>
   <defs>
     <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#101D30"/>
@@ -29,7 +29,7 @@
     <text x="60" y="147" fill="#F4F7FC" font-size="32" font-weight="600" letter-spacing="-0.6">Prove contract behavior. Compile for Midnight.</text>
     <text x="60" y="181" fill="#AEBFD5" font-size="20">Author-written specifications. Lean-checked proofs. A direct native backend.</text>
     <text x="60" y="218" fill="#8BAFFF" font-size="14" font-weight="700" letter-spacing="1.8">PROJECT GOALS</text>
-    <text x="1140" y="218" fill="#AEBFD5" font-size="15" text-anchor="end">Full target scope · Selected programs qualified today</text>
+    <text x="1140" y="218" fill="#AEBFD5" font-size="15" text-anchor="end">Full target scope · Selected programs; historical proofs</text>
 
     <g fill="#132236" stroke="#30435E">
       <rect x="60" y="234" width="344" height="198" rx="12"/>
@@ -60,7 +60,7 @@
 
     <path d="M60 456H1140" stroke="#293A52"/>
     <text x="60" y="484" fill="#70E6CF" font-size="13" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
-    <text x="60" y="512" fill="#E3EBF5" font-size="18">Claim proofs + localnet · Rust + C/C++</text>
+    <text x="60" y="512" fill="#E3EBF5" font-size="18">Historical claim proofs · localnet · Rust + C/C++</text>
     <text x="60" y="540" fill="#AEBFD5" font-size="18">Counter · memo Lists · ElGamal + ECDH</text>
     <path d="M620 479V543" stroke="#293A52"/>
     <text x="653" y="484" fill="#CFB58A" font-size="13" font-weight="700" letter-spacing="1.8">OPEN COVERAGE + ASSURANCE</text>

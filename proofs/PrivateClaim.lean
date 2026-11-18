@@ -1,7 +1,7 @@
 import examples.PrivateClaim
-import Nightlean.Claim
+import Noctium.Claim
 
-namespace Nightlean.PrivateClaimProofs
+namespace Noctium.PrivateClaimProofs
 
 def claimEntry : Entrypoint :=
   PrivateClaim.entrypoints.headD {name := "missing", circuit := {name := "missing"}}
@@ -838,4 +838,4 @@ theorem fixture_observations_equal :
 #print axioms fixture_replay_rejected
 #print axioms fixture_observations_equal
 
-end Nightlean.PrivateClaimProofs
+end Noctium.PrivateClaimProofs

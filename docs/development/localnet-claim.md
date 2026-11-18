@@ -12,9 +12,9 @@ Commands executed from the repository root:
 
 ```sh
 lake build
-.lake/build/bin/noctium compile examples/PrivateClaim.lean --adapter compact --output /private/tmp/nightlean-source-adapter
-/private/tmp/nightlean-backend-spike/compact-native/compactc /private/tmp/nightlean-source-adapter/PrivateClaim.compact /private/tmp/nightlean-backend-spike/source-claim-out
-node scripts/localnet/deploy-claim.mjs /private/tmp/nightlean-backend-spike/source-claim-out /private/tmp/nightlean-local-claim4
+.lake/build/bin/noctium compile examples/PrivateClaim.lean --adapter compact --output /private/tmp/noctium-source-adapter
+/private/tmp/noctium-backend-spike/compact-native/compactc /private/tmp/noctium-source-adapter/PrivateClaim.compact /private/tmp/noctium-backend-spike/source-claim-out
+node scripts/localnet/deploy-claim.mjs /private/tmp/noctium-backend-spike/source-claim-out /private/tmp/noctium-local-claim4
 ```
 
 The generated adapter's SHA-256 was `448ea7090f029e2fb8e6974ff8368d61420288561b744585ec6171dc1edc51f6`. The official compiler was Compact 0.36.0, commit `b5d9e4dfc532fe47011c4f6296e254f4853eb469`, language 0.28.0, runtime 0.21.0. The verifier key's SHA-256 was `b6354b0aaf6996b8c882e829910798d1fc2a925521a74175169a16604504d820`.
@@ -23,7 +23,7 @@ The bounded hash adapter was checked against Native Poseidon field vectors befor
 
 ## Network and transaction evidence
 
-The harness refuses a node whose genesis differs from `0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d`. It uses the isolated `nightlean-dev` Docker network, ledger 9.1.0.1 released node/runtime profile, official proof server 9.0.0, and a published development-chain funding identity. No public-network identity or funds participate.
+The harness refuses a node whose genesis differs from `0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d`. It uses the isolated `noctium-dev` Docker network, ledger 9.1.0.1 released node/runtime profile, official proof server 9.0.0, and a published development-chain funding identity. No public-network identity or funds participate.
 
 - Contract address: `20a022f70bdab7bd954dea06965c1c3c9bb164a39be132ebff8dba9cf2b915ab`.
 - Deployment ledger transaction hash: `0xcfdd250ab451d26e7b01a4ad0534033da0b2149ad6d8d16c496ddb93ca73e230`.
@@ -56,4 +56,4 @@ An independent Polkadot RPC observer then verified both ledger transaction hashe
 - Deployment: block 92, hash `0x594486ca9ef319aa7b119a9cc015d76ae1f304dd7c1c56181aa127a7bfefe14f`, extrinsic index 4, extrinsic hash `0x379aa3be5100c3beba44ca91fe54ae00aa390552ae7f827881b7477b624b8ff0`, contract event `ContractDeploy`.
 - Valid claim: block 98, hash `0x09282cce44617c484269634b657336e101920b0617bed4bca7ca3c1095b877bb`, extrinsic index 4, extrinsic hash `0x69e5e20d873a5af6043530df9b90e02978a761c2813860ffa598a6d23234db2b`, contract event `ContractCall`.
 
-Reproduce using `NIGHTLEAN_WALLET_DEPENDENCIES=/private/tmp/nightlean-preview-wallet node scripts/localnet/receipt.mjs TX_HASH CONTRACT_ADDRESS ContractDeploy 75` for deployment, or `ContractCall 75` for the claim. The configured dependency directory contains the locked Noctium wallet SDK's Polkadot API dependency. The observer pins the development genesis and runtime and reads finalized blocks only.
+Reproduce using `NOCTIUM_WALLET_DEPENDENCIES=/private/tmp/noctium-preview-wallet node scripts/localnet/receipt.mjs TX_HASH CONTRACT_ADDRESS ContractDeploy 75` for deployment, or `ContractCall 75` for the claim. The configured dependency directory contains the locked Noctium wallet SDK's Polkadot API dependency. The observer pins the development genesis and runtime and reads finalized blocks only.

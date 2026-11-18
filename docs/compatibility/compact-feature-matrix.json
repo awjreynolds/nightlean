@@ -21,7 +21,7 @@
     "proofServer": "9.0.0",
     "qualification": "Latest stable release and network matrix differ. Network qualification of 0.36.1 is not established by matrix."
   },
-  "nightleanObservation": {
+  "noctiumObservation": {
     "commit": "da3ffa3b61b0948768ca370b2abc391575e1dbae",
     "sourceInspected": true,
     "testsRerun": false,
@@ -39,7 +39,7 @@
     "PROVENANCE": "Pinned source/tool versions, hashes, build/dependency closure and reproducible artifact manifest."
   },
   "statusMeaning": {
-    "missing": "No corresponding supported frontend/native route found in inspected Nightlean source.",
+    "missing": "No corresponding supported frontend/native route found in inspected Noctium source.",
     "subset": "Some corresponding implementation exists, not full Compact feature equivalence.",
     "related-subset": "Related example/primitive exists, semantic equivalence to named Compact API unverified."
   },
@@ -136,7 +136,7 @@
       "id": "C-LANG-BOOL",
       "layer": "language",
       "surface": "Boolean",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Bool values, equality, constants and constraints exist. General Boolean operators and Compact conversion semantics are absent.",
       "source": [
         "reference"
@@ -146,8 +146,8 @@
         "ZK"
       ],
       "observedEvidence": [
-        "Nightlean/IR.lean",
-        "Nightlean/Frontend.lean",
+        "Noctium/IR.lean",
+        "Noctium/Frontend.lean",
         "tests/IR.lean"
       ],
       "equivalence": "unverified"
@@ -156,7 +156,7 @@
       "id": "C-LANG-FIELD",
       "layer": "language",
       "surface": "Field arithmetic",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Native canonical field literals, add, subtract and multiply exist. Scalar Native/Bool/UInt conversions are implemented. Full operator/context and foreign-field equivalence remain unverified.",
       "source": [
         "reference"
@@ -166,8 +166,8 @@
         "ZK"
       ],
       "observedEvidence": [
-        "Nightlean/Field.lean",
-        "Nightlean/IR.lean",
+        "Noctium/Field.lean",
+        "Noctium/IR.lean",
         "tests/Field.lean"
       ],
       "equivalence": "unverified",
@@ -175,8 +175,8 @@
         "checkedOn": "2026-11-16",
         "scope": "Published scalar semantics and native producer checks cover modular subtraction and mixed UInt/Native scalar conversions. This does not qualify every Compact field operation.",
         "evidence": [
-          "Nightlean/Semantics.lean",
-          "Nightlean/ScalarPolicy.lean",
+          "Noctium/Semantics.lean",
+          "Noctium/ScalarPolicy.lean",
           "tests/BoundedScalars.lean",
           "docs/development/native-producer-safety.md"
         ],
@@ -187,7 +187,7 @@
       "id": "C-LANG-UINT",
       "layer": "language",
       "surface": "Uint<n> and Uint<0..n>",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Pinned compiler uses inclusive maxima internally. For ordinary Uint<0..m> and Uint<0..n>, addition returns exclusive bound m+n-1 and multiplication returns (m-1)*(n-1)+1. This contradicts the looser reference prose. Subtraction retains the left maximum and asserts a nonnegative result. Follow pinned implementation parity, not prose equations. Nominal aliases have separate checked-result rules.",
       "source": [
         "reference",
@@ -293,7 +293,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Bounded UInt widths/ranges, checked add/sub/mul, canonical scalar ABI and one finalized state round trip now exist. Nominal aliases and complete operator/context coverage remain unverified.",
         "evidence": [
-          "Nightlean/ScalarPolicy.lean",
+          "Noctium/ScalarPolicy.lean",
           "tests/BoundedScalars.lean",
           "tests/scalars/constraint-cases.json",
           "tests/scalars/localnet-evidence.json",
@@ -306,7 +306,7 @@
       "id": "C-LANG-BYTES",
       "layer": "language",
       "surface": "Bytes<n>",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Byte literals, padding, conversion, canonical encoding and length bounds.",
       "source": [
         "reference"
@@ -321,7 +321,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
-          "Nightlean/Types/Composite.lean",
+          "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
@@ -335,7 +335,7 @@
       "id": "C-LANG-VECTOR",
       "layer": "language",
       "surface": "Vector<n,T>",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Fixed-size homogeneous arrays, indexing, slicing, spread and bounds.",
       "source": [
         "reference"
@@ -350,7 +350,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
-          "Nightlean/Types/Composite.lean",
+          "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
@@ -364,7 +364,7 @@
       "id": "C-LANG-TUPLE",
       "layer": "language",
       "surface": "Tuple and unit []",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Heterogeneous tuples, vector subtyping, destructuring, access, spread and unit returns.",
       "source": [
         "reference"
@@ -379,7 +379,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
-          "Nightlean/Types/Composite.lean",
+          "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
@@ -393,7 +393,7 @@
       "id": "C-LANG-STRUCT",
       "layer": "language",
       "surface": "Struct",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Named fields, defaults, construction, access, destructuring, spread and generic structs.",
       "source": [
         "reference"
@@ -408,13 +408,13 @@
         "checkedOn": "2026-11-17",
         "scope": "Checked Lean composite values and Rust/C++ codecs preserve nominal/logical identity. Source helper composite outputs flatten under component disclosure checks. Bounded generic structures specialize with declaration-derived nominal identity. General aggregate ledger effects, complete constructor/default/spread/destructuring surface and Compact equivalence remain unqualified.",
         "evidence": [
-          "Nightlean/Types/Composite.lean",
+          "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
           "docs/development/composite-values.md",
           "tests/composite-values/qualification-evidence.json",
-          "Nightlean/Helpers/Specialization.lean",
+          "Noctium/Helpers/Specialization.lean",
           "tests/GenericSpecialization.lean",
           "tests/generics/Native.lean",
           "tests/generics/qualification-evidence.json",
@@ -428,7 +428,7 @@
       "id": "C-LANG-ENUM",
       "layer": "language",
       "surface": "Enum",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Member creation, comparisons, bounds, casts and defaults.",
       "source": [
         "reference"
@@ -443,7 +443,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
         "evidence": [
-          "Nightlean/Types/Composite.lean",
+          "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
@@ -457,7 +457,7 @@
       "id": "C-LANG-ALIAS",
       "layer": "language",
       "surface": "Structural and nominal type aliases",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Structural Uint aliases use inclusive-maximum widening. Nominal numeric aliases require matching identities, retain their original type and downcast checked arithmetic results. The max-unsigned guard precedes nominal downcasting. See C-LANG-UINT conformance cases.",
       "source": [
         "reference",
@@ -475,7 +475,7 @@
         "scope": "Transparent compile-time aliases normalize within bounded generic helper/type specialization. Nominal generic structures preserve distinct identity. Compact nominal numeric alias arithmetic/downcast semantics remain unqualified.",
         "fullEquivalence": "unverified",
         "evidence": [
-          "Nightlean/Helpers/Specialization.lean",
+          "Noctium/Helpers/Specialization.lean",
           "tests/GenericSpecialization.lean",
           "tests/generics/Native.lean",
           "tests/generics/qualification-evidence.json",
@@ -487,7 +487,7 @@
       "id": "C-LANG-OPAQUE",
       "layer": "language",
       "surface": "Opaque string and Uint8Array",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Host-only values and restrictions on circuit usage/serialization must be explicit.",
       "source": [
         "reference"
@@ -503,7 +503,7 @@
       "id": "C-LANG-SUBTYPE",
       "layer": "language",
       "surface": "Subtyping and least upper bounds",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Compare normalized inclusive Uint maxima. Source/prose result-bound discrepancy changes return, binding, ledger-write and argument acceptance. See C-LANG-UINT conformance cases. Compact value semantics need a Lean surface design rather than copied syntax.",
       "source": [
         "reference",
@@ -521,8 +521,8 @@
         "scope": "Scalar widening and Native embedding are implemented. Internal composite type rules preserve nominal identity and kernel-proved UInt widening. Public source composite/helper argument execution and full subtyping equivalence remain open.",
         "evidence": [
           "tests/BoundedScalars.lean",
-          "Nightlean/Frontend.lean",
-          "Nightlean/Types/Composite.lean",
+          "Noctium/Frontend.lean",
+          "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean"
         ],
         "fullEquivalence": "unverified"
@@ -532,7 +532,7 @@
       "id": "C-LANG-CAST",
       "layer": "language",
       "surface": "Type conversions",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Each permitted and rejected source/target pair, range failures, byte order and foreign-field restrictions.",
       "source": [
         "reference"
@@ -558,7 +558,7 @@
       "id": "C-LANG-DEFAULT",
       "layer": "language",
       "surface": "Type defaults",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Defaults for every supported type, including inactive Maybe/Either payloads.",
       "source": [
         "reference"
@@ -583,8 +583,8 @@
       "id": "C-LANG-SELECT",
       "layer": "language",
       "surface": "Conditional expressions and branches",
-      "nightleanStatus": "subset",
-      "notes": "select evaluates both arms in Nightlean. This does not establish Compact branch/short-circuit equivalence.",
+      "noctiumStatus": "subset",
+      "notes": "select evaluates both arms in Noctium. This does not establish Compact branch/short-circuit equivalence.",
       "source": [
         "reference"
       ],
@@ -593,7 +593,7 @@
         "ZK"
       ],
       "observedEvidence": [
-        "Nightlean/Semantics.lean",
+        "Noctium/Semantics.lean",
         "scripts/zkir/native-runtime.mjs"
       ],
       "equivalence": "unverified"
@@ -602,7 +602,7 @@
       "id": "C-LANG-CONTROL",
       "layer": "language",
       "surface": "if, short-circuit logic, return, sequencing",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Guard witness calls, failed assertions, state effects and event effects correctly.",
       "source": [
         "reference"
@@ -618,7 +618,7 @@
       "id": "C-LANG-LOOP",
       "layer": "language",
       "surface": "Statically bounded for loops",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Range endpoints constant or nat parameters, or fixed-size vectors/tuples/bytes. Return within loop rejected.",
       "source": [
         "reference"
@@ -634,7 +634,7 @@
       "id": "C-LANG-MAPFOLD",
       "layer": "language",
       "surface": "map, fold and anonymous circuits",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Do not confuse expression map with ledger Map.",
       "source": [
         "reference"
@@ -650,7 +650,7 @@
       "id": "C-LANG-FUNCTION",
       "layer": "language",
       "surface": "Named circuits and circuit calls",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Parameters, arity, results, helper calls and recursive-call rejection.",
       "source": [
         "reference"
@@ -665,7 +665,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Structured Lean helper declarations support lexical overload groups, typed scalar/unit signatures, ordered once-only arguments, recursion rejection, transitive effects and scalar disclosure checks. Source/expansion/execution resource policies are enforced. Structured branch purity and external effect backend execution remain open.",
         "evidence": [
-          "Nightlean/Helpers.lean",
+          "Noctium/Helpers.lean",
           "tests/Helpers.lean",
           "tests/HelperSource.lean",
           "runtime/tests/helpers.rs",
@@ -679,7 +679,7 @@
       "id": "C-LANG-PURITY",
       "layer": "language",
       "surface": "Pure/impure analysis",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Pure circuits exclude ledger operations, events and witness calls.",
       "source": [
         "reference"
@@ -694,7 +694,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Structured Lean helper declarations support lexical overload groups, typed scalar/unit signatures, ordered once-only arguments, recursion rejection, transitive effects and scalar disclosure checks. Source/expansion/execution resource policies are enforced. Structured branch purity and external effect backend execution remain open.",
         "evidence": [
-          "Nightlean/Helpers.lean",
+          "Noctium/Helpers.lean",
           "tests/Helpers.lean",
           "tests/HelperSource.lean",
           "runtime/tests/helpers.rs",
@@ -708,7 +708,7 @@
       "id": "C-LANG-GENERICS",
       "layer": "language",
       "surface": "Type and natural-number generic parameters",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Specialization and invalid/recursive instantiation cases.",
       "source": [
         "reference"
@@ -725,7 +725,7 @@
         "scope": "Bounded Lean helper/type specialization accepts compile-time type and natural arguments, preserves declaration identity, rejects kind/arity/free-name/cycle/resource errors, and emits checked concrete programs plus versioned signature sidecars. Two selected native scalar instantiations have independent compiler/checker evidence and retained native proofs. This is not complete generic-module or Compact semantic equivalence.",
         "fullEquivalence": "unverified",
         "evidence": [
-          "Nightlean/Helpers/Specialization.lean",
+          "Noctium/Helpers/Specialization.lean",
           "tests/GenericSpecialization.lean",
           "tests/generics/Native.lean",
           "tests/generics/qualification-evidence.json",
@@ -737,7 +737,7 @@
       "id": "C-LANG-MODULE",
       "layer": "language",
       "surface": "Modules, imports, exports, includes",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Namespace and visibility behavior, top-level exports, generic modules.",
       "source": [
         "reference"
@@ -753,7 +753,7 @@
       "id": "C-LANG-SCOPE",
       "layer": "language",
       "surface": "Bindings, patterns and lexical scope",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "const binding, shadowing, destructuring and left-to-right expression evaluation.",
       "source": [
         "reference"
@@ -768,7 +768,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Structured Lean helper declarations support lexical overload groups, typed scalar/unit signatures, ordered once-only arguments, recursion rejection, transitive effects and scalar disclosure checks. Source/expansion/execution resource policies are enforced. Structured branch purity and external effect backend execution remain open.",
         "evidence": [
-          "Nightlean/Helpers.lean",
+          "Noctium/Helpers.lean",
           "tests/Helpers.lean",
           "tests/HelperSource.lean",
           "runtime/tests/helpers.rs",
@@ -782,8 +782,8 @@
       "id": "C-LANG-PRAGMA",
       "layer": "language",
       "surface": "Version pragmas and compatibility declarations",
-      "nightleanStatus": "missing",
-      "notes": "Equivalent explicit Nightlean compatibility target, without Compact syntax or toolchain dependency.",
+      "noctiumStatus": "missing",
+      "notes": "Equivalent explicit Noctium compatibility target, without Compact syntax or toolchain dependency.",
       "source": [
         "reference"
       ],
@@ -798,7 +798,7 @@
       "id": "C-LANG-ASSERT",
       "layer": "language",
       "surface": "Assertions",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Boolean constraints exist. Failure attribution and unit-valued assertions need equivalence cases.",
       "source": [
         "reference",
@@ -809,7 +809,7 @@
         "ZK"
       ],
       "observedEvidence": [
-        "Nightlean/IR.lean",
+        "Noctium/IR.lean",
         "tests/IR.lean"
       ],
       "equivalence": "unverified"
@@ -818,7 +818,7 @@
       "id": "C-PRIVATE-INPUT",
       "layer": "private-runtime",
       "surface": "Private inputs and public outputs",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Current explicit input visibility supports a fixed claim. No full exported-argument disclosure policy.",
       "source": [
         "reference",
@@ -830,7 +830,7 @@
         "HOST"
       ],
       "observedEvidence": [
-        "Nightlean/Frontend.lean",
+        "Noctium/Frontend.lean",
         "docs/development/native-localnet.md"
       ],
       "equivalence": "unverified"
@@ -839,7 +839,7 @@
       "id": "C-PRIVATE-WITNESS",
       "layer": "private-runtime",
       "surface": "Witness declarations and callbacks",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Finite scalar/composite typed source calls now use the native resumable Rust/C++ runtime. Broader witness-language coverage remains open.",
       "source": [
         "reference"
@@ -871,7 +871,7 @@
       "id": "C-PRIVATE-STATE",
       "layer": "private-runtime",
       "surface": "Private-state initialization and evolution",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Source scalar private stages and transactional native journals are qualified subsets. Storage truth and persistence remain host assumptions.",
       "source": [
         "reference"
@@ -903,7 +903,7 @@
       "id": "C-PRIVATE-DISCLOSURE",
       "layer": "language",
       "surface": "Explicit and indirect disclosure analysis",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Track private values through data/control flow, outputs, ledger writes, events, cross-calls and declassifying commitments.",
       "source": [
         "disclosure",
@@ -919,7 +919,7 @@
         "checkedOn": "2026-11-16",
         "scope": "Mandatory scalar source/native-entrypoint gates track private value and control origins at current public outputs, state writes and query paths. Explicit releases preserve control dependencies. Native authorized-release proofs bind public fields. Structured lazy control, composites/helpers and all native descriptors remain open. Failure/timing/provider/proof-byte privacy is separate from scalar flow checking.",
         "evidence": [
-          "Nightlean/Disclosure.lean",
+          "Noctium/Disclosure.lean",
           "tests/Disclosure.lean",
           "tests/disclosure-cli.sh",
           "tests/disclosure/native-evidence.json",
@@ -932,7 +932,7 @@
       "id": "C-STATE-CONSTRUCTOR",
       "layer": "language-ledger",
       "surface": "Contract constructor",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Native runtime config initializes scalar cells and explicitly empty maps. No general constructor language or witness initialization.",
       "source": [
         "reference"
@@ -951,7 +951,7 @@
       "id": "C-STATE-SEALED",
       "layer": "language-ledger",
       "surface": "Sealed ledger fields",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Reject mutations reachable from exported circuits, including helper calls.",
       "source": [
         "reference"
@@ -967,7 +967,7 @@
       "id": "C-STATE-NESTED",
       "layer": "language-ledger",
       "surface": "Nested ledger ADTs",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Map value nesting and typed ledger paths need explicit layout and operation semantics.",
       "source": [
         "reference",
@@ -984,7 +984,7 @@
       "id": "C-CONTRACT-INTERFACE",
       "layer": "language-ledger",
       "surface": "Contract types and implements",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Non-generic provable signatures. Pure interface circuits rejected in 0.36.x.",
       "source": [
         "reference",
@@ -1002,7 +1002,7 @@
       "id": "C-CONTRACT-CALL",
       "layer": "language-ledger",
       "surface": "Cross-contract execution",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Bind address, entry-point hash, arguments/results and communication commitment. Enforce conformance, key agreement, no re-entry, witness restrictions.",
       "source": [
         "reference",
@@ -1021,7 +1021,7 @@
       "id": "C-EVENT-EMIT",
       "layer": "language-ledger",
       "surface": "Standard event emission",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Only standard event types, ordered VersionedLogItem v1 encoding. Constructor emission rejected. General custom event declarations are not assumed.",
       "source": [
         "reference",
@@ -1039,7 +1039,7 @@
       "id": "C-ARTIFACT-ZKIR",
       "layer": "artifact",
       "surface": "ZKIR and proof/key artifacts",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Native key generation and local ledger execution exist for private claim and bounded scalars. Selected 3.2.1 compiler/runtime profiles now carry exact native revision and reject mixed profiles. Default remains 3.2.0. Full instruction/type and artifact equivalence remain unverified.",
       "source": [
         "reference",
@@ -1073,7 +1073,7 @@
       "id": "C-ARTIFACT-MANIFEST",
       "layer": "artifact",
       "surface": "Contract metadata, manifests and source provenance",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Canonical native public bundle assembler/verifier retains authenticated bytes with selected profile and provenance. Complete exported interfaces, signed releases and proof-to-deployment correspondence remain open.",
       "source": [
         "reference"
@@ -1083,7 +1083,7 @@
         "PROVENANCE"
       ],
       "observedEvidence": [
-        "Nightlean/Target.lean",
+        "Noctium/Target.lean",
         "docs/development/native-localnet-receipts.json"
       ],
       "equivalence": "unverified",
@@ -1102,7 +1102,7 @@
       "id": "C-ARTIFACT-HOST",
       "layer": "artifact-runtime",
       "surface": "Portable execution and value ABI",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Qualified Rust and linked C/C++ source-witness/proof/client subsets run without Node. Web/mobile/WASM packages and full ABI equivalence remain open.",
       "source": [
         "reference"
@@ -1136,7 +1136,7 @@
       "id": "C-ARTIFACT-LEDGER",
       "layer": "artifact-ledger",
       "surface": "State/transcript/communication binding",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "One native private claim finalized with exact state match. Multi-call, checkpoints, coins, all ADTs and malicious transcript variations unqualified.",
       "source": [
         "ledger"
@@ -1163,7 +1163,7 @@
       "id": "C-DIAGNOSTIC",
       "layer": "tooling",
       "surface": "Static and dynamic diagnostics",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Source spans, type/capability errors exist. Need stable error categories and negative corpus, not identical Compact wording.",
       "source": [
         "reference"
@@ -1173,8 +1173,8 @@
         "ABI"
       ],
       "observedEvidence": [
-        "Nightlean/IR.lean",
-        "Nightlean/Frontend.lean"
+        "Noctium/IR.lean",
+        "Noctium/Frontend.lean"
       ],
       "equivalence": "unverified"
     },
@@ -1182,7 +1182,7 @@
       "id": "C-SDK-MAINTENANCE",
       "layer": "ledger-sdk",
       "surface": "Authority replacement and verifier-key/IR maintenance",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Exposed by ledger SDK, not a Compact language primitive. Include deployment lifecycle tests as a separate compatibility track.",
       "source": [
         "ledger",
@@ -1199,7 +1199,7 @@
       "id": "C-SDK-INTEGRATION",
       "layer": "ledger-sdk",
       "surface": "Wallet, funding, proof, deployment and indexer integration",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Isolated localnet deployment/funding exists for claim. SDK replacement is outside language parity, portable adapters still need qualification.",
       "source": [
         "matrix",
@@ -1216,9 +1216,9 @@
     },
     {
       "id": "C-NATIVE-POSEIDON",
-      "layer": "nightlean-extension",
+      "layer": "noctium-extension",
       "surface": "Domain-tagged two-input Poseidon primitive",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Native primitive and claim proved. No inference of equivalence to generic transientHash, Merkle leaf hashing or Compact serialization.",
       "source": [
         "stdlib",
@@ -1229,7 +1229,7 @@
         "ZK"
       ],
       "observedEvidence": [
-        "Nightlean/IR.lean",
+        "Noctium/IR.lean",
         "docs/development/native-localnet.md"
       ],
       "equivalence": "unverified"
@@ -1238,7 +1238,7 @@
       "id": "C-ADT-KERNEL-BALANCE",
       "layer": "language-ledger",
       "surface": "Kernel.balance",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1255,7 +1255,7 @@
       "id": "C-ADT-KERNEL-BALANCEGREATERTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.balanceGreaterThan",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1272,7 +1272,7 @@
       "id": "C-ADT-KERNEL-BALANCELESSTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.balanceLessThan",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1289,7 +1289,7 @@
       "id": "C-ADT-KERNEL-BLOCKTIMEGREATERTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.blockTimeGreaterThan",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1306,7 +1306,7 @@
       "id": "C-ADT-KERNEL-BLOCKTIMELESSTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.blockTimeLessThan",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1323,7 +1323,7 @@
       "id": "C-ADT-KERNEL-CALLER",
       "layer": "language-ledger",
       "surface": "Kernel.caller",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1340,7 +1340,7 @@
       "id": "C-ADT-KERNEL-CHECKPOINT",
       "layer": "language-ledger",
       "surface": "Kernel.checkpoint",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1357,7 +1357,7 @@
       "id": "C-ADT-KERNEL-CLAIMCONTRACTCALL",
       "layer": "language-ledger",
       "surface": "Kernel.claimContractCall",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1374,7 +1374,7 @@
       "id": "C-ADT-KERNEL-CLAIMUNSHIELDEDCOINSPEND",
       "layer": "language-ledger",
       "surface": "Kernel.claimUnshieldedCoinSpend",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1391,7 +1391,7 @@
       "id": "C-ADT-KERNEL-CLAIMZSWAPCOINRECEIVE",
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinReceive",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1408,7 +1408,7 @@
       "id": "C-ADT-KERNEL-CLAIMZSWAPCOINSPEND",
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinSpend",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1425,7 +1425,7 @@
       "id": "C-ADT-KERNEL-CLAIMZSWAPNULLIFIER",
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapNullifier",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1442,7 +1442,7 @@
       "id": "C-ADT-KERNEL-INCUNSHIELDEDINPUTS",
       "layer": "language-ledger",
       "surface": "Kernel.incUnshieldedInputs",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1459,7 +1459,7 @@
       "id": "C-ADT-KERNEL-INCUNSHIELDEDOUTPUTS",
       "layer": "language-ledger",
       "surface": "Kernel.incUnshieldedOutputs",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1476,7 +1476,7 @@
       "id": "C-ADT-KERNEL-MINTSHIELDED",
       "layer": "language-ledger",
       "surface": "Kernel.mintShielded",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1493,7 +1493,7 @@
       "id": "C-ADT-KERNEL-MINTUNSHIELDED",
       "layer": "language-ledger",
       "surface": "Kernel.mintUnshielded",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1510,7 +1510,7 @@
       "id": "C-ADT-KERNEL-SELF",
       "layer": "language-ledger",
       "surface": "Kernel.self",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1527,7 +1527,7 @@
       "id": "C-ADT-CELL-READ",
       "layer": "language-ledger",
       "surface": "Cell.read",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
       "source": [
         "adt"
@@ -1538,8 +1538,8 @@
         "LEDGER"
       ],
       "observedEvidence": [
-        "Nightlean/IR.lean",
-        "Nightlean/Backend/Impact.lean",
+        "Noctium/IR.lean",
+        "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
       ],
       "equivalence": "unverified"
@@ -1548,7 +1548,7 @@
       "id": "C-ADT-CELL-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Cell.resetToDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1565,7 +1565,7 @@
       "id": "C-ADT-CELL-WRITE",
       "layer": "language-ledger",
       "surface": "Cell.write",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
       "source": [
         "adt"
@@ -1576,8 +1576,8 @@
         "LEDGER"
       ],
       "observedEvidence": [
-        "Nightlean/IR.lean",
-        "Nightlean/Backend/Impact.lean",
+        "Noctium/IR.lean",
+        "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
       ],
       "equivalence": "unverified"
@@ -1586,7 +1586,7 @@
       "id": "C-ADT-CELL-WRITECOIN",
       "layer": "language-ledger",
       "surface": "Cell.writeCoin",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1603,7 +1603,7 @@
       "id": "C-ADT-COUNTER-DECREMENT",
       "layer": "language-ledger",
       "surface": "Counter.decrement",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1620,7 +1620,7 @@
       "id": "C-ADT-COUNTER-INCREMENT",
       "layer": "language-ledger",
       "surface": "Counter.increment",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1637,7 +1637,7 @@
       "id": "C-ADT-COUNTER-LESSTHAN",
       "layer": "language-ledger",
       "surface": "Counter.lessThan",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1654,7 +1654,7 @@
       "id": "C-ADT-COUNTER-READ",
       "layer": "language-ledger",
       "surface": "Counter.read",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1671,7 +1671,7 @@
       "id": "C-ADT-COUNTER-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Counter.resetToDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1688,7 +1688,7 @@
       "id": "C-ADT-SET-INSERT",
       "layer": "language-ledger",
       "surface": "Set.insert",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1705,7 +1705,7 @@
       "id": "C-ADT-SET-INSERTCOIN",
       "layer": "language-ledger",
       "surface": "Set.insertCoin",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1722,7 +1722,7 @@
       "id": "C-ADT-SET-ISEMPTY",
       "layer": "language-ledger",
       "surface": "Set.isEmpty",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1739,7 +1739,7 @@
       "id": "C-ADT-SET-MEMBER",
       "layer": "language-ledger",
       "surface": "Set.member",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1756,7 +1756,7 @@
       "id": "C-ADT-SET-REMOVE",
       "layer": "language-ledger",
       "surface": "Set.remove",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1773,7 +1773,7 @@
       "id": "C-ADT-SET-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Set.resetToDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1790,7 +1790,7 @@
       "id": "C-ADT-SET-SIZE",
       "layer": "language-ledger",
       "surface": "Set.size",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1807,7 +1807,7 @@
       "id": "C-ADT-SET-ITERATOR",
       "layer": "host-ledger-view",
       "surface": "Set.[Symbol.iterator]",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -1823,7 +1823,7 @@
       "id": "C-ADT-MAP-INSERT",
       "layer": "language-ledger",
       "surface": "Map.insert",
-      "nightleanStatus": "subset",
+      "noctiumStatus": "subset",
       "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
       "source": [
         "adt"
@@ -1834,8 +1834,8 @@
         "LEDGER"
       ],
       "observedEvidence": [
-        "Nightlean/IR.lean",
-        "Nightlean/Backend/Impact.lean",
+        "Noctium/IR.lean",
+        "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
       ],
       "equivalence": "unverified"
@@ -1844,7 +1844,7 @@
       "id": "C-ADT-MAP-INSERTCOIN",
       "layer": "language-ledger",
       "surface": "Map.insertCoin",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1861,7 +1861,7 @@
       "id": "C-ADT-MAP-INSERTDEFAULT",
       "layer": "language-ledger",
       "surface": "Map.insertDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1878,7 +1878,7 @@
       "id": "C-ADT-MAP-ISEMPTY",
       "layer": "language-ledger",
       "surface": "Map.isEmpty",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1895,7 +1895,7 @@
       "id": "C-ADT-MAP-LOOKUP",
       "layer": "language-ledger",
       "surface": "Map.lookup",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "IR has readMap, but native lowerer explicitly rejects map value reads.",
       "source": [
         "adt"
@@ -1912,7 +1912,7 @@
       "id": "C-ADT-MAP-MEMBER",
       "layer": "language-ledger",
       "surface": "Map.member",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1929,7 +1929,7 @@
       "id": "C-ADT-MAP-REMOVE",
       "layer": "language-ledger",
       "surface": "Map.remove",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1946,7 +1946,7 @@
       "id": "C-ADT-MAP-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Map.resetToDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1963,7 +1963,7 @@
       "id": "C-ADT-MAP-SIZE",
       "layer": "language-ledger",
       "surface": "Map.size",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -1980,7 +1980,7 @@
       "id": "C-ADT-MAP-ITERATOR",
       "layer": "host-ledger-view",
       "surface": "Map.[Symbol.iterator]",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -1996,7 +1996,7 @@
       "id": "C-ADT-LIST-HEAD",
       "layer": "language-ledger",
       "surface": "List.head",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2013,7 +2013,7 @@
       "id": "C-ADT-LIST-ISEMPTY",
       "layer": "language-ledger",
       "surface": "List.isEmpty",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2030,7 +2030,7 @@
       "id": "C-ADT-LIST-LENGTH",
       "layer": "language-ledger",
       "surface": "List.length",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2047,7 +2047,7 @@
       "id": "C-ADT-LIST-POPFRONT",
       "layer": "language-ledger",
       "surface": "List.popFront",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2064,7 +2064,7 @@
       "id": "C-ADT-LIST-PUSHFRONT",
       "layer": "language-ledger",
       "surface": "List.pushFront",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2081,7 +2081,7 @@
       "id": "C-ADT-LIST-PUSHFRONTCOIN",
       "layer": "language-ledger",
       "surface": "List.pushFrontCoin",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2098,7 +2098,7 @@
       "id": "C-ADT-LIST-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "List.resetToDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2115,7 +2115,7 @@
       "id": "C-ADT-LIST-ITERATOR",
       "layer": "host-ledger-view",
       "surface": "List.[Symbol.iterator]",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2131,7 +2131,7 @@
       "id": "C-ADT-MERKLETREE-CHECKROOT",
       "layer": "language-ledger",
       "surface": "MerkleTree.checkRoot",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2148,7 +2148,7 @@
       "id": "C-ADT-MERKLETREE-INSERT",
       "layer": "language-ledger",
       "surface": "MerkleTree.insert",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2165,7 +2165,7 @@
       "id": "C-ADT-MERKLETREE-INSERTHASH",
       "layer": "language-ledger",
       "surface": "MerkleTree.insertHash",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2182,7 +2182,7 @@
       "id": "C-ADT-MERKLETREE-INSERTHASHINDEX",
       "layer": "language-ledger",
       "surface": "MerkleTree.insertHashIndex",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2199,7 +2199,7 @@
       "id": "C-ADT-MERKLETREE-INSERTINDEX",
       "layer": "language-ledger",
       "surface": "MerkleTree.insertIndex",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2216,7 +2216,7 @@
       "id": "C-ADT-MERKLETREE-INSERTINDEXDEFAULT",
       "layer": "language-ledger",
       "surface": "MerkleTree.insertIndexDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2233,7 +2233,7 @@
       "id": "C-ADT-MERKLETREE-ISFULL",
       "layer": "language-ledger",
       "surface": "MerkleTree.isFull",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2250,7 +2250,7 @@
       "id": "C-ADT-MERKLETREE-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "MerkleTree.resetToDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2267,7 +2267,7 @@
       "id": "C-ADT-MERKLETREE-FINDPATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.findPathForLeaf",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2283,7 +2283,7 @@
       "id": "C-ADT-MERKLETREE-FIRSTFREE",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.firstFree",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2299,7 +2299,7 @@
       "id": "C-ADT-MERKLETREE-PATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.pathForLeaf",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2315,7 +2315,7 @@
       "id": "C-ADT-MERKLETREE-ROOT",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.root",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2331,7 +2331,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-CHECKROOT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.checkRoot",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2348,7 +2348,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-INSERT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insert",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2365,7 +2365,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-INSERTHASH",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertHash",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2382,7 +2382,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-INSERTHASHINDEX",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertHashIndex",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2399,7 +2399,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEX",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndex",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2416,7 +2416,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEXDEFAULT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndexDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2433,7 +2433,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-ISFULL",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.isFull",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2450,7 +2450,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-RESETHISTORY",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.resetHistory",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2467,7 +2467,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.resetToDefault",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
       "source": [
         "adt"
@@ -2484,7 +2484,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-FINDPATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.findPathForLeaf",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2500,7 +2500,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-FIRSTFREE",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.firstFree",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2516,7 +2516,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-HISTORY",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.history",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2532,7 +2532,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-PATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.pathForLeaf",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2548,7 +2548,7 @@
       "id": "C-ADT-HISTORICMERKLETREE-ROOT",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.root",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Off-chain read API, not callable from Compact circuits.",
       "source": [
         "adt"
@@ -2564,7 +2564,7 @@
       "id": "C-STDLIB-MAYBE",
       "layer": "standard-library",
       "surface": "Maybe",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2585,7 +2585,7 @@
       "id": "C-STDLIB-EITHER",
       "layer": "standard-library",
       "surface": "Either",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2606,7 +2606,7 @@
       "id": "C-STDLIB-JUBJUBSCHNORRSIGNATURE",
       "layer": "standard-library",
       "surface": "JubjubSchnorrSignature",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2627,7 +2627,7 @@
       "id": "C-STDLIB-SECP256K1ECDSASIGNATURE",
       "layer": "standard-library",
       "surface": "Secp256k1EcdsaSignature",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2648,7 +2648,7 @@
       "id": "C-STDLIB-SECP256R1ECDSASIGNATURE",
       "layer": "standard-library",
       "surface": "Secp256r1EcdsaSignature",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2669,7 +2669,7 @@
       "id": "C-STDLIB-ED25519SIGNATURE",
       "layer": "standard-library",
       "surface": "Ed25519Signature",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2690,7 +2690,7 @@
       "id": "C-STDLIB-MERKLETREEDIGEST",
       "layer": "standard-library",
       "surface": "MerkleTreeDigest",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2711,7 +2711,7 @@
       "id": "C-STDLIB-MERKLETREEPATHENTRY",
       "layer": "standard-library",
       "surface": "MerkleTreePathEntry",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2732,7 +2732,7 @@
       "id": "C-STDLIB-MERKLETREEPATH",
       "layer": "standard-library",
       "surface": "MerkleTreePath",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2753,7 +2753,7 @@
       "id": "C-STDLIB-CONTRACTADDRESS",
       "layer": "standard-library",
       "surface": "ContractAddress",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2774,7 +2774,7 @@
       "id": "C-STDLIB-SHIELDEDCOININFO",
       "layer": "standard-library",
       "surface": "ShieldedCoinInfo",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2795,7 +2795,7 @@
       "id": "C-STDLIB-QUALIFIEDSHIELDEDCOININFO",
       "layer": "standard-library",
       "surface": "QualifiedShieldedCoinInfo",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2816,7 +2816,7 @@
       "id": "C-STDLIB-ZSWAPCOINPUBLICKEY",
       "layer": "standard-library",
       "surface": "ZswapCoinPublicKey",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2837,7 +2837,7 @@
       "id": "C-STDLIB-SHIELDEDSENDRESULT",
       "layer": "standard-library",
       "surface": "ShieldedSendResult",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2858,7 +2858,7 @@
       "id": "C-STDLIB-USERADDRESS",
       "layer": "standard-library",
       "surface": "UserAddress",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2879,7 +2879,7 @@
       "id": "C-STDLIB-PUBLICADDRESS",
       "layer": "standard-library",
       "surface": "PublicAddress",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2900,7 +2900,7 @@
       "id": "C-STDLIB-KERNEL",
       "layer": "language-ledger",
       "surface": "kernel",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -2921,7 +2921,7 @@
       "id": "C-STDLIB-SHIELDEDSPEND",
       "layer": "language-ledger",
       "surface": "ShieldedSpend",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -2942,7 +2942,7 @@
       "id": "C-STDLIB-SHIELDEDRECEIVE",
       "layer": "language-ledger",
       "surface": "ShieldedReceive",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -2963,7 +2963,7 @@
       "id": "C-STDLIB-SHIELDEDMINT",
       "layer": "language-ledger",
       "surface": "ShieldedMint",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -2984,7 +2984,7 @@
       "id": "C-STDLIB-SHIELDEDBURN",
       "layer": "language-ledger",
       "surface": "ShieldedBurn",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3005,7 +3005,7 @@
       "id": "C-STDLIB-UNSHIELDEDSPEND",
       "layer": "language-ledger",
       "surface": "UnshieldedSpend",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3026,7 +3026,7 @@
       "id": "C-STDLIB-UNSHIELDEDRECEIVE",
       "layer": "language-ledger",
       "surface": "UnshieldedReceive",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3047,7 +3047,7 @@
       "id": "C-STDLIB-UNSHIELDEDMINT",
       "layer": "language-ledger",
       "surface": "UnshieldedMint",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3068,7 +3068,7 @@
       "id": "C-STDLIB-UNSHIELDEDBURN",
       "layer": "language-ledger",
       "surface": "UnshieldedBurn",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3089,7 +3089,7 @@
       "id": "C-STDLIB-PAUSED",
       "layer": "language-ledger",
       "surface": "Paused",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3110,7 +3110,7 @@
       "id": "C-STDLIB-UNPAUSED",
       "layer": "language-ledger",
       "surface": "Unpaused",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3131,7 +3131,7 @@
       "id": "C-STDLIB-MISC",
       "layer": "language-ledger",
       "surface": "Misc",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
       "source": [
         "stdlib",
@@ -3152,7 +3152,7 @@
       "id": "C-STDLIB-SOME",
       "layer": "standard-library",
       "surface": "some",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3173,7 +3173,7 @@
       "id": "C-STDLIB-NONE",
       "layer": "standard-library",
       "surface": "none",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3194,7 +3194,7 @@
       "id": "C-STDLIB-LEFT",
       "layer": "standard-library",
       "surface": "left",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3215,7 +3215,7 @@
       "id": "C-STDLIB-RIGHT",
       "layer": "standard-library",
       "surface": "right",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3236,8 +3236,8 @@
       "id": "C-STDLIB-TRANSIENTHASH",
       "layer": "standard-library",
       "surface": "transientHash",
-      "nightleanStatus": "related-subset",
-      "notes": "Nightlean poseidon2 exists, generic input alignment and exact Compact hash domain/padding unverified.",
+      "noctiumStatus": "related-subset",
+      "notes": "Noctium poseidon2 exists, generic input alignment and exact Compact hash domain/padding unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3259,7 +3259,7 @@
       "id": "C-STDLIB-TRANSIENTCOMMIT",
       "layer": "standard-library",
       "surface": "transientCommit",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3280,7 +3280,7 @@
       "id": "C-STDLIB-PERSISTENTHASH",
       "layer": "standard-library",
       "surface": "persistentHash",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3301,7 +3301,7 @@
       "id": "C-STDLIB-PERSISTENTCOMMIT",
       "layer": "standard-library",
       "surface": "persistentCommit",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3322,7 +3322,7 @@
       "id": "C-STDLIB-DEGRADETOTRANSIENT",
       "layer": "standard-library",
       "surface": "degradeToTransient",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3343,7 +3343,7 @@
       "id": "C-STDLIB-UPGRADEFROMTRANSIENT",
       "layer": "standard-library",
       "surface": "upgradeFromTransient",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3364,7 +3364,7 @@
       "id": "C-STDLIB-KECCAK256",
       "layer": "standard-library",
       "surface": "keccak256",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3385,7 +3385,7 @@
       "id": "C-STDLIB-SHA512",
       "layer": "standard-library",
       "surface": "sha512",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3406,7 +3406,7 @@
       "id": "C-STDLIB-JUBJUBPOINT",
       "layer": "standard-library",
       "surface": "JubjubPoint",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3427,7 +3427,7 @@
       "id": "C-STDLIB-JUBJUBSCALAR",
       "layer": "standard-library",
       "surface": "JubjubScalar",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3448,7 +3448,7 @@
       "id": "C-STDLIB-CONSTRUCTJUBJUBPOINT",
       "layer": "standard-library",
       "surface": "constructJubjubPoint",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3469,7 +3469,7 @@
       "id": "C-STDLIB-JUBJUBPOINTX",
       "layer": "standard-library",
       "surface": "jubjubPointX",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3490,7 +3490,7 @@
       "id": "C-STDLIB-JUBJUBPOINTY",
       "layer": "standard-library",
       "surface": "jubjubPointY",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3511,7 +3511,7 @@
       "id": "C-STDLIB-SECP256K1POINT",
       "layer": "standard-library",
       "surface": "Secp256k1Point",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3532,7 +3532,7 @@
       "id": "C-STDLIB-SECP256K1BASE",
       "layer": "standard-library",
       "surface": "Secp256k1Base",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3553,7 +3553,7 @@
       "id": "C-STDLIB-SECP256K1SCALAR",
       "layer": "standard-library",
       "surface": "Secp256k1Scalar",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3574,7 +3574,7 @@
       "id": "C-STDLIB-SECP256K1POINTX",
       "layer": "standard-library",
       "surface": "secp256k1PointX",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3595,7 +3595,7 @@
       "id": "C-STDLIB-SECP256K1POINTY",
       "layer": "standard-library",
       "surface": "secp256k1PointY",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3616,7 +3616,7 @@
       "id": "C-STDLIB-SECP256R1POINT",
       "layer": "standard-library",
       "surface": "Secp256r1Point",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3637,7 +3637,7 @@
       "id": "C-STDLIB-SECP256R1BASE",
       "layer": "standard-library",
       "surface": "Secp256r1Base",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3658,7 +3658,7 @@
       "id": "C-STDLIB-SECP256R1SCALAR",
       "layer": "standard-library",
       "surface": "Secp256r1Scalar",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3679,7 +3679,7 @@
       "id": "C-STDLIB-SECP256R1POINTX",
       "layer": "standard-library",
       "surface": "secp256r1PointX",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3700,7 +3700,7 @@
       "id": "C-STDLIB-SECP256R1POINTY",
       "layer": "standard-library",
       "surface": "secp256r1PointY",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3721,7 +3721,7 @@
       "id": "C-STDLIB-CURVE25519POINT",
       "layer": "standard-library",
       "surface": "Curve25519Point",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3742,7 +3742,7 @@
       "id": "C-STDLIB-CURVE25519BASE",
       "layer": "standard-library",
       "surface": "Curve25519Base",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3763,7 +3763,7 @@
       "id": "C-STDLIB-CURVE25519SCALAR",
       "layer": "standard-library",
       "surface": "Curve25519Scalar",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3784,7 +3784,7 @@
       "id": "C-STDLIB-CURVE25519POINTX",
       "layer": "standard-library",
       "surface": "curve25519PointX",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3805,7 +3805,7 @@
       "id": "C-STDLIB-CURVE25519POINTY",
       "layer": "standard-library",
       "surface": "curve25519PointY",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3826,7 +3826,7 @@
       "id": "C-STDLIB-ECADD",
       "layer": "standard-library",
       "surface": "ecAdd",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
       "source": [
         "stdlib",
@@ -3847,7 +3847,7 @@
       "id": "C-STDLIB-ECNEG",
       "layer": "standard-library",
       "surface": "ecNeg",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3868,7 +3868,7 @@
       "id": "C-STDLIB-ECMUL",
       "layer": "standard-library",
       "surface": "ecMul",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
       "source": [
         "stdlib",
@@ -3889,7 +3889,7 @@
       "id": "C-STDLIB-ECMULGENERATOR",
       "layer": "standard-library",
       "surface": "ecMulGenerator",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
       "source": [
         "stdlib",
@@ -3910,7 +3910,7 @@
       "id": "C-STDLIB-NEG",
       "layer": "standard-library",
       "surface": "neg",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
       "source": [
         "stdlib",
@@ -3931,7 +3931,7 @@
       "id": "C-STDLIB-INV",
       "layer": "standard-library",
       "surface": "inv",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
       "source": [
         "stdlib",
@@ -3952,7 +3952,7 @@
       "id": "C-STDLIB-HASHTOCURVE",
       "layer": "standard-library",
       "surface": "hashToCurve",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3973,7 +3973,7 @@
       "id": "C-STDLIB-JUBJUBSCHNORRVERIFY",
       "layer": "standard-library",
       "surface": "jubjubSchnorrVerify",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3994,7 +3994,7 @@
       "id": "C-STDLIB-SECP256K1ECDSAVERIFY",
       "layer": "standard-library",
       "surface": "secp256k1EcdsaVerify",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4015,7 +4015,7 @@
       "id": "C-STDLIB-SECP256K1ETHEREUMADDRESS",
       "layer": "standard-library",
       "surface": "secp256k1EthereumAddress",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4036,7 +4036,7 @@
       "id": "C-STDLIB-SECP256R1ECDSAVERIFY",
       "layer": "standard-library",
       "surface": "secp256r1EcdsaVerify",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4057,7 +4057,7 @@
       "id": "C-STDLIB-ED25519VERIFY",
       "layer": "standard-library",
       "surface": "ed25519Verify",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4078,7 +4078,7 @@
       "id": "C-STDLIB-MERKLETREEPATHROOT",
       "layer": "standard-library",
       "surface": "merkleTreePathRoot",
-      "nightleanStatus": "related-subset",
+      "noctiumStatus": "related-subset",
       "notes": "Claim example computes a selected fixed-depth path, not this generic library API or standard leaf hash.",
       "source": [
         "stdlib",
@@ -4101,7 +4101,7 @@
       "id": "C-STDLIB-MERKLETREEPATHROOTNOLEAFHASH",
       "layer": "standard-library",
       "surface": "merkleTreePathRootNoLeafHash",
-      "nightleanStatus": "related-subset",
+      "noctiumStatus": "related-subset",
       "notes": "Claim example computes a selected fixed-depth path, not this generic library API or standard leaf hash.",
       "source": [
         "stdlib",
@@ -4124,7 +4124,7 @@
       "id": "C-STDLIB-NATIVETOKEN",
       "layer": "standard-library",
       "surface": "nativeToken",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4145,7 +4145,7 @@
       "id": "C-STDLIB-TOKENTYPE",
       "layer": "standard-library",
       "surface": "tokenType",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4166,7 +4166,7 @@
       "id": "C-STDLIB-MINTSHIELDEDTOKEN",
       "layer": "standard-library",
       "surface": "mintShieldedToken",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4187,7 +4187,7 @@
       "id": "C-STDLIB-EVOLVENONCE",
       "layer": "standard-library",
       "surface": "evolveNonce",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4208,7 +4208,7 @@
       "id": "C-STDLIB-SHIELDEDBURNADDRESS",
       "layer": "standard-library",
       "surface": "shieldedBurnAddress",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4229,7 +4229,7 @@
       "id": "C-STDLIB-RECEIVESHIELDED",
       "layer": "standard-library",
       "surface": "receiveShielded",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4250,7 +4250,7 @@
       "id": "C-STDLIB-SENDSHIELDED",
       "layer": "standard-library",
       "surface": "sendShielded",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4271,7 +4271,7 @@
       "id": "C-STDLIB-SENDIMMEDIATESHIELDED",
       "layer": "standard-library",
       "surface": "sendImmediateShielded",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4292,7 +4292,7 @@
       "id": "C-STDLIB-MERGECOIN",
       "layer": "standard-library",
       "surface": "mergeCoin",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4313,7 +4313,7 @@
       "id": "C-STDLIB-MERGECOINIMMEDIATE",
       "layer": "standard-library",
       "surface": "mergeCoinImmediate",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4334,7 +4334,7 @@
       "id": "C-STDLIB-OWNPUBLICKEY",
       "layer": "standard-library",
       "surface": "ownPublicKey",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4355,7 +4355,7 @@
       "id": "C-STDLIB-CREATEZSWAPINPUT",
       "layer": "standard-library",
       "surface": "createZswapInput",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4376,7 +4376,7 @@
       "id": "C-STDLIB-CREATEZSWAPOUTPUT",
       "layer": "standard-library",
       "surface": "createZswapOutput",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4397,7 +4397,7 @@
       "id": "C-STDLIB-MINTUNSHIELDEDTOKEN",
       "layer": "standard-library",
       "surface": "mintUnshieldedToken",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4418,7 +4418,7 @@
       "id": "C-STDLIB-SENDUNSHIELDED",
       "layer": "standard-library",
       "surface": "sendUnshielded",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4439,7 +4439,7 @@
       "id": "C-STDLIB-RECEIVEUNSHIELDED",
       "layer": "standard-library",
       "surface": "receiveUnshielded",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4460,7 +4460,7 @@
       "id": "C-STDLIB-UNSHIELDEDBALANCE",
       "layer": "standard-library",
       "surface": "unshieldedBalance",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4481,7 +4481,7 @@
       "id": "C-STDLIB-UNSHIELDEDBALANCELT",
       "layer": "standard-library",
       "surface": "unshieldedBalanceLt",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4502,7 +4502,7 @@
       "id": "C-STDLIB-UNSHIELDEDBALANCEGTE",
       "layer": "standard-library",
       "surface": "unshieldedBalanceGte",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4523,7 +4523,7 @@
       "id": "C-STDLIB-UNSHIELDEDBALANCEGT",
       "layer": "standard-library",
       "surface": "unshieldedBalanceGt",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4544,7 +4544,7 @@
       "id": "C-STDLIB-UNSHIELDEDBALANCELTE",
       "layer": "standard-library",
       "surface": "unshieldedBalanceLte",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4565,7 +4565,7 @@
       "id": "C-STDLIB-BLOCKTIMELT",
       "layer": "standard-library",
       "surface": "blockTimeLt",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4586,7 +4586,7 @@
       "id": "C-STDLIB-BLOCKTIMEGTE",
       "layer": "standard-library",
       "surface": "blockTimeGte",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4607,7 +4607,7 @@
       "id": "C-STDLIB-BLOCKTIMEGT",
       "layer": "standard-library",
       "surface": "blockTimeGt",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4628,7 +4628,7 @@
       "id": "C-STDLIB-BLOCKTIMELTE",
       "layer": "standard-library",
       "surface": "blockTimeLte",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4649,7 +4649,7 @@
       "id": "C-STDLIB-SERIALIZE",
       "layer": "standard-library",
       "surface": "serialize",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Pinned API prose says event-only, but compiler source and 0.36.1 regression support ordinary serializable values. Use expand-serialize.ss, reject unsupported point/contract/ADT/opaque cases.",
       "source": [
         "stdlib",
@@ -4670,7 +4670,7 @@
       "id": "C-STDLIB-DESERIALIZE",
       "layer": "standard-library",
       "surface": "deserialize",
-      "nightleanStatus": "missing",
+      "noctiumStatus": "missing",
       "notes": "Pinned API prose says event-only, but compiler source and 0.36.1 regression support ordinary serializable values. Use expand-serialize.ss, reject unsupported point/contract/ADT/opaque cases.",
       "source": [
         "stdlib",

@@ -6,7 +6,7 @@ This package closes the claim-specific formal state/transcript link. Exact UTF-8
 
 ## Independent native model
 
-`Nightlean/Verification/NativeState.lean` defines canonical scalar cells with field or one-byte Boolean alignment, native array/map nodes, a stack machine, exact read observations and an independently checked trace relation. The qualified state shape is a root array containing two field cells followed by one field-keyed map. The model represents maps as entry lists. A well-formed source invariant supplies unique keys, canonical keys and true spent markers. The preservation theorem also holds for the larger abstract list domain.
+`Noctium/Verification/NativeState.lean` defines canonical scalar cells with field or one-byte Boolean alignment, native array/map nodes, a stack machine, exact read observations and an independently checked trace relation. The qualified state shape is a root array containing two field cells followed by one field-keyed map. The model represents maps as entry lists. A well-formed source invariant supplies unique keys, canonical keys and true spent markers. The preservation theorem also holds for the larger abstract list domain.
 
 The machine implements the claim's push, popeq, dup, index, member and insert operations. Popeq compares the complete aligned cell against the actual top of stack. Membership tests key presence, including entries whose stored value is false. Path-preserving index retains the parent array and its field-aligned index on the stack. Insert 2 first rebuilds the map at the supplied key, then rebuilds the root array at the saved index. Missing paths, wrong slots, type/alignment mismatches and incorrect expected reads return no model successor. Transient/storage flags survive in the opcode transcript. The model abstracts native reference-strength bookkeeping, whose implementation agreement is an explicit boundary.
 
@@ -68,7 +68,7 @@ The script builds the actual source/proofs in a fresh temporary import directory
 
 Ten mutations must fail at the actual kernel equality check: wrong slot, saved path, key, write value, expected read, alignment, storage flag, read declaration order, opcode grouping and inactive group. Import failures or missing identifiers do not qualify as rejection evidence. The script exports 15 proof roots and four fresh certificate roots, rejects all non-approved transitive axiom declarations and unsafe definitions, then replays the exported closure with `leanchecker --from-export`.
 
-Development evidence lives under `.nightlean/audits/private-claim-state/`. A portable summary is retained in `tests/private-claim-state-evidence.json`. Exact byte-to-tree correspondence is not claimed. The proof does not treat a runtime JSON parse, CLI exit code, hash or local-ledger sample as a kernel byte certificate.
+Development evidence lives under `.noctium/audits/private-claim-state/`. A portable summary is retained in `tests/private-claim-state-evidence.json`. Exact byte-to-tree correspondence is not claimed. The proof does not treat a runtime JSON parse, CLI exit code, hash or local-ledger sample as a kernel byte certificate.
 
 ## Native implementation and admission boundary
 

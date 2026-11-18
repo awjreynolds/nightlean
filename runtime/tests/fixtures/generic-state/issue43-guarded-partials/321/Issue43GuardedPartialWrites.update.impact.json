@@ -38,7 +38,7 @@
     {"value":
      {"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxx",
       "body":
       {"tag": "usub",
        "right":
@@ -46,14 +46,14 @@
         "tag": "select",
         "no": {"value": "0", "tag": "uint", "maximum": "255"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}},
        "maximum": "255",
        "left":
        {"yes": {"tag": "reference", "name": "left"},
         "tag": "select",
         "no": {"value": "0", "tag": "uint", "maximum": "255"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}},
      "type": "Native",
      "tag": "cast"},
     "alignment": "field"},
@@ -76,14 +76,14 @@
     {"value":
      {"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxx",
       "body":
       {"value":
        {"yes": {"tag": "reference", "name": "wide"},
         "tag": "select",
         "no": {"value": "0", "tag": "constant"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}},
        "type": "UIntRange<8>",
        "tag": "cast"}},
      "type": "Native",
@@ -108,7 +108,7 @@
     {"value":
      {"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxxx",
       "body":
       {"tag": "assertThen",
        "condition":
@@ -116,7 +116,7 @@
         "tag": "select",
         "no": {"value": true, "tag": "bool"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxx"}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}},
        "body": {"value": "7", "tag": "uint", "maximum": "7"}}},
      "type": "Native",
      "tag": "cast"},
@@ -140,7 +140,7 @@
     {"value":
      {"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxx",
       "body":
       {"value": {"value": true, "tag": "bool"},
        "tag": "let",
@@ -152,14 +152,14 @@
          "tag": "select",
          "no": {"value": "0", "tag": "uint", "maximum": "255"},
          "condition":
-         {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+         {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}},
         "maximum": "255",
         "left":
         {"yes": {"tag": "reference", "name": "left"},
          "tag": "select",
          "no": {"value": "0", "tag": "uint", "maximum": "255"},
          "condition":
-         {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}}}},
+         {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}}},
      "type": "Native",
      "tag": "cast"},
     "alignment": "field"},
@@ -181,7 +181,7 @@
     "expression":
     {"value": {"tag": "reference", "name": "enabled"},
      "tag": "let",
-     "name": "_nightlean_activity_guard_xxxxxxxx",
+     "name": "_noctium_activity_guard_xxxxxxxx",
      "body":
      {"tag": "add",
       "right": {"value": "2", "tag": "constant"},
@@ -196,7 +196,7 @@
  "guards":
  [{"value": {"tag": "reference", "name": "checkEnabled"},
    "tag": "let",
-   "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+   "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
    "body":
    {"yes":
     {"tag": "assertThen",
@@ -205,12 +205,12 @@
       "tag": "select",
       "no": {"value": true, "tag": "bool"},
       "condition":
-      {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}},
+      {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}},
      "body": {"value": true, "tag": "bool"}},
     "tag": "select",
     "no": {"value": true, "tag": "bool"},
     "condition":
-    {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}],
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}],
  "entrypoint": "update",
  "contractName": "Issue43GuardedPartialWrites",
  "circuit":

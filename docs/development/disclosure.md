@@ -1,6 +1,6 @@
 # Scalar disclosure policy
 
-Noctium rejects undisclosed private value and control origins at the current public source sinks. The executable policy lives in `Nightlean/Disclosure.lean`. The Lean compiler checks source declarations, checks again before artifact emission, and applies the policy at the public typed-IR ZKIR and Impact lowering entrypoints.
+Noctium rejects undisclosed private value and control origins at the current public source sinks. The executable policy lives in `Noctium/Disclosure.lean`. The Lean compiler checks source declarations, checks again before artifact emission, and applies the policy at the public typed-IR ZKIR and Impact lowering entrypoints.
 
 This is DF-00, the current scalar-language policy. Composite values, source functions, structured guarded effects, general providers and native-wide propagation require their own rules. Structured `if` statements remain unsupported. This pass does not establish timing, failure-channel or whole-program noninterference.
 
@@ -79,7 +79,7 @@ Independent native key generation produced k5 keys for `authorizedRelease` at 13
 After reproducing the source, keys, proof and pinned parameter file in one directory, run the explicit native verification test:
 
 ```sh
-NIGHTLEAN_DISCLOSURE_FIXTURE=/path/to/qualification \
+NOCTIUM_DISCLOSURE_FIXTURE=/path/to/qualification \
   cargo test --manifest-path runtime/Cargo.toml --locked \
   --test disclosure_verification -- --ignored
 ```

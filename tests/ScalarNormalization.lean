@@ -1,7 +1,7 @@
-import Nightlean.Verification.ScalarNormalizationSoundness
-import Nightlean.Backend.Zkir
+import Noctium.Verification.ScalarNormalizationSoundness
+import Noctium.Backend.Zkir
 
-open Nightlean Nightlean.Backend.Native Nightlean.Verification.ScalarNormalization
+open Noctium Noctium.Backend.Native Noctium.Verification.ScalarNormalization
 
 namespace ScalarNormalizationTests
 

@@ -21,9 +21,9 @@
     "logSha256": "50d73540227450c8f778e7e554a73a62e1387b46ab80815f8aa9dec2123920e6"
   },
   "reviewedModel": {
-    "module": "Nightlean.Verification.GenericStateProofRoles",
-    "soundnessRole": "Nightlean.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound",
-    "completenessRole": "Nightlean.Verification.GenericStateConverseCompleteness.accepted_entrypoint_run_complete",
+    "module": "Noctium.Verification.GenericStateProofRoles",
+    "soundnessRole": "Noctium.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound",
+    "completenessRole": "Noctium.Verification.GenericStateConverseCompleteness.accepted_entrypoint_run_complete",
     "bytes": 90414390,
     "sha256": "28c25f37d4a5def604466d61252929139a87279cf0de302707dc59de66bab02a",
     "independentlyExportedFromExactReviewedSource": true,
@@ -63,7 +63,7 @@
       },
       "modelMismatch": {
         "status": "rejected",
-        "error": "model_declaration_mismatch: Nightlean.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound"
+        "error": "model_declaration_mismatch: Noctium.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound"
       },
       "oversized": {
         "status": "rejected",
@@ -205,5 +205,12 @@
     "Full ZKIR v3, whole compiler or G1-G6 completion",
     "New native proof generation, ledger deployment or public-network qualification for these two fixtures"
   ],
-  "historicalClaimSourceAuthority": "925164d0e17d994038d77d3b2b71c410619557d3"
+  "historicalClaimSourceAuthority": "925164d0e17d994038d77d3b2b71c410619557d3",
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "324aa67325947ede1613e4339d292fb303c4f41de7bc59d4fc4fb1c777d7bdfc",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/generic-state66-public/qualification-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/generic-state66-public/qualification-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

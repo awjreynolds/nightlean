@@ -1,7 +1,7 @@
-import Nightlean.Frontend
-open scoped Nightlean
+import Noctium.Frontend
+open scoped Noctium
 
-nightlean_circuit arithmeticRelation where
+noctium_circuit arithmeticRelation where
   public expected : Native
   private secret : Native
   let square : Native := mul(secret, secret)
@@ -9,7 +9,7 @@ nightlean_circuit arithmeticRelation where
   output result : Native := expected
 end
 
-nightlean_contract ArithmeticContract where
+noctium_contract ArithmeticContract where
   cell value : Native
   map seen : Native => Bool
   entry apply uses arithmeticRelation where
@@ -25,25 +25,25 @@ end
 
 /-- error: unknown Noctium value 'missing' -/
 #guard_msgs in
-nightlean_circuit unknownValue where
+noctium_circuit unknownValue where
   output result : Native := missing
 end
 
 /-- error: Noctium expression type mismatch -/
 #guard_msgs in
-nightlean_circuit wrongType where
+noctium_circuit wrongType where
   public flag : Bool
   output result : Native := flag
 end
 
 /-- error: duplicate Noctium value 'same' -/
 #guard_msgs in
-nightlean_circuit duplicateInput where
+noctium_circuit duplicateInput where
   public same : Native
   private same : Native
 end
 
-nightlean_contract PrivateRelease where
+noctium_contract PrivateRelease where
   cell value : Native
   entry leak uses arithmeticRelation where
     write value := disclose(secret)
@@ -52,36 +52,36 @@ end
 
 /-- error: absent requires a declared state map -/
 #guard_msgs in
-nightlean_contract WrongStateKind where
+noctium_contract WrongStateKind where
   cell value : Native
   entry leak uses arithmeticRelation where
     absent value[expected]
   end
 end
 
-#guard arithmeticRelation.inputs.map (·.visibility) == [Nightlean.Visibility.public, Nightlean.Visibility.private]
+#guard arithmeticRelation.inputs.map (·.visibility) == [Noctium.Visibility.public, Noctium.Visibility.private]
 #guard arithmeticRelation.span.line == 4
 
 /-- error: duplicate Noctium output 'value' -/
 #guard_msgs in
-nightlean_circuit shadowInput where
+noctium_circuit shadowInput where
   public value : Native
   output value : Native := value
 end
 
 /-- error: Noctium expression type mismatch -/
 #guard_msgs in
-nightlean_circuit wrongSelectCondition where
+noctium_circuit wrongSelectCondition where
   public value : Native
   output result : Native := select(value, 1, 2)
 end
 
 namespace Qualified
-nightlean_circuit relation where
+noctium_circuit relation where
   public x : Native
   output result : Native := x
 end
-nightlean_contract contractValue where
+noctium_contract contractValue where
   entry invoke uses relation where
   end
 end

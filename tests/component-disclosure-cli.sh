@@ -11,7 +11,7 @@ import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
 const directory = process.argv[2];
-const metadata = JSON.parse(await readFile(join(directory, 'nightlean.json'), 'utf8'));
+const metadata = JSON.parse(await readFile(join(directory, 'noctium.json'), 'utf8'));
 assert.equal(metadata.circuits.length, 1);
 const circuit = metadata.circuits[0];
 assert.deepEqual(circuit.inputs.map(input => input.name), [

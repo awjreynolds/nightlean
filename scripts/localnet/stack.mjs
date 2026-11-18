@@ -6,9 +6,9 @@ import { join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const exec = promisify(execFile);
-const name = 'nightlean-dev';
-const label = 'org.nightlean.localnet';
-const params = resolve(process.env.NIGHTLEAN_PROOF_CACHE ?? '/private/tmp/nightlean-proof-params');
+const name = 'noctium-dev';
+const label = 'org.noctium.localnet';
+const params = resolve(process.env.NOCTIUM_PROOF_CACHE ?? '/private/tmp/noctium-proof-params');
 const images = {
   node: 'midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a',
   relay: 'node@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf',
@@ -44,7 +44,7 @@ async function waitFor(check, title) {
 }
 async function prepareProofCache() {
   await mkdir(params, { recursive: true });
-  for (const source of [process.env.NIGHTLEAN_PROOF_CACHE_SOURCE, process.env.NIGHTLEAN_PROOF_CACHE_EXTRA_SOURCE].filter(Boolean)) {
+  for (const source of [process.env.NOCTIUM_PROOF_CACHE_SOURCE, process.env.NOCTIUM_PROOF_CACHE_EXTRA_SOURCE].filter(Boolean)) {
     if (resolve(source) === params) throw new Error('Proof cache source and destination must differ');
     await cp(resolve(source), params, { recursive: true, force: false, dereference: true });
   }
@@ -58,7 +58,7 @@ async function startProof() {
   await waitFor(async () => (await fetch(`${endpoints.proof}/health`, { signal: AbortSignal.timeout(2000) })).ok, 'proof server');
 }
 async function startRelay() {
-  const relay = "const net=require('net'); for(const [port,host,target] of [[9944,'nightlean-dev-node',9944],[6300,'nightlean-dev-proof',6300],[8088,'nightlean-dev-indexer',8088]]) net.createServer(s=>{const t=net.connect(target,host);s.pipe(t);t.pipe(s);s.on('error',()=>t.destroy());t.on('error',()=>s.destroy());}).listen(port,'0.0.0.0');";
+  const relay = "const net=require('net'); for(const [port,host,target] of [[9944,'noctium-dev-node',9944],[6300,'noctium-dev-proof',6300],[8088,'noctium-dev-indexer',8088]]) net.createServer(s=>{const t=net.connect(target,host);s.pipe(t);t.pipe(s);s.on('error',()=>t.destroy());t.on('error',()=>s.destroy());}).listen(port,'0.0.0.0');";
   await start('relay', ['--read-only', '-p', '127.0.0.1:19944:9944', '-p', '127.0.0.1:16300:6300', '-p', '127.0.0.1:18088:8088', '--entrypoint', 'node', images.relay, '-e', relay]);
   const relayInfo = await exists(`${name}-relay`);
   if (!relayInfo.NetworkSettings.Networks[name]) await docker(['network', 'connect', name, `${name}-relay`]);
@@ -103,12 +103,12 @@ if (process.argv[2] === 'down') {
   for (const image of Object.values(images)) await docker(['image', 'inspect', image]);
   const networks = await docker(['network', 'ls', '--format', '{{.Name}}']);
   if (!networks.split('\n').includes(name)) await docker(['network', 'create', '--internal', '--label', `${label}=${name}`, name]);
-  await start('node', ['--network', name, '--env', 'CFG_PRESET=dev', images.node, '--dev', '--force-authoring', '--base-path', '/tmp/nightlean-dev', '--no-telemetry', '--reserved-only', '--state-pruning', 'archive', '--blocks-pruning', 'archive', '--rpc-external', '--rpc-cors', 'all']);
+  await start('node', ['--network', name, '--env', 'CFG_PRESET=dev', images.node, '--dev', '--force-authoring', '--base-path', '/tmp/noctium-dev', '--no-telemetry', '--reserved-only', '--state-pruning', 'archive', '--blocks-pruning', 'archive', '--rpc-external', '--rpc-cors', 'all']);
   await startRelay();
   await waitFor(async () => Number.parseInt(await rpc('chain_getHeader').then((h) => h.number), 16) >= 1, 'development block one');
   if (await rpc('chain_getBlockHash', [0]) !== endpoints.genesis) throw new Error('Development genesis mismatch');
   await startProof();
-  await start('indexer', ['--network', name, '--env', 'APP__INFRA__NODE__URL=ws://nightlean-dev-node:9944', '--env', 'APP__APPLICATION__NETWORK_ID=undeployed', '--env', `APP__INFRA__SECRET=${'1'.repeat(64)}`, '--env', 'APP__INFRA__SPO_NODE__URL=ws://nightlean-dev-node:9944', '--env', 'APP__INFRA__SPO_NODE__BLOCKFROST_ID=synthetic', images.indexer]);
+  await start('indexer', ['--network', name, '--env', 'APP__INFRA__NODE__URL=ws://noctium-dev-node:9944', '--env', 'APP__APPLICATION__NETWORK_ID=undeployed', '--env', `APP__INFRA__SECRET=${'1'.repeat(64)}`, '--env', 'APP__INFRA__SPO_NODE__URL=ws://noctium-dev-node:9944', '--env', 'APP__INFRA__SPO_NODE__BLOCKFROST_ID=synthetic', images.indexer]);
   await waitFor(async () => (await fetch(`${endpoints.proof}/health`, { signal: AbortSignal.timeout(2000) })).ok, 'proof server');
   await waitFor(async () => {
     const response = await fetch(endpoints.indexer, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: '{__typename}' }), signal: AbortSignal.timeout(2000) });

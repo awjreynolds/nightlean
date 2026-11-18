@@ -23,7 +23,7 @@
      ["Bytes<32>",
       {"composite":
        {"typeFingerprint":
-        "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+        "NoctiumCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NoctiumCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
         "schemaVersion": 1,
         "layout":
         {"kind": "struct",
@@ -44,7 +44,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "NoctiumCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NoctiumCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -69,7 +69,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "NoctiumCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NoctiumCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -115,7 +115,7 @@
         "right": {"value": true, "tag": "bool"},
         "left": {"tag": "reference", "name": "present"}},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body": {"tag": "reference", "name": "account"}},
       "alignment": "bytes32"}]},
    "op": "guarded",
@@ -126,7 +126,7 @@
   {"operation":
    {"schema":
     {"typeFingerprint":
-     "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+     "NoctiumCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NoctiumCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
      "schemaVersion": 1,
      "layout":
      {"kind": "struct",
@@ -160,7 +160,7 @@
   {"storage": true,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "NoctiumCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NoctiumCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -188,7 +188,7 @@
      "alignment": "bytes32"}]},
   {"schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NightleanCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+    "NoctiumCompositeTypeV1;r31:Issue69CompositeMap.Ciphertext4NoctiumCompositeLayoutV1;1;R31:Issue69CompositeMap.Ciphertext44;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",

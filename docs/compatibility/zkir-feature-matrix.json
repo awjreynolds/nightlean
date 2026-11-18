@@ -26,7 +26,7 @@
     "meaningOfCounts": "Enum and requirement coverage only. These counts do not measure completion, enumerate every overload or constitute an executable conformance corpus.",
     "existingEvidence": "Three previously executed 3.2.1 workload records seed native keygen, checker, proof and ledger observations. Membership in a successful workload does not qualify an operation independently.",
     "scopeLimit": "Public networks and whole-language safety remain unqualified. The included Agda draft predates expanded types and instructions.",
-    "sourceObservation": "The Nightlean working tree was read during concurrent bounded-scalar implementation. Source and test definitions are observations, without newly executed scalar proof or ledger results."
+    "sourceObservation": "The Noctium working tree was read during concurrent bounded-scalar implementation. Source and test definitions are observations, without newly executed scalar proof or ledger results."
   },
   "counts": {
     "instructionVariants": 47,
@@ -344,8 +344,8 @@
     "E-LOCAL-SOURCE": {
       "kind": "source-and-test-definition-inspection-only",
       "refs": [
-        "../../Nightlean/Backend/Zkir.lean",
-        "../../Nightlean/IR.lean",
+        "../../Noctium/Backend/Zkir.lean",
+        "../../Noctium/IR.lean",
         "../../tests/Zkir.lean",
         "../../tests/BoundedScalars.lean",
         "../../tests/ScalarPolicy.lean"
@@ -379,7 +379,7 @@
         "ZKIR-UPSTREAM-OUTPUT-TESTS",
         "ZKIR-TYPEPASS"
       ],
-      "scope": "Upstream proof, typed-output and chip-inference tests are definitions only. Not executed or credited as Nightlean acceptance."
+      "scope": "Upstream proof, typed-output and chip-inference tests are definitions only. Not executed or credited as Noctium acceptance."
     }
   },
   "requirements": [
@@ -405,7 +405,7 @@
           "expected": "Reject duplicate/missing/nonfinal Output, duplicate names and use before definition."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-TYPECHECK",
@@ -429,7 +429,7 @@
           "expected": "Reject cross-curve operands, Native/Bool confusion and unsupported Bytes selection before keygen."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-BOOLEAN",
@@ -453,7 +453,7 @@
           "expected": "Malicious Native 2 must not satisfy a source Boolean assertion or alter guarded activity."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-RANGES",
@@ -477,7 +477,7 @@
           "expected": "Reject out-of-range operands, widths and underflow without relying only on preprocessing."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-GUARDEDINPUTS",
@@ -501,7 +501,7 @@
           "expected": "Reject a malicious default/read substitution or extra/short transcript and any assumption that guard constrains witness allocation. Reject eager partial operations on inactive defaults when no validated totalization exists."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-PUBLICBINDING",
@@ -525,7 +525,7 @@
           "expected": "Reject unbound public arguments and reordered/mismatched activity groups."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-DISCLOSURE",
@@ -552,7 +552,7 @@
           "expected": "Reject private-dependent public branches, effect presence/order, destination/key choices and implicit derived leaks without release."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-PRIVATEHOST",
@@ -577,7 +577,7 @@
           "expected": "Proving failure, rejected transaction, cancellation or restart must not commit private state or expose witness logs."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-COMMITMENT",
@@ -604,7 +604,7 @@
           "expected": "Reject changed output, nonce/randomness, binding input, wrong entrypoint and mismatched verifier key."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-CANONICAL",
@@ -628,7 +628,7 @@
           "expected": "Reject wrong limb counts, noncanonical typed encodings and invalid points, while accepting specified field reduction only through FromBytes."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-DEPENDENCIES",
@@ -652,7 +652,7 @@
           "expected": "Fail dependency/manifest validation if Compact execution/imports or unsupported pin substitutions enter required paths."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-PROOFBOUNDARY",
@@ -676,7 +676,7 @@
           "expected": "Altered relation/key/public statement or forged internal witness fails verification, including cases the honest checker already rejects."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-LEDGERTRANSCRIPT",
@@ -703,7 +703,7 @@
           "expected": "Reject reordered groups, stale reads, mismatched encodings and partial outcomes presented as full success."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-COMPOSITION",
@@ -730,7 +730,7 @@
           "expected": "Reject wrong callee/entrypoint/key/nonce, forged caller and prohibited re-entry."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-FAILURE",
@@ -756,7 +756,7 @@
           "expected": "Reject treating partial application as full acceptance or committing private changes after failed/abandoned execution."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-LEDGERASSETS",
@@ -782,7 +782,7 @@
           "expected": "Reject unauthorized mint/spend, imbalance, wrong recipient/asset and replayed coin/nullifier."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-LIFECYCLE",
@@ -808,7 +808,7 @@
           "expected": "Reject unauthorized update, stale counter, mismatched key and unsupported transition."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-RESOURCE",
@@ -832,7 +832,7 @@
           "expected": "Reject excessive types/widths/allocations before processing and avoid unsafe 20-worker default replay."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-SOURCEPROVENANCE",
@@ -856,7 +856,7 @@
           "expected": "Reject source/hash drift and treating the 3.2.0 CLI banner as sufficient identity for tagged 3.2.1."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-FORMAT",
@@ -880,7 +880,7 @@
           "expected": "Reject unknown major/minor/schema revisions and reordered enum discriminants."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-HASHALIGNMENT",
@@ -904,7 +904,7 @@
           "expected": "Reject unsupported Option/Compress alignments, malformed widths and assumptions that similarly named source hash APIs have identical semantics."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     },
     {
       "id": "ZKIR-REQ-MALICIOUSWITNESS",
@@ -928,7 +928,7 @@
           "expected": "Attempt Native Assert=2, unchecked range overflow, false-guard transcript substitution, forged outputs and activity/commitment changes."
         }
       ],
-      "basis": "Required Nightlean safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Nightlean enforces the condition."
+      "basis": "Required Noctium safety/integration condition derived from the audited native behavior. This is not a claim that upstream or current Noctium enforces the condition."
     }
   ],
   "entries": [
@@ -1033,7 +1033,7 @@
         {
           "id": "ZKIR-OP-ASSERT-N",
           "polarity": "negative",
-          "expected": "Safe Nightlean producer rejects an unconstrained/non-bit assertion, including Native 2. Raw native preprocessing requires one, whereas the circuit assertion constrains nonzero. A raw Assert alone does not establish Booleanity."
+          "expected": "Safe Noctium producer rejects an unconstrained/non-bit assertion, including Native 2. Raw native preprocessing requires one, whereas the circuit assertion constrains nonzero. A raw Assert alone does not establish Booleanity."
         }
       ],
       "evidence": {
@@ -2841,7 +2841,7 @@
       "backend": {
         "status": "implemented-with-preconditions",
         "semantics": "Accumulate typed result values with exact output-signature matching; optionally included in communications commitment.",
-        "preconditionsAndLimits": "Prose says terminator but VM loops continue. Require exactly one final Output in Nightlean. Output alone is not Impact/public release."
+        "preconditionsAndLimits": "Prose says terminator but VM loops continue. Require exactly one final Output in Noctium. Output alone is not Impact/public release."
       },
       "safeLeanSourceSupport": {
         "status": "scalar-subset-lowering-observed",
@@ -4515,7 +4515,7 @@
         {
           "id": "ZKIR-LEDGER-EVENTS-N",
           "polarity": "negative",
-          "expected": "Reject malformed native payload/schema and unauthorized private disclosure. Any event restriction during source construction needs an explicit Nightlean source-policy basis rather than an invented native ledger ban."
+          "expected": "Reject malformed native payload/schema and unauthorized private disclosure. Any event restriction during source construction needs an explicit Noctium source-policy basis rather than an invented native ledger ban."
         }
       ],
       "sources": [
@@ -4796,7 +4796,7 @@
       "module": "Noctium.Frontend",
       "scope": "Noctium",
       "declarations": "noctium_*",
-      "compatibility": "Legacy Nightlean modules, declarations, proof identities and ABI/artifact identifiers remain accepted."
+      "compatibility": "Canonical Noctium modules, declarations, compiler artifacts, Rust package and C ABI. Previous-name compatibility aliases have been removed."
     },
     "jubjubEvidence": {
       "source": "tests/Issue70Jubjub.lean",

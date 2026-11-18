@@ -22,7 +22,7 @@
     {"list":
      {"composite":
       {"typeFingerprint":
-       "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+       "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
        "schemaVersion": 1,
        "layout":
        {"kind": "struct",
@@ -43,7 +43,7 @@
         {"list":
          {"composite":
           {"typeFingerprint":
-           "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+           "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
            "schemaVersion": 1,
            "layout":
            {"kind": "struct",
@@ -64,7 +64,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -96,7 +96,7 @@
    {"slot": 0,
     "schema":
     {"typeFingerprint":
-     "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+     "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
      "schemaVersion": 1,
      "layout":
      {"kind": "struct",
@@ -111,11 +111,11 @@
     "expressions":
     [{"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxx",
       "body": {"tag": "reference", "name": "x"}},
      {"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxx",
       "body": {"tag": "reference", "name": "y"}}]},
    "op": "guarded",
    "guard": {"tag": "reference", "name": "enabled"}},
@@ -123,7 +123,7 @@
    {"slot": 1,
     "schema":
     {"typeFingerprint":
-     "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+     "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
      "schemaVersion": 1,
      "layout":
      {"kind": "struct",
@@ -138,7 +138,7 @@
     [{"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "owner"},
         "tag": "select",
@@ -178,12 +178,12 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"},
      {"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "spender"},
         "tag": "select",
@@ -223,16 +223,16 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"}],
     "expressions":
     [{"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxx",
       "body": {"tag": "reference", "name": "x"}},
      {"value": {"tag": "reference", "name": "enabled"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxx",
       "body": {"tag": "reference", "name": "y"}}]},
    "op": "guarded",
    "guard": {"tag": "reference", "name": "enabled"}},
@@ -243,7 +243,7 @@
     [{"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "owner"},
         "tag": "select",
@@ -283,12 +283,12 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"},
      {"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "spender"},
         "tag": "select",
@@ -328,7 +328,7 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"}],
     "expression": {"tag": "reference", "name": "guardedLength"}},
    "op": "guarded",
@@ -337,7 +337,7 @@
    {"slot": 1,
     "schema":
     {"typeFingerprint":
-     "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+     "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
      "schemaVersion": 1,
      "layout":
      {"kind": "struct",
@@ -352,7 +352,7 @@
     [{"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "owner"},
         "tag": "select",
@@ -392,12 +392,12 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"},
      {"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "spender"},
         "tag": "select",
@@ -437,7 +437,7 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"}],
     "expressions":
     [{"tag": "reference", "name": "guardedHead_x"},

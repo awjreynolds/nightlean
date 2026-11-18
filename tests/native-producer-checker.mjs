@@ -22,7 +22,7 @@ function compact(value){
 }
 const vector=values=>Buffer.concat([compact(values.length),...values.map(compact)]);
 function preimage(test){
- const key=Buffer.from('nightlean/native-producer/safety');
+ const key=Buffer.from('noctium/native-producer/safety');
  return Buffer.concat([Buffer.from('midnight:proof-preimage:'),vector([]),vector(test.private??[]),
   vector(test.publicInputs??[]),vector(test.publicReads??[]),compact(42),Buffer.from([0]),compact(key.length),key]);
 }
@@ -46,7 +46,7 @@ fixtures.push(
  {id:'SOURCE-PUBLIC-BOOL-TWO-REJECT',circuit:boolCircuit,publicInputs:['2','2'],publicReads:['2'],accepted:false},
  {id:'SOURCE-PUBLIC-BOOL-WRONG-RETURN-REJECT',circuit:boolCircuit,publicInputs:['1','0'],publicReads:['1'],accepted:false},
 );
-const directory=await mkdtemp(join(tmpdir(),'nightlean-native-producer-'));
+const directory=await mkdtemp(join(tmpdir(),'noctium-native-producer-'));
 const results=[];
 try{
  for(const test of fixtures){

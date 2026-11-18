@@ -4817,14 +4817,14 @@ mod completed_invocation_tests {
             .into_iter()
             .map(|(id, (key_prefix, operations))| host::Capability {
                 id,
-                namespace: "nightlean".into(),
+                namespace: "noctium".into(),
                 key_prefix,
                 operations: operations.into_iter().collect(),
             })
             .collect();
         host::Context {
             protocol_version: 1,
-            namespace: "nightlean".into(),
+            namespace: "noctium".into(),
             base_revision: "fixture-r0".into(),
             attempt_id: attempt_id.into(),
             capabilities,

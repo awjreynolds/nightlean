@@ -1,12 +1,12 @@
-import Nightlean.Frontend
-open scoped Nightlean
+import Noctium.Frontend
+open scoped Noctium
 
-nightlean_circuit publicBoolRoundTrip where
+noctium_circuit publicBoolRoundTrip where
   public flag : Bool
   output result : Bool := flag
 end
 
-nightlean_contract PublicBoolCell where
+noctium_contract PublicBoolCell where
   cell enabled : Bool
   entry apply uses publicBoolRoundTrip where
     read enabled as old

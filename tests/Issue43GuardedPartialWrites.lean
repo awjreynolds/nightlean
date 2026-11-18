@@ -1,11 +1,11 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue43GuardedPartialWrites where
+noctium_circuit issue43GuardedPartialWrites where
   private enabled : Bool
   private checkEnabled : Bool
   private left : UInt 8
@@ -14,7 +14,7 @@ nightlean_circuit issue43GuardedPartialWrites where
   private approved : Bool
 end
 
-nightlean_contract Issue43GuardedPartialWrites where
+noctium_contract Issue43GuardedPartialWrites where
   cell underflowed : UInt 8
   cell narrowed : UInt 3
   cell asserted : UInt 3

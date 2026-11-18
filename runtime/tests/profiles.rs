@@ -1,4 +1,4 @@
-use nightlean_runtime::{ffi::*, profile};
+use noctium_runtime::{ffi::*, profile};
 use serde_json::{Value as Json, json};
 use std::borrow::Cow;
 #[cfg(feature = "zkir-321")]
@@ -48,11 +48,11 @@ fn abi_rejects_the_other_native_build_profile_before_execution() {
     let bytes = serde_json::to_vec(&envelope).unwrap();
     let (mut session, mut result) = (0, 0);
     assert_eq!(
-        unsafe { nightlean_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result) },
+        unsafe { noctium_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result) },
         OK
     );
-    assert_eq!(nightlean_result_free(result), OK);
-    assert_eq!(nightlean_session_free(session), OK);
+    assert_eq!(noctium_result_free(result), OK);
+    assert_eq!(noctium_session_free(session), OK);
     envelope["profile"] = json!(if cfg!(feature = "zkir-321") {
         "midnight-ledger-9-zkir-3.2.0"
     } else {
@@ -60,7 +60,7 @@ fn abi_rejects_the_other_native_build_profile_before_execution() {
     });
     let bytes = serde_json::to_vec(&envelope).unwrap();
     assert_eq!(
-        unsafe { nightlean_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result) },
+        unsafe { noctium_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result) },
         INVALID_ARGUMENT
     );
     assert_eq!((session, result), (0, 0));
@@ -73,12 +73,12 @@ fn preimage(inputs: Vec<transient_crypto::curve::Fr>) -> ProofPreimage {
         public_transcript_outputs: vec![],
         binding_input: 42u64.into(),
         communications_commitment: None,
-        key_location: KeyLocation(Cow::Borrowed("nightlean/profile-regression")),
+        key_location: KeyLocation(Cow::Borrowed("noctium/profile-regression")),
     }
 }
 #[test]
 fn boolean_release_semantic_cases_use_the_linked_official_checker() {
-    let circuit = nightlean_runtime::zkir::IrSource::load(
+    let circuit = noctium_runtime::zkir::IrSource::load(
         include_bytes!("../../tests/zkir321/boolean-deserialization-contract.zkir").as_slice(),
     )
     .unwrap();
@@ -91,7 +91,7 @@ fn boolean_release_semantic_cases_use_the_linked_official_checker() {
             case["result"].as_str().unwrap_or("0"),
         ]
         .into_iter()
-        .map(|v| nightlean_runtime::canonical_field(v).unwrap())
+        .map(|v| noctium_runtime::canonical_field(v).unwrap())
         .collect();
         let accepted = preimage(inputs).check(&circuit).is_ok();
         assert_eq!(
@@ -105,7 +105,7 @@ fn boolean_release_semantic_cases_use_the_linked_official_checker() {
 #[test]
 #[cfg(feature = "zkir-321")]
 fn selected_321_pin_sizes_intermediate_jubjub_without_old_chip_panic() {
-    let circuit = nightlean_runtime::zkir::IrSource::load(
+    let circuit = noctium_runtime::zkir::IrSource::load(
         include_bytes!("../../tests/zkir321/jubjub-intermediate.zkir").as_slice(),
     )
     .unwrap();

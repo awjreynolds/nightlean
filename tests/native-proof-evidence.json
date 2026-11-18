@@ -87,5 +87,12 @@
   "nodeOrSubprocessInApplicationProofPath": false,
   "compiledContractVerified": false,
   "srsCeremonyTrustedExternally": true,
-  "hardCpuCancellationRequiresHostWorker": true
+  "hardCpuCancellationRequiresHostWorker": true,
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "5ecf886387851e4acf22cd5afab34c885e3037c4722e355ebc0e670157a9677a",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/native-proof-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/native-proof-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

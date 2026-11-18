@@ -1,6 +1,6 @@
-import Nightlean.Frontend
-open scoped Nightlean
-open Nightlean.Helpers
+import Noctium.Frontend
+open scoped Noctium
+open Noctium.Helpers
 
 /-- Source authoring uses typed declarations, lexical identities and forward calls. -/
 def helperScalarProgram : Program := {
@@ -19,16 +19,16 @@ def helperScalarProgram : Program := {
     {name := "secret", ty := .native, visibility := .private}]}]
 }
 
-nightlean_helper_circuit helperComposed from helperScalarProgram entry "scalar"
+noctium_helper_circuit helperComposed from helperScalarProgram entry "scalar"
 
-nightlean_circuit helperDirect where
+noctium_circuit helperDirect where
   public expected : Native
   private secret : Native
   assert eq(mul(secret, secret), expected)
   output result : Native := expected
 end
 
-nightlean_contract HelperContract where
+noctium_contract HelperContract where
   cell value : Native
   entry apply uses helperComposed where
     write value := result

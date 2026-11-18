@@ -22,7 +22,7 @@
     {"list":
      {"composite":
       {"typeFingerprint":
-       "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+       "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
        "schemaVersion": 1,
        "layout":
        {"kind": "struct",
@@ -43,7 +43,7 @@
         {"list":
          {"composite":
           {"typeFingerprint":
-           "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+           "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
            "schemaVersion": 1,
            "layout":
            {"kind": "struct",
@@ -62,7 +62,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -79,7 +79,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -113,7 +113,7 @@
   {"slot": 0,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -138,7 +138,7 @@
   {"slot": 1,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",

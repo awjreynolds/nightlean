@@ -1,8 +1,8 @@
-import Nightlean.Verification.NativePrivacy
+import Noctium.Verification.NativePrivacy
 import Lean.Replay
 import LeanExport.Parse
 
-open Lean Nightlean.Verification
+open Lean Noctium.Verification
 
 private def load (path : System.FilePath) : IO LeanExport.ExportedEnv := do
   unless (← path.metadata).byteSize ≤ 64 * 1024 * 1024 do throw <| IO.userError "export_limit"
@@ -50,16 +50,16 @@ def main (args : List String) : IO UInt32 := do
     let candidate ← load proofPath
     let policy ← name policyText
     let proof ← name proofText
-    let obligation ← name "Nightlean.PrivateClaimNativePrivacy.NativePrivacyObligation"
-    let expectedPolicy ← name "Nightlean.PrivateClaimNativePrivacy.policy"
-    let sourcePolicy ← name "Nightlean.PrivateClaimVerification.policy"
-    let observer ← name "Nightlean.PrivateClaimNativePrivacy.observe"
+    let obligation ← name "Noctium.PrivateClaimNativePrivacy.NativePrivacyObligation"
+    let expectedPolicy ← name "Noctium.PrivateClaimNativePrivacy.policy"
+    let sourcePolicy ← name "Noctium.PrivateClaimVerification.policy"
+    let observer ← name "Noctium.PrivateClaimNativePrivacy.observe"
     for root in Audit.approvedAxioms ++ [policy, expectedPolicy, sourcePolicy, obligation, observer] do
       unless model.constMap.contains root do throw <| IO.userError s!"missing_trusted_model_root: {root}"
     let environment ← replay model.constMap candidate.constMap
     let mut axioms ← checked environment policy proof obligation
-    for (sourceProof, role) in [("Nightlean.PrivateClaimVerification.functional", Audit.Role.functional),
-        ("Nightlean.PrivateClaimVerification.privacy", Audit.Role.privacy)] do
+    for (sourceProof, role) in [("Noctium.PrivateClaimVerification.functional", Audit.Role.functional),
+        ("Noctium.PrivateClaimVerification.privacy", Audit.Role.privacy)] do
       match Audit.check environment sourcePolicy (← name sourceProof) role with
       | .ok registration => axioms := axioms ++ registration.axioms
       | .error message => throw <| IO.userError message

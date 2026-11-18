@@ -1,6 +1,6 @@
-import Nightlean.ComponentDisclosure
-import Nightlean.Control
-open Nightlean Nightlean.Helpers
+import Noctium.ComponentDisclosure
+import Noctium.Control
+open Noctium Noctium.Helpers
 
 private def recordType : Types.CompositeType := .structure "Demo.Record"
 

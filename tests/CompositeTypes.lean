@@ -1,7 +1,7 @@
-import Nightlean.Types.Composite
+import Noctium.Types.Composite
 
-open Nightlean
-open Nightlean.Types
+open Noctium
+open Noctium.Types
 
 private def point : SourceSpan := {file := "composite-fixture.lean", line := 7, column := 4}
 

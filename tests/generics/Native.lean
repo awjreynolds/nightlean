@@ -1,7 +1,7 @@
-import Nightlean.Compiler
+import Noctium.Compiler
 
-open scoped Nightlean
-open Nightlean.Helpers.Specialization
+open scoped Noctium
+open Noctium.Helpers.Specialization
 
 private def genericAddProgram : Program := {
   declarations := [{
@@ -36,5 +36,5 @@ private def genericAddProgram : Program := {
   ]
 }
 
-nightlean_generic_circuit genericAddSmall from genericAddProgram entry "small"
-nightlean_generic_circuit genericAddWide from genericAddProgram entry "wide"
+noctium_generic_circuit genericAddSmall from genericAddProgram entry "small"
+noctium_generic_circuit genericAddWide from genericAddProgram entry "wide"

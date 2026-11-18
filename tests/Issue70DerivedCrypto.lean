@@ -1,5 +1,5 @@
 import Noctium.Frontend
-import Nightlean.Disclosure
+import Noctium.Disclosure
 
 open scoped Noctium
 
@@ -63,7 +63,7 @@ noctium_contract Issue70DerivedCrypto where
   end
 end
 
-#guard match Nightlean.Disclosure.circuit {
+#guard match Noctium.Disclosure.circuit {
     name := "unreleasedPointDigest"
     inputs := [{name := "point", ty := .jubjubPoint, visibility := .private}]
     outputs := [{name := "digest", ty := .bytes 32, value := .persistentHashNativeVector [

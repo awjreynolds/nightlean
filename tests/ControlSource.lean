@@ -1,7 +1,7 @@
-import Nightlean.Frontend
-open Nightlean.Helpers
+import Noctium.Frontend
+open Noctium.Helpers
 
-private def controlSpan : Nightlean.SourceSpan := {file := "tests/ControlSource.lean", line := 7}
+private def controlSpan : Noctium.SourceSpan := {file := "tests/ControlSource.lean", line := 7}
 
 def branchWitnessProgram : Program := {
   declarations := [{
@@ -84,20 +84,20 @@ def constantInactiveReturnProgram : Program := {
     {name := "flag", ty := .bool, visibility := .private}]}]
 }
 
-open scoped Nightlean
-nightlean_control branchWitness from branchWitnessProgram entry "branchWitness"
-nightlean_control witnessOrder from witnessOrderProgram entry "order"
-nightlean_control inactiveFailure from inactiveFailureProgram entry "inactive"
-nightlean_control shortCircuit from shortCircuitProgram entry "shortCircuit"
-nightlean_control lazyReturn from lazyReturnProgram entry "lazyReturn"
-nightlean_control lazyExpression from lazyExpressionProgram entry "lazyExpression"
+open scoped Noctium
+noctium_control branchWitness from branchWitnessProgram entry "branchWitness"
+noctium_control witnessOrder from witnessOrderProgram entry "order"
+noctium_control inactiveFailure from inactiveFailureProgram entry "inactive"
+noctium_control shortCircuit from shortCircuitProgram entry "shortCircuit"
+noctium_control lazyReturn from lazyReturnProgram entry "lazyReturn"
+noctium_control lazyExpression from lazyExpressionProgram entry "lazyExpression"
 
-nightlean_control conditionalProviders from conditionalProvidersProgram entry "conditionalProviders"
+noctium_control conditionalProviders from conditionalProvidersProgram entry "conditionalProviders"
 
-nightlean_control activeFailure from activeFailureProgram entry "activeFailure"
+noctium_control activeFailure from activeFailureProgram entry "activeFailure"
 
-nightlean_control unitConditional from unitConditionalProgram entry "unitConditional"
+noctium_control unitConditional from unitConditionalProgram entry "unitConditional"
 
-nightlean_control unitPrivateBranches from unitPrivateBranchesProgram entry "unitPrivateBranches"
+noctium_control unitPrivateBranches from unitPrivateBranchesProgram entry "unitPrivateBranches"
 
-nightlean_control constantInactiveReturn from constantInactiveReturnProgram entry "constantInactiveReturn"
+noctium_control constantInactiveReturn from constantInactiveReturnProgram entry "constantInactiveReturn"

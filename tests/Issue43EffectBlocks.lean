@@ -1,16 +1,16 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue43EffectBlocks where
+noctium_circuit issue43EffectBlocks where
   private choose : Bool
   public wide : Native
 end
 
-nightlean_contract Issue43EffectBlocks where
+noctium_contract Issue43EffectBlocks where
   cell left : Native
   cell right : Native
   cell selected : Native
@@ -85,12 +85,12 @@ private def issue43UndisclosedParentWrite : Entrypoint :=
   | .error _ => Bool.true
   | .ok _ => Bool.false
 
-nightlean_circuit issue43BranchLocalEscapeRelation where
+noctium_circuit issue43BranchLocalEscapeRelation where
 end
 
 /-- error: unknown Noctium value 'branchLocal' -/
 #guard_msgs in
-nightlean_contract Issue43BranchLocalEscape where
+noctium_contract Issue43BranchLocalEscape where
   cell marker : Native
   entry update uses issue43BranchLocalEscapeRelation where
     if true then {

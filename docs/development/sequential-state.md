@@ -20,7 +20,7 @@ Map insertion remains supported. Map-value reads remain explicitly rejected by I
 - `failingGuard` writes and reads a cell, then requires a false condition.
 - `noncanonicalRead` writes one cell, then reads a Bool cell whose native field encoding is noncanonical.
 
-Native preparation and `nightlean_runtime::check` confirm ordered read outputs `0, 1, 2, 9, 1, 255, 9`, the resulting cell values, and one map entry. A changed read value fails native checking. The noncanonical Bool read fails preparation. The failing guard fails native checking while the original input state stays unchanged.
+Native preparation and `noctium_runtime::check` confirm ordered read outputs `0, 1, 2, 9, 1, 255, 9`, the resulting cell values, and one map entry. A changed read value fails native checking. The noncanonical Bool read fails preparation. The failing guard fails native checking while the original input state stays unchanged.
 
 The PrivateClaim regression keeps its reads before its map insertion. The test checks its ordered public transcript values, private transcript values, final cells, and inserted map entry. Existing unsigned tests also pass. These checks exercise the no-prefix path used by programs whose reads precede writes.
 
@@ -47,9 +47,9 @@ The emitted plans and circuits compare byte-for-byte with the checked-in fixture
 The parent runtime qualification ran these locked, offline commands on each selected profile:
 
 ```sh
-/private/tmp/nightlean-cargo/bin/cargo +1.100.0 test --manifest-path runtime/Cargo.toml \
+/private/tmp/noctium-cargo/bin/cargo +1.100.0 test --manifest-path runtime/Cargo.toml \
   --locked --offline --test state_ordering --test validation --test unsigned
-/private/tmp/nightlean-cargo/bin/cargo +1.100.0 test --manifest-path runtime/Cargo.toml \
+/private/tmp/noctium-cargo/bin/cargo +1.100.0 test --manifest-path runtime/Cargo.toml \
   --locked --offline --no-default-features --features zkir-321 \
   --test state_ordering --test validation --test unsigned
 ```

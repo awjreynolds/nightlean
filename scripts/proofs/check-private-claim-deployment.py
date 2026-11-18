@@ -59,7 +59,7 @@ def trusted_authority_snapshot(
         "model.ndjson": record["modelSha256"],
         "base-proof-closure.ndjson": record["baseProofSha256"],
         "certificate.ndjson": authority["certificateSha256"],
-        "source/.lake/build/bin/nightlean": record["compilerSha256"],
+        "source/.lake/build/bin/noctium": record["compilerSha256"],
     }
     for relative, digest in record["source"]["files"].items():
         files["source/" + relative] = digest

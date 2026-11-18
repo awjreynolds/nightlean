@@ -57,7 +57,7 @@
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -66,7 +66,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": false,
     "op": "push",
@@ -74,7 +74,7 @@
     {"value":
      {"value": {"value": true, "tag": "bool"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
       "body":
       {"yes":
        {"tag": "eq",
@@ -84,10 +84,10 @@
        "no": {"value": false, "tag": "bool"},
        "condition":
        {"tag": "reference",
-        "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}},
+        "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}},
      "tag": "let",
      "name":
-     "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
      "body":
      {"yes": {"tag": "reference", "name": "owner"},
       "tag": "select",
@@ -129,13 +129,13 @@
       "condition":
       {"tag": "reference",
        "name":
-       "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+       "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
     "alignment": "bytes32"},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -144,7 +144,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": false,
     "op": "push",
@@ -154,7 +154,7 @@
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -163,13 +163,13 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation": {"op": "new"},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -178,13 +178,13 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation": {"op": "insert", "n": 2},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -193,7 +193,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"op": "dup"},
   {"slot": 1,
    "pushPath": false,
@@ -218,7 +218,7 @@
       {"value":
        {"value": {"value": true, "tag": "bool"},
         "tag": "let",
-        "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+        "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
         "body":
         {"yes":
          {"tag": "eq",
@@ -228,10 +228,10 @@
          "no": {"value": false, "tag": "bool"},
          "condition":
          {"tag": "reference",
-          "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx"}}},
+          "name": "_noctium_activity_guard_xxxxxxxxxxxxxx"}}},
        "tag": "let",
        "name":
-       "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "owner"},
         "tag": "select",
@@ -273,13 +273,13 @@
         "condition":
         {"tag": "reference",
          "name":
-         "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+         "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
       "alignment": "bytes32"}]},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -289,7 +289,7 @@
      "no": {"value": false, "tag": "bool"},
      "condition":
      {"tag": "reference",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx"}}}},
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": false,
     "op": "push",
@@ -297,7 +297,7 @@
     {"value":
      {"value": {"value": true, "tag": "bool"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
       "body":
       {"yes":
        {"tag": "eq",
@@ -307,10 +307,10 @@
        "no": {"value": false, "tag": "bool"},
        "condition":
        {"tag": "reference",
-        "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx"}}},
+        "name": "_noctium_activity_guard_xxxxxxxxxxxxxx"}}},
      "tag": "let",
      "name":
-     "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
      "body":
      {"yes": {"tag": "reference", "name": "spender"},
       "tag": "select",
@@ -352,13 +352,13 @@
       "condition":
       {"tag": "reference",
        "name":
-       "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+       "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
     "alignment": "bytes32"},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -368,7 +368,7 @@
      "no": {"value": false, "tag": "bool"},
      "condition":
      {"tag": "reference",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx"}}}},
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": true,
     "op": "push",
@@ -379,7 +379,7 @@
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -389,13 +389,13 @@
      "no": {"value": false, "tag": "bool"},
      "condition":
      {"tag": "reference",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx"}}}},
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxx"}}}},
   {"operation": {"op": "insert", "n": 3},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -405,7 +405,7 @@
      "no": {"value": false, "tag": "bool"},
      "condition":
      {"tag": "reference",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx"}}}},
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxx"}}}},
   {"slot": 0, "pushPath": true, "op": "indexPath", "keys": []},
   {"op": "addImmediate", "amount": 3},
   {"op": "insert", "n": 1},

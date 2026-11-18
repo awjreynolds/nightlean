@@ -850,7 +850,7 @@ mod tests {
     #[test]
     fn private_output_rollback_and_no_overwrite() {
         let path =
-            std::env::temp_dir().join(format!("nightlean-assembly-test-{}", OsRng.r#gen::<u64>()));
+            std::env::temp_dir().join(format!("noctium-assembly-test-{}", OsRng.r#gen::<u64>()));
         {
             let directory = OutputDirectory::new(&path).unwrap();
             directory.write("private.bin", b"synthetic").unwrap();
@@ -878,7 +878,7 @@ mod tests {
     #[test]
     fn invalid_assembly_leaves_destination_absent() {
         let path = std::env::temp_dir().join(format!(
-            "nightlean-assembly-invalid-{}",
+            "noctium-assembly-invalid-{}",
             OsRng.r#gen::<u64>()
         ));
         assert!(
@@ -901,7 +901,7 @@ mod tests {
     #[test]
     fn malformed_private_config_discards_value_bearing_parser_cause() {
         let path = std::env::temp_dir().join(format!(
-            "nightlean-assembly-privacy-{}",
+            "noctium-assembly-privacy-{}",
             OsRng.r#gen::<u64>()
         ));
         let selected_plan = serde_json::to_vec(&selected_fixture_json()).unwrap();

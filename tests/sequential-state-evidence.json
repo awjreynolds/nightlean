@@ -104,8 +104,8 @@
   "sourceSha256": {
     "tests/Issue65StateOrdering.lean": "af688069ff2bb7718704aec697a03d07931c211e95c77d175f3ba12734dd7848",
     "examples/PrivateClaim.lean": "5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771",
-    "Nightlean/Semantics.lean": "e55723ecee83ec82773e29f962ee89f6477befc672ac9f82741eefe30f25f2e7",
-    "Nightlean/Backend/Impact.lean": "7d80654f880fd6d0ddda641899e2b515ea9d81037075104dfc3b7921f2002069",
+    "Noctium/Semantics.lean": "e55723ecee83ec82773e29f962ee89f6477befc672ac9f82741eefe30f25f2e7",
+    "Noctium/Backend/Impact.lean": "7d80654f880fd6d0ddda641899e2b515ea9d81037075104dfc3b7921f2002069",
     "runtime/src/lib.rs": "1a2ac2f098e532dafc60f683c35087a840e0dbfa17357991df6a12edaaf010af",
     "runtime/tests/state_ordering.rs": "9474204788042b09e70d9d0ca6f0ae3a9411d7a6411ced53fed057efaec78d63",
     "runtime/tests/validation.rs": "72e92dd6583eb528714d29f18400ab6609b6551b9d8fb22146a1e49296309ac7",
@@ -231,12 +231,12 @@
   ],
   "nativeRuntimeVerification": {
     "rustToolchain": "Rust 1.100.0",
-    "cargoTargetDir": "/private/tmp/nightlean-issue65-runtime-target",
+    "cargoTargetDir": "/private/tmp/noctium-issue65-runtime-target",
     "runs": [
       {
         "profile": "320",
         "command": [
-          "/private/tmp/nightlean-cargo/bin/cargo",
+          "/private/tmp/noctium-cargo/bin/cargo",
           "+1.100.0",
           "test",
           "--manifest-path",
@@ -274,7 +274,7 @@
       {
         "profile": "321",
         "command": [
-          "/private/tmp/nightlean-cargo/bin/cargo",
+          "/private/tmp/noctium-cargo/bin/cargo",
           "+1.100.0",
           "test",
           "--manifest-path",
@@ -348,5 +348,12 @@
     "runtimeAndLeanFixtureBlobsMatched": 94,
     "allRuntimeAndLeanFixtureBlobsAndModesMatched": true,
     "matchRecordSha256": "8ba080e343ac1b4f3bde90419426ca73714485f0788a444f8d68e4884a6c08d6"
-  }
+  },
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "3e8c3ff42c66d17e68ef424a98e306c111c4b7924453731ac2902d3d4d4f3ad0",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/sequential-state-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/sequential-state-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

@@ -1,5 +1,5 @@
 mod common;
-use nightlean_runtime::{Db, Plan, create_state, prepare};
+use noctium_runtime::{Db, Plan, create_state, prepare};
 use onchain_runtime::state::ContractState;
 use rand::{Rng, rngs::OsRng};
 use serde_json::{Value as Json, json};
@@ -31,7 +31,7 @@ fn write(root: &Path, name: &str, bytes: &[u8]) {
     }
 }
 fn run(root: &Path, state: &str) -> Output {
-    Command::new(env!("CARGO_BIN_EXE_nightlean-runtime"))
+    Command::new(env!("CARGO_BIN_EXE_noctium-runtime"))
         .arg(root)
         .args(["--check-state"])
         .arg(root.join(state))
@@ -45,7 +45,7 @@ fn run(root: &Path, state: &str) -> Output {
 #[test]
 fn supplied_state_checks_distinguish_rejection_from_loading_failures() {
     let root = Fixture(
-        std::env::temp_dir().join(format!("nightlean-state-test-{}", OsRng.r#gen::<u64>())),
+        std::env::temp_dir().join(format!("noctium-state-test-{}", OsRng.r#gen::<u64>())),
     );
     fs::create_dir(&root.0).unwrap();
     #[cfg(unix)]

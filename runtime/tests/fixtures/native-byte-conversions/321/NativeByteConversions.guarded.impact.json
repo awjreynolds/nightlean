@@ -49,7 +49,7 @@
     "expression":
     {"value": {"tag": "reference", "name": "enabled"},
      "tag": "let",
-     "name": "_nightlean_activity_guard_xxxxxxxxx",
+     "name": "_noctium_activity_guard_xxxxxxxxx",
      "body":
      {"tag": "jubjubCoordinate",
       "point":
@@ -92,7 +92,7 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxx"}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}},
        "type": "JubjubPoint",
        "tag": "fromBytes32"},
       "index": 0}},
@@ -115,7 +115,7 @@
     "expression":
     {"value": {"tag": "reference", "name": "enabled"},
      "tag": "let",
-     "name": "_nightlean_activity_guard_xxxxxxxxx",
+     "name": "_noctium_activity_guard_xxxxxxxxx",
      "body":
      {"tag": "jubjubCoordinate",
       "point":
@@ -158,7 +158,7 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxx"}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}},
        "type": "JubjubPoint",
        "tag": "fromBytes32"},
       "index": 1}},

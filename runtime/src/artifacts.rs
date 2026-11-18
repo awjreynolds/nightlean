@@ -70,7 +70,7 @@ impl Role {
             Self::Source => format!("source/{name}"),
             Self::Circuit => "circuit/entrypoint.zkir".into(),
             Self::Plan => "plan/entrypoint.impact.json".into(),
-            Self::Metadata => "schema/nightlean.json".into(),
+            Self::Metadata => "schema/noctium.json".into(),
             Self::Abi => format!("schema/{name}"),
             Self::Profile => "profile/target.json".into(),
             Self::LedgerParameters => "parameters/ledger.params".into(),
@@ -597,8 +597,8 @@ fn validate_name(role: Role, name: &str) -> Result<()> {
         Role::Source => name.ends_with(".lean"),
         Role::Circuit => !name.contains('/') && name.ends_with(".zkir"),
         Role::Plan => !name.contains('/') && name.ends_with(".impact.json"),
-        Role::Metadata => name == "nightlean.json",
-        Role::Abi => name == "nightlean_runtime.h" || name == "abi.schema.json",
+        Role::Metadata => name == "noctium.json",
+        Role::Abi => name == "noctium_runtime.h" || name == "abi.schema.json",
         Role::Profile => name == "target.json",
         Role::LedgerParameters => name == "ledger.params",
         Role::ProverKey => name == "entrypoint.prover",
@@ -987,8 +987,8 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         let header = std::str::from_utf8(abi_bytes)
             .map_err(|_| error("invalid_abi", "ABI header is not UTF-8"))?;
         require(
-            header.contains("#define NIGHTLEAN_ABI_VERSION 1u")
-                && header.contains("nightlean_session_begin("),
+            header.contains("#define NOCTIUM_ABI_VERSION 1u")
+                && header.contains("noctium_session_begin("),
             "invalid_abi",
             "unsupported native ABI header",
         )?;
@@ -1328,7 +1328,7 @@ mod witness_source_tests {
 fn validate_manifest(manifest: &Manifest) -> Result<()> {
     require(
         manifest.schema_version == SCHEMA_VERSION
-            && manifest.kind == "nightlean-public-entrypoint-bundle",
+            && manifest.kind == "noctium-public-entrypoint-bundle",
         "unsupported_version",
         "unsupported bundle schema or kind",
     )?;
@@ -1514,7 +1514,7 @@ pub fn assemble(recipe: Recipe, destination: &Path) -> Result<Manifest> {
         .collect();
     let manifest = Manifest {
         schema_version: SCHEMA_VERSION,
-        kind: "nightlean-public-entrypoint-bundle".into(),
+        kind: "noctium-public-entrypoint-bundle".into(),
         profile: crate::profile::NAME.into(),
         ledger_revision: LEDGER_REVISION.into(),
         zkir_revision: ZKIR_REVISION.into(),

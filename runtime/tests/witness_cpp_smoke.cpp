@@ -1,5 +1,5 @@
-#include "../include/nightlean_control.h"
-#include "../include/nightlean_native.h"
+#include "../include/noctium_control.h"
+#include "../include/noctium_native.h"
 #include <cassert>
 #include <cctype>
 #include <cstdint>
@@ -18,17 +18,17 @@
 static std::string take(uint64_t token, bool secret=false) {
   size_t length=0, written=99;
   if (secret) {
-    assert(nightlean_control_result_length(token,&length)==NIGHTLEAN_CONTROL_INVALID_HANDLE);
-    assert(nightlean_control_private_length(token,&length)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_result_length(token,&length)==NOCTIUM_CONTROL_INVALID_HANDLE);
+    assert(noctium_control_private_length(token,&length)==NOCTIUM_CONTROL_OK);
   } else {
-    assert(nightlean_control_result_length(token,&length)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_result_length(token,&length)==NOCTIUM_CONTROL_OK);
   }
   std::string bytes(length,'\0');
   const auto copied=secret
-      ? nightlean_control_private_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written)
-      : nightlean_control_result_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written);
-  assert(copied==NIGHTLEAN_CONTROL_OK&&written==length);
-  assert((secret?nightlean_control_private_free(token):nightlean_control_result_free(token))==NIGHTLEAN_CONTROL_OK);
+      ? noctium_control_private_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written)
+      : noctium_control_result_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written);
+  assert(copied==NOCTIUM_CONTROL_OK&&written==length);
+  assert((secret?noctium_control_private_free(token):noctium_control_result_free(token))==NOCTIUM_CONTROL_OK);
   return bytes;
 }
 
@@ -113,17 +113,17 @@ static std::string read_file(const char *path) {
 static std::string take_native(uint64_t token,bool secret=false) {
   size_t length=0,written=99;
   if(secret){
-    assert(nightlean_native_result_length(token,&length)==NIGHTLEAN_NATIVE_INVALID_HANDLE);
-    assert(nightlean_native_private_length(token,&length)==NIGHTLEAN_NATIVE_OK);
+    assert(noctium_native_result_length(token,&length)==NOCTIUM_NATIVE_INVALID_HANDLE);
+    assert(noctium_native_private_length(token,&length)==NOCTIUM_NATIVE_OK);
   } else {
-    assert(nightlean_native_result_length(token,&length)==NIGHTLEAN_NATIVE_OK);
+    assert(noctium_native_result_length(token,&length)==NOCTIUM_NATIVE_OK);
   }
   std::string bytes(length,'\0');
   const auto copied=secret
-      ?nightlean_native_private_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written)
-      :nightlean_native_result_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written);
-  assert(copied==NIGHTLEAN_NATIVE_OK&&written==length);
-  assert((secret?nightlean_native_private_free(token):nightlean_native_result_free(token))==NIGHTLEAN_NATIVE_OK);
+      ?noctium_native_private_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written)
+      :noctium_native_result_copy(token,reinterpret_cast<uint8_t*>(bytes.data()),length,&written);
+  assert(copied==NOCTIUM_NATIVE_OK&&written==length);
+  assert((secret?noctium_native_private_free(token):noctium_native_result_free(token))==NOCTIUM_NATIVE_OK);
   return bytes;
 }
 
@@ -142,10 +142,10 @@ static uint64_t open_localnet(const std::string& config) {
   std::vector<uint8_t> seed(32,0);
   seed[31]=1;
   uint64_t adapter=0;
-  const auto status=nightlean_localnet_open(
+  const auto status=noctium_localnet_open(
     reinterpret_cast<const uint8_t*>(config.data()),config.size(),seed.data(),seed.size(),&adapter
   );
-  if(status!=NIGHTLEAN_NATIVE_OK){
+  if(status!=NOCTIUM_NATIVE_OK){
     std::cerr<<"localnet open failed with status "<<status<<std::endl;
     assert(false&&"localnet adapter did not open");
   }
@@ -198,15 +198,15 @@ static std::string drive_client(uint64_t client,uint64_t adapter,std::string sta
   for(unsigned step=0;step<2048;++step){
     if(status.empty()){
       uint64_t result=0;
-      assert(nightlean_client_advance(client,&result)==NIGHTLEAN_NATIVE_OK);
+      assert(noctium_client_advance(client,&result)==NOCTIUM_NATIVE_OK);
       status=take_native(result);
     }
     if(field(status,"status")!="need_host")return status;
     uint64_t request=0;
-    assert(nightlean_client_request(client,&request)==NIGHTLEAN_NATIVE_OK);
+    assert(noctium_client_request(client,&request)==NOCTIUM_NATIVE_OK);
     if(status.find("\"hasPrivateArguments\":true")!=std::string::npos){
       uint64_t private_token=0;
-      assert(nightlean_client_private_request(request,&private_token)==NIGHTLEAN_NATIVE_OK);
+      assert(noctium_client_private_request(request,&private_token)==NOCTIUM_NATIVE_OK);
       auto private_bytes=take_native(private_token,true);
       assert(!private_bytes.empty());
       for(volatile char& byte:private_bytes)byte=0;
@@ -214,15 +214,15 @@ static std::string drive_client(uint64_t client,uint64_t adapter,std::string sta
     auto entropy=std::string(32,'\0');
     assert(getentropy(entropy.data(),entropy.size())==0);
     uint64_t reply=0;
-    const auto resolved=nightlean_localnet_resolve(
+    const auto resolved=noctium_localnet_resolve(
       adapter,request,1,reinterpret_cast<const uint8_t*>(entropy.data()),entropy.size(),&reply
     );
     for(volatile char& byte:entropy)byte=0;
-    assert(resolved==NIGHTLEAN_NATIVE_OK);
+    assert(resolved==NOCTIUM_NATIVE_OK);
     const auto metadata=client_metadata(status);
     uint64_t result=0;
-    assert(nightlean_client_resume(client,
-      reinterpret_cast<const uint8_t*>(metadata.data()),metadata.size(),reply,&result)==NIGHTLEAN_NATIVE_OK);
+    assert(noctium_client_resume(client,
+      reinterpret_cast<const uint8_t*>(metadata.data()),metadata.size(),reply,&result)==NOCTIUM_NATIVE_OK);
     status=take_native(result);
   }
   assert(false&&"native client exceeded the smoke-test step bound");
@@ -231,8 +231,8 @@ static std::string drive_client(uint64_t client,uint64_t adapter,std::string sta
 
 static std::string client_command(uint64_t client,uint64_t adapter,const std::string& command) {
   uint64_t result=0;
-  assert(nightlean_client_command(client,
-    reinterpret_cast<const uint8_t*>(command.data()),command.size(),&result)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_client_command(client,
+    reinterpret_cast<const uint8_t*>(command.data()),command.size(),&result)==NOCTIUM_NATIVE_OK);
   return drive_client(client,adapter,take_native(result));
 }
 
@@ -259,8 +259,8 @@ static std::string deployment_context(const std::string& attempt,const std::stri
 static std::string read_local_private_value(uint64_t adapter,const std::string& name_space,const std::string& key) {
   const auto query="{\"namespace\":\""+name_space+"\",\"key\":\""+key+"\"}";
   uint64_t token=0;
-  assert(nightlean_localnet_private_value(adapter,
-    reinterpret_cast<const uint8_t*>(query.data()),query.size(),&token)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_localnet_private_value(adapter,
+    reinterpret_cast<const uint8_t*>(query.data()),query.size(),&token)==NOCTIUM_NATIVE_OK);
   return take_native(token,true);
 }
 
@@ -298,7 +298,7 @@ static int run_native_witness(int argc,char** argv) {
   localnet_config=replace_string(localnet_config,"journalDirectory",journal_directory);
   const auto adapter=open_localnet(localnet_config);
   uint64_t result=0;
-  assert(nightlean_localnet_context(adapter,&result)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_localnet_context(adapter,&result)==NOCTIUM_NATIVE_OK);
   const auto chain_context=take_native(result);
   const auto future_ttl=std::to_string(std::stoull(field(chain_context,"blockTime"))+1800);
   target_descriptor=replace_number(target_descriptor,"ttl",future_ttl);
@@ -314,12 +314,12 @@ static int run_native_witness(int argc,char** argv) {
   auto target_coins=std::string(32,'\0');
   assert(getentropy(target_coins.data(),target_coins.size())==0);
   uint64_t target=0;
-  assert(nightlean_native_witness_target_begin(
+  assert(noctium_native_witness_target_begin(
     reinterpret_cast<const uint8_t*>(target_descriptor.data()),target_descriptor.size(),
     reinterpret_cast<const uint8_t*>(state_config.data()),state_config.size(),
     reinterpret_cast<const uint8_t*>(parameters.data()),parameters.size(),
     reinterpret_cast<const uint8_t*>(target_coins.data()),target_coins.size(),&target,&result
-  )==NIGHTLEAN_NATIVE_OK);
+  )==NOCTIUM_NATIVE_OK);
   for(volatile char& byte:target_coins)byte=0;
   const auto prepared_target=take_native(result);
   assert(field(prepared_target,"status")=="target_ready");
@@ -330,55 +330,55 @@ static int run_native_witness(int argc,char** argv) {
   const auto incomplete_context=witness_host_context(incomplete_attempt,"noctium-witness62-incomplete-"+incomplete_attempt.substr(0,12));
   const auto incomplete_begin="{\"abiVersion\":1,\"inputs\":{\"expected\":\"14\",\"seed\":\"7\"},\"hostContext\":"+incomplete_context+"}";
   uint64_t incomplete_control=0;
-  assert(nightlean_control_begin_from_native_target(
+  assert(noctium_control_begin_from_native_target(
     target,reinterpret_cast<const uint8_t*>(plan.data()),plan.size(),
     reinterpret_cast<const uint8_t*>(incomplete_begin.data()),incomplete_begin.size(),&incomplete_control
-  )==NIGHTLEAN_CONTROL_OK);
+  )==NOCTIUM_CONTROL_OK);
   auto incomplete_coins=std::string(32,'\0');
   assert(getentropy(incomplete_coins.data(),incomplete_coins.size())==0);
   uint64_t rejected_proof=99;
-  assert(nightlean_native_begin_from_witness(
+  assert(noctium_native_begin_from_witness(
     reinterpret_cast<const uint8_t*>(proof_descriptor.data()),proof_descriptor.size(),target,incomplete_control,
     reinterpret_cast<const uint8_t*>(parameters.data()),parameters.size(),
     reinterpret_cast<const uint8_t*>(incomplete_coins.data()),incomplete_coins.size(),&rejected_proof
-  )==NIGHTLEAN_NATIVE_INVALID_STATE&&rejected_proof==0);
+  )==NOCTIUM_NATIVE_INVALID_STATE&&rejected_proof==0);
   for(volatile char& byte:incomplete_coins)byte=0;
-  assert(nightlean_control_advance(incomplete_control,&result)==NIGHTLEAN_CONTROL_OK);
+  assert(noctium_control_advance(incomplete_control,&result)==NOCTIUM_CONTROL_OK);
   assert(take(result).find("\"status\":\"need_host\"")!=std::string::npos);
-  assert(nightlean_control_cancel(incomplete_control,&result)==NIGHTLEAN_CONTROL_OK);
+  assert(noctium_control_cancel(incomplete_control,&result)==NOCTIUM_CONTROL_OK);
   assert(take(result).find("\"status\":\"cancelled\"")!=std::string::npos);
   auto cancelled_coins=std::string(32,'\0');
   assert(getentropy(cancelled_coins.data(),cancelled_coins.size())==0);
-  assert(nightlean_native_begin_from_witness(
+  assert(noctium_native_begin_from_witness(
     reinterpret_cast<const uint8_t*>(proof_descriptor.data()),proof_descriptor.size(),target,incomplete_control,
     reinterpret_cast<const uint8_t*>(parameters.data()),parameters.size(),
     reinterpret_cast<const uint8_t*>(cancelled_coins.data()),cancelled_coins.size(),&rejected_proof
-  )==NIGHTLEAN_NATIVE_INVALID_STATE&&rejected_proof==0);
+  )==NOCTIUM_NATIVE_INVALID_STATE&&rejected_proof==0);
   for(volatile char& byte:cancelled_coins)byte=0;
-  assert(nightlean_control_free(incomplete_control)==NIGHTLEAN_CONTROL_OK);
+  assert(noctium_control_free(incomplete_control)==NOCTIUM_CONTROL_OK);
 
   const auto attempt=fresh_attempt();
   const auto source_namespace="noctium-witness62-source-"+attempt.substr(0,16);
   const auto host_context=witness_host_context(attempt,source_namespace);
   const auto begin="{\"abiVersion\":1,\"inputs\":{\"expected\":\"14\",\"seed\":\"7\"},\"hostContext\":"+host_context+"}";
   uint64_t control=0;
-  assert(nightlean_control_begin_from_native_target(
+  assert(noctium_control_begin_from_native_target(
     target,reinterpret_cast<const uint8_t*>(plan.data()),plan.size(),
     reinterpret_cast<const uint8_t*>(begin.data()),begin.size(),&control
-  )==NIGHTLEAN_CONTROL_OK);
+  )==NOCTIUM_CONTROL_OK);
   const std::string forged_source_stage=
     "{\"abiVersion\":2,\"operation\":\"private_state.stage.v1\","
     "\"capability\":\"private\",\"key\":\"cache/forged\","
     "\"type\":\"UIntRange<256>\",\"value\":\"999\"}";
   uint64_t denied_source_stage=99;
-  assert(nightlean_control_stage(control,
+  assert(noctium_control_stage(control,
     reinterpret_cast<const uint8_t*>(forged_source_stage.data()),forged_source_stage.size(),
-    &denied_source_stage)==NIGHTLEAN_CONTROL_INVALID_RESPONSE&&denied_source_stage==0);
+    &denied_source_stage)==NOCTIUM_CONTROL_INVALID_RESPONSE&&denied_source_stage==0);
   std::vector<std::string> calls;
   bool completed=false;
   for(unsigned step=0;step<64;++step){
     uint64_t token=0;
-    assert(nightlean_control_advance(control,&token)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_advance(control,&token)==NOCTIUM_CONTROL_OK);
     const auto pending=take(token);
     if(pending.find("\"status\":\"completed\"")!=std::string::npos){completed=true;break;}
     assert(pending.find("\"status\":\"need_host\"")!=std::string::npos);
@@ -387,7 +387,7 @@ static int run_native_witness(int argc,char** argv) {
     std::string private_request;
     for(unsigned export_count=0;export_count<1024;++export_count){
       uint64_t private_token=0;
-      assert(nightlean_control_private_request(control,&private_token)==NIGHTLEAN_CONTROL_OK);
+      assert(noctium_control_private_request(control,&private_token)==NOCTIUM_CONTROL_OK);
       const auto exported=take(private_token,true);
       if(export_count==0)private_request=exported;
       else assert(exported==private_request);
@@ -406,8 +406,8 @@ static int run_native_witness(int argc,char** argv) {
       "\",\"attemptId\":\""+attempt+"\",\"outcome\":\"value\",\"operation\":\""+
       field(pending,"operation")+"\",\"capability\":\""+field(pending,"capability")+
       "\",\"schema\":\""+field(pending,"schema")+"\",\"value\":"+value+"}";
-    assert(nightlean_control_resume_typed(control,
-      reinterpret_cast<const uint8_t*>(response.data()),response.size(),&token)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_resume_typed(control,
+      reinterpret_cast<const uint8_t*>(response.data()),response.size(),&token)==NOCTIUM_CONTROL_OK);
     take(token);
   }
   assert(completed);
@@ -420,40 +420,40 @@ static int run_native_witness(int argc,char** argv) {
   const auto mismatched_descriptor=replace_string(
     proof_descriptor,"proofParametersSha256",alternate_parameter_hash);
   uint64_t mismatched_proof=99;
-  assert(nightlean_native_begin_from_witness(
+  assert(noctium_native_begin_from_witness(
     reinterpret_cast<const uint8_t*>(mismatched_descriptor.data()),mismatched_descriptor.size(),
     target,control,
     reinterpret_cast<const uint8_t*>(alternate_parameters.data()),alternate_parameters.size(),
     reinterpret_cast<const uint8_t*>(mismatched_coins.data()),mismatched_coins.size(),
     &mismatched_proof
-  )==NIGHTLEAN_NATIVE_INVALID_ARGUMENT&&mismatched_proof==0);
+  )==NOCTIUM_NATIVE_INVALID_ARGUMENT&&mismatched_proof==0);
   for(volatile char& byte:mismatched_coins)byte=0;
-  assert(nightlean_control_advance(control,&result)==NIGHTLEAN_CONTROL_OK);
+  assert(noctium_control_advance(control,&result)==NOCTIUM_CONTROL_OK);
   assert(take(result).find("\"status\":\"completed\"")!=std::string::npos);
   uint64_t proof=0;
-  assert(nightlean_native_begin_from_witness(
+  assert(noctium_native_begin_from_witness(
     reinterpret_cast<const uint8_t*>(proof_descriptor.data()),proof_descriptor.size(),target,control,
     reinterpret_cast<const uint8_t*>(parameters.data()),parameters.size(),
     reinterpret_cast<const uint8_t*>(proof_coins.data()),proof_coins.size(),&proof
-  )==NIGHTLEAN_NATIVE_OK);
+  )==NOCTIUM_NATIVE_OK);
   for(volatile char& byte:proof_coins)byte=0;
-  assert(nightlean_native_advance(proof,&result)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_native_advance(proof,&result)==NOCTIUM_NATIVE_OK);
   const auto proof_request=take_native(result);
   assert(field(proof_request,"status")=="need_proof");
   uint64_t request=0;
-  assert(nightlean_native_private_request(proof,&request)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_native_private_request(proof,&request)==NOCTIUM_NATIVE_OK);
   auto prove_coins=std::string(32,'\0');
   assert(getentropy(prove_coins.data(),prove_coins.size())==0);
-  assert(nightlean_native_local_prove(request,
-    reinterpret_cast<const uint8_t*>(prove_coins.data()),prove_coins.size(),&result)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_native_local_prove(request,
+    reinterpret_cast<const uint8_t*>(prove_coins.data()),prove_coins.size(),&result)==NOCTIUM_NATIVE_OK);
   for(volatile char& byte:prove_coins)byte=0;
   const auto proof_response=take_native(result);
   const auto proof_reply="{\"abiVersion\":1,\"requestId\":"+numeric_field(proof_request,"requestId")+
     ",\"operation\":\"native.prove.v1\",\"capability\":\""+field(proof_request,"capability")+
     "\",\"profile\":\""+field(proof_request,"profile")+"\"}";
-  assert(nightlean_native_resume(proof,
+  assert(noctium_native_resume(proof,
     reinterpret_cast<const uint8_t*>(proof_reply.data()),proof_reply.size(),
-    reinterpret_cast<const uint8_t*>(proof_response.data()),proof_response.size(),&result)==NIGHTLEAN_NATIVE_OK);
+    reinterpret_cast<const uint8_t*>(proof_response.data()),proof_response.size(),&result)==NOCTIUM_NATIVE_OK);
   const auto proved=take_native(result);
   assert(field(proved,"status")=="proved");
 
@@ -462,9 +462,9 @@ static int run_native_witness(int argc,char** argv) {
   const auto deploy_context=deployment_context(deploy_attempt,deploy_namespace);
   const auto deploy_setup="{\"hostContext\":"+deploy_context+",\"stages\":[]}";
   uint64_t deployment_client=0;
-  assert(nightlean_client_start(proof,0,
+  assert(noctium_client_start(proof,0,
     reinterpret_cast<const uint8_t*>(client_descriptor.data()),client_descriptor.size(),
-    reinterpret_cast<const uint8_t*>(deploy_setup.data()),deploy_setup.size(),&deployment_client)==NIGHTLEAN_NATIVE_OK);
+    reinterpret_cast<const uint8_t*>(deploy_setup.data()),deploy_setup.size(),&deployment_client)==NOCTIUM_NATIVE_OK);
   const auto deployment_prepared=client_command(deployment_client,adapter,"prepare");
   if(field(deployment_prepared,"status")!="step_done"){
     std::cerr<<deployment_prepared<<std::endl;
@@ -488,14 +488,14 @@ static int run_native_witness(int argc,char** argv) {
   assert(field(deployment_committed,"contractAddress")==contract_address);
   persist_public_evidence(evidence_path,profile,contract_address,
     object_field(deployment_committed,"receipt"),{},calls.size(),false);
-  assert(nightlean_client_detach(deployment_client)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_client_detach(deployment_client)==NOCTIUM_NATIVE_OK);
 
   uint64_t client=0;
-  assert(nightlean_client_start_from_witness(proof,
-    reinterpret_cast<const uint8_t*>(client_descriptor.data()),client_descriptor.size(),&client)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_client_start_from_witness(proof,
+    reinterpret_cast<const uint8_t*>(client_descriptor.data()),client_descriptor.size(),&client)==NOCTIUM_NATIVE_OK);
   uint64_t duplicate=99;
-  assert(nightlean_client_start_from_witness(proof,
-    reinterpret_cast<const uint8_t*>(client_descriptor.data()),client_descriptor.size(),&duplicate)==NIGHTLEAN_NATIVE_INVALID_STATE&&duplicate==0);
+  assert(noctium_client_start_from_witness(proof,
+    reinterpret_cast<const uint8_t*>(client_descriptor.data()),client_descriptor.size(),&duplicate)==NOCTIUM_NATIVE_INVALID_STATE&&duplicate==0);
   const auto call_prepared=client_command(client,adapter,"prepare");
   if(field(call_prepared,"status")!="step_done"){
     std::cerr<<call_prepared<<std::endl;
@@ -524,10 +524,10 @@ static int run_native_witness(int argc,char** argv) {
   persist_public_evidence(evidence_path,profile,contract_address,
     object_field(deployment_committed,"receipt"),object_field(call_committed,"receipt"),
     calls.size(),source_state_matched);
-  assert(nightlean_client_detach(client)==NIGHTLEAN_NATIVE_OK);
-  assert(nightlean_native_free(proof)==NIGHTLEAN_NATIVE_OK);
-  assert(nightlean_native_target_context_free(target)==NIGHTLEAN_NATIVE_INVALID_HANDLE);
-  assert(nightlean_localnet_free(adapter)==NIGHTLEAN_NATIVE_OK);
+  assert(noctium_client_detach(client)==NOCTIUM_NATIVE_OK);
+  assert(noctium_native_free(proof)==NOCTIUM_NATIVE_OK);
+  assert(noctium_native_target_context_free(target)==NOCTIUM_NATIVE_INVALID_HANDLE);
+  assert(noctium_localnet_free(adapter)==NOCTIUM_NATIVE_OK);
   std::cout<<"typed source localnet C ABI passed, provider calls="<<calls.size()
     <<", contract address="<<contract_address<<"\n";
   return 0;
@@ -539,11 +539,11 @@ int main(int argc,char **argv) {
   const auto plan=read_file(argv[1]);
   const std::string attempt(64,'b');
   const std::string context=
-    "{\"protocolVersion\":1,\"namespace\":\"nightlean\",\"baseRevision\":\"fixture-r0\","
+    "{\"protocolVersion\":1,\"namespace\":\"noctium\",\"baseRevision\":\"fixture-r0\","
     "\"attemptId\":\""+attempt+"\",\"capabilities\":["
-    "{\"id\":\"private\",\"namespace\":\"nightlean\",\"keyPrefix\":\"cache/\","
+    "{\"id\":\"private\",\"namespace\":\"noctium\",\"keyPrefix\":\"cache/\","
     "\"operations\":[\"private_state.read.v1\",\"private_state.stage.v1\",\"private_state.compare_exchange.v1\"]},"
-    "{\"id\":\"lookup\",\"namespace\":\"nightlean\",\"keyPrefix\":\"lookup/\","
+    "{\"id\":\"lookup\",\"namespace\":\"noctium\",\"keyPrefix\":\"lookup/\","
     "\"operations\":[\"noctium.lookup.v1\"]}],\"operations\":["
     "{\"operation\":\"private_state.read.v1\",\"argumentSchema\":{\"key\":\"Key\"},"
     "\"resultSchema\":\"UIntRange<256>\"},"
@@ -558,28 +558,28 @@ int main(int argc,char **argv) {
   const auto begin="{\"abiVersion\":1,\"plan\":"+plan+
     ",\"inputs\":{\"expected\":\"14\",\"seed\":\"7\"},\"hostContext\":"+context+"}";
   uint64_t session=0;
-  assert(nightlean_control_begin(reinterpret_cast<const uint8_t*>(begin.data()),begin.size(),&session)==NIGHTLEAN_CONTROL_OK);
+  assert(noctium_control_begin(reinterpret_cast<const uint8_t*>(begin.data()),begin.size(),&session)==NOCTIUM_CONTROL_OK);
   const std::string forged_stage=
     "{\"abiVersion\":2,\"operation\":\"private_state.stage.v1\","
     "\"capability\":\"private\",\"key\":\"cache/forged\","
     "\"type\":\"UIntRange<256>\",\"value\":\"999\"}";
   uint64_t denied_stage=99;
-  assert(nightlean_control_stage(session,
+  assert(noctium_control_stage(session,
     reinterpret_cast<const uint8_t*>(forged_stage.data()),forged_stage.size(),&denied_stage)
-    ==NIGHTLEAN_CONTROL_INVALID_RESPONSE&&denied_stage==0);
+    ==NOCTIUM_CONTROL_INVALID_RESPONSE&&denied_stage==0);
 
   std::vector<std::string> calls;
   std::string complete;
   for (;;) {
     uint64_t result=0;
-    assert(nightlean_control_advance(session,&result)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_advance(session,&result)==NOCTIUM_CONTROL_OK);
     const auto pending=take(result);
     if (pending.find("\"status\":\"need_host\"")==std::string::npos) {
       complete=pending;
       break;
     }
     uint64_t repeated=0;
-    assert(nightlean_control_advance(session,&repeated)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_advance(session,&repeated)==NOCTIUM_CONTROL_OK);
     assert(take(repeated)==pending);
     assert(pending.find("cache/last")==std::string::npos);
     const auto name=last_field(pending,"name");
@@ -587,7 +587,7 @@ int main(int argc,char **argv) {
     std::string private_request;
     for(unsigned export_count=0;export_count<4;++export_count){
       uint64_t private_token=0;
-      assert(nightlean_control_private_request(session,&private_token)==NIGHTLEAN_CONTROL_OK);
+      assert(noctium_control_private_request(session,&private_token)==NOCTIUM_CONTROL_OK);
       const auto exported=take(private_token,true);
       if(export_count==0)private_request=exported;
       else assert(exported==private_request);
@@ -612,15 +612,15 @@ int main(int argc,char **argv) {
     assert(attempt_position!=std::string::npos);
     crossed.replace(attempt_position,attempt.size(),std::string(64,'c'));
     uint64_t denied=99;
-    assert(nightlean_control_resume_typed(session,reinterpret_cast<const uint8_t*>(crossed.data()),crossed.size(),&denied)==NIGHTLEAN_CONTROL_INVALID_RESPONSE&&denied==0);
-    assert(nightlean_control_advance(session,&repeated)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_resume_typed(session,reinterpret_cast<const uint8_t*>(crossed.data()),crossed.size(),&denied)==NOCTIUM_CONTROL_INVALID_RESPONSE&&denied==0);
+    assert(noctium_control_advance(session,&repeated)==NOCTIUM_CONTROL_OK);
     assert(take(repeated)==pending);
-    assert(nightlean_control_resume_typed(session,reinterpret_cast<const uint8_t*>(response.data()),response.size(),&result)==NIGHTLEAN_CONTROL_OK);
+    assert(noctium_control_resume_typed(session,reinterpret_cast<const uint8_t*>(response.data()),response.size(),&result)==NOCTIUM_CONTROL_OK);
     take(result);
   }
   assert(complete.find("\"status\":\"completed\"")!=std::string::npos);
   assert(complete.find("\"result\":\"14\"")!=std::string::npos);
   assert((calls==std::vector<std::string>{"cache","cache","lookup","cache","lookup"}));
-  assert(nightlean_control_free(session)==NIGHTLEAN_CONTROL_OK);
+  assert(noctium_control_free(session)==NOCTIUM_CONTROL_OK);
   std::cout<<"typed source fixture C ABI passed, provider calls="<<calls.size()<<"\n";
 }

@@ -13,7 +13,7 @@ The selector manifest is [midnight-ledger-9-zkir-3.2.1-target.json](../../profil
 
 The selected profile records release `3.2.1`, source tag `zkir-3.2.1`, revision `7a51b3385bbf4bce3604df87a7c70867c9ab43c0`, declared crate version `3.2.0` and observed CLI banner `midnight-zkir 3.2.0`. The upstream patch did not update its crate/banner. Noctium preserves these distinct identities instead of editing upstream source or inferring the release from its banner.
 
-Both the CLI check and compile passes receive the validated target. The legacy `#nightlean_compile` command still uses 3.2.0. The selected compile command is `#nightlean_compile_target directory profileJson`. Only 3.2.1 plans add `target` and full `targetProfile` fields. Compiler metadata carries the same exact profile. IR language version remains 3.2. The default profile still omits the optional native-source field, preserving its original serialized profile and compiler artifact bytes.
+Both the CLI check and compile passes receive the validated target. The legacy `#noctium_compile` command still uses 3.2.0. The selected compile command is `#noctium_compile_target directory profileJson`. Only 3.2.1 plans add `target` and full `targetProfile` fields. Compiler metadata carries the same exact profile. IR language version remains 3.2. The default profile still omits the optional native-source field, preserving its original serialized profile and compiler artifact bytes.
 
 ## Select the matching native build
 

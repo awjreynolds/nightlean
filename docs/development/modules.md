@@ -1,6 +1,6 @@
 # Lean module identity and views
 
-`Nightlean.Modules` provides the bounded compile-time core for Noctium module
+`Noctium.Modules` provides the bounded compile-time core for Noctium module
 composition. Registration receives the full Lean `Name` for each source
 module. A user-facing alias or import path does not replace that identity.
 
@@ -13,8 +13,8 @@ identity. They do not copy state fields or grant access to private members.
 The expansion API accepts a registry of pure module definitions:
 
 ```lean
-import Nightlean.Modules
-open Nightlean.Modules
+import Noctium.Modules
+open Noctium.Modules
 
 private def registry : Registry := ...
 def result := expand registry `Demo.Entry []
@@ -40,7 +40,7 @@ state by full member identity, assigns canonical field names, resolves entry
 aliases, and groups helper requests by exact source program. The frontend then
 specializes each group with the issue46 batch session, checks the concrete
 program, attaches the compiled circuits, and validates an ordinary
-`Nightlean.Contract`.
+`Noctium.Contract`.
 
 State schemas support fixed scalar types, type parameters that specialize to a
 scalar, and unsigned bounds supplied by natural parameters. Expansion resolves

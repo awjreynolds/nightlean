@@ -1,5 +1,5 @@
 //! Native proof ABI phase A. Real fixtures are supplied by the host, never embedded.
-use nightlean_runtime::{native_ffi::*, profile};
+use noctium_runtime::{native_ffi::*, profile};
 use rand::RngCore;
 use serde_json::{Value, json};
 use std::{fs, ptr};
@@ -13,9 +13,9 @@ unsafe fn bytes(token: u64, private: bool) -> Vec<u8> {
     assert_eq!(
         unsafe {
             if private {
-                nightlean_native_private_length(token, &mut len)
+                noctium_native_private_length(token, &mut len)
             } else {
-                nightlean_native_result_length(token, &mut len)
+                noctium_native_result_length(token, &mut len)
             }
         },
         OK
@@ -25,9 +25,9 @@ unsafe fn bytes(token: u64, private: bool) -> Vec<u8> {
     assert_eq!(
         unsafe {
             if private {
-                nightlean_native_private_copy(token, out.as_mut_ptr(), len, &mut written)
+                noctium_native_private_copy(token, out.as_mut_ptr(), len, &mut written)
             } else {
-                nightlean_native_result_copy(token, out.as_mut_ptr(), len, &mut written)
+                noctium_native_result_copy(token, out.as_mut_ptr(), len, &mut written)
             }
         },
         OK
@@ -38,9 +38,9 @@ unsafe fn bytes(token: u64, private: bool) -> Vec<u8> {
 fn status(s: u64) -> Value {
     unsafe {
         let mut t = 0;
-        assert_eq!(nightlean_native_advance(s, &mut t), OK);
+        assert_eq!(noctium_native_advance(s, &mut t), OK);
         let v = serde_json::from_slice(&bytes(t, false)).unwrap();
-        assert_eq!(nightlean_native_result_free(t), OK);
+        assert_eq!(noctium_native_result_free(t), OK);
         v
     }
 }
@@ -52,7 +52,7 @@ unsafe fn begin(desc: &Value, private: &[u8], parameters: &[u8]) -> (i32, u64) {
     let seed = coins();
     let mut out = 99;
     let code = unsafe {
-        nightlean_native_begin(
+        noctium_native_begin(
             d.as_ptr(),
             d.len(),
             private.as_ptr(),
@@ -70,7 +70,7 @@ unsafe fn resume(session: u64, reply: &Value, response: &[u8]) -> (i32, u64) {
     let m = serde_json::to_vec(reply).unwrap();
     let mut t = 99;
     let code = unsafe {
-        nightlean_native_resume(
+        noctium_native_resume(
             session,
             m.as_ptr(),
             m.len(),
@@ -87,7 +87,7 @@ fn forged_tokens_nulls_and_foreign_token_classes_reject() {
         let mut token = 99;
         let mut size = 99;
         assert_eq!(
-            nightlean_native_begin(
+            noctium_native_begin(
                 ptr::null(),
                 0,
                 ptr::null(),
@@ -101,30 +101,30 @@ fn forged_tokens_nulls_and_foreign_token_classes_reject() {
             INVALID_ARGUMENT
         );
         assert_eq!(token, 0);
-        assert_eq!(nightlean_native_advance(1, &mut token), INVALID_HANDLE);
+        assert_eq!(noctium_native_advance(1, &mut token), INVALID_HANDLE);
         assert_eq!(token, 0);
         assert_eq!(
-            nightlean_native_advance(1, ptr::null_mut()),
+            noctium_native_advance(1, ptr::null_mut()),
             INVALID_ARGUMENT
         );
-        assert_eq!(nightlean_native_result_length(1, &mut size), INVALID_HANDLE);
+        assert_eq!(noctium_native_result_length(1, &mut size), INVALID_HANDLE);
         assert_eq!(size, 0);
         assert_eq!(
-            nightlean_native_private_length(1, &mut size),
+            noctium_native_private_length(1, &mut size),
             INVALID_HANDLE
         );
-        assert_eq!(nightlean_native_cancel(1), INVALID_HANDLE);
-        assert_eq!(nightlean_native_free(1), INVALID_HANDLE);
-        assert_eq!(nightlean_native_result_free(1), INVALID_HANDLE);
-        assert_eq!(nightlean_native_private_free(1), INVALID_HANDLE);
+        assert_eq!(noctium_native_cancel(1), INVALID_HANDLE);
+        assert_eq!(noctium_native_free(1), INVALID_HANDLE);
+        assert_eq!(noctium_native_result_free(1), INVALID_HANDLE);
+        assert_eq!(noctium_native_private_free(1), INVALID_HANDLE);
     }
 }
 #[test]
 #[ignore = "requires independently authenticated retained claim bundle, private config and SRS"]
 fn real_native_pull_resume_rejects_crossed_duplicate_corrupt_and_cancelled_replies() {
-    let private = fs::read(std::env::var("NIGHTLEAN_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
-    let parameters = fs::read(std::env::var("NIGHTLEAN_TEST_PROOF_PARAMETERS").unwrap()).unwrap();
-    let desc = json!({"abiVersion":1,"profile":profile::NAME,"bundleDirectory":std::env::var("NIGHTLEAN_TEST_BUNDLE").unwrap(),"trustedManifestSha256":std::env::var("NIGHTLEAN_TEST_MANIFEST_SHA256").unwrap(),"proofParametersSha256":std::env::var("NIGHTLEAN_TEST_PROOF_PARAMETERS_SHA256").unwrap(),"k":9,"ttl":2000000000u64,"proofServiceCapability":"host.prover","maxResponseBytes":MAX_BYTES});
+    let private = fs::read(std::env::var("NOCTIUM_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
+    let parameters = fs::read(std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS").unwrap()).unwrap();
+    let desc = json!({"abiVersion":1,"profile":profile::NAME,"bundleDirectory":std::env::var("NOCTIUM_TEST_BUNDLE").unwrap(),"trustedManifestSha256":std::env::var("NOCTIUM_TEST_MANIFEST_SHA256").unwrap(),"proofParametersSha256":std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS_SHA256").unwrap(),"k":9,"ttl":2000000000u64,"proofServiceCapability":"host.prover","maxResponseBytes":MAX_BYTES});
     unsafe {
         for field in ["profile", "trustedManifestSha256", "proofParametersSha256"] {
             let mut bad = desc.clone();
@@ -144,10 +144,10 @@ fn real_native_pull_resume_rejects_crossed_duplicate_corrupt_and_cancelled_repli
         let other = status(b);
         assert_ne!(req["requestId"], other["requestId"]);
         let mut payload = 0;
-        assert_eq!(nightlean_native_private_request(a, &mut payload), OK);
+        assert_eq!(noctium_native_private_request(a, &mut payload), OK);
         let mut len = 0;
         assert_eq!(
-            nightlean_native_result_length(payload, &mut len),
+            noctium_native_result_length(payload, &mut len),
             INVALID_HANDLE
         );
         let private_payload = bytes(payload, true);
@@ -155,31 +155,31 @@ fn real_native_pull_resume_rejects_crossed_duplicate_corrupt_and_cancelled_repli
         let mut extra_private = Vec::new();
         for _ in 0..15 {
             let mut token = 0;
-            assert_eq!(nightlean_native_private_request(a, &mut token), OK);
+            assert_eq!(noctium_native_private_request(a, &mut token), OK);
             extra_private.push(token);
         }
         let mut limited = 99;
-        assert_eq!(nightlean_native_private_request(a, &mut limited), LIMIT);
+        assert_eq!(noctium_native_private_request(a, &mut limited), LIMIT);
         assert_eq!(limited, 0);
         for token in extra_private {
-            assert_eq!(nightlean_native_private_free(token), OK);
+            assert_eq!(noctium_native_private_free(token), OK);
         }
         let mut extra_results = Vec::new();
         for _ in 0..64 {
             let mut token = 0;
-            assert_eq!(nightlean_native_advance(a, &mut token), OK);
+            assert_eq!(noctium_native_advance(a, &mut token), OK);
             extra_results.push(token);
         }
-        assert_eq!(nightlean_native_advance(a, &mut limited), LIMIT);
+        assert_eq!(noctium_native_advance(a, &mut limited), LIMIT);
         assert_eq!(limited, 0);
         for token in extra_results {
-            assert_eq!(nightlean_native_result_free(token), OK);
+            assert_eq!(noctium_native_result_free(token), OK);
         }
         assert_eq!(status(a), req);
         let mut written = 99;
         let mut small = [7; 1];
         assert_eq!(
-            nightlean_native_private_copy(payload, small.as_mut_ptr(), 1, &mut written),
+            noctium_native_private_copy(payload, small.as_mut_ptr(), 1, &mut written),
             BUFFER_TOO_SMALL
         );
         assert_eq!(written, 0);
@@ -187,18 +187,18 @@ fn real_native_pull_resume_rejects_crossed_duplicate_corrupt_and_cancelled_repli
         let seed = coins();
         let mut response_token = 99;
         assert_eq!(
-            nightlean_native_local_prove(payload, seed.as_ptr(), 32, &mut response_token),
+            noctium_native_local_prove(payload, seed.as_ptr(), 32, &mut response_token),
             OK
         );
         let response = bytes(response_token, false);
         assert_eq!(
-            nightlean_native_private_length(response_token, &mut len),
+            noctium_native_private_length(response_token, &mut len),
             INVALID_HANDLE
         );
-        assert_eq!(nightlean_native_result_free(response_token), OK);
+        assert_eq!(noctium_native_result_free(response_token), OK);
         let mut out = 99;
         assert_eq!(
-            nightlean_native_local_prove(payload, seed.as_ptr(), 32, &mut out),
+            noctium_native_local_prove(payload, seed.as_ptr(), 32, &mut out),
             INVALID_STATE
         );
         assert_eq!(out, 0);
@@ -262,46 +262,46 @@ fn real_native_pull_resume_rejects_crossed_duplicate_corrupt_and_cancelled_repli
         assert_eq!(complete["submitted"], false);
         let encoded = hex::decode(complete["publicIntentHex"].as_str().unwrap()).unwrap();
         let mut reader = encoded.as_slice();
-        let _: nightlean_runtime::proof::PublicProvedNativeIntent =
+        let _: noctium_runtime::proof::PublicProvedNativeIntent =
             serialize::tagged_deserialize(&mut reader).unwrap();
         assert!(reader.is_empty());
         assert_eq!(
-            nightlean_runtime::artifacts::digest(&encoded),
+            noctium_runtime::artifacts::digest(&encoded),
             complete["publicIntentSha256"]
         );
         assert_eq!(status(a), complete);
         assert_eq!(resume(a, &m, &response), (INVALID_STATE, 0));
-        assert_eq!(nightlean_native_cancel(a), INVALID_STATE);
+        assert_eq!(noctium_native_cancel(a), INVALID_STATE);
         assert_eq!(
-            nightlean_native_private_length(payload, &mut len),
+            noctium_native_private_length(payload, &mut len),
             INVALID_HANDLE
         );
-        assert_eq!(nightlean_native_private_free(payload), INVALID_HANDLE);
-        assert_eq!(nightlean_native_result_free(finished), OK);
-        assert_eq!(nightlean_native_result_free(finished), INVALID_HANDLE);
+        assert_eq!(noctium_native_private_free(payload), INVALID_HANDLE);
+        assert_eq!(noctium_native_result_free(finished), OK);
+        assert_eq!(noctium_native_result_free(finished), INVALID_HANDLE);
         let mut revoked = 0;
-        assert_eq!(nightlean_native_private_request(b, &mut revoked), OK);
-        assert_eq!(nightlean_native_cancel(b), OK);
+        assert_eq!(noctium_native_private_request(b, &mut revoked), OK);
+        assert_eq!(noctium_native_cancel(b), OK);
         assert_eq!(
-            nightlean_native_private_length(revoked, &mut len),
+            noctium_native_private_length(revoked, &mut len),
             INVALID_HANDLE
         );
         assert_eq!(resume(b, &reply(&other), &response), (INVALID_STATE, 0));
-        assert_eq!(nightlean_native_cancel(b), INVALID_STATE);
-        assert_eq!(nightlean_native_free(a), OK);
-        assert_eq!(nightlean_native_free(a), INVALID_HANDLE);
-        assert_eq!(nightlean_native_free(b), OK);
+        assert_eq!(noctium_native_cancel(b), INVALID_STATE);
+        assert_eq!(noctium_native_free(a), OK);
+        assert_eq!(noctium_native_free(a), INVALID_HANDLE);
+        assert_eq!(noctium_native_free(b), OK);
         let (code, c) = begin(&desc, &private, &parameters);
         assert_eq!(code, OK);
-        assert_eq!(nightlean_native_cancel(c), OK);
-        assert_eq!(nightlean_native_private_request(c, &mut out), INVALID_STATE);
-        assert_eq!(nightlean_native_free(c), OK);
+        assert_eq!(noctium_native_cancel(c), OK);
+        assert_eq!(noctium_native_private_request(c, &mut out), INVALID_STATE);
+        assert_eq!(noctium_native_free(c), OK);
         let (code, c) = begin(&desc, &private, &parameters);
         assert_eq!(code, OK);
-        assert_eq!(nightlean_native_private_request(c, &mut out), OK);
-        assert_eq!(nightlean_native_private_free(out), OK);
-        assert_eq!(nightlean_native_private_free(out), INVALID_HANDLE);
-        assert_eq!(nightlean_native_free(c), OK);
+        assert_eq!(noctium_native_private_request(c, &mut out), OK);
+        assert_eq!(noctium_native_private_free(out), OK);
+        assert_eq!(noctium_native_private_free(out), INVALID_HANDLE);
+        assert_eq!(noctium_native_free(c), OK);
         println!(
             "native_ffi_profile={} payload={} response={} attached={} positive_and_adversarial=true",
             profile::NAME,

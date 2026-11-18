@@ -65,7 +65,7 @@ Only after this gate should the ABI be frozen and C/C++, WASM, Kotlin, Swift, an
 
 ## Research basis
 
-- [Runtime boundaries and pinned Midnight APIs](../research/nightlean-portable-runtime-boundary.md)
+- [Runtime boundaries and pinned Midnight APIs](../research/noctium-portable-runtime-boundary.md)
 - [Noir, Aztec, Circom and mobile runtime comparison](../research/portable-witness-comparison.md)
 
 These reports distinguish verified upstream APIs from Noctium recommendations and untested target support.

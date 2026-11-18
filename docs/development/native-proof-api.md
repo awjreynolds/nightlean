@@ -1,6 +1,6 @@
 # Native proof construction and verification
 
-The Rust library builds and proves the current source private claim in process. Applications do not need Node, Compact, a shell command or a toolkit subprocess for this proof stage. `nightlean_runtime::proof` uses the selected pinned native ZKIR implementation and the official ledger's typed proof attachment path.
+The Rust library builds and proves the current source private claim in process. Applications do not need Node, Compact, a shell command or a toolkit subprocess for this proof stage. `noctium_runtime::proof` uses the selected pinned native ZKIR implementation and the official ledger's typed proof attachment path.
 
 This Rust API covers one frozen contract call with no offers or dust actions. Source-bound skipped transcript groups use native Noop attachment and gas accounting. The selected-3.2.1 conditional-write case has real proof and attachment evidence. The published C ABI provides a separate phase A native proof interface; it also stops before funding, signing, submission, receipt validation or journal persistence. Mobile/WASM SDKs remain unqualified. A locally verified proof establishes the retained verifier key's relation for the exact native statement. This is not a general theorem connecting Lean source, compiler output and generated keys. `compiled_verified` stays false. See [native proof ABI phase A](native-proof-abi.md) for the C ABI guide and qualification evidence.
 
@@ -85,9 +85,9 @@ and trusted parameters.
 
 The opt-in test is
 `proof::tests::inactive_guarded_write_matches_native_noop_preview_and_binds_skipped_fields`.
-Supply `NIGHTLEAN_ISSUE43_BUNDLE`, `NIGHTLEAN_ISSUE43_MANIFEST_SHA256`,
-`NIGHTLEAN_ISSUE43_PRIVATE_CONFIG`, `NIGHTLEAN_ISSUE43_PROOF_PARAMETERS`, and
-`NIGHTLEAN_ISSUE43_PROOF_PARAMETERS_SHA256`, then run:
+Supply `NOCTIUM_ISSUE43_BUNDLE`, `NOCTIUM_ISSUE43_MANIFEST_SHA256`,
+`NOCTIUM_ISSUE43_PRIVATE_CONFIG`, `NOCTIUM_ISSUE43_PROOF_PARAMETERS`, and
+`NOCTIUM_ISSUE43_PROOF_PARAMETERS_SHA256`, then run:
 
 ```sh
 cargo +1.100.0 test --manifest-path runtime/Cargo.toml \
@@ -97,7 +97,7 @@ cargo +1.100.0 test --manifest-path runtime/Cargo.toml \
 ```
 
 Use the compiled `Issue43ConditionalWrites` fixture and matching independent
-native keys. Also supply the five corresponding `NIGHTLEAN_ISSUE43_EMPTY_*`
+native keys. Also supply the five corresponding `NOCTIUM_ISSUE43_EMPTY_*`
 variables for the compiled `Issue43EmptyActivity` fixture. Keep invocation
 configurations outside their public bundles.
 
@@ -140,8 +140,8 @@ cargo test --manifest-path runtime/Cargo.toml --no-default-features --features z
   --test native_proof -- --include-ignored
 ```
 
-The opt-in test reads `NIGHTLEAN_TEST_BUNDLE`, `NIGHTLEAN_TEST_MANIFEST_SHA256`, `NIGHTLEAN_TEST_PRIVATE_CONFIG`, `NIGHTLEAN_TEST_PROOF_PARAMETERS` and `NIGHTLEAN_TEST_PROOF_PARAMETERS_SHA256` from the test host. It generates a real proof in Rust, verifies and attaches it through the native ledger, checks serialization, and rejects invalid response versions, malformed/trailing/truncated/oversized bytes, corrupt proofs, changed contract and intent binding, and inconsistent communication commitments. It also tests cancellation before private disclosure and while a request is pending.
+The opt-in test reads `NOCTIUM_TEST_BUNDLE`, `NOCTIUM_TEST_MANIFEST_SHA256`, `NOCTIUM_TEST_PRIVATE_CONFIG`, `NOCTIUM_TEST_PROOF_PARAMETERS` and `NOCTIUM_TEST_PROOF_PARAMETERS_SHA256` from the test host. It generates a real proof in Rust, verifies and attaches it through the native ledger, checks serialization, and rejects invalid response versions, malformed/trailing/truncated/oversized bytes, corrupt proofs, changed contract and intent binding, and inconsistent communication commitments. It also tests cancellation before private disclosure and while a request is pending.
 
-The ignored library test `proof::tests::real_crypto_rejects_each_statement_field_and_wrong_key` additionally takes `NIGHTLEAN_TEST_OTHER_VERIFIER`. It independently changes every public statement field and uses another real native verifier key. All mutations fail actual cryptographic verification. There is no mock-verification feature in this path.
+The ignored library test `proof::tests::real_crypto_rejects_each_statement_field_and_wrong_key` additionally takes `NOCTIUM_TEST_OTHER_VERIFIER`. It independently changes every public statement field and uses another real native verifier key. All mutations fail actual cryptographic verification. There is no mock-verification feature in this path.
 
 Primary implementation sources are the pinned ledger `ledger/src/prove.rs`, `ledger/src/verify.rs`, `transient-crypto/src/proofs.rs`, `proof-server/src/endpoints.rs`, and the selected ZKIR `zkir/src/ir.rs`. Profile pins and previous ledger qualification are recorded in [native runtime profiles](zkir-3.2.1-integrated.md).

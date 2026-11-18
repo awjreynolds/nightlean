@@ -1,5 +1,5 @@
 mod common;
-use nightlean_runtime::{
+use noctium_runtime::{
     Expr, MODULUS, Plan, Value, canonical_field, environment, evaluate, field_decimal,
 };
 use serde_json::json;
@@ -113,7 +113,7 @@ fn unqualified_nonempty_map_state_rejects() {
     let plan:Plan=serde_json::from_value(json!({"schemaVersion":1,"entrypoint":"claim","circuit":{"inputs":[],"outputs":[]},"state":[{"name":"spent","kind":{"map":["Native","Bool"]}}],"operations":[],"reads":[]})).unwrap();
     let plan = common::selected(plan);
     let config = serde_json::from_value(json!({"spent":[["1",true]]})).unwrap();
-    assert!(nightlean_runtime::create_state(&plan, &config).is_err());
+    assert!(noctium_runtime::create_state(&plan, &config).is_err());
 }
 
 #[test]
@@ -125,12 +125,12 @@ fn state_read_after_write_uses_the_native_tentative_state() {
         {"op":"popeq","alignment":"field","expression":{"tag":"reference","name":"post"}}
     ],"reads":[{"name":"post","type":"Native"}]})).unwrap();
     let plan = common::selected(plan);
-    let state = nightlean_runtime::create_state(
+    let state = noctium_runtime::create_state(
         &plan,
         &serde_json::from_value(json!({"root":"1"})).unwrap(),
     )
     .unwrap();
-    let execution = nightlean_runtime::prepare(
+    let execution = noctium_runtime::prepare(
         &plan,
         &BTreeMap::new(),
         &state,

@@ -41,7 +41,7 @@ const compact = value => {
 };
 const vector = values => Buffer.concat([compact(values.length), ...values.map(compact)]);
 const preimage = test => {
-  const key = Buffer.from('nightlean/claim-lowering/qualification');
+  const key = Buffer.from('noctium/claim-lowering/qualification');
   return Buffer.concat([Buffer.from('midnight:proof-preimage:'), vector([]), vector(test.private),
     vector(test.groups), vector(test.reads), compact(42), Buffer.from([0]), compact(key.length), key]);
 };
@@ -79,7 +79,7 @@ for (const test of cases) {
 }
 let proof;
 if (nativeCli) {
-  const directory = await mkdtemp(join(tmpdir(), 'nightlean-lowering-prover-'));
+  const directory = await mkdtemp(join(tmpdir(), 'noctium-lowering-prover-'));
   try {
     const input = join(directory, 'claim.zkir');
     await writeFile(input, source);

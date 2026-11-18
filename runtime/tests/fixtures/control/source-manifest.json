@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "source": "tests/ControlSource.lean",
-  "sourceSha256": "c66b913a4323b50e7c6079cc73c1969311005069ef19cca4891477905efb4da7",
-  "emissionCommand": "lake exe nightlean compile tests/ControlSource.lean --output /private/tmp/nightlean-control-source",
+  "sourceSha256": "c3d7560bd7e7bfb34151c52a7e5db3e7297d7db2148944f3b61f9da54c5c432b",
+  "emissionCommand": "lake exe noctium compile tests/ControlSource.lean --output /private/tmp/noctium-control-source",
   "scope": "Host control semantics only. No native guard qualification or persistent commit claim.",
   "fixtures": {
     "activeFailure.control.json": "a4c14e28576055939aa60641341aede8510c6f63fd1c97fd47f61ba91c3b4266",

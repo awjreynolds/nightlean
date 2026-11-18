@@ -1,8 +1,8 @@
-import Nightlean.Verification.ScalarExpressionHash
+import Noctium.Verification.ScalarExpressionHash
 
 namespace ScalarExpressionHashTests
 
-open Nightlean Nightlean.Verification ScalarLowering
+open Noctium Noctium.Verification ScalarLowering
 open ScalarExpressionArithmetic ScalarExpressionHash
 
 example : ExprComplete (.poseidon2 11 (.native 5) (.native 7)) :=

@@ -1,8 +1,8 @@
-import Nightlean.Verification.ScalarExpressionLowering
+import Noctium.Verification.ScalarExpressionLowering
 
 namespace ScalarExpressionLoweringTests
 
-open Nightlean Nightlean.Verification ScalarLowering
+open Noctium Noctium.Verification ScalarLowering
 open ScalarExpressionLowering
 
 example : ExprComplete

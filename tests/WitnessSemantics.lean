@@ -1,9 +1,9 @@
-import Nightlean.Witness.Semantics
+import Noctium.Witness.Semantics
 
-open Nightlean.Helpers
-open Nightlean.Witness
-open Nightlean.Witness.Semantics
-open Nightlean
+open Noctium.Helpers
+open Noctium.Witness
+open Noctium.Witness.Semantics
+open Noctium
 
 namespace WitnessSemanticsTest
 

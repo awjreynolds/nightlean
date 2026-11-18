@@ -1,7 +1,7 @@
 #![cfg(feature = "zkir-321")]
 
 use base_crypto::fab::AlignedValue;
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, Expr, Plan, Value, check, create_state, evaluate, prepare, zkir::IrSource,
 };
 use onchain_runtime::state::{ChargedState, StateValue};

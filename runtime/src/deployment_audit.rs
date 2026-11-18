@@ -20,8 +20,8 @@ use std::collections::BTreeMap;
 use transient_crypto::proofs::Zkir;
 
 pub const GUARANTEE: &str = "PrivateClaimDeploymentIdentity/v1";
-pub const SOURCE_POLICY: &str = "Nightlean.PrivateClaimVerification.policy";
-pub const NATIVE_POLICY: &str = "Nightlean.PrivateClaimNativePrivacy.policy";
+pub const SOURCE_POLICY: &str = "Noctium.PrivateClaimVerification.policy";
+pub const NATIVE_POLICY: &str = "Noctium.PrivateClaimNativePrivacy.policy";
 pub fn hash(bytes: &[u8]) -> String {
     hex::encode(Sha256::digest(bytes))
 }
@@ -228,7 +228,7 @@ pub async fn qualify<'a>(
         (Role::Circuit, "PrivateClaim.claim.zkir"),
         (Role::Plan, "PrivateClaim.claim.impact.json"),
         (Role::Profile, "target-profile.json"),
-        (Role::Metadata, "nightlean.json"),
+        (Role::Metadata, "noctium.json"),
     ] {
         ensure!(
             authority["record"]["artifacts"][name].as_str()

@@ -41,7 +41,7 @@ pub enum Error {
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "nightlean_localnet_{self:?}")
+        write!(f, "noctium_localnet_{self:?}")
     }
 }
 impl std::error::Error for Error {}
@@ -1534,19 +1534,19 @@ mod tests {
             assert_eq!(node.sync().err(), Some(Error::Metadata));
             node.runtime_code = code;
             let cache = ProofCache::new(
-                "/private/tmp/nightlean-proof-params".into(),
+                "/private/tmp/noctium-proof-params".into(),
                 reqwest::Url::parse("https://srs.midnight.network/").unwrap(),
             )
             .unwrap();
             let material = cache.dust().await.unwrap();
             let dust_srs = cache.parameters(material.k()).await.unwrap();
             let bundle = artifacts::verify(
-                std::path::Path::new(&std::env::var("NIGHTLEAN_TEST_BUNDLE").unwrap()),
-                Some(&std::env::var("NIGHTLEAN_TEST_MANIFEST_SHA256").unwrap()),
+                std::path::Path::new(&std::env::var("NOCTIUM_TEST_BUNDLE").unwrap()),
+                Some(&std::env::var("NOCTIUM_TEST_MANIFEST_SHA256").unwrap()),
             )
             .unwrap();
             let config = zeroize::Zeroizing::new(
-                std::fs::read(std::env::var("NIGHTLEAN_TEST_PRIVATE_CONFIG").unwrap()).unwrap(),
+                std::fs::read(std::env::var("NOCTIUM_TEST_PRIVATE_CONFIG").unwrap()).unwrap(),
             );
             let prepared = PreparedProof::from_config(
                 &bundle,
@@ -1625,7 +1625,7 @@ mod tests {
                 .await
                 .unwrap();
             let journal_dir = std::path::PathBuf::from(format!(
-                "/private/tmp/nightlean-native-journal-{}-{}",
+                "/private/tmp/noctium-native-journal-{}-{}",
                 std::process::id(),
                 snapshot.height
             ));
@@ -1898,11 +1898,11 @@ mod tests {
                 )
                 .is_err()
             );
-            if let Ok(path) = std::env::var("NIGHTLEAN_TEST_EVIDENCE") {
+            if let Ok(path) = std::env::var("NOCTIUM_TEST_EVIDENCE") {
                 let final_snapshot = node.sync().unwrap();
                 let mut final_state = Vec::new();
                 serialize::tagged_serialize(&final_snapshot.state, &mut final_state).unwrap();
-                let value = json!({"runtimeCodeHash":node.runtime_code,"metadataVersion":16,"metadataSha256":hex::encode(&node.metadata.fingerprint),"contractParametersSha256":call_srs.sha256(),"dustParametersSha256":dust_srs.sha256(),"finalReplayHeight":final_snapshot.height,"finalReplayBlockHash":final_snapshot.finalized_hash,"nativeLedgerStateTaggedSha256":hex::encode(sha2::Sha256::digest(&final_state)),"nativeStoredLedgerRootMatchedRuntime":true,"schemaVersion":1,"scope":"native deploy and claim, lost acknowledgement, durable restart, byte-identical retry, postbroadcast cancellation/deadline, exact finalized state, committed private CAS and accepted-chain private CAS conflict","profile":crate::profile::NAME,"manifestSha256":std::env::var("NIGHTLEAN_TEST_MANIFEST_SHA256").unwrap(),"genesis":policy.genesis,"specVersion":policy.spec_version,"transactionVersion":policy.transaction_version,"journalDirectory":journal_dir,"negativeClaims":negative_claims,"invalidNativeProofRefused":true,"alteredPublicCommitmentRefused":true,"wrongNetworkRefused":true,"wrongGenesisRefused":true,"wrongProfileRefused":true,"rawReplayRefused":true,"claimedStateReplayRefused":true,"wrongReceiptFieldsRefused":true,"metadataMismatchRefused":true,"runtimeCodeMismatchRefused":true,"fundingCacheMismatchRefusedBeforeEntropyUse":true,"records":evidence});
+                let value = json!({"runtimeCodeHash":node.runtime_code,"metadataVersion":16,"metadataSha256":hex::encode(&node.metadata.fingerprint),"contractParametersSha256":call_srs.sha256(),"dustParametersSha256":dust_srs.sha256(),"finalReplayHeight":final_snapshot.height,"finalReplayBlockHash":final_snapshot.finalized_hash,"nativeLedgerStateTaggedSha256":hex::encode(sha2::Sha256::digest(&final_state)),"nativeStoredLedgerRootMatchedRuntime":true,"schemaVersion":1,"scope":"native deploy and claim, lost acknowledgement, durable restart, byte-identical retry, postbroadcast cancellation/deadline, exact finalized state, committed private CAS and accepted-chain private CAS conflict","profile":crate::profile::NAME,"manifestSha256":std::env::var("NOCTIUM_TEST_MANIFEST_SHA256").unwrap(),"genesis":policy.genesis,"specVersion":policy.spec_version,"transactionVersion":policy.transaction_version,"journalDirectory":journal_dir,"negativeClaims":negative_claims,"invalidNativeProofRefused":true,"alteredPublicCommitmentRefused":true,"wrongNetworkRefused":true,"wrongGenesisRefused":true,"wrongProfileRefused":true,"rawReplayRefused":true,"claimedStateReplayRefused":true,"wrongReceiptFieldsRefused":true,"metadataMismatchRefused":true,"runtimeCodeMismatchRefused":true,"fundingCacheMismatchRefusedBeforeEntropyUse":true,"records":evidence});
                 std::fs::write(path, serde_json::to_vec_pretty(&value).unwrap()).unwrap();
             }
         });

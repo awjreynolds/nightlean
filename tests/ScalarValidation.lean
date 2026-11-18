@@ -1,9 +1,9 @@
-import Nightlean.Verification.ScalarValidation
+import Noctium.Verification.ScalarValidation
 
 namespace ScalarValidationTests
 
-open Lean Nightlean Nightlean.Backend.Native
-open Nightlean.Verification NativeRelation ScalarNormalization ScalarValidation
+open Lean Noctium Noctium.Backend.Native
+open Noctium.Verification NativeRelation ScalarNormalization ScalarValidation
 
 private def accepted (result : Except String α) : Bool :=
   match result with | .ok _ => true | .error _ => false
@@ -97,7 +97,7 @@ example (hash : Hash) (inputs witness : Assignment) (streams : InputStreams)
   exact ⟨by simpa only [interpret] using bound,
     by simpa [rangeExpected, interpret] using sound.groups⟩
 
-#print axioms Nightlean.Verification.ScalarValidation.validate_sound
-#print axioms Nightlean.Verification.ScalarValidation.validate_observed_returns
+#print axioms Noctium.Verification.ScalarValidation.validate_sound
+#print axioms Noctium.Verification.ScalarValidation.validate_observed_returns
 
 end ScalarValidationTests

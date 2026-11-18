@@ -1,7 +1,7 @@
-import Nightlean.Passes
+import Noctium.Passes
 
-open Nightlean
-open Nightlean.Passes
+open Noctium
+open Noctium.Passes
 
 private def ctx : EvalContext := {
   modulus := 17

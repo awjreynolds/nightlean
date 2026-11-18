@@ -47,14 +47,14 @@
     "expression":
     {"value": {"tag": "reference", "name": "enabled"},
      "tag": "let",
-     "name": "_nightlean_activity_guard_xxxxxxxxxxxx",
+     "name": "_noctium_activity_guard_xxxxxxxxxxxx",
      "body":
      {"value":
       {"yes": {"tag": "reference", "name": "denominator"},
        "tag": "select",
        "no": {"value": "1", "tag": "constant"},
        "condition":
-       {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxx"}},
+       {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxx"}},
       "tag": "inv"}},
     "alignment": "field"},
    "op": "guarded",
@@ -75,7 +75,7 @@
     "expression":
     {"value": {"tag": "reference", "name": "enabled"},
      "tag": "let",
-     "name": "_nightlean_activity_guard_xxxxxxxx",
+     "name": "_noctium_activity_guard_xxxxxxxx",
      "body":
      {"value":
       {"value":
@@ -86,7 +86,7 @@
          "tag": "select",
          "no": {"value": "1", "tag": "constant"},
          "condition":
-         {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}},
+         {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}},
         "tag": "jubjubScalarFromNative"},
        "tag": "inv"},
       "tag": "jubjubScalarToNative"}},

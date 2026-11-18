@@ -45,7 +45,7 @@ def main() -> int:
         model_digest = hashlib.sha256(model).hexdigest()
         if model_digest != args.trusted_model_sha256:
             raise ValueError("model_pin_mismatch")
-        with tempfile.TemporaryDirectory(prefix="nightlean-scalar-audit-") as directory:
+        with tempfile.TemporaryDirectory(prefix="noctium-scalar-audit-") as directory:
             scratch = Path(directory)
             model_path, proof_path = scratch / "model.ndjson", scratch / "proof.ndjson"
             model_path.write_bytes(model)

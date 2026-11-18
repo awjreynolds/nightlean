@@ -41,10 +41,10 @@ Reproduce the source/checker cases after building Noctium and installing the pin
 lake build
 lake env lean tests/BoundedScalars.lean
 bash tests/uint-cli.sh
-.lake/build/bin/noctium compile tests/BoundedScalars.lean --output /tmp/nightlean-scalar-cases
-node scripts/zkir/check-scalar-cases.mjs /tmp/nightlean-scalar-cases
+.lake/build/bin/noctium compile tests/BoundedScalars.lean --output /tmp/noctium-scalar-cases
+node scripts/zkir/check-scalar-cases.mjs /tmp/noctium-scalar-cases
 ```
 
-Native assembly and its private output layout are documented in [native-assembler.md](native-assembler.md). For the existing isolated localnet harness, set `NIGHTLEAN_NATIVE_RUNTIME` to the built native runtime executable when passing Rust-assembled artifacts to `scripts/localnet/deploy-native.mjs`. The harness requires native preflight checks, exact receipt/state matching and native rejection against the fetched post-state.
+Native assembly and its private output layout are documented in [native-assembler.md](native-assembler.md). For the existing isolated localnet harness, set `NOCTIUM_NATIVE_RUNTIME` to the built native runtime executable when passing Rust-assembled artifacts to `scripts/localnet/deploy-native.mjs`. The harness requires native preflight checks, exact receipt/state matching and native rejection against the fetched post-state.
 
 The default profile remains unchanged. Nominal aliases, composites, general operators, lazy guarded branches, explicit disclosure analysis, multi-contract calls, assets, events and the remaining native types/instructions still require their own implementation and evidence.

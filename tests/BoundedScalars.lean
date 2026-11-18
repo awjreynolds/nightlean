@@ -1,10 +1,10 @@
-import Nightlean.Compiler
-import Nightlean.Semantics
-open Nightlean
+import Noctium.Compiler
+import Noctium.Semantics
+open Noctium
 section Source
-open scoped Nightlean
+open scoped Noctium
 
-nightlean_circuit unsignedSum where
+noctium_circuit unsignedSum where
   public expected : UIntRange 511
   private left : UInt 8
   private right : UInt 8
@@ -13,19 +13,19 @@ nightlean_circuit unsignedSum where
   output result : UIntRange 511 := disclose(sum)
 end
 
-nightlean_circuit unsignedProduct where
+noctium_circuit unsignedProduct where
   private left : UInt 8
   private right : UInt 8
   output result : UIntRange 65026 := disclose(mul(left, right))
 end
 
-nightlean_circuit unsignedDifference where
+noctium_circuit unsignedDifference where
   private left : UInt 8
   private right : UInt 8
   output result : UInt 8 := disclose(sub(left, right))
 end
 
-nightlean_circuit scalarCasts where
+noctium_circuit scalarCasts where
   private field : Native
   private flag : Bool
   output narrowed : UInt 8 := disclose(cast(UInt 8, field))
@@ -34,7 +34,7 @@ nightlean_circuit scalarCasts where
   output widened : Native := disclose(cast(Native, cast(UInt 8, field)))
 end
 
-nightlean_circuit scalarDefaults where
+noctium_circuit scalarDefaults where
   output field : Native := default(Native)
   output flag : Bool := default(Bool)
   output zero : UInt 0 := default(UInt 0)
@@ -44,63 +44,63 @@ nightlean_circuit scalarDefaults where
   output joined : UIntRange 8 := select(true, uint(2), uint(7))
 end
 
-nightlean_circuit unusedUnderflow where
+noctium_circuit unusedUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : UInt 8 := sub(left, right)
   output value : UInt 8 := disclose(left)
 end
 
-nightlean_circuit unusedNarrowing where
+noctium_circuit unusedNarrowing where
   private field : Native
   let ignored : Native := cast(Native, cast(UInt 8, field))
   output value : Native := disclose(field)
 end
 
-nightlean_circuit unusedBooleanUnderflow where
+noctium_circuit unusedBooleanUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Bool := eq(sub(left, right), uint(0))
   output value : UInt 8 := disclose(left)
 end
 
-nightlean_circuit unusedNativeUnderflow where
+noctium_circuit unusedNativeUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Native := add(sub(left, right), 0)
   output value : UInt 8 := disclose(left)
 end
 
-nightlean_circuit unusedHashUnderflow where
+noctium_circuit unusedHashUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Native := poseidon2(1, sub(left, right), 0)
   output value : UInt 8 := disclose(left)
 end
 
-nightlean_circuit unusedSelectionUnderflow where
+noctium_circuit unusedSelectionUnderflow where
   private left : UInt 8
   private right : UInt 8
   let ignored : Bool := select(false, eq(sub(left, right), uint(0)), false)
   output value : UInt 8 := disclose(left)
 end
 
-nightlean_circuit zeroBound where
+noctium_circuit zeroBound where
   private zero : UInt 0
   output value : UInt 0 := disclose(zero)
 end
 
-nightlean_circuit zeroNarrowing where
+noctium_circuit zeroNarrowing where
   private flag : Bool
   output zero : UInt 0 := disclose(cast(UInt 0, flag))
 end
 
-nightlean_circuit topWidth where
+noctium_circuit topWidth where
   private value : UInt 248
   output result : UInt 248 := disclose(value)
 end
 
-nightlean_contract UnsignedLedger where
+noctium_contract UnsignedLedger where
   cell total : UIntRange 511
   entry apply uses unsignedSum where
     read total as old
@@ -186,43 +186,43 @@ private def invalidMaximum : Nat := ScalarPolicy.maxUint + 1
   | .ok _ => Bool.true | _ => Bool.false
 
 section SourceFailures
-open scoped Nightlean
+open scoped Noctium
 
 /-- error: unsigned width exceeds target maximum -/
 #guard_msgs in
-nightlean_circuit oversizedWidth where
+noctium_circuit oversizedWidth where
   private value : UInt 249
 end
 
 /-- error: unsigned exclusive bound must be positive -/
 #guard_msgs in
-nightlean_circuit zeroExclusive where
+noctium_circuit zeroExclusive where
   private value : UIntRange 0
 end
 
 /-- error: unsigned constant exceeds its type -/
 #guard_msgs in
-nightlean_circuit badConstant where
+noctium_circuit badConstant where
   output value : UInt 8 := 256
 end
 
 /-- error: Noctium expression type mismatch; use an explicit narrowing cast -/
 #guard_msgs in
-nightlean_circuit implicitNarrowing where
+noctium_circuit implicitNarrowing where
   private wide : UInt 16
   output value : UInt 8 := wide
 end
 
 /-- error: boolean arithmetic requires an explicit cast -/
 #guard_msgs in
-nightlean_circuit booleanArithmetic where
+noctium_circuit booleanArithmetic where
   private flag : Bool
   output value : Native := add(flag, 1)
 end
 
 /-- error: unsigned type exceeds target maximum -/
 #guard_msgs in
-nightlean_circuit typeOverflow where
+noctium_circuit typeOverflow where
   private left : UInt 248
   output result : UInt 248 := add(left, uint(1))
 end

@@ -64,43 +64,43 @@
     },
     {
       "bytes": 272,
-      "path": "/private/tmp/nightlean-cse-parity-summary.json",
+      "path": "/private/tmp/noctium-cse-parity-summary.json",
       "sha256": "ca58740c9792a6200410d2e4067bcce9aa1a5dbe86dc4a5d786a871b69541bd1"
     },
     {
       "bytes": 2680,
-      "path": "/private/tmp/nightlean-cse-scalar-checker-321.json",
+      "path": "/private/tmp/noctium-cse-scalar-checker-321.json",
       "sha256": "0437d2c78089b886c601f849617c3a37e2dbcc6ed873cc5384920997b5eddec8"
     },
     {
       "bytes": 2036,
-      "path": "/private/tmp/nightlean-cse-helper-prover-321.json",
+      "path": "/private/tmp/noctium-cse-helper-prover-321.json",
       "sha256": "e2e031be31a966a18ff8ffb109deb21af8bb7a2eb7c44c3a0a13125afbef98ed"
     },
     {
       "bytes": 724,
-      "path": "/private/tmp/nightlean-cse-qualified/checker-evidence.json",
+      "path": "/private/tmp/noctium-cse-qualified/checker-evidence.json",
       "sha256": "a3b605049ca973d82c5475c5b37d44b4814a2c7c57b2aad65f45ac6a4961c077"
     },
     {
       "bytes": 207,
-      "path": "/private/tmp/nightlean-cse-qualified/prover-evidence.json",
+      "path": "/private/tmp/noctium-cse-qualified/prover-evidence.json",
       "sha256": "3d6ec674d402da3ba54bd90bfbf96e6e1414f6c50bc679016ad488b4d3046417"
     },
     {
       "bytes": 924,
-      "path": "/private/tmp/nightlean-generic-scalar-claim-regression/summary.json",
+      "path": "/private/tmp/noctium-generic-scalar-claim-regression/summary.json",
       "sha256": "093430d345214f7f96c7927891333213173c132308f5dd460b6563fa5bf0c844"
     },
     {
       "bytes": 1745,
-      "path": "/private/tmp/nightlean-cse-final.json",
+      "path": "/private/tmp/noctium-cse-final.json",
       "sha256": "93e40c06eafede79e8241335b221546e56fd2d968552d825c4614eaef10f6db2"
     }
   ],
   "roleRegression": {
     "compilerBuildAuthenticated": false,
-    "completenessRole": "Nightlean.Verification.ScalarTranslation.lowerCircuit_complete",
+    "completenessRole": "Noctium.Verification.ScalarTranslation.lowerCircuit_complete",
     "externalReviewedModelProvided": false,
     "rejections": [
       "swapped",
@@ -161,7 +161,7 @@
       }
     },
     "scope": "generic scalar library proof roles and transitive axiom policy",
-    "soundnessRole": "Nightlean.Verification.ScalarTranslation.lowerCircuit_sound",
+    "soundnessRole": "Noctium.Verification.ScalarTranslation.lowerCircuit_sound",
     "status": "passed",
     "trustedModelSha256": "6e9b4da95bc6bdf305b5a8e32be7585e62ed74efc6942287ff8c38d7828c98d9",
     "wholeCompilerVerified": false
@@ -180,181 +180,181 @@
   "sourceFiles": [
     {
       "bytes": 8465,
-      "path": "Nightlean/Backend/NativeMeaning.lean",
+      "path": "Noctium/Backend/NativeMeaning.lean",
       "role": "core",
       "sha256": "bfdd687cf2e565251b4f8c4e8617b74674e72c3627819dc86ce4b8ac851de799"
     },
     {
       "bytes": 5280,
-      "path": "Nightlean/Backend/NativeExpected.lean",
+      "path": "Noctium/Backend/NativeExpected.lean",
       "role": "core",
       "sha256": "0234b68c4b3cbed5bc548199dd6a60336ab501a9296e65eb2de4ff1a4a289f26"
     },
     {
       "bytes": 14073,
-      "path": "Nightlean/Backend/NativeProducer.lean",
+      "path": "Noctium/Backend/NativeProducer.lean",
       "role": "core",
       "sha256": "bac2cb19e43d404b1ac3d52fe1e1bf2c33656ea7d7a9b6e4a2ef88b396f296df"
     },
     {
       "bytes": 14479,
-      "path": "Nightlean/Backend/Zkir.lean",
+      "path": "Noctium/Backend/Zkir.lean",
       "role": "core",
       "sha256": "cc9a9353bf0b2682f0984d33264302301161d0f05051cfb8a8db7ee7b02d0ee9"
     },
     {
       "bytes": 12276,
-      "path": "Nightlean/Semantics.lean",
+      "path": "Noctium/Semantics.lean",
       "role": "core",
       "sha256": "e55723ecee83ec82773e29f962ee89f6477befc672ac9f82741eefe30f25f2e7"
     },
     {
       "bytes": 9098,
-      "path": "Nightlean/Verification/NativeRelation.lean",
+      "path": "Noctium/Verification/NativeRelation.lean",
       "role": "core",
       "sha256": "41f6403c8c74ff6f46f69a2358d286da70142ca24ea46a59f7598a47d95f4feb"
     },
     {
       "bytes": 12567,
-      "path": "Nightlean/Verification/NativeRelationJson.lean",
+      "path": "Noctium/Verification/NativeRelationJson.lean",
       "role": "core",
       "sha256": "085442018324ff985f79e21ed6e6df8d80b8bb7cfa0153bfaa421be24d345fc9"
     },
     {
       "bytes": 9396,
-      "path": "Nightlean/Verification/ScalarAdmission.lean",
+      "path": "Noctium/Verification/ScalarAdmission.lean",
       "role": "proof",
       "sha256": "0b16487482d258c1546c6aa50b4944c238f3203581fa9a74868bf2d37323661c"
     },
     {
       "bytes": 13115,
-      "path": "Nightlean/Verification/ScalarAllocation.lean",
+      "path": "Noctium/Verification/ScalarAllocation.lean",
       "role": "proof",
       "sha256": "84bd5d74a3aad2c7a2339e99d603fbcd2bf7b0333994fb74995ef4a9eedea72f"
     },
     {
       "bytes": 8810,
-      "path": "Nightlean/Verification/ScalarCache.lean",
+      "path": "Noctium/Verification/ScalarCache.lean",
       "role": "proof",
       "sha256": "16302aeebaffdedc56467e0698b717a4a49f22707594a81168aa4d8ac1fc0f6c"
     },
     {
       "bytes": 28700,
-      "path": "Nightlean/Verification/ScalarCircuit.lean",
+      "path": "Noctium/Verification/ScalarCircuit.lean",
       "role": "proof",
       "sha256": "70bff175095ed7601fdcacf38b1cf022f6535590e26872315e481ff9f09e8526"
     },
     {
       "bytes": 38185,
-      "path": "Nightlean/Verification/ScalarCircuitLowering.lean",
+      "path": "Noctium/Verification/ScalarCircuitLowering.lean",
       "role": "proof",
       "sha256": "c8316f1d0c61ca8b295e3b1e458a78988552a91719cdc21aca7ae77170d38188"
     },
     {
       "bytes": 4835,
-      "path": "Nightlean/Verification/ScalarExportAudit.lean",
+      "path": "Noctium/Verification/ScalarExportAudit.lean",
       "role": "proof",
       "sha256": "2964c9396b47679cae8e090467942f19df478d4ce18c19e4dab74171f4577f78"
     },
     {
       "bytes": 89800,
-      "path": "Nightlean/Verification/ScalarExpressionArithmetic.lean",
+      "path": "Noctium/Verification/ScalarExpressionArithmetic.lean",
       "role": "proof",
       "sha256": "1611116b691bb913f52e02019a38138379dae930747c8c1db836f68c146ca79b"
     },
     {
       "bytes": 5545,
-      "path": "Nightlean/Verification/ScalarExpressionAssertion.lean",
+      "path": "Noctium/Verification/ScalarExpressionAssertion.lean",
       "role": "proof",
       "sha256": "f53cdadda9993719dfa1032204a98af990a7923308f3212fc6816fb245db270d"
     },
     {
       "bytes": 26567,
-      "path": "Nightlean/Verification/ScalarExpressionControl.lean",
+      "path": "Noctium/Verification/ScalarExpressionControl.lean",
       "role": "proof",
       "sha256": "3e27fd34e2f2a7cb80330393fdb640bf0a70c9d17097c9168ff29115875d3799"
     },
     {
       "bytes": 19596,
-      "path": "Nightlean/Verification/ScalarExpressionHash.lean",
+      "path": "Noctium/Verification/ScalarExpressionHash.lean",
       "role": "proof",
       "sha256": "507e37b260fbcc898947f2c6fbe2bbbc415de98f120fa1e03aa2adf18257d8c1"
     },
     {
       "bytes": 3071,
-      "path": "Nightlean/Verification/ScalarExpressionLowering.lean",
+      "path": "Noctium/Verification/ScalarExpressionLowering.lean",
       "role": "proof",
       "sha256": "2cb364b9ceb9fd694c207fe0acfa80fcdc13fde370e6fa4c207944e19c1b8841"
     },
     {
       "bytes": 11620,
-      "path": "Nightlean/Verification/ScalarExpressionSelect.lean",
+      "path": "Noctium/Verification/ScalarExpressionSelect.lean",
       "role": "proof",
       "sha256": "0d427286a99a03cdc7c1676bfcab7fe38dbe42d6f6dc69cef4534e2087233700"
     },
     {
       "bytes": 8100,
-      "path": "Nightlean/Verification/ScalarImmediate.lean",
+      "path": "Noctium/Verification/ScalarImmediate.lean",
       "role": "proof",
       "sha256": "7011541b0ca72ff0ff103d7088dd527bf84d68737b17ec66ab5a0b3225f125f8"
     },
     {
       "bytes": 17389,
-      "path": "Nightlean/Verification/ScalarInstructionEncoding.lean",
+      "path": "Noctium/Verification/ScalarInstructionEncoding.lean",
       "role": "proof",
       "sha256": "bac41e99eee6a8f12885abe8d40e9574d70a8b89e245476f1029979608ff784a"
     },
     {
       "bytes": 33908,
-      "path": "Nightlean/Verification/ScalarLowering.lean",
+      "path": "Noctium/Verification/ScalarLowering.lean",
       "role": "proof",
       "sha256": "f91e7ed7141a5c027158e31475fb7759c85d5d23139b549a310c3de5fce5d02a"
     },
     {
       "bytes": 32504,
-      "path": "Nightlean/Verification/ScalarNormalization.lean",
+      "path": "Noctium/Verification/ScalarNormalization.lean",
       "role": "proof",
       "sha256": "dfd33380e7e206a77be4e1ddef8a994379e1ee16f726b5cb4cac6c8c5793e07b"
     },
     {
       "bytes": 28977,
-      "path": "Nightlean/Verification/ScalarNormalizationSoundness.lean",
+      "path": "Noctium/Verification/ScalarNormalizationSoundness.lean",
       "role": "proof",
       "sha256": "9fa12c38c80a012b2454f7b1b1e8853b967f4a678a187bc65add757abb8ebd0e"
     },
     {
       "bytes": 10417,
-      "path": "Nightlean/Verification/ScalarParserAgreement.lean",
+      "path": "Noctium/Verification/ScalarParserAgreement.lean",
       "role": "proof",
       "sha256": "ea1a851b44ca1bb0352e6c1616bc89910c4a1842fd1b82cb1887b7544760e458"
     },
     {
       "bytes": 11587,
-      "path": "Nightlean/Verification/ScalarRangeLowering.lean",
+      "path": "Noctium/Verification/ScalarRangeLowering.lean",
       "role": "proof",
       "sha256": "6a53890ae80be374863381e7b3d8bfbf6099c95d52be664ac0e46e694ff4316c"
     },
     {
       "bytes": 6509,
-      "path": "Nightlean/Verification/ScalarStateExtensions.lean",
+      "path": "Noctium/Verification/ScalarStateExtensions.lean",
       "role": "proof",
       "sha256": "372c00abdc9170f01c44dbc91fac18ba610b237d07681a8402494d9097c33314"
     },
     {
       "bytes": 9312,
-      "path": "Nightlean/Verification/ScalarTranslation.lean",
+      "path": "Noctium/Verification/ScalarTranslation.lean",
       "role": "proof",
       "sha256": "daaba578effe1a1c5b452f42a519710f7e5e3b856303699bdf3d961db2ae82ab"
     },
     {
       "bytes": 78628,
-      "path": "Nightlean/Verification/ScalarValidation.lean",
+      "path": "Noctium/Verification/ScalarValidation.lean",
       "role": "proof",
       "sha256": "de01de8a111527dc8d000adb9067bee8f4876d4ed53df541329729b924ea4346"
     },
     {
       "bytes": 7348,
-      "path": "Nightlean/Verification/ScalarWitness.lean",
+      "path": "Noctium/Verification/ScalarWitness.lean",
       "role": "proof",
       "sha256": "c87847a06e0d6ab45aa57d4f3273bc925cc1d45098431f158c2a20a206530ac9"
     },
@@ -488,5 +488,12 @@
     "snapshot": "/private/tmp/noctium-scalar64-parent-33fz6u_v",
     "tree": "c829b42d03645eb02d7036fcdbde7cb7bc63a03d"
   },
-  "wholeCompilerVerified": false
+  "wholeCompilerVerified": false,
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "e4e058cbdb4cf63d7eb6c68284ad4a09bf35fb92cdecdee79de29d3e965b2edc",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/generic-scalar-preservation-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/generic-scalar-preservation-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

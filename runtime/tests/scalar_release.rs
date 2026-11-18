@@ -1,13 +1,13 @@
 //! Opt-in source conformance against the actually linked native release.
-use nightlean_runtime::{canonical_field, zkir::IrSource};
+use noctium_runtime::{canonical_field, zkir::IrSource};
 use serde_json::Value as Json;
 use std::{borrow::Cow, fs, path::PathBuf};
 use transient_crypto::proofs::{KeyLocation, ProofPreimage};
 #[test]
-#[ignore = "requires fresh compiler-generated scalar circuits in NIGHTLEAN_SCALAR_SOURCE_DIR"]
+#[ignore = "requires fresh compiler-generated scalar circuits in NOCTIUM_SCALAR_SOURCE_DIR"]
 fn all_adversarial_scalar_cases_run_on_selected_native_pin() {
     let directory = PathBuf::from(
-        std::env::var_os("NIGHTLEAN_SCALAR_SOURCE_DIR").expect("NIGHTLEAN_SCALAR_SOURCE_DIR"),
+        std::env::var_os("NOCTIUM_SCALAR_SOURCE_DIR").expect("NOCTIUM_SCALAR_SOURCE_DIR"),
     );
     let cases: Vec<Json> =
         serde_json::from_slice(include_bytes!("../../tests/scalars/constraint-cases.json"))

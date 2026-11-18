@@ -1,4 +1,4 @@
-use nightlean_runtime::aggregates::{MAGIC, Schema};
+use noctium_runtime::aggregates::{MAGIC, Schema};
 use serde_json::{Value as Json, json};
 
 fn schema(layout: Json, fingerprint: &str, counts: (usize, usize, usize)) -> Vec<u8> {
@@ -23,7 +23,7 @@ fn field(name: &str, layout: Json) -> Json {
 fn unit_schema() -> Vec<u8> {
     schema(
         json!({"kind":"unit"}),
-        "NightleanCompositeTypeV1;uNightleanCompositeLayoutV1;0;0;",
+        "NoctiumCompositeTypeV1;uNoctiumCompositeLayoutV1;0;0;",
         (0, 1, 1),
     )
 }
@@ -35,7 +35,7 @@ fn nested_schema() -> Vec<u8> {
             {"name":"None","fields":[]},{"name":"Some","fields":[field("pair",json!({"kind":"tuple","items":[native(),uint("15")]}))]}
         ]})),field("bytes",json!({"kind":"bytes","length":2}))
     ]},{"kind":"unit"}]}),
-        "NightleanCompositeTypeV1;t2;[r11:Test.Packetu]NightleanCompositeLayoutV1;1;R11:Test.Packet4;f6:amountsU255;f5:flagsv2;sBf6:choicee11:Test.Choicef5:bytesb2;1;E11:Test.Choice2;V4:None0;V4:Some1;f4:pairt2;[sNsU15;]",
+        "NoctiumCompositeTypeV1;t2;[r11:Test.Packetu]NoctiumCompositeLayoutV1;1;R11:Test.Packet4;f6:amountsU255;f5:flagsv2;sBf6:choicee11:Test.Choicef5:bytesb2;1;E11:Test.Choice2;V4:None0;V4:Some1;f4:pairt2;[sNsU15;]",
         (8, 16, 13),
     )
 }
@@ -171,11 +171,11 @@ fn malformed_logical_values_preserve_scalar_and_nominal_identity() {
 #[test]
 fn scalar_extrema_and_full_width_wire_are_checked() {
     let modulus =
-        num_bigint::BigUint::parse_bytes(nightlean_runtime::MODULUS.as_bytes(), 10).unwrap();
+        num_bigint::BigUint::parse_bytes(noctium_runtime::MODULUS.as_bytes(), 10).unwrap();
     let maximum = &modulus - 1u8;
     let checked = Schema::from_json(&schema(
         native(),
-        "NightleanCompositeTypeV1;sNNightleanCompositeLayoutV1;0;0;",
+        "NoctiumCompositeTypeV1;sNNoctiumCompositeLayoutV1;0;0;",
         (1, 1, 1),
     ))
     .unwrap();
@@ -191,14 +191,14 @@ fn scalar_extrema_and_full_width_wire_are_checked() {
     assert!(
         checked
             .encode_json_value(
-                &serde_json::to_vec(&json!({"kind":"native","value":nightlean_runtime::MODULUS}))
+                &serde_json::to_vec(&json!({"kind":"native","value":noctium_runtime::MODULUS}))
                     .unwrap()
             )
             .is_err()
     );
     let zero = Schema::from_json(&schema(
         uint("0"),
-        "NightleanCompositeTypeV1;sU0;NightleanCompositeLayoutV1;0;0;",
+        "NoctiumCompositeTypeV1;sU0;NoctiumCompositeLayoutV1;0;0;",
         (1, 1, 1),
     ))
     .unwrap();
@@ -216,25 +216,25 @@ fn unit_and_empty_sequences_roundtrip_without_invented_leaves() {
     for (layout, fingerprint, counts, value) in [
         (
             json!({"kind":"unit"}),
-            "NightleanCompositeTypeV1;uNightleanCompositeLayoutV1;0;0;",
+            "NoctiumCompositeTypeV1;uNoctiumCompositeLayoutV1;0;0;",
             (0, 1, 1),
             json!({"kind":"unit"}),
         ),
         (
             json!({"kind":"tuple","items":[]}),
-            "NightleanCompositeTypeV1;t0;[]NightleanCompositeLayoutV1;0;0;",
+            "NoctiumCompositeTypeV1;t0;[]NoctiumCompositeLayoutV1;0;0;",
             (0, 1, 1),
             json!({"kind":"tuple","items":[]}),
         ),
         (
             json!({"kind":"vector","length":0,"element":native()}),
-            "NightleanCompositeTypeV1;v0;sNNightleanCompositeLayoutV1;0;0;",
+            "NoctiumCompositeTypeV1;v0;sNNoctiumCompositeLayoutV1;0;0;",
             (0, 1, 2),
             json!({"kind":"vector","items":[]}),
         ),
         (
             json!({"kind":"bytes","length":0}),
-            "NightleanCompositeTypeV1;b0;NightleanCompositeLayoutV1;0;0;",
+            "NoctiumCompositeTypeV1;b0;NoctiumCompositeLayoutV1;0;0;",
             (0, 1, 1),
             json!({"kind":"bytes","values":[]}),
         ),
@@ -252,7 +252,7 @@ fn unit_and_empty_sequences_roundtrip_without_invented_leaves() {
 }
 #[test]
 fn deep_zero_vectors_validate_retained_children_without_a_new_depth_limit() {
-    let depth = nightlean_runtime::aggregates::MAX_NODES - 1;
+    let depth = noctium_runtime::aggregates::MAX_NODES - 1;
     let mut layout = String::new();
     for _ in 0..depth {
         layout.push_str("{\"kind\":\"vector\",\"length\":0,\"element\":");
@@ -262,7 +262,7 @@ fn deep_zero_vectors_validate_retained_children_without_a_new_depth_limit() {
         layout.push('}');
     }
     let fingerprint = format!(
-        "NightleanCompositeTypeV1;{}sNNightleanCompositeLayoutV1;0;0;",
+        "NoctiumCompositeTypeV1;{}sNNoctiumCompositeLayoutV1;0;0;",
         "v0;".repeat(depth)
     );
     let text = format!(
@@ -272,7 +272,7 @@ fn deep_zero_vectors_validate_retained_children_without_a_new_depth_limit() {
         depth + 1
     );
     let checked = Schema::from_json(text.as_bytes()).unwrap();
-    assert_eq!(checked.counts().layout_nodes, nightlean_runtime::aggregates::MAX_NODES);
+    assert_eq!(checked.counts().layout_nodes, noctium_runtime::aggregates::MAX_NODES);
     let wire = checked
         .encode_json_value(b"{\"kind\":\"vector\",\"items\":[]}")
         .unwrap();
@@ -293,7 +293,7 @@ fn deep_zero_vectors_validate_retained_children_without_a_new_depth_limit() {
     let over_limit = format!(
         "{{\"schemaVersion\":1,\"typeFingerprint\":{},\"layout\":{},\"counts\":{{\"leaves\":0,\"expandedNodes\":1,\"layoutNodes\":{}}}}}",
         serde_json::to_string(&format!(
-            "NightleanCompositeTypeV1;{}sNNightleanCompositeLayoutV1;0;0;",
+            "NoctiumCompositeTypeV1;{}sNNoctiumCompositeLayoutV1;0;0;",
             "v0;".repeat(over_limit_depth)
         ))
         .unwrap(),
@@ -306,13 +306,13 @@ fn deep_zero_vectors_validate_retained_children_without_a_new_depth_limit() {
 #[test]
 fn transport_limit_accepts_exact_boundary_and_rejects_one_byte_over() {
     let mut schema = unit_schema();
-    schema.resize(nightlean_runtime::aggregates::MAX_TRANSPORT_BYTES, b' ');
+    schema.resize(noctium_runtime::aggregates::MAX_TRANSPORT_BYTES, b' ');
     let checked = Schema::from_json(&schema).unwrap();
     schema.push(b' ');
     assert!(Schema::from_json(&schema).is_err());
 
     let mut value = b"{\"kind\":\"unit\"}".to_vec();
-    value.resize(nightlean_runtime::aggregates::MAX_TRANSPORT_BYTES, b' ');
+    value.resize(noctium_runtime::aggregates::MAX_TRANSPORT_BYTES, b' ');
     assert!(checked.encode_json_value(&value).is_ok());
     value.push(b' ');
     assert!(checked.encode_json_value(&value).is_err());
@@ -368,7 +368,7 @@ fn repeated_nominal_definitions_agree_and_physical_aliases_do_not() {
             {"kind":"struct","id":"A","fields":[field("x",native())]},
             {"kind":"struct","id":"A","fields":[field("x",native())]}
         ]}),
-        "NightleanCompositeTypeV1;t2;[r1:Ar1:A]NightleanCompositeLayoutV1;1;R1:A1;f1:xsN0;",
+        "NoctiumCompositeTypeV1;t2;[r1:Ar1:A]NoctiumCompositeLayoutV1;1;R1:A1;f1:xsN0;",
         (2, 5, 5),
     );
     let checked = Schema::from_json(&repeated).unwrap();
@@ -385,13 +385,13 @@ fn repeated_nominal_definitions_agree_and_physical_aliases_do_not() {
     );
     let a = Schema::from_json(&schema(
         json!({"kind":"struct","id":"A","fields":[field("x",native())]}),
-        "NightleanCompositeTypeV1;r1:ANightleanCompositeLayoutV1;1;R1:A1;f1:xsN0;",
+        "NoctiumCompositeTypeV1;r1:ANoctiumCompositeLayoutV1;1;R1:A1;f1:xsN0;",
         (1, 2, 2),
     ))
     .unwrap();
     let b = Schema::from_json(&schema(
         json!({"kind":"struct","id":"B","fields":[field("x",native())]}),
-        "NightleanCompositeTypeV1;r1:BNightleanCompositeLayoutV1;1;R1:B1;f1:xsN0;",
+        "NoctiumCompositeTypeV1;r1:BNoctiumCompositeLayoutV1;1;R1:B1;f1:xsN0;",
         (1, 2, 2),
     ))
     .unwrap();
@@ -424,13 +424,13 @@ fn enum_active_native_branch_does_not_inherit_inactive_uint_bounds() {
 }
 #[test]
 fn c_abi_has_owned_copy_free_null_and_stale_token_behavior() {
-    use nightlean_runtime::aggregates::*;
+    use noctium_runtime::aggregates::*;
     let schema = unit_schema();
     let value = b"{\"kind\":\"unit\"}";
     unsafe {
         let mut token = 99;
         assert_eq!(
-            nightlean_aggregate_encode(
+            noctium_aggregate_encode(
                 std::ptr::null(),
                 0,
                 value.as_ptr(),
@@ -441,7 +441,7 @@ fn c_abi_has_owned_copy_free_null_and_stale_token_behavior() {
         );
         assert_eq!(token, 0);
         assert_eq!(
-            nightlean_aggregate_encode(
+            noctium_aggregate_encode(
                 schema.as_ptr(),
                 schema.len(),
                 value.as_ptr(),
@@ -451,26 +451,26 @@ fn c_abi_has_owned_copy_free_null_and_stale_token_behavior() {
             0
         );
         let mut length = 0;
-        assert_eq!(nightlean_aggregate_buffer_length(token, &mut length), 0);
+        assert_eq!(noctium_aggregate_buffer_length(token, &mut length), 0);
         let mut wire = vec![0u8; length];
         let mut written = 99;
         assert_eq!(
-            nightlean_aggregate_buffer_copy(token, wire.as_mut_ptr(), length - 1, &mut written),
+            noctium_aggregate_buffer_copy(token, wire.as_mut_ptr(), length - 1, &mut written),
             7
         );
         assert_eq!(written, 0);
         assert_eq!(
-            nightlean_aggregate_buffer_copy(token, wire.as_mut_ptr(), length, &mut written),
+            noctium_aggregate_buffer_copy(token, wire.as_mut_ptr(), length, &mut written),
             0
         );
         assert_eq!(written, length);
-        assert_eq!(nightlean_aggregate_buffer_free(token), 0);
-        assert_eq!(nightlean_aggregate_buffer_free(token), 2);
-        assert_eq!(nightlean_aggregate_buffer_length(token, &mut length), 2);
+        assert_eq!(noctium_aggregate_buffer_free(token), 0);
+        assert_eq!(noctium_aggregate_buffer_free(token), 2);
+        assert_eq!(noctium_aggregate_buffer_length(token, &mut length), 2);
         assert_eq!(length, 0);
         let mut decoded = 0;
         assert_eq!(
-            nightlean_aggregate_decode(
+            noctium_aggregate_decode(
                 schema.as_ptr(),
                 schema.len(),
                 wire.as_ptr(),
@@ -479,12 +479,12 @@ fn c_abi_has_owned_copy_free_null_and_stale_token_behavior() {
             ),
             0
         );
-        assert_eq!(nightlean_aggregate_buffer_free(decoded), 0);
+        assert_eq!(noctium_aggregate_buffer_free(decoded), 0);
         let mut tokens = vec![];
         for _ in 0..64 {
             let mut current = 0;
             assert_eq!(
-                nightlean_aggregate_encode(
+                noctium_aggregate_encode(
                     schema.as_ptr(),
                     schema.len(),
                     value.as_ptr(),
@@ -497,7 +497,7 @@ fn c_abi_has_owned_copy_free_null_and_stale_token_behavior() {
         }
         let mut exhausted = 99;
         assert_eq!(
-            nightlean_aggregate_encode(
+            noctium_aggregate_encode(
                 schema.as_ptr(),
                 schema.len(),
                 value.as_ptr(),
@@ -507,9 +507,9 @@ fn c_abi_has_owned_copy_free_null_and_stale_token_behavior() {
             5
         );
         assert_eq!(exhausted, 0);
-        assert_eq!(nightlean_aggregate_buffer_free(tokens.pop().unwrap()), 0);
+        assert_eq!(noctium_aggregate_buffer_free(tokens.pop().unwrap()), 0);
         assert_eq!(
-            nightlean_aggregate_encode(
+            noctium_aggregate_encode(
                 schema.as_ptr(),
                 schema.len(),
                 value.as_ptr(),
@@ -520,7 +520,7 @@ fn c_abi_has_owned_copy_free_null_and_stale_token_behavior() {
         );
         tokens.push(exhausted);
         for current in tokens {
-            assert_eq!(nightlean_aggregate_buffer_free(current), 0);
+            assert_eq!(noctium_aggregate_buffer_free(current), 0);
         }
     }
 }

@@ -9,7 +9,7 @@
   "callSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
   "compiledContractVerified": false,
   "compilerBuildAuthenticated": false,
-  "developmentEvidenceDirectory": ".nightlean/audits/private-claim-state/",
+  "developmentEvidenceDirectory": ".noctium/audits/private-claim-state/",
   "eligibleSourceCompleteness": true,
   "isolatedStagedSnapshot": true,
   "kernelReplayed": true,
@@ -120,13 +120,20 @@
   "resourceAdmission": "21 operations and map length + 1; actual ledger cost/size agreement remains explicit",
   "scope": "actual claim native state/public transcript preservation and decoded plan/call JSON trees",
   "sourceFilesSha256": {
-    "Nightlean/Verification/NativeState.lean": "5e795a1c77a7e85504e0ddb8ce66a5e6e7281c5d5c1222e1b1c6235943b702f0",
-    "Nightlean/Verification/NativeStateJson.lean": "311527b4e1d432bfb854a0eaaf1406b5cf176c3f75073959a13f9d764816c553",
+    "Noctium/Verification/NativeState.lean": "5e795a1c77a7e85504e0ddb8ce66a5e6e7281c5d5c1222e1b1c6235943b702f0",
+    "Noctium/Verification/NativeStateJson.lean": "311527b4e1d432bfb854a0eaaf1406b5cf176c3f75073959a13f9d764816c553",
     "proofs/PrivateClaimNativeState.lean": "2cb7331ddcea34251db3a0a53dfa498cc00711773b8c39830d044f5f32e81ffe",
     "scripts/proofs/check-private-claim-state.py": "5093ec5732d68d5ea72a952511b50f605a97148c39cf72c79c166921b97fa91e",
     "tests/private-claim-state-checker.mjs": "0ec4a37b7d2a1fa188e844dc56c9ab0528cd412f728294d3b85dfab82f36a7fb"
   },
   "sourceSha256": "5a2e0f2f8b087567d00a274bc64bfb893b4ddf70fb459923ccd2db05be1bf771",
   "status": "passed",
-  "validationBaseCommit": "6492027"
+  "validationBaseCommit": "6492027",
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "1ff08ca640433e0fce8cd7d1a45a4b8093b54d732b591a92cb1f241fdd6c5b7f",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/private-claim-state-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/private-claim-state-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

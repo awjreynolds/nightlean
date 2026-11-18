@@ -1,7 +1,7 @@
 //! Explicit development-host example. No wallet seed or endpoint belongs to the SDK core.
 use anyhow::{Result, anyhow, ensure};
 use futures::{executor::block_on, future::pending};
-use nightlean_runtime::{
+use noctium_runtime::{
     artifacts,
     client::{NetworkPolicy, SubmissionAttempt},
     funding::FeePolicy,
@@ -209,7 +209,7 @@ async fn run(configuration: Configuration) -> Result<()> {
         .deployment_intent()
         .ok_or_else(|| anyhow!("deployment material missing"))?
         .prove(
-            nightlean_runtime::funding::CONTRACT_SEGMENT,
+            noctium_runtime::funding::CONTRACT_SEGMENT,
             provider,
             &snapshot.state.parameters.cost_model.runtime_cost_model,
         )
@@ -227,12 +227,12 @@ async fn run(configuration: Configuration) -> Result<()> {
             StdRng::from_entropy(),
         );
         let signing = ExplicitSeal::new(
-            |_: &nightlean_runtime::funding::UnsealedTransaction, p: &NetworkPolicy| {
+            |_: &noctium_runtime::funding::UnsealedTransaction, p: &NetworkPolicy| {
                 *p == configuration.policy
             },
             StdRng::from_entropy(),
         );
-        let bound = nightlean_runtime::client::BoundTransaction::prepare(
+        let bound = noctium_runtime::client::BoundTransaction::prepare(
             intent,
             configuration.policy.clone(),
             &node,

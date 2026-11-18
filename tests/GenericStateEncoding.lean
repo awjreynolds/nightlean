@@ -1,9 +1,9 @@
-import Nightlean.Verification.GenericStateEncoding
-import Nightlean.Verification.SourceEffects
+import Noctium.Verification.GenericStateEncoding
+import Noctium.Verification.SourceEffects
 
-open Nightlean Nightlean.Verification.NativeRelation
-open Nightlean.Verification.NativeState
-open Nightlean.Verification.GenericStateEncoding
+open Noctium Noctium.Verification.NativeRelation
+open Noctium.Verification.NativeState
+open Noctium.Verification.GenericStateEncoding
 
 private def declarations : List StateDecl := [
   {name := "counter", kind := .cell .native},
@@ -61,7 +61,7 @@ private def afterSource : LedgerState := {
 #guard match runEffects ctx effects [] before with
   | .ok state => state == afterSource
   | .error _ => false
-#guard match Nightlean.Verification.SourceEffects.fold ctx effects ([], before) with
+#guard match Noctium.Verification.SourceEffects.fold ctx effects ([], before) with
   | .ok (env, state) => env == [("seen", .native 1)] && state == afterSource
   | .error _ => false
 

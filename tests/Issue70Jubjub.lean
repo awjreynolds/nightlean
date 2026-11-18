@@ -1,8 +1,8 @@
 import Noctium.Frontend
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Native
-import Nightlean.Backend.Zkir
-import Nightlean.Disclosure
+import Noctium.Backend.Impact
+import Noctium.Backend.Native
+import Noctium.Backend.Zkir
+import Noctium.Disclosure
 
 open scoped Noctium
 open Lean
@@ -58,7 +58,7 @@ private def issue70JubjubEntry : Noctium.Entrypoint :=
   | entrypoint :: _ => entrypoint
   | _ => {name := "missing", circuit := {name := "missing"}}
 
-#guard match Nightlean.Backend.Zkir.lowerEntrypoint Issue70Jubjub.state issue70JubjubEntry with
+#guard match Noctium.Backend.Zkir.lowerEntrypoint Issue70Jubjub.state issue70JubjubEntry with
   | .ok _ => _root_.Bool.true
   | .error _ => _root_.Bool.false
 
@@ -72,12 +72,12 @@ private def issue70JubjubMutation (program : Json) : Json :=
       [("instructions", Json.arr retained)])
 
 private def issue70JubjubRoundtripIsRequired : _root_.Bool :=
-  match Nightlean.Backend.Native.expectedEntrypoint Issue70Jubjub.state issue70JubjubEntry with
+  match Noctium.Backend.Native.expectedEntrypoint Issue70Jubjub.state issue70JubjubEntry with
   | .error _ => _root_.Bool.false
   | .ok expected =>
-    match Nightlean.Backend.Zkir.lowerEntrypoint Issue70Jubjub.state issue70JubjubEntry with
+    match Noctium.Backend.Zkir.lowerEntrypoint Issue70Jubjub.state issue70JubjubEntry with
     | .error _ => _root_.Bool.false
-    | .ok program => match Nightlean.Backend.Native.validate expected (issue70JubjubMutation program) with
+    | .ok program => match Noctium.Backend.Native.validate expected (issue70JubjubMutation program) with
       | .error _ => _root_.Bool.true
       | .ok _ => _root_.Bool.false
 
@@ -94,10 +94,10 @@ private def issue70JubjubPointMutation (program : Json) : Json :=
   | .ok object => Json.mkObj ((object.toList.filter (·.1 != "instructions")) ++
       [("instructions", Json.arr retained)])
 
-#guard match Nightlean.Backend.Native.expectedEntrypoint Issue70Jubjub.state issue70JubjubEntry,
-    Nightlean.Backend.Zkir.lowerEntrypoint Issue70Jubjub.state issue70JubjubEntry with
+#guard match Noctium.Backend.Native.expectedEntrypoint Issue70Jubjub.state issue70JubjubEntry,
+    Noctium.Backend.Zkir.lowerEntrypoint Issue70Jubjub.state issue70JubjubEntry with
   | .ok expected, .ok program =>
-    match Nightlean.Backend.Native.validate expected (issue70JubjubPointMutation program) with
+    match Noctium.Backend.Native.validate expected (issue70JubjubPointMutation program) with
     | .error _ => _root_.Bool.true
     | .ok _ => _root_.Bool.false
   | _, _ => _root_.Bool.false

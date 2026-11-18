@@ -1038,7 +1038,7 @@ impl Runtime {
             serde_json::from_value(journal.clone()).map_err(|_| Error::Descriptor)?;
         let mut bytes = serde_json::to_vec(&canonical).map_err(|_| Error::Descriptor)?;
         let mut hasher = Sha256::new();
-        hasher.update(b"nightlean.private-state-journal.v1\0");
+        hasher.update(b"noctium.private-state-journal.v1\0");
         hasher.update(&bytes);
         journal["journalDigest"] = json!(hex::encode(hasher.finalize()));
         bytes.zeroize();

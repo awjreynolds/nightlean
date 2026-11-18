@@ -1,17 +1,17 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 open Lean
 
-nightlean_circuit issue70PersistentHash where
+noctium_circuit issue70PersistentHash where
   private secret : Bytes32
   public expected : Bytes32
 end
 
-nightlean_contract Issue70PersistentHash where
+noctium_contract Issue70PersistentHash where
   map registered : Bytes32 => Bool
   entry register uses issue70PersistentHash where
     insert registered[disclose(persistentHash32(secret))] := true

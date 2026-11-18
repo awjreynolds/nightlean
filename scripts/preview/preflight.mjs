@@ -69,7 +69,7 @@ if (artifacts) await check('artifacts', async () => {
 
 let identity;
 await check('identity', async () => {
-  const directory = await realpath(process.env.NIGHTLEAN_WALLET_DIR ?? '/private/tmp/nightlean-preview-wallet');
+  const directory = await realpath(process.env.NOCTIUM_WALLET_DIR ?? '/private/tmp/noctium-preview-wallet');
   const seedPath = join(directory, 'wallet.seed');
   const directoryInfo = await stat(directory), seedInfo = await lstat(seedPath);
   if (!seedInfo.isFile() || seedInfo.isSymbolicLink() || (directoryInfo.mode & 0o077) || (seedInfo.mode & 0o077)) throw Error('Unsafe identity path');

@@ -1,1 +1,95 @@
-{"compiler":{"implementation":"Lean4","sourceRevision":"b1afd9f4afa9525a5031820ab7eeaaddbee7e299","toolchain":"leanprover/lean4:v4.35.0"},"entries":[{"name":"tests/WitnessSource.lean","path":"source/tests/WitnessSource.lean","role":"source","sha256":"cc8bca1c7c09d4dd2565a29b8a037b45e21fa5519a320775caab00ed0fae8508","size":6923},{"name":"TypedWitness.ScalarWitness.claim.zkir","path":"circuit/entrypoint.zkir","role":"circuit","sha256":"2633a900cefbc639c58b1fea4b8b003c145f637854543239ac832c243a45a0f7","size":2745},{"name":"TypedWitness.ScalarWitness.claim.impact.json","path":"plan/entrypoint.impact.json","role":"plan","sha256":"3af5b0e8ae37965f6bad553131d7f47f70299691b7b9286e3a8de62e30241d63","size":4768},{"name":"nightlean.json","path":"schema/nightlean.json","role":"metadata","sha256":"171e587e600496f2e0d3592d0306a409c0aa8516af3ab4fd5854e8d469573808","size":33488},{"name":"abi.schema.json","path":"schema/abi.schema.json","role":"abi","sha256":"ef5dc95975d933809251affa50a5cd8b3a71ed79d39c922a419f091e9c2283ce","size":61},{"name":"target.json","path":"profile/target.json","role":"profile","sha256":"f02c99dc0043e554800a688d62610a71302652eea08465eee919d12bbe464d4f","size":249},{"name":"ledger.params","path":"parameters/ledger.params","role":"ledgerParameters","sha256":"6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679","size":791},{"name":"entrypoint.prover","path":"keys/entrypoint.prover","role":"proverKey","sha256":"6562daef72e883e917da3c1b717153e4be9e79b596625311ef476b9db9b3fba8","size":114299},{"name":"entrypoint.verifier","path":"keys/entrypoint.verifier","role":"verifierKey","sha256":"68158626b25f84549786a1b5f75d993b1a9ae02853e8a1dd4bc3fd08befc8482","size":1353},{"name":"native-zkir.json","path":"provenance/native-zkir.json","role":"toolchain","sha256":"a2b17ead0f8984b16b0bbc380fde30fb10de76c1913d5303f3770da6f30f0396","size":450},{"name":"TypedWitness.ScalarWitness.claim.witness.json","path":"witness/entrypoint.binding.json","role":"witnessBinding","sha256":"e401b424a3829b67a338070f75579511b3bb42ea261e95f063af2706b159987b","size":4297},{"name":"TypedWitness.ScalarWitness.claim.witness.control.json","path":"witness/entrypoint.control.json","role":"witnessControl","sha256":"343da9cf944e623f2db15d5eaafa25163ff029babb1deddf5a62129854d33ace","size":10235}],"kind":"nightlean-public-entrypoint-bundle","ledgerRevision":"a2b30128ca4b660b73a068e29b56b48ede8c9a74","profile":"midnight-ledger-9","schemaVersion":1,"stages":["lean-compilation","native-key-generation","public-bundle-assembly"],"zkirRevision":"446c7fecc6bd41dab99ebe89ab404e9d077d11a9"}
+{
+  "recordKind": "historical-public-bundle-manifest-summary",
+  "historicalStatus": "entry hashes identify the original bundle only",
+  "kind": "noctium-public-entrypoint-bundle",
+  "profile": "midnight-ledger-9",
+  "compilerSourceRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
+  "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+  "zkirRevision": "446c7fecc6bd41dab99ebe89ab404e9d077d11a9",
+  "entries": [
+    {
+      "name": "tests/WitnessSource.lean",
+      "role": "source",
+      "sha256": "cc8bca1c7c09d4dd2565a29b8a037b45e21fa5519a320775caab00ed0fae8508",
+      "size": 6923
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.zkir",
+      "role": "circuit",
+      "sha256": "2633a900cefbc639c58b1fea4b8b003c145f637854543239ac832c243a45a0f7",
+      "size": 2745
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.impact.json",
+      "role": "plan",
+      "sha256": "3af5b0e8ae37965f6bad553131d7f47f70299691b7b9286e3a8de62e30241d63",
+      "size": 4768
+    },
+    {
+      "name": "noctium.json",
+      "role": "metadata",
+      "sha256": "171e587e600496f2e0d3592d0306a409c0aa8516af3ab4fd5854e8d469573808",
+      "size": 33488
+    },
+    {
+      "name": "abi.schema.json",
+      "role": "abi",
+      "sha256": "ef5dc95975d933809251affa50a5cd8b3a71ed79d39c922a419f091e9c2283ce",
+      "size": 61
+    },
+    {
+      "name": "target.json",
+      "role": "profile",
+      "sha256": "f02c99dc0043e554800a688d62610a71302652eea08465eee919d12bbe464d4f",
+      "size": 249
+    },
+    {
+      "name": "ledger.params",
+      "role": "ledgerParameters",
+      "sha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
+      "size": 791
+    },
+    {
+      "name": "entrypoint.prover",
+      "role": "proverKey",
+      "sha256": "6562daef72e883e917da3c1b717153e4be9e79b596625311ef476b9db9b3fba8",
+      "size": 114299
+    },
+    {
+      "name": "entrypoint.verifier",
+      "role": "verifierKey",
+      "sha256": "68158626b25f84549786a1b5f75d993b1a9ae02853e8a1dd4bc3fd08befc8482",
+      "size": 1353
+    },
+    {
+      "name": "native-zkir.json",
+      "role": "toolchain",
+      "sha256": "a2b17ead0f8984b16b0bbc380fde30fb10de76c1913d5303f3770da6f30f0396",
+      "size": 450
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.witness.json",
+      "role": "witnessBinding",
+      "sha256": "e401b424a3829b67a338070f75579511b3bb42ea261e95f063af2706b159987b",
+      "size": 4297
+    },
+    {
+      "name": "TypedWitness.ScalarWitness.claim.witness.control.json",
+      "role": "witnessControl",
+      "sha256": "343da9cf944e623f2db15d5eaafa25163ff029babb1deddf5a62129854d33ace",
+      "size": 10235
+    }
+  ],
+  "stages": [
+    "lean-compilation",
+    "native-key-generation",
+    "public-bundle-assembly"
+  ],
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "0c4d452a35969e2f89bc15dc0f0de11165b04ad74c5ad3a80039f8b453afe95e",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/witness62-public/bundles/320-scalar.manifest.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/witness62-public/bundles/320-scalar.manifest.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
+}

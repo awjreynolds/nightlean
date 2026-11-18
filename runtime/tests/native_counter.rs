@@ -1,7 +1,7 @@
 #![cfg(feature = "zkir-321")]
 
 use base_crypto::fab::AlignedValue;
-use nightlean_runtime::{Db, Plan, check, create_state, prepare, zkir::IrSource};
+use noctium_runtime::{Db, Plan, check, create_state, prepare, zkir::IrSource};
 use onchain_runtime::state::{ChargedState, StateValue};
 use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;

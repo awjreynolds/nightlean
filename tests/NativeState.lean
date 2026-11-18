@@ -1,5 +1,5 @@
-import Nightlean.Verification.NativeStateJson
-open Nightlean.Verification.NativeRelation Nightlean.Verification.NativeState
+import Noctium.Verification.NativeStateJson
+open Noctium.Verification.NativeRelation Noctium.Verification.NativeState
 
 example : step (.popeq (boolean false)) ⟨[.cell (field zero)], []⟩ = none := by decide +kernel
 example : step (.index 3 false) (initial zero one []) = none := by decide +kernel

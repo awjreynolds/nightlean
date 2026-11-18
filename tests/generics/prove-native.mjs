@@ -20,7 +20,7 @@ assert.ok(directory !== repository && !directory.startsWith(repository + sep),
 const {Zkir, check} = await import(pathToFileURL(resolve(checkerPath)).href);
 const require = createRequire(new URL('../../scripts/zkir/package.json', import.meta.url));
 const ledger = await import(pathToFileURL(require.resolve('@midnight-ntwrk/ledger-v9')).href);
-const proofServer = new URL(process.env.NIGHTLEAN_PROOF_SERVER ?? 'http://127.0.0.1:16300');
+const proofServer = new URL(process.env.NOCTIUM_PROOF_SERVER ?? 'http://127.0.0.1:16300');
 assert.ok(['http:', 'https:'].includes(proofServer.protocol));
 assert.ok(['127.0.0.1', 'localhost', '[::1]'].includes(proofServer.hostname));
 assert.ok(!proofServer.username && !proofServer.password);
@@ -30,7 +30,7 @@ const material = {
   proverKey: new Uint8Array(await readFile(join(directory, 'keys', `${circuitName}.prover`))),
   verifierKey: new Uint8Array(await readFile(join(directory, 'keys', `${circuitName}.verifier`))),
 };
-const keyLocation = `nightlean/generics/${circuitName}`;
+const keyLocation = `noctium/generics/${circuitName}`;
 const witness = circuitName === 'genericAddSmall'
   ? {privateValues: ['7', '8'], publicValues: ['15', '15'], publicReads: ['15']}
   : {privateValues: ['100', '155'], publicValues: ['255', '255'], publicReads: ['255']};

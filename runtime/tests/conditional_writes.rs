@@ -1,6 +1,6 @@
 #![cfg(feature = "zkir-321")]
 
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, Expr, Instruction, Plan, check, create_state, field_decimal, field_value, prepare,
     zkir::IrSource,
 };
@@ -67,7 +67,7 @@ fn allowance(state: &ChargedState<Db>, account: u64) -> Option<String> {
     Some(field_decimal(fields[0]))
 }
 
-fn execute(plan: &Plan, enabled: bool, initial: &ChargedState<Db>) -> nightlean_runtime::Execution {
+fn execute(plan: &Plan, enabled: bool, initial: &ChargedState<Db>) -> noctium_runtime::Execution {
     prepare(
         plan,
         &inputs(enabled),

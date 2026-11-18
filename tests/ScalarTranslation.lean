@@ -1,7 +1,7 @@
-import Nightlean.Verification.ScalarTranslation
+import Noctium.Verification.ScalarTranslation
 
 namespace ScalarTranslationTests
-open Lean Nightlean Nightlean.Backend Nightlean.Verification
+open Lean Noctium Noctium.Backend Noctium.Verification
 open NativeRelation ScalarNormalization ScalarTranslation
 
 private def ctx : EvalContext := {modulus := Field.modulus, poseidon2 := fun _ _ _ => .ok 0}
@@ -50,7 +50,7 @@ example (json : Json) (program : Program) (streams : InputStreams) (witness : As
   rw [failed] at successful
   cases successful
 
-#print axioms Nightlean.Verification.ScalarTranslation.lowerCircuit_sound
+#print axioms Noctium.Verification.ScalarTranslation.lowerCircuit_sound
 
 /-- Completeness supplies a witness for the actual emitted CSE/shadowing program,
 with an authenticated final Impact vector and exact host returns. -/
@@ -64,6 +64,6 @@ example (json : Json) (program : Program)
     (emptyInputs shadowed rfl _) lowered decoded (by rfl)
   exact ⟨witness, by simpa [shadowed, valueNumber] using satisfies⟩
 
-#print axioms Nightlean.Verification.ScalarTranslation.lowerCircuit_complete
+#print axioms Noctium.Verification.ScalarTranslation.lowerCircuit_complete
 
 end ScalarTranslationTests

@@ -25,7 +25,7 @@
        ["Bytes<32>",
         {"composite":
          {"typeFingerprint":
-          "NightleanCompositeTypeV1;r25:NestedEscrow.EscrowRecordNightleanCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
+          "NoctiumCompositeTypeV1;r25:NestedEscrow.EscrowRecordNoctiumCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
           "schemaVersion": 1,
           "layout":
           {"kind": "struct",
@@ -62,7 +62,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r25:NestedEscrow.EscrowRecordNightleanCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
+    "NoctiumCompositeTypeV1;r25:NestedEscrow.EscrowRecordNoctiumCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -111,7 +111,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r25:NestedEscrow.EscrowRecordNightleanCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
+    "NoctiumCompositeTypeV1;r25:NestedEscrow.EscrowRecordNoctiumCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -169,7 +169,7 @@
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -178,7 +178,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": false,
     "op": "push",
@@ -186,7 +186,7 @@
     {"value":
      {"value": {"value": true, "tag": "bool"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
       "body":
       {"yes":
        {"tag": "eq",
@@ -196,17 +196,17 @@
        "no": {"value": false, "tag": "bool"},
        "condition":
        {"tag": "reference",
-        "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}},
+        "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}},
      "tag": "let",
      "name":
-     "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
      "body": {"tag": "reference", "name": "owner"}},
     "alignment": "bytes32"},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -215,7 +215,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": false,
     "op": "push",
@@ -225,7 +225,7 @@
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -234,13 +234,13 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation": {"op": "new"},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -249,13 +249,13 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation": {"op": "insert", "n": 2},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -264,7 +264,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"op": "dup"},
   {"slot": 0,
    "pushPath": false,
@@ -297,7 +297,7 @@
         "right": {"value": true, "tag": "bool"},
         "left": {"tag": "reference", "name": "recordPresent"}},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
        "body": {"tag": "reference", "name": "owner"}},
       "alignment": "bytes32"},
      {"expression":
@@ -306,7 +306,7 @@
         "right": {"value": true, "tag": "bool"},
         "left": {"tag": "reference", "name": "recordPresent"}},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxxxxxxxx",
        "body": {"tag": "reference", "name": "spender"}},
       "alignment": "bytes32"}]},
    "op": "guarded",
@@ -317,7 +317,7 @@
   {"operation":
    {"schema":
     {"typeFingerprint":
-     "NightleanCompositeTypeV1;r25:NestedEscrow.EscrowRecordNightleanCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
+     "NoctiumCompositeTypeV1;r25:NestedEscrow.EscrowRecordNoctiumCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
      "schemaVersion": 1,
      "layout":
      {"kind": "struct",
@@ -377,7 +377,7 @@
   {"storage": true,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r25:NestedEscrow.EscrowRecordNightleanCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
+    "NoctiumCompositeTypeV1;r25:NestedEscrow.EscrowRecordNoctiumCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -431,7 +431,7 @@
      "alignment": "bytes32"}]},
   {"schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r25:NestedEscrow.EscrowRecordNightleanCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
+    "NoctiumCompositeTypeV1;r25:NestedEscrow.EscrowRecordNoctiumCompositeLayoutV1;1;R25:NestedEscrow.EscrowRecord11;f8:ownerC1xsNf8:ownerC1ysNf8:ownerC2xsNf8:ownerC2ysNf10:spenderC1xsNf10:spenderC1ysNf10:spenderC2xsNf10:spenderC2ysNf5:memoXsNf5:memoYsNf10:memoAmountsN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",

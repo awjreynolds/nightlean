@@ -1,6 +1,6 @@
 # Canonical composite types and source layouts
 
-`Nightlean.Types.Composite` defines the Lean-owned type/layout foundation for unit, scalar leaves, structural tuples, nominal structs, nominal enums, fixed vectors and fixed byte sequences. [Checked composite values](composite-values.md) adds construction, flattening, native relation constraints and a Rust/C++ value codec. The source ledger path below reuses these checked layouts for a narrow Native-only record case.
+`Noctium.Types.Composite` defines the Lean-owned type/layout foundation for unit, scalar leaves, structural tuples, nominal structs, nominal enums, fixed vectors and fixed byte sequences. [Checked composite values](composite-values.md) adds construction, flattening, native relation constraints and a Rust/C++ value codec. The source ledger path below reuses these checked layouts for a narrow Native-only record case.
 
 ## Identity and ordering
 
@@ -51,7 +51,7 @@ Native plans use `indexPath` for typed key paths. Empty-map creation indexes the
 `tests/CompositeTypes.lean` contains the TYC-IDENTITY, TYC-ORDER, TYC-LENGTH, TYC-CYCLE and TYC-SUBTYPE cases. It checks insertion-order-stable fingerprints, field-order changes, nominal distinction, forward references, cycles, missing names, duplicate declarations, scalar bounds, sequence limits, enum tags/payloads and recursive UInt widening proofs. Its S8 nested zero-vector regression has three logical expanded nodes and 1,021 retained layout constructors. A 100-node retained-layout limit rejects it before layout construction. At a 1,021-node bound, the returned counts are `(expandedNodes, layoutNodes, value.expandedNodeCount, value.nodeCount) = (3, 1021, 3, 1021)`.
 
 ```sh
-lake build Nightlean.Types.Composite
+lake build Noctium.Types.Composite
 lake env lean tests/CompositeTypes.lean
 ```
 

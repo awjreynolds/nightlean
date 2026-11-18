@@ -1,6 +1,6 @@
 #![cfg(feature = "zkir-321")]
 
-use nightlean_runtime::{Db, Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
+use noctium_runtime::{Db, Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
 use onchain_runtime::state::{ChargedState, StateValue};
 use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
@@ -66,7 +66,7 @@ fn prepare_case(
     plan: &Plan,
     initial: &ChargedState<Db>,
     values: BTreeMap<String, Json>,
-) -> anyhow::Result<nightlean_runtime::Execution> {
+) -> anyhow::Result<noctium_runtime::Execution> {
     prepare(
         plan,
         &values,

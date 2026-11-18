@@ -1,6 +1,6 @@
-import Nightlean.Claim
+import Noctium.Claim
 
-open Nightlean
+open Noctium
 
 private def caps : Capabilities := {poseidon2 := true, stateCells := true, stateMaps := true}
 

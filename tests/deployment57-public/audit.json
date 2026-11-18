@@ -74,5 +74,12 @@
   "sourceAuthoritySha256": "5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb",
   "status": "selected-private-claim-deployment-identity-qualified",
   "trustedNodeFinalityRequired": true,
-  "universalCompilerVerified": false
+  "universalCompilerVerified": false,
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "b51ad4f399c55c95aba31fcf0155f8f315e04543b5d51a29132a2048478854f7",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/deployment57-public/audit.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/deployment57-public/audit.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

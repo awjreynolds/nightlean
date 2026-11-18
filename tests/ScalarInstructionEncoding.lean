@@ -1,8 +1,8 @@
-import Nightlean.Verification.ScalarInstructionEncoding
+import Noctium.Verification.ScalarInstructionEncoding
 
 namespace ScalarInstructionEncodingTests
 
-open Lean Nightlean Nightlean.Backend Nightlean.Verification NativeRelation ScalarInstructionEncoding
+open Lean Noctium Noctium.Backend Noctium.Verification NativeRelation ScalarInstructionEncoding
 
 private theorem valid0 : NativeRelationJson.validIdentifier "%v0" = true :=
   fresh_identifier 0 (by decide)
@@ -105,11 +105,11 @@ example (left right : Nat) (same : s!"%v{left}" = s!"%v{right}") : left = right 
 example : NativeRelationJson.validIdentifier s!"%v{Native.maxInstructions}" = true :=
   fresh_identifier _ (Nat.le_refl _)
 
-#print axioms Nightlean.Verification.ScalarInstructionEncoding.OperandEncoding.decode
-#print axioms Nightlean.Verification.ScalarInstructionEncoding.decode_binary_instruction_add
-#print axioms Nightlean.Verification.ScalarInstructionEncoding.decode_select_instruction
-#print axioms Nightlean.Verification.ScalarInstructionEncoding.decode_lessThan_instruction
-#print axioms Nightlean.Verification.ScalarInstructionEncoding.fresh_identifier
-#print axioms Nightlean.Verification.ScalarInstructionEncoding.fresh_name_injective
+#print axioms Noctium.Verification.ScalarInstructionEncoding.OperandEncoding.decode
+#print axioms Noctium.Verification.ScalarInstructionEncoding.decode_binary_instruction_add
+#print axioms Noctium.Verification.ScalarInstructionEncoding.decode_select_instruction
+#print axioms Noctium.Verification.ScalarInstructionEncoding.decode_lessThan_instruction
+#print axioms Noctium.Verification.ScalarInstructionEncoding.fresh_identifier
+#print axioms Noctium.Verification.ScalarInstructionEncoding.fresh_name_injective
 
 end ScalarInstructionEncodingTests

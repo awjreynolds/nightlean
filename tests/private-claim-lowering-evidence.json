@@ -99,6 +99,13 @@
   "ledgerStatePreservationProved": false,
   "compiledContractVerified": false,
   "reproduction": "python3 scripts/proofs/check-private-claim-lowering.py",
-  "nativeReproduction": "node tests/private-claim-lowering-checker.mjs OFFICIAL_321_CHECKER .nightlean/audits/private-claim-lowering/emitted/claimRelation.zkir [NATIVE_321_CLI]",
-  "boundary": "Kernel theorem and quoted JSON-tree identity; exact byte/build/key/deployment chain remains open."
+  "nativeReproduction": "node tests/private-claim-lowering-checker.mjs OFFICIAL_321_CHECKER .noctium/audits/private-claim-lowering/emitted/claimRelation.zkir [NATIVE_321_CLI]",
+  "boundary": "Kernel theorem and quoted JSON-tree identity; exact byte/build/key/deployment chain remains open.",
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "4ff9674d9266a219d10ed48644deac4ba14d72c75acf448703f7fd532dbbbe83",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/private-claim-lowering-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/private-claim-lowering-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

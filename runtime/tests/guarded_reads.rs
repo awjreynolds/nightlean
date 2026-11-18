@@ -1,6 +1,6 @@
 #![cfg(feature = "zkir-321")]
 
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, Expr, Plan, check, create_state, field_decimal, field_value, prepare, zkir::IrSource,
 };
 use onchain_runtime::state::{ChargedState, StateValue};
@@ -71,7 +71,7 @@ fn execute(
     plan: &Plan,
     enabled: bool,
     initial: &ChargedState<Db>,
-) -> anyhow::Result<nightlean_runtime::Execution> {
+) -> anyhow::Result<noctium_runtime::Execution> {
     prepare(
         plan,
         &inputs(enabled),

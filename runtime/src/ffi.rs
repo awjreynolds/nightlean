@@ -1,6 +1,6 @@
 //! C ABI v1: opaque integer tokens and caller-owned copy buffers.
 //!
-//! Pointer arguments follow the C contract in include/nightlean_runtime.h. The
+//! Pointer arguments follow the C contract in include/noctium_runtime.h. The
 //! runtime validates nulls/lengths, but a foreign caller must provide readable
 //! input memory and writable output memory. Invalid raw addresses are not
 //! recoverable by Rust panic handling.
@@ -432,14 +432,14 @@ fn advance(session: &mut Session) -> Result<Json, i32> {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn nightlean_runtime_abi_version() -> u32 {
+pub extern "C" fn noctium_runtime_abi_version() -> u32 {
     ABI_VERSION
 }
 
 /// # Safety
 /// Foreign pointers must satisfy the readable/writable memory contract in the C header.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_session_begin(
+pub unsafe extern "C" fn noctium_session_begin(
     bytes: *const u8,
     length: usize,
     out_session: *mut u64,
@@ -470,7 +470,7 @@ pub unsafe extern "C" fn nightlean_session_begin(
 /// # Safety
 /// out_result must point to writable storage for one uint64_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_session_advance(session: u64, out_result: *mut u64) -> i32 {
+pub unsafe extern "C" fn noctium_session_advance(session: u64, out_result: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_result)? };
         let mut registry = registry();
@@ -486,7 +486,7 @@ pub unsafe extern "C" fn nightlean_session_advance(session: u64, out_result: *mu
 /// # Safety
 /// bytes/length and out_result must satisfy the C header's memory contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_session_resume(
+pub unsafe extern "C" fn noctium_session_resume(
     session: u64,
     bytes: *const u8,
     length: usize,
@@ -557,7 +557,7 @@ pub unsafe extern "C" fn nightlean_session_resume(
 /// # Safety
 /// out_result must point to writable storage for one uint64_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_session_cancel(session: u64, out_result: *mut u64) -> i32 {
+pub unsafe extern "C" fn noctium_session_cancel(session: u64, out_result: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_result)? };
         let mut registry = registry();
@@ -578,7 +578,7 @@ pub unsafe extern "C" fn nightlean_session_cancel(session: u64, out_result: *mut
     })
 }
 #[unsafe(no_mangle)]
-pub extern "C" fn nightlean_session_free(session: u64) -> i32 {
+pub extern "C" fn noctium_session_free(session: u64) -> i32 {
     guard(|| {
         registry().sessions.remove(&session).ok_or(INVALID_HANDLE)?;
         Ok(())
@@ -587,7 +587,7 @@ pub extern "C" fn nightlean_session_free(session: u64) -> i32 {
 /// # Safety
 /// out_length must point to writable storage for one size_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_result_length(result: u64, out_length: *mut usize) -> i32 {
+pub unsafe extern "C" fn noctium_result_length(result: u64, out_length: *mut usize) -> i32 {
     guard(|| {
         if out_length.is_null() {
             return Err(INVALID_ARGUMENT);
@@ -602,7 +602,7 @@ pub unsafe extern "C" fn nightlean_result_length(result: u64, out_length: *mut u
 /// # Safety
 /// destination must be writable for capacity bytes; out_written for one size_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_result_copy(
+pub unsafe extern "C" fn noctium_result_copy(
     result: u64,
     destination: *mut u8,
     capacity: usize,
@@ -629,7 +629,7 @@ pub unsafe extern "C" fn nightlean_result_copy(
     })
 }
 #[unsafe(no_mangle)]
-pub extern "C" fn nightlean_result_free(result: u64) -> i32 {
+pub extern "C" fn noctium_result_free(result: u64) -> i32 {
     guard(|| {
         let mut bytes = registry().results.remove(&result).ok_or(INVALID_HANDLE)?;
         bytes.zeroize();
@@ -658,49 +658,49 @@ mod tests {
     }
     #[test]
     fn null_inputs_and_forged_tokens_reject() {
-        assert_eq!(nightlean_runtime_abi_version(), 1);
+        assert_eq!(noctium_runtime_abi_version(), 1);
         let mut session = 0;
         let mut result = 0;
         assert_eq!(
-            unsafe { nightlean_session_begin(ptr::null(), 1, &mut session, &mut result) },
+            unsafe { noctium_session_begin(ptr::null(), 1, &mut session, &mut result) },
             INVALID_ARGUMENT
         );
         let one_byte = 0u8;
         assert_eq!(
             unsafe {
-                nightlean_session_begin(&one_byte, MAX_INPUT_BYTES + 1, &mut session, &mut result)
+                noctium_session_begin(&one_byte, MAX_INPUT_BYTES + 1, &mut session, &mut result)
             },
             INVALID_ARGUMENT
         );
         assert_eq!(
-            unsafe { nightlean_session_advance(u64::MAX, &mut result) },
+            unsafe { noctium_session_advance(u64::MAX, &mut result) },
             INVALID_HANDLE
         );
-        assert_eq!(nightlean_session_free(u64::MAX), INVALID_HANDLE);
-        assert_eq!(nightlean_result_free(u64::MAX), INVALID_HANDLE);
+        assert_eq!(noctium_session_free(u64::MAX), INVALID_HANDLE);
+        assert_eq!(noctium_result_free(u64::MAX), INVALID_HANDLE);
     }
     #[test]
     fn result_lifetime_and_copy_contract() {
         let result = registry().result(status("ready")).unwrap();
         let mut len = 0;
-        assert_eq!(unsafe { nightlean_result_length(result, &mut len) }, OK);
+        assert_eq!(unsafe { noctium_result_length(result, &mut len) }, OK);
         assert!(len > 0);
         let mut written = 0;
         let mut bytes = vec![0; len];
         assert_eq!(
-            unsafe { nightlean_result_copy(result, bytes.as_mut_ptr(), len - 1, &mut written) },
+            unsafe { noctium_result_copy(result, bytes.as_mut_ptr(), len - 1, &mut written) },
             BUFFER_TOO_SMALL
         );
         assert_eq!(written, 0);
         assert_eq!(
-            unsafe { nightlean_result_copy(result, bytes.as_mut_ptr(), len, &mut written) },
+            unsafe { noctium_result_copy(result, bytes.as_mut_ptr(), len, &mut written) },
             OK
         );
         assert_eq!(written, len);
-        assert_eq!(nightlean_result_free(result), OK);
-        assert_eq!(nightlean_result_free(result), INVALID_HANDLE);
+        assert_eq!(noctium_result_free(result), OK);
+        assert_eq!(noctium_result_free(result), INVALID_HANDLE);
         assert_eq!(
-            unsafe { nightlean_result_length(result, &mut len) },
+            unsafe { noctium_result_length(result, &mut len) },
             INVALID_HANDLE
         );
     }
@@ -736,7 +736,7 @@ impl Registry {
 /// # Safety
 /// bytes/length and out_result must satisfy the C header's memory contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_session_stage_private(
+pub unsafe extern "C" fn noctium_session_stage_private(
     session: u64,
     bytes: *const u8,
     length: usize,
@@ -765,7 +765,7 @@ pub unsafe extern "C" fn nightlean_session_stage_private(
 /// # Safety
 /// bytes/length and out_result must satisfy the C header's memory contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_session_notify(
+pub unsafe extern "C" fn noctium_session_notify(
     session: u64,
     bytes: *const u8,
     length: usize,
@@ -801,7 +801,7 @@ pub unsafe extern "C" fn nightlean_session_notify(
 /// # Safety
 /// out_private must address writable storage for one uint64_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_session_private_data(
+pub unsafe extern "C" fn noctium_session_private_data(
     session: u64,
     kind: u32,
     out_private: *mut u64,
@@ -833,7 +833,7 @@ pub unsafe extern "C" fn nightlean_session_private_data(
 /// # Safety
 /// out_length must address writable storage for one size_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_private_length(token: u64, out_length: *mut usize) -> i32 {
+pub unsafe extern "C" fn noctium_private_length(token: u64, out_length: *mut usize) -> i32 {
     guard(|| {
         if out_length.is_null() {
             return Err(INVALID_ARGUMENT);
@@ -848,7 +848,7 @@ pub unsafe extern "C" fn nightlean_private_length(token: u64, out_length: *mut u
 /// # Safety
 /// destination and out_written follow the C header's writable-memory contract.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_private_copy(
+pub unsafe extern "C" fn noctium_private_copy(
     token: u64,
     destination: *mut u8,
     capacity: usize,
@@ -875,7 +875,7 @@ pub unsafe extern "C" fn nightlean_private_copy(
     })
 }
 #[unsafe(no_mangle)]
-pub extern "C" fn nightlean_private_free(token: u64) -> i32 {
+pub extern "C" fn noctium_private_free(token: u64) -> i32 {
     guard(|| {
         let mut value = registry()
             .private_results

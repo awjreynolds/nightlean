@@ -81,8 +81,8 @@ The accepted private-claim circuit retains SHA-256 `c569dd887fdf6aa3bdd2c8e23589
 ```sh
 lake build
 lake env lean --run tests/NativeProducer.lean
-.lake/build/bin/noctium compile tests/NativeProducerSource.lean --output /tmp/nightlean-producer-bool
-node tests/native-producer-checker.mjs "$OFFICIAL_321_CHECKER" /tmp/nightlean-producer-bool "$NATIVE_321_CLI"
+.lake/build/bin/noctium compile tests/NativeProducerSource.lean --output /tmp/noctium-producer-bool
+node tests/native-producer-checker.mjs "$OFFICIAL_321_CHECKER" /tmp/noctium-producer-bool "$NATIVE_321_CLI"
 ```
 
 The optional native CLI argument enables the two raw keygen observations. JavaScript here is an official-library qualification harness. It implements no compiler pass or runtime semantics.

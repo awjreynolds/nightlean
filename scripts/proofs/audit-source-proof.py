@@ -45,7 +45,7 @@ def main() -> int:
         if model_digest != args.trusted_model_sha256:
             raise ValueError("model_pin_mismatch")
         # Retain both inputs before checking. The checker never reopens caller paths.
-        with tempfile.TemporaryDirectory(prefix="nightlean-proof-audit-") as directory:
+        with tempfile.TemporaryDirectory(prefix="noctium-proof-audit-") as directory:
             scratch = Path(directory)
             model_path, proof_path = scratch / "model.ndjson", scratch / "proof.ndjson"
             model_path.write_bytes(model)

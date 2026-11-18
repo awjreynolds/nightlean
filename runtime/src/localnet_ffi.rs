@@ -69,7 +69,7 @@ fn services(token: u64) -> Result<Arc<Mutex<Services>>, i32> {
 /// # Safety
 /// Public config/private seed/output buffers must remain valid until return. Seed is optional for recovery.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_localnet_open(
+pub unsafe extern "C" fn noctium_localnet_open(
     config: *const u8,
     config_len: usize,
     seed: *const u8,
@@ -166,7 +166,7 @@ pub unsafe extern "C" fn nightlean_localnet_open(
 /// # Safety
 /// out_result must reference writable memory. Returns public context for explicit TTL selection.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_localnet_context(adapter: u64, out_result: *mut u64) -> i32 {
+pub unsafe extern "C" fn noctium_localnet_context(adapter: u64, out_result: *mut u64) -> i32 {
     ffi::guard(|| {
         unsafe { ffi::output(out_result)? };
         let _work = Work::reserve()?;
@@ -185,7 +185,7 @@ pub unsafe extern "C" fn nightlean_localnet_context(adapter: u64, out_result: *m
 /// # Safety
 /// Explicit entropy/output buffers must remain valid until return. Entropy is required only for funding/signing.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_localnet_resolve(
+pub unsafe extern "C" fn noctium_localnet_resolve(
     adapter: u64,
     request: u64,
     approve: u32,
@@ -281,7 +281,7 @@ pub unsafe extern "C" fn nightlean_localnet_resolve(
     })
 }
 #[unsafe(no_mangle)]
-pub extern "C" fn nightlean_localnet_free(adapter: u64) -> i32 {
+pub extern "C" fn noctium_localnet_free(adapter: u64) -> i32 {
     ffi::guard(|| {
         registry(|r| {
             r.services.remove(&adapter).ok_or(INVALID_HANDLE)?;
@@ -293,7 +293,7 @@ pub extern "C" fn nightlean_localnet_free(adapter: u64) -> i32 {
 /// # Safety
 /// Request and writable output pointers must remain valid until return. Result token is private.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_localnet_private_value(
+pub unsafe extern "C" fn noctium_localnet_private_value(
     adapter: u64,
     request: *const u8,
     request_len: usize,

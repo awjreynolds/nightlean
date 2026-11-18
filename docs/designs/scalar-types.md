@@ -2,7 +2,7 @@
 
 The feature reference is Compact 0.36.1 at `7fa3a117c5e7efe9d2c51da04263e5f0b3509144`. Noctium uses its observed scalar semantics as a comparison contract. The source syntax, typed representation and backend remain Noctium's own.
 
-`Nightlean/ScalarPolicy.lean` is the executable policy foundation. The bounded scalar slice now extends this policy through the circuit DSL, native lowering and runtime ABI. A selected source program has [finalized local ledger evidence](../development/unsigned-localnet.md). The feature matrix remains unverified for full equivalence.
+`Noctium/ScalarPolicy.lean` is the executable policy foundation. The bounded scalar slice now extends this policy through the circuit DSL, native lowering and runtime ABI. A selected source program has [finalized local ledger evidence](../development/unsigned-localnet.md). The feature matrix remains unverified for full equivalence.
 
 ## Bounds
 

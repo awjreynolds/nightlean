@@ -45,7 +45,7 @@
     [{"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "owner"},
         "tag": "select",
@@ -85,12 +85,12 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"},
      {"expression":
       {"value": {"tag": "reference", "name": "enabled"},
        "tag": "let",
-       "name": "_nightlean_activity_guard_xxxxxxxx",
+       "name": "_noctium_activity_guard_xxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "spender"},
         "tag": "select",
@@ -130,7 +130,7 @@
           0],
          "tag": "bytes32Literal"},
         "condition":
-        {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxx"}}},
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
       "alignment": "bytes32"}]},
    "op": "guarded",
    "guard": {"tag": "reference", "name": "enabled"}},

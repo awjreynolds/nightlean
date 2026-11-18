@@ -22,27 +22,27 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 HELPERS = runpy.run_path(str(ROOT / "scripts/proofs/check-private-claim-lowering.py"))
-ARTIFACTS = ["claimRelation.zkir", "PrivateClaim.claim.impact.json", "PrivateClaim.claim.zkir", "target-profile.json", "nightlean.json"]
-SOURCE_POLICY = "Nightlean.PrivateClaimVerification.policy"
-NATIVE_POLICY = "Nightlean.PrivateClaimNativePrivacy.policy"
-NS = "Nightlean.PrivateClaimArtifacts"
+ARTIFACTS = ["claimRelation.zkir", "PrivateClaim.claim.impact.json", "PrivateClaim.claim.zkir", "target-profile.json", "noctium.json"]
+SOURCE_POLICY = "Noctium.PrivateClaimVerification.policy"
+NATIVE_POLICY = "Noctium.PrivateClaimNativePrivacy.policy"
+NS = "Noctium.PrivateClaimArtifacts"
 CERT = "PrivateClaimArtifactCertificate"
 PROFILE = "profiles/midnight-ledger-9-zkir-3.2.1-target.json"
 SOURCES = ["examples/PrivateClaim.lean", "proofs/PrivateClaim.lean", "proofs/PrivateClaimVerification.lean",
            "proofs/PrivateClaimLowering.lean", "proofs/PrivateClaimNativeState.lean",
            "proofs/PrivateClaimNativePrivacy.lean", "proofs/PrivateClaimArtifacts.lean"]
 MODEL_ROOTS = [f"{NS}.Certified", f"{NS}.FunctionalPreservation", f"{NS}.EligibleCompleteness", f"{NS}.concrete_complete", f"{NS}.concrete_preservation", f"{NS}.concrete_privacy", f"{NS}.exact_byte_build_binding",
-    "Nightlean.Verification.ArtifactBytes.parse", "Nightlean.Verification.ArtifactCertificate.Authenticated",
-    "Nightlean.Verification.ArtifactCertificate.selectedProfile", NATIVE_POLICY, SOURCE_POLICY,
-    "Nightlean.PrivateClaimNativePrivacy.NativePrivacyObligation", "Nightlean.PrivateClaimNativePrivacy.actualObserve",
-    "Nightlean.Verification.FunctionalObligation", "Nightlean.Verification.PrivacyObligation",
+    "Noctium.Verification.ArtifactBytes.parse", "Noctium.Verification.ArtifactCertificate.Authenticated",
+    "Noctium.Verification.ArtifactCertificate.selectedProfile", NATIVE_POLICY, SOURCE_POLICY,
+    "Noctium.PrivateClaimNativePrivacy.NativePrivacyObligation", "Noctium.PrivateClaimNativePrivacy.actualObserve",
+    "Noctium.Verification.FunctionalObligation", "Noctium.Verification.PrivacyObligation",
     "propext", "Classical.choice", "Quot.sound"]
 BASE_ROOTS = MODEL_ROOTS + [
-    "Nightlean.PrivateClaimVerification.functional", "Nightlean.PrivateClaimVerification.privacy",
-    "Nightlean.PrivateClaimLowering.native_constraints_sound", "Nightlean.PrivateClaimLowering.eligible_source_complete",
-    "Nightlean.PrivateClaimNativeState.native_execution_sound", "Nightlean.PrivateClaimNativeState.source_native_preservation",
-    "Nightlean.PrivateClaimNativeState.eligible_admitted_complete", "Nightlean.PrivateClaimNativePrivacy.privacy",
-    "Nightlean.PrivateClaimNativePrivacy.symmetric_eligible_native_pair"]
+    "Noctium.PrivateClaimVerification.functional", "Noctium.PrivateClaimVerification.privacy",
+    "Noctium.PrivateClaimLowering.native_constraints_sound", "Noctium.PrivateClaimLowering.eligible_source_complete",
+    "Noctium.PrivateClaimNativeState.native_execution_sound", "Noctium.PrivateClaimNativeState.source_native_preservation",
+    "Noctium.PrivateClaimNativeState.eligible_admitted_complete", "Noctium.PrivateClaimNativePrivacy.privacy",
+    "Noctium.PrivateClaimNativePrivacy.symmetric_eligible_native_pair"]
 
 
 def run(command: list[str], cwd: Path = ROOT, env: dict | None = None, *, failure: bool = False,
@@ -129,7 +129,7 @@ def source_build(commit: str, directory: Path, toolchain: Path) -> dict:
     source_identity = archive(commit, source)
     env = clean_env(toolchain)
     lake = str(toolchain / "bin/lake")
-    run([lake, "build", "nightlean", "Nightlean.Compiler", "Nightlean.Claim", "Nightlean.Verification.ArtifactCertificate"], source, env)
+    run([lake, "build", "noctium", "Noctium.Compiler", "Noctium.Claim", "Noctium.Verification.ArtifactCertificate"], source, env)
     run([str(toolchain / "bin/lean"), "tests/ArtifactBytes.lean"], source,
         clean_env(toolchain, source / ".lake/build/lib/lean"))
     imports = directory / "proof-imports"
@@ -144,7 +144,7 @@ def source_build(commit: str, directory: Path, toolchain: Path) -> dict:
         (directory / filename).write_text(exported.stdout)
         HELPERS["exported_axioms"](directory / filename)
     artifacts = directory / "artifacts"
-    run([str(source / ".lake/build/bin/nightlean"), "compile", "examples/PrivateClaim.lean", "--target", PROFILE,
+    run([str(source / ".lake/build/bin/noctium"), "compile", "examples/PrivateClaim.lean", "--target", PROFILE,
          "--output", str(artifacts)], source, env)
     shutil.copyfile(source / PROFILE, artifacts / "target-profile.json")
     imports_identity = []
@@ -162,7 +162,7 @@ def source_build(commit: str, directory: Path, toolchain: Path) -> dict:
     return {"source": source_identity, "imports": imports_identity,
             "modelSha256": sha(directory / "model.ndjson"),
             "baseProofSha256": sha(directory / "base-proof-closure.ndjson"),
-            "compilerSha256": sha(source / ".lake/build/bin/nightlean"),
+            "compilerSha256": sha(source / ".lake/build/bin/noctium"),
             "artifacts": {name: sha(artifacts / name) for name in ARTIFACTS}}
 
 
@@ -202,8 +202,8 @@ def certificate_source(build: dict, artifacts: Path) -> str:
 set_option maxRecDepth 100000
 set_option maxHeartbeats 100000000
 namespace {CERT}
-open Nightlean.Verification.ArtifactBytes Nightlean.Verification.ArtifactCertificate
-open Nightlean.PrivateClaimLowering Nightlean.PrivateClaimNativeState Nightlean.PrivateClaimArtifacts
+open Noctium.Verification.ArtifactBytes Noctium.Verification.ArtifactCertificate
+open Noctium.PrivateClaimLowering Noctium.PrivateClaimNativeState Noctium.PrivateClaimArtifacts
 {os.linesep.join(definitions)}
 def authority : Authority := {{
   build := {quote_build(build, 'profileBytes')}
@@ -216,14 +216,14 @@ def sourceIdentity : String := {json.dumps(build['sourceCommit'])}
 {os.linesep.join(checks)}
 theorem certified : Certified authority build sourceIdentity standaloneBytes planBytes callBytes profileBytes :=
   ⟨standaloneValid, planValid, callValid, profileValid, rfl, rfl, ⟨rfl,rfl,rfl,rfl⟩⟩
-theorem binding : Nightlean.Verification.NativePrivacy.ExactArtifactBinding Bytes BuildIdentity sourceIdentity
+theorem binding : Noctium.Verification.NativePrivacy.ExactArtifactBinding Bytes BuildIdentity sourceIdentity
     planBytes callBytes (tree planBytes) (tree callBytes) build parse (Authenticated authority) :=
   exact_byte_build_binding authority build sourceIdentity standaloneBytes planBytes callBytes profileBytes certified
 theorem functional : FunctionalPreservation (tree planBytes) (tree callBytes) :=
   concrete_preservation authority build sourceIdentity standaloneBytes planBytes callBytes profileBytes certified
 theorem complete : EligibleCompleteness (tree planBytes) (tree callBytes) :=
   concrete_complete authority build sourceIdentity standaloneBytes planBytes callBytes profileBytes certified
-theorem privacy : Nightlean.PrivateClaimNativePrivacy.DecodedPrivacyObligation (tree planBytes) (tree callBytes) :=
+theorem privacy : Noctium.PrivateClaimNativePrivacy.DecodedPrivacyObligation (tree planBytes) (tree callBytes) :=
   concrete_privacy authority build sourceIdentity standaloneBytes planBytes callBytes profileBytes certified
 #print axioms certified
 #print axioms binding
@@ -279,7 +279,7 @@ def check_files(directory: Path, record: dict) -> None:
         prefix, relative = path.split("/", 1)
         original = directory / ("source/.lake/build/lib/lean" if prefix == "library" else "proof-imports") / relative
         assert sha(original) == expected, "loaded_import_product_mismatch: " + path
-    assert sha(directory / "source/.lake/build/bin/nightlean") == record["compilerSha256"], "compiler_product_mismatch"
+    assert sha(directory / "source/.lake/build/bin/noctium") == record["compilerSha256"], "compiler_product_mismatch"
     for name, expected in record["artifacts"].items():
         assert sha(directory / "artifacts" / name) == expected, "artifact_file_mismatch: " + name
     assert sha(directory / "base-proof-closure.ndjson") == record["baseProofSha256"], "theorem_body_closure_mismatch"
@@ -394,7 +394,7 @@ def native_agreement(bundle: Path, cargo: Path, checker: Path | None) -> dict:
                     str(ROOT / "scripts/proofs/artifact-json-native/Cargo.toml"), "--target-dir", str(samples / "native-target")],
                    env=native_env)
     (samples / "native-build.txt").write_text(compiled.stdout + compiled.stderr)
-    rust = run([str(samples / "native-target/debug/nightlean-artifact-json-probe"), *paths])
+    rust = run([str(samples / "native-target/debug/noctium-artifact-json-probe"), *paths])
     assert [HELPERS["strict_json_bytes"](line.encode()) for line in lean.stdout.splitlines()] == [
         HELPERS["strict_json_bytes"](line.encode()) for line in rust.stdout.splitlines()], "native_parser_sample_mismatch"
     result = {"scope": "accepted actual artifact subset samples, not a proof of Rust/serde", "acceptedSamples": len(paths),
@@ -488,8 +488,8 @@ def regress(authority_path: Path, authority_pin: str, bundle: Path) -> dict:
         source = """import proofs.PrivateClaimArtifacts
 set_option maxRecDepth 100000
 set_option maxHeartbeats 100000000
-open Nightlean.Verification.ArtifactBytes Nightlean.Verification.ArtifactCertificate
-""" + "def bytes : Bytes := " + lean_bytes(changed) + "\n" +             "example : (decodeProgram bytes).toOption = some Nightlean.PrivateClaimNativeState.callProgram := by decide +kernel\n"
+open Noctium.Verification.ArtifactBytes Noctium.Verification.ArtifactCertificate
+""" + "def bytes : Bytes := " + lean_bytes(changed) + "\n" +             "example : (decodeProgram bytes).toOption = some Noctium.PrivateClaimNativeState.callProgram := by decide +kernel\n"
         path = temporary / (label + ".lean")
         path.write_text(source)
         env = clean_env(tools, Path(str(bundle / "proof-imports") + os.pathsep + str(trusted / "source/.lake/build/lib/lean")))

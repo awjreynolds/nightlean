@@ -11,7 +11,7 @@
       "runtime/src/native_ffi.rs": "02d43c613bd65c192e6ca790d95affbb20f2c757419c767ca19971a19d402522",
       "runtime/src/artifacts.rs": "24128793b4dfc9cc83bc6ff464254ff8c51bcb99fef8c10cdb8e8d235c328f73",
       "runtime/src/lib.rs": "2fb53b56a10e1ebec171a1e9eee98efd843b1c2fa77484920c5d9efe7679980c",
-      "runtime/include/nightlean_native.h": "b1b0ae517090aa6addb3e6dcc349c7df5e36ca74248885710ae7f824f2005c65",
+      "runtime/include/noctium_native.h": "b1b0ae517090aa6addb3e6dcc349c7df5e36ca74248885710ae7f824f2005c65",
       "runtime/tests/native_proof.rs": "4b66deb6000b3e5a7995c9b312697f4598ba28d9ea2761f4988c330252f765b4",
       "runtime/tests/native_ffi.rs": "c722988c7a98261cd6ac8ee7fa9b2755d1132ef8d656764aa04a6356bd083ead",
       "runtime/tests/native_cpp_smoke.cpp": "bce7e67a252725ce663ab1da50bce7f0b19ca8c38e8182544024390ab9a93f3a",
@@ -21,8 +21,15 @@
   "profiles": {
     "320": {
       "featureSelection": "default zkir-320",
-      "workerOrdinarySuite": { "passed": 109, "failed": 0, "ignored": 7 },
-      "workerRealRustProofAndAbi": { "passed": 6, "failed": 0 },
+      "workerOrdinarySuite": {
+        "passed": 109,
+        "failed": 0,
+        "ignored": 7
+      },
+      "workerRealRustProofAndAbi": {
+        "passed": 6,
+        "failed": 0
+      },
       "workerLinkedCpp": {
         "positiveAndAdversarialProofReplies": true,
         "publicIntentSha256": "e5044c443a4362170c14c3b313ddf94daf5290d56d3a5731fdcb00a4972541cd"
@@ -34,9 +41,16 @@
         "cppReal": "e6cfa05d49cffb8c643734ef75335b055b1d0fad0a74c0a5577dcd106f407a6a",
         "regression": "601d5c3dc0f64eed4b9374632c61f654ae4d1b1d18b20387f8379d63dc29b8fb"
       },
-      "independentRealRustProofAndAbi": { "passed": 6, "failed": 0 },
-      "independentLiveWorkAccounting": { "passed": 1 },
-      "independentEarlyArtifactBudget": { "passed": 1 },
+      "independentRealRustProofAndAbi": {
+        "passed": 6,
+        "failed": 0
+      },
+      "independentLiveWorkAccounting": {
+        "passed": 1
+      },
+      "independentEarlyArtifactBudget": {
+        "passed": 1
+      },
       "independentLinkedCpp": {
         "linked": true,
         "positiveAndAdversarialProofReplies": true,
@@ -53,8 +67,15 @@
     },
     "321": {
       "featureSelection": "--no-default-features --features zkir-321",
-      "workerOrdinarySuite": { "passed": 110, "failed": 0, "ignored": 7 },
-      "workerRealRustProofAndAbi": { "passed": 6, "failed": 0 },
+      "workerOrdinarySuite": {
+        "passed": 110,
+        "failed": 0,
+        "ignored": 7
+      },
+      "workerRealRustProofAndAbi": {
+        "passed": 6,
+        "failed": 0
+      },
       "workerLinkedCpp": {
         "positiveAndAdversarialProofReplies": true,
         "publicIntentSha256": "c19bbbb787762aa0ead9551f1017c4d854387eaeb6520617b7fdf3872df55ea7"
@@ -66,9 +87,16 @@
         "cppReal": "2c08ec6145a9d32e46e1873c1fc893d4a4c181911ab7c7d8e6119761629ce625",
         "regression": "cfe9d9f160922b9a55d368fa08d12d54a60e94470468c3aef3c3917a1c072c41"
       },
-      "independentRealRustProofAndAbi": { "passed": 6, "failed": 0 },
-      "independentLiveWorkAccounting": { "passed": 1 },
-      "independentEarlyArtifactBudget": { "passed": 1 },
+      "independentRealRustProofAndAbi": {
+        "passed": 6,
+        "failed": 0
+      },
+      "independentLiveWorkAccounting": {
+        "passed": 1
+      },
+      "independentEarlyArtifactBudget": {
+        "passed": 1
+      },
       "independentLinkedCpp": {
         "linked": true,
         "positiveAndAdversarialProofReplies": true,
@@ -115,5 +143,12 @@
     "No full native source or whole-compiler audit claim.",
     "Ordinary worker suite results and independent qualification results are distinct runs."
   ],
-  "publicationPolicy": "Contains safe aggregate results and public source, evidence, and report hashes only. Private fixture contents and raw environment values are omitted."
+  "publicationPolicy": "Contains safe aggregate results and public source, evidence, and report hashes only. Private fixture contents and raw environment values are omitted.",
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "1a3cd3922316e6ef47a4cfe4872d718aa2127e5b067c0d0862043eb3794fe30a",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/native-proof-abi-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/native-proof-abi-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

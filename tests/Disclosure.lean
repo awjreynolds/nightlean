@@ -1,6 +1,6 @@
-import Nightlean.Backend.Zkir
+import Noctium.Backend.Zkir
 
-open Nightlean
+open Noctium
 
 private def originSpan : SourceSpan := {file := "private-source.lean", line := 4, column := 7}
 private def sinkSpan : SourceSpan := {file := "public-sink.lean", line := 12, column := 3}

@@ -401,7 +401,7 @@ mod tests {
     };
     fn temporary() -> PathBuf {
         std::env::temp_dir().join(format!(
-            "nightlean-journal-files-{}-{}",
+            "noctium-journal-files-{}-{}",
             std::process::id(),
             rand::random::<u64>()
         ))

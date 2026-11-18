@@ -12,7 +12,7 @@ The separate [deployment audit](private-claim-deployment-audit.md) now joins thi
 
 ## Exact byte semantics
 
-`Nightlean/Verification/ArtifactBytes.lean` defines `Bytes := List UInt8` and a total, fuel-bounded parser. No UTF-8 conversion or whitespace normalization precedes parsing. The accepted qualification subset is:
+`Noctium/Verification/ArtifactBytes.lean` defines `Bytes := List UInt8` and a total, fuel-bounded parser. No UTF-8 conversion or whitespace normalization precedes parsing. The accepted qualification subset is:
 
 - At most 65,536 bytes and 64 nested containers.
 - Objects, arrays, strings, booleans, null and minimal nonnegative decimal UInt64 integers.
@@ -82,7 +82,7 @@ The immutable run records these identities:
 | Toolchain closure | `86091fb262b7dced37da8f094acc64f4e10589728b947425d445e82f5297bb3e` |
 | Reproduced certificate export | `bfbe2928a9059cc758db7ea130ef213e4f59520aa99b6f341350172716d6f79e` |
 
-The retained authority root is `/private/tmp/nightlean-artifact-authority-925164d`. The candidate root is `/private/tmp/nightlean-artifact-candidate-925164d`. Those local directories contain the archives, actual build products, public artifacts, exports and kernel replay logs. The public evidence receipt embeds the audit, regression and parser-sample reports so their results survive cleanup of local temporary directories. Reproduction requires fresh directories and independently reviewed pins, rather than trusting a copied candidate manifest.
+The retained authority root is `/private/tmp/noctium-artifact-authority-925164d`. The candidate root is `/private/tmp/noctium-artifact-candidate-925164d`. Those local directories contain the archives, actual build products, public artifacts, exports and kernel replay logs. The public evidence receipt embeds the audit, regression and parser-sample reports so their results survive cleanup of local temporary directories. Reproduction requires fresh directories and independently reviewed pins, rather than trusting a copied candidate manifest.
 
 The audit admits only `propext`, `Classical.choice` and `Quot.sound`. It checks source functional/privacy roles, native privacy, concrete byte functional preservation, eligible-source completeness and concrete byte privacy composition. Thus the formal privacy foundation from child issue 63 now composes with an instantiated byte/build certificate for this commit. The observer remains `successfulClaimPublicTranscriptV1`, with the explicit scope and host premises above.
 

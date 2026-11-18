@@ -16,8 +16,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 STATE = runpy.run_path(str(ROOT / "scripts/proofs/check-private-claim-state.py"))
 run = STATE["run"]
-NS = "Nightlean.PrivateClaimNativePrivacy"
-FIXTURES = "Nightlean.PrivateClaimPrivacyFixtures"
+NS = "Noctium.PrivateClaimNativePrivacy"
+FIXTURES = "Noctium.PrivateClaimPrivacyFixtures"
 ROOTS = [f"{NS}.{name}" for name in ["privacy", "exact_source_policy", "exact_source_scope", "no_private_release",
     "source_privacy_from_native", "native_observer_equal", "bound_native_privacy", "decoded_bound_privacy",
     "native_progress", "different_private_fixture_pair", "symmetric_path_flip", "symmetric_eligible_native_pair",
@@ -26,8 +26,8 @@ ROOTS = [f"{NS}.{name}" for name in ["privacy", "exact_source_policy", "exact_so
     "direct_leak_rejected", "hash_leak_rejected", "query_leak_rejected", "constant_under_private_control_rejected",
     "direct_payloads_differ", "activity_masks_differ", "private_query_keys_differ", "equal_hash_release_does_not_identify_secret"]]
 MODEL_ROOTS = [f"{NS}.{name}" for name in ["policy", "NativePrivacyObligation", "observe", "actualObserve",
-    "bindingView", "BindingAgrees", "allOutcomesPolicy"]] + ["Nightlean.PrivateClaimVerification.policy",
-    "Nightlean.Verification.FunctionalObligation", "Nightlean.Verification.PrivacyObligation",
+    "bindingView", "BindingAgrees", "allOutcomesPolicy"]] + ["Noctium.PrivateClaimVerification.policy",
+    "Noctium.Verification.FunctionalObligation", "Noctium.Verification.PrivacyObligation",
     "propext", "Classical.choice", "Quot.sound"]
 
 
@@ -36,7 +36,7 @@ def certificate_source(plan: object, call: object, namespace: str) -> str:
         "import proofs.PrivateClaimNativeState", "import proofs.PrivateClaimPrivacyFixtures")
     return base + f'''
 namespace {namespace}
-open Nightlean.PrivateClaimNativePrivacy
+open Noctium.PrivateClaimNativePrivacy
 theorem nativePrivacy : DecodedPrivacyObligation planJson callJson :=
   decoded_obligation planJson callJson planDecoded callDecoded
 theorem exactPolicy : NativePrivacyObligation policy := privacy
@@ -48,7 +48,7 @@ end {namespace}
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / ".nightlean/audits/private-claim-privacy")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / ".noctium/audits/private-claim-privacy")
     parser.add_argument("--native-checker", type=Path)
     parser.add_argument("--trusted-model-export", type=Path)
     parser.add_argument("--trusted-model-sha256")
@@ -57,10 +57,10 @@ def main() -> int:
         parser.error("trusted model export and SHA256 must be supplied together")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    run(["lake", "build", "nightlean", "Nightlean.Verification.NativePrivacy", "Nightlean.Verification.NativeStateJson",
-         "Nightlean.Verification.NativeRelationJson", "Nightlean.Claim", "Nightlean.Backend.Zkir", "Nightlean.Frontend", "Nightlean.Compiler"])
+    run(["lake", "build", "noctium", "Noctium.Verification.NativePrivacy", "Noctium.Verification.NativeStateJson",
+         "Noctium.Verification.NativeRelationJson", "Noctium.Claim", "Noctium.Backend.Zkir", "Noctium.Frontend", "Noctium.Compiler"])
     run(["lake", "env", "lean", "scripts/proofs/AuditNativePrivacyExport.lean"])
-    with tempfile.TemporaryDirectory(prefix="nightlean-claim-privacy-") as directory:
+    with tempfile.TemporaryDirectory(prefix="noctium-claim-privacy-") as directory:
         scratch = Path(directory)
         imports = scratch / "imports"
         source_root = scratch / "source"
@@ -106,7 +106,7 @@ def main() -> int:
             if source.endswith("PrivateClaimNativePrivacy.lean"):
                 (output / "direct-axioms.txt").write_text(report)
         emitted = output / "emitted"
-        run([str(ROOT / ".lake/build/bin/nightlean"), "compile", "examples/PrivateClaim.lean", "--target",
+        run([str(ROOT / ".lake/build/bin/noctium"), "compile", "examples/PrivateClaim.lean", "--target",
              "profiles/midnight-ledger-9-zkir-3.2.1-target.json", "--output", str(emitted)])
         plan_bytes = (emitted / "PrivateClaim.claim.impact.json").read_bytes()
         call_bytes = (emitted / "PrivateClaim.claim.zkir").read_bytes()
@@ -146,15 +146,15 @@ def main() -> int:
             ("WrongRelease", "{policy with source := {policy.source with privacy := {scope := .successfulOnly, releases := .declared (fun _ => [])}}}"),
         ]:
             contents = f'''import proofs.PrivateClaimNativePrivacy
-open Nightlean Nightlean.Verification Nightlean.PrivateClaimNativePrivacy
+open Noctium Noctium.Verification Noctium.PrivateClaimNativePrivacy
 example : NativePrivacyObligation ({proof}) := privacy
 '''
             report = build(f"proofs/{name}Privacy.lean", contents, negative=True)
             assert "Type mismatch" in report, report
             (output / (name + ".rejection.txt")).write_text(report)
         contents = '''import proofs.PrivateClaimNativePrivacy
-open Nightlean.PrivateClaimNativePrivacy
-example : NativePrivacyObligation policy := Nightlean.PrivateClaimVerification.functional
+open Noctium.PrivateClaimNativePrivacy
+example : NativePrivacyObligation policy := Noctium.PrivateClaimVerification.functional
 '''
         report = build("proofs/FunctionalOnlyPrivacy.lean", contents, negative=True)
         assert "Type mismatch" in report, report
@@ -167,7 +167,7 @@ example : NativePrivacyObligation policy := Nightlean.PrivateClaimVerification.f
             return path
 
         baseline = export("proofs.PrivateClaimNativePrivacy", MODEL_ROOTS, "baseline-model.ndjson")
-        proof_roots = ROOTS + ["Nightlean.PrivateClaimVerification.functional", "Nightlean.PrivateClaimVerification.privacy"] + [
+        proof_roots = ROOTS + ["Noctium.PrivateClaimVerification.functional", "Noctium.PrivateClaimVerification.privacy"] + [
             "PrivateClaimPrivacyCertificate." + item for item in ["planDecoded", "callDecoded", "nativePrivacy", "exactPolicy"]]
         proof = export("proofs.PrivateClaimPrivacyCertificate", proof_roots, "proof-closure.ndjson")
         axioms = STATE["exported_axioms"](proof)
@@ -199,7 +199,7 @@ example : NativePrivacyObligation policy := Nightlean.PrivateClaimVerification.f
         (output / "audit.json").write_text(json.dumps(accepted, indent=2, sort_keys=True) + "\n")
         for name, policy_name, proof_name, error in [
             ("WrongScope", f"{NS}.allOutcomesPolicy", f"{NS}.privacy", "wrong_native_privacy_obligation"),
-            ("FunctionalOnly", f"{NS}.policy", "Nightlean.PrivateClaimVerification.functional", "wrong_native_privacy_obligation"),
+            ("FunctionalOnly", f"{NS}.policy", "Noctium.PrivateClaimVerification.functional", "wrong_native_privacy_obligation"),
         ]:
             rejection = audit(proof, policy_name, proof_name, error)
             (output / (name + "-audit-rejection.json")).write_text(json.dumps(rejection, indent=2) + "\n")
@@ -223,7 +223,7 @@ example : NativePrivacyObligation policy := Nightlean.PrivateClaimVerification.f
                           str(emitted / "PrivateClaim.claim.impact.json"), str(emitted / "PrivateClaim.claim.zkir")])
             (output / "native-checker.json").write_text(native.stdout)
         summary = {"status": "formal-privacy-package-passed-exact-byte-build-integration-pending", "issue58Complete": False,
-            "policy": f"{NS}.policy", "privacyProof": f"{NS}.privacy", "sourcePolicy": "Nightlean.PrivateClaimVerification.policy",
+            "policy": f"{NS}.policy", "privacyProof": f"{NS}.privacy", "sourcePolicy": "Noctium.PrivateClaimVerification.policy",
             "observer": "successfulClaimPublicTranscriptV1", "scope": "successful-valid-executions-only",
             "observables": ["declared public root/campaign/nullifier", "return nullifier", "public before/after state",
                 "six aligned reads", "public read scalars", "ordered opcode payloads and query paths", "all-active mask",

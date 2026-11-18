@@ -1,7 +1,7 @@
 #![cfg(feature = "zkir-321")]
 
 use base_crypto::fab::AlignedValue;
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, Expr, MODULUS, Plan, ScalarType, Value, check, create_state, environment, evaluate,
     field_decimal, field_value, prepare, zkir::IrSource,
 };
@@ -215,7 +215,7 @@ fn typed_jubjub_elgamal_binds_ciphertext_and_rejects_noncanonical_scalars() {
     assert_eq!(
         evaluate(&low31, &BTreeMap::new()).unwrap(),
         Value::Native(
-            nightlean_runtime::canonical_field(
+            noctium_runtime::canonical_field(
                 "53206320320083115796502214552783413060461247639578808291150702859268522240"
             )
             .unwrap()

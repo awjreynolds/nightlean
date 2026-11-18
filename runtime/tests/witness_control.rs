@@ -1,4 +1,4 @@
-use nightlean_runtime::{
+use noctium_runtime::{
     control::{InvocationTarget, Session, TypedResponse},
     host::{self, Capability, Context, Limits, Operation, Provider},
     witness::{Parameter, WitnessSignature},
@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[cfg(feature = "zkir-321")]
 #[test]
 fn byte_witness_state_and_hash_helpers_bind_account_ciphertext_and_memo() {
-    use nightlean_runtime::{
+    use noctium_runtime::{
         Plan, canonical_field, check, create_state, field_decimal, field_value, prepare,
         zkir::IrSource,
     };
@@ -185,7 +185,7 @@ fn byte_witness_state_and_hash_helpers_bind_account_ciphertext_and_memo() {
 #[cfg(feature = "zkir-321")]
 #[test]
 fn witness_backed_curve_helpers_bind_elgamal_outputs_and_reject_a_wrong_key() {
-    use nightlean_runtime::{
+    use noctium_runtime::{
         Plan, check, create_state, field_decimal, field_value, prepare, zkir::IrSource,
     };
     use onchain_runtime::state::StateValue;
@@ -285,7 +285,7 @@ fn witness_backed_curve_helpers_bind_elgamal_outputs_and_reject_a_wrong_key() {
 #[cfg(feature = "zkir-321")]
 #[test]
 fn typed_curve_witnesses_keep_private_values_and_feed_the_native_relation() {
-    use nightlean_runtime::{Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
+    use noctium_runtime::{Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
     use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine};
 
     let source = include_str!("fixtures/curve-witness/321/CurveWitness.claim.witness.control.json");
@@ -487,20 +487,20 @@ fn source_context(signatures: &[WitnessSignature], attempt_id: &str) -> Context 
         .into_iter()
         .map(|(id, (key_prefix, operations))| Capability {
             id,
-            namespace: "nightlean".into(),
+            namespace: "noctium".into(),
             key_prefix,
             operations: operations.into_iter().collect(),
         })
         .collect::<Vec<_>>();
     capabilities.push(Capability {
         id: "commit".into(),
-        namespace: "nightlean".into(),
+        namespace: "noctium".into(),
         key_prefix: "cache/".into(),
         operations: vec![host::CAS.into()],
     });
     Context {
         protocol_version: 1,
-        namespace: "nightlean".into(),
+        namespace: "noctium".into(),
         base_revision: "preview-r0".into(),
         attempt_id: attempt_id.into(),
         capabilities,
@@ -739,7 +739,7 @@ fn dishonest_provider_result_fails_independent_source_constraints() {
 #[cfg(feature = "zkir-321")]
 #[test]
 fn readable_private_state_source_binds_callbacks_stages_and_native_constraints() {
-    use nightlean_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
+    use noctium_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
     use onchain_runtime::state::StateValue;
     use transient_crypto::{curve::Fr, fab::AlignedValueExt};
 

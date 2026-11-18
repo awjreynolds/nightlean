@@ -31,7 +31,7 @@ function scaleNatural(value) {
 }
 const vector = values => Buffer.concat([scaleNatural(values.length), ...values.map(scaleNatural)]);
 function preimage({expected, secret, output}) {
-  const location = Buffer.from('nightlean/helpers/qualification');
+  const location = Buffer.from('noctium/helpers/qualification');
   return Buffer.concat([Buffer.from('midnight:proof-preimage:'), vector([]), vector([secret]),
     vector([expected, output]), vector([expected]), scaleNatural(42), Buffer.from([0]),
     scaleNatural(location.length), location]);
@@ -71,7 +71,7 @@ for (const name of ['helperDirect', 'helperComposed']) {
   }
   const record = {name, k: relation.getK(), sourceSha256: digest(source), binarySha256: digest(ir), cases: results};
   if (mode === 'prove') {
-    const server = new URL(process.env.NIGHTLEAN_PROOF_SERVER ?? 'http://127.0.0.1:16300');
+    const server = new URL(process.env.NOCTIUM_PROOF_SERVER ?? 'http://127.0.0.1:16300');
     assert.ok(['http:', 'https:'].includes(server.protocol) &&
       ['127.0.0.1', 'localhost', '[::1]'].includes(server.hostname) && !server.username && !server.password);
     const response = await fetch(new URL('/prove', server), {method: 'POST',

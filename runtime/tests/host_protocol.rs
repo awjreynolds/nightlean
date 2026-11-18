@@ -1,5 +1,5 @@
 mod common;
-use nightlean_runtime::ffi::*;
+use noctium_runtime::ffi::*;
 use serde_json::{Value as Json, json};
 use std::{collections::BTreeMap, sync::Mutex};
 static TEST_LOCK: Mutex<()> = Mutex::new(());
@@ -10,18 +10,18 @@ fn envelope(attempt: char) -> Json {
     context["attemptId"] = json!(attempt.to_string().repeat(64));
     let mut params = Vec::new();
     serialize::tagged_serialize(&ledger::structure::INITIAL_PARAMETERS, &mut params).unwrap();
-    json!({"abiVersion":1,"profile":nightlean_runtime::profile::ABI,"plan":common::unsigned_json(),"publicInputs":{"expected":"510"},"state":{"total":"0"},"ledgerParametersHex":hex::encode(params),"address":"00".repeat(32),"circuit":serde_json::from_str::<Json>(include_str!("fixtures/unsigned/circuit.zkir")).unwrap(),"hostContext":context})
+    json!({"abiVersion":1,"profile":noctium_runtime::profile::ABI,"plan":common::unsigned_json(),"publicInputs":{"expected":"510"},"state":{"total":"0"},"ledgerParametersHex":hex::encode(params),"address":"00".repeat(32),"circuit":serde_json::from_str::<Json>(include_str!("fixtures/unsigned/circuit.zkir")).unwrap(),"hostContext":context})
 }
 fn take(token: u64) -> Json {
     let mut length = 0;
-    assert_eq!(unsafe { nightlean_result_length(token, &mut length) }, OK);
+    assert_eq!(unsafe { noctium_result_length(token, &mut length) }, OK);
     let mut bytes = vec![0; length];
     let mut written = 0;
     assert_eq!(
-        unsafe { nightlean_result_copy(token, bytes.as_mut_ptr(), length, &mut written) },
+        unsafe { noctium_result_copy(token, bytes.as_mut_ptr(), length, &mut written) },
         OK
     );
-    assert_eq!(nightlean_result_free(token), OK);
+    assert_eq!(noctium_result_free(token), OK);
     let text = String::from_utf8(bytes).unwrap();
     assert!(!text.contains("8675309"));
     assert!(!text.contains("claims/"));
@@ -33,7 +33,7 @@ fn begin(value: Json) -> u64 {
     let mut session = 0;
     let mut result = 0;
     assert_eq!(
-        unsafe { nightlean_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result) },
+        unsafe { noctium_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result) },
         OK
     );
     take(result);
@@ -42,7 +42,7 @@ fn begin(value: Json) -> u64 {
 fn advance(session: u64) -> Json {
     let mut result = 0;
     assert_eq!(
-        unsafe { nightlean_session_advance(session, &mut result) },
+        unsafe { noctium_session_advance(session, &mut result) },
         OK
     );
     take(result)
@@ -69,47 +69,47 @@ fn response(session: u64, id: u64, value: Json, bound: bool) -> Result<Json, i32
         payload["capability"] = json!("store");
         payload["schema"] = json!("UIntRange<256>");
     }
-    call(session, payload, nightlean_session_resume)
+    call(session, payload, noctium_session_resume)
 }
 fn notice(session: u64, attempt: char, transaction: char, event: &str) -> Result<Json, i32> {
     call(
         session,
         json!({"abiVersion":1,"attemptId":attempt.to_string().repeat(64),"transactionId":transaction.to_string().repeat(64),"event":event}),
-        nightlean_session_notify,
+        noctium_session_notify,
     )
 }
 fn stage(session: u64, key: &str) -> Result<Json, i32> {
     call(
         session,
         json!({"abiVersion":1,"operation":"private_state.stage.v1","capability":"store","key":key,"type":"Native","value":"8675309"}),
-        nightlean_session_stage_private,
+        noctium_session_stage_private,
     )
 }
 fn private(session: u64, kind: u32) -> Result<Json, i32> {
     let mut token = 0;
-    let status = unsafe { nightlean_session_private_data(session, kind, &mut token) };
+    let status = unsafe { noctium_session_private_data(session, kind, &mut token) };
     if status != OK {
         return Err(status);
     }
     let mut length = 0;
     assert_eq!(
-        unsafe { nightlean_result_length(token, &mut length) },
+        unsafe { noctium_result_length(token, &mut length) },
         INVALID_HANDLE
     );
-    assert_eq!(unsafe { nightlean_private_length(token, &mut length) }, OK);
+    assert_eq!(unsafe { noctium_private_length(token, &mut length) }, OK);
     let mut bytes = vec![0; length];
     let mut written = 99;
     assert_eq!(
-        unsafe { nightlean_private_copy(token, bytes.as_mut_ptr(), length - 1, &mut written) },
+        unsafe { noctium_private_copy(token, bytes.as_mut_ptr(), length - 1, &mut written) },
         BUFFER_TOO_SMALL
     );
     assert_eq!(written, 0);
     assert_eq!(
-        unsafe { nightlean_private_copy(token, bytes.as_mut_ptr(), length, &mut written) },
+        unsafe { noctium_private_copy(token, bytes.as_mut_ptr(), length, &mut written) },
         OK
     );
-    assert_eq!(nightlean_private_free(token), OK);
-    assert_eq!(nightlean_private_free(token), INVALID_HANDLE);
+    assert_eq!(noctium_private_free(token), OK);
+    assert_eq!(noctium_private_free(token), INVALID_HANDLE);
     Ok(serde_json::from_slice(&bytes).unwrap())
 }
 fn prepare(session: u64) {
@@ -187,7 +187,7 @@ fn commit(session: u64, value: Json) -> Result<Json, i32> {
     call(
         session,
         json!({"abiVersion":1,"requestId":3,"operation":"private_state.compare_exchange.v1","capability":"store","schema":"PrivateStateCasResult/v1","value":value}),
-        nightlean_session_resume,
+        noctium_session_resume,
     )
 }
 #[test]
@@ -208,7 +208,7 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
         let mut payload = json!({"abiVersion":1,"requestId":1,"operation":"private_state.read.v1","capability":"store","schema":"UIntRange<256>","value":"255"});
         payload[field] = value;
         assert_eq!(
-            call(session, payload, nightlean_session_resume),
+            call(session, payload, noctium_session_resume),
             Err(INVALID_RESPONSE)
         );
         assert_eq!(advance(session), first);
@@ -265,7 +265,7 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
         ),
         Err(INVALID_STATE)
     );
-    assert_eq!(nightlean_session_free(session), OK);
+    assert_eq!(noctium_session_free(session), OK);
     // The second CAS now observes the stale revision and never applies.
     let journal = private(concurrent, PRIVATE_REQUEST).unwrap()["journal"].clone();
     assert_eq!(
@@ -273,7 +273,7 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
         "conflicted"
     );
     assert_eq!(store.applies, 1);
-    nightlean_session_free(concurrent);
+    noctium_session_free(concurrent);
     // Recovery of an identical persisted attempt uses the host receipt, never a second apply.
     let retry = begin(envelope('a'));
     prepare(retry);
@@ -284,10 +284,10 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
         "committed"
     );
     assert_eq!(store.applies, 1);
-    nightlean_session_free(retry);
+    noctium_session_free(retry);
     let changed = begin(envelope('a'));
     stage(changed, "claims/used").unwrap();
-    call(changed,json!({"abiVersion":1,"operation":"private_state.stage.v1","capability":"store","key":"claims/used","type":"Native","value":"8675310"}),nightlean_session_stage_private).unwrap();
+    call(changed,json!({"abiVersion":1,"operation":"private_state.stage.v1","capability":"store","key":"claims/used","type":"Native","value":"8675310"}),noctium_session_stage_private).unwrap();
     advance(changed);
     response(changed, 1, json!("255"), true).unwrap();
     advance(changed);
@@ -300,7 +300,7 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
         "conflicted"
     );
     assert_eq!(store.applies, 1);
-    nightlean_session_free(changed);
+    noctium_session_free(changed);
     let uncertain = begin(envelope('e'));
     prepare(uncertain);
     notice(uncertain, 'e', 'f', "bind").unwrap();
@@ -313,7 +313,7 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
     assert_eq!(private(uncertain, PRIVATE_REQUEST), Err(INVALID_STATE));
     let mut output = 0;
     assert_eq!(
-        unsafe { nightlean_session_cancel(uncertain, &mut output) },
+        unsafe { noctium_session_cancel(uncertain, &mut output) },
         INVALID_STATE
     );
     assert_eq!(
@@ -321,16 +321,16 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
         "rejected"
     );
     assert_eq!(private(uncertain, PRIVATE_JOURNAL), Err(INVALID_STATE));
-    nightlean_session_free(uncertain);
+    noctium_session_free(uncertain);
     let cancelled = begin(envelope('1'));
     stage(cancelled, "claims/used").unwrap();
     assert_eq!(
-        unsafe { nightlean_session_cancel(cancelled, &mut output) },
+        unsafe { noctium_session_cancel(cancelled, &mut output) },
         OK
     );
     take(output);
     assert_eq!(private(cancelled, PRIVATE_JOURNAL), Err(INVALID_STATE));
-    nightlean_session_free(cancelled);
+    noctium_session_free(cancelled);
     let mut failed = envelope('2');
     failed["publicInputs"]["expected"] = json!("509");
     let failed = begin(failed);
@@ -341,7 +341,7 @@ fn provider_capabilities_and_journals_follow_host_cas_lifecycle() {
     response(failed, 2, json!("255"), false).unwrap();
     assert_eq!(advance(failed)["status"], "failed");
     assert_eq!(private(failed, PRIVATE_JOURNAL), Err(INVALID_STATE));
-    nightlean_session_free(failed);
+    noctium_session_free(failed);
 }
 
 #[test]
@@ -382,7 +382,7 @@ fn host_descriptor_scopes_and_private_buffer_limits_reject_without_partial_effec
         let mut result = 99;
         assert_eq!(
             unsafe {
-                nightlean_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result)
+                noctium_session_begin(bytes.as_ptr(), bytes.len(), &mut session, &mut result)
             },
             expected
         );
@@ -395,28 +395,28 @@ fn host_descriptor_scopes_and_private_buffer_limits_reject_without_partial_effec
     for _ in 0..MAX_PRIVATE_RESULTS {
         let mut token = 0;
         assert_eq!(
-            unsafe { nightlean_session_private_data(session, PRIVATE_JOURNAL, &mut token) },
+            unsafe { noctium_session_private_data(session, PRIVATE_JOURNAL, &mut token) },
             OK
         );
         tokens.push(token);
     }
     let mut extra = 99;
     assert_eq!(
-        unsafe { nightlean_session_private_data(session, PRIVATE_JOURNAL, &mut extra) },
+        unsafe { noctium_session_private_data(session, PRIVATE_JOURNAL, &mut extra) },
         LIMIT
     );
     assert_eq!(extra, 0);
     for token in tokens {
-        assert_eq!(nightlean_private_free(token), OK);
+        assert_eq!(noctium_private_free(token), OK);
     }
     assert!(private(session, PRIVATE_JOURNAL).is_ok());
     let mut cancelled = 0;
     assert_eq!(
-        unsafe { nightlean_session_cancel(session, &mut cancelled) },
+        unsafe { noctium_session_cancel(session, &mut cancelled) },
         OK
     );
     take(cancelled);
-    nightlean_session_free(session);
+    noctium_session_free(session);
     let mut small = envelope('5');
     small["hostContext"]["limits"]["privateBytes"] = json!(1024);
     small["hostContext"]["limits"]["writes"] = json!(64);
@@ -435,9 +435,9 @@ fn host_descriptor_scopes_and_private_buffer_limits_reject_without_partial_effec
     }
     assert!(rejected);
     assert_eq!(
-        unsafe { nightlean_session_cancel(small, &mut cancelled) },
+        unsafe { noctium_session_cancel(small, &mut cancelled) },
         OK
     );
     take(cancelled);
-    nightlean_session_free(small);
+    noctium_session_free(small);
 }

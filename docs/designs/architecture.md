@@ -20,6 +20,10 @@ The application path needs no Node or Compact runtime. Independent Midnight libr
 
 ## Assurance boundaries
 
+Retained exact-byte and deployment receipts qualify their recorded historical commits.
+The canonical namespace migration does not requalify the renamed source or native ABI.
+See the [namespace and evidence boundary](../development/namespaces.md).
+
 The published contract-to-artifact guarantees apply to the actual private-claim program. Its proofs connect imported source definitions to independent native relation and state models, then to retained artifact bytes. Soundness quantifies over arbitrary satisfying assignments and checked VM traces. The proof does not assume an honest witness generator.
 
 | Layer | Established today | Remaining boundary |

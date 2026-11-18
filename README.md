@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/noctium-social.png" alt="Noctium research preview. Prove contract behavior in Lean and compile for Midnight. Published evidence covers the private claim's correctness, scoped privacy and exact artifacts. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open." width="100%">
+  <img src="docs/assets/noctium-social.png" alt="Noctium research preview. Prove contract behavior in Lean and compile for Midnight. Published evidence covers the private claim's correctness, scoped privacy and exact artifacts. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The historical selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open." width="100%">
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@ The compiler and primary lowering are written in Lean. Contract execution uses a
 
 A private circuit input supplies a witness value for one call. Persisted private state lives in the application's wallet, and ledger cells and maps are public. Using a secret in arithmetic does not publish the result. `disclose(result)` authorizes public release, while an accepted proof also reveals its declared predicate. The [private state counter](examples/PrivateStateCounter.lean) shows readable private reads, typed callbacks, `prove` conditions and staged updates. See the [example guide](examples/README.md) and [privacy authoring review](docs/research/human-readable-privacy-authoring.md) for the boundaries and Compact's bounds.
 
-**Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. These are claim-specific guarantees. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
+**Research preview.** The private-claim example has source correctness, native preservation and scoped privacy proofs, joined to exact retained artifacts by byte/build certificates. Retained byte and deployment receipts qualify their recorded historical commits. They do not qualify the renamed source tree. These are claim-specific guarantees. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The historical selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open. See [what is proved and what is trusted](docs/designs/architecture.md#assurance-boundaries).
 
 ## Try the compiler
 
@@ -38,11 +38,11 @@ lake exe noctium check examples/BoundedScalars.lean
 lake exe noctium compile examples/BoundedScalars.lean --output build/bounded
 ```
 
-The output includes the standalone `boundedRelation.zkir`, contract-call `BoundedScalars.apply.zkir`, runtime plan `BoundedScalars.apply.impact.json`, and `nightlean.json` manifest. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source: imports and elaborators execute development code.
+The output includes the standalone `boundedRelation.zkir`, contract-call `BoundedScalars.apply.zkir`, runtime plan `BoundedScalars.apply.impact.json`, and `noctium.json` manifest. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source: imports and elaborators execute development code.
 
 For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 
-Use `Noctium.Frontend`, the `Noctium` scope and `noctium_*` declarations for new source. Legacy module, ABI and artifact identifiers remain accepted for compatibility with pinned proof evidence.
+Use `Noctium.Frontend`, the `Noctium` scope and `noctium_*` declarations. Native hosts use `noctium_*` C symbols and `noctium_*.h` headers. The compiler and runtime now use one [canonical namespace](docs/development/namespaces.md).
 
 ## A small, real example
 

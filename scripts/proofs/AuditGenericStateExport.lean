@@ -1,4 +1,4 @@
-import Nightlean.Verification.GenericStateExportAudit
+import Noctium.Verification.GenericStateExportAudit
 
 def main (args : List String) : IO UInt32 :=
-  Nightlean.Verification.GenericStateExportAudit.run args
+  Noctium.Verification.GenericStateExportAudit.run args

@@ -1,8 +1,8 @@
-import Nightlean.Verification.ScalarCache
+import Noctium.Verification.ScalarCache
 
 namespace ScalarCacheTests
 
-open Nightlean Nightlean.Backend Nightlean.Verification NativeRelation ScalarLowering ScalarCache
+open Noctium Noctium.Backend Noctium.Verification NativeRelation ScalarLowering ScalarCache
 
 /-- A cached hash key must point to the exact literal field domain. Operand
 decoding alone does not permit substituting an arbitrary domain operand. -/
@@ -21,10 +21,10 @@ example (left right output : String) (a b : Operand) :
     ¬ CacheCorresponds ("test_eq", [left, right], none) output (.mul a b output) := by
   simp [CacheCorresponds]
 
-#print axioms Nightlean.Verification.ScalarCache.cached_testEq_meaning
-#print axioms Nightlean.Verification.ScalarCache.cached_neg_meaning
-#print axioms Nightlean.Verification.ScalarCache.cached_not_meaning
-#print axioms Nightlean.Verification.ScalarCache.cached_select_meaning
-#print axioms Nightlean.Verification.ScalarCache.cached_hash_meaning
+#print axioms Noctium.Verification.ScalarCache.cached_testEq_meaning
+#print axioms Noctium.Verification.ScalarCache.cached_neg_meaning
+#print axioms Noctium.Verification.ScalarCache.cached_not_meaning
+#print axioms Noctium.Verification.ScalarCache.cached_select_meaning
+#print axioms Noctium.Verification.ScalarCache.cached_hash_meaning
 
 end ScalarCacheTests

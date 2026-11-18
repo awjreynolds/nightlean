@@ -7,8 +7,8 @@ python3 - <<'PY'
 from pathlib import Path
 import subprocess
 
-modules = sorted(".".join(path.with_suffix("").parts) for path in Path("Nightlean").rglob("*.lean"))
-subprocess.run(["lake", "build", "Nightlean", "noctium", "nightlean", *modules], check=True)
+modules = sorted(".".join(path.with_suffix("").parts) for path in Path("Noctium").rglob("*.lean"))
+subprocess.run(["lake", "build", "Noctium", "noctium", "noctium", *modules], check=True)
 for source in sorted(Path("tests").glob("*.lean")):
     print(f"Checking {source}", flush=True)
     subprocess.run(["lake", "env", "lean", str(source)], check=True)

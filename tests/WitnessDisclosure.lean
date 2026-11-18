@@ -1,6 +1,6 @@
-import Nightlean.Witness
+import Noctium.Witness
 
-open Nightlean Nightlean.Helpers
+open Noctium Noctium.Helpers
 
 namespace WitnessDisclosure
 

@@ -22,8 +22,8 @@
   {"name": "c2y", "kind": {"cell": "Native"}}],
  "schemaVersion": 1,
  "reads":
- [{"type": "Native", "name": "_nightlean_jubjub_point_recipient_0"},
-  {"type": "Native", "name": "_nightlean_jubjub_point_recipient_1"}],
+ [{"type": "Native", "name": "_noctium_jubjub_point_recipient_0"},
+  {"type": "Native", "name": "_noctium_jubjub_point_recipient_1"}],
  "operations":
  [{"storage": false,
    "op": "push",

@@ -13,7 +13,7 @@ pub const MAX_DECLARATIONS: usize = 1024;
 // Each checked layout/value node has fewer than sixteen JSON metadata nodes.
 // This bounds malformed syntax before semantic layout validation, without a depth cap.
 const MAX_JSON_NODES: usize = 16 * MAX_NODES + 16;
-pub const MAGIC: &[u8] = b"nightlean:aggregate:value:v1:";
+pub const MAGIC: &[u8] = b"noctium:aggregate:value:v1:";
 
 #[derive(Debug)]
 enum JsonNode {
@@ -880,7 +880,7 @@ impl Schema {
             }
         }
         let mut fingerprint = format!(
-            "NightleanCompositeTypeV1;{}NightleanCompositeLayoutV1;{};",
+            "NoctiumCompositeTypeV1;{}NoctiumCompositeLayoutV1;{};",
             type_encoding(&nodes, root)?,
             declarations.values().filter(|d| !d.is_enum).count()
         );
@@ -1851,13 +1851,13 @@ fn store(mut value: Vec<u8>) -> std::result::Result<u64, i32> {
     Ok(token)
 }
 #[unsafe(no_mangle)]
-pub extern "C" fn nightlean_aggregate_abi_version() -> u32 {
+pub extern "C" fn noctium_aggregate_abi_version() -> u32 {
     1
 }
 /// # Safety
 /// Borrowed inputs must be readable and output must be aligned writable storage, without overlap.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_aggregate_encode(
+pub unsafe extern "C" fn noctium_aggregate_encode(
     schema: *const u8,
     schema_length: usize,
     value: *const u8,
@@ -1883,7 +1883,7 @@ pub unsafe extern "C" fn nightlean_aggregate_encode(
 /// # Safety
 /// Borrowed inputs must be readable and output must be aligned writable storage, without overlap.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_aggregate_decode(
+pub unsafe extern "C" fn noctium_aggregate_decode(
     schema: *const u8,
     schema_length: usize,
     wire: *const u8,
@@ -1909,7 +1909,7 @@ pub unsafe extern "C" fn nightlean_aggregate_decode(
 /// # Safety
 /// out_length must be aligned writable storage for one size_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_aggregate_buffer_length(
+pub unsafe extern "C" fn noctium_aggregate_buffer_length(
     token: u64,
     out_length: *mut usize,
 ) -> i32 {
@@ -1928,7 +1928,7 @@ pub unsafe extern "C" fn nightlean_aggregate_buffer_length(
 /// # Safety
 /// Output storage must be writable, aligned and nonoverlapping. No partial copies are performed.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn nightlean_aggregate_buffer_copy(
+pub unsafe extern "C" fn noctium_aggregate_buffer_copy(
     token: u64,
     destination: *mut u8,
     capacity: usize,
@@ -1954,7 +1954,7 @@ pub unsafe extern "C" fn nightlean_aggregate_buffer_copy(
     })
 }
 #[unsafe(no_mangle)]
-pub extern "C" fn nightlean_aggregate_buffer_free(token: u64) -> i32 {
+pub extern "C" fn noctium_aggregate_buffer_free(token: u64) -> i32 {
     guard(|| {
         let mut value = buffers().data.remove(&token).ok_or(INVALID_HANDLE)?;
         value.zeroize();

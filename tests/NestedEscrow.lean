@@ -1,5 +1,5 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
 import Noctium.Frontend
 
 open scoped Noctium
@@ -66,7 +66,7 @@ private def nestedEscrowEntry : Noctium.Entrypoint :=
   | ep :: _ => ep
   | _ => {name := "missing", circuit := {name := "missing"}}
 
-#guard match Nightlean.Backend.Impact.lower NestedEscrow.state nestedEscrowEntry with
+#guard match Noctium.Backend.Impact.lower NestedEscrow.state nestedEscrowEntry with
   | .ok plan =>
       plan.reads.any (·.name == "ownerPresent") &&
       plan.reads.any (·.name == "recordPresent") &&
@@ -74,6 +74,6 @@ private def nestedEscrowEntry : Noctium.Entrypoint :=
       plan.operations.any (fun op => match op with | .newMap => _root_.Bool.true | _ => _root_.Bool.false)
   | .error _ => _root_.Bool.false
 
-#guard match Nightlean.Backend.Zkir.lowerEntrypoint NestedEscrow.state nestedEscrowEntry with
+#guard match Noctium.Backend.Zkir.lowerEntrypoint NestedEscrow.state nestedEscrowEntry with
   | .ok _ => _root_.Bool.true
   | .error _ => _root_.Bool.false

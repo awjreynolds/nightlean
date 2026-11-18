@@ -18,7 +18,7 @@ function compact(value){
 }
 const vector=values=>Buffer.concat([compact(values.length),...values.map(compact)]);
 const preimage=inputs=>{
- const key=Buffer.from('nightlean/zkir321/qualification');
+ const key=Buffer.from('noctium/zkir321/qualification');
  return Buffer.concat([Buffer.from('midnight:proof-preimage:'),vector(inputs),vector([]),vector([]),vector([]),compact(42),Buffer.from([0]),compact(key.length),key]);
 };
 const circuit=Zkir.fromJson(await readFile(new URL('./boolean-deserialization-contract.zkir',import.meta.url),'utf8'));

@@ -1,10 +1,10 @@
 import proofs.PrivateClaimLowering
 import proofs.PrivateClaimVerification
-import Nightlean.Verification.NativeStateJson
+import Noctium.Verification.NativeStateJson
 
 set_option maxRecDepth 10000
 set_option maxHeartbeats 4000000
-namespace Nightlean.PrivateClaimNativeState
+namespace Noctium.PrivateClaimNativeState
 open PrivateClaimProofs PrivateClaimLowering Verification.NativeRelation
 open Verification.NativeState
 private def ref := Operand.reference
@@ -40,13 +40,13 @@ def callProgram : Program := {
     .assert (ref "%v9"),
     .input .«public» "%input_storedRoot",
     .input .«public» "%input_storedCampaign",
-    .input .«public» "%input__nightlean_absence_5",
-    .boolean (ref "%input__nightlean_absence_5"),
+    .input .«public» "%input__noctium_absence_5",
+    .boolean (ref "%input__noctium_absence_5"),
     .testEq (ref "%input_storedRoot") (ref "%input_root") "%v10",
     .assert (ref "%v10"),
     .testEq (ref "%input_storedCampaign") (ref "%input_campaign") "%v11",
     .assert (ref "%v11"),
-    .testEq (ref "%input__nightlean_absence_5") (imm 0) "%v12",
+    .testEq (ref "%input__noctium_absence_5") (imm 0) "%v12",
     .assert (ref "%v12"),
     .impact (imm 1) [imm 16, imm 1, imm 1, imm 52435875175126190479447740508185965837690552500527637822603658699938581184511, ref "%input_root"],
     .impact (imm 1) [imm 12, imm 1, imm 52435875175126190479447740508185965837690552500527637822603658699938581184511, ref "%input_root"],
@@ -121,7 +121,7 @@ theorem scalar_projection (hash : Hash) (input : Inputs) (sr sc presence : Scala
     all_goals first | trivial | exact sat.instructions _ (by decide +kernel)
   · have hp := sat.publicInputs
     change [w "%input_root", w "%input_campaign", w "%input_suppliedNullifier",
-      w "%input_storedRoot", w "%input_storedCampaign", w "%input__nightlean_absence_5"] =
+      w "%input_storedRoot", w "%input_storedCampaign", w "%input__noctium_absence_5"] =
       [input.root, input.campaign, input.nullifier, sr, sc, presence] at hp
     have head := congrArg (List.take 3) hp
     exact head
@@ -221,7 +221,7 @@ theorem call_guards (hash : Hash) (input : Inputs) (sr sc presence : Scalar)
     (sat : CircuitSatisfies hash callProgram (callStreams input sr sc presence) w publicGroups) :
     w "%input_storedRoot" = w "%input_root" ∧
     w "%input_storedCampaign" = w "%input_campaign" ∧
-    w "%input__nightlean_absence_5" = zero := by
+    w "%input__noctium_absence_5" = zero := by
   refine ⟨?_, ?_, ?_⟩
   · exact test_eq_assert_sound _ _ _
       (sat.instructions (.testEq (ref "%input_storedRoot") (ref "%input_root") "%v10") (by simp [callProgram]))
@@ -230,7 +230,7 @@ theorem call_guards (hash : Hash) (input : Inputs) (sr sc presence : Scalar)
       (sat.instructions (.testEq (ref "%input_storedCampaign") (ref "%input_campaign") "%v11") (by simp [callProgram]))
       (sat.instructions (.assert (ref "%v11")) (by simp [callProgram]))
   · exact test_eq_assert_sound _ _ _
-      (sat.instructions (.testEq (ref "%input__nightlean_absence_5") (imm 0) "%v12") (by simp [callProgram]))
+      (sat.instructions (.testEq (ref "%input__noctium_absence_5") (imm 0) "%v12") (by simp [callProgram]))
       (sat.instructions (.assert (ref "%v12")) (by simp [callProgram]))
 
 /-- Universal native VM preservation. No source success, honest read provider,
@@ -333,7 +333,7 @@ def callWitness (hash : Hash) (input : Inputs) : Assignment := fun name =>
   match name with
   | "%input_storedRoot" => input.root
   | "%input_storedCampaign" => input.campaign
-  | "%input__nightlean_absence_5" => zero
+  | "%input__noctium_absence_5" => zero
   | "%v10" | "%v11" | "%v12" | "%v13" => one
   | _ => computedWitness hash input name
 
@@ -535,4 +535,4 @@ theorem eligible_admitted_complete (ctx : EvalContext) (hash : Hash) (agreement 
 #print axioms native_replay_rejected
 #print axioms invariant_preserved
 #print axioms public_transcript_preserved
-end Nightlean.PrivateClaimNativeState
+end Noctium.PrivateClaimNativeState

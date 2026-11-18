@@ -1,6 +1,6 @@
-import Nightlean.Verification
+import Noctium.Verification
 
-open Nightlean Nightlean.Verification
+open Noctium Noctium.Verification
 
 namespace VerificationFixture
 
@@ -93,10 +93,10 @@ run_cmd do
     | .ok _ => throwError "untrusted axiom accepted"
 
 #guard_msgs (drop info) in
-#nightlean_register_functional functional for policy
+#noctium_register_functional functional for policy
 
 #guard_msgs (drop info) in
-#nightlean_register_privacy privacy for policy
+#noctium_register_privacy privacy for policy
 
 #print axioms functional
 #print axioms privacy

@@ -1,7 +1,7 @@
 import proofs.PrivateClaim
-import Nightlean.Verification
+import Noctium.Verification
 
-namespace Nightlean.PrivateClaimVerification
+namespace Noctium.PrivateClaimVerification
 open PrivateClaimProofs Verification
 
 /-- Accepted executions establish authorization even when Pre does not assume it. -/
@@ -219,9 +219,9 @@ theorem privacy : PrivacyObligation policy := by
   change claimEntry.run ctx (inputEnvironment leftInput) _ = claimEntry.run ctx (inputEnvironment rightInput) _
   rw [leftSuccess, rightSuccess, outputsEq, afterEq]
 
-#nightlean_register_functional functional for policy
-#nightlean_register_privacy privacy for policy
+#noctium_register_functional functional for policy
+#noctium_register_privacy privacy for policy
 #print axioms functional
 #print axioms privacy
 
-end Nightlean.PrivateClaimVerification
+end Noctium.PrivateClaimVerification

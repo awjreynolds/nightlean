@@ -94,5 +94,12 @@
     "unitAndUInt255RejectedInvalidFirstIndex": true,
     "validChainsAccepted": true,
     "priorFailureReproduced": true
-  }
+  },
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "0e86812a15a8748b074063bb7ec2416a5b3da0d142d57585c544762a8045f6f0",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/composite-values/qualification-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/composite-values/qualification-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

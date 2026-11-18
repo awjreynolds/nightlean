@@ -14,7 +14,7 @@ Install the pinned Lean toolchain, Rust 1.100.0, Node.js, Git, and a native C bu
 lake build
 npm ci --prefix scripts/zkir --ignore-scripts
 npm ci --prefix scripts/preview --ignore-scripts
-node scripts/zkir/bootstrap-native.mjs /private/tmp/nightlean-native-zkir
+node scripts/zkir/bootstrap-native.mjs /private/tmp/noctium-native-zkir
 node scripts/localnet/stack.mjs up
 mkdir -p build/native-claim
 node scripts/localnet/ledger-parameters.mjs build/native-claim/ledger.params
@@ -26,7 +26,7 @@ The bootstrap builds the official independent ZKIR 3.2.0 CLI from pinned source 
 
 ```sh
 .lake/build/bin/noctium compile examples/PrivateClaim.lean --output build/native-claim/source
-/private/tmp/nightlean-native-zkir/bin/zkir compile build/native-claim/source/PrivateClaim.claim.zkir build/native-claim/claim.prover build/native-claim/claim.verifier
+/private/tmp/noctium-native-zkir/bin/zkir compile build/native-claim/source/PrivateClaim.claim.zkir build/native-claim/claim.prover build/native-claim/claim.verifier
 node scripts/zkir/claim-config.mjs build/native-claim/inputs.json
 node scripts/zkir/native-contract.mjs build/native-claim/source/PrivateClaim.claim.impact.json build/native-claim/source/PrivateClaim.claim.zkir build/native-claim/claim.prover build/native-claim/claim.verifier build/native-claim/artifacts --ledger-params build/native-claim/ledger.params --config build/native-claim/inputs.json --prove
 node scripts/localnet/deploy-native.mjs build/native-claim/artifacts build/native-claim/local
@@ -36,7 +36,7 @@ The config generator uses publicly known development values: secret 42, campaign
 
 `--prove` is optional. It creates a diagnostic standalone proof with binding input 42. The funded transaction runner creates its own correctly bound proof and does not reuse that diagnostic proof. Proving requests contain witnesses, so the optional proof-server override accepts HTTP or HTTPS on loopback only and refuses credentials and redirects.
 
-If SDK dependencies are installed outside `scripts/preview`, set `NIGHTLEAN_WALLET_DEPENDENCIES` to their package directory before running `deploy-native.mjs`. The qualified setup used `/private/tmp/nightlean-preview-wallet`.
+If SDK dependencies are installed outside `scripts/preview`, set `NOCTIUM_WALLET_DEPENDENCIES` to their package directory before running `deploy-native.mjs`. The qualified setup used `/private/tmp/noctium-preview-wallet`.
 
 ## Emitted artifacts and validation
 

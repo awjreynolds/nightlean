@@ -11,7 +11,7 @@
     "releaseLabel": "3.2.1",
     "expectedCliVersion": "3.2.0",
     "version": "midnight-zkir 3.2.0",
-    "binary": "/private/tmp/nightlean-native-zkir-321/bin/zkir",
+    "binary": "/private/tmp/noctium-native-zkir-321/bin/zkir",
     "binarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
     "cargoLockSha256": "f6044eb43d4d8e6f2ed3dab33cb8f70fe1a59784fcc987e18aef4dab46a16c6b",
     "command": "cargo +1.100.0 build --release --locked --package midnight-zkir --features binary"
@@ -147,5 +147,12 @@
     "compactCompilerOrRuntimeInvoked": false,
     "publicNetworkQualified": false,
     "wholeLanguageQualified": false
-  }
+  },
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "8f23652e457ce27dacd2d288ca2c26cd391b2f1140c20400a9ae24b05fa94afc",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/zkir321/qualification-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/zkir321/qualification-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

@@ -9,7 +9,7 @@
       "runtime/src/native_client.rs": "0bfe522518b797843f7613b112c571d63d60af038dd02893adfa8ab336c5999b",
       "runtime/src/localnet_ffi.rs": "82112c85c2f9507347112396bf3663b536f523ece527a174694e368d122a63f6",
       "runtime/src/native_ffi.rs": "c9a7d7f8bbb867d09232eca1ec3d8c5f99c40f457f808a48a7eb3609e0ab617e",
-      "runtime/include/nightlean_native.h": "d3b84495a55ed71f296e66b0a4cc28d1e5613e9a63d97c0a55bfb61d343bc11b",
+      "runtime/include/noctium_native.h": "d3b84495a55ed71f296e66b0a4cc28d1e5613e9a63d97c0a55bfb61d343bc11b",
       "runtime/tests/native_client_cpp_smoke.cpp": "5247282b6b2d5864c29b96c842b0a55a10247f0a6276d304d987fa3fd0475fb0",
       "runtime/tests/native_client_ffi.rs": "1b88f2683316f450d684281574221cb174cee8a317c00e6759a9600184e760fa",
       "runtime/src/lib.rs": "8b897f2b2be9cd58ba549a66d8272d9f8fea8c7be5be0604d78089c12d4e456f",
@@ -278,5 +278,12 @@
     "320Recovered": "89e0853696d3e76bd56ca07c633baa8f8d7ee61f3503f7d886fcb8ba6a7b22d6",
     "321FreshRun": "9f155312ae38c945958a99994775ec94c565e740337aa78d076f697f0915da9a",
     "321Recovered": "3a7644b56b25f4cb1f413d0693678a06e88b2dcc9357c158b87c0cedfa465a6f"
-  }
+  },
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "f10abec4c1776010e61758090f517658beef17dd0532718b02625249678dcd9d",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/native-client-abi-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/native-client-abi-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

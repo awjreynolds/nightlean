@@ -1,10 +1,10 @@
 import proofs.PrivateClaimNativeState
-import Nightlean.Verification.NativePrivacy
+import Noctium.Verification.NativePrivacy
 
 set_option maxRecDepth 10000
 set_option maxHeartbeats 8000000
 
-namespace Nightlean.PrivateClaimNativePrivacy
+namespace Noctium.PrivateClaimNativePrivacy
 open PrivateClaimProofs PrivateClaimLowering PrivateClaimNativeState
 open Verification Verification.NativeRelation Verification.NativeState Verification.NativePrivacy
 
@@ -428,4 +428,4 @@ theorem exact_artifact_composition {Bytes Build : Type} (sourceIdentity : String
 #print axioms symmetric_eligible_native_pair
 #print axioms exact_artifact_composition
 #print axioms wrong_scope_rejected
-end Nightlean.PrivateClaimNativePrivacy
+end Noctium.PrivateClaimNativePrivacy

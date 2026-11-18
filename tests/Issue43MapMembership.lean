@@ -1,16 +1,16 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue43MapMembership where
+noctium_circuit issue43MapMembership where
   public account : Native
   public proposed : Native
 end
 
-nightlean_contract Issue43MapMembership where
+noctium_contract Issue43MapMembership where
   map balances : Native => Native
   entry initOnce uses issue43MapMembership where
     insert balances[8] := 99

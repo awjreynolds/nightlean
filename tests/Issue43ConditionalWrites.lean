@@ -1,16 +1,16 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue43ConditionalWrites where
+noctium_circuit issue43ConditionalWrites where
   private enabled : Bool
   public account : Native
 end
 
-nightlean_contract Issue43ConditionalWrites where
+noctium_contract Issue43ConditionalWrites where
   cell current : Native
   map allowances : Native => Native
   entry apply uses issue43ConditionalWrites where

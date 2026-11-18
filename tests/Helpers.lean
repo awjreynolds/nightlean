@@ -1,6 +1,6 @@
-import Nightlean.Helpers
-import Nightlean.Backend.Zkir
-open Nightlean Nightlean.Helpers
+import Noctium.Helpers
+import Noctium.Backend.Zkir
+open Noctium Noctium.Helpers
 
 private def accepted (value : Except α β) : Bool := match value with | .ok _ => true | _ => false
 private def rejected (value : Except α β) : Bool := !accepted value

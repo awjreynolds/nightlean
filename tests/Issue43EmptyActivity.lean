@@ -1,12 +1,12 @@
-import Nightlean.Frontend
+import Noctium.Frontend
 
-open scoped Nightlean
+open scoped Noctium
 
-nightlean_circuit issue43PrivateOnly where
+noctium_circuit issue43PrivateOnly where
   private enabled : Bool
 end
 
-nightlean_contract Issue43EmptyActivity where
+noctium_contract Issue43EmptyActivity where
   cell current : Native
   map allowances : Native => Native
   entry apply uses issue43PrivateOnly where

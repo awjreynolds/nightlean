@@ -78,7 +78,7 @@ const calls = [];
 for (const direction0 of [0n, 1n]) {
   const privateValues = [secret, sibling0, sibling1, direction0, 1n];
   const prototype = new ledger.ContractCallPrototype(address, 'claim', operation, guaranteed, fallible,
-    privateValues.map(field), empty, empty, randomness, 'nightlean/privacy-pair');
+    privateValues.map(field), empty, empty, randomness, 'noctium/privacy-pair');
   const intent = parentIntent.addCall(prototype);
   const action = intent.actions[0];
   assert.ok(action instanceof ledger.ContractCall);

@@ -8,11 +8,11 @@
     "testedSnapshot": "/private/tmp/noctium-component44-isolated-867v0mk0",
     "issue64WorktreeExcluded": true,
     "sourceSha256": {
-      "Nightlean/Helpers.lean": "cecef66645fcab26542eb4f09c721377f207a4af3803b88da06376b9bf55394a",
-      "Nightlean/Control.lean": "4364c8c190a79a30f560749bfe3af4ae38ecc3edcf45199391468616d1dc88c0",
-      "Nightlean/Frontend.lean": "26d635738a439f6cef8500e79ead642b9449d858b8ab68f614785c6fb609eac9",
-      "Nightlean/Compiler.lean": "9dbffaa5e49437ef4230cab513273450200ac231b3b0c143373209c0a089bcb8",
-      "Nightlean/ComponentDisclosure.lean": "bb72a2e901b4d87ecf729e39d4357009cddd44c109bd1869c3e4ef07e492ecb6",
+      "Noctium/Helpers.lean": "cecef66645fcab26542eb4f09c721377f207a4af3803b88da06376b9bf55394a",
+      "Noctium/Control.lean": "4364c8c190a79a30f560749bfe3af4ae38ecc3edcf45199391468616d1dc88c0",
+      "Noctium/Frontend.lean": "26d635738a439f6cef8500e79ead642b9449d858b8ab68f614785c6fb609eac9",
+      "Noctium/Compiler.lean": "9dbffaa5e49437ef4230cab513273450200ac231b3b0c143373209c0a089bcb8",
+      "Noctium/ComponentDisclosure.lean": "bb72a2e901b4d87ecf729e39d4357009cddd44c109bd1869c3e4ef07e492ecb6",
       "tests/ComponentDisclosure.lean": "e5ec2f9ef66b23ba5cfdd20e43486e9b7a163ec67d95f8ffa8b79b65ae4bb69e",
       "tests/component-disclosure-cli.sh": "78f91e3f7a4a5b6f1d0480a5e09e2aa98888816be1e56c2e73718bbca45c34ee",
       "scripts/check-lean.sh": "d4bc2f8ffa8a89e76ac52aa01d0cf96ae3e5255a87342b5648d1f878bd1046eb",
@@ -33,7 +33,7 @@
     },
     "publicationWhitespaceFinalization": {
       "changes": {
-        "Nightlean/ComponentDisclosure.lean": {
+        "Noctium/ComponentDisclosure.lean": {
           "before": "9b2799b238dd5fe32cfcbb7c3389e88246414142f29da53231b3c5a2c0486f6e",
           "after": "bb72a2e901b4d87ecf729e39d4357009cddd44c109bd1869c3e4ef07e492ecb6"
         },
@@ -94,5 +94,12 @@
     "combinedLeanAndSourceCliChecksPassed": true,
     "combinedLog": "/private/tmp/noctium-combined44-64-source-check.log",
     "combinedLogSha256": "c9682198f8d05672729003beed6ab15cfb3058c1fdec205d95463a8fe031ac78"
-  }
+  },
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "dcf9511c855d4d129102ed851a0904baa4e52c7cc53e4d5636336f54e19d307b",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/component-disclosure-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/component-disclosure-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

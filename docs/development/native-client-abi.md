@@ -17,13 +17,13 @@ cargo +1.100.0 build --manifest-path runtime/Cargo.toml --locked --lib --feature
 cargo +1.100.0 build --manifest-path runtime/Cargo.toml --locked --lib --no-default-features --features zkir-321,localnet
 ```
 
-Include [`nightlean_native.h`](../../runtime/include/nightlean_native.h), link `libnightlean_runtime`, and call the `nightlean_client_*` functions for phase B. The header documents descriptor fields, request correlation, token ownership, limits, and localnet helper configuration. [`native_client_cpp_smoke.cpp`](../../runtime/tests/native_client_cpp_smoke.cpp) is the linked qualification host. Its `run` mode writes a private recovery reference for a second process; keep that file private. Its `recover` mode needs the public descriptor, localnet configuration, and that private reference. The complete two-process run also needs the retained public bundle, private proof configuration, trusted SRS, and funded isolated localnet. The evidence file records the qualified inputs by digest without publishing private configuration or journal contents.
+Include [`noctium_native.h`](../../runtime/include/noctium_native.h), link `libnoctium_runtime`, and call the `noctium_client_*` functions for phase B. The header documents descriptor fields, request correlation, token ownership, limits, and localnet helper configuration. [`native_client_cpp_smoke.cpp`](../../runtime/tests/native_client_cpp_smoke.cpp) is the linked qualification host. Its `run` mode writes a private recovery reference for a second process; keep that file private. Its `recover` mode needs the public descriptor, localnet configuration, and that private reference. The complete two-process run also needs the retained public bundle, private proof configuration, trusted SRS, and funded isolated localnet. The evidence file records the qualified inputs by digest without publishing private configuration or journal contents.
 
 Compile the checked-in host against the library built for the same profile:
 
 ```sh
 clang++ -std=c++17 -Wall -Wextra -Werror runtime/tests/native_client_cpp_smoke.cpp \
-  -L"$LIBDIR" -lnightlean_runtime -Wl,-rpath,"$LIBDIR" \
+  -L"$LIBDIR" -lnoctium_runtime -Wl,-rpath,"$LIBDIR" \
   -o /tmp/noctium-native-client-cpp
 
 /tmp/noctium-native-client-cpp run PROOF_DESCRIPTOR PRIVATE_CONFIG TRUSTED_SRS \

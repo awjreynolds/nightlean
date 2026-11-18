@@ -1,17 +1,17 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.NativeExpected
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.NativeExpected
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Lean Nightlean
+open scoped Noctium
+open Lean Noctium
 
-nightlean_circuit issue43GuardedReads where
+noctium_circuit issue43GuardedReads where
   public account : Native
   public enabled : Bool
 end
 
-nightlean_contract Issue43GuardedReads where
+noctium_contract Issue43GuardedReads where
   cell marker : Native
   map balances : Native => Native
   entry update uses issue43GuardedReads where

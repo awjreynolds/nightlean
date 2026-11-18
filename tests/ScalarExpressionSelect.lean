@@ -1,7 +1,7 @@
-import Nightlean.Verification.ScalarExpressionSelect
+import Noctium.Verification.ScalarExpressionSelect
 
 namespace ScalarExpressionSelectTests
-open Nightlean Nightlean.Verification ScalarLowering
+open Noctium Noctium.Verification ScalarLowering
 open ScalarExpressionSelect ScalarExpressionArithmetic
 
 example : ExprComplete (.select (.bool true) (.native 9) (.native 2)) :=
@@ -18,5 +18,5 @@ example : (Expr.select (.bool true) (.uint 3 1) (.cast (.uint 3) (.native 4))).e
 
 example : (Expr.select (.bool false) (.native 9) (.native 2)).eval ctx [] = .ok 2 := rfl
 
-#print axioms Nightlean.Verification.ScalarExpressionSelect.exprComplete_select
+#print axioms Noctium.Verification.ScalarExpressionSelect.exprComplete_select
 end ScalarExpressionSelectTests

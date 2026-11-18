@@ -1,16 +1,16 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue69Bytes32Register where
+noctium_circuit issue69Bytes32Register where
   public probe : Bytes32
   private account : Bytes32
 end
 
-nightlean_contract Issue69Bytes32Map where
+noctium_contract Issue69Bytes32Map where
   map registered : Bytes32 => Bool
   entry register uses issue69Bytes32Register where
     member registered[probe] as existed
@@ -43,7 +43,7 @@ private def issue69Bytes32CastRejected : Expr .native :=
   | .error message => message == "byte strings do not support scalar casts"
   | .ok _ => Bool.false
 
-nightlean_circuit issue69Bytes32Equality where
+noctium_circuit issue69Bytes32Equality where
   private left : Bytes32
   private right : Bytes32
   output same : Bool := disclose(eq(left, right))

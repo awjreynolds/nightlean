@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-cli="$PWD/.lake/build/bin/nightlean"
+cli="$PWD/.lake/build/bin/noctium"
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 
@@ -28,9 +28,9 @@ deepStrictEqual(circuit.instructions.at(-1).op, 'output');
 JS
 
 cat > "$scratch/invalid.lean" <<'LEAN'
-import Nightlean.Frontend
-open scoped Nightlean
-nightlean_circuit bad where
+import Noctium.Frontend
+open scoped Noctium
+noctium_circuit bad where
   private unused : UInt 249
 end
 LEAN

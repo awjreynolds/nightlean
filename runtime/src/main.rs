@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::hash::HashOutput;
 use coin_structure::contract::ContractAddress;
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, LEDGER_REVISION, Plan, ZKIR_REVISION, check, create_state, environment,
     parse_private_config, prepare,
 };
@@ -24,12 +24,12 @@ fn run() -> Result<()> {
         args.len() == 1
             || args.len() == 3 && args[1] == "--write-checker-preimage"
             || args.len() == 4 && args[1] == "--check-state" && args[3] == "--expect-rejection",
-        "usage: nightlean-runtime ARTIFACT_DIRECTORY [--write-checker-preimage PRIVATE_FILE | --check-state STATE.bin --expect-rejection]"
+        "usage: noctium-runtime ARTIFACT_DIRECTORY [--write-checker-preimage PRIVATE_FILE | --check-state STATE.bin --expect-rejection]"
     );
     let directory = Path::new(&args[0]);
     let plan: Plan = load(&directory.join("source-plan.json"))?;
     ensure!(
-        nightlean_runtime::profile::validate_plan(
+        noctium_runtime::profile::validate_plan(
             plan.target.as_deref(),
             plan.target_profile.as_ref()
         ),
@@ -48,7 +48,7 @@ fn run() -> Result<()> {
     );
     let parameters = tagged_deserialize(fs::read(directory.join("ledger.params"))?.as_slice())
         .context("invalid ledger parameters")?;
-    let ir = nightlean_runtime::zkir::IrSource::load(fs::File::open(
+    let ir = noctium_runtime::zkir::IrSource::load(fs::File::open(
         directory
             .join("zkir")
             .join(format!("{}.zkir", plan.entrypoint)),
@@ -161,7 +161,7 @@ fn run() -> Result<()> {
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({
-            "runtime":"native Rust","nodeInvoked":false,"ledgerRevision":LEDGER_REVISION,"zkirRevision":ZKIR_REVISION,"zkirRelease":nightlean_runtime::profile::RELEASE,"runtimeProfile":nightlean_runtime::profile::ABI,
+            "runtime":"native Rust","nodeInvoked":false,"ledgerRevision":LEDGER_REVISION,"zkirRevision":ZKIR_REVISION,"zkirRelease":noctium_runtime::profile::RELEASE,"runtimeProfile":noctium_runtime::profile::ABI,
             "scope":"plan evaluation, native state/transcripts, budgeting, checker preimage, official circuit checking; no proof or transaction submission",
             "initialStateMatches":true,"predictedStateMatches":true,"predictedStateSha256":hex::encode(Sha256::digest(&predicted_bytes)),
             "operations":execution.program.len(),"activityGroups":activity.len(),"privateInputCount":execution.preimage.private_transcript.len(),
@@ -174,7 +174,7 @@ fn run() -> Result<()> {
 }
 fn main() {
     if let Err(error) = run() {
-        eprintln!("nightlean-runtime: {error:#}");
+        eprintln!("noctium-runtime: {error:#}");
         std::process::exit(1);
     }
 }

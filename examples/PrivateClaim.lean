@@ -1,9 +1,9 @@
-import Nightlean.Frontend
-open scoped Nightlean
+import Noctium.Frontend
+open scoped Noctium
 
 /- Two-level claim fixture. The path depth is a workload parameter. Domain tags
-1/2/3 are Nightlean application choices, not Midnight protocol constants. -/
-nightlean_circuit claimRelation where
+1/2/3 are Noctium application choices, not Midnight protocol constants. -/
+noctium_circuit claimRelation where
   public root : Native
   public campaign : Native
   public suppliedNullifier : Native
@@ -25,7 +25,7 @@ nightlean_circuit claimRelation where
   output nullifier : Native := suppliedNullifier
 end
 
-nightlean_contract PrivateClaim where
+noctium_contract PrivateClaim where
   cell acceptedRoot : Native
   cell campaignId : Native
   map spent : Native => Bool

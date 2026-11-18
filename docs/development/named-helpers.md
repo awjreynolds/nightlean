@@ -1,7 +1,7 @@
 # Typed named helpers
 
 Issue 41 uses structured Lean source declarations, without a Compact dependency.
-`Nightlean.Helpers.Program` contains lexical scopes, typed named declarations and
+`Noctium.Helpers.Program` contains lexical scopes, typed named declarations and
 monomorphic exports. `noctium_helper_circuit name from program entry "export"`
 checks and registers an export in the existing frontend. Existing
 `noctium_contract` entries then use the resulting circuit normally.
@@ -14,7 +14,7 @@ with a native state-cell write.
 
 ```lean
 import Noctium.Frontend
-open Nightlean.Helpers
+open Noctium.Helpers
 
 def arithmeticHelpers : Program := {
   declarations := [{
@@ -177,8 +177,8 @@ step against the same cache with:
 cargo +1.100.0 run --manifest-path runtime/Cargo.toml --locked \
   --no-default-features --features zkir-321 \
   --example qualify_helper_parameters -- \
-  /private/tmp/nightlean-proof-params/bls_midnight_2p5 \
-  /private/tmp/nightlean-proof-params/bls_midnight_2p4
+  /private/tmp/noctium-proof-params/bls_midnight_2p5 \
+  /private/tmp/noctium-proof-params/bls_midnight_2p4
 ```
 
 The 6,532-byte parent SHA-256 is
@@ -193,14 +193,14 @@ Regenerate source artifacts through the matching target:
 ```sh
 lake exe noctium compile tests/HelperSource.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
-  --output /private/tmp/nightlean-helper-source-321
+  --output /private/tmp/noctium-helper-source-321
 ```
 
 Generate the relation keys with the pinned 3.2.1 tool and the prepared parameter
 cache. Run `node tests/helpers/qualify.mjs DIRECTORY PINNED_CHECKER_MODULE check`
 for checker cases, or replace `check` with `prove` after key generation.
 Proof mode uses the local proof service at `http://127.0.0.1:16300` by default.
-`NIGHTLEAN_PROOF_SERVER` selects another loopback service. The qualification
-service used `/private/tmp/nightlean-proof-params` as its host parameter cache.
+`NOCTIUM_PROOF_SERVER` selects another loopback service. The qualification
+service used `/private/tmp/noctium-proof-params` as its host parameter cache.
 See the [matching native profile instructions](zkir-3.2.1-integrated.md) for
 profile and tool identity requirements.

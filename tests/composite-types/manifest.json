@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "status": "source-layout-model-only",
-  "layoutProfile": "NightleanCompositeLayoutV1",
+  "layoutProfile": "NoctiumCompositeLayoutV1",
   "localLimits": {
     "maxDeclarations": 1024,
     "maxVectorLength": 1024,
@@ -18,17 +18,17 @@
   },
   "scalarLeaves": {
     "native": {
-      "logicalType": "Nightlean.Ty.native",
+      "logicalType": "Noctium.Ty.native",
       "fieldSlots": 1,
       "constraint": "canonical field element below pinned field modulus"
     },
     "bool": {
-      "logicalType": "Nightlean.Ty.bool",
+      "logicalType": "Noctium.Ty.bool",
       "fieldSlots": 1,
       "constraint": "field element is exactly 0 or 1"
     },
     "uint": {
-      "logicalType": "Nightlean.Ty.uint(maximum)",
+      "logicalType": "Noctium.Ty.uint(maximum)",
       "fieldSlots": 1,
       "constraint": "field element is at most inclusive maximum"
     },

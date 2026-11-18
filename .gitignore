@@ -5,7 +5,7 @@ node_modules/
 __pycache__/
 /scripts/proofs/artifact-json-native/target/
 build/
-.nightlean/
+.noctium/
 .env
 .env.*
 *.prover

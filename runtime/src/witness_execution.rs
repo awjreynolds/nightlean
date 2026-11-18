@@ -52,12 +52,12 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::State => f.write_str("nightlean_witness_execution_state"),
-            Self::ResourceLimit => f.write_str("nightlean_witness_execution_limit"),
-            Self::InvalidArtifacts => f.write_str("nightlean_witness_execution_artifacts"),
-            Self::InvalidSource => f.write_str("nightlean_witness_execution_source"),
+            Self::State => f.write_str("noctium_witness_execution_state"),
+            Self::ResourceLimit => f.write_str("noctium_witness_execution_limit"),
+            Self::InvalidArtifacts => f.write_str("noctium_witness_execution_artifacts"),
+            Self::InvalidSource => f.write_str("noctium_witness_execution_source"),
             Self::InvalidClientDescriptor => {
-                f.write_str("nightlean_witness_execution_client_descriptor")
+                f.write_str("noctium_witness_execution_client_descriptor")
             }
             Self::Proof(error) => error.fmt(f),
             Self::Client(error) => error.fmt(f),
@@ -783,8 +783,8 @@ mod tests {
     const TTL: u64 = 2_000_000_000;
 
     fn fixture_env(name: &str) -> String {
-        std::env::var(format!("NIGHTLEAN_WITNESS_PUBLIC_{name}"))
-            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_WITNESS_PUBLIC_{name}"))
+        std::env::var(format!("NOCTIUM_WITNESS_PUBLIC_{name}"))
+            .unwrap_or_else(|_| panic!("missing NOCTIUM_WITNESS_PUBLIC_{name}"))
     }
 
     fn test_context(plan: &Json, attempt_id: &str) -> host::Context {
@@ -850,20 +850,20 @@ mod tests {
             .into_iter()
             .map(|(id, (key_prefix, operations))| Capability {
                 id,
-                namespace: "nightlean".into(),
+                namespace: "noctium".into(),
                 key_prefix,
                 operations: operations.into_iter().collect(),
             })
             .collect::<Vec<_>>();
         capabilities.push(Capability {
             id: "commit".into(),
-            namespace: "nightlean".into(),
+            namespace: "noctium".into(),
             key_prefix: "cache/".into(),
             operations: vec![host::CAS.into()],
         });
         Context {
             protocol_version: 1,
-            namespace: "nightlean".into(),
+            namespace: "noctium".into(),
             base_revision: "preview-r0".into(),
             attempt_id: attempt_id.into(),
             capabilities,

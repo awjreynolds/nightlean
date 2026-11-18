@@ -50,7 +50,7 @@ const operations = plan.operations.map(op => {
 const relation = Zkir.fromJson(JSON.stringify(circuit));
 const provider = {lookupKey: async () => ({ir: relation.serialize(), proverKey: new Uint8Array(), verifierKey: new Uint8Array()})};
 const preimage = ops => ledger.proofDataIntoSerializedPreimage(empty, empty, ops,
-  [secret, sibling0, sibling1, 0n, 1n].map(field), 'nightlean/state-preservation');
+  [secret, sibling0, sibling1, 0n, 1n].map(field), 'noctium/state-preservation');
 const activity = await check(preimage(operations), provider);
 assert.equal(activity.length, 21);
 assert.ok(activity.every(group => group === undefined || group === null), "every native group must be active");

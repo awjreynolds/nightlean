@@ -9,7 +9,7 @@
   {"type": "Native", "name": "suppliedNullifier"},
   {"type": "Native", "name": "storedRoot"},
   {"type": "Native", "name": "storedCampaign"},
-  {"type": "Bool", "name": "_nightlean_absence_5"}],
+  {"type": "Bool", "name": "_noctium_absence_5"}],
  "operations":
  [{"storage": false,
    "op": "push",
@@ -76,7 +76,7 @@
    "left": {"tag": "reference", "name": "storedCampaign"}},
   {"tag": "eq",
    "right": {"value": false, "tag": "bool"},
-   "left": {"tag": "reference", "name": "_nightlean_absence_5"}}],
+   "left": {"tag": "reference", "name": "_noctium_absence_5"}}],
  "entrypoint": "claim",
  "contractName": "PrivateClaim",
  "circuit":

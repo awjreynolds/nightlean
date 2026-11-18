@@ -4,7 +4,7 @@ import { Zkir, check } from '@midnightntwrk/zkir-v3';
 import { maxField, createProvingPayload } from '@midnight-ntwrk/ledger-v9';
 import { createHash } from 'node:crypto';
 
-const proofServer = new URL(process.env.NIGHTLEAN_PROOF_SERVER ?? 'http://127.0.0.1:16300');
+const proofServer = new URL(process.env.NOCTIUM_PROOF_SERVER ?? 'http://127.0.0.1:16300');
 if (!['http:', 'https:'].includes(proofServer.protocol) ||
     !['127.0.0.1', 'localhost', '[::1]'].includes(proofServer.hostname) ||
     proofServer.username || proofServer.password) {
@@ -43,7 +43,7 @@ if (args.length !== 5) {
 } else {
   try {
     const spec = JSON.parse(await readFile(args[3], 'utf8'));
-    const key = Buffer.from('nightlean/standalone-relation');
+    const key = Buffer.from('noctium/standalone-relation');
     // Mirrors pinned ledger9 ProofPreimage struct and SCALE serialization.
     // Public vectors here are synthetic relation statements, not encoded ledger operations.
     const serialized = Buffer.concat([

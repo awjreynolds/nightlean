@@ -1,7 +1,7 @@
-import Nightlean.Verification.ScalarExpressionAssertion
+import Noctium.Verification.ScalarExpressionAssertion
 
 namespace ScalarExpressionAssertionTests
-open Nightlean Nightlean.Verification ScalarLowering
+open Noctium Noctium.Verification ScalarLowering
 open ScalarExpressionAssertion ScalarExpressionArithmetic
 
 example : ExprComplete (.assertE (.bool true) (.native 9)) :=
@@ -19,5 +19,5 @@ example : (Expr.assertE (.bool false) (.usub (.uint 7 1) (.uint 7 2))).eval ctx 
 example : (Expr.assertE (.bool true) (.usub (.uint 7 1) (.uint 7 2))).eval ctx [] =
     .error "unsigned subtraction underflow" := rfl
 
-#print axioms Nightlean.Verification.ScalarExpressionAssertion.exprComplete_assertE
+#print axioms Noctium.Verification.ScalarExpressionAssertion.exprComplete_assertE
 end ScalarExpressionAssertionTests

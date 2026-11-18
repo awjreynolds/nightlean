@@ -7,7 +7,7 @@ import { createKeystore, PublicKey, UnshieldedWallet } from '@midnightntwrk/wall
 import { NoOpTransactionHistoryStorage, ProtocolVersion } from '@midnightntwrk/wallet-sdk-abstractions';
 import { WebSocket } from 'ws';
 
-export async function loadPreviewIdentity(directory = process.env.NIGHTLEAN_WALLET_DIR ?? '/private/tmp/nightlean-preview-wallet') {
+export async function loadPreviewIdentity(directory = process.env.NOCTIUM_WALLET_DIR ?? '/private/tmp/noctium-preview-wallet') {
   directory = resolve(directory);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await chmod(directory, 0o700);

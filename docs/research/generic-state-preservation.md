@@ -57,9 +57,9 @@ git clone https://github.com/awjreynolds/noctium.git noctium-generic-state66
 cd noctium-generic-state66
 git checkout 675ac782161d61af501dea04c4e214643e091014
 bash scripts/check-lean.sh
-lake env leanexport Nightlean.Verification.GenericStateProofRoles -- \
-  Nightlean.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound \
-  Nightlean.Verification.GenericStateConverseCompleteness.accepted_entrypoint_run_complete \
+lake env leanexport Noctium.Verification.GenericStateProofRoles -- \
+  Noctium.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound \
+  Noctium.Verification.GenericStateConverseCompleteness.accepted_entrypoint_run_complete \
   propext Classical.choice Quot.sound > /tmp/generic-state-model.ndjson
 python3 scripts/proofs/check-generic-state-proof-audit.py \
   --output-dir /tmp/generic-state-audit \

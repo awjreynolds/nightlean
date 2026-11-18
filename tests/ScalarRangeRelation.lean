@@ -1,10 +1,10 @@
-import Nightlean.Verification.NativeRelationJson
+import Noctium.Verification.NativeRelationJson
 
 namespace ScalarRangeRelationTests
 
 open Lean
-open Nightlean.Verification.NativeRelation
-open Nightlean.Verification.NativeRelationJson
+open Noctium.Verification.NativeRelation
+open Noctium.Verification.NativeRelationJson
 
 private def nativeType : Json := toJson ("Scalar<BLS12-381>" : String)
 
@@ -23,24 +23,24 @@ private def rangeFixture : Json := root [
     ("output", toJson ("%v0" : String))],
   instruction "output" [("vals", toJson (["%v0"] : List String))]]
 
-#guard match Nightlean.Verification.NativeRelationJson.decode rangeFixture with
+#guard match Noctium.Verification.NativeRelationJson.decode rangeFixture with
   | .ok program => match program.instructions with
     | [.bits (.reference value) 8, .lessThan (.reference left) (.immediate bound) 8 output,
        .output [.reference returned]] =>
       value == "%input_value" && left == value && bound.val == 10 &&
       output == "%v0" && returned == output &&
-      (Nightlean.Verification.NativeRelationJson.encode program).compress == rangeFixture.compress
+      (Noctium.Verification.NativeRelationJson.encode program).compress == rangeFixture.compress
     | _ => false
   | .error _ => false
 
-#guard match Nightlean.Verification.NativeRelationJson.decode (root [
+#guard match Noctium.Verification.NativeRelationJson.decode (root [
     instruction "constrain_bits" [("val", toJson ("%v0" : String)), ("bits", toJson (0 : Nat))]]) with
   | .error _ => true
   | .ok _ => false
 
-#guard match Nightlean.Verification.NativeRelationJson.decode (root [
+#guard match Noctium.Verification.NativeRelationJson.decode (root [
     instruction "less_than" [("a", toJson ("%a" : String)), ("b", toJson ("%b" : String)),
-      ("bits", toJson (Nightlean.ScalarPolicy.maxBits + 1)), ("output", toJson ("%v0" : String))]]) with
+      ("bits", toJson (Noctium.ScalarPolicy.maxBits + 1)), ("output", toJson ("%v0" : String))]]) with
   | .error _ => true
   | .ok _ => false
 

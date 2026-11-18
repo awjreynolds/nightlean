@@ -63,7 +63,7 @@ Required follow-on work includes compiler/lowering soundness, canonical state/en
 
 ## Actual-source policy and export audit
 
-`proofs/PrivateClaimVerification.lean` binds `Nightlean.PrivateClaimVerification.policy` to the imported actual `PrivateClaim` contract and entrypoint index zero. Its `functional` and `privacy` theorems have the exact `FunctionalObligation policy` and `PrivacyObligation policy` types. Both register through the source proof registry. Their direct transitive axiom reports contain only `propext`, `Classical.choice` and `Quot.sound`.
+`proofs/PrivateClaimVerification.lean` binds `Noctium.PrivateClaimVerification.policy` to the imported actual `PrivateClaim` contract and entrypoint index zero. Its `functional` and `privacy` theorems have the exact `FunctionalObligation policy` and `PrivacyObligation policy` types. Both register through the source proof registry. Their direct transitive axiom reports contain only `propext`, `Classical.choice` and `Quot.sound`.
 
 The reviewed predicates separate accepted-execution safety from progress:
 
@@ -83,7 +83,7 @@ Run fresh source compilation, proof export, kernel replay, direct axiom checks a
 python3 scripts/proofs/check-private-claim-audit.py
 ```
 
-The script compiles the actual source and both proof modules into a temporary import directory. Source filenames stay relative to the repository. It retains model/proof NDJSON bytes, the SHA256 pin, direct axiom reports, checker JSON and negative-test evidence under `.nightlean/audits/private-claim-source/`. It supplies the retained model hash separately to `audit-source-proof.py`. The trusted checker starts from an empty environment, replays the exported kernel terms, checks the exact obligation types and rejects any changed declaration shared with the pinned model.
+The script compiles the actual source and both proof modules into a temporary import directory. Source filenames stay relative to the repository. It retains model/proof NDJSON bytes, the SHA256 pin, direct axiom reports, checker JSON and negative-test evidence under `.noctium/audits/private-claim-source/`. It supplies the retained model hash separately to `audit-source-proof.py`. The trusted checker starts from an empty environment, replays the exported kernel terms, checks the exact obligation types and rejects any changed declaration shared with the pinned model.
 
 The default run treats its fresh baseline as trusted for this regression only. It does not authenticate a human specification review. After reviewing and retaining a model export, supply its independently recorded pin explicitly:
 

@@ -1,8 +1,8 @@
-import Nightlean.Verification.ScalarRangeLowering
+import Noctium.Verification.ScalarRangeLowering
 
 namespace ScalarRangeLoweringTests
 
-open Lean Nightlean Nightlean.Backend Nightlean.Verification
+open Lean Noctium Noctium.Backend Noctium.Verification
 open NativeRelation ScalarRangeLowering ScalarWitness
 
 example (state : Zkir.LowerState) (text : String) :
@@ -41,7 +41,7 @@ example (hash : Hash) (witness : Assignment) (maximum number : Nat)
       trivial (by intro instruction member; cases member)
   exact ⟨afterWitness, instructions, decoded, holds, frame⟩
 
-#print axioms Nightlean.Verification.ScalarRangeLowering.constrainUnsigned_complete
-#print axioms Nightlean.Verification.ScalarRangeLowering.nonpower_decode
+#print axioms Noctium.Verification.ScalarRangeLowering.constrainUnsigned_complete
+#print axioms Noctium.Verification.ScalarRangeLowering.nonpower_decode
 
 end ScalarRangeLoweringTests

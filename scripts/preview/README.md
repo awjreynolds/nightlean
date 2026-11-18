@@ -10,7 +10,7 @@ node scripts/preview/wallet.mjs
 node scripts/preview/wallet.mjs --balance
 ```
 
-The default wallet directory is `/private/tmp/nightlean-preview-wallet`, with directory mode `0700` and seed mode `0600`. Set `NIGHTLEAN_WALLET_DIR` to a durable private directory before the first invocation if the wallet must survive temporary-directory cleanup. Reuse the same directory for every run. Do not copy the seed into the repository.
+The default wallet directory is `/private/tmp/noctium-preview-wallet`, with directory mode `0700` and seed mode `0600`. Set `NOCTIUM_WALLET_DIR` to a durable private directory before the first invocation if the wallet must survive temporary-directory cleanup. Reuse the same directory for every run. Do not copy the seed into the repository.
 
 The faucet is <https://midnight-tmnight-preview.nethermind.dev/>. Submit the printed `mn_addr_preview` address and complete its CAPTCHA. The official procedure requires an unshielded address. After funding, NIGHT still needs registration for DUST generation before contract deployment. This read-only helper does not perform registration.
 
@@ -23,7 +23,7 @@ node scripts/preview/wallet-full.mjs
 node scripts/preview/wallet-full.mjs --register-dust
 ```
 
-The first command only synchronizes. The second submits registration only when funded unregistered NIGHT UTXOs exist, after the SDK estimates the fee and waits for enough retroactive DUST. Keep a local proof server running, with `NIGHTLEAN_PROOF_SERVER` set if its URL differs from `http://127.0.0.1:16300`. The Preview wallet must finish its full history sync before registration. On 2026-11-16 the empty project wallet reached protocol `2001100`, with zero NIGHT and DUST. Registration and deployment were not attempted.
+The first command only synchronizes. The second submits registration only when funded unregistered NIGHT UTXOs exist, after the SDK estimates the fee and waits for enough retroactive DUST. Keep a local proof server running, with `NOCTIUM_PROOF_SERVER` set if its URL differs from `http://127.0.0.1:16300`. The Preview wallet must finish its full history sync before registration. On 2026-11-16 the empty project wallet reached protocol `2001100`, with zero NIGHT and DUST. Registration and deployment were not attempted.
 
 For the separate funded development chain, use `wallet-local.mjs` after starting the [Noctium localnet](../localnet/README.md). This identity belongs to the published development genesis and must never be used on Preview or another public network. The local helper verifies the exact genesis and runtime before deriving the public test identity.
 

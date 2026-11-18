@@ -90,7 +90,7 @@ function compact(value) {
 
 const vector = values => Buffer.concat([compact(values.length), ...values.map(compact)]);
 function serializedPreimage(circuit, witness) {
-  const key = Buffer.from(`nightlean/issue43/${circuit}`);
+  const key = Buffer.from(`noctium/issue43/${circuit}`);
   return Buffer.concat([
     Buffer.from('midnight:proof-preimage:'),
     vector(witness.inputs),

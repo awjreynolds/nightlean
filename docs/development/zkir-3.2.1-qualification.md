@@ -19,14 +19,14 @@ The tagged `zkir/Cargo.toml` still declares `version = "3.2.0"`. A clean native 
 Build the new version in a separate directory:
 
 ```sh
-RUSTUP_HOME=/private/tmp/nightlean-rustup \
-CARGO_HOME=/private/tmp/nightlean-cargo \
-NIGHTLEAN_CARGO=/private/tmp/nightlean-cargo/bin/cargo \
-CARGO_TARGET_DIR=/private/tmp/nightlean-zkir-321-build \
-node scripts/zkir/bootstrap-native.mjs --version 3.2.1 /private/tmp/nightlean-native-zkir-321
+RUSTUP_HOME=/private/tmp/noctium-rustup \
+CARGO_HOME=/private/tmp/noctium-cargo \
+NOCTIUM_CARGO=/private/tmp/noctium-cargo/bin/cargo \
+CARGO_TARGET_DIR=/private/tmp/noctium-zkir-321-build \
+node scripts/zkir/bootstrap-native.mjs --version 3.2.1 /private/tmp/noctium-native-zkir-321
 ```
 
-The existing positional-directory invocation still selects 3.2.0. `--version` accepts only the two known source pins. Omitting the directory selects a separate default directory for each version. `NIGHTLEAN_ZKIR_SOURCE` still requires the exact selected revision and clean tracked source. The manifest records requested release, actual CLI version, source revision, binary hash and lockfile hash. A compatibility run rebuilt 3.2.0 into `/private/tmp/nightlean-bootstrap-compat-320` and retained executable SHA-256 `2664d4d6f97c04e882b4208b9926f27f1e1d03082ca508e69f0145c491aa694a`. The existing `/private/tmp/nightlean-native-zkir` executable retained the same hash.
+The existing positional-directory invocation still selects 3.2.0. `--version` accepts only the two known source pins. Omitting the directory selects a separate default directory for each version. `NOCTIUM_ZKIR_SOURCE` still requires the exact selected revision and clean tracked source. The manifest records requested release, actual CLI version, source revision, binary hash and lockfile hash. A compatibility run rebuilt 3.2.0 into `/private/tmp/noctium-bootstrap-compat-320` and retained executable SHA-256 `2664d4d6f97c04e882b4208b9926f27f1e1d03082ca508e69f0145c491aa694a`. The existing `/private/tmp/noctium-native-zkir` executable retained the same hash.
 
 ## Patch regressions
 
@@ -41,7 +41,7 @@ The Boolean deserialization correction belongs to Compact 0.36.1 lowering, separ
 Run the checker fixtures after downloading and verifying the official release asset:
 
 ```sh
-node tests/zkir321/check-fixtures.mjs /private/tmp/nightlean-zkir321-wasm/package/midnight_zkir_wasm_fs.js
+node tests/zkir321/check-fixtures.mjs /private/tmp/noctium-zkir321-wasm/package/midnight_zkir_wasm_fs.js
 ```
 
 ## Existing Native/Bool claim
@@ -61,8 +61,8 @@ Run the independent new checker against assembled artifacts:
 
 ```sh
 node tests/zkir321/check-native-claim.mjs \
-  /private/tmp/nightlean-zkir321-wasm/package/midnight_zkir_wasm_fs.js \
-  /private/tmp/nightlean-zkir321-qualification/artifacts
+  /private/tmp/noctium-zkir321-wasm/package/midnight_zkir_wasm_fs.js \
+  /private/tmp/noctium-zkir321-qualification/artifacts
 ```
 
 The local ledger run uses the existing isolated Noctium development node on port 19944 and proof server on port 16300. Its genesis is `0x823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d`, runtime spec 2001100, transaction version 4. The published development wallet funds the run. No authzk service or wallet is changed.
@@ -76,7 +76,7 @@ The node finalized a fresh deployment and claim for contract `39a612eb9b2ec02391
 
 The fetched post-claim state exactly matches predicted bytes, SHA-256 `d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3`. Five changes to the secret, Merkle path, direction, root and nullifier failed the official checker before submission. Replay failed the host's absent-key guard against the fetched spent state. No replay transaction was submitted. A second state fetch confirmed unchanged ledger bytes.
 
-The first funding attempt used the existing helper's default 20 RPC fetch workers to replay 981 historical blocks. The isolated node hit its 3 GiB container memory limit, with Docker `OOMKilled=true` and exit 137 at `2026-11-16T15:33:04.187093465Z`. The existing node was restarted once with its chain state preserved. A temporary qualification harness reused the already generated deploy transaction, reduced fetch/compute/replay concurrency to two, and used a separate persistent qualification cache. That run produced the receipts above. This bounded harness changed no tracked deployment helper. The successful replay cache is `/private/tmp/nightlean-zkir321-qualification/localnet/qualification-fetch.db`. Future long-history runs should bound toolkit fetch concurrency rather than repeat the 20-worker in-memory scan.
+The first funding attempt used the existing helper's default 20 RPC fetch workers to replay 981 historical blocks. The isolated node hit its 3 GiB container memory limit, with Docker `OOMKilled=true` and exit 137 at `2026-11-16T15:33:04.187093465Z`. The existing node was restarted once with its chain state preserved. A temporary qualification harness reused the already generated deploy transaction, reduced fetch/compute/replay concurrency to two, and used a separate persistent qualification cache. That run produced the receipts above. This bounded harness changed no tracked deployment helper. The successful replay cache is `/private/tmp/noctium-zkir321-qualification/localnet/qualification-fetch.db`. Future long-history runs should bound toolkit fetch concurrency rather than repeat the 20-worker in-memory scan.
 
 ## Qualification boundary
 

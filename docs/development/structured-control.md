@@ -110,10 +110,10 @@ native circuits:
 ```sh
 lake exe noctium compile tests/ControlSource.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
-  --output /private/tmp/nightlean-control-source
+  --output /private/tmp/noctium-control-source
 ```
 
-This source emits eleven `.control.json` files. `nightlean.json` lists their
+This source emits eleven `.control.json` files. `noctium.json` lists their
 filenames under `hostControlPlans` and records `nativeGuardQualified: false`.
 Named calls refer to a typed function table. Exporting the plan never duplicates
 callee subtrees. Declarations retain lexical identities, overload resolution,
@@ -239,9 +239,9 @@ cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
 ```
 
 Build the matching native library before compiling the C++ smoke program.
-Link `runtime/tests/control_cpp_smoke.cpp` against `nightlean_runtime`, then pass
+Link `runtime/tests/control_cpp_smoke.cpp` against `noctium_runtime`, then pass
 `conditionalProviders.control.json` and `activeFailure.control.json` as the two
 arguments. The public ABI is documented in
-[nightlean_control.h](../../runtime/include/nightlean_control.h). Fixture
+[noctium_control.h](../../runtime/include/noctium_control.h). Fixture
 callbacks and their values are public synthetic test data. Production callback
 registrations and private inputs stay under the embedding host's control.

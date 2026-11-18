@@ -4,7 +4,7 @@ use futures::{
     future::{pending, ready},
 };
 use ledger::structure::{ContractAction, ProofVersioned};
-use nightlean_runtime::{
+use noctium_runtime::{
     artifacts,
     assembly::NativeIntent,
     proof::{
@@ -77,7 +77,7 @@ fn parameter_identity_and_fixed_errors_reject_without_echoing_private_values() {
         assert!(!format!("{error:#} {error:?}").contains("SENTINEL"));
     }
     let error = ServiceError;
-    assert_eq!(format!("{error}"), "nightlean_proof_service_failure");
+    assert_eq!(format!("{error}"), "noctium_proof_service_failure");
 }
 
 #[test]
@@ -121,11 +121,11 @@ fn authenticated_malformed_parameters_reject_before_unchecked_native_read() {
 fn authenticated_malformed_keys_reject_before_private_input() {
     use artifacts::{Manifest, Role};
     use midnight_zk_stdlib::Relation;
-    let source = std::path::PathBuf::from(std::env::var("NIGHTLEAN_TEST_BUNDLE").unwrap());
+    let source = std::path::PathBuf::from(std::env::var("NOCTIUM_TEST_BUNDLE").unwrap());
     let manifest: Manifest =
         serde_json::from_slice(&fs::read(source.join("manifest.json")).unwrap()).unwrap();
     let root = std::env::temp_dir().join(format!(
-        "nightlean-malformed-key-{}",
+        "noctium-malformed-key-{}",
         rand::Rng::r#gen::<u64>(&mut OsRng)
     ));
     fs::create_dir(&root).unwrap();
@@ -189,7 +189,7 @@ fn authenticated_malformed_keys_reject_before_private_input() {
                 .iter()
                 .find(|entry| entry.role == Role::Circuit)
                 .unwrap();
-            let circuit = nightlean_runtime::zkir::IrSource::load(
+            let circuit = noctium_runtime::zkir::IrSource::load(
                 fs::read(source.join(&circuit_entry.path))
                     .unwrap()
                     .as_slice(),
@@ -254,12 +254,12 @@ fn authenticated_malformed_keys_reject_before_private_input() {
 #[test]
 #[ignore = "requires authenticated source claim bundle, private config, and trusted native SRS"]
 fn actual_source_claim_proves_verifies_and_attaches_without_subprocesses() {
-    let root = std::env::var("NIGHTLEAN_TEST_BUNDLE").unwrap();
-    let digest = std::env::var("NIGHTLEAN_TEST_MANIFEST_SHA256").unwrap();
-    let config = fs::read(std::env::var("NIGHTLEAN_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
+    let root = std::env::var("NOCTIUM_TEST_BUNDLE").unwrap();
+    let digest = std::env::var("NOCTIUM_TEST_MANIFEST_SHA256").unwrap();
+    let config = fs::read(std::env::var("NOCTIUM_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
     let parameter_bytes =
-        fs::read(std::env::var("NIGHTLEAN_TEST_PROOF_PARAMETERS").unwrap()).unwrap();
-    let parameter_digest = std::env::var("NIGHTLEAN_TEST_PROOF_PARAMETERS_SHA256").unwrap();
+        fs::read(std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS").unwrap()).unwrap();
+    let parameter_digest = std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS_SHA256").unwrap();
     let integrity_only = artifacts::verify(root.as_ref(), None).unwrap();
     assert_eq!(
         PreparedProof::from_config(
@@ -297,7 +297,7 @@ fn actual_source_claim_proves_verifies_and_attaches_without_subprocesses() {
         Some(Error::InvalidParameters)
     );
     assert!(prepared.deployment_intent().is_some());
-    assert_eq!(prepared.profile(), nightlean_runtime::profile::NAME);
+    assert_eq!(prepared.profile(), noctium_runtime::profile::NAME);
 
     // An already-triggered stop prevents the service from seeing private material.
     let response = Response::new(vec![]);
@@ -334,7 +334,7 @@ fn actual_source_claim_proves_verifies_and_attaches_without_subprocesses() {
 
     let local = LocalProver::new(OsRng);
     let proved = block_on(prepared.prove(&local, &params, 1_048_576, pending())).unwrap();
-    let roundtrip: nightlean_runtime::proof::ProvedNativeIntent =
+    let roundtrip: noctium_runtime::proof::ProvedNativeIntent =
         tagged_deserialize(proved.serialized()).unwrap();
     assert_eq!(encoded(&roundtrip), proved.serialized());
     let ContractAction::Call(call) = proved.native().actions.iter_deref().next().unwrap() else {
@@ -345,7 +345,7 @@ fn actual_source_claim_proves_verifies_and_attaches_without_subprocesses() {
     };
     let wire = encoded(&ProofVersioned::V2(proof.clone()));
     let public_bytes = proved.public_serialized().unwrap();
-    let public: nightlean_runtime::proof::PublicProvedNativeIntent =
+    let public: noctium_runtime::proof::PublicProvedNativeIntent =
         tagged_deserialize(public_bytes.as_slice()).unwrap();
     assert_eq!(encoded(&public), public_bytes);
     assert_eq!(

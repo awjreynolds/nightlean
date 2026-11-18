@@ -1,5 +1,5 @@
 //! Source-backed native state effects and adversarial transcript bindings.
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, Expr, Instruction, Plan, check, create_state, field_decimal, field_value, prepare,
     zkir::IrSource,
 };
@@ -125,7 +125,7 @@ fn initial_state(plan: &Plan) -> ChargedState<Db> {
     .expect("source schema creates typed native state")
 }
 
-fn prepare_source(plan: &Plan, state: &ChargedState<Db>) -> nightlean_runtime::Execution {
+fn prepare_source(plan: &Plan, state: &ChargedState<Db>) -> noctium_runtime::Execution {
     prepare(
         plan,
         &BTreeMap::new(),

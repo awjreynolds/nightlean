@@ -1,4 +1,4 @@
-use nightlean_runtime::{
+use noctium_runtime::{
     control::{Response, Session},
     host,
 };
@@ -221,57 +221,57 @@ fn missing_inactive_registration_and_raised_fuel_are_rejected() {
 }
 
 fn abi_take(token: u64, private: bool) -> Json {
-    use nightlean_runtime::control_ffi::*;
+    use noctium_runtime::control_ffi::*;
     let mut length = 0;
     let mut written = 0;
     if private {
         assert_eq!(
-            unsafe { nightlean_control_result_length(token, &mut length) },
+            unsafe { noctium_control_result_length(token, &mut length) },
             INVALID_HANDLE
         );
         assert_eq!(
-            unsafe { nightlean_control_private_length(token, &mut length) },
+            unsafe { noctium_control_private_length(token, &mut length) },
             OK
         );
     } else {
         assert_eq!(
-            unsafe { nightlean_control_result_length(token, &mut length) },
+            unsafe { noctium_control_result_length(token, &mut length) },
             OK
         );
     }
     let mut bytes = vec![0; length];
     let status = unsafe {
         if private {
-            nightlean_control_private_copy(token, bytes.as_mut_ptr(), length, &mut written)
+            noctium_control_private_copy(token, bytes.as_mut_ptr(), length, &mut written)
         } else {
-            nightlean_control_result_copy(token, bytes.as_mut_ptr(), length, &mut written)
+            noctium_control_result_copy(token, bytes.as_mut_ptr(), length, &mut written)
         }
     };
     assert_eq!(status, OK);
     assert_eq!(written, length);
     assert_eq!(
         if private {
-            nightlean_control_private_free(token)
+            noctium_control_private_free(token)
         } else {
-            nightlean_control_result_free(token)
+            noctium_control_result_free(token)
         },
         OK
     );
     serde_json::from_slice(&bytes).unwrap()
 }
 fn abi_drive(source: Json) -> (Json, Json, Vec<String>) {
-    use nightlean_runtime::control_ffi::*;
+    use noctium_runtime::control_ffi::*;
     let envelope = json!({"abiVersion":1,"plan":source,"inputs":{},"hostContext":context_json(source["witnesses"].as_array().unwrap())});
     let bytes = serde_json::to_vec(&envelope).unwrap();
     let mut handle = 0;
     assert_eq!(
-        unsafe { nightlean_control_begin(bytes.as_ptr(), bytes.len(), &mut handle) },
+        unsafe { noctium_control_begin(bytes.as_ptr(), bytes.len(), &mut handle) },
         OK
     );
     let mut calls = vec![];
     let result = loop {
         let mut token = 0;
-        assert_eq!(unsafe { nightlean_control_advance(handle, &mut token) }, OK);
+        assert_eq!(unsafe { noctium_control_advance(handle, &mut token) }, OK);
         let result = abi_take(token, false);
         if result["status"] != "need_host" {
             break result;
@@ -288,18 +288,18 @@ fn abi_drive(source: Json) -> (Json, Json, Vec<String>) {
         };
         let bytes=serde_json::to_vec(&json!({"abiVersion":1,"requestId":request["id"],"operation":request["operation"],"capability":request["capability"],"schema":request["schema"],"value":value})).unwrap();
         assert_eq!(
-            unsafe { nightlean_control_resume(handle, bytes.as_ptr(), bytes.len(), &mut token) },
+            unsafe { noctium_control_resume(handle, bytes.as_ptr(), bytes.len(), &mut token) },
             OK
         );
         abi_take(token, false);
     };
     let mut token = 0;
     assert_eq!(
-        unsafe { nightlean_control_private_trace(handle, &mut token) },
+        unsafe { noctium_control_private_trace(handle, &mut token) },
         OK
     );
     let trace = abi_take(token, true);
-    assert_eq!(nightlean_control_free(handle), OK);
+    assert_eq!(noctium_control_free(handle), OK);
     (result, trace, calls)
 }
 fn context_json(witnesses: &[Json]) -> Json {
@@ -562,7 +562,7 @@ fn direct_stage_rejects_unauthorized_keys_and_cancelled_invocations() {
 
 #[test]
 fn control_abi_clears_outputs_and_checks_handles_and_copy_capacity() {
-    use nightlean_runtime::control_ffi::*;
+    use noctium_runtime::control_ffi::*;
     let source = plan(vec![ret(c(1))], vec![]);
     let bytes = serde_json::to_vec(
         &json!({"abiVersion":1,"plan":source,"inputs":{},"hostContext":context_json(&[])}),
@@ -570,44 +570,44 @@ fn control_abi_clears_outputs_and_checks_handles_and_copy_capacity() {
     .unwrap();
     let mut session = 99;
     assert_eq!(
-        unsafe { nightlean_control_begin(std::ptr::null(), 1, &mut session) },
+        unsafe { noctium_control_begin(std::ptr::null(), 1, &mut session) },
         INVALID_ARGUMENT
     );
     assert_eq!(session, 0);
     assert_eq!(
-        unsafe { nightlean_control_begin(bytes.as_ptr(), bytes.len(), &mut session) },
+        unsafe { noctium_control_begin(bytes.as_ptr(), bytes.len(), &mut session) },
         OK
     );
     let mut token = 99;
     assert_eq!(
-        unsafe { nightlean_control_advance(session, &mut token) },
+        unsafe { noctium_control_advance(session, &mut token) },
         OK
     );
     let mut length = 0;
     assert_eq!(
-        unsafe { nightlean_control_result_length(token, &mut length) },
+        unsafe { noctium_control_result_length(token, &mut length) },
         OK
     );
     let mut buffer = vec![0; length];
     let mut written = 99;
     assert_eq!(
         unsafe {
-            nightlean_control_result_copy(token, buffer.as_mut_ptr(), length - 1, &mut written)
+            noctium_control_result_copy(token, buffer.as_mut_ptr(), length - 1, &mut written)
         },
         BUFFER_TOO_SMALL
     );
     assert_eq!(written, 0);
     assert_eq!(
-        unsafe { nightlean_control_result_copy(token, buffer.as_mut_ptr(), length, &mut written) },
+        unsafe { noctium_control_result_copy(token, buffer.as_mut_ptr(), length, &mut written) },
         OK
     );
     assert_eq!(written, length);
-    assert_eq!(nightlean_control_result_free(token), OK);
-    assert_eq!(nightlean_control_result_free(token), INVALID_HANDLE);
-    assert_eq!(nightlean_control_free(session), OK);
+    assert_eq!(noctium_control_result_free(token), OK);
+    assert_eq!(noctium_control_result_free(token), INVALID_HANDLE);
+    assert_eq!(noctium_control_free(session), OK);
     token = 99;
     assert_eq!(
-        unsafe { nightlean_control_advance(session, &mut token) },
+        unsafe { noctium_control_advance(session, &mut token) },
         INVALID_HANDLE
     );
     assert_eq!(token, 0);

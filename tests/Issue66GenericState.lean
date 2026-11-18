@@ -1,19 +1,19 @@
-import Nightlean.Frontend
-import Nightlean.Backend.Zkir
-import Nightlean.Verification.GenericStateOps
-import Nightlean.Verification.GenericStateEncoding
-import Nightlean.Verification.GenericStateInputValues
-import Nightlean.Verification.NativeRelationJson
+import Noctium.Frontend
+import Noctium.Backend.Zkir
+import Noctium.Verification.GenericStateOps
+import Noctium.Verification.GenericStateEncoding
+import Noctium.Verification.GenericStateInputValues
+import Noctium.Verification.NativeRelationJson
 
-open scoped Nightlean
-open Nightlean Nightlean.Verification
-open Nightlean.Verification.NativeRelation
-open Nightlean.Verification.NativeState
+open scoped Noctium
+open Noctium Noctium.Verification
+open Noctium.Verification.NativeRelation
+open Noctium.Verification.NativeState
 
-nightlean_circuit issue66Empty where
+noctium_circuit issue66Empty where
 end
 
-nightlean_contract Issue66MixedState where
+noctium_contract Issue66MixedState where
   cell counter : Native
   cell flag : Bool
   cell quota : UInt 5
@@ -136,11 +136,11 @@ private def issue66GuardsHold (witness : Assignment) : _root_.Bool :=
 
 #guard issue66GuardsHold issue66Witness
 #guard decide (issue66NativeRun (fun name =>
-  if name.startsWith "%input__nightlean_absence_" then one
+  if name.startsWith "%input__noctium_absence_" then one
   else issue66Witness name) =
     some ⟨[.vector issue66FinalSlots], issue66ExpectedReads⟩)
 #guard !issue66GuardsHold (fun name =>
-  if name.startsWith "%input__nightlean_absence_" then one
+  if name.startsWith "%input__noctium_absence_" then one
   else issue66Witness name)
 
 private def issue66NativeRunMutated (change : List Op → List Op) :

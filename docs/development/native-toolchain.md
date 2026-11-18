@@ -22,19 +22,19 @@ The untouched upstream workspace built in 1 minute 48 seconds with four jobs. Ca
 Install Rust 1.100.0 and a native C build toolchain. The verified host had Xcode's Apple Clang 21 and CMake available. Then run:
 
 ```sh
-node scripts/zkir/bootstrap-native.mjs /private/tmp/nightlean-native-zkir
+node scripts/zkir/bootstrap-native.mjs /private/tmp/noctium-native-zkir
 ```
 
-The helper clones the independent upstream source, checks its exact revision and tracked-file cleanliness, builds with the lockfile, checks the CLI version, and writes `bin/zkir` plus `build-manifest.json` under the supplied directory. Set `NIGHTLEAN_ZKIR_SOURCE` to reuse an existing clean checkout at the pinned revision. `NIGHTLEAN_CARGO` chooses the Cargo executable.
+The helper clones the independent upstream source, checks its exact revision and tracked-file cleanliness, builds with the lockfile, checks the CLI version, and writes `bin/zkir` plus `build-manifest.json` under the supplied directory. Set `NOCTIUM_ZKIR_SOURCE` to reuse an existing clean checkout at the pinned revision. `NOCTIUM_CARGO` chooses the Cargo executable.
 
 The verified session installed Rust into isolated temporary directories without changing the user's PATH or global Rust setup. The official Apple ARM64 rustup installer had SHA-256 `63752a1919a3a4793173ec70f8f212621a7ce38ba6a246095984482f4de20f9f`, matching the [official installer checksum](https://static.rust-lang.org/rustup/dist/aarch64-apple-darwin/rustup-init.sha256). With that isolated installation, the tested bootstrap command was:
 
 ```sh
-RUSTUP_HOME=/private/tmp/nightlean-rustup \
-CARGO_HOME=/private/tmp/nightlean-cargo \
-NIGHTLEAN_CARGO=/private/tmp/nightlean-cargo/bin/cargo \
-NIGHTLEAN_ZKIR_SOURCE=/private/tmp/nightlean-backend-spike/midnight-zkir \
-node scripts/zkir/bootstrap-native.mjs /private/tmp/nightlean-native-zkir
+RUSTUP_HOME=/private/tmp/noctium-rustup \
+CARGO_HOME=/private/tmp/noctium-cargo \
+NOCTIUM_CARGO=/private/tmp/noctium-cargo/bin/cargo \
+NOCTIUM_ZKIR_SOURCE=/private/tmp/noctium-backend-spike/midnight-zkir \
+node scripts/zkir/bootstrap-native.mjs /private/tmp/noctium-native-zkir
 ```
 
 This source checkout belongs to the independent upstream ZKIR repository. The script does not invoke another source-language compiler. Its build command is:
@@ -48,11 +48,11 @@ cargo +1.100.0 build --release --locked --package midnight-zkir --features binar
 The independently built CLI compiled the private-claim entrypoint with `k=9` and `rows=297`:
 
 ```sh
-MIDNIGHT_PP=/private/tmp/nightlean-proof-params \
-/private/tmp/nightlean-native-zkir/bin/zkir compile \
-  /private/tmp/nightlean-native-contract/zkir/claim.zkir \
-  /private/tmp/nightlean-independent-keys/claim.prover \
-  /private/tmp/nightlean-independent-keys/claim.verifier
+MIDNIGHT_PP=/private/tmp/noctium-proof-params \
+/private/tmp/noctium-native-zkir/bin/zkir compile \
+  /private/tmp/noctium-native-contract/zkir/claim.zkir \
+  /private/tmp/noctium-independent-keys/claim.prover \
+  /private/tmp/noctium-independent-keys/claim.verifier
 ```
 
 | Output | SHA-256 |

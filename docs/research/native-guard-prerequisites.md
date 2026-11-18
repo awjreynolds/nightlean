@@ -15,7 +15,7 @@ ZKIR=/path/to/pinned-zkir-3.2.1/bin/zkir
 CHECKER=/path/to/zkir-v3-3.2.1/package/midnight_zkir_wasm_fs.js
 CHECKER_WASM=/path/to/zkir-v3-3.2.1/package/midnight_zkir_wasm_bg.wasm
 PARAMS=/path/to/verified-midnight-parameters
-ARTIFACTS="$(mktemp -d /tmp/nightlean-guarded-native.XXXXXX)"
+ARTIFACTS="$(mktemp -d /tmp/noctium-guarded-native.XXXXXX)"
 
 cp tests/guarded-native-prerequisites/*.zkir "$ARTIFACTS/"
 for circuit in guarded-impact input-guards private-input-guard; do

@@ -1,5 +1,5 @@
-import Nightlean.Verification.ArtifactBytes
-open Lean Nightlean.Verification.ArtifactBytes
+import Noctium.Verification.ArtifactBytes
+open Lean Noctium.Verification.ArtifactBytes
 
 example : parse [32, 9, 10, 13, 91, 48, 44, 49, 50, 44, 116, 114, 117, 101, 44, 110, 117, 108, 108, 93, 32] =
     .ok (.arr #[toJson (0 : Nat), toJson (12 : Nat), .bool true, .null]) := by rfl

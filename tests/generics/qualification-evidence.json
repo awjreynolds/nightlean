@@ -5,9 +5,9 @@
     "commit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba",
     "tree": "40efd98f9e2dbd6161ac3914f0bddf670343e42c",
     "sourceSha256": {
-      "Nightlean/Helpers/Specialization.lean": "b30729dd4d3ffcfb6eb46bf8296ced18642ce9238f523ea3aa0a7cf79f4b5a4c",
-      "Nightlean/Frontend.lean": "fa55d1d6a2ebaf3e73cb06ddfa23416bee20a385711eaeb3d449170532f8842b",
-      "Nightlean/Compiler.lean": "c528bdecbce1471f0495331c687653b5dfd5598441d9d9e6bc53002e44baf7c4",
+      "Noctium/Helpers/Specialization.lean": "b30729dd4d3ffcfb6eb46bf8296ced18642ce9238f523ea3aa0a7cf79f4b5a4c",
+      "Noctium/Frontend.lean": "fa55d1d6a2ebaf3e73cb06ddfa23416bee20a385711eaeb3d449170532f8842b",
+      "Noctium/Compiler.lean": "c528bdecbce1471f0495331c687653b5dfd5598441d9d9e6bc53002e44baf7c4",
       "tests/GenericSpecialization.lean": "c4f0ceb1086840bdd7c68c0ab01e276211c2bd49ca9fdb61b89b1f6e99141e88",
       "tests/generics/Native.lean": "f1d7d3c48c8244d6bb581e08a68f983f2ea92d4d80af4fef7f23d28a5cb77e98",
       "tests/generics/cases.json": "c6fa9ade72a34d008b54358997492b21713b704d79d4a365944fedd09e584e08",
@@ -51,7 +51,7 @@
         "exitCode": 0
       },
       {
-        "command": "node scripts/zkir/check-scalar-cases.mjs <profile-321 dir> /private/tmp/nightlean-zkir321-wasm/package/midnight_zkir_wasm_fs.js tests/generics/cases.json",
+        "command": "node scripts/zkir/check-scalar-cases.mjs <profile-321 dir> /private/tmp/noctium-zkir321-wasm/package/midnight_zkir_wasm_fs.js tests/generics/cases.json",
         "exitCode": 0,
         "cases": 6,
         "positiveAccepted": 2,
@@ -81,7 +81,7 @@
           "bytes": 531,
           "sha256": "b0444747cd56323c6bd425b7c52b1d5d4d1c924dae1f4bf5e42f99219d0151d5"
         },
-        "nightlean.json": {
+        "noctium.json": {
           "bytes": 3085,
           "sha256": "f037fa3c86471dc4166bd71bef232b0a084c22aaa34777e7beaaffd52b11db4d"
         }
@@ -103,17 +103,17 @@
           "bytes": 531,
           "sha256": "b0444747cd56323c6bd425b7c52b1d5d4d1c924dae1f4bf5e42f99219d0151d5"
         },
-        "nightlean.json": {
+        "noctium.json": {
           "bytes": 3365,
           "sha256": "1004b84a3d0d79a56c995356146a50faa1f526f41f06b9c79faada1352180870"
         }
       },
       "proofBearingWorkerOutput": {
-        "path": "/private/tmp/nightlean-generic46-reviewfix-final-20261117",
+        "path": "/private/tmp/noctium-generic46-reviewfix-final-20261117",
         "allFourZkirAndSidecarsByteMatch": true
       }
     },
-    "profileInvariant": "The two ZKIR relations and specialization sidecars are byte-identical across the selected compiler profiles. nightlean.json differs as expected because it records the target profile.",
+    "profileInvariant": "The two ZKIR relations and specialization sidecars are byte-identical across the selected compiler profiles. noctium.json differs as expected because it records the target profile.",
     "proofIdentity": "Both independent emitted .zkir files match byte-for-byte with the retained worker proof-generation relations. Worker report says native proofs self-verified; this independent run checked relation identity and official 3.2.1 raw witness cases, without generating new keys/proofs.",
     "scope": "Compile-time helper/type/natural specialization only. This does not establish general source witness runtime (issue 62), full ZKIR feature coverage, broad state preservation, whole compiler correctness, or delivered mobile/web SDKs."
   },
@@ -196,5 +196,12 @@
     "No ledger deployment or full native feature coverage claim.",
     "Native proof service verification is worker-observed integration evidence. Independent qualification checks exact relation identity and raw witness acceptance, without rerunning proof verification.",
     "TypeScript/WASM, Kotlin and Swift SDKs remain open."
-  ]
+  ],
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "86603974ba089df15ca4d9d735918674f6b1dab2fceaf40574f698e07cda174d",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/generics/qualification-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/generics/qualification-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

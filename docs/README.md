@@ -51,7 +51,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Scalar design](designs/scalar-types.md), [native unsigned lowering](development/native-unsigned-scalars.md) and [producer safety gate](development/native-producer-safety.md).
 - [Sequential native cell reads](development/sequential-state.md), with source-generated read-after-write fixtures on both runtime profiles. Generic state preservation remains separate proof work.
 - [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) compile to native circuit leaves with disclosure checks. Bytes32-keyed ledger records support nonempty Native-only layouts.
-- [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/nightlean-portable-runtime-boundary.md).
+- [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/noctium-portable-runtime-boundary.md).
 - [Typed source witnesses](development/typed-witnesses.md), including canonical composite calls, source-staged reads, public witness artifacts and the consuming native proof/client handoff.
 - [ZKIR capability research](research/zkir-v3-full-coverage.md), [native inventory](compatibility/zkir-feature-matrix.json) and [ledger capability research](research/midnight-ledger9-capabilities.md). The [raw native guard experiment](research/native-guard-prerequisites.md) records verified prerequisites, with source guard support still gated.
 - [Compact comparison baseline](research/compact-equivalence-baseline.md). Inventory entries are not a completion percentage.

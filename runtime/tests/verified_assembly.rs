@@ -1,5 +1,5 @@
-//! Real-key qualification, opt in with the three NIGHTLEAN_TEST_* fixture paths/digest.
-use nightlean_runtime::{
+//! Real-key qualification, opt in with the three NOCTIUM_TEST_* fixture paths/digest.
+use noctium_runtime::{
     artifacts::{self, Role},
     assembly,
 };
@@ -31,7 +31,7 @@ fn copy(source: &Path, destination: &Path) {
     }
 }
 fn cli(bundle: &Path, digest: &str, config: &Path, output: &Path) -> std::process::Output {
-    Command::new(env!("CARGO_BIN_EXE_nightlean-assemble"))
+    Command::new(env!("CARGO_BIN_EXE_noctium-assemble"))
         .arg("--bundle")
         .arg(bundle)
         .args(["--manifest-sha256", digest, "--config"])
@@ -48,14 +48,14 @@ fn cli(bundle: &Path, digest: &str, config: &Path, output: &Path) -> std::proces
 #[ignore = "requires pinned real-key bundle and separate private qualification config"]
 fn verified_assembly_authenticates_before_private_access_and_keeps_verified_bytes() {
     let source =
-        PathBuf::from(std::env::var_os("NIGHTLEAN_TEST_BUNDLE").expect("NIGHTLEAN_TEST_BUNDLE"));
+        PathBuf::from(std::env::var_os("NOCTIUM_TEST_BUNDLE").expect("NOCTIUM_TEST_BUNDLE"));
     let digest =
-        std::env::var("NIGHTLEAN_TEST_MANIFEST_SHA256").expect("NIGHTLEAN_TEST_MANIFEST_SHA256");
+        std::env::var("NOCTIUM_TEST_MANIFEST_SHA256").expect("NOCTIUM_TEST_MANIFEST_SHA256");
     let config_path = PathBuf::from(
-        std::env::var_os("NIGHTLEAN_TEST_PRIVATE_CONFIG").expect("NIGHTLEAN_TEST_PRIVATE_CONFIG"),
+        std::env::var_os("NOCTIUM_TEST_PRIVATE_CONFIG").expect("NOCTIUM_TEST_PRIVATE_CONFIG"),
     );
     let mut root = Directory(std::env::temp_dir().join(format!(
-        "nightlean-verified-assembly-{}",
+        "noctium-verified-assembly-{}",
         OsRng.r#gen::<u64>()
     )));
     fs::create_dir(&root.0).unwrap();

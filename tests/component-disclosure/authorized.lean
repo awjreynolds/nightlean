@@ -1,5 +1,5 @@
-import Nightlean.Frontend
-open Nightlean Nightlean.Helpers
+import Noctium.Frontend
+open Noctium Noctium.Helpers
 
 def componentPayloadType : Types.CompositeType := Types.CompositeType.structure "Demo.Payload"
 def componentPayloadParameter : Parameter := {name := "payload", ty := Ty.native}
@@ -29,5 +29,5 @@ def componentDisclosureProgram : Program := {
   exports := [componentReleaseExport]
 }
 
-open scoped Nightlean
-nightlean_component_circuit componentRelease from componentDisclosureProgram entry "release"
+open scoped Noctium
+noctium_component_circuit componentRelease from componentDisclosureProgram entry "release"

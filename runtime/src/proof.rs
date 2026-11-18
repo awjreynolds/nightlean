@@ -850,7 +850,7 @@ pub enum Error {
 }
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "nightlean_proof_{self:?}")
+        write!(f, "noctium_proof_{self:?}")
     }
 }
 impl std::error::Error for Error {}
@@ -1042,7 +1042,7 @@ impl TrustedParameters {
 impl ParamsProverProvider for TrustedParameters {
     async fn get_params(&self, k: u8) -> io::Result<ParamsProver> {
         if k != self.k {
-            return Err(io::Error::other("nightlean_parameter_degree_mismatch"));
+            return Err(io::Error::other("noctium_parameter_degree_mismatch"));
         }
         Ok(self.prover.clone())
     }
@@ -1597,7 +1597,7 @@ pub enum Abort {
 pub struct ServiceError;
 impl fmt::Display for ServiceError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("nightlean_proof_service_failure")
+        f.write_str("noctium_proof_service_failure")
     }
 }
 impl std::error::Error for ServiceError {}
@@ -1684,7 +1684,7 @@ impl<S> Clone for CheckedProvider<'_, S> {
 impl<S> Resolver for CheckedProvider<'_, S> {
     async fn resolve_key(&self, key: KeyLocation) -> io::Result<Option<ProvingKeyMaterial>> {
         if key.0.as_ref() != self.prepared.material.entrypoint {
-            return Err(io::Error::other("nightlean_proof_unknown_key"));
+            return Err(io::Error::other("noctium_proof_unknown_key"));
         }
         Ok(Some(self.prepared.material.native.clone()))
     }
@@ -1753,8 +1753,8 @@ mod tests {
 
     #[cfg(feature = "zkir-321")]
     fn issue67_supply_fixture(name: &str) -> String {
-        std::env::var(format!("NIGHTLEAN_ISSUE67_SUPPLY_{name}"))
-            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_ISSUE67_SUPPLY_{name}"))
+        std::env::var(format!("NOCTIUM_ISSUE67_SUPPLY_{name}"))
+            .unwrap_or_else(|_| panic!("missing NOCTIUM_ISSUE67_SUPPLY_{name}"))
     }
 
     #[cfg(feature = "zkir-321")]
@@ -1801,7 +1801,7 @@ mod tests {
         serde_json::to_vec(&serde_json::json!({
             "abiVersion": 1,
             "policy": {
-                "networkId": "nightlean-test",
+                "networkId": "noctium-test",
                 "genesis": "8".repeat(64),
                 "specVersion": 1,
                 "transactionVersion": 4,
@@ -1823,12 +1823,12 @@ mod tests {
         serde_json::to_vec(&serde_json::json!({
             "hostContext": {
                 "protocolVersion": 1,
-                "namespace": "nightlean-test",
+                "namespace": "noctium-test",
                 "baseRevision": "r0",
                 "attemptId": "c".repeat(64),
                 "capabilities": [{
                     "id": "commit",
-                    "namespace": "nightlean-test",
+                    "namespace": "noctium-test",
                     "keyPrefix": "cache/",
                     "operations": [crate::host::CAS]
                 }],
@@ -1843,13 +1843,13 @@ mod tests {
 
     #[cfg(feature = "zkir-321")]
     fn issue43_fixture(name: &str) -> String {
-        std::env::var(format!("NIGHTLEAN_ISSUE43_{name}"))
-            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_ISSUE43_{name}"))
+        std::env::var(format!("NOCTIUM_ISSUE43_{name}"))
+            .unwrap_or_else(|_| panic!("missing NOCTIUM_ISSUE43_{name}"))
     }
 
     fn issue43_empty_activity_fixture(name: &str) -> String {
-        std::env::var(format!("NIGHTLEAN_ISSUE43_EMPTY_{name}"))
-            .unwrap_or_else(|_| panic!("missing NIGHTLEAN_ISSUE43_EMPTY_{name}"))
+        std::env::var(format!("NOCTIUM_ISSUE43_EMPTY_{name}"))
+            .unwrap_or_else(|_| panic!("missing NOCTIUM_ISSUE43_EMPTY_{name}"))
     }
 
     #[test]
@@ -2224,13 +2224,13 @@ mod tests {
     #[test]
     #[ignore = "requires authenticated real source bundle, private inputs, SRS and another retained VK"]
     fn real_crypto_rejects_each_statement_field_and_wrong_key() {
-        let root = std::env::var("NIGHTLEAN_TEST_BUNDLE").unwrap();
-        let digest = std::env::var("NIGHTLEAN_TEST_MANIFEST_SHA256").unwrap();
+        let root = std::env::var("NOCTIUM_TEST_BUNDLE").unwrap();
+        let digest = std::env::var("NOCTIUM_TEST_MANIFEST_SHA256").unwrap();
         let config =
-            std::fs::read(std::env::var("NIGHTLEAN_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
+            std::fs::read(std::env::var("NOCTIUM_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
         let parameters =
-            std::fs::read(std::env::var("NIGHTLEAN_TEST_PROOF_PARAMETERS").unwrap()).unwrap();
-        let parameter_digest = std::env::var("NIGHTLEAN_TEST_PROOF_PARAMETERS_SHA256").unwrap();
+            std::fs::read(std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS").unwrap()).unwrap();
+        let parameter_digest = std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS_SHA256").unwrap();
         let bundle = crate::artifacts::verify(root.as_ref(), Some(&digest)).unwrap();
         let mut prepared =
             PreparedProof::from_config(&bundle, &config, 2_000_000_000, &mut OsRng).unwrap();
@@ -2261,7 +2261,7 @@ mod tests {
             );
             prepared.statement[index] = old;
         }
-        let other = std::fs::read(std::env::var("NIGHTLEAN_TEST_OTHER_VERIFIER").unwrap()).unwrap();
+        let other = std::fs::read(std::env::var("NOCTIUM_TEST_OTHER_VERIFIER").unwrap()).unwrap();
         let other: VerifierKey = decode(&other).unwrap();
         other.init().unwrap();
         prepared.material.verifier = other;

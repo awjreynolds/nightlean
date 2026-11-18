@@ -1,11 +1,11 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue69CompositeMap where
+noctium_circuit issue69CompositeMap where
   private account : Bytes32
   private c1x : Native
   private c1y : Native
@@ -13,7 +13,7 @@ nightlean_circuit issue69CompositeMap where
   private c2y : Native
 end
 
-nightlean_contract Issue69CompositeMap where
+noctium_contract Issue69CompositeMap where
   tree balances : Bytes32 => struct Ciphertext4 {
     c1x : Native
     c1y : Native

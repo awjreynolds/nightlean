@@ -1,6 +1,6 @@
 import Noctium.Frontend
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
 
 open scoped Noctium
 
@@ -53,7 +53,7 @@ private def nativeCounterEntry (name : String) : Noctium.Entrypoint :=
   | some found => found
   | none => {name := "missing", circuit := {name := "missing"}}
 
-#guard match Nightlean.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "bump") with
+#guard match Noctium.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "bump") with
   | .ok plan =>
       plan.operations.any (fun op => match op with
         | .addImmediate 3 => _root_.Bool.true
@@ -63,25 +63,25 @@ private def nativeCounterEntry (name : String) : Noctium.Entrypoint :=
         | _ => _root_.Bool.false)
   | .error _ => _root_.Bool.false
 
-#guard match Nightlean.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "reduce") with
+#guard match Noctium.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "reduce") with
   | .ok plan => plan.operations.any (fun op => match op with
       | .subImmediate 2 => _root_.Bool.true
       | _ => _root_.Bool.false)
   | .error _ => _root_.Bool.false
 
-#guard match Nightlean.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "resetCounters") with
+#guard match Noctium.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "resetCounters") with
   | .ok plan => plan.operations.any (fun op => match op with
       | .push (.counter (.uint _ 0)) Bool.true => _root_.Bool.true
       | _ => _root_.Bool.false)
   | .error _ => _root_.Bool.false
 
-#guard match Nightlean.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "guarded") with
+#guard match Noctium.Backend.Impact.lower NativeCounter.state (nativeCounterEntry "guarded") with
   | .ok plan => plan.activityGuards.any Option.isSome &&
       plan.operations.any (fun op => match op with
         | .addImmediate 5 => _root_.Bool.true
         | _ => _root_.Bool.false)
   | .error _ => _root_.Bool.false
 
-#guard match Nightlean.Backend.Zkir.lowerEntrypoint NativeCounter.state (nativeCounterEntry "bump") with
+#guard match Noctium.Backend.Zkir.lowerEntrypoint NativeCounter.state (nativeCounterEntry "bump") with
   | .ok _ => _root_.Bool.true
   | .error _ => _root_.Bool.false

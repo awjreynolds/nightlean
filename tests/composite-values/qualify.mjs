@@ -29,7 +29,7 @@ function compact(value){
 }
 const vector=values=>Buffer.concat([compact(values.length),...values.map(compact)]);
 function preimage(test){
-  const key=Buffer.from('nightlean/aggregate/qualification');
+  const key=Buffer.from('noctium/aggregate/qualification');
   return Buffer.concat([Buffer.from('midnight:proof-preimage:'),vector([]),vector(test.private),
     vector(test.publicInputs),vector(test.publicReads),compact(42),Buffer.from([0]),compact(key.length),key]);
 }
@@ -65,7 +65,7 @@ const evidence={scope:'typed backend standalone aggregate relation; source aggre
   binarySha256:createHash('sha256').update(ir).digest('hex'),
   schemaSha256:createHash('sha256').update(JSON.stringify(nativeSchema)).digest('hex'),hostSchemaAndLeafOrderMatch:true,cases:results};
 if(mode==='prove'){
-  const server=new URL(process.env.NIGHTLEAN_PROOF_SERVER??'http://127.0.0.1:16300');
+  const server=new URL(process.env.NOCTIUM_PROOF_SERVER??'http://127.0.0.1:16300');
   assert.ok(['http:','https:'].includes(server.protocol)&&['127.0.0.1','localhost','[::1]'].includes(server.hostname)&&!server.username&&!server.password);
   const payload=createProvingPayload(preimage(cases[0]),42n,material);
   const response=await fetch(new URL('/prove',server),{method:'POST',body:payload,redirect:'error',signal:AbortSignal.timeout(120000)});

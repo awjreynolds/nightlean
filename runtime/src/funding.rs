@@ -38,7 +38,7 @@ pub enum Error {
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "nightlean_funding_{self:?}")
+        write!(f, "noctium_funding_{self:?}")
     }
 }
 impl std::error::Error for Error {}

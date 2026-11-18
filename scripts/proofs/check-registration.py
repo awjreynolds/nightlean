@@ -13,8 +13,8 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
 MODEL_ROOTS = [
-    "Nightlean.Verification.FunctionalObligation",
-    "Nightlean.Verification.PrivacyObligation",
+    "Noctium.Verification.FunctionalObligation",
+    "Noctium.Verification.PrivacyObligation",
     "VerificationFixture.policy",
     "VerificationFixture.wrongContractPolicy", "VerificationFixture.wrongSpecPolicy",
     "VerificationFixture.releasingPolicy",
@@ -30,9 +30,9 @@ def run(args: list[str], env: dict[str, str] | None = None) -> subprocess.Comple
 
 
 def main() -> int:
-    run(["lake", "build", "Nightlean.Verification.ExportAudit"])
+    run(["lake", "build", "Noctium.Verification.ExportAudit"])
     source = (ROOT / "tests/Verification.lean").read_text()
-    with tempfile.TemporaryDirectory(prefix="nightlean-registration-test-") as directory:
+    with tempfile.TemporaryDirectory(prefix="noctium-registration-test-") as directory:
         scratch = Path(directory)
         sources, objects = scratch / "source", scratch / "objects"
         (sources / "tests").mkdir(parents=True)
@@ -96,8 +96,8 @@ def main() -> int:
         # Keep the original model roots/pin stable. This separate UInt model
         # exercises fresh-environment numeral reporting and failure-channel scope.
         failure_model = export("failure-model.ndjson", [
-            "Nightlean.Verification.FunctionalObligation",
-            "Nightlean.Verification.PrivacyObligation",
+            "Noctium.Verification.FunctionalObligation",
+            "Noctium.Verification.PrivacyObligation",
             "VerificationFixture.failurePolicy", "VerificationFixture.failureAllOutcomesPolicy",
             "propext", "Classical.choice", "Quot.sound",
         ])

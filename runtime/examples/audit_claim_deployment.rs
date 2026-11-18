@@ -2,7 +2,7 @@
 //! mandatory exact-byte source audit and externally supplied trust pins.
 use anyhow::{Result, anyhow, ensure};
 use futures::{executor::block_on, future::pending};
-use nightlean_runtime::{
+use noctium_runtime::{
     artifacts::{self, Recipe, Role, Selection},
     client::{BoundTransaction, SubmissionAttempt},
     deployment_audit::{self as audit, DeploymentRecord, ObservedTransaction, Specification},
@@ -106,21 +106,21 @@ struct QuotedFunding<'a, 'b> {
     node: &'a Node,
     quote: RefCell<Option<audit::FundingQuote>>,
 }
-impl nightlean_runtime::client::FundingAdapter for QuotedFunding<'_, '_> {
+impl noctium_runtime::client::FundingAdapter for QuotedFunding<'_, '_> {
     async fn fund(
         &self,
-        contract: &nightlean_runtime::proof::ProvedNativeIntent,
-        snapshot: &nightlean_runtime::client::Snapshot,
-        policy: &nightlean_runtime::client::NetworkPolicy,
+        contract: &noctium_runtime::proof::ProvedNativeIntent,
+        snapshot: &noctium_runtime::client::Snapshot,
+        policy: &noctium_runtime::client::NetworkPolicy,
     ) -> std::result::Result<
-        nightlean_runtime::funding::UnsealedTransaction,
-        nightlean_runtime::client::HostFailure,
+        noctium_runtime::funding::UnsealedTransaction,
+        noctium_runtime::client::HostFailure,
     > {
         let quote = self
             .material
             .check_live(self.spec, snapshot, self.node.runtime_fingerprint())
-            .map_err(|_| nightlean_runtime::client::HostFailure)?;
-        let native = nightlean_runtime::client::FundingAdapter::fund(
+            .map_err(|_| noctium_runtime::client::HostFailure)?;
+        let native = noctium_runtime::client::FundingAdapter::fund(
             &self.inner,
             contract,
             snapshot,
@@ -242,8 +242,8 @@ async fn run(request: Request) -> Result<Json> {
             },
             Selection {
                 role: Role::Metadata,
-                name: "nightlean.json".into(),
-                input: dir.join("nightlean.json"),
+                name: "noctium.json".into(),
+                input: dir.join("noctium.json"),
             },
             Selection {
                 role: Role::Profile,
@@ -395,7 +395,7 @@ async fn run(request: Request) -> Result<Json> {
     };
     let (_, deploy) = deploy
         .prove(
-            nightlean_runtime::funding::CONTRACT_SEGMENT,
+            noctium_runtime::funding::CONTRACT_SEGMENT,
             provider,
             &live.state.parameters.cost_model.runtime_cost_model,
         )
@@ -423,8 +423,8 @@ async fn run(request: Request) -> Result<Json> {
             quote: RefCell::new(None),
         };
         let signing = ExplicitSeal::new(
-            |_: &nightlean_runtime::funding::UnsealedTransaction,
-             p: &nightlean_runtime::client::NetworkPolicy| *p == spec.policy,
+            |_: &noctium_runtime::funding::UnsealedTransaction,
+             p: &noctium_runtime::client::NetworkPolicy| *p == spec.policy,
             StdRng::from_entropy(),
         );
         let bound =

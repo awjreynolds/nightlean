@@ -33,15 +33,15 @@ The prover and host receive private inputs. A remote proving service therefore b
 
 ## What the implementation already enforces
 
-`Nightlean/IR.lean` distinguishes parameter, provider and private-state origins. `Nightlean/Disclosure.lean:30` checks value origins separately from active control origins. Arithmetic, selection, hashing and Jubjub expressions propagate origins. Missing origin references fail closed.
+`Noctium/IR.lean` distinguishes parameter, provider and private-state origins. `Noctium/Disclosure.lean:30` checks value origins separately from active control origins. Arithmetic, selection, hashing and Jubjub expressions propagate origins. Missing origin references fail closed.
 
-`disclose` removes the wrapped expression's origins. `Nightlean/Semantics.lean:265` states its evaluation identity: the marker changes no value. The marker permits release downstream, rather than publishing data immediately or checking end-user consent. Place disclosure near the actual sink. Releasing `hash(secret)` should leave other uses of `secret` private.
+`disclose` removes the wrapped expression's origins. `Noctium/Semantics.lean:265` states its evaluation identity: the marker changes no value. The marker permits release downstream, rather than publishing data immediately or checking end-user consent. Place disclosure near the actual sink. Releasing `hash(secret)` should leave other uses of `secret` private.
 
 The sink checks cover public circuit outputs, public ledger payloads, map keys, nested paths, membership/absence queries and supported state activity guards. Disclosing a constant inside a privately controlled branch does not authorize the branch's public activity. A public write of the same constant in one branch and no write in the other still exposes information through activity.
 
-`Nightlean/Control.lean` and `Nightlean/ComponentDisclosure.lean` extend tracking through supported helpers, returns, aggregate components and private execution. A private branch used only for private work differs from a branch selecting public effects. Host callback schedules still reveal information to the invocation controller. They are outside the existing contract-public privacy observer.
+`Noctium/Control.lean` and `Noctium/ComponentDisclosure.lean` extend tracking through supported helpers, returns, aggregate components and private execution. A private branch used only for private work differs from a branch selecting public effects. Host callback schedules still reveal information to the invocation controller. They are outside the existing contract-public privacy observer.
 
-`Nightlean/Witness.lean:10` retains stage-value evaluation when erasing private writes into the constraint program. The circuit does not prove the external storage mutation. `tests/WitnessSource.lean` exercises private reads, read-after-stage, repeated typed callbacks, result constraints, staged writes, Unit results and composite results. Authoring those examples currently requires substantial `Helpers.Program` structure construction. This is the largest immediate readability gap.
+`Noctium/Witness.lean:10` retains stage-value evaluation when erasing private writes into the constraint program. The circuit does not prove the external storage mutation. `tests/WitnessSource.lean` exercises private reads, read-after-stage, repeated typed callbacks, result constraints, staged writes, Unit results and composite results. Authoring those examples currently requires substantial `Helpers.Program` structure construction. This is the largest immediate readability gap.
 
 Typed private reads use declared fixed keys and scoped capabilities. Source stages currently support scalar values. The host journal supports more composite values than source staging. Source-bound invocations accept writes from their compiled stages, rather than arbitrary replacement journals. Typed curve inputs exist on the direct native path, but provider/control curve schemas and typed curve returns remain separate gaps. A type appearing in the scalar IR does not establish support through every execution route.
 
@@ -232,11 +232,11 @@ Use the owned `WitnessExecution` → `WitnessProof` → `WitnessProvedCall` → 
 
 The lower-level `host.rs` accepted notification still trusts the host. Do not expose an application-friendly `commit(true)` wrapper around that seam. `docs/designs/private-state-lifecycle.md` describes an older transport package and understates later source stages, recovery and validated client support. Use `docs/development/typed-witnesses.md` plus current code for present integration behavior.
 
-The host's durable storage, atomic CAS and finality service remain assumptions. A source theorem about private stages does not prove a database write. `recordInvocation_replayInvocation_matches` and `validateCompleteInputMap_preserves_bindings` in `Nightlean/Witness/Semantics.lean` cover admitted recording/replay and exact bindings under their stated validation/trace premises. They do not prove every compiler transformation or callback implementation.
+The host's durable storage, atomic CAS and finality service remain assumptions. A source theorem about private stages does not prove a database write. `recordInvocation_replayInvocation_matches` and `validateCompleteInputMap_preserves_bindings` in `Noctium/Witness/Semantics.lean` cover admitted recording/replay and exact bindings under their stated validation/trace premises. They do not prove every compiler transformation or callback implementation.
 
 ## Public examples and historical evidence
 
-At inspection, `examples/Disclosure.lean`, `examples/PrivateClaim.lean` and `examples/openzeppelin/PublicSupply.lean` still use `Nightlean` imports/scopes or commands. `examples/BoundedScalars.lean` already uses Noctium. “Nightly” is not the actual legacy identifier in these files.
+At inspection, `examples/Disclosure.lean`, `examples/PrivateClaim.lean` and `examples/openzeppelin/PublicSupply.lean` still use `Noctium` imports/scopes or commands. `examples/BoundedScalars.lean` already uses Noctium. “Nightly” is not the actual legacy identifier in these files.
 
 Concurrent parent work is migrating the ordinary disclosure and public-supply examples and adding `examples/NoctiumPrivateClaim.lean` as the branded teaching copy. The original `examples/PrivateClaim.lean` path and source SHA remain unchanged. These edits follow the research baseline above and do not extend its historical proof receipts.
 

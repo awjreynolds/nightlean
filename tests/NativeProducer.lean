@@ -1,9 +1,9 @@
-import Nightlean.Backend.Zkir
-import Nightlean.Claim
+import Noctium.Backend.Zkir
+import Noctium.Claim
 
-open Lean Nightlean
-open Nightlean.Backend
-open Nightlean.Backend.Native
+open Lean Noctium
+open Noctium.Backend
+open Noctium.Backend.Native
 
 private def op (name : String) (fields : List (String × Json) := []) : Json :=
   Json.mkObj (("op", toJson name) :: fields)

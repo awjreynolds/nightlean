@@ -54,7 +54,7 @@ Operation descriptors support typed argument maps of Native, Bool, normalized UI
 
 At most one input provider or CAS request is outstanding. Repeating advance returns the same request ID. Public `need_host` metadata contains the operation, capability, result schema, input name where applicable and `hasPrivateArguments: true`. It contains no private arguments, journal keys, values or digest.
 
-The host retrieves pending private arguments with `nightlean_session_private_data(session, NIGHTLEAN_PRIVATE_REQUEST, ...)`. Provider arguments contain the namespace and typed argument map. The concrete read returns a scalar response through the existing resume function:
+The host retrieves pending private arguments with `noctium_session_private_data(session, NOCTIUM_PRIVATE_REQUEST, ...)`. Provider arguments contain the namespace and typed argument map. The concrete read returns a scalar response through the existing resume function:
 
 ```json
 {"abiVersion":1,"requestId":1,"operation":"private_state.read.v1","capability":"store","schema":"UIntRange<256>","value":"255"}
@@ -62,11 +62,11 @@ The host retrieves pending private arguments with `nightlean_session_private_dat
 
 Every metadata field must match. Canonical range/type rules apply to the value. Rejection leaves the pending request intact. Duplicate responses reject after successful consumption. The executor neither starts nested requests nor performs the host's read itself.
 
-Private retrieval returns a token in a separate buffer registry. `nightlean_private_length`, `nightlean_private_copy` and `nightlean_private_free` own that token. Normal result functions reject private tokens, and private functions reject normal result tokens. Copies have no terminator and no partial-copy behavior. Session release and private-buffer release are independent. The caller owns copied bytes and their confidentiality.
+Private retrieval returns a token in a separate buffer registry. `noctium_private_length`, `noctium_private_copy` and `noctium_private_free` own that token. Normal result functions reject private tokens, and private functions reject normal result tokens. Copies have no terminator and no partial-copy behavior. Session release and private-buffer release are independent. The caller owns copied bytes and their confidentiality.
 
 ## Journal preparation and transaction binding
 
-Before execution finishes, `nightlean_session_stage_private` accepts a capability-scoped typed write:
+Before execution finishes, `noctium_session_stage_private` accepts a capability-scoped typed write:
 
 ```json
 {"abiVersion":1,"operation":"private_state.stage.v1","capability":"store","key":"claims/used","type":"Native","value":"8675309"}
@@ -78,9 +78,9 @@ Successful native execution freezes the journal in Prepared. A failed circuit or
 
 After constructing the final intended transaction, the host sends a `bind` notification with the exact transaction ID and attempt ID. Binding is immutable. Changing fees, signatures or another identity-bearing transaction component requires a new transaction identity and therefore a new execution attempt. The core trusts the host's transaction identity association until it validates serialized transactions/receipts itself.
 
-A bound successful session exports the private journal through `NIGHTLEAN_PRIVATE_JOURNAL`. The journal contains protocol version, attempt and transaction IDs, namespace, base revision, intended contract address and entrypoint, typed writes and `journalDigest`. Address and entrypoint come from the actual native begin context rather than a later notification.
+A bound successful session exports the private journal through `NOCTIUM_PRIVATE_JOURNAL`. The journal contains protocol version, attempt and transaction IDs, namespace, base revision, intended contract address and entrypoint, typed writes and `journalDigest`. Address and entrypoint come from the actual native begin context rather than a later notification.
 
-The digest is SHA-256 over the domain bytes `nightlean.private-state-journal.v1\0` followed by compact UTF-8 JSON of the journal without `journalDigest`. Object keys use lexical order, scalar values use their canonical encodings, and write maps use lexical keys. No digest leaves the private buffer channel. It binds the complete frozen update payload and execution target, rather than serving as a public fingerprint of low-entropy secrets.
+The digest is SHA-256 over the domain bytes `noctium.private-state-journal.v1\0` followed by compact UTF-8 JSON of the journal without `journalDigest`. Object keys use lexical order, scalar values use their canonical encodings, and write maps use lexical keys. No digest leaves the private buffer channel. It binds the complete frozen update payload and execution target, rather than serving as a public fingerprint of low-entropy secrets.
 
 ## Executable transition contract
 

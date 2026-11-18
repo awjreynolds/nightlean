@@ -1,8 +1,8 @@
-import Nightlean.Verification.ScalarExpressionArithmetic
+import Noctium.Verification.ScalarExpressionArithmetic
 
 namespace ScalarExpressionArithmeticTests
 
-open Nightlean Nightlean.Backend Nightlean.Verification
+open Noctium Noctium.Backend Noctium.Verification
 open ScalarLowering ScalarExpressionArithmetic
 
 private def repeated : Expr .native :=
@@ -58,17 +58,17 @@ private def repeatedCircuit : Circuit := {
         | .mul .. => true
         | _ => false).length == 1
 
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_native
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_bool
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_uint
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_ref
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_add
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_mul
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_sub
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_uadd
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_usub
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_umul
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.complete_cast
-#print axioms Nightlean.Verification.ScalarExpressionArithmetic.select_step
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_native
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_bool
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_uint
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_ref
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_add
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_mul
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_sub
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_uadd
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_usub
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_umul
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.complete_cast
+#print axioms Noctium.Verification.ScalarExpressionArithmetic.select_step
 
 end ScalarExpressionArithmeticTests

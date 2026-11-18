@@ -1,8 +1,8 @@
-import Nightlean.Modules
+import Noctium.Modules
 
-namespace Nightlean.ModulesTests
+namespace Noctium.ModulesTests
 
-open Lean Nightlean Nightlean.Modules Nightlean.Helpers.Specialization
+open Lean Noctium Noctium.Modules Noctium.Helpers.Specialization
 
 private def sourceName (parts : List String) : Name :=
   parts.foldl Name.str .anonymous
@@ -23,7 +23,7 @@ private def messageContains (result : Except Diagnostic α) (fragment : String) 
   | .error diagnostic => (diagnostic.message.splitOn fragment).length > 1
   | .ok _ => false
 
-private def genericIdentity : Nightlean.Helpers.Specialization.Declaration := {
+private def genericIdentity : Noctium.Helpers.Specialization.Declaration := {
   id := ⟨0, 0⟩
   name := "identity"
   parameters := [⟨"T", .type⟩]
@@ -32,7 +32,7 @@ private def genericIdentity : Nightlean.Helpers.Specialization.Declaration := {
   body := [.return (some (.ref "value"))]
 }
 
-private def genericIdentitySource : Nightlean.Helpers.Specialization.Program := {
+private def genericIdentitySource : Noctium.Helpers.Specialization.Program := {
   declarations := [genericIdentity]
   exports := [
     {name := "nativeA", target := ⟨0, 0⟩, arguments := [.type .native],
@@ -43,7 +43,7 @@ private def genericIdentitySource : Nightlean.Helpers.Specialization.Program := 
       inputs := [{name := "value", type := .uint (.literal 255), visibility := .public}]}]
 }
 
-private def genericRequestSource : Nightlean.Helpers.Specialization.Program := {
+private def genericRequestSource : Noctium.Helpers.Specialization.Program := {
   declarations := [genericIdentity]
   exports := [{
     name := "identity"
@@ -76,7 +76,7 @@ private def genericModule : Definition := {
 }
 
 private def genericImport (viewName : String) (type : Types.CompositeType) (size : Nat) :
-    Nightlean.Modules.Import := {
+    Noctium.Modules.Import := {
   viewName
   target := sourceName ["Demo", "Generic"]
   arguments := [.typeValue type, .naturalValue size]
@@ -263,9 +263,9 @@ private def sourceExportFor (expansion : Expansion) (module : Name) (name : Stri
   | .error _ => false
 
 -- A batch shares one cache and assigns generated IDs in canonical export order.
-#guard match Nightlean.Helpers.Specialization.specializeBatch genericIdentitySource
+#guard match Noctium.Helpers.Specialization.specializeBatch genericIdentitySource
       ["wide", "nativeB", "nativeA"],
-    Nightlean.Helpers.Specialization.specializeBatch genericIdentitySource
+    Noctium.Helpers.Specialization.specializeBatch genericIdentitySource
       ["nativeA", "wide", "nativeB"] with
   | .ok first, .ok second =>
     first.instances == second.instances &&
@@ -278,7 +278,7 @@ private def sourceExportFor (expansion : Expansion) (module : Name) (name : Stri
   | _, _ => false
 
 #guard messageContains
-  (Nightlean.Helpers.Specialization.specializeBatchWithLimits
+  (Noctium.Helpers.Specialization.specializeBatchWithLimits
     {maxSpecializations := 1} genericIdentitySource ["nativeA", "wide"])
   "batch export count"
 
@@ -291,9 +291,9 @@ private def moduleRequests : List ExportRequest := [
     [.type (.uint (.literal 63))]}]
 
 #guard match
-    Nightlean.Helpers.Specialization.specializeRequestsWithLimits {}
+    Noctium.Helpers.Specialization.specializeRequestsWithLimits {}
       genericRequestSource moduleRequests,
-    Nightlean.Helpers.Specialization.specializeRequestsWithLimits {}
+    Noctium.Helpers.Specialization.specializeRequestsWithLimits {}
       genericRequestSource moduleRequests.reverse with
   | .ok first, .ok second =>
     first.instances == second.instances &&
@@ -481,4 +481,4 @@ private def cycleB : Definition := {
       [.type (.vector 4 (.scalar .native)), .natural 1]) "normalized type nodes"
   | .error _ => false
 
-end Nightlean.ModulesTests
+end Noctium.ModulesTests

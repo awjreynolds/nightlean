@@ -4,13 +4,13 @@ This proof package concerns the current straight-line Native, Bool and UInt scal
 
 ## Reused implementation
 
-- `Nightlean/IR.lean` defines the typed scalar expression and circuit syntax and its actual entry checks.
-- `Nightlean/Semantics.lean` defines the executable source semantics. UInt operations reject unsupported bounds, narrowing overflow and subtraction underflow. Selection evaluates both arms. A let evaluates its value even when the body does not use the binding.
-- `Nightlean/Backend/NativeMeaning.lean` provides the existing normalization consumed by the mandatory validator. Normalized values retain ordered assertions and every range requirement, including requirements from unused computations.
-- `Nightlean/Backend/NativeExpected.lean` independently derives the expected input, assertion, bound, return and Impact schedules.
-- `Nightlean/Backend/NativeProducer.lean` validates the actual emitted JSON, SSA definitions, opcode preconditions, bound refinements and schedules.
-- `Nightlean/Backend/Zkir.lean` performs the existing lowering and CSE. `lowerCircuit_validated` proves successful lowering passed the actual mandatory validator against `expectedCircuit (Passes.pruneCircuit circuit)`.
-- `Nightlean/Verification/NativeRelation.lean` specifies field-level instruction satisfaction for an arbitrary assignment. `NativeRelationJson.lean` decodes the actual scalar instruction representation.
+- `Noctium/IR.lean` defines the typed scalar expression and circuit syntax and its actual entry checks.
+- `Noctium/Semantics.lean` defines the executable source semantics. UInt operations reject unsupported bounds, narrowing overflow and subtraction underflow. Selection evaluates both arms. A let evaluates its value even when the body does not use the binding.
+- `Noctium/Backend/NativeMeaning.lean` provides the existing normalization consumed by the mandatory validator. Normalized values retain ordered assertions and every range requirement, including requirements from unused computations.
+- `Noctium/Backend/NativeExpected.lean` independently derives the expected input, assertion, bound, return and Impact schedules.
+- `Noctium/Backend/NativeProducer.lean` validates the actual emitted JSON, SSA definitions, opcode preconditions, bound refinements and schedules.
+- `Noctium/Backend/Zkir.lean` performs the existing lowering and CSE. `lowerCircuit_validated` proves successful lowering passed the actual mandatory validator against `expectedCircuit (Passes.pruneCircuit circuit)`.
+- `Noctium/Verification/NativeRelation.lean` specifies field-level instruction satisfaction for an arbitrary assignment. `NativeRelationJson.lean` decodes the actual scalar instruction representation.
 
 No second compiler or alternate lowering appears in the proof model. `ScalarNormalization.interpret` gives meaning to the symbolic terms already carried by the validator. Its unsupported opcode fallback is unreachable for normalized source expressions and accepted producer instructions.
 
@@ -93,10 +93,10 @@ Reproduce the reviewed model from the pinned source and Lean toolchain:
 ```sh
 git worktree add --detach /absolute/path/to/scalar-proof-source 6ed98d2991b14146176da7028588404464d0ba5a
 cd /absolute/path/to/scalar-proof-source
-lake build Nightlean.Verification.ScalarTranslation Nightlean.Verification.ScalarExportAudit
-lake env leanexport Nightlean.Verification.ScalarTranslation -- \
-  Nightlean.Verification.ScalarTranslation.lowerCircuit_sound \
-  Nightlean.Verification.ScalarTranslation.lowerCircuit_complete \
+lake build Noctium.Verification.ScalarTranslation Noctium.Verification.ScalarExportAudit
+lake env leanexport Noctium.Verification.ScalarTranslation -- \
+  Noctium.Verification.ScalarTranslation.lowerCircuit_sound \
+  Noctium.Verification.ScalarTranslation.lowerCircuit_complete \
   propext Classical.choice Quot.sound > /absolute/path/to/model.ndjson
 shasum -a 256 /absolute/path/to/model.ndjson
 python3 scripts/proofs/check-scalar-proof-audit.py \

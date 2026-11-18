@@ -1,15 +1,15 @@
-import Nightlean.Backend.Impact
-import Nightlean.Backend.Zkir
-import Nightlean.Frontend
+import Noctium.Backend.Impact
+import Noctium.Backend.Zkir
+import Noctium.Frontend
 
-open scoped Nightlean
-open Nightlean
+open scoped Noctium
+open Noctium
 
-nightlean_circuit issue68MapRead where
+noctium_circuit issue68MapRead where
   public account : Native
 end
 
-nightlean_contract Issue68MapReads where
+noctium_contract Issue68MapReads where
   map balances : Native => Native
   entry update uses issue68MapRead where
     insert balances[account] := 7

@@ -1,8 +1,8 @@
 //! Typed source-to-native ABI rejects malformed or stale context handles before allocation.
-use nightlean_runtime::native_ffi::{
-    INVALID_ARGUMENT, INVALID_HANDLE, nightlean_client_start_from_witness,
-    nightlean_native_begin_from_witness, nightlean_native_target_context_free,
-    nightlean_native_witness_target_begin,
+use noctium_runtime::native_ffi::{
+    INVALID_ARGUMENT, INVALID_HANDLE, noctium_client_start_from_witness,
+    noctium_native_begin_from_witness, noctium_native_target_context_free,
+    noctium_native_witness_target_begin,
 };
 use serde_json::json;
 
@@ -18,7 +18,7 @@ fn witness_handoff_abi_is_strict_and_zeroes_failed_outputs() {
     let mut context = 99;
     let mut result = 99;
     let code = unsafe {
-        nightlean_native_witness_target_begin(
+        noctium_native_witness_target_begin(
             malformed_target.as_ptr(),
             malformed_target.len(),
             state.as_ptr(),
@@ -37,7 +37,7 @@ fn witness_handoff_abi_is_strict_and_zeroes_failed_outputs() {
     let malformed_proof = br#"{"abiVersion":1,"unknown":true}"#;
     let mut proof = 99;
     let code = unsafe {
-        nightlean_native_begin_from_witness(
+        noctium_native_begin_from_witness(
             malformed_proof.as_ptr(),
             malformed_proof.len(),
             u64::MAX,
@@ -55,7 +55,7 @@ fn witness_handoff_abi_is_strict_and_zeroes_failed_outputs() {
     let malformed_client = b"{}";
     let mut client = 99;
     let code = unsafe {
-        nightlean_client_start_from_witness(
+        noctium_client_start_from_witness(
             u64::MAX,
             malformed_client.as_ptr(),
             malformed_client.len(),
@@ -65,7 +65,7 @@ fn witness_handoff_abi_is_strict_and_zeroes_failed_outputs() {
     assert_eq!(code, INVALID_ARGUMENT);
     assert_eq!(client, 0);
     assert_eq!(
-        nightlean_native_target_context_free(u64::MAX),
+        noctium_native_target_context_free(u64::MAX),
         INVALID_HANDLE
     );
 }

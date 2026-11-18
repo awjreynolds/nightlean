@@ -17,7 +17,7 @@ run = HELPERS["run"]
 quote_tree = HELPERS["quote_tree"]
 strict_json_bytes = HELPERS["strict_json_bytes"]
 exported_axioms = HELPERS["exported_axioms"]
-NS = "Nightlean.PrivateClaimNativeState"
+NS = "Noctium.PrivateClaimNativeState"
 PROOF_NAMES = ["actual_schema_order", "actual_effect_order", "groups_encoding", "execute_plan",
                "native_execution_sound", "source_native_preservation", "eligible_native_complete",
                "eligible_admitted_complete", "native_replay_rejected", "entries_frame", "native_frame",
@@ -30,23 +30,23 @@ def certificate_source(plan: object, call: object, namespace: str) -> str:
 set_option maxRecDepth 10000
 set_option maxHeartbeats 8000000
 namespace {namespace}
-open Nightlean Nightlean.PrivateClaimProofs Nightlean.PrivateClaimLowering
-open Nightlean.Verification.NativeRelation Nightlean.Verification.NativeState
-open Nightlean.PrivateClaimNativeState
+open Noctium Noctium.PrivateClaimProofs Noctium.PrivateClaimLowering
+open Noctium.Verification.NativeRelation Noctium.Verification.NativeState
+open Noctium.PrivateClaimNativeState
 def planJson : Lean.Json := {quote_tree(plan)}
 def callJson : Lean.Json := {quote_tree(call)}
-theorem planDecoded : Nightlean.Verification.NativeStateJson.decode planJson =
+theorem planDecoded : Noctium.Verification.NativeStateJson.decode planJson =
     .ok symbolicPlan := by
-  have check : (Nightlean.Verification.NativeStateJson.decode planJson).toOption =
+  have check : (Noctium.Verification.NativeStateJson.decode planJson).toOption =
       some symbolicPlan := by decide +kernel
-  cases h : Nightlean.Verification.NativeStateJson.decode planJson with
+  cases h : Noctium.Verification.NativeStateJson.decode planJson with
   | error message => rw [h] at check; contradiction
   | ok value => rw [h] at check; exact congrArg Except.ok (Option.some.inj check)
-theorem callDecoded : Nightlean.Verification.NativeRelationJson.decode callJson =
+theorem callDecoded : Noctium.Verification.NativeRelationJson.decode callJson =
     .ok callProgram := by
-  have check : (Nightlean.Verification.NativeRelationJson.decode callJson).toOption =
+  have check : (Noctium.Verification.NativeRelationJson.decode callJson).toOption =
       some callProgram := by decide +kernel
-  cases h : Nightlean.Verification.NativeRelationJson.decode callJson with
+  cases h : Noctium.Verification.NativeRelationJson.decode callJson with
   | error message => rw [h] at check; contradiction
   | ok value => rw [h] at check; exact congrArg Except.ok (Option.some.inj check)
 theorem sound (ctx : EvalContext) (hash : Hash) (agreement : HashAgreement ctx hash)
@@ -79,16 +79,16 @@ end {namespace}
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / ".nightlean/audits/private-claim-state")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / ".noctium/audits/private-claim-state")
     parser.add_argument("--native-checker", type=Path)
     args = parser.parse_args()
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    run(["lake", "build", "nightlean", "Nightlean", "Nightlean.Frontend",
-         "Nightlean.Verification.NativeRelationJson", "Nightlean.Verification.NativeStateJson",
-         "Nightlean.Verification"])
+    run(["lake", "build", "noctium", "Noctium", "Noctium.Frontend",
+         "Noctium.Verification.NativeRelationJson", "Noctium.Verification.NativeStateJson",
+         "Noctium.Verification"])
     run(["lake", "env", "lean", "tests/NativeState.lean"])
-    with tempfile.TemporaryDirectory(prefix="nightlean-claim-state-") as directory:
+    with tempfile.TemporaryDirectory(prefix="noctium-claim-state-") as directory:
         scratch = Path(directory)
         imports = scratch / "imports"
         for child in ["examples", "proofs"]:
@@ -101,7 +101,7 @@ def main() -> int:
             if source.endswith("PrivateClaimNativeState.lean"):
                 (output / "direct-axioms.txt").write_text(built.stdout)
         emitted = output / "emitted"
-        run([str(ROOT / ".lake/build/bin/nightlean"), "compile", "examples/PrivateClaim.lean",
+        run([str(ROOT / ".lake/build/bin/noctium"), "compile", "examples/PrivateClaim.lean",
              "--target", "profiles/midnight-ledger-9-zkir-3.2.1-target.json", "--output", str(emitted)])
         plan_bytes = (emitted / "PrivateClaim.claim.impact.json").read_bytes()
         call_bytes = (emitted / "PrivateClaim.claim.zkir").read_bytes()

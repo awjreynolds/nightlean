@@ -1,6 +1,6 @@
-import Nightlean.Target
+import Noctium.Target
 
-open Lean Nightlean
+open Lean Noctium
 
 private def accepts (profile : TargetProfile) : Bool :=
   match profile.validate with

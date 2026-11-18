@@ -25,5 +25,12 @@
   "schemaVersion": 1,
   "sourceCommit": "925164d0e17d994038d77d3b2b71c410619557d3",
   "sourceTree": "380ced01c6ced4409c7aedf59a9985d21b50f582",
-  "srsSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd"
+  "srsSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "17cae31f6a73eec24a729a6ef74187ccf11264a96c8bc1355f18672f94db1d1e",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/deployment57-public/specification.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/deployment57-public/specification.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

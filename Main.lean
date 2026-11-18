@@ -1,4 +1,4 @@
-import Nightlean.Cli
-import Nightlean.Compiler
+import Noctium.Cli
+import Noctium.Compiler
 
-def main (args : List String) : IO UInt32 := Nightlean.Cli.run args
+def main (args : List String) : IO UInt32 := Noctium.Cli.run args

@@ -1,6 +1,6 @@
 #![cfg(feature = "zkir-321")]
 
-use nightlean_runtime::{Plan, check, create_state, field_value, prepare, zkir::IrSource};
+use noctium_runtime::{Plan, check, create_state, field_value, prepare, zkir::IrSource};
 use onchain_runtime::state::StateValue;
 use serde_json::json;
 use sha2::{Digest, Sha256};

@@ -47,7 +47,7 @@ pub enum Error {
 }
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "nightlean_client_{self:?}")
+        write!(f, "noctium_client_{self:?}")
     }
 }
 impl std::error::Error for Error {}
@@ -88,7 +88,7 @@ fn journal_valid(journal: &serde_json::Value, identity: &JournalIdentity) -> Res
     )?;
     let bytes = Zeroizing::new(serde_json::to_vec(&value).map_err(|_| Error::Identity)?);
     let mut digest = Sha256::new();
-    digest.update(b"nightlean.private-state-journal.v1\0");
+    digest.update(b"noctium.private-state-journal.v1\0");
     digest.update(&*bytes);
     require(
         hex::encode(digest.finalize()) == identity.journal_digest,
@@ -1925,7 +1925,7 @@ pub(crate) mod tests {
         use crate::localnet::journal::DirectoryJournal;
         use std::time::Duration;
         let root = std::env::temp_dir().join(format!(
-            "nightlean-journal-test-{}-{}",
+            "noctium-journal-test-{}-{}",
             std::process::id(),
             rand::random::<u64>()
         ));

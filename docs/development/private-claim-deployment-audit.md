@@ -4,7 +4,7 @@ This audit joins the selected PrivateClaim source certificate to native key gene
 
 The controller starts by running the closed [exact-byte artifact audit](private-claim-artifact-certificates.md), using an independently supplied authority digest. It then generates and checks native keys, constructs an authenticated public bundle and checks the actual deployed operation and initialized state. A public auditor needs public artifacts and a trusted node endpoint. Witnesses, wallet seeds and private journals are excluded from the public verification interface.
 
-The source authority used by the retained qualification is commit `925164d0e17d994038d77d3b2b71c410619557d3`, tree `380ced01c6ced4409c7aedf59a9985d21b50f582`, authority SHA-256 `5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb`. Current Noctium branding and SDK revisions do not replace this historical compiler/proof identity. Existing `Nightlean.*` proof names and wire-format identifiers remain stable compatibility identifiers.
+The source authority used by the retained qualification is commit `925164d0e17d994038d77d3b2b71c410619557d3`, tree `380ced01c6ced4409c7aedf59a9985d21b50f582`, authority SHA-256 `5911db364d99b11fdaab6af215264fc59e8c8f8f86d13d2981eb7c246d2ca9eb`. Current Noctium branding and SDK revisions do not replace this historical compiler/proof identity. Existing `Noctium.*` proof names and wire-format identifiers remain stable compatibility identifiers.
 
 ## The checked join
 

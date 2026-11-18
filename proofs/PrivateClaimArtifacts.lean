@@ -1,7 +1,7 @@
 import proofs.PrivateClaimNativePrivacy
-import Nightlean.Verification.ArtifactCertificate
+import Noctium.Verification.ArtifactCertificate
 
-namespace Nightlean.PrivateClaimArtifacts
+namespace Noctium.PrivateClaimArtifacts
 open Verification Verification.ArtifactBytes Verification.ArtifactCertificate
 open PrivateClaimLowering PrivateClaimNativeState PrivateClaimNativePrivacy
 
@@ -82,4 +82,4 @@ theorem concrete_functional (authority : Authority) (build : BuildIdentity) (sou
 #print axioms concrete_preservation
 #print axioms concrete_privacy
 #print axioms exact_byte_build_binding
-end Nightlean.PrivateClaimArtifacts
+end Noctium.PrivateClaimArtifacts

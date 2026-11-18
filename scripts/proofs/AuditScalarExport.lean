@@ -1,4 +1,4 @@
-import Nightlean.Verification.ScalarExportAudit
+import Noctium.Verification.ScalarExportAudit
 
 def main (args : List String) : IO UInt32 :=
-  Nightlean.Verification.ScalarExportAudit.run args
+  Noctium.Verification.ScalarExportAudit.run args

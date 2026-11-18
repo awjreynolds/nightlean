@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-NS = "Nightlean.PrivateClaimLowering"
+NS = "Noctium.PrivateClaimLowering"
 PROOF_ROOTS = [f"{NS}.{name}" for name in [
     "native_constraints_sound", "native_constraints_pruned_sound", "source_acceptance_complete",
     "eligible_source_complete", "decoded_constraints_sound", "decoded_eligible_constraints_complete",
@@ -56,13 +56,13 @@ def certificate_source(tree: object, namespace: str) -> str:
 set_option maxRecDepth 10000
 set_option maxHeartbeats 4000000
 namespace {namespace}
-open Nightlean Nightlean.PrivateClaimProofs Nightlean.Verification.NativeRelation Nightlean.PrivateClaimLowering
+open Noctium Noctium.PrivateClaimProofs Noctium.Verification.NativeRelation Noctium.PrivateClaimLowering
 def emittedJson : Lean.Json := {quote_tree(tree)}
-theorem decoded : Nightlean.Verification.NativeRelationJson.decode emittedJson =
+theorem decoded : Noctium.Verification.NativeRelationJson.decode emittedJson =
     .ok {NS}.program := by
-  have check : (Nightlean.Verification.NativeRelationJson.decode emittedJson).toOption =
+  have check : (Noctium.Verification.NativeRelationJson.decode emittedJson).toOption =
       some {NS}.program := by decide +kernel
-  cases h : Nightlean.Verification.NativeRelationJson.decode emittedJson with
+  cases h : Noctium.Verification.NativeRelationJson.decode emittedJson with
   | error message => rw [h] at check; contradiction
   | ok value =>
     rw [h] at check
@@ -139,7 +139,7 @@ def strict_json_bytes(contents: bytes) -> object:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / ".nightlean/audits/private-claim-lowering")
+    parser.add_argument("--output-dir", type=Path, default=ROOT / ".noctium/audits/private-claim-lowering")
     args = parser.parse_args()
     for malformed in [b'{"x":1,"x":2}', b'{"x":NaN}', b'{"x":Infinity}',
                       b'{"x":1.0}', b'{"x":1e0}', b'{"x":-0}', b'{"x":-1}']:
@@ -151,9 +151,9 @@ def main() -> int:
             raise AssertionError(f"malformed JSON accepted: {malformed!r}")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    run(["lake", "build", "nightlean", "Nightlean", "Nightlean.Frontend", "Nightlean.Verification.NativeRelationJson"])
+    run(["lake", "build", "noctium", "Noctium", "Noctium.Frontend", "Noctium.Verification.NativeRelationJson"])
     run(["lake", "env", "lean", "tests/NativeRelationJson.lean"])
-    with tempfile.TemporaryDirectory(prefix="nightlean-claim-lowering-") as directory:
+    with tempfile.TemporaryDirectory(prefix="noctium-claim-lowering-") as directory:
         scratch = Path(directory)
         imports = scratch / "imports"
         for child in ["examples", "proofs"]:
@@ -166,7 +166,7 @@ def main() -> int:
             if source.endswith("PrivateClaimLowering.lean"):
                 (output / "direct-axioms.txt").write_text(built.stdout)
         emitted = output / "emitted"
-        run([str(ROOT / ".lake/build/bin/nightlean"), "compile", "examples/PrivateClaim.lean",
+        run([str(ROOT / ".lake/build/bin/noctium"), "compile", "examples/PrivateClaim.lean",
              "--target", "profiles/midnight-ledger-9-zkir-3.2.1-target.json", "--output", str(emitted)])
         artifact = emitted / "claimRelation.zkir"
         original_bytes = artifact.read_bytes()

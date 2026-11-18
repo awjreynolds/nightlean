@@ -11,8 +11,8 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[2]
-SOUNDNESS = "Nightlean.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound"
-COMPLETENESS = "Nightlean.Verification.GenericStateConverseCompleteness.accepted_entrypoint_run_complete"
+SOUNDNESS = "Noctium.Verification.GenericStateAcceptedSoundness.accepted_entrypoint_run_sound"
+COMPLETENESS = "Noctium.Verification.GenericStateConverseCompleteness.accepted_entrypoint_run_complete"
 FIXTURE = "GenericStateAuditFixtures"
 LIMIT = 128 * 1024 * 1024
 
@@ -76,15 +76,15 @@ def main() -> int:
         parser.error("external model and digest must be supplied together")
     output = args.output_dir.resolve()
     output.mkdir(parents=True, exist_ok=True)
-    command(["lake", "build", "Nightlean.Verification.GenericStateProofRoles",
-             "Nightlean.Verification.GenericStateExportAudit"])
+    command(["lake", "build", "Noctium.Verification.GenericStateProofRoles",
+             "Noctium.Verification.GenericStateExportAudit"])
     with tempfile.TemporaryDirectory(prefix="noctium-generic-state-audit-") as directory:
         scratch = Path(directory)
         source = scratch / "source" / f"{FIXTURE}.lean"
         imports = scratch / "imports"
         source.parent.mkdir()
         imports.mkdir()
-        source.write_text(f'''import Nightlean.Verification.GenericStateProofRoles
+        source.write_text(f'''import Noctium.Verification.GenericStateProofRoles
 import Lean
 namespace {FIXTURE}
 open Lean Elab Command in
@@ -113,7 +113,7 @@ end {FIXTURE}
                  str(imports / f"{FIXTURE}.olean"), str(source)], environment)
 
         baseline = output / "baseline-model.ndjson"
-        export(baseline, "Nightlean.Verification.GenericStateProofRoles",
+        export(baseline, "Noctium.Verification.GenericStateProofRoles",
                [SOUNDNESS, COMPLETENESS, "propext", "Classical.choice", "Quot.sound"],
                environment)
         trusted = args.trusted_model_export or baseline

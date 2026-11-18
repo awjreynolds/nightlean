@@ -8,7 +8,7 @@
  "types":
  [{"schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r17:TypedWitness.PairNightleanCompositeLayoutV1;1;R17:TypedWitness.Pair2;f6:amountsU255;f4:okaysB0;",
+    "NoctiumCompositeTypeV1;r17:TypedWitness.PairNoctiumCompositeLayoutV1;1;R17:TypedWitness.Pair2;f6:amountsU255;f4:okaysB0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",

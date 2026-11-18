@@ -1,6 +1,6 @@
 #![cfg(feature = "zkir-321")]
 
-use nightlean_runtime::{
+use noctium_runtime::{
     Db, MODULUS, Plan, check, create_state, field_decimal, field_value, prepare, zkir::IrSource,
 };
 use num_bigint::BigUint;

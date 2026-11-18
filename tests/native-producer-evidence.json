@@ -22,17 +22,55 @@
     "releaseAssetSha256": "f2f4d6c1aaa85e2d9cec1c9f204f4f47ae5c7650ef170a68b1675441ea037133"
   },
   "upstreamObservations": [
-    {"id": "NATIVE-ASSERT-ONE", "checkerAccepted": true},
-    {"id": "NATIVE-ASSERT-TWO-CHECKER", "checkerAccepted": false, "nativeKeygenSucceeded": true},
-    {"id": "NATIVE-DUPLICATE-OUTPUT-UPSTREAM", "checkerAccepted": true, "nativeKeygenSucceeded": true},
-    {"id": "NATIVE-OUTPUT-DOES-NOT-TERMINATE", "checkerAccepted": false},
-    {"id": "NATIVE-INACTIVE-INPUT-DOES-NOT-SKIP-INVERSION", "checkerAccepted": false},
-    {"id": "NATIVE-LESS-THAN-UNBOUNDED-OUTSIDE-CONTRACT", "checkerAccepted": false, "scope": "Undefined input combination, observation only"},
-    {"id": "NATIVE-LESS-THAN-RANGED-REJECTS-BAD-WITNESS", "checkerAccepted": false},
-    {"id": "SOURCE-PUBLIC-BOOL-FALSE", "checkerAccepted": true, "activityGroups": 2},
-    {"id": "SOURCE-PUBLIC-BOOL-TRUE", "checkerAccepted": true, "activityGroups": 2},
-    {"id": "SOURCE-PUBLIC-BOOL-TWO-REJECT", "checkerAccepted": false},
-    {"id": "SOURCE-PUBLIC-BOOL-WRONG-RETURN-REJECT", "checkerAccepted": false}
+    {
+      "id": "NATIVE-ASSERT-ONE",
+      "checkerAccepted": true
+    },
+    {
+      "id": "NATIVE-ASSERT-TWO-CHECKER",
+      "checkerAccepted": false,
+      "nativeKeygenSucceeded": true
+    },
+    {
+      "id": "NATIVE-DUPLICATE-OUTPUT-UPSTREAM",
+      "checkerAccepted": true,
+      "nativeKeygenSucceeded": true
+    },
+    {
+      "id": "NATIVE-OUTPUT-DOES-NOT-TERMINATE",
+      "checkerAccepted": false
+    },
+    {
+      "id": "NATIVE-INACTIVE-INPUT-DOES-NOT-SKIP-INVERSION",
+      "checkerAccepted": false
+    },
+    {
+      "id": "NATIVE-LESS-THAN-UNBOUNDED-OUTSIDE-CONTRACT",
+      "checkerAccepted": false,
+      "scope": "Undefined input combination, observation only"
+    },
+    {
+      "id": "NATIVE-LESS-THAN-RANGED-REJECTS-BAD-WITNESS",
+      "checkerAccepted": false
+    },
+    {
+      "id": "SOURCE-PUBLIC-BOOL-FALSE",
+      "checkerAccepted": true,
+      "activityGroups": 2
+    },
+    {
+      "id": "SOURCE-PUBLIC-BOOL-TRUE",
+      "checkerAccepted": true,
+      "activityGroups": 2
+    },
+    {
+      "id": "SOURCE-PUBLIC-BOOL-TWO-REJECT",
+      "checkerAccepted": false
+    },
+    {
+      "id": "SOURCE-PUBLIC-BOOL-WRONG-RETURN-REJECT",
+      "checkerAccepted": false
+    }
   ],
   "goldens": {
     "privateClaimZkirSha256": "c569dd887fdf6aa3bdd2c8e2358985657ad3612eb72e0eb16f28682bb2b2b81c",
@@ -50,5 +88,12 @@
     "Full native instruction/type, alignment, composition or asset coverage",
     "Whole-source or proving resource safety",
     "A formal source-to-native preservation theorem for the abstract validator/normalizer"
-  ]
+  ],
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "7f9448e47beacfe20e1c1b98d13c60add2d24c974b29470ac5655f62342e02fc",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/native-producer-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/native-producer-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

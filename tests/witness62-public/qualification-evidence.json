@@ -49,7 +49,7 @@
       "validateCompleteInputMap_preserves_bindings",
       "recordInvocation_replayInvocation_matches"
     ],
-    "namespace": "Nightlean.Witness.Semantics",
+    "namespace": "Noctium.Witness.Semantics",
     "axioms": [
       "propext",
       "Classical.choice",
@@ -324,5 +324,12 @@
     "Public-network qualification",
     "Pair ledger deployment"
   ],
-  "historicalClaimSourceAuthority": "925164d0e17d994038d77d3b2b71c410619557d3"
+  "historicalClaimSourceAuthority": "925164d0e17d994038d77d3b2b71c410619557d3",
+  "historicalDisplayOnly": true,
+  "originalRecordSha256": "309511f102702d4d2635685d1b5d042a08f45a9943f1ab4412e407559dee8210",
+  "originalRecordCommit": "d30745c936ed04f90135ee7cb6c2dc6e1b45dae0",
+  "originalRecordPath": "tests/witness62-public/qualification-evidence.json",
+  "originalRecordUrl": "https://github.com/awjreynolds/noctium/blob/d30745c936ed04f90135ee7cb6c2dc6e1b45dae0/tests/witness62-public/qualification-evidence.json",
+  "currentSourceQualified": false,
+  "historicalScopeNote": "Paths and labels are normalized for current branding. Retained hashes and qualification claims apply to the original record and its pinned source and implementation commits, not to the current renamed source tree."
 }

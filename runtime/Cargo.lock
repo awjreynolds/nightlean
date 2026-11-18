@@ -2381,7 +2381,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "nightlean-runtime"
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
+]
+
+[[package]]
+name = "noctium-runtime"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2413,18 +2425,6 @@ dependencies = [
  "serde_json",
  "sha2 0.11.1",
  "zeroize",
-]
-
-[[package]]
-name = "nix"
-version = "0.31.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
-dependencies = [
- "bitflags",
- "cfg-if",
- "cfg_aliases",
- "libc",
 ]
 
 [[package]]

@@ -22,7 +22,7 @@
     {"list":
      {"composite":
       {"typeFingerprint":
-       "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+       "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
        "schemaVersion": 1,
        "layout":
        {"kind": "struct",
@@ -43,7 +43,7 @@
         {"list":
          {"composite":
           {"typeFingerprint":
-           "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+           "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
            "schemaVersion": 1,
            "layout":
            {"kind": "struct",
@@ -64,7 +64,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -81,7 +81,7 @@
   {"type": "Composite",
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -123,7 +123,7 @@
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -132,7 +132,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": false,
     "op": "push",
@@ -140,7 +140,7 @@
     {"value":
      {"value": {"value": true, "tag": "bool"},
       "tag": "let",
-      "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
       "body":
       {"yes":
        {"tag": "eq",
@@ -150,10 +150,10 @@
        "no": {"value": false, "tag": "bool"},
        "condition":
        {"tag": "reference",
-        "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}},
+        "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}},
      "tag": "let",
      "name":
-     "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
      "body":
      {"yes": {"tag": "reference", "name": "owner"},
       "tag": "select",
@@ -195,13 +195,13 @@
       "condition":
       {"tag": "reference",
        "name":
-       "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+       "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
     "alignment": "bytes32"},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -210,7 +210,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation":
    {"storage": false,
     "op": "push",
@@ -220,7 +220,7 @@
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -229,13 +229,13 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation": {"op": "new"},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -244,13 +244,13 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"operation": {"op": "insert", "n": 2},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -259,7 +259,7 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxxx"}}}},
   {"op": "dup"},
   {"slot": 1,
    "pushPath": false,
@@ -283,7 +283,7 @@
       {"value":
        {"value": {"value": true, "tag": "bool"},
         "tag": "let",
-        "name": "_nightlean_activity_guard_xxxxxxxxxxxx",
+        "name": "_noctium_activity_guard_xxxxxxxxxxxx",
         "body":
         {"yes":
          {"tag": "eq",
@@ -293,10 +293,10 @@
          "no": {"value": false, "tag": "bool"},
          "condition":
          {"tag": "reference",
-          "name": "_nightlean_activity_guard_xxxxxxxxxxxx"}}},
+          "name": "_noctium_activity_guard_xxxxxxxxxxxx"}}},
        "tag": "let",
        "name":
-       "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "owner"},
         "tag": "select",
@@ -338,13 +338,13 @@
         "condition":
         {"tag": "reference",
          "name":
-         "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+         "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
       "alignment": "bytes32"},
      {"expression":
       {"value":
        {"value": {"value": true, "tag": "bool"},
         "tag": "let",
-        "name": "_nightlean_activity_guard_xxxxxxxxxxxx",
+        "name": "_noctium_activity_guard_xxxxxxxxxxxx",
         "body":
         {"yes":
          {"tag": "eq",
@@ -354,10 +354,10 @@
          "no": {"value": false, "tag": "bool"},
          "condition":
          {"tag": "reference",
-          "name": "_nightlean_activity_guard_xxxxxxxxxxxx"}}},
+          "name": "_noctium_activity_guard_xxxxxxxxxxxx"}}},
        "tag": "let",
        "name":
-       "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+       "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
        "body":
        {"yes": {"tag": "reference", "name": "spender"},
         "tag": "select",
@@ -399,13 +399,13 @@
         "condition":
         {"tag": "reference",
          "name":
-         "_nightlean_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
+         "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}}},
       "alignment": "bytes32"}]},
    "op": "guarded",
    "guard":
    {"value": {"value": true, "tag": "bool"},
     "tag": "let",
-    "name": "_nightlean_activity_guard_xxxxxxxxxxxx",
+    "name": "_noctium_activity_guard_xxxxxxxxxxxx",
     "body":
     {"yes":
      {"tag": "eq",
@@ -414,11 +414,11 @@
      "tag": "select",
      "no": {"value": false, "tag": "bool"},
      "condition":
-     {"tag": "reference", "name": "_nightlean_activity_guard_xxxxxxxxxxxx"}}}},
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxx"}}}},
   {"slot": 0,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -434,7 +434,7 @@
   {"slot": 1,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -458,7 +458,7 @@
   {"slot": 0,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
@@ -483,7 +483,7 @@
   {"slot": 1,
    "schema":
    {"typeFingerprint":
-    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "NoctiumCompositeTypeV1;r15:NativeList.MemoNoctiumCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
     "schemaVersion": 1,
     "layout":
     {"kind": "struct",
