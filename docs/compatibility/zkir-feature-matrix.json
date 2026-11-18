@@ -4747,12 +4747,22 @@
         "../../Noctium/Foreign.lean",
         "../../runtime/tests/foreign_codec.rs"
       ]
+    },
+    {
+      "issue": 75,
+      "commit": "562b704",
+      "scope": "Six typed Secp input/result paths with canonical constants, equality and select. Source/native/witness checks pass; legacy runtime compile check passes. Foreign arithmetic and storage remain pending; no new opcode/proof/deployment qualification.",
+      "refs": [
+        "../development/foreign-transport.md",
+        "../../tests/ForeignTransport.lean",
+        "../../runtime/tests/foreign_transport.rs"
+      ]
     }
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "38b2b35e532a63f8af508026f1a4df60f074ebc9",
-    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded fixed-byte values, persistent hashing, typed Boolean gates and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
+    "sourceCommit": "562b70400ac630a1c3bdb1af42aa41560cb8478e",
+    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub paths and six typed Secp transport paths. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
       "add",
@@ -4809,7 +4819,13 @@
     "explicitNativeValueTypes": [
       "Native",
       "JubjubScalar",
-      "JubjubPoint"
+      "JubjubPoint",
+      "Secp256k1Base",
+      "Secp256k1Scalar",
+      "Secp256k1Point",
+      "Secp256r1Base",
+      "Secp256r1Scalar",
+      "Secp256r1Point"
     ],
     "derivedSourceEncodings": [
       "Bool as constrained Native 0/1",
@@ -5070,9 +5086,22 @@
       "vectors": "../../runtime/tests/fixtures/foreign-codec/321/encoding.json",
       "scope": "Standalone Lean metadata and canonical field constant encoding, plus checked native Rust codec for Secp256k1/Secp256r1 Base, Scalar and Point. Rust module is exposed only with zkir-321.",
       "checks": "Lean encoding/decoding guards and 12field boundary vectors plus2identities compared with pinned native conversion/encoding. One focused Rust test checks all6types, generator/identity roundtrips, malformed limbs, noncanonical field encodings, altered identity and off-curve rejection.",
-      "compilerTypeIntegration": false,
+      "compilerTypeIntegration": true,
       "opcodeCoverageChange": 0,
-      "limits": "Source Ty/IR, operations, helpers, native lowering and SDK transport integration remain pending. No new keys, proofs or deployment. Full issue75 and parent25 remain open."
+      "limits": "Foundation scope at its recorded commit was codec only. Current typed integration is described in foreignTransportEvidence. Full arithmetic, curve operations and ledger storage remain open under issue75."
+    },
+    "foreignTransportEvidence": {
+      "issue": 75,
+      "implementationCommit": "562b70400ac630a1c3bdb1af42aa41560cb8478e",
+      "source": "../../tests/ForeignTransport.lean",
+      "native": "../../runtime/tests/foreign_transport.rs",
+      "guide": "../development/foreign-transport.md",
+      "scope": "All six Secp256k1/Secp256r1 Base/Scalar/Point types: logical Source Ty/IR, canonical field literals/identity points, typed public/private native inputs, equality/select and typed circuit/contract results. No implicit Native casts or foreign ScalarPolicy arithmetic.",
+      "wire": "Native typed inputs and Encode projections consume2/5 fields with shifted low192/high64 canonical field codecs. Rust public/provider values use exact canonical32-byte LE fields or33-byte native SEC1 points, with zero33 identity. Canonical byte aliases and type mismatch reject.",
+      "focusedChecks": "Compiler build, source guards, real Rust Session, one source-generated native checker case with both choose paths, six public and six private foreign values, field modulus-minus-one/scalar-order-minus-one and generator/identity points, exact19 private fields, altered public transcript/private point flag, wrong family tag and field byte alias rejection.",
+      "nativeCheckerRuntimeSeconds": 0.02,
+      "legacyScope": "The zkir-320 runtime library compiled after the shared value changes. New foreign runtime variants remain321-only. No legacy proof/ledger requalification.",
+      "limits": "No new opcode names, keys, proofs or deployment. Foreign field/group arithmetic, further byte-conversion syntax, ledger storage and formal witness/compiler preservation remain open. Nonidentity point load_constant is not qualified."
     }
   }
 }

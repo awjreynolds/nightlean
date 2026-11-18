@@ -2,7 +2,7 @@
 
 Status: implementation in progress under [issue 75](https://github.com/awjreynolds/noctium/issues/75). The current source snapshot does not qualify these types. This package extends [the full native capability goal](../compatibility/GOAL.md), after native hash-to-curve.
 
-The first dependency is implemented: [Lean metadata and field constant encoding](../../Noctium/Foreign.lean), a [checked Rust native codec](../../runtime/src/foreign.rs), and [shared differential vectors](../../runtime/tests/fixtures/foreign-codec/321/encoding.json). The focused native case covers all six types, canonical boundary values, identity/generator points and malformed encodings. The Rust module is currently exposed only with `zkir-321`. Source Ty/IR, operations, transport and SDK integration remain pending. This foundation adds no source opcode/type coverage, keys, proofs or deployment qualification.
+The codec foundation includes [Lean metadata and field constant encoding](../../Noctium/Foreign.lean), a [checked Rust native codec](../../runtime/src/foreign.rs), and [shared differential vectors](../../runtime/tests/fixtures/foreign-codec/321/encoding.json). [Typed transport](../development/foreign-transport.md) now connects all six types to Source Ty/IR, public/private inputs, canonical literals, equality/select and typed results. A focused Lean/native example and real Rust Session case pass. The Rust path is currently exposed only with `zkir-321`. Field/group arithmetic, further byte-conversion syntax and foreign ledger storage remain pending. No new keys, proofs or deployment qualify these slices.
 
 ## Scope and interface
 
