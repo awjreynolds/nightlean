@@ -272,6 +272,9 @@ inductive Statement where
   | stage (capability key : String) (ty : Ty) (value : Term)
   | readCell (state destination : String) (ty : Ty)
   | writeCell (state : String) (ty : Ty) (value : Term)
+  | readMap (state destination : String) (keyTy valueTy : Ty) (key : Term)
+  | readMember (state destination : String) (keyTy valueTy : Ty) (key : Term)
+  | writeMap (state : String) (keyTy valueTy : Ty) (key value : Term)
   deriving Repr
 
 structure Declaration where
@@ -401,12 +404,17 @@ private def statementMetadata : Statement → Except Diagnostic Unit
   | .stage capability key _ _ => do textMetadata capability; textMetadata key
   | .readCell state destination _ => do textMetadata state; textMetadata destination
   | .writeCell state _ _ => textMetadata state
+  | .readMap state destination _ _ _ | .readMember state destination _ _ _ =>
+    do textMetadata state; textMetadata destination
+  | .writeMap state _ _ _ _ => textMetadata state
   | _ => pure ()
 
 private def statementTerms : Statement → List Term
   | .bind _ _ value | .evaluate value | .assert value | .stage _ _ _ value => [value]
   | .writeCell _ _ value => [value]
   | .readCell .. => []
+  | .readMap _ _ _ _ key | .readMember _ _ _ _ key => [key]
+  | .writeMap _ _ _ key value => [key, value]
   | .branch condition _ _ => [condition]
   | .return value => value.toList
 
@@ -1207,12 +1215,15 @@ private def inputNames (program : Program) (target : DeclarationId) : List Strin
       | .ok compiled => sourceLeafPaths compiled.checked.value input.name
       | .error _ => [input.name]
 
-private def exportedInputNames (program : Program) (target : DeclarationId) : List String :=
-  program.exports.filter (·.target == target) |>.flatMap fun entry =>
-    entry.inputs.map (·.name) ++ entry.compositeInputs.flatMap fun input =>
-      match Types.compileType program.composites input.type with
-      | .ok compiled => sourceLeafPaths compiled.checked.value input.name
-      | .error _ => [input.name]
+private def checkedMap (program : Program) (span : SourceSpan) (name : String)
+    (keyTy valueTy : Ty) : Except Diagnostic Unit := do
+  liftError span ((LedgerValueType.map keyTy (.scalar valueTy)).validate Capabilities.source)
+  unless nativeCellType valueTy do fail span "structured helper map values require Native, Bool, or UInt"
+  let some state := program.ledger.find? (·.name == name)
+    | fail span s!"unknown helper ledger map '{name}'"
+  unless state.kind == .map keyTy valueTy do
+    fail span s!"ledger map '{name}' type mismatch"
+  if state.sealed then fail span "only cells can be sealed"
 
 private def checkBody (limits : Limits) (program : Program) (declaration : Declaration)
     (fuel : Nat) (env : Environment) (body : List Statement)
@@ -1270,6 +1281,26 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
           let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
           unless subtype info.ty (.scalar ty) do fail span "ledger cell write type mismatch"
           pure {info with effects := (.ledgerWrite :: info.effects).eraseDups}
+        | .readMap state destination keyTy valueTy key
+        | .readMember state destination keyTy valueTy key => do
+          checkedMap program span state keyTy valueTy
+          let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span key
+          unless subtype info.ty (.scalar keyTy) do fail span "ledger map key type mismatch"
+          if locals.contains destination || (inputNames program declaration.id).contains destination then
+            fail span s!"ledger read destination '{destination}' shadows an existing binding"
+          let resultTy := match statement with
+            | .readMember .. => Ty.bool
+            | _ => valueTy
+          env := (destination, .scalar resultTy) :: env
+          locals := destination :: locals
+          pure {info with ty := .unit, effects := (.ledgerRead :: info.effects).eraseDups}
+        | .writeMap state keyTy valueTy key value => do
+          checkedMap program span state keyTy valueTy
+          let key ← inferTerm limits.maxSourceDepth program declaration.id.scope env span key
+          unless subtype key.ty (.scalar keyTy) do fail span "ledger map key type mismatch"
+          let value ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
+          unless subtype value.ty (.scalar valueTy) do fail span "ledger map value type mismatch"
+          pure (combine .unit [key, value] [.ledgerWrite])
       result := {result with
         calls := result.calls ++ info.calls
         effects := (result.effects ++ info.effects).eraseDups
@@ -1626,6 +1657,12 @@ private def closeExpression (bindings : List LocalBinding) (value : Expr ty) : E
 private def closeLedgerEffect (bindings : List LocalBinding) : Effect → Effect
   | .require condition => .require (closeExpression bindings condition)
   | .writeCell state ty value => .writeCell state ty (closeExpression bindings value)
+  | .readMap state destination keyTy valueTy key =>
+      .readMap state destination keyTy valueTy (closeExpression bindings key)
+  | .readMember state destination keyTy valueTy key =>
+      .readMember state destination keyTy valueTy (closeExpression bindings key)
+  | .writeMap state keyTy valueTy key value =>
+      .writeMap state keyTy valueTy (closeExpression bindings key) (closeExpression bindings value)
   | effect => effect
 
 private def appendLedgerEffect (span : SourceSpan) (effect : Effect) : LowerM Unit := do
@@ -2254,6 +2291,31 @@ mutual
         let value ← liftD (typedExpr declaration.span ty value)
         appendLedgerEffect declaration.span (.writeCell stateName ty value)
         lowerBodyWith program declaration env rest continuation
+      | .readMap stateName destination keyTy valueTy key
+      | .readMember stateName destination keyTy valueTy key => do
+        unless (← get).ledgerMode do
+          liftD (fail declaration.span "native helper capability unavailable: ledger read")
+        let key ← lowerTerm program declaration.id.scope env declaration.span key
+        let key ← liftD (typedExpr declaration.span keyTy key)
+        let resultTy := match statement with
+          | .readMember .. => Ty.bool
+          | _ => valueTy
+        let readName ← freshTyped resultTy
+        let effect := match statement with
+          | .readMember .. => Effect.readMember stateName readName keyTy valueTy key
+          | _ => Effect.readMap stateName readName keyTy valueTy key
+        appendLedgerEffect declaration.span effect
+        let reference := scalarValue (ty := resultTy) (Expr.ref readName)
+        lowerBodyWith program declaration ((destination, reference) :: env) rest continuation
+      | .writeMap stateName keyTy valueTy key value => do
+        unless (← get).ledgerMode do
+          liftD (fail declaration.span "native helper capability unavailable: ledger write")
+        let key ← lowerTerm program declaration.id.scope env declaration.span key
+        let key ← liftD (typedExpr declaration.span keyTy key)
+        let value ← lowerTerm program declaration.id.scope env declaration.span value
+        let value ← liftD (typedExpr declaration.span valueTy value)
+        appendLedgerEffect declaration.span (.writeMap stateName keyTy valueTy key value)
+        lowerBodyWith program declaration env rest continuation
       | .stage .. => liftD (fail declaration.span "native helper capability unavailable: private state")
       | .return _ => liftD (fail declaration.span "invalid helper statement sequence")
 end
@@ -2411,6 +2473,7 @@ private def compileEntrypointForState (limits : Limits) (program : Program)
     fail exported.span "native ledger helper witness scheduling is unavailable"
   let readNames := lowering.ledgerEffects.filterMap fun
     | .readCell _ destination _ => some destination
+    | .readMap _ destination _ _ _ | .readMember _ destination _ _ _ => some destination
     | _ => none
   let outputName := ((List.range (inputs.length + readNames.length + 1)).map fun index =>
     if index == 0 then "result" else s!"result{index}").find?
@@ -2625,6 +2688,10 @@ mutual
     | .readCell .. :: _ =>
       liftM (fail declaration.span "ledger reads require the native contract runtime")
     | .writeCell .. :: _ =>
+      liftM (fail declaration.span "ledger writes require the native contract runtime")
+    | .readMap .. :: _ | .readMember .. :: _ =>
+      liftM (fail declaration.span "ledger reads require the native contract runtime")
+    | .writeMap .. :: _ =>
       liftM (fail declaration.span "ledger writes require the native contract runtime")
     | .stage _ _ _ _ :: _ => liftM (fail declaration.span "private staging requires the portable control runtime")
 end

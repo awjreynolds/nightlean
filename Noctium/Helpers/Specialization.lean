@@ -1138,6 +1138,10 @@ private partial def collectWitnessStatements : List Helpers.Statement → Array 
         collectWitnessStatements no result
       | .readCell .. => result
       | .writeCell _ _ value => collectWitnessTerms value result
+      | .readMap _ _ _ _ key | .readMember _ _ _ _ key =>
+        collectWitnessTerms key result
+      | .writeMap _ _ _ key value =>
+        collectWitnessTerms value (collectWitnessTerms key result)
     collectWitnessStatements rest result
 
 private def witnessStatements (body : List Helpers.Statement) : List SignatureValue :=

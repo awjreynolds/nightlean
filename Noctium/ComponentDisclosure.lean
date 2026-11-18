@@ -370,6 +370,18 @@ private partial def analyzeBody (fuel : Nat) (program : Program) (prepared : Pre
   | .writeCell _ _ value :: rest => do
     discard (analyzeTerm fuel program prepared declaration.id.scope env span value)
     analyzeBody fuel program prepared declaration env rest
+  | .readMap _ destination _ valueTy key :: rest => do
+    discard (analyzeTerm fuel program prepared declaration.id.scope env span key)
+    analyzeBody fuel program prepared declaration
+      ((destination, scalarValue (.scalar valueTy)) :: env) rest
+  | .readMember _ destination _ _ key :: rest => do
+    discard (analyzeTerm fuel program prepared declaration.id.scope env span key)
+    analyzeBody fuel program prepared declaration
+      ((destination, scalarValue (.scalar .bool)) :: env) rest
+  | .writeMap _ _ _ key value :: rest => do
+    discard (analyzeTerm fuel program prepared declaration.id.scope env span key)
+    discard (analyzeTerm fuel program prepared declaration.id.scope env span value)
+    analyzeBody fuel program prepared declaration env rest
 end
 
 private def outputName (program : Program) (entry : Export) : String := Id.run do

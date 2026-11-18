@@ -61,6 +61,7 @@ jobs:
           lake env lean tests/NativeHelperBranches.lean
           lake env lean tests/GuardedWitness.lean
           lake env lean tests/StructuredCells.lean
+          lake env lean tests/StructuredMaps.lean
           lake env lean tests/Helpers.lean
           lake env lean tests/Control.lean
           lake env lean --run tests/NativeProducer.lean

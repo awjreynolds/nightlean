@@ -16,6 +16,9 @@ def expressionSchedule : List Statement → List Term
   | .stage _ _ _ value :: rest => value :: expressionSchedule rest
   | .readCell .. :: rest => expressionSchedule rest
   | .writeCell _ _ value :: rest => value :: expressionSchedule rest
+  | .readMap _ _ _ _ key :: rest | .readMember _ _ _ _ key :: rest =>
+      key :: expressionSchedule rest
+  | .writeMap _ _ _ key value :: rest => key :: value :: expressionSchedule rest
   | .branch condition yes no :: rest =>
       condition :: expressionSchedule yes ++ expressionSchedule no ++ expressionSchedule rest
 termination_by body => sizeOf body
@@ -76,6 +79,15 @@ theorem eraseStages_preserves_expressionSchedule (body : List Statement) :
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [eraseStages, expressionSchedule] using hr
         | writeCell state type value =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [eraseStages, expressionSchedule] using hr
+        | readMap state destination keyTy valueTy key =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [eraseStages, expressionSchedule] using hr
+        | readMember state destination keyTy valueTy key =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [eraseStages, expressionSchedule] using hr
+        | writeMap state keyTy valueTy key value =>
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [eraseStages, expressionSchedule] using hr
         | branch condition yes no =>
@@ -152,6 +164,10 @@ def stageObservations : List Statement → List Observation
       .evaluate value :: .privateWrite capability key type value :: stageObservations rest
   | .readCell .. :: rest => stageObservations rest
   | .writeCell _ _ value :: rest => .evaluate value :: stageObservations rest
+  | .readMap _ _ _ _ key :: rest | .readMember _ _ _ _ key :: rest =>
+      .evaluate key :: stageObservations rest
+  | .writeMap _ _ _ key value :: rest =>
+      .evaluate key :: .evaluate value :: stageObservations rest
   | .branch condition yes no :: rest =>
       .evaluate condition :: stageObservations yes ++ stageObservations no ++ stageObservations rest
 termination_by body => sizeOf body
@@ -194,6 +210,15 @@ theorem stageObservations_preserve_evaluations (body : List Statement) :
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
         | writeCell state type value =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
+        | readMap state destination keyTy valueTy key =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
+        | readMember state destination keyTy valueTy key =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
+        | writeMap state keyTy valueTy key value =>
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
         | branch condition yes no =>
@@ -264,6 +289,15 @@ theorem stageObservations_preserve_exact_write_frame (body : List Statement) :
         | writeCell state type value =>
             have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
             simpa [stageObservations, privateWrites, sourceStageEvents] using hr
+        | readMap state destination keyTy valueTy key =>
+            have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
+            simpa [stageObservations, privateWrites, sourceStageEvents] using hr
+        | readMember state destination keyTy valueTy key =>
+            have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
+            simpa [stageObservations, privateWrites, sourceStageEvents] using hr
+        | writeMap state keyTy valueTy key value =>
+            have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
+            simpa [stageObservations, privateWrites, sourceStageEvents] using hr
         | branch condition yes no =>
             have hy := ih (statementWeight yes) (by rw [← weightEq]; simp [statementWeight]; omega) yes rfl
             have hn := ih (statementWeight no) (by rw [← weightEq]; simp [statementWeight]; omega) no rfl
@@ -298,7 +332,7 @@ private def eligibilityChildren : EligibilityNode → Option (List EligibilityNo
   | .statement statement => match statement with
     | .bind _ _ value | .evaluate value | .assert value | .stage _ _ _ value =>
         some [.term value]
-    | .readCell .. | .writeCell .. => none
+    | .readCell .. | .writeCell .. | .readMap .. | .readMember .. | .writeMap .. => none
     | .return none => some []
     | .return (some value) => some [.term value]
     | .branch .. => none
@@ -1327,6 +1361,8 @@ mutual
                 (evalBody fuel program context grants provider declaration environment rest)
           | .readCell .. | .writeCell .. =>
               fail "ledger state statements are outside the bounded native replay semantics"
+          | .readMap .. | .readMember .. | .writeMap .. =>
+              fail "ledger state statements are outside the bounded native replay semantics"
           | .branch .. => fail "structured control is outside the bounded native replay semantics"
   termination_by fuel _ _ _ _ _ _ _ => fuel
   decreasing_by all_goals omega
@@ -1870,6 +1906,15 @@ private theorem body_recordSafe_step (fuel : Nat)
       simp only [evalBody]
       exact recordSafe_fail _
     | writeCell state ty value =>
+      simp only [evalBody]
+      exact recordSafe_fail _
+    | readMap state destination keyTy valueTy key =>
+      simp only [evalBody]
+      exact recordSafe_fail _
+    | readMember state destination keyTy valueTy key =>
+      simp only [evalBody]
+      exact recordSafe_fail _
+    | writeMap state keyTy valueTy key value =>
       simp only [evalBody]
       exact recordSafe_fail _
 
@@ -3834,6 +3879,15 @@ private theorem evalBody_successSim_step (fuel : Nat) (program : Program)
     | writeCell state ty value =>
       simp only [Noctium.Witness.eraseStages, evalBody]
       exact successSim_fail _
+    | readMap state destination keyTy valueTy key =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact successSim_fail _
+    | readMember state destination keyTy valueTy key =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact successSim_fail _
+    | writeMap state keyTy valueTy key value =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact successSim_fail _
 
 end Noctium.Witness.Semantics
 
@@ -4656,6 +4710,15 @@ private theorem evalBody_failureSim_step (fuel : Nat) (program : Program)
       simp only [Noctium.Witness.eraseStages, evalBody]
       exact failureSim_fail _
     | writeCell state ty value =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact failureSim_fail _
+    | readMap state destination keyTy valueTy key =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact failureSim_fail _
+    | readMember state destination keyTy valueTy key =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact failureSim_fail _
+    | writeMap state keyTy valueTy key value =>
       simp only [Noctium.Witness.eraseStages, evalBody]
       exact failureSim_fail _
 

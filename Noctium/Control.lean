@@ -229,7 +229,11 @@ mutual
       body checked target env control rest
     | .readCell .. :: _ =>
       liftD (fail target.span "portable control capability unavailable: ledger reads")
+    | .readMap .. :: _ | .readMember .. :: _ =>
+      liftD (fail target.span "portable control capability unavailable: ledger reads")
     | .writeCell .. :: _ =>
+      liftD (fail target.span "portable control capability unavailable: ledger writes")
+    | .writeMap .. :: _ =>
       liftD (fail target.span "portable control capability unavailable: ledger writes")
     | .branch condition yes no :: rest =>
       let condition ← expression checked target.id.scope env target.span condition
@@ -485,7 +489,11 @@ mutual
           ("capability", toJson capability), ("key", toJson key), ("type", toJson (typeName (.scalar ty))),
           ("value", ← emitExpression checked target.id.scope env target.span value)])
         | .readCell .. => emitLift (fail target.span "portable control capability unavailable: ledger reads")
+        | .readMap .. | .readMember .. =>
+          emitLift (fail target.span "portable control capability unavailable: ledger reads")
         | .writeCell .. => emitLift (fail target.span "portable control capability unavailable: ledger writes")
+        | .writeMap .. =>
+          emitLift (fail target.span "portable control capability unavailable: ledger writes")
       result := result ++ [item]
     pure result
 end
