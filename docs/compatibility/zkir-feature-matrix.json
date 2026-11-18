@@ -4861,7 +4861,8 @@
       "guarded native map leaf deletion with idempotent absent-leaf behavior, missing-parent rejection and separate VM activity groups",
       "public source constructors and sealed deployment cells, with exact UTF8 Compress metadata and source/runtime immutability checks",
       "checked JubjubScalar/JubjubPoint direct cells, scalar map values and nested scalar leaves, with canonical scalar/subgroup point codecs and guarded zero/identity defaults",
-      "packed public Bytes32 prologue: one bytes-aligned Push/Popeq pair, two bounded Native public chunks, private byte ABI unchanged and retained bytewise artifact compatibility"
+      "packed public Bytes32 prologue: one bytes-aligned Push/Popeq pair, two bounded Native public chunks, private byte ABI unchanged and retained bytewise artifact compatibility",
+      "structured scalar cell/map bodies with typed witnesses and private staging, using authenticated native cursor callbacks; focused native evidence covers one Native cell"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
@@ -5376,6 +5377,25 @@
         "bindingBytes": 9060
       },
       "limits": "No new keys/proofs/deployments or proving performance measurement. Scoped native case covers scalar slots. General structured helper ledger effects, whole guarded proof/ledger qualification and schema2 semantic-preservation proof remain open. Host-only plans stay separately gated."
+    },
+    "structuredLedgerWitnesses": {
+      "checkedOn": "2026-11-18",
+      "sourceCommit": "4b3b37e018ed5f8406caa3a91bcbf3428d9925a5",
+      "source": "../../tests/StructuredLedgerWitness.lean",
+      "native": "../../runtime/src/witness_execution/ledger_tests.rs",
+      "documentation": "../development/structured-cells.md#state-dependent-typed-witnesses",
+      "newOpcodes": 0,
+      "scope": "Paired Lean host/native lowering for structured cell/map reads, membership and writes, typed providers and private staging. Internal callback rows bind source call ordinals to native effect operation boundaries. One native cursor supplies ledger reads and preserves read-after-write order. Public host responses cannot supply internal reads.",
+      "checks": {
+        "compilerBuild": "passed",
+        "sourceExport": "passed, selected 3.2.1 profile",
+        "nativeCases": "passed,4 cases in0.02seconds",
+        "existingGuardedWitnessCases": "passed,2 cases in0.01seconds",
+        "activeCell": "balance3 -> provider7 -> write/read/return10, private stage7",
+        "inactiveCell": "no external provider, balance3 preserved, return0",
+        "essentialRejects": "wrong provider result before staging, forged host response to internal callback, read metadata redirected to a different native read, undisclosed source write"
+      },
+      "limits": "Native runtime evidence covers one Native cell. Map/provider combinations, aggregate and nested state bodies, portable SDK bindings, whole guarded proof/ledger qualification and general source preservation remain open. No new keys, proofs, deployments, broad regressions or K benchmark."
     }
   }
 }

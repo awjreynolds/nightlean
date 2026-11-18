@@ -26,7 +26,7 @@ The current structured-map scenario also passes through the same executor. Only 
 
 ## Integration boundary
 
-This is a Rust preparation API. It is not yet connected to state reads inside source witness helper bodies. `WitnessExecution` currently runs its source Session before full native preparation. The next integration must coordinate that Session with this cursor while preserving provider order, native effect boundaries and private journal ownership.
+The Rust `WitnessExecution` owner now coordinates source Sessions with this cursor for [structured state-dependent typed witnesses](structured-cells.md#state-dependent-typed-witnesses). Internal callbacks bind to native read/write boundaries. External providers retain the existing typed interface, and private staging retains the existing journal owner. Direct cursor users still supply their own private-input scheduling. Portable bindings and broader state layouts need separate qualification.
 
 A completed preimage still needs `check` against the native circuit. Preparation does not prove circuit satisfaction or submit a transaction. No new keys, proofs, deployment, C ABI, web/mobile binding or general preservation theorem accompanies this interface.
 

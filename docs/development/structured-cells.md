@@ -38,7 +38,7 @@ Assertions and partial computations retain guarded evaluation. Active invalid ca
 
 This route supports Native, Bool and bounded UInt cell/map values. Key types follow the existing ledger validation. The native map case exercises Bytes32 keys and Native values. The helper resource policy bounds the owning schema to 256 declarations, and results are scalar or Unit.
 
-Aggregate values, nested ledger trees and provider/private-state scheduling inside the same body remain under [structured native control](https://github.com/awjreynolds/noctium/issues/43). Existing contract effect blocks retain broader state operations. Ordinary `Helpers.compile` and portable host-control plans reject these ledger statements. `stage` retains its private journal meaning.
+Typed providers and private staging now share the same structured body with ordered state effects. Aggregate values, nested ledger trees and complete proof/ledger qualification remain under [structured native control](https://github.com/awjreynolds/noctium/issues/43). Existing contract effect blocks retain broader state operations. Ordinary `Helpers.compile` and portable host-control plans reject ledger statements. `stage` retains its private journal meaning.
 
 ## Focused evidence
 
@@ -62,3 +62,17 @@ Only the circuit and ledger plan consumed by each current test are retained as f
 The optional historical `Noctium.Witness.Semantics` model still has unmatched older Boolean, byte and curve families. Cell/map statements are explicitly outside its bounded replay model. Its repair and broader preservation qualification remain under [semantic preservation](https://github.com/awjreynolds/noctium/issues/21).
 
 The current compiler build, source export and focused native map case pass. The native case runs in 0.02 seconds after compilation. The shared native build directory occupies 1.1 GiB with the POC build settings.
+
+## State-dependent typed witnesses
+
+The [source example](../../tests/StructuredLedgerWitness.lean) reads balance 3, passes that value to the `derive` witness, explicitly discloses the computed update, writes the balance and reads the updated value. Private staging follows the source assertions. The same `entry ... from ...` form emits its typed witness binding and control plan alongside the native circuit and Impact plan.
+
+`WitnessExecution.advance` handles internal ledger callbacks through its owned `PreparationCursor`. Applications receive only external provider requests. Generated read slots are constrained equal to their actual native ledger reads. This equality permits treating those slots as public ledger data. Applications cannot supply a ledger read through `resume_typed`. Callback metadata binds each internal call to its source ordinal and native operation boundary, with read name/type checks against the selected plan.
+
+The cursor keeps one native execution prefix, so a later read observes earlier writes. No second host ledger interpreter runs. The authenticated deployment target or admitted current-state token supplies the starting state. Candidate writes remain local until the existing proof, client and private-journal lifecycle accepts the operation. Cancellation retains the original admitted state for retry.
+
+The focused Rust case covers balance 3, provider result 7, updated balance/return 10 and staged private value 7. The inactive branch skips the external provider, returns 0 and preserves balance 3. A wrong provider result fails before private staging. The case also rejects an externally forged internal read response and a callback redirected to another native read. Both completed paths pass the pinned 3.2.1 checker.
+
+This source integration currently uses scalar cell/map values and scalar or Unit results. The native runtime case covers one Native cell. Map/provider combinations, aggregate state bodies, portable bindings and general source-preservation proofs need separate evidence. No new opcode, key, proof or deployment accompanies this slice.
+
+State-dependent witness implementation revision: `4b3b37e018ed5f8406caa3a91bcbf3428d9925a5`. Four focused runtime cases pass in 0.02 seconds. Two existing guarded-witness cases pass in 0.01 seconds. The compiler and source export pass.

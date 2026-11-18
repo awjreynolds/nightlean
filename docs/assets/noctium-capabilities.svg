@@ -84,7 +84,7 @@
 
     <path d="M60 925H1540" stroke="#293A52"/>
     <text x="60" y="962" fill="#70E6CF" font-size="16" font-weight="700" letter-spacing="1.8">PUBLISHED EVIDENCE</text>
-    <text x="60" y="998" fill="#E3EBF5" font-size="21">38 scoped opcodes · state helpers · resumable runtime</text>
+    <text x="60" y="998" fill="#E3EBF5" font-size="21">38 scoped opcodes · ordered state + typed witnesses</text>
     <text x="60" y="1029" fill="#AEBFD5" font-size="21">Token: 16 entrypoints · native proofs + localnet</text>
     <text x="60" y="1060" fill="#AEBFD5" font-size="21">Historical proofs · localnet · Rust + C/C++ clients</text>
 
