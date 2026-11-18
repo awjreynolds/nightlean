@@ -4771,8 +4771,8 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "f62218cce8b5f5eb4d7636fc1f7fb81397336598",
-    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub paths and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
+    "sourceCommit": "705e5bb1f1bd6bfef874bb7756c0f920ae63e49d",
+    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
       "add",
@@ -4859,7 +4859,8 @@
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks",
       "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves epoch-checked memo clearing and encrypted escrow approval/refund/replacement and delegated spend/burn with supply/memos/permanent pair counters",
       "guarded native map leaf deletion with idempotent absent-leaf behavior, missing-parent rejection and separate VM activity groups",
-      "public source constructors and sealed deployment cells, with exact UTF8 Compress metadata and source/runtime immutability checks"
+      "public source constructors and sealed deployment cells, with exact UTF8 Compress metadata and source/runtime immutability checks",
+      "checked JubjubScalar/JubjubPoint direct cells, scalar map values and nested scalar leaves, with canonical scalar/subgroup point codecs and guarded zero/identity defaults"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
@@ -5171,6 +5172,20 @@
       "focusedChecks": "66-job compiler build, focused source guards/export and one native checker case with three invocations: parent creation under keyA, overwriteA and insertB. Checks six typed results,11private fields,204-bit scalar carriers,4/5-field points, missing guarded defaults, exact nested cell alignment, first-key preservation and second-key addition. Altered transcript, malformed stored leaf width, mismatched scalar/base leaf schema and foreign-key schema reject. Legacy320 library compilation passes. Direct/nested storage guide snippets compile.",
       "nativeCheckerRuntimeSeconds": 0.07,
       "limits": "No new key/proof generation, deployment or repeated witness Session campaign; runtime control parsing did not change. Foreign map keys, composite record leaves, broader native overload qualification and full formal preservation remain open."
+    },
+    "jubjubStorageEvidence": {
+      "issue": 78,
+      "implementationCommit": "705e5bb1f1bd6bfef874bb7756c0f920ae63e49d",
+      "source": "../../tests/JubjubStorage.lean",
+      "native": "../../runtime/tests/jubjub_storage.rs",
+      "guide": "../development/jubjub-storage.md",
+      "scope": "JubjubScalar/JubjubPoint in direct cells, scalar map values and nested scalar tree leaves. Uses existing logical-token pushFields/popeqFields with one scalar Fr or ordered point x/y Fr. No new opcode names or wire tags.",
+      "readBinding": "Scalar reads retain raw==encode(reduced) canonical bridge. Point reads bind reserved raw Native coordinates and select guard?rawX:0 / guard?rawY:1 before checked point construction and x/y roundtrip assertions. NativeExpected mirrors those terms. Inactive reads do not inspect state.",
+      "runtimeBoundary": "Typed storage codec reuses canonical scalar conversion and subgroup-checked point decode/re-encode. Active reads require exact declared cell/map/tree kind, encoded width and alignment. Typed pushes validate logical token, width and canonical value; source effect typing/native gate bind the target. Native/Bytes32 keys remain, Jubjub keys and record/list curve leaves stay rejected.",
+      "focusedChecks": "66-job compiler build, focused source guards/export, compiled guide snippet, one native checker case spanning three invocations and12typed returns across cells/maps/trees. Canonical1/2-field values, defaults, overwrites, sibling preservation and map/tree sizes match. Transcript mutation, wrong declared role, malformed width, noncanonical scalar, subgroup-invalid order2point and unsupported Jubjub keys reject. Existing foreign-tree native case passes through the shared codec. Legacy320 library compilation passes.",
+      "nativeCheckerRuntimeSeconds": 0.07,
+      "foreignRegressionRuntimeSeconds": 0.05,
+      "limits": "No key/proof generation, deployment or repeated witness Session campaign. General byte ledger values, unsupported typed keys, composite curve leaves, broader overload qualification and full formal preservation remain open."
     }
   }
 }

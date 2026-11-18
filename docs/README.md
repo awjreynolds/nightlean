@@ -56,6 +56,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Typed Secp transport](development/foreign-transport.md), public/private inputs, literals, equality, selection and results across six foreign types.
 - [Secp arithmetic and bytes](development/foreign-operations.md), field/group operations, coordinates, canonical points, reducing field conversions and guarded partial operations.
 - [Secp cells and map values](development/foreign-storage.md), canonical multi-field storage, constructor defaults and guarded reads.
+- [Jubjub ledger storage](development/jubjub-storage.md), checked scalar/point values across cells, maps and nested leaves.
 - [Nested foreign ledger state](development/foreign-trees.md), typed scalar leaves, parent creation, guarded defaults and preserved sibling entries.
 - [Curve25519 types](development/curve25519.md), prime-order Edwards points, distinct scalar encoding, typed operations and point storage.
 - [Foreign-field implementation plan](designs/foreign-types.md), delivered Secp slices and remaining Curve25519, storage and assurance work.
