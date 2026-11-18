@@ -529,8 +529,8 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     | .ok _ => pure ()
   validateConstraints caps env c.span c.constraints
   for output in c.outputs do
-    if output.ty.isBytes || output.ty.isJubjub then
-      throw {span := output.span, message := "Bytes32 and Jubjub circuit outputs are not supported"}
+    if output.ty.isJubjub || (output.ty.isBytes && output.ty != .bytes 32) then
+      throw {span := output.span, message := "circuit outputs support only Bytes32 among opaque values"}
     match output.ty.validate caps with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()

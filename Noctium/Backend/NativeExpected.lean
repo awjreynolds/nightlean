@@ -89,7 +89,11 @@ def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
   let aliases := sourceInputAliases value.inputs
   let (_, constraints, _) ← convert value.span (collect aliases value.constraints)
   let conditions ← convert value.span (value.constraints.mapM (normalize aliases))
-  let outputs ← value.outputs.mapM fun output => convert output.span (normalize aliases output.value)
+  let mut outputs := []
+  for output in value.outputs do
+    let fields ← convert output.span output.nativeReturnFields
+    for field in fields do
+      outputs := outputs ++ [← convert output.span (normalize aliases field)]
   let returns := outputs.map (·.term)
   let groups := (value.inputs.filter (·.visibility == .«public»)).flatMap fun input =>
     input.nativeIdentifiers.map fun identifier => [.input identifier]

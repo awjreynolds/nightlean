@@ -323,6 +323,173 @@ noctium_circuit allowanceView where
   public spender : Bytes32
 end
 
+noctium_witness_circuit transferFromEscrow where
+  read private Wallet.accountSecret as accountSecret
+  read private Wallet.encryptionSecret as encryptionSecret
+  public fromAddress : Bytes32
+  public spenderId : Bytes32
+  public to : Bytes32
+  private value : UInt 128
+  public ownerPk : JubjubPoint
+  public spenderC1 : JubjubPoint
+  public spenderC2 : JubjubPoint
+  public ownerC1 : JubjubPoint
+  public ownerC2 : JubjubPoint
+  public spendEpoch : UInt 64
+  public recipientPk : JubjubPoint
+  public pendingC1 : JubjubPoint
+  public pendingC2 : JubjubPoint
+  public creditEpoch : UInt 64
+  let derivedSpenderId : Bytes32 := persistentHash32(accountSecret)
+  let encryptionScalar : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([bytes32("ElGamal:secretToScalar"), encryptionSecret])))
+  let derivedSpenderPk : JubjubPoint := jubjubMulGenerator(encryptionScalar)
+  prove eq(spenderId, derivedSpenderId)
+  let plaintextWide : UInt 248 := witness plaintextBalance(spenderC1, spenderC2)
+  let escrowAmount : UInt 128 := cast(UInt 128, plaintextWide)
+  prove eq(jubjubAdd(spenderC2,
+    jubjubNeg(jubjubMul(spenderC1, encryptionScalar))),
+    jubjubMulGenerator(jubjubScalarFromNative(cast(Native, escrowAmount))))
+  let spendSeed : Bytes32 := witness freshSeed()
+  let remaining : UInt 128 := sub(escrowAmount, value)
+  let valueField : Native := cast(Native, value)
+  let valuePoint : JubjubPoint := jubjubMulGenerator(jubjubScalarFromNative(valueField))
+  let spendEpochBytes : Bytes32 := toBytes32(cast(Native, spendEpoch))
+  let spenderR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([spendSeed, bytes32("spend_escrow_spender"), fromAddress,
+      spenderId, spendEpochBytes])))
+  let ownerR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([spendSeed, bytes32("spend_escrow_owner"), fromAddress,
+      spenderId, spendEpochBytes])))
+  let ownerMemoR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([spendSeed, bytes32("spend_owner_memo"), fromAddress,
+      spenderId, spendEpochBytes])))
+  let nextSpenderC1 : JubjubPoint := jubjubAdd(
+    spenderC1, jubjubNeg(jubjubMulGenerator(spenderR)))
+  let nextSpenderC2 : JubjubPoint := jubjubAdd(spenderC2,
+    jubjubNeg(jubjubAdd(valuePoint, jubjubMul(derivedSpenderPk, spenderR))))
+  let nextOwnerC1 : JubjubPoint := jubjubAdd(
+    ownerC1, jubjubNeg(jubjubMulGenerator(ownerR)))
+  let nextOwnerC2 : JubjubPoint := jubjubAdd(ownerC2,
+    jubjubNeg(jubjubAdd(valuePoint, jubjubMul(ownerPk, ownerR))))
+  let ownerMemoEphemeral : JubjubPoint := jubjubMulGenerator(ownerMemoR)
+  let ownerMemoShared : JubjubPoint := jubjubMul(ownerPk, ownerMemoR)
+  let ownerMemoDigest : Bytes32 := persistentHashPoint(ownerMemoShared)
+  let ownerMemoMask : Native := degradeToNative(persistentHashVector32([
+    ownerMemoDigest, bytes32("OZ_CFT_escrow_owner_v1")]))
+  let ownerMemoCiphertext : Native := add(cast(Native, remaining), ownerMemoMask)
+  let spendRecovered : JubjubPoint := jubjubAdd(nextSpenderC2,
+    jubjubNeg(jubjubMul(nextSpenderC1, encryptionScalar)))
+  let remainingPoint : JubjubPoint := jubjubMulGenerator(
+    jubjubScalarFromNative(cast(Native, remaining)))
+  let creditSeed : Bytes32 := witness freshSeed()
+  let creditCountHash : Bytes32 := persistentHashNative(cast(Native, creditEpoch))
+  let creditR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([creditSeed, bytes32("credit_balance"), to, creditCountHash])))
+  let creditMemoR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([creditSeed, bytes32("credit_memo"), to, creditCountHash])))
+  let nextPendingC1 : JubjubPoint := jubjubAdd(pendingC1, jubjubMulGenerator(creditR))
+  let nextPendingC2 : JubjubPoint := jubjubAdd(
+    jubjubAdd(pendingC2, valuePoint), jubjubMul(recipientPk, creditR))
+  let creditMemoEphemeral : JubjubPoint := jubjubMulGenerator(creditMemoR)
+  let creditMemoShared : JubjubPoint := jubjubMul(recipientPk, creditMemoR)
+  let creditMemoDigest : Bytes32 := persistentHashPoint(creditMemoShared)
+  let creditMemoMask : Native := degradeToNative(persistentHashVector32([
+    creditMemoDigest, bytes32("OZ_CFT_ecdh_memo_v1")]))
+  let creditMemoCiphertext : Native := add(valueField, creditMemoMask)
+  prove eq(spendRecovered, remainingPoint)
+  output spenderKeyX : Native := disclose(jubjubX(derivedSpenderPk))
+  output spenderKeyY : Native := disclose(jubjubY(derivedSpenderPk))
+  output nextSpenderC1X : Native := disclose(jubjubX(nextSpenderC1))
+  output nextSpenderC1Y : Native := disclose(jubjubY(nextSpenderC1))
+  output nextSpenderC2X : Native := disclose(jubjubX(nextSpenderC2))
+  output nextSpenderC2Y : Native := disclose(jubjubY(nextSpenderC2))
+  output nextOwnerC1X : Native := disclose(jubjubX(nextOwnerC1))
+  output nextOwnerC1Y : Native := disclose(jubjubY(nextOwnerC1))
+  output nextOwnerC2X : Native := disclose(jubjubX(nextOwnerC2))
+  output nextOwnerC2Y : Native := disclose(jubjubY(nextOwnerC2))
+  output ownerMemoEphemeralX : Native := disclose(jubjubX(ownerMemoEphemeral))
+  output ownerMemoEphemeralY : Native := disclose(jubjubY(ownerMemoEphemeral))
+  output ownerMemoAmount : Native := disclose(ownerMemoCiphertext)
+  output nextPendingC1X : Native := disclose(jubjubX(nextPendingC1))
+  output nextPendingC1Y : Native := disclose(jubjubY(nextPendingC1))
+  output nextPendingC2X : Native := disclose(jubjubX(nextPendingC2))
+  output nextPendingC2Y : Native := disclose(jubjubY(nextPendingC2))
+  output memoX : Native := disclose(jubjubX(creditMemoEphemeral))
+  output memoY : Native := disclose(jubjubY(creditMemoEphemeral))
+  output memoAmount : Native := disclose(creditMemoCiphertext)
+end
+
+noctium_witness_circuit burnFromEscrow where
+  read private Wallet.accountSecret as accountSecret
+  read private Wallet.encryptionSecret as encryptionSecret
+  public fromAddress : Bytes32
+  public spenderId : Bytes32
+  private value : UInt 128
+  public ownerPk : JubjubPoint
+  public spenderC1 : JubjubPoint
+  public spenderC2 : JubjubPoint
+  public ownerC1 : JubjubPoint
+  public ownerC2 : JubjubPoint
+  public spendEpoch : UInt 64
+  let derivedSpenderId : Bytes32 := persistentHash32(accountSecret)
+  let encryptionScalar : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([bytes32("ElGamal:secretToScalar"), encryptionSecret])))
+  let derivedSpenderPk : JubjubPoint := jubjubMulGenerator(encryptionScalar)
+  prove eq(spenderId, derivedSpenderId)
+  let plaintextWide : UInt 248 := witness plaintextBalance(spenderC1, spenderC2)
+  let escrowAmount : UInt 128 := cast(UInt 128, plaintextWide)
+  prove eq(jubjubAdd(spenderC2,
+    jubjubNeg(jubjubMul(spenderC1, encryptionScalar))),
+    jubjubMulGenerator(jubjubScalarFromNative(cast(Native, escrowAmount))))
+  let spendSeed : Bytes32 := witness freshSeed()
+  let remaining : UInt 128 := sub(escrowAmount, value)
+  let valueField : Native := cast(Native, value)
+  let valuePoint : JubjubPoint := jubjubMulGenerator(jubjubScalarFromNative(valueField))
+  let spendEpochBytes : Bytes32 := toBytes32(cast(Native, spendEpoch))
+  let spenderR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([spendSeed, bytes32("spend_escrow_spender"), fromAddress,
+      spenderId, spendEpochBytes])))
+  let ownerR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([spendSeed, bytes32("spend_escrow_owner"), fromAddress,
+      spenderId, spendEpochBytes])))
+  let ownerMemoR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([spendSeed, bytes32("spend_owner_memo"), fromAddress,
+      spenderId, spendEpochBytes])))
+  let nextSpenderC1 : JubjubPoint := jubjubAdd(
+    spenderC1, jubjubNeg(jubjubMulGenerator(spenderR)))
+  let nextSpenderC2 : JubjubPoint := jubjubAdd(spenderC2,
+    jubjubNeg(jubjubAdd(valuePoint, jubjubMul(derivedSpenderPk, spenderR))))
+  let nextOwnerC1 : JubjubPoint := jubjubAdd(
+    ownerC1, jubjubNeg(jubjubMulGenerator(ownerR)))
+  let nextOwnerC2 : JubjubPoint := jubjubAdd(ownerC2,
+    jubjubNeg(jubjubAdd(valuePoint, jubjubMul(ownerPk, ownerR))))
+  let ownerMemoEphemeral : JubjubPoint := jubjubMulGenerator(ownerMemoR)
+  let ownerMemoShared : JubjubPoint := jubjubMul(ownerPk, ownerMemoR)
+  let ownerMemoDigest : Bytes32 := persistentHashPoint(ownerMemoShared)
+  let ownerMemoMask : Native := degradeToNative(persistentHashVector32([
+    ownerMemoDigest, bytes32("OZ_CFT_escrow_owner_v1")]))
+  let ownerMemoCiphertext : Native := add(cast(Native, remaining), ownerMemoMask)
+  let spendRecovered : JubjubPoint := jubjubAdd(nextSpenderC2,
+    jubjubNeg(jubjubMul(nextSpenderC1, encryptionScalar)))
+  let remainingPoint : JubjubPoint := jubjubMulGenerator(
+    jubjubScalarFromNative(cast(Native, remaining)))
+  prove eq(spendRecovered, remainingPoint)
+  output spenderKeyX : Native := disclose(jubjubX(derivedSpenderPk))
+  output spenderKeyY : Native := disclose(jubjubY(derivedSpenderPk))
+  output nextSpenderC1X : Native := disclose(jubjubX(nextSpenderC1))
+  output nextSpenderC1Y : Native := disclose(jubjubY(nextSpenderC1))
+  output nextSpenderC2X : Native := disclose(jubjubX(nextSpenderC2))
+  output nextSpenderC2Y : Native := disclose(jubjubY(nextSpenderC2))
+  output nextOwnerC1X : Native := disclose(jubjubX(nextOwnerC1))
+  output nextOwnerC1Y : Native := disclose(jubjubY(nextOwnerC1))
+  output nextOwnerC2X : Native := disclose(jubjubX(nextOwnerC2))
+  output nextOwnerC2Y : Native := disclose(jubjubY(nextOwnerC2))
+  output ownerMemoEphemeralX : Native := disclose(jubjubX(ownerMemoEphemeral))
+  output ownerMemoEphemeralY : Native := disclose(jubjubY(ownerMemoEphemeral))
+  output ownerMemoAmount : Native := disclose(ownerMemoCiphertext)
+end
+
 noctium_witness_circuit clearMemoInput where
   read private Wallet.accountSecret as accountSecret
   read private Wallet.encryptionSecret as encryptionSecret
@@ -386,6 +553,7 @@ noctium_contract ConfidentialToken where
     ownerMemoEphemeralY : Native
     ownerMemoAmount : Native
   }
+  tree escrowSpendEpochs : Bytes32 => Bytes32 => Counter
 
   entry registerWithKey uses registerAccount where
     read initialized as isInitialized
@@ -696,6 +864,139 @@ noctium_contract ConfidentialToken where
       select(allowancePresent, currentAllowance_ownerMemoEphemeralY, 1))
     return ownerMemoAmount : Native := select(
       allowancePresent, currentAllowance_ownerMemoAmount, 0)
+  end
+
+  -- A delegated spend updates both escrow copies and the owner's remaining
+  -- allowance memo. Incoming value stays in the recipient's pending pool.
+  entry transferFrom uses transferFromEscrow where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    require eq(eq(to, bytes32("")), false)
+    member encryptionKeys[disclose(fromAddress)] as ownerRegistered
+    require eq(ownerRegistered, true)
+    member encryptionKeys[disclose(spenderId)] as spenderRegistered
+    require eq(spenderRegistered, true)
+    read encryptionKeys[disclose(spenderId)] as storedSpenderKey
+    require eq(storedSpenderKey_x, result.spenderKeyX)
+    require eq(storedSpenderKey_y, result.spenderKeyY)
+    read encryptionKeys[disclose(fromAddress)] as storedOwnerKey
+    require eq(storedOwnerKey_x, jubjubX(ownerPk))
+    require eq(storedOwnerKey_y, jubjubY(ownerPk))
+    member escrow[disclose(fromAddress)] as ownerEscrowPresent
+    require eq(ownerEscrowPresent, true)
+    member escrow[disclose(fromAddress)][disclose(spenderId)] as escrowPresent
+    require eq(escrowPresent, true)
+    read escrow[disclose(fromAddress)][disclose(spenderId)] as oldEscrow
+    require eq(oldEscrow_spenderCtC1X, jubjubX(spenderC1))
+    require eq(oldEscrow_spenderCtC1Y, jubjubY(spenderC1))
+    require eq(oldEscrow_spenderCtC2X, jubjubX(spenderC2))
+    require eq(oldEscrow_spenderCtC2Y, jubjubY(spenderC2))
+    require eq(oldEscrow_ownerCtC1X, jubjubX(ownerC1))
+    require eq(oldEscrow_ownerCtC1Y, jubjubY(ownerC1))
+    require eq(oldEscrow_ownerCtC2X, jubjubX(ownerC2))
+    require eq(oldEscrow_ownerCtC2Y, jubjubY(ownerC2))
+    member escrowSpendEpochs[disclose(fromAddress)] as spendEpochOwnerPresent
+    if eq(spendEpochOwnerPresent, false) then {
+      insert escrowSpendEpochs[disclose(fromAddress)] := emptyMap
+    } else {
+    }
+    member escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)] as spendEpochPresent
+    if eq(spendEpochPresent, false) then {
+      reset escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)]
+    } else {
+    }
+    increment escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)] by 1
+    read escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)] as actualSpendEpoch
+    require eq(actualSpendEpoch, spendEpoch)
+    write escrow[disclose(fromAddress)][disclose(spenderId)] := fields(
+      result.nextSpenderC1X, result.nextSpenderC1Y,
+      result.nextSpenderC2X, result.nextSpenderC2Y,
+      result.nextOwnerC1X, result.nextOwnerC1Y,
+      result.nextOwnerC2X, result.nextOwnerC2Y,
+      result.ownerMemoEphemeralX, result.ownerMemoEphemeralY,
+      result.ownerMemoAmount)
+    member encryptionKeys[disclose(to)] as recipientRegistered
+    require eq(recipientRegistered, true)
+    read encryptionKeys[disclose(to)] as storedRecipientKey
+    require eq(storedRecipientKey_x, jubjubX(recipientPk))
+    require eq(storedRecipientKey_y, jubjubY(recipientPk))
+    read pending[disclose(to)] as oldPending
+    require eq(oldPending_c1x, jubjubX(pendingC1))
+    require eq(oldPending_c1y, jubjubY(pendingC1))
+    require eq(oldPending_c2x, jubjubX(pendingC2))
+    require eq(oldPending_c2y, jubjubY(pendingC2))
+    member memos[disclose(to)] as memoListPresent
+    if eq(memoListPresent, false) then {
+      reset memos[disclose(to)]
+    } else {
+    }
+    member creditEpochs[disclose(to)] as creditEpochPresent
+    if eq(creditEpochPresent, false) then {
+      reset creditEpochs[disclose(to)]
+    } else {
+    }
+    increment creditEpochs[disclose(to)] by 1
+    read creditEpochs[disclose(to)] as actualCreditEpoch
+    require eq(actualCreditEpoch, creditEpoch)
+    write pending[disclose(to)] := fields(
+      result.nextPendingC1X, result.nextPendingC1Y,
+      result.nextPendingC2X, result.nextPendingC2Y)
+    pushFront memos[disclose(to)] := fields(
+      result.memoX, result.memoY, result.memoAmount)
+    return caller : Bytes32 := spenderId
+  end
+
+  -- Public-supply wrapper for consuming the escrow as a burn. It returns the
+  -- authenticated spender id and reduces supply by the same private value.
+  entry burnFrom uses burnFromEscrow where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    member encryptionKeys[disclose(fromAddress)] as ownerRegistered
+    require eq(ownerRegistered, true)
+    member encryptionKeys[disclose(spenderId)] as spenderRegistered
+    require eq(spenderRegistered, true)
+    read encryptionKeys[disclose(spenderId)] as storedSpenderKey
+    require eq(storedSpenderKey_x, result.spenderKeyX)
+    require eq(storedSpenderKey_y, result.spenderKeyY)
+    read encryptionKeys[disclose(fromAddress)] as storedOwnerKey
+    require eq(storedOwnerKey_x, jubjubX(ownerPk))
+    require eq(storedOwnerKey_y, jubjubY(ownerPk))
+    member escrow[disclose(fromAddress)] as ownerEscrowPresent
+    require eq(ownerEscrowPresent, true)
+    member escrow[disclose(fromAddress)][disclose(spenderId)] as escrowPresent
+    require eq(escrowPresent, true)
+    read escrow[disclose(fromAddress)][disclose(spenderId)] as oldEscrow
+    require eq(oldEscrow_spenderCtC1X, jubjubX(spenderC1))
+    require eq(oldEscrow_spenderCtC1Y, jubjubY(spenderC1))
+    require eq(oldEscrow_spenderCtC2X, jubjubX(spenderC2))
+    require eq(oldEscrow_spenderCtC2Y, jubjubY(spenderC2))
+    require eq(oldEscrow_ownerCtC1X, jubjubX(ownerC1))
+    require eq(oldEscrow_ownerCtC1Y, jubjubY(ownerC1))
+    require eq(oldEscrow_ownerCtC2X, jubjubX(ownerC2))
+    require eq(oldEscrow_ownerCtC2Y, jubjubY(ownerC2))
+    member escrowSpendEpochs[disclose(fromAddress)] as spendEpochOwnerPresent
+    if eq(spendEpochOwnerPresent, false) then {
+      insert escrowSpendEpochs[disclose(fromAddress)] := emptyMap
+    } else {
+    }
+    member escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)] as spendEpochPresent
+    if eq(spendEpochPresent, false) then {
+      reset escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)]
+    } else {
+    }
+    increment escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)] by 1
+    read escrowSpendEpochs[disclose(fromAddress)][disclose(spenderId)] as actualSpendEpoch
+    require eq(actualSpendEpoch, spendEpoch)
+    write escrow[disclose(fromAddress)][disclose(spenderId)] := fields(
+      result.nextSpenderC1X, result.nextSpenderC1Y,
+      result.nextSpenderC2X, result.nextSpenderC2Y,
+      result.nextOwnerC1X, result.nextOwnerC1Y,
+      result.nextOwnerC2X, result.nextOwnerC2Y,
+      result.ownerMemoEphemeralX, result.ownerMemoEphemeralY,
+      result.ownerMemoAmount)
+    read totalSupply as currentSupply
+    write totalSupply := disclose(sub(currentSupply, value))
+    return caller : Bytes32 := spenderId
   end
 end
 

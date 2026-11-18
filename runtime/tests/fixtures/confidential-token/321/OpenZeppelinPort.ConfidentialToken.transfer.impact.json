@@ -142,7 +142,11 @@
             {"name": "ownerMemoAmount",
              "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
           "counts":
-          {"leaves": 11, "layoutNodes": 12, "expandedNodes": 12}}}]}]}}}],
+          {"leaves": 11, "layoutNodes": 12, "expandedNodes": 12}}}]}]}}},
+  {"name": "escrowSpendEpochs",
+   "kind":
+   {"tree":
+    {"map": ["Bytes<32>", {"map": ["Bytes<32>", {"counter": true}]}]}}}],
  "schemaVersion": 1,
  "returns":
  [{"visibility": "public",

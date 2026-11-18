@@ -1,0 +1,744 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "registered", "kind": {"map": ["Bytes<32>", "Bool"]}}],
+ "schemaVersion": 1,
+ "reads":
+ [{"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_0"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_1"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_2"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_3"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_4"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_5"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_6"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_7"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_8"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_9"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_10"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_11"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_12"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_13"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_14"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_15"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_16"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_17"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_18"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_19"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_20"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_21"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_22"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_23"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_24"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_25"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_26"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_27"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_28"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_29"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_30"},
+  {"type": "UIntRange<256>", "name": "_noctium_bytes_expectedAccountId_31"},
+  {"type": "Bool", "name": "found"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 0},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 0},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 1},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 1},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 2},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 2},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 3},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 3},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 4},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 4},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 5},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 5},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 6},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 6},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 7},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 7},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 8},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 8},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 9},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 9},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 10},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 10},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 11},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 11},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 12},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 12},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 13},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 13},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 14},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 14},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 15},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 15},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 16},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 16},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 17},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 17},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 18},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 18},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 19},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 19},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 20},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 20},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 21},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 21},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 22},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 22},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 23},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 23},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 24},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 24},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 25},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 25},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 26},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 26},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 27},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 27},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 28},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 28},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 29},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 29},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 30},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 30},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 31},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value":
+    {"value": {"tag": "reference", "name": "expectedAccountId"},
+     "tag": "byteAt",
+     "index": 31},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"slot": 0, "pushPath": true, "op": "index"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "accountId"},
+   "alignment": "bytes32"},
+  {"storage": true,
+   "op": "push",
+   "expression":
+   {"yes": {"value": "1", "tag": "constant"},
+    "tag": "select",
+    "no": {"value": "0", "tag": "constant"},
+    "condition": {"value": true, "tag": "bool"}},
+   "alignment": "field"},
+  {"op": "insert", "n": 2},
+  {"op": "dup"},
+  {"slot": 0, "pushPath": false, "op": "index"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "accountId"},
+   "alignment": "bytes32"},
+  {"op": "member"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "found"},
+   "alignment": "bit"}],
+ "nativeCircuitFile": "NativeBytes32WitnessOutput.register.zkir",
+ "guards":
+ [{"tag": "eq",
+   "right": {"value": true, "tag": "bool"},
+   "left": {"tag": "reference", "name": "found"}}],
+ "entrypoint": "register",
+ "contractName": "NativeBytes32WitnessOutput",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Bytes<32>",
+    "name": "accountId",
+    "expression":
+    {"value": {"tag": "reference", "name": "accountSecret"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expectedAccountId"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"tag": "assertThen",
+       "condition":
+       {"yes":
+        {"tag": "eq",
+         "right":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper0"},
+           "tag": "persistentHash32"},
+          "tag": "bytesField",
+          "index": 1},
+         "left":
+         {"value": {"tag": "reference", "name": "$helper1"},
+          "tag": "bytesField",
+          "index": 1}},
+        "tag": "select",
+        "no": {"value": false, "tag": "bool"},
+        "condition":
+        {"tag": "eq",
+         "right":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper0"},
+           "tag": "persistentHash32"},
+          "tag": "bytesField",
+          "index": 0},
+         "left":
+         {"value": {"tag": "reference", "name": "$helper1"},
+          "tag": "bytesField",
+          "index": 0}}},
+       "body":
+       {"value": {"tag": "reference", "name": "$helper0"},
+        "tag": "persistentHash32"}}}}}],
+  "name": "accountHash",
+  "inputs":
+  [{"visibility": "private", "type": "Bytes<32>", "name": "accountSecret"},
+   {"visibility": "public", "type": "Bytes<32>", "name": "expectedAccountId"}],
+  "file": "accountHash.zkir",
+  "constraints": []}}

@@ -668,7 +668,11 @@ def lowerBody (c : Circuit) : LowerM Unit := do
     emit "assert" [("cond", toJson value)]
   let mut outputs := []
   for output in c.outputs do
-    outputs := outputs ++ [← lowerExpr output.value]
+    match output.nativeReturnFields with
+    | .error message => rejectLowering message
+    | .ok fields =>
+      for field in fields do
+        outputs := outputs ++ [← lowerExpr field]
   if !outputs.isEmpty then bindPublic outputs
   emit "output" [("vals", toJson outputs)]
 
@@ -696,7 +700,8 @@ def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   let program := Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
     ("inputs", Json.arr #[]),
-    ("outputs", Json.arr (c.outputs.toArray.map fun _ => nativeType)),
+    ("outputs", Json.arr ((c.outputs.flatMap fun output =>
+      List.replicate output.nativeReturnFieldCount nativeType).toArray)),
     ("do_communications_commitment", toJson false),
     ("instructions", Json.arr result.instructions)]
   validateProduced c.span (← Native.expectedCircuit c) program
@@ -739,8 +744,13 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
   for condition in entry.circuit.constraints do
     emit "assert" [("cond", toJson (← lowerExpr condition))]
   for output in entry.circuit.outputs do
-    let value ← lowerExpr output.value
-    modify fun s => {s with aliases := (output.name, value) :: s.aliases}
+    match output with
+    | {name, ty := .bytes 32, value, ..} =>
+      let value ← lowerBytes value
+      modify fun s => {s with byteAliases := (name, value) :: s.byteAliases}
+    | {name, value, ..} =>
+      let value ← lowerExpr value
+      modify fun s => {s with aliases := (name, value) :: s.aliases}
   -- Public parameters were read above in declaration order. Remaining reads
   -- come from ledger cells and the VM membership result in transcript order.
   let publicCount := Impact.publicInputReadCount entry.circuit.inputs

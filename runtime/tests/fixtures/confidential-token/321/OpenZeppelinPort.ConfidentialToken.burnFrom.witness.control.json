@@ -1,0 +1,1712 @@
+{"witnesses":
+ [{"resultType": "Bytes<32>",
+   "privateKey": "noctium/OpenZeppelinPort.Wallet/accountSecret",
+   "parameters": [],
+   "operation": "private_state.read.v1",
+   "name": "private_state.read.OpenZeppelinPort.Wallet.accountSecret.v1",
+   "capability": "private_state:OpenZeppelinPort.Wallet"},
+  {"resultType": "Bytes<32>",
+   "privateKey": "noctium/OpenZeppelinPort.Wallet/encryptionSecret",
+   "parameters": [],
+   "operation": "private_state.read.v1",
+   "name": "private_state.read.OpenZeppelinPort.Wallet.encryptionSecret.v1",
+   "capability": "private_state:OpenZeppelinPort.Wallet"},
+  {"resultType":
+   "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+   "privateKey": null,
+   "parameters":
+   [{"type": "JubjubPoint", "name": "c1"},
+    {"type": "JubjubPoint", "name": "c2"}],
+   "operation": "noctium.witness.OpenZeppelinPort.plaintextBalance.v1",
+   "name": "OpenZeppelinPort.plaintextBalance",
+   "capability": "OpenZeppelinPort.plaintextBalance"},
+  {"resultType": "Bytes<32>",
+   "privateKey": null,
+   "parameters": [],
+   "operation": "noctium.witness.OpenZeppelinPort.freshSeed.v1",
+   "name": "OpenZeppelinPort.freshSeed",
+   "capability": "OpenZeppelinPort.freshSeed"}],
+ "types":
+ [{"schema":
+   {"typeFingerprint":
+    "NoctiumCompositeTypeV1;r38:OpenZeppelinPort.burnFromEscrow.OutputNoctiumCompositeLayoutV1;1;R38:OpenZeppelinPort.burnFromEscrow.Output13;f11:spenderKeyXsNf11:spenderKeyYsNf14:nextSpenderC1XsNf14:nextSpenderC1YsNf14:nextSpenderC2XsNf14:nextSpenderC2YsNf12:nextOwnerC1XsNf12:nextOwnerC1YsNf12:nextOwnerC2XsNf12:nextOwnerC2YsNf19:ownerMemoEphemeralXsNf19:ownerMemoEphemeralYsNf15:ownerMemoAmountsN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "OpenZeppelinPort.burnFromEscrow.Output",
+     "fields":
+     [{"name": "spenderKeyX",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "spenderKeyY",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextSpenderC1X",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextSpenderC1Y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextSpenderC2X",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextSpenderC2Y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextOwnerC1X",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextOwnerC1Y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextOwnerC2X",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "nextOwnerC2Y",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "ownerMemoEphemeralX",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "ownerMemoEphemeralY",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "ownerMemoAmount",
+       "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 13, "layoutNodes": 14, "expandedNodes": 14}},
+   "id": "t0"}],
+ "schemaVersion": 2,
+ "name": "noctium.witness-circuit.OpenZeppelinPort.burnFromEscrow.v1",
+ "mode": "native",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs":
+ [{"visibility": "public", "type": "Bytes<32>", "name": "fromAddress"},
+  {"visibility": "public", "type": "Bytes<32>", "name": "spenderId"},
+  {"visibility": "private",
+   "type": "UIntRange<340282366920938463463374607431768211456>",
+   "name": "value"},
+  {"visibility": "public", "type": "JubjubPoint", "name": "ownerPk"},
+  {"visibility": "public", "type": "JubjubPoint", "name": "spenderC1"},
+  {"visibility": "public", "type": "JubjubPoint", "name": "spenderC2"},
+  {"visibility": "public", "type": "JubjubPoint", "name": "ownerC1"},
+  {"visibility": "public", "type": "JubjubPoint", "name": "ownerC2"},
+  {"visibility": "public",
+   "type": "UIntRange<18446744073709551616>",
+   "name": "spendEpoch"}],
+ "functions":
+ [{"resultType": "Aggregate:t0",
+   "parameters":
+   [{"type": "Bytes<32>", "name": "fromAddress"},
+    {"type": "Bytes<32>", "name": "spenderId"},
+    {"type": "UIntRange<340282366920938463463374607431768211456>",
+     "name": "value"},
+    {"type": "JubjubPoint", "name": "ownerPk"},
+    {"type": "JubjubPoint", "name": "spenderC1"},
+    {"type": "JubjubPoint", "name": "spenderC2"},
+    {"type": "JubjubPoint", "name": "ownerC1"},
+    {"type": "JubjubPoint", "name": "ownerC2"},
+    {"type": "UIntRange<18446744073709551616>", "name": "spendEpoch"}],
+   "name": "OpenZeppelinPort.burnFromEscrow",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "witnessCall",
+      "span":
+      {"line": 424,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "site": "OpenZeppelinPort.burnFromEscrow.read.0",
+      "name": "private_state.read.OpenZeppelinPort.Wallet.accountSecret.v1",
+      "arguments": []},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "accountSecret"},
+    {"value":
+     {"tag": "witnessCall",
+      "span":
+      {"line": 425,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "site": "OpenZeppelinPort.burnFromEscrow.read.1",
+      "name": "private_state.read.OpenZeppelinPort.Wallet.encryptionSecret.v1",
+      "arguments": []},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "encryptionSecret"},
+    {"value":
+     {"tag": "bytes",
+      "span":
+      {"line": 435,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "persistentHash32",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 435,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "accountSecret"}]},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "derivedSpenderId"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 436,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubScalarFromNative",
+      "arguments":
+      [{"tag": "bytes",
+        "span":
+        {"line": 436,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "degradeToNative",
+        "arguments":
+        [{"tag": "bytes",
+          "span":
+          {"line": 436,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "persistentHashVector32",
+          "arguments":
+          [{"values":
+            [69,
+             108,
+             71,
+             97,
+             109,
+             97,
+             108,
+             58,
+             115,
+             101,
+             99,
+             114,
+             101,
+             116,
+             84,
+             111,
+             83,
+             99,
+             97,
+             108,
+             97,
+             114,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0],
+            "tag": "bytes32",
+            "span":
+            {"line": 436,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3}},
+           {"tag": "reference",
+            "span":
+            {"line": 436,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "encryptionSecret"}]}]}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "encryptionScalar"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 438,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubMulGenerator",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 438,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "encryptionScalar"}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "derivedSpenderPk"},
+    {"tag": "assert",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span":
+      {"line": 439,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "right":
+      {"tag": "reference",
+       "span":
+       {"line": 439,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "derivedSpenderId"},
+      "left":
+      {"tag": "reference",
+       "span":
+       {"line": 439,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "spenderId"}}},
+    {"value":
+     {"tag": "witnessCall",
+      "span":
+      {"line": 440,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "site": "OpenZeppelinPort.burnFromEscrow.call.s15.0",
+      "name": "OpenZeppelinPort.plaintextBalance",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 440,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "spenderC1"},
+       {"tag": "reference",
+        "span":
+        {"line": 440,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "spenderC2"}]},
+     "type":
+     "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "plaintextWide"},
+    {"value":
+     {"value":
+      {"tag": "reference",
+       "span":
+       {"line": 441,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "plaintextWide"},
+      "type": "UIntRange<340282366920938463463374607431768211456>",
+      "tag": "cast",
+      "span":
+      {"line": 441,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "UIntRange<340282366920938463463374607431768211456>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "escrowAmount"},
+    {"tag": "assert",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span":
+      {"line": 442,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "right":
+      {"tag": "curve",
+       "span":
+       {"line": 442,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubMulGenerator",
+       "arguments":
+       [{"tag": "curve",
+         "span":
+         {"line": 442,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "operation": "jubjubScalarFromNative",
+         "arguments":
+         [{"value":
+           {"tag": "reference",
+            "span":
+            {"line": 442,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "escrowAmount"},
+           "type": "Native",
+           "tag": "cast",
+           "span":
+           {"line": 442,
+            "file": "examples/openzeppelin/ConfidentialToken.lean",
+            "column": 3}}]}]},
+      "left":
+      {"tag": "curve",
+       "span":
+       {"line": 442,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubAdd",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 442,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "spenderC2"},
+        {"tag": "curve",
+         "span":
+         {"line": 442,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "operation": "jubjubNeg",
+         "arguments":
+         [{"tag": "curve",
+           "span":
+           {"line": 442,
+            "file": "examples/openzeppelin/ConfidentialToken.lean",
+            "column": 3},
+           "operation": "jubjubMul",
+           "arguments":
+           [{"tag": "reference",
+             "span":
+             {"line": 442,
+              "file": "examples/openzeppelin/ConfidentialToken.lean",
+              "column": 3},
+             "name": "spenderC1"},
+            {"tag": "reference",
+             "span":
+             {"line": 442,
+              "file": "examples/openzeppelin/ConfidentialToken.lean",
+              "column": 3},
+             "name": "encryptionScalar"}]}]}]}}},
+    {"value":
+     {"tag": "witnessCall",
+      "span":
+      {"line": 445,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "site": "OpenZeppelinPort.burnFromEscrow.call.s18.0",
+      "name": "OpenZeppelinPort.freshSeed",
+      "arguments": []},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "spendSeed"},
+    {"value":
+     {"tag": "binary",
+      "span":
+      {"line": 446,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "right":
+      {"tag": "reference",
+       "span":
+       {"line": 446,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "value"},
+      "operation": "sub",
+      "left":
+      {"tag": "reference",
+       "span":
+       {"line": 446,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "escrowAmount"}},
+     "type": "UIntRange<340282366920938463463374607431768211456>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "remaining"},
+    {"value":
+     {"value":
+      {"tag": "reference",
+       "span":
+       {"line": 447,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "value"},
+      "type": "Native",
+      "tag": "cast",
+      "span":
+      {"line": 447,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "valueField"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 448,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubMulGenerator",
+      "arguments":
+      [{"tag": "curve",
+        "span":
+        {"line": 448,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubScalarFromNative",
+        "arguments":
+        [{"tag": "reference",
+          "span":
+          {"line": 448,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "name": "valueField"}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "valuePoint"},
+    {"value":
+     {"tag": "bytes",
+      "span":
+      {"line": 449,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "nativeToBytes32",
+      "arguments":
+      [{"value":
+        {"tag": "reference",
+         "span":
+         {"line": 449,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "spendEpoch"},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 449,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3}}]},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "spendEpochBytes"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 450,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubScalarFromNative",
+      "arguments":
+      [{"tag": "bytes",
+        "span":
+        {"line": 450,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "degradeToNative",
+        "arguments":
+        [{"tag": "bytes",
+          "span":
+          {"line": 450,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "persistentHashVector32",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 450,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spendSeed"},
+           {"values":
+            [115,
+             112,
+             101,
+             110,
+             100,
+             95,
+             101,
+             115,
+             99,
+             114,
+             111,
+             119,
+             95,
+             115,
+             112,
+             101,
+             110,
+             100,
+             101,
+             114,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0],
+            "tag": "bytes32",
+            "span":
+            {"line": 450,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3}},
+           {"tag": "reference",
+            "span":
+            {"line": 450,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "fromAddress"},
+           {"tag": "reference",
+            "span":
+            {"line": 450,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spenderId"},
+           {"tag": "reference",
+            "span":
+            {"line": 450,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spendEpochBytes"}]}]}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "spenderR"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 453,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubScalarFromNative",
+      "arguments":
+      [{"tag": "bytes",
+        "span":
+        {"line": 453,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "degradeToNative",
+        "arguments":
+        [{"tag": "bytes",
+          "span":
+          {"line": 453,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "persistentHashVector32",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 453,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spendSeed"},
+           {"values":
+            [115,
+             112,
+             101,
+             110,
+             100,
+             95,
+             101,
+             115,
+             99,
+             114,
+             111,
+             119,
+             95,
+             111,
+             119,
+             110,
+             101,
+             114,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0],
+            "tag": "bytes32",
+            "span":
+            {"line": 453,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3}},
+           {"tag": "reference",
+            "span":
+            {"line": 453,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "fromAddress"},
+           {"tag": "reference",
+            "span":
+            {"line": 453,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spenderId"},
+           {"tag": "reference",
+            "span":
+            {"line": 453,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spendEpochBytes"}]}]}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerR"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 456,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubScalarFromNative",
+      "arguments":
+      [{"tag": "bytes",
+        "span":
+        {"line": 456,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "degradeToNative",
+        "arguments":
+        [{"tag": "bytes",
+          "span":
+          {"line": 456,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "persistentHashVector32",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 456,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spendSeed"},
+           {"values":
+            [115,
+             112,
+             101,
+             110,
+             100,
+             95,
+             111,
+             119,
+             110,
+             101,
+             114,
+             95,
+             109,
+             101,
+             109,
+             111,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0,
+             0],
+            "tag": "bytes32",
+            "span":
+            {"line": 456,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3}},
+           {"tag": "reference",
+            "span":
+            {"line": 456,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "fromAddress"},
+           {"tag": "reference",
+            "span":
+            {"line": 456,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spenderId"},
+           {"tag": "reference",
+            "span":
+            {"line": 456,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spendEpochBytes"}]}]}]},
+     "type": "JubjubScalar",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerMemoR"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 459,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 459,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "spenderC1"},
+       {"tag": "curve",
+        "span":
+        {"line": 459,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubNeg",
+        "arguments":
+        [{"tag": "curve",
+          "span":
+          {"line": 459,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "jubjubMulGenerator",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 459,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "spenderR"}]}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "nextSpenderC1"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 461,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 461,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "spenderC2"},
+       {"tag": "curve",
+        "span":
+        {"line": 461,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubNeg",
+        "arguments":
+        [{"tag": "curve",
+          "span":
+          {"line": 461,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "jubjubAdd",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 461,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "valuePoint"},
+           {"tag": "curve",
+            "span":
+            {"line": 461,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "operation": "jubjubMul",
+            "arguments":
+            [{"tag": "reference",
+              "span":
+              {"line": 461,
+               "file": "examples/openzeppelin/ConfidentialToken.lean",
+               "column": 3},
+              "name": "derivedSpenderPk"},
+             {"tag": "reference",
+              "span":
+              {"line": 461,
+               "file": "examples/openzeppelin/ConfidentialToken.lean",
+               "column": 3},
+              "name": "spenderR"}]}]}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "nextSpenderC2"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 463,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 463,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerC1"},
+       {"tag": "curve",
+        "span":
+        {"line": 463,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubNeg",
+        "arguments":
+        [{"tag": "curve",
+          "span":
+          {"line": 463,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "jubjubMulGenerator",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 463,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "ownerR"}]}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "nextOwnerC1"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 465,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 465,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerC2"},
+       {"tag": "curve",
+        "span":
+        {"line": 465,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubNeg",
+        "arguments":
+        [{"tag": "curve",
+          "span":
+          {"line": 465,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "jubjubAdd",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 465,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "valuePoint"},
+           {"tag": "curve",
+            "span":
+            {"line": 465,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "operation": "jubjubMul",
+            "arguments":
+            [{"tag": "reference",
+              "span":
+              {"line": 465,
+               "file": "examples/openzeppelin/ConfidentialToken.lean",
+               "column": 3},
+              "name": "ownerPk"},
+             {"tag": "reference",
+              "span":
+              {"line": 465,
+               "file": "examples/openzeppelin/ConfidentialToken.lean",
+               "column": 3},
+              "name": "ownerR"}]}]}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "nextOwnerC2"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 467,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubMulGenerator",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 467,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerMemoR"}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerMemoEphemeral"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 468,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubMul",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 468,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerPk"},
+       {"tag": "reference",
+        "span":
+        {"line": 468,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerMemoR"}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerMemoShared"},
+    {"value":
+     {"tag": "bytes",
+      "span":
+      {"line": 469,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "persistentHashPoint",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 469,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerMemoShared"}]},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerMemoDigest"},
+    {"value":
+     {"tag": "bytes",
+      "span":
+      {"line": 470,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "degradeToNative",
+      "arguments":
+      [{"tag": "bytes",
+        "span":
+        {"line": 470,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "persistentHashVector32",
+        "arguments":
+        [{"tag": "reference",
+          "span":
+          {"line": 470,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "name": "ownerMemoDigest"},
+         {"values":
+          [79,
+           90,
+           95,
+           67,
+           70,
+           84,
+           95,
+           101,
+           115,
+           99,
+           114,
+           111,
+           119,
+           95,
+           111,
+           119,
+           110,
+           101,
+           114,
+           95,
+           118,
+           49,
+           0,
+           0,
+           0,
+           0,
+           0,
+           0,
+           0,
+           0,
+           0,
+           0],
+          "tag": "bytes32",
+          "span":
+          {"line": 470,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3}}]}]},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerMemoMask"},
+    {"value":
+     {"tag": "binary",
+      "span":
+      {"line": 472,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "right":
+      {"tag": "reference",
+       "span":
+       {"line": 472,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "ownerMemoMask"},
+      "operation": "add",
+      "left":
+      {"value":
+       {"tag": "reference",
+        "span":
+        {"line": 472,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "remaining"},
+       "type": "Native",
+       "tag": "cast",
+       "span":
+       {"line": 472,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3}}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerMemoCiphertext"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 473,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 473,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "nextSpenderC2"},
+       {"tag": "curve",
+        "span":
+        {"line": 473,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubNeg",
+        "arguments":
+        [{"tag": "curve",
+          "span":
+          {"line": 473,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "jubjubMul",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 473,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "nextSpenderC1"},
+           {"tag": "reference",
+            "span":
+            {"line": 473,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "encryptionScalar"}]}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "spendRecovered"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 475,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubMulGenerator",
+      "arguments":
+      [{"tag": "curve",
+        "span":
+        {"line": 475,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubScalarFromNative",
+        "arguments":
+        [{"value":
+          {"tag": "reference",
+           "span":
+           {"line": 475,
+            "file": "examples/openzeppelin/ConfidentialToken.lean",
+            "column": 3},
+           "name": "remaining"},
+          "type": "Native",
+          "tag": "cast",
+          "span":
+          {"line": 475,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3}}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "remainingPoint"},
+    {"tag": "assert",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span":
+      {"line": 477,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "right":
+      {"tag": "reference",
+       "span":
+       {"line": 477,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "remainingPoint"},
+      "left":
+      {"tag": "reference",
+       "span":
+       {"line": 477,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "spendRecovered"}}},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 478,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 478,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "derivedSpenderPk"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 478,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_38_spenderKeyX"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 479,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 479,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "derivedSpenderPk"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 479,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_39_spenderKeyY"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 480,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 480,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextSpenderC1"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 480,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_40_nextSpenderC1X"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 481,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 481,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextSpenderC1"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 481,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_41_nextSpenderC1Y"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 482,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 482,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextSpenderC2"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 482,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_42_nextSpenderC2X"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 483,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 483,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextSpenderC2"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 483,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_43_nextSpenderC2Y"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 484,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 484,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextOwnerC1"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 484,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_44_nextOwnerC1X"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 485,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 485,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextOwnerC1"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 485,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_45_nextOwnerC1Y"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 486,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 486,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextOwnerC2"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 486,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_46_nextOwnerC2X"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 487,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 487,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "nextOwnerC2"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 487,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_47_nextOwnerC2Y"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 488,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 488,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "ownerMemoEphemeral"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 488,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_48_ownerMemoEphemeralX"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 489,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubY",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 489,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "ownerMemoEphemeral"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 489,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_49_ownerMemoEphemeralY"},
+    {"value":
+     {"value":
+      {"tag": "reference",
+       "span":
+       {"line": 490,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "ownerMemoCiphertext"},
+      "tag": "disclose",
+      "span":
+      {"line": 490,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_50_ownerMemoAmount"},
+    {"value":
+     {"type": "Aggregate:t0",
+      "tag": "composite",
+      "span":
+      {"line": 423,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 1},
+      "leaves":
+      [{"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_38_spenderKeyX"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_39_spenderKeyY"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_40_nextSpenderC1X"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_41_nextSpenderC1Y"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_42_nextSpenderC2X"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_43_nextSpenderC2Y"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_44_nextOwnerC1X"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_45_nextOwnerC1Y"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_46_nextOwnerC2X"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_47_nextOwnerC2Y"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_48_ownerMemoEphemeralX"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_49_ownerMemoEphemeralY"},
+       {"tag": "reference",
+        "span":
+        {"line": 423,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 1},
+        "name": "__noctium_output_50_ownerMemoAmount"}]},
+     "tag": "return",
+     "span":
+     {"line": 423,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1}}]}],
+ "entry": "s0d0",
+ "binding":
+ "{\"calls\":[{\"inputs\":[\"$helper9\"],\"name\":\"private_state.read.OpenZeppelinPort.Wallet.accountSecret.v1\",\"ordinal\":\"0\",\"path\":[\"s0d0\"],\"resultType\":\"Bytes<32>\",\"site\":\"OpenZeppelinPort.burnFromEscrow.read.0\"},{\"inputs\":[\"$helper11\"],\"name\":\"private_state.read.OpenZeppelinPort.Wallet.encryptionSecret.v1\",\"ordinal\":\"1\",\"path\":[\"s0d0\"],\"resultType\":\"Bytes<32>\",\"site\":\"OpenZeppelinPort.burnFromEscrow.read.1\"},{\"inputs\":[\"$helper18\"],\"name\":\"OpenZeppelinPort.plaintextBalance\",\"ordinal\":\"2\",\"path\":[\"s0d0\"],\"resultType\":\"UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>\",\"site\":\"OpenZeppelinPort.burnFromEscrow.call.s15.0\"},{\"inputs\":[\"$helper21\"],\"name\":\"OpenZeppelinPort.freshSeed\",\"ordinal\":\"3\",\"path\":[\"s0d0\"],\"resultType\":\"Bytes<32>\",\"site\":\"OpenZeppelinPort.burnFromEscrow.call.s18.0\"}],\"circuitInputs\":[{\"name\":\"fromAddress\",\"type\":\"Bytes<32>\",\"visibility\":\"public\"},{\"name\":\"spenderId\",\"type\":\"Bytes<32>\",\"visibility\":\"public\"},{\"name\":\"value\",\"type\":\"UIntRange<340282366920938463463374607431768211456>\",\"visibility\":\"private\"},{\"name\":\"ownerPk\",\"type\":\"JubjubPoint\",\"visibility\":\"public\"},{\"name\":\"spenderC1\",\"type\":\"JubjubPoint\",\"visibility\":\"public\"},{\"name\":\"spenderC2\",\"type\":\"JubjubPoint\",\"visibility\":\"public\"},{\"name\":\"ownerC1\",\"type\":\"JubjubPoint\",\"visibility\":\"public\"},{\"name\":\"ownerC2\",\"type\":\"JubjubPoint\",\"visibility\":\"public\"},{\"name\":\"spendEpoch\",\"type\":\"UIntRange<18446744073709551616>\",\"visibility\":\"public\"},{\"name\":\"$helper9\",\"type\":\"Bytes<32>\",\"visibility\":\"private\"},{\"name\":\"$helper11\",\"type\":\"Bytes<32>\",\"visibility\":\"private\"},{\"name\":\"$helper18\",\"type\":\"UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>\",\"visibility\":\"private\"},{\"name\":\"$helper21\",\"type\":\"Bytes<32>\",\"visibility\":\"private\"}],\"circuitName\":\"OpenZeppelinPort.burnFromEscrow\",\"circuitOutputs\":[{\"name\":\"result.spenderKeyX\",\"type\":\"Native\"},{\"name\":\"result.spenderKeyY\",\"type\":\"Native\"},{\"name\":\"result.nextSpenderC1X\",\"type\":\"Native\"},{\"name\":\"result.nextSpenderC1Y\",\"type\":\"Native\"},{\"name\":\"result.nextSpenderC2X\",\"type\":\"Native\"},{\"name\":\"result.nextSpenderC2Y\",\"type\":\"Native\"},{\"name\":\"result.nextOwnerC1X\",\"type\":\"Native\"},{\"name\":\"result.nextOwnerC1Y\",\"type\":\"Native\"},{\"name\":\"result.nextOwnerC2X\",\"type\":\"Native\"},{\"name\":\"result.nextOwnerC2Y\",\"type\":\"Native\"},{\"name\":\"result.ownerMemoEphemeralX\",\"type\":\"Native\"},{\"name\":\"result.ownerMemoEphemeralY\",\"type\":\"Native\"},{\"name\":\"result.ownerMemoAmount\",\"type\":\"Native\"}],\"inputBindings\":[{\"inputs\":[\"fromAddress\"],\"name\":\"fromAddress\",\"type\":\"Bytes<32>\"},{\"inputs\":[\"spenderId\"],\"name\":\"spenderId\",\"type\":\"Bytes<32>\"},{\"inputs\":[\"value\"],\"name\":\"value\",\"type\":\"UIntRange<340282366920938463463374607431768211456>\"},{\"inputs\":[\"ownerPk\"],\"name\":\"ownerPk\",\"type\":\"JubjubPoint\"},{\"inputs\":[\"spenderC1\"],\"name\":\"spenderC1\",\"type\":\"JubjubPoint\"},{\"inputs\":[\"spenderC2\"],\"name\":\"spenderC2\",\"type\":\"JubjubPoint\"},{\"inputs\":[\"ownerC1\"],\"name\":\"ownerC1\",\"type\":\"JubjubPoint\"},{\"inputs\":[\"ownerC2\"],\"name\":\"ownerC2\",\"type\":\"JubjubPoint\"},{\"inputs\":[\"spendEpoch\"],\"name\":\"spendEpoch\",\"type\":\"UIntRange<18446744073709551616>\"}],\"kind\":\"typed-witness-bindings\",\"ledgerInputs\":[{\"name\":\"isInitialized\",\"type\":\"Bool\",\"visibility\":\"public\"},{\"name\":\"ownerRegistered\",\"type\":\"Bool\",\"visibility\":\"public\"},{\"name\":\"spenderRegistered\",\"type\":\"Bool\",\"visibility\":\"public\"},{\"name\":\"storedSpenderKey_x\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"storedSpenderKey_y\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"storedOwnerKey_x\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"storedOwnerKey_y\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"ownerEscrowPresent\",\"type\":\"Bool\",\"visibility\":\"public\"},{\"name\":\"escrowPresent\",\"type\":\"Bool\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_spenderCtC1X\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_spenderCtC1Y\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_spenderCtC2X\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_spenderCtC2Y\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_ownerCtC1X\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_ownerCtC1Y\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_ownerCtC2X\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_ownerCtC2Y\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_ownerMemoEphemeralX\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_ownerMemoEphemeralY\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"oldEscrow_ownerMemoAmount\",\"type\":\"Native\",\"visibility\":\"public\"},{\"name\":\"spendEpochOwnerPresent\",\"type\":\"Bool\",\"visibility\":\"public\"},{\"name\":\"spendEpochPresent\",\"type\":\"Bool\",\"visibility\":\"public\"},{\"name\":\"actualSpendEpoch\",\"type\":\"UIntRange<18446744073709551616>\",\"visibility\":\"public\"},{\"name\":\"currentSupply\",\"type\":\"UIntRange<340282366920938463463374607431768211456>\",\"visibility\":\"public\"}],\"nativeRelation\":{\"do_communications_commitment\":true,\"inputs\":[],\"instructions\":[{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_0\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_0\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_1\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_2\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_2\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_3\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_3\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_4\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_5\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_6\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_6\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_7\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_7\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_8\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_8\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_9\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_9\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_10\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_10\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_11\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_11\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_12\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_12\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_13\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_13\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_14\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_14\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_15\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_15\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_16\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_16\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_17\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_17\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_18\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_19\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_19\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_20\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_20\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_21\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_21\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_22\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_22\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_23\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_23\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_24\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_24\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_25\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_25\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_26\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_26\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_27\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_27\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_28\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_28\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_29\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_29\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_30\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_30\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_fromAddress_byte_31\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_fromAddress_byte_31\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_0\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_0\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_1\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_2\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_2\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_3\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_3\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_4\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_5\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_6\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_6\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_7\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_7\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_8\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_8\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_9\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_9\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_10\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_10\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_11\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_11\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_12\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_12\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_13\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_13\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_14\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_14\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_15\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_15\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_16\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_16\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_17\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_17\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_18\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_19\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_19\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_20\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_20\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_21\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_21\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_22\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_22\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_23\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_23\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_24\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_24\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_25\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_25\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_26\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_26\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_27\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_27\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_28\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_28\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_29\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_29\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_30\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_30\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderId_byte_31\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_spenderId_byte_31\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_value\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_value\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerPk_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerPk_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_ownerPk_x\",\"%input_ownerPk_y\"],\"op\":\"from_coordinates\",\"output\":\"%v0\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v1\",\"%v2\"],\"point\":\"%v0\"},{\"a\":\"%input_ownerPk_x\",\"b\":\"%v1\",\"op\":\"constrain_eq\"},{\"a\":\"%input_ownerPk_y\",\"b\":\"%v2\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderC1_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderC1_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_spenderC1_x\",\"%input_spenderC1_y\"],\"op\":\"from_coordinates\",\"output\":\"%v3\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v4\",\"%v5\"],\"point\":\"%v3\"},{\"a\":\"%input_spenderC1_x\",\"b\":\"%v4\",\"op\":\"constrain_eq\"},{\"a\":\"%input_spenderC1_y\",\"b\":\"%v5\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderC2_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderC2_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_spenderC2_x\",\"%input_spenderC2_y\"],\"op\":\"from_coordinates\",\"output\":\"%v6\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v7\",\"%v8\"],\"point\":\"%v6\"},{\"a\":\"%input_spenderC2_x\",\"b\":\"%v7\",\"op\":\"constrain_eq\"},{\"a\":\"%input_spenderC2_y\",\"b\":\"%v8\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerC1_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerC1_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_ownerC1_x\",\"%input_ownerC1_y\"],\"op\":\"from_coordinates\",\"output\":\"%v9\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v10\",\"%v11\"],\"point\":\"%v9\"},{\"a\":\"%input_ownerC1_x\",\"b\":\"%v10\",\"op\":\"constrain_eq\"},{\"a\":\"%input_ownerC1_y\",\"b\":\"%v11\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerC2_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerC2_y\",\"type\":\"Scalar<BLS12-381>\"},{\"inputs\":[\"%input_ownerC2_x\",\"%input_ownerC2_y\"],\"op\":\"from_coordinates\",\"output\":\"%v12\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v13\",\"%v14\"],\"point\":\"%v12\"},{\"a\":\"%input_ownerC2_x\",\"b\":\"%v13\",\"op\":\"constrain_eq\"},{\"a\":\"%input_ownerC2_y\",\"b\":\"%v14\",\"op\":\"constrain_eq\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spendEpoch\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":64,\"op\":\"constrain_bits\",\"val\":\"%input_spendEpoch\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_0\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_0\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_1\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_2\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_2\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_3\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_3\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_4\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_5\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_6\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_6\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_7\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_7\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_8\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_8\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_9\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_9\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_10\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_10\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_11\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_11\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_12\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_12\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_13\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_13\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_14\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_14\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_15\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_15\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_16\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_16\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_17\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_17\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_18\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_19\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_19\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_20\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_20\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_21\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_21\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_22\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_22\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_23\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_23\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_24\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_24\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_25\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_25\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_26\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_26\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_27\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_27\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_28\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_28\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_29\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_29\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_30\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_30\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper9_byte_31\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper9_byte_31\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_0\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_0\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_1\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_2\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_2\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_3\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_3\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_4\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_5\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_6\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_6\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_7\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_7\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_8\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_8\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_9\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_9\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_10\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_10\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_11\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_11\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_12\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_12\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_13\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_13\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_14\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_14\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_15\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_15\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_16\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_16\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_17\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_17\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_18\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_19\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_19\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_20\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_20\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_21\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_21\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_22\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_22\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_23\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_23\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_24\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_24\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_25\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_25\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_26\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_26\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_27\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_27\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_28\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_28\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_29\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_29\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_30\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_30\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper11_byte_31\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper11_byte_31\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":248,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_0\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_0\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_1\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_2\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_2\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_3\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_3\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_4\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_5\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_6\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_6\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_7\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_7\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_8\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_8\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_9\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_9\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_10\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_10\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_11\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_11\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_12\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_12\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_13\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_13\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_14\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_14\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_15\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_15\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_16\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_16\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_17\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_17\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_18\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_19\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_19\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_20\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_20\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_21\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_21\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_22\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_22\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_23\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_23\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_24\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_24\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_25\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_25\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_26\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_26\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_27\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_27\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_28\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_28\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_29\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_29\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_30\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_30\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_$helper21_byte_31\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_$helper21_byte_31\"},{\"a\":\"0x0001\",\"b\":\"0x00\",\"op\":\"mul\",\"output\":\"%v15\"},{\"a\":\"%input_$helper9_byte_30\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v16\"},{\"a\":\"0x0001\",\"b\":\"%v16\",\"op\":\"mul\",\"output\":\"%v17\"},{\"a\":\"%input_$helper9_byte_29\",\"b\":\"%v17\",\"op\":\"add\",\"output\":\"%v18\"},{\"a\":\"0x0001\",\"b\":\"%v18\",\"op\":\"mul\",\"output\":\"%v19\"},{\"a\":\"%input_$helper9_byte_28\",\"b\":\"%v19\",\"op\":\"add\",\"output\":\"%v20\"},{\"a\":\"0x0001\",\"b\":\"%v20\",\"op\":\"mul\",\"output\":\"%v21\"},{\"a\":\"%input_$helper9_byte_27\",\"b\":\"%v21\",\"op\":\"add\",\"output\":\"%v22\"},{\"a\":\"0x0001\",\"b\":\"%v22\",\"op\":\"mul\",\"output\":\"%v23\"},{\"a\":\"%input_$helper9_byte_26\",\"b\":\"%v23\",\"op\":\"add\",\"output\":\"%v24\"},{\"a\":\"0x0001\",\"b\":\"%v24\",\"op\":\"mul\",\"output\":\"%v25\"},{\"a\":\"%input_$helper9_byte_25\",\"b\":\"%v25\",\"op\":\"add\",\"output\":\"%v26\"},{\"a\":\"0x0001\",\"b\":\"%v26\",\"op\":\"mul\",\"output\":\"%v27\"},{\"a\":\"%input_$helper9_byte_24\",\"b\":\"%v27\",\"op\":\"add\",\"output\":\"%v28\"},{\"a\":\"0x0001\",\"b\":\"%v28\",\"op\":\"mul\",\"output\":\"%v29\"},{\"a\":\"%input_$helper9_byte_23\",\"b\":\"%v29\",\"op\":\"add\",\"output\":\"%v30\"},{\"a\":\"0x0001\",\"b\":\"%v30\",\"op\":\"mul\",\"output\":\"%v31\"},{\"a\":\"%input_$helper9_byte_22\",\"b\":\"%v31\",\"op\":\"add\",\"output\":\"%v32\"},{\"a\":\"0x0001\",\"b\":\"%v32\",\"op\":\"mul\",\"output\":\"%v33\"},{\"a\":\"%input_$helper9_byte_21\",\"b\":\"%v33\",\"op\":\"add\",\"output\":\"%v34\"},{\"a\":\"0x0001\",\"b\":\"%v34\",\"op\":\"mul\",\"output\":\"%v35\"},{\"a\":\"%input_$helper9_byte_20\",\"b\":\"%v35\",\"op\":\"add\",\"output\":\"%v36\"},{\"a\":\"0x0001\",\"b\":\"%v36\",\"op\":\"mul\",\"output\":\"%v37\"},{\"a\":\"%input_$helper9_byte_19\",\"b\":\"%v37\",\"op\":\"add\",\"output\":\"%v38\"},{\"a\":\"0x0001\",\"b\":\"%v38\",\"op\":\"mul\",\"output\":\"%v39\"},{\"a\":\"%input_$helper9_byte_18\",\"b\":\"%v39\",\"op\":\"add\",\"output\":\"%v40\"},{\"a\":\"0x0001\",\"b\":\"%v40\",\"op\":\"mul\",\"output\":\"%v41\"},{\"a\":\"%input_$helper9_byte_17\",\"b\":\"%v41\",\"op\":\"add\",\"output\":\"%v42\"},{\"a\":\"0x0001\",\"b\":\"%v42\",\"op\":\"mul\",\"output\":\"%v43\"},{\"a\":\"%input_$helper9_byte_16\",\"b\":\"%v43\",\"op\":\"add\",\"output\":\"%v44\"},{\"a\":\"0x0001\",\"b\":\"%v44\",\"op\":\"mul\",\"output\":\"%v45\"},{\"a\":\"%input_$helper9_byte_15\",\"b\":\"%v45\",\"op\":\"add\",\"output\":\"%v46\"},{\"a\":\"0x0001\",\"b\":\"%v46\",\"op\":\"mul\",\"output\":\"%v47\"},{\"a\":\"%input_$helper9_byte_14\",\"b\":\"%v47\",\"op\":\"add\",\"output\":\"%v48\"},{\"a\":\"0x0001\",\"b\":\"%v48\",\"op\":\"mul\",\"output\":\"%v49\"},{\"a\":\"%input_$helper9_byte_13\",\"b\":\"%v49\",\"op\":\"add\",\"output\":\"%v50\"},{\"a\":\"0x0001\",\"b\":\"%v50\",\"op\":\"mul\",\"output\":\"%v51\"},{\"a\":\"%input_$helper9_byte_12\",\"b\":\"%v51\",\"op\":\"add\",\"output\":\"%v52\"},{\"a\":\"0x0001\",\"b\":\"%v52\",\"op\":\"mul\",\"output\":\"%v53\"},{\"a\":\"%input_$helper9_byte_11\",\"b\":\"%v53\",\"op\":\"add\",\"output\":\"%v54\"},{\"a\":\"0x0001\",\"b\":\"%v54\",\"op\":\"mul\",\"output\":\"%v55\"},{\"a\":\"%input_$helper9_byte_10\",\"b\":\"%v55\",\"op\":\"add\",\"output\":\"%v56\"},{\"a\":\"0x0001\",\"b\":\"%v56\",\"op\":\"mul\",\"output\":\"%v57\"},{\"a\":\"%input_$helper9_byte_9\",\"b\":\"%v57\",\"op\":\"add\",\"output\":\"%v58\"},{\"a\":\"0x0001\",\"b\":\"%v58\",\"op\":\"mul\",\"output\":\"%v59\"},{\"a\":\"%input_$helper9_byte_8\",\"b\":\"%v59\",\"op\":\"add\",\"output\":\"%v60\"},{\"a\":\"0x0001\",\"b\":\"%v60\",\"op\":\"mul\",\"output\":\"%v61\"},{\"a\":\"%input_$helper9_byte_7\",\"b\":\"%v61\",\"op\":\"add\",\"output\":\"%v62\"},{\"a\":\"0x0001\",\"b\":\"%v62\",\"op\":\"mul\",\"output\":\"%v63\"},{\"a\":\"%input_$helper9_byte_6\",\"b\":\"%v63\",\"op\":\"add\",\"output\":\"%v64\"},{\"a\":\"0x0001\",\"b\":\"%v64\",\"op\":\"mul\",\"output\":\"%v65\"},{\"a\":\"%input_$helper9_byte_5\",\"b\":\"%v65\",\"op\":\"add\",\"output\":\"%v66\"},{\"a\":\"0x0001\",\"b\":\"%v66\",\"op\":\"mul\",\"output\":\"%v67\"},{\"a\":\"%input_$helper9_byte_4\",\"b\":\"%v67\",\"op\":\"add\",\"output\":\"%v68\"},{\"a\":\"0x0001\",\"b\":\"%v68\",\"op\":\"mul\",\"output\":\"%v69\"},{\"a\":\"%input_$helper9_byte_3\",\"b\":\"%v69\",\"op\":\"add\",\"output\":\"%v70\"},{\"a\":\"0x0001\",\"b\":\"%v70\",\"op\":\"mul\",\"output\":\"%v71\"},{\"a\":\"%input_$helper9_byte_2\",\"b\":\"%v71\",\"op\":\"add\",\"output\":\"%v72\"},{\"a\":\"0x0001\",\"b\":\"%v72\",\"op\":\"mul\",\"output\":\"%v73\"},{\"a\":\"%input_$helper9_byte_1\",\"b\":\"%v73\",\"op\":\"add\",\"output\":\"%v74\"},{\"a\":\"0x0001\",\"b\":\"%v74\",\"op\":\"mul\",\"output\":\"%v75\"},{\"a\":\"%input_$helper9_byte_0\",\"b\":\"%v75\",\"op\":\"add\",\"output\":\"%v76\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}}],\"inputs\":[\"%input_$helper9_byte_31\",\"%v76\"],\"op\":\"persistent_hash\",\"output\":\"%v77\"},{\"input\":\"%v77\",\"op\":\"encode\",\"outputs\":[\"%v78\",\"%v79\"]},{\"a\":\"0x00\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v80\"},{\"a\":\"0x0001\",\"b\":\"%v80\",\"op\":\"mul\",\"output\":\"%v81\"},{\"a\":\"0x00\",\"b\":\"%v81\",\"op\":\"add\",\"output\":\"%v82\"},{\"a\":\"0x0001\",\"b\":\"%v82\",\"op\":\"mul\",\"output\":\"%v83\"},{\"a\":\"0x00\",\"b\":\"%v83\",\"op\":\"add\",\"output\":\"%v84\"},{\"a\":\"0x0001\",\"b\":\"%v84\",\"op\":\"mul\",\"output\":\"%v85\"},{\"a\":\"0x00\",\"b\":\"%v85\",\"op\":\"add\",\"output\":\"%v86\"},{\"a\":\"0x0001\",\"b\":\"%v86\",\"op\":\"mul\",\"output\":\"%v87\"},{\"a\":\"0x00\",\"b\":\"%v87\",\"op\":\"add\",\"output\":\"%v88\"},{\"a\":\"0x0001\",\"b\":\"%v88\",\"op\":\"mul\",\"output\":\"%v89\"},{\"a\":\"0x00\",\"b\":\"%v89\",\"op\":\"add\",\"output\":\"%v90\"},{\"a\":\"0x0001\",\"b\":\"%v90\",\"op\":\"mul\",\"output\":\"%v91\"},{\"a\":\"0x00\",\"b\":\"%v91\",\"op\":\"add\",\"output\":\"%v92\"},{\"a\":\"0x0001\",\"b\":\"%v92\",\"op\":\"mul\",\"output\":\"%v93\"},{\"a\":\"0x00\",\"b\":\"%v93\",\"op\":\"add\",\"output\":\"%v94\"},{\"a\":\"0x0001\",\"b\":\"%v94\",\"op\":\"mul\",\"output\":\"%v95\"},{\"a\":\"0x00\",\"b\":\"%v95\",\"op\":\"add\",\"output\":\"%v96\"},{\"a\":\"0x0001\",\"b\":\"%v96\",\"op\":\"mul\",\"output\":\"%v97\"},{\"a\":\"0x72\",\"b\":\"%v97\",\"op\":\"add\",\"output\":\"%v98\"},{\"a\":\"0x0001\",\"b\":\"%v98\",\"op\":\"mul\",\"output\":\"%v99\"},{\"a\":\"0x61\",\"b\":\"%v99\",\"op\":\"add\",\"output\":\"%v100\"},{\"a\":\"0x0001\",\"b\":\"%v100\",\"op\":\"mul\",\"output\":\"%v101\"},{\"a\":\"0x6c\",\"b\":\"%v101\",\"op\":\"add\",\"output\":\"%v102\"},{\"a\":\"0x0001\",\"b\":\"%v102\",\"op\":\"mul\",\"output\":\"%v103\"},{\"a\":\"0x61\",\"b\":\"%v103\",\"op\":\"add\",\"output\":\"%v104\"},{\"a\":\"0x0001\",\"b\":\"%v104\",\"op\":\"mul\",\"output\":\"%v105\"},{\"a\":\"0x63\",\"b\":\"%v105\",\"op\":\"add\",\"output\":\"%v106\"},{\"a\":\"0x0001\",\"b\":\"%v106\",\"op\":\"mul\",\"output\":\"%v107\"},{\"a\":\"0x53\",\"b\":\"%v107\",\"op\":\"add\",\"output\":\"%v108\"},{\"a\":\"0x0001\",\"b\":\"%v108\",\"op\":\"mul\",\"output\":\"%v109\"},{\"a\":\"0x6f\",\"b\":\"%v109\",\"op\":\"add\",\"output\":\"%v110\"},{\"a\":\"0x0001\",\"b\":\"%v110\",\"op\":\"mul\",\"output\":\"%v111\"},{\"a\":\"0x54\",\"b\":\"%v111\",\"op\":\"add\",\"output\":\"%v112\"},{\"a\":\"0x0001\",\"b\":\"%v112\",\"op\":\"mul\",\"output\":\"%v113\"},{\"a\":\"0x74\",\"b\":\"%v113\",\"op\":\"add\",\"output\":\"%v114\"},{\"a\":\"0x0001\",\"b\":\"%v114\",\"op\":\"mul\",\"output\":\"%v115\"},{\"a\":\"0x65\",\"b\":\"%v115\",\"op\":\"add\",\"output\":\"%v116\"},{\"a\":\"0x0001\",\"b\":\"%v116\",\"op\":\"mul\",\"output\":\"%v117\"},{\"a\":\"0x72\",\"b\":\"%v117\",\"op\":\"add\",\"output\":\"%v118\"},{\"a\":\"0x0001\",\"b\":\"%v118\",\"op\":\"mul\",\"output\":\"%v119\"},{\"a\":\"0x63\",\"b\":\"%v119\",\"op\":\"add\",\"output\":\"%v120\"},{\"a\":\"0x0001\",\"b\":\"%v120\",\"op\":\"mul\",\"output\":\"%v121\"},{\"a\":\"0x65\",\"b\":\"%v121\",\"op\":\"add\",\"output\":\"%v122\"},{\"a\":\"0x0001\",\"b\":\"%v122\",\"op\":\"mul\",\"output\":\"%v123\"},{\"a\":\"0x73\",\"b\":\"%v123\",\"op\":\"add\",\"output\":\"%v124\"},{\"a\":\"0x0001\",\"b\":\"%v124\",\"op\":\"mul\",\"output\":\"%v125\"},{\"a\":\"0x3a\",\"b\":\"%v125\",\"op\":\"add\",\"output\":\"%v126\"},{\"a\":\"0x0001\",\"b\":\"%v126\",\"op\":\"mul\",\"output\":\"%v127\"},{\"a\":\"0x6c\",\"b\":\"%v127\",\"op\":\"add\",\"output\":\"%v128\"},{\"a\":\"0x0001\",\"b\":\"%v128\",\"op\":\"mul\",\"output\":\"%v129\"},{\"a\":\"0x61\",\"b\":\"%v129\",\"op\":\"add\",\"output\":\"%v130\"},{\"a\":\"0x0001\",\"b\":\"%v130\",\"op\":\"mul\",\"output\":\"%v131\"},{\"a\":\"0x6d\",\"b\":\"%v131\",\"op\":\"add\",\"output\":\"%v132\"},{\"a\":\"0x0001\",\"b\":\"%v132\",\"op\":\"mul\",\"output\":\"%v133\"},{\"a\":\"0x61\",\"b\":\"%v133\",\"op\":\"add\",\"output\":\"%v134\"},{\"a\":\"0x0001\",\"b\":\"%v134\",\"op\":\"mul\",\"output\":\"%v135\"},{\"a\":\"0x47\",\"b\":\"%v135\",\"op\":\"add\",\"output\":\"%v136\"},{\"a\":\"0x0001\",\"b\":\"%v136\",\"op\":\"mul\",\"output\":\"%v137\"},{\"a\":\"0x6c\",\"b\":\"%v137\",\"op\":\"add\",\"output\":\"%v138\"},{\"a\":\"0x0001\",\"b\":\"%v138\",\"op\":\"mul\",\"output\":\"%v139\"},{\"a\":\"0x45\",\"b\":\"%v139\",\"op\":\"add\",\"output\":\"%v140\"},{\"a\":\"%input_$helper11_byte_30\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v141\"},{\"a\":\"0x0001\",\"b\":\"%v141\",\"op\":\"mul\",\"output\":\"%v142\"},{\"a\":\"%input_$helper11_byte_29\",\"b\":\"%v142\",\"op\":\"add\",\"output\":\"%v143\"},{\"a\":\"0x0001\",\"b\":\"%v143\",\"op\":\"mul\",\"output\":\"%v144\"},{\"a\":\"%input_$helper11_byte_28\",\"b\":\"%v144\",\"op\":\"add\",\"output\":\"%v145\"},{\"a\":\"0x0001\",\"b\":\"%v145\",\"op\":\"mul\",\"output\":\"%v146\"},{\"a\":\"%input_$helper11_byte_27\",\"b\":\"%v146\",\"op\":\"add\",\"output\":\"%v147\"},{\"a\":\"0x0001\",\"b\":\"%v147\",\"op\":\"mul\",\"output\":\"%v148\"},{\"a\":\"%input_$helper11_byte_26\",\"b\":\"%v148\",\"op\":\"add\",\"output\":\"%v149\"},{\"a\":\"0x0001\",\"b\":\"%v149\",\"op\":\"mul\",\"output\":\"%v150\"},{\"a\":\"%input_$helper11_byte_25\",\"b\":\"%v150\",\"op\":\"add\",\"output\":\"%v151\"},{\"a\":\"0x0001\",\"b\":\"%v151\",\"op\":\"mul\",\"output\":\"%v152\"},{\"a\":\"%input_$helper11_byte_24\",\"b\":\"%v152\",\"op\":\"add\",\"output\":\"%v153\"},{\"a\":\"0x0001\",\"b\":\"%v153\",\"op\":\"mul\",\"output\":\"%v154\"},{\"a\":\"%input_$helper11_byte_23\",\"b\":\"%v154\",\"op\":\"add\",\"output\":\"%v155\"},{\"a\":\"0x0001\",\"b\":\"%v155\",\"op\":\"mul\",\"output\":\"%v156\"},{\"a\":\"%input_$helper11_byte_22\",\"b\":\"%v156\",\"op\":\"add\",\"output\":\"%v157\"},{\"a\":\"0x0001\",\"b\":\"%v157\",\"op\":\"mul\",\"output\":\"%v158\"},{\"a\":\"%input_$helper11_byte_21\",\"b\":\"%v158\",\"op\":\"add\",\"output\":\"%v159\"},{\"a\":\"0x0001\",\"b\":\"%v159\",\"op\":\"mul\",\"output\":\"%v160\"},{\"a\":\"%input_$helper11_byte_20\",\"b\":\"%v160\",\"op\":\"add\",\"output\":\"%v161\"},{\"a\":\"0x0001\",\"b\":\"%v161\",\"op\":\"mul\",\"output\":\"%v162\"},{\"a\":\"%input_$helper11_byte_19\",\"b\":\"%v162\",\"op\":\"add\",\"output\":\"%v163\"},{\"a\":\"0x0001\",\"b\":\"%v163\",\"op\":\"mul\",\"output\":\"%v164\"},{\"a\":\"%input_$helper11_byte_18\",\"b\":\"%v164\",\"op\":\"add\",\"output\":\"%v165\"},{\"a\":\"0x0001\",\"b\":\"%v165\",\"op\":\"mul\",\"output\":\"%v166\"},{\"a\":\"%input_$helper11_byte_17\",\"b\":\"%v166\",\"op\":\"add\",\"output\":\"%v167\"},{\"a\":\"0x0001\",\"b\":\"%v167\",\"op\":\"mul\",\"output\":\"%v168\"},{\"a\":\"%input_$helper11_byte_16\",\"b\":\"%v168\",\"op\":\"add\",\"output\":\"%v169\"},{\"a\":\"0x0001\",\"b\":\"%v169\",\"op\":\"mul\",\"output\":\"%v170\"},{\"a\":\"%input_$helper11_byte_15\",\"b\":\"%v170\",\"op\":\"add\",\"output\":\"%v171\"},{\"a\":\"0x0001\",\"b\":\"%v171\",\"op\":\"mul\",\"output\":\"%v172\"},{\"a\":\"%input_$helper11_byte_14\",\"b\":\"%v172\",\"op\":\"add\",\"output\":\"%v173\"},{\"a\":\"0x0001\",\"b\":\"%v173\",\"op\":\"mul\",\"output\":\"%v174\"},{\"a\":\"%input_$helper11_byte_13\",\"b\":\"%v174\",\"op\":\"add\",\"output\":\"%v175\"},{\"a\":\"0x0001\",\"b\":\"%v175\",\"op\":\"mul\",\"output\":\"%v176\"},{\"a\":\"%input_$helper11_byte_12\",\"b\":\"%v176\",\"op\":\"add\",\"output\":\"%v177\"},{\"a\":\"0x0001\",\"b\":\"%v177\",\"op\":\"mul\",\"output\":\"%v178\"},{\"a\":\"%input_$helper11_byte_11\",\"b\":\"%v178\",\"op\":\"add\",\"output\":\"%v179\"},{\"a\":\"0x0001\",\"b\":\"%v179\",\"op\":\"mul\",\"output\":\"%v180\"},{\"a\":\"%input_$helper11_byte_10\",\"b\":\"%v180\",\"op\":\"add\",\"output\":\"%v181\"},{\"a\":\"0x0001\",\"b\":\"%v181\",\"op\":\"mul\",\"output\":\"%v182\"},{\"a\":\"%input_$helper11_byte_9\",\"b\":\"%v182\",\"op\":\"add\",\"output\":\"%v183\"},{\"a\":\"0x0001\",\"b\":\"%v183\",\"op\":\"mul\",\"output\":\"%v184\"},{\"a\":\"%input_$helper11_byte_8\",\"b\":\"%v184\",\"op\":\"add\",\"output\":\"%v185\"},{\"a\":\"0x0001\",\"b\":\"%v185\",\"op\":\"mul\",\"output\":\"%v186\"},{\"a\":\"%input_$helper11_byte_7\",\"b\":\"%v186\",\"op\":\"add\",\"output\":\"%v187\"},{\"a\":\"0x0001\",\"b\":\"%v187\",\"op\":\"mul\",\"output\":\"%v188\"},{\"a\":\"%input_$helper11_byte_6\",\"b\":\"%v188\",\"op\":\"add\",\"output\":\"%v189\"},{\"a\":\"0x0001\",\"b\":\"%v189\",\"op\":\"mul\",\"output\":\"%v190\"},{\"a\":\"%input_$helper11_byte_5\",\"b\":\"%v190\",\"op\":\"add\",\"output\":\"%v191\"},{\"a\":\"0x0001\",\"b\":\"%v191\",\"op\":\"mul\",\"output\":\"%v192\"},{\"a\":\"%input_$helper11_byte_4\",\"b\":\"%v192\",\"op\":\"add\",\"output\":\"%v193\"},{\"a\":\"0x0001\",\"b\":\"%v193\",\"op\":\"mul\",\"output\":\"%v194\"},{\"a\":\"%input_$helper11_byte_3\",\"b\":\"%v194\",\"op\":\"add\",\"output\":\"%v195\"},{\"a\":\"0x0001\",\"b\":\"%v195\",\"op\":\"mul\",\"output\":\"%v196\"},{\"a\":\"%input_$helper11_byte_2\",\"b\":\"%v196\",\"op\":\"add\",\"output\":\"%v197\"},{\"a\":\"0x0001\",\"b\":\"%v197\",\"op\":\"mul\",\"output\":\"%v198\"},{\"a\":\"%input_$helper11_byte_1\",\"b\":\"%v198\",\"op\":\"add\",\"output\":\"%v199\"},{\"a\":\"0x0001\",\"b\":\"%v199\",\"op\":\"mul\",\"output\":\"%v200\"},{\"a\":\"%input_$helper11_byte_0\",\"b\":\"%v200\",\"op\":\"add\",\"output\":\"%v201\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}}],\"inputs\":[\"0x00\",\"%v140\",\"%input_$helper11_byte_31\",\"%v201\"],\"op\":\"persistent_hash\",\"output\":\"%v202\"},{\"input\":\"%v202\",\"op\":\"encode\",\"outputs\":[\"%v203\",\"%v204\"]},{\"native\":\"%v203\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v205\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v206\",\"scalar\":\"%v205\"},{\"a\":\"%input_spenderId_byte_31\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v207\"},{\"a\":\"%v207\",\"b\":\"%v79\",\"op\":\"test_eq\",\"output\":\"%v208\"},{\"a\":\"%input_spenderId_byte_30\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v209\"},{\"a\":\"0x0001\",\"b\":\"%v209\",\"op\":\"mul\",\"output\":\"%v210\"},{\"a\":\"%input_spenderId_byte_29\",\"b\":\"%v210\",\"op\":\"add\",\"output\":\"%v211\"},{\"a\":\"0x0001\",\"b\":\"%v211\",\"op\":\"mul\",\"output\":\"%v212\"},{\"a\":\"%input_spenderId_byte_28\",\"b\":\"%v212\",\"op\":\"add\",\"output\":\"%v213\"},{\"a\":\"0x0001\",\"b\":\"%v213\",\"op\":\"mul\",\"output\":\"%v214\"},{\"a\":\"%input_spenderId_byte_27\",\"b\":\"%v214\",\"op\":\"add\",\"output\":\"%v215\"},{\"a\":\"0x0001\",\"b\":\"%v215\",\"op\":\"mul\",\"output\":\"%v216\"},{\"a\":\"%input_spenderId_byte_26\",\"b\":\"%v216\",\"op\":\"add\",\"output\":\"%v217\"},{\"a\":\"0x0001\",\"b\":\"%v217\",\"op\":\"mul\",\"output\":\"%v218\"},{\"a\":\"%input_spenderId_byte_25\",\"b\":\"%v218\",\"op\":\"add\",\"output\":\"%v219\"},{\"a\":\"0x0001\",\"b\":\"%v219\",\"op\":\"mul\",\"output\":\"%v220\"},{\"a\":\"%input_spenderId_byte_24\",\"b\":\"%v220\",\"op\":\"add\",\"output\":\"%v221\"},{\"a\":\"0x0001\",\"b\":\"%v221\",\"op\":\"mul\",\"output\":\"%v222\"},{\"a\":\"%input_spenderId_byte_23\",\"b\":\"%v222\",\"op\":\"add\",\"output\":\"%v223\"},{\"a\":\"0x0001\",\"b\":\"%v223\",\"op\":\"mul\",\"output\":\"%v224\"},{\"a\":\"%input_spenderId_byte_22\",\"b\":\"%v224\",\"op\":\"add\",\"output\":\"%v225\"},{\"a\":\"0x0001\",\"b\":\"%v225\",\"op\":\"mul\",\"output\":\"%v226\"},{\"a\":\"%input_spenderId_byte_21\",\"b\":\"%v226\",\"op\":\"add\",\"output\":\"%v227\"},{\"a\":\"0x0001\",\"b\":\"%v227\",\"op\":\"mul\",\"output\":\"%v228\"},{\"a\":\"%input_spenderId_byte_20\",\"b\":\"%v228\",\"op\":\"add\",\"output\":\"%v229\"},{\"a\":\"0x0001\",\"b\":\"%v229\",\"op\":\"mul\",\"output\":\"%v230\"},{\"a\":\"%input_spenderId_byte_19\",\"b\":\"%v230\",\"op\":\"add\",\"output\":\"%v231\"},{\"a\":\"0x0001\",\"b\":\"%v231\",\"op\":\"mul\",\"output\":\"%v232\"},{\"a\":\"%input_spenderId_byte_18\",\"b\":\"%v232\",\"op\":\"add\",\"output\":\"%v233\"},{\"a\":\"0x0001\",\"b\":\"%v233\",\"op\":\"mul\",\"output\":\"%v234\"},{\"a\":\"%input_spenderId_byte_17\",\"b\":\"%v234\",\"op\":\"add\",\"output\":\"%v235\"},{\"a\":\"0x0001\",\"b\":\"%v235\",\"op\":\"mul\",\"output\":\"%v236\"},{\"a\":\"%input_spenderId_byte_16\",\"b\":\"%v236\",\"op\":\"add\",\"output\":\"%v237\"},{\"a\":\"0x0001\",\"b\":\"%v237\",\"op\":\"mul\",\"output\":\"%v238\"},{\"a\":\"%input_spenderId_byte_15\",\"b\":\"%v238\",\"op\":\"add\",\"output\":\"%v239\"},{\"a\":\"0x0001\",\"b\":\"%v239\",\"op\":\"mul\",\"output\":\"%v240\"},{\"a\":\"%input_spenderId_byte_14\",\"b\":\"%v240\",\"op\":\"add\",\"output\":\"%v241\"},{\"a\":\"0x0001\",\"b\":\"%v241\",\"op\":\"mul\",\"output\":\"%v242\"},{\"a\":\"%input_spenderId_byte_13\",\"b\":\"%v242\",\"op\":\"add\",\"output\":\"%v243\"},{\"a\":\"0x0001\",\"b\":\"%v243\",\"op\":\"mul\",\"output\":\"%v244\"},{\"a\":\"%input_spenderId_byte_12\",\"b\":\"%v244\",\"op\":\"add\",\"output\":\"%v245\"},{\"a\":\"0x0001\",\"b\":\"%v245\",\"op\":\"mul\",\"output\":\"%v246\"},{\"a\":\"%input_spenderId_byte_11\",\"b\":\"%v246\",\"op\":\"add\",\"output\":\"%v247\"},{\"a\":\"0x0001\",\"b\":\"%v247\",\"op\":\"mul\",\"output\":\"%v248\"},{\"a\":\"%input_spenderId_byte_10\",\"b\":\"%v248\",\"op\":\"add\",\"output\":\"%v249\"},{\"a\":\"0x0001\",\"b\":\"%v249\",\"op\":\"mul\",\"output\":\"%v250\"},{\"a\":\"%input_spenderId_byte_9\",\"b\":\"%v250\",\"op\":\"add\",\"output\":\"%v251\"},{\"a\":\"0x0001\",\"b\":\"%v251\",\"op\":\"mul\",\"output\":\"%v252\"},{\"a\":\"%input_spenderId_byte_8\",\"b\":\"%v252\",\"op\":\"add\",\"output\":\"%v253\"},{\"a\":\"0x0001\",\"b\":\"%v253\",\"op\":\"mul\",\"output\":\"%v254\"},{\"a\":\"%input_spenderId_byte_7\",\"b\":\"%v254\",\"op\":\"add\",\"output\":\"%v255\"},{\"a\":\"0x0001\",\"b\":\"%v255\",\"op\":\"mul\",\"output\":\"%v256\"},{\"a\":\"%input_spenderId_byte_6\",\"b\":\"%v256\",\"op\":\"add\",\"output\":\"%v257\"},{\"a\":\"0x0001\",\"b\":\"%v257\",\"op\":\"mul\",\"output\":\"%v258\"},{\"a\":\"%input_spenderId_byte_5\",\"b\":\"%v258\",\"op\":\"add\",\"output\":\"%v259\"},{\"a\":\"0x0001\",\"b\":\"%v259\",\"op\":\"mul\",\"output\":\"%v260\"},{\"a\":\"%input_spenderId_byte_4\",\"b\":\"%v260\",\"op\":\"add\",\"output\":\"%v261\"},{\"a\":\"0x0001\",\"b\":\"%v261\",\"op\":\"mul\",\"output\":\"%v262\"},{\"a\":\"%input_spenderId_byte_3\",\"b\":\"%v262\",\"op\":\"add\",\"output\":\"%v263\"},{\"a\":\"0x0001\",\"b\":\"%v263\",\"op\":\"mul\",\"output\":\"%v264\"},{\"a\":\"%input_spenderId_byte_2\",\"b\":\"%v264\",\"op\":\"add\",\"output\":\"%v265\"},{\"a\":\"0x0001\",\"b\":\"%v265\",\"op\":\"mul\",\"output\":\"%v266\"},{\"a\":\"%input_spenderId_byte_1\",\"b\":\"%v266\",\"op\":\"add\",\"output\":\"%v267\"},{\"a\":\"0x0001\",\"b\":\"%v267\",\"op\":\"mul\",\"output\":\"%v268\"},{\"a\":\"%input_spenderId_byte_0\",\"b\":\"%v268\",\"op\":\"add\",\"output\":\"%v269\"},{\"a\":\"%v269\",\"b\":\"%v78\",\"op\":\"test_eq\",\"output\":\"%v270\"},{\"a\":\"%v270\",\"b\":\"0x00\",\"bit\":\"%v208\",\"op\":\"cond_select\",\"output\":\"%v271\"},{\"a\":\"%v271\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v272\"},{\"cond\":\"%v272\",\"op\":\"assert\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"a\":\"%v3\",\"op\":\"ec_mul\",\"output\":\"%v273\",\"scalar\":\"%v205\"},{\"a\":\"%v273\",\"op\":\"neg\",\"output\":\"%v274\"},{\"a\":\"%v6\",\"b\":\"%v274\",\"op\":\"add\",\"output\":\"%v275\"},{\"native\":\"%input_$helper18\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v276\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v277\",\"scalar\":\"%v276\"},{\"a\":\"%v275\",\"b\":\"%v277\",\"op\":\"test_eq\",\"output\":\"%v278\"},{\"a\":\"%v278\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v279\"},{\"cond\":\"%v279\",\"op\":\"assert\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"a\":\"%input_value\",\"op\":\"neg\",\"output\":\"%v280\"},{\"a\":\"%input_$helper18\",\"b\":\"%v280\",\"op\":\"add\",\"output\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"native\":\"%input_value\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v282\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v283\",\"scalar\":\"%v282\"},{\"input\":\"%input_spendEpoch\",\"op\":\"to_bytes\",\"output\":\"%v284\"},{\"input\":\"%v284\",\"op\":\"encode\",\"outputs\":[\"%v285\",\"%v286\"]},{\"a\":\"%input_$helper21_byte_30\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v287\"},{\"a\":\"0x0001\",\"b\":\"%v287\",\"op\":\"mul\",\"output\":\"%v288\"},{\"a\":\"%input_$helper21_byte_29\",\"b\":\"%v288\",\"op\":\"add\",\"output\":\"%v289\"},{\"a\":\"0x0001\",\"b\":\"%v289\",\"op\":\"mul\",\"output\":\"%v290\"},{\"a\":\"%input_$helper21_byte_28\",\"b\":\"%v290\",\"op\":\"add\",\"output\":\"%v291\"},{\"a\":\"0x0001\",\"b\":\"%v291\",\"op\":\"mul\",\"output\":\"%v292\"},{\"a\":\"%input_$helper21_byte_27\",\"b\":\"%v292\",\"op\":\"add\",\"output\":\"%v293\"},{\"a\":\"0x0001\",\"b\":\"%v293\",\"op\":\"mul\",\"output\":\"%v294\"},{\"a\":\"%input_$helper21_byte_26\",\"b\":\"%v294\",\"op\":\"add\",\"output\":\"%v295\"},{\"a\":\"0x0001\",\"b\":\"%v295\",\"op\":\"mul\",\"output\":\"%v296\"},{\"a\":\"%input_$helper21_byte_25\",\"b\":\"%v296\",\"op\":\"add\",\"output\":\"%v297\"},{\"a\":\"0x0001\",\"b\":\"%v297\",\"op\":\"mul\",\"output\":\"%v298\"},{\"a\":\"%input_$helper21_byte_24\",\"b\":\"%v298\",\"op\":\"add\",\"output\":\"%v299\"},{\"a\":\"0x0001\",\"b\":\"%v299\",\"op\":\"mul\",\"output\":\"%v300\"},{\"a\":\"%input_$helper21_byte_23\",\"b\":\"%v300\",\"op\":\"add\",\"output\":\"%v301\"},{\"a\":\"0x0001\",\"b\":\"%v301\",\"op\":\"mul\",\"output\":\"%v302\"},{\"a\":\"%input_$helper21_byte_22\",\"b\":\"%v302\",\"op\":\"add\",\"output\":\"%v303\"},{\"a\":\"0x0001\",\"b\":\"%v303\",\"op\":\"mul\",\"output\":\"%v304\"},{\"a\":\"%input_$helper21_byte_21\",\"b\":\"%v304\",\"op\":\"add\",\"output\":\"%v305\"},{\"a\":\"0x0001\",\"b\":\"%v305\",\"op\":\"mul\",\"output\":\"%v306\"},{\"a\":\"%input_$helper21_byte_20\",\"b\":\"%v306\",\"op\":\"add\",\"output\":\"%v307\"},{\"a\":\"0x0001\",\"b\":\"%v307\",\"op\":\"mul\",\"output\":\"%v308\"},{\"a\":\"%input_$helper21_byte_19\",\"b\":\"%v308\",\"op\":\"add\",\"output\":\"%v309\"},{\"a\":\"0x0001\",\"b\":\"%v309\",\"op\":\"mul\",\"output\":\"%v310\"},{\"a\":\"%input_$helper21_byte_18\",\"b\":\"%v310\",\"op\":\"add\",\"output\":\"%v311\"},{\"a\":\"0x0001\",\"b\":\"%v311\",\"op\":\"mul\",\"output\":\"%v312\"},{\"a\":\"%input_$helper21_byte_17\",\"b\":\"%v312\",\"op\":\"add\",\"output\":\"%v313\"},{\"a\":\"0x0001\",\"b\":\"%v313\",\"op\":\"mul\",\"output\":\"%v314\"},{\"a\":\"%input_$helper21_byte_16\",\"b\":\"%v314\",\"op\":\"add\",\"output\":\"%v315\"},{\"a\":\"0x0001\",\"b\":\"%v315\",\"op\":\"mul\",\"output\":\"%v316\"},{\"a\":\"%input_$helper21_byte_15\",\"b\":\"%v316\",\"op\":\"add\",\"output\":\"%v317\"},{\"a\":\"0x0001\",\"b\":\"%v317\",\"op\":\"mul\",\"output\":\"%v318\"},{\"a\":\"%input_$helper21_byte_14\",\"b\":\"%v318\",\"op\":\"add\",\"output\":\"%v319\"},{\"a\":\"0x0001\",\"b\":\"%v319\",\"op\":\"mul\",\"output\":\"%v320\"},{\"a\":\"%input_$helper21_byte_13\",\"b\":\"%v320\",\"op\":\"add\",\"output\":\"%v321\"},{\"a\":\"0x0001\",\"b\":\"%v321\",\"op\":\"mul\",\"output\":\"%v322\"},{\"a\":\"%input_$helper21_byte_12\",\"b\":\"%v322\",\"op\":\"add\",\"output\":\"%v323\"},{\"a\":\"0x0001\",\"b\":\"%v323\",\"op\":\"mul\",\"output\":\"%v324\"},{\"a\":\"%input_$helper21_byte_11\",\"b\":\"%v324\",\"op\":\"add\",\"output\":\"%v325\"},{\"a\":\"0x0001\",\"b\":\"%v325\",\"op\":\"mul\",\"output\":\"%v326\"},{\"a\":\"%input_$helper21_byte_10\",\"b\":\"%v326\",\"op\":\"add\",\"output\":\"%v327\"},{\"a\":\"0x0001\",\"b\":\"%v327\",\"op\":\"mul\",\"output\":\"%v328\"},{\"a\":\"%input_$helper21_byte_9\",\"b\":\"%v328\",\"op\":\"add\",\"output\":\"%v329\"},{\"a\":\"0x0001\",\"b\":\"%v329\",\"op\":\"mul\",\"output\":\"%v330\"},{\"a\":\"%input_$helper21_byte_8\",\"b\":\"%v330\",\"op\":\"add\",\"output\":\"%v331\"},{\"a\":\"0x0001\",\"b\":\"%v331\",\"op\":\"mul\",\"output\":\"%v332\"},{\"a\":\"%input_$helper21_byte_7\",\"b\":\"%v332\",\"op\":\"add\",\"output\":\"%v333\"},{\"a\":\"0x0001\",\"b\":\"%v333\",\"op\":\"mul\",\"output\":\"%v334\"},{\"a\":\"%input_$helper21_byte_6\",\"b\":\"%v334\",\"op\":\"add\",\"output\":\"%v335\"},{\"a\":\"0x0001\",\"b\":\"%v335\",\"op\":\"mul\",\"output\":\"%v336\"},{\"a\":\"%input_$helper21_byte_5\",\"b\":\"%v336\",\"op\":\"add\",\"output\":\"%v337\"},{\"a\":\"0x0001\",\"b\":\"%v337\",\"op\":\"mul\",\"output\":\"%v338\"},{\"a\":\"%input_$helper21_byte_4\",\"b\":\"%v338\",\"op\":\"add\",\"output\":\"%v339\"},{\"a\":\"0x0001\",\"b\":\"%v339\",\"op\":\"mul\",\"output\":\"%v340\"},{\"a\":\"%input_$helper21_byte_3\",\"b\":\"%v340\",\"op\":\"add\",\"output\":\"%v341\"},{\"a\":\"0x0001\",\"b\":\"%v341\",\"op\":\"mul\",\"output\":\"%v342\"},{\"a\":\"%input_$helper21_byte_2\",\"b\":\"%v342\",\"op\":\"add\",\"output\":\"%v343\"},{\"a\":\"0x0001\",\"b\":\"%v343\",\"op\":\"mul\",\"output\":\"%v344\"},{\"a\":\"%input_$helper21_byte_1\",\"b\":\"%v344\",\"op\":\"add\",\"output\":\"%v345\"},{\"a\":\"0x0001\",\"b\":\"%v345\",\"op\":\"mul\",\"output\":\"%v346\"},{\"a\":\"%input_$helper21_byte_0\",\"b\":\"%v346\",\"op\":\"add\",\"output\":\"%v347\"},{\"a\":\"0x00\",\"b\":\"%v97\",\"op\":\"add\",\"output\":\"%v348\"},{\"a\":\"0x0001\",\"b\":\"%v348\",\"op\":\"mul\",\"output\":\"%v349\"},{\"a\":\"0x00\",\"b\":\"%v349\",\"op\":\"add\",\"output\":\"%v350\"},{\"a\":\"0x0001\",\"b\":\"%v350\",\"op\":\"mul\",\"output\":\"%v351\"},{\"a\":\"0x72\",\"b\":\"%v351\",\"op\":\"add\",\"output\":\"%v352\"},{\"a\":\"0x0001\",\"b\":\"%v352\",\"op\":\"mul\",\"output\":\"%v353\"},{\"a\":\"0x65\",\"b\":\"%v353\",\"op\":\"add\",\"output\":\"%v354\"},{\"a\":\"0x0001\",\"b\":\"%v354\",\"op\":\"mul\",\"output\":\"%v355\"},{\"a\":\"0x64\",\"b\":\"%v355\",\"op\":\"add\",\"output\":\"%v356\"},{\"a\":\"0x0001\",\"b\":\"%v356\",\"op\":\"mul\",\"output\":\"%v357\"},{\"a\":\"0x6e\",\"b\":\"%v357\",\"op\":\"add\",\"output\":\"%v358\"},{\"a\":\"0x0001\",\"b\":\"%v358\",\"op\":\"mul\",\"output\":\"%v359\"},{\"a\":\"0x65\",\"b\":\"%v359\",\"op\":\"add\",\"output\":\"%v360\"},{\"a\":\"0x0001\",\"b\":\"%v360\",\"op\":\"mul\",\"output\":\"%v361\"},{\"a\":\"0x70\",\"b\":\"%v361\",\"op\":\"add\",\"output\":\"%v362\"},{\"a\":\"0x0001\",\"b\":\"%v362\",\"op\":\"mul\",\"output\":\"%v363\"},{\"a\":\"0x73\",\"b\":\"%v363\",\"op\":\"add\",\"output\":\"%v364\"},{\"a\":\"0x0001\",\"b\":\"%v364\",\"op\":\"mul\",\"output\":\"%v365\"},{\"a\":\"0x5f\",\"b\":\"%v365\",\"op\":\"add\",\"output\":\"%v366\"},{\"a\":\"0x0001\",\"b\":\"%v366\",\"op\":\"mul\",\"output\":\"%v367\"},{\"a\":\"0x77\",\"b\":\"%v367\",\"op\":\"add\",\"output\":\"%v368\"},{\"a\":\"0x0001\",\"b\":\"%v368\",\"op\":\"mul\",\"output\":\"%v369\"},{\"a\":\"0x6f\",\"b\":\"%v369\",\"op\":\"add\",\"output\":\"%v370\"},{\"a\":\"0x0001\",\"b\":\"%v370\",\"op\":\"mul\",\"output\":\"%v371\"},{\"a\":\"0x72\",\"b\":\"%v371\",\"op\":\"add\",\"output\":\"%v372\"},{\"a\":\"0x0001\",\"b\":\"%v372\",\"op\":\"mul\",\"output\":\"%v373\"},{\"a\":\"0x63\",\"b\":\"%v373\",\"op\":\"add\",\"output\":\"%v374\"},{\"a\":\"0x0001\",\"b\":\"%v374\",\"op\":\"mul\",\"output\":\"%v375\"},{\"a\":\"0x73\",\"b\":\"%v375\",\"op\":\"add\",\"output\":\"%v376\"},{\"a\":\"0x0001\",\"b\":\"%v376\",\"op\":\"mul\",\"output\":\"%v377\"},{\"a\":\"0x65\",\"b\":\"%v377\",\"op\":\"add\",\"output\":\"%v378\"},{\"a\":\"0x0001\",\"b\":\"%v378\",\"op\":\"mul\",\"output\":\"%v379\"},{\"a\":\"0x5f\",\"b\":\"%v379\",\"op\":\"add\",\"output\":\"%v380\"},{\"a\":\"0x0001\",\"b\":\"%v380\",\"op\":\"mul\",\"output\":\"%v381\"},{\"a\":\"0x64\",\"b\":\"%v381\",\"op\":\"add\",\"output\":\"%v382\"},{\"a\":\"0x0001\",\"b\":\"%v382\",\"op\":\"mul\",\"output\":\"%v383\"},{\"a\":\"0x6e\",\"b\":\"%v383\",\"op\":\"add\",\"output\":\"%v384\"},{\"a\":\"0x0001\",\"b\":\"%v384\",\"op\":\"mul\",\"output\":\"%v385\"},{\"a\":\"0x65\",\"b\":\"%v385\",\"op\":\"add\",\"output\":\"%v386\"},{\"a\":\"0x0001\",\"b\":\"%v386\",\"op\":\"mul\",\"output\":\"%v387\"},{\"a\":\"0x70\",\"b\":\"%v387\",\"op\":\"add\",\"output\":\"%v388\"},{\"a\":\"0x0001\",\"b\":\"%v388\",\"op\":\"mul\",\"output\":\"%v389\"},{\"a\":\"0x73\",\"b\":\"%v389\",\"op\":\"add\",\"output\":\"%v390\"},{\"a\":\"%input_fromAddress_byte_30\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v391\"},{\"a\":\"0x0001\",\"b\":\"%v391\",\"op\":\"mul\",\"output\":\"%v392\"},{\"a\":\"%input_fromAddress_byte_29\",\"b\":\"%v392\",\"op\":\"add\",\"output\":\"%v393\"},{\"a\":\"0x0001\",\"b\":\"%v393\",\"op\":\"mul\",\"output\":\"%v394\"},{\"a\":\"%input_fromAddress_byte_28\",\"b\":\"%v394\",\"op\":\"add\",\"output\":\"%v395\"},{\"a\":\"0x0001\",\"b\":\"%v395\",\"op\":\"mul\",\"output\":\"%v396\"},{\"a\":\"%input_fromAddress_byte_27\",\"b\":\"%v396\",\"op\":\"add\",\"output\":\"%v397\"},{\"a\":\"0x0001\",\"b\":\"%v397\",\"op\":\"mul\",\"output\":\"%v398\"},{\"a\":\"%input_fromAddress_byte_26\",\"b\":\"%v398\",\"op\":\"add\",\"output\":\"%v399\"},{\"a\":\"0x0001\",\"b\":\"%v399\",\"op\":\"mul\",\"output\":\"%v400\"},{\"a\":\"%input_fromAddress_byte_25\",\"b\":\"%v400\",\"op\":\"add\",\"output\":\"%v401\"},{\"a\":\"0x0001\",\"b\":\"%v401\",\"op\":\"mul\",\"output\":\"%v402\"},{\"a\":\"%input_fromAddress_byte_24\",\"b\":\"%v402\",\"op\":\"add\",\"output\":\"%v403\"},{\"a\":\"0x0001\",\"b\":\"%v403\",\"op\":\"mul\",\"output\":\"%v404\"},{\"a\":\"%input_fromAddress_byte_23\",\"b\":\"%v404\",\"op\":\"add\",\"output\":\"%v405\"},{\"a\":\"0x0001\",\"b\":\"%v405\",\"op\":\"mul\",\"output\":\"%v406\"},{\"a\":\"%input_fromAddress_byte_22\",\"b\":\"%v406\",\"op\":\"add\",\"output\":\"%v407\"},{\"a\":\"0x0001\",\"b\":\"%v407\",\"op\":\"mul\",\"output\":\"%v408\"},{\"a\":\"%input_fromAddress_byte_21\",\"b\":\"%v408\",\"op\":\"add\",\"output\":\"%v409\"},{\"a\":\"0x0001\",\"b\":\"%v409\",\"op\":\"mul\",\"output\":\"%v410\"},{\"a\":\"%input_fromAddress_byte_20\",\"b\":\"%v410\",\"op\":\"add\",\"output\":\"%v411\"},{\"a\":\"0x0001\",\"b\":\"%v411\",\"op\":\"mul\",\"output\":\"%v412\"},{\"a\":\"%input_fromAddress_byte_19\",\"b\":\"%v412\",\"op\":\"add\",\"output\":\"%v413\"},{\"a\":\"0x0001\",\"b\":\"%v413\",\"op\":\"mul\",\"output\":\"%v414\"},{\"a\":\"%input_fromAddress_byte_18\",\"b\":\"%v414\",\"op\":\"add\",\"output\":\"%v415\"},{\"a\":\"0x0001\",\"b\":\"%v415\",\"op\":\"mul\",\"output\":\"%v416\"},{\"a\":\"%input_fromAddress_byte_17\",\"b\":\"%v416\",\"op\":\"add\",\"output\":\"%v417\"},{\"a\":\"0x0001\",\"b\":\"%v417\",\"op\":\"mul\",\"output\":\"%v418\"},{\"a\":\"%input_fromAddress_byte_16\",\"b\":\"%v418\",\"op\":\"add\",\"output\":\"%v419\"},{\"a\":\"0x0001\",\"b\":\"%v419\",\"op\":\"mul\",\"output\":\"%v420\"},{\"a\":\"%input_fromAddress_byte_15\",\"b\":\"%v420\",\"op\":\"add\",\"output\":\"%v421\"},{\"a\":\"0x0001\",\"b\":\"%v421\",\"op\":\"mul\",\"output\":\"%v422\"},{\"a\":\"%input_fromAddress_byte_14\",\"b\":\"%v422\",\"op\":\"add\",\"output\":\"%v423\"},{\"a\":\"0x0001\",\"b\":\"%v423\",\"op\":\"mul\",\"output\":\"%v424\"},{\"a\":\"%input_fromAddress_byte_13\",\"b\":\"%v424\",\"op\":\"add\",\"output\":\"%v425\"},{\"a\":\"0x0001\",\"b\":\"%v425\",\"op\":\"mul\",\"output\":\"%v426\"},{\"a\":\"%input_fromAddress_byte_12\",\"b\":\"%v426\",\"op\":\"add\",\"output\":\"%v427\"},{\"a\":\"0x0001\",\"b\":\"%v427\",\"op\":\"mul\",\"output\":\"%v428\"},{\"a\":\"%input_fromAddress_byte_11\",\"b\":\"%v428\",\"op\":\"add\",\"output\":\"%v429\"},{\"a\":\"0x0001\",\"b\":\"%v429\",\"op\":\"mul\",\"output\":\"%v430\"},{\"a\":\"%input_fromAddress_byte_10\",\"b\":\"%v430\",\"op\":\"add\",\"output\":\"%v431\"},{\"a\":\"0x0001\",\"b\":\"%v431\",\"op\":\"mul\",\"output\":\"%v432\"},{\"a\":\"%input_fromAddress_byte_9\",\"b\":\"%v432\",\"op\":\"add\",\"output\":\"%v433\"},{\"a\":\"0x0001\",\"b\":\"%v433\",\"op\":\"mul\",\"output\":\"%v434\"},{\"a\":\"%input_fromAddress_byte_8\",\"b\":\"%v434\",\"op\":\"add\",\"output\":\"%v435\"},{\"a\":\"0x0001\",\"b\":\"%v435\",\"op\":\"mul\",\"output\":\"%v436\"},{\"a\":\"%input_fromAddress_byte_7\",\"b\":\"%v436\",\"op\":\"add\",\"output\":\"%v437\"},{\"a\":\"0x0001\",\"b\":\"%v437\",\"op\":\"mul\",\"output\":\"%v438\"},{\"a\":\"%input_fromAddress_byte_6\",\"b\":\"%v438\",\"op\":\"add\",\"output\":\"%v439\"},{\"a\":\"0x0001\",\"b\":\"%v439\",\"op\":\"mul\",\"output\":\"%v440\"},{\"a\":\"%input_fromAddress_byte_5\",\"b\":\"%v440\",\"op\":\"add\",\"output\":\"%v441\"},{\"a\":\"0x0001\",\"b\":\"%v441\",\"op\":\"mul\",\"output\":\"%v442\"},{\"a\":\"%input_fromAddress_byte_4\",\"b\":\"%v442\",\"op\":\"add\",\"output\":\"%v443\"},{\"a\":\"0x0001\",\"b\":\"%v443\",\"op\":\"mul\",\"output\":\"%v444\"},{\"a\":\"%input_fromAddress_byte_3\",\"b\":\"%v444\",\"op\":\"add\",\"output\":\"%v445\"},{\"a\":\"0x0001\",\"b\":\"%v445\",\"op\":\"mul\",\"output\":\"%v446\"},{\"a\":\"%input_fromAddress_byte_2\",\"b\":\"%v446\",\"op\":\"add\",\"output\":\"%v447\"},{\"a\":\"0x0001\",\"b\":\"%v447\",\"op\":\"mul\",\"output\":\"%v448\"},{\"a\":\"%input_fromAddress_byte_1\",\"b\":\"%v448\",\"op\":\"add\",\"output\":\"%v449\"},{\"a\":\"0x0001\",\"b\":\"%v449\",\"op\":\"mul\",\"output\":\"%v450\"},{\"a\":\"%input_fromAddress_byte_0\",\"b\":\"%v450\",\"op\":\"add\",\"output\":\"%v451\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}}],\"inputs\":[\"%input_$helper21_byte_31\",\"%v347\",\"0x00\",\"%v390\",\"%input_fromAddress_byte_31\",\"%v451\",\"%input_spenderId_byte_31\",\"%v269\",\"%v286\",\"%v285\"],\"op\":\"persistent_hash\",\"output\":\"%v452\"},{\"input\":\"%v452\",\"op\":\"encode\",\"outputs\":[\"%v453\",\"%v454\"]},{\"native\":\"%v453\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v455\"},{\"a\":\"0x00\",\"b\":\"%v351\",\"op\":\"add\",\"output\":\"%v456\"},{\"a\":\"0x0001\",\"b\":\"%v456\",\"op\":\"mul\",\"output\":\"%v457\"},{\"a\":\"0x00\",\"b\":\"%v457\",\"op\":\"add\",\"output\":\"%v458\"},{\"a\":\"0x0001\",\"b\":\"%v458\",\"op\":\"mul\",\"output\":\"%v459\"},{\"a\":\"0x72\",\"b\":\"%v459\",\"op\":\"add\",\"output\":\"%v460\"},{\"a\":\"0x0001\",\"b\":\"%v460\",\"op\":\"mul\",\"output\":\"%v461\"},{\"a\":\"0x65\",\"b\":\"%v461\",\"op\":\"add\",\"output\":\"%v462\"},{\"a\":\"0x0001\",\"b\":\"%v462\",\"op\":\"mul\",\"output\":\"%v463\"},{\"a\":\"0x6e\",\"b\":\"%v463\",\"op\":\"add\",\"output\":\"%v464\"},{\"a\":\"0x0001\",\"b\":\"%v464\",\"op\":\"mul\",\"output\":\"%v465\"},{\"a\":\"0x77\",\"b\":\"%v465\",\"op\":\"add\",\"output\":\"%v466\"},{\"a\":\"0x0001\",\"b\":\"%v466\",\"op\":\"mul\",\"output\":\"%v467\"},{\"a\":\"0x6f\",\"b\":\"%v467\",\"op\":\"add\",\"output\":\"%v468\"},{\"a\":\"0x0001\",\"b\":\"%v468\",\"op\":\"mul\",\"output\":\"%v469\"},{\"a\":\"0x5f\",\"b\":\"%v469\",\"op\":\"add\",\"output\":\"%v470\"},{\"a\":\"0x0001\",\"b\":\"%v470\",\"op\":\"mul\",\"output\":\"%v471\"},{\"a\":\"0x77\",\"b\":\"%v471\",\"op\":\"add\",\"output\":\"%v472\"},{\"a\":\"0x0001\",\"b\":\"%v472\",\"op\":\"mul\",\"output\":\"%v473\"},{\"a\":\"0x6f\",\"b\":\"%v473\",\"op\":\"add\",\"output\":\"%v474\"},{\"a\":\"0x0001\",\"b\":\"%v474\",\"op\":\"mul\",\"output\":\"%v475\"},{\"a\":\"0x72\",\"b\":\"%v475\",\"op\":\"add\",\"output\":\"%v476\"},{\"a\":\"0x0001\",\"b\":\"%v476\",\"op\":\"mul\",\"output\":\"%v477\"},{\"a\":\"0x63\",\"b\":\"%v477\",\"op\":\"add\",\"output\":\"%v478\"},{\"a\":\"0x0001\",\"b\":\"%v478\",\"op\":\"mul\",\"output\":\"%v479\"},{\"a\":\"0x73\",\"b\":\"%v479\",\"op\":\"add\",\"output\":\"%v480\"},{\"a\":\"0x0001\",\"b\":\"%v480\",\"op\":\"mul\",\"output\":\"%v481\"},{\"a\":\"0x65\",\"b\":\"%v481\",\"op\":\"add\",\"output\":\"%v482\"},{\"a\":\"0x0001\",\"b\":\"%v482\",\"op\":\"mul\",\"output\":\"%v483\"},{\"a\":\"0x5f\",\"b\":\"%v483\",\"op\":\"add\",\"output\":\"%v484\"},{\"a\":\"0x0001\",\"b\":\"%v484\",\"op\":\"mul\",\"output\":\"%v485\"},{\"a\":\"0x64\",\"b\":\"%v485\",\"op\":\"add\",\"output\":\"%v486\"},{\"a\":\"0x0001\",\"b\":\"%v486\",\"op\":\"mul\",\"output\":\"%v487\"},{\"a\":\"0x6e\",\"b\":\"%v487\",\"op\":\"add\",\"output\":\"%v488\"},{\"a\":\"0x0001\",\"b\":\"%v488\",\"op\":\"mul\",\"output\":\"%v489\"},{\"a\":\"0x65\",\"b\":\"%v489\",\"op\":\"add\",\"output\":\"%v490\"},{\"a\":\"0x0001\",\"b\":\"%v490\",\"op\":\"mul\",\"output\":\"%v491\"},{\"a\":\"0x70\",\"b\":\"%v491\",\"op\":\"add\",\"output\":\"%v492\"},{\"a\":\"0x0001\",\"b\":\"%v492\",\"op\":\"mul\",\"output\":\"%v493\"},{\"a\":\"0x73\",\"b\":\"%v493\",\"op\":\"add\",\"output\":\"%v494\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}}],\"inputs\":[\"%input_$helper21_byte_31\",\"%v347\",\"0x00\",\"%v494\",\"%input_fromAddress_byte_31\",\"%v451\",\"%input_spenderId_byte_31\",\"%v269\",\"%v286\",\"%v285\"],\"op\":\"persistent_hash\",\"output\":\"%v495\"},{\"input\":\"%v495\",\"op\":\"encode\",\"outputs\":[\"%v496\",\"%v497\"]},{\"native\":\"%v496\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v498\"},{\"a\":\"0x00\",\"b\":\"%v459\",\"op\":\"add\",\"output\":\"%v499\"},{\"a\":\"0x0001\",\"b\":\"%v499\",\"op\":\"mul\",\"output\":\"%v500\"},{\"a\":\"0x00\",\"b\":\"%v500\",\"op\":\"add\",\"output\":\"%v501\"},{\"a\":\"0x0001\",\"b\":\"%v501\",\"op\":\"mul\",\"output\":\"%v502\"},{\"a\":\"0x6f\",\"b\":\"%v502\",\"op\":\"add\",\"output\":\"%v503\"},{\"a\":\"0x0001\",\"b\":\"%v503\",\"op\":\"mul\",\"output\":\"%v504\"},{\"a\":\"0x6d\",\"b\":\"%v504\",\"op\":\"add\",\"output\":\"%v505\"},{\"a\":\"0x0001\",\"b\":\"%v505\",\"op\":\"mul\",\"output\":\"%v506\"},{\"a\":\"0x65\",\"b\":\"%v506\",\"op\":\"add\",\"output\":\"%v507\"},{\"a\":\"0x0001\",\"b\":\"%v507\",\"op\":\"mul\",\"output\":\"%v508\"},{\"a\":\"0x6d\",\"b\":\"%v508\",\"op\":\"add\",\"output\":\"%v509\"},{\"a\":\"0x0001\",\"b\":\"%v509\",\"op\":\"mul\",\"output\":\"%v510\"},{\"a\":\"0x5f\",\"b\":\"%v510\",\"op\":\"add\",\"output\":\"%v511\"},{\"a\":\"0x0001\",\"b\":\"%v511\",\"op\":\"mul\",\"output\":\"%v512\"},{\"a\":\"0x72\",\"b\":\"%v512\",\"op\":\"add\",\"output\":\"%v513\"},{\"a\":\"0x0001\",\"b\":\"%v513\",\"op\":\"mul\",\"output\":\"%v514\"},{\"a\":\"0x65\",\"b\":\"%v514\",\"op\":\"add\",\"output\":\"%v515\"},{\"a\":\"0x0001\",\"b\":\"%v515\",\"op\":\"mul\",\"output\":\"%v516\"},{\"a\":\"0x6e\",\"b\":\"%v516\",\"op\":\"add\",\"output\":\"%v517\"},{\"a\":\"0x0001\",\"b\":\"%v517\",\"op\":\"mul\",\"output\":\"%v518\"},{\"a\":\"0x77\",\"b\":\"%v518\",\"op\":\"add\",\"output\":\"%v519\"},{\"a\":\"0x0001\",\"b\":\"%v519\",\"op\":\"mul\",\"output\":\"%v520\"},{\"a\":\"0x6f\",\"b\":\"%v520\",\"op\":\"add\",\"output\":\"%v521\"},{\"a\":\"0x0001\",\"b\":\"%v521\",\"op\":\"mul\",\"output\":\"%v522\"},{\"a\":\"0x5f\",\"b\":\"%v522\",\"op\":\"add\",\"output\":\"%v523\"},{\"a\":\"0x0001\",\"b\":\"%v523\",\"op\":\"mul\",\"output\":\"%v524\"},{\"a\":\"0x64\",\"b\":\"%v524\",\"op\":\"add\",\"output\":\"%v525\"},{\"a\":\"0x0001\",\"b\":\"%v525\",\"op\":\"mul\",\"output\":\"%v526\"},{\"a\":\"0x6e\",\"b\":\"%v526\",\"op\":\"add\",\"output\":\"%v527\"},{\"a\":\"0x0001\",\"b\":\"%v527\",\"op\":\"mul\",\"output\":\"%v528\"},{\"a\":\"0x65\",\"b\":\"%v528\",\"op\":\"add\",\"output\":\"%v529\"},{\"a\":\"0x0001\",\"b\":\"%v529\",\"op\":\"mul\",\"output\":\"%v530\"},{\"a\":\"0x70\",\"b\":\"%v530\",\"op\":\"add\",\"output\":\"%v531\"},{\"a\":\"0x0001\",\"b\":\"%v531\",\"op\":\"mul\",\"output\":\"%v532\"},{\"a\":\"0x73\",\"b\":\"%v532\",\"op\":\"add\",\"output\":\"%v533\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}}],\"inputs\":[\"%input_$helper21_byte_31\",\"%v347\",\"0x00\",\"%v533\",\"%input_fromAddress_byte_31\",\"%v451\",\"%input_spenderId_byte_31\",\"%v269\",\"%v286\",\"%v285\"],\"op\":\"persistent_hash\",\"output\":\"%v534\"},{\"input\":\"%v534\",\"op\":\"encode\",\"outputs\":[\"%v535\",\"%v536\"]},{\"native\":\"%v535\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v537\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v538\",\"scalar\":\"%v455\"},{\"a\":\"%v538\",\"op\":\"neg\",\"output\":\"%v539\"},{\"a\":\"%v3\",\"b\":\"%v539\",\"op\":\"add\",\"output\":\"%v540\"},{\"a\":\"%v206\",\"op\":\"ec_mul\",\"output\":\"%v541\",\"scalar\":\"%v455\"},{\"a\":\"%v283\",\"b\":\"%v541\",\"op\":\"add\",\"output\":\"%v542\"},{\"a\":\"%v542\",\"op\":\"neg\",\"output\":\"%v543\"},{\"a\":\"%v6\",\"b\":\"%v543\",\"op\":\"add\",\"output\":\"%v544\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v545\",\"scalar\":\"%v498\"},{\"a\":\"%v545\",\"op\":\"neg\",\"output\":\"%v546\"},{\"a\":\"%v9\",\"b\":\"%v546\",\"op\":\"add\",\"output\":\"%v547\"},{\"a\":\"%v0\",\"op\":\"ec_mul\",\"output\":\"%v548\",\"scalar\":\"%v498\"},{\"a\":\"%v283\",\"b\":\"%v548\",\"op\":\"add\",\"output\":\"%v549\"},{\"a\":\"%v549\",\"op\":\"neg\",\"output\":\"%v550\"},{\"a\":\"%v12\",\"b\":\"%v550\",\"op\":\"add\",\"output\":\"%v551\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v552\",\"scalar\":\"%v537\"},{\"a\":\"%v0\",\"op\":\"ec_mul\",\"output\":\"%v553\",\"scalar\":\"%v537\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v554\",\"%v555\"],\"point\":\"%v553\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"tag\":\"field\"}},{\"tag\":\"atom\",\"value\":{\"tag\":\"field\"}}],\"inputs\":[\"%v554\",\"%v555\"],\"op\":\"persistent_hash\",\"output\":\"%v556\"},{\"input\":\"%v556\",\"op\":\"encode\",\"outputs\":[\"%v557\",\"%v558\"]},{\"a\":\"0x31\",\"b\":\"%v97\",\"op\":\"add\",\"output\":\"%v559\"},{\"a\":\"0x0001\",\"b\":\"%v559\",\"op\":\"mul\",\"output\":\"%v560\"},{\"a\":\"0x76\",\"b\":\"%v560\",\"op\":\"add\",\"output\":\"%v561\"},{\"a\":\"0x0001\",\"b\":\"%v561\",\"op\":\"mul\",\"output\":\"%v562\"},{\"a\":\"0x5f\",\"b\":\"%v562\",\"op\":\"add\",\"output\":\"%v563\"},{\"a\":\"0x0001\",\"b\":\"%v563\",\"op\":\"mul\",\"output\":\"%v564\"},{\"a\":\"0x72\",\"b\":\"%v564\",\"op\":\"add\",\"output\":\"%v565\"},{\"a\":\"0x0001\",\"b\":\"%v565\",\"op\":\"mul\",\"output\":\"%v566\"},{\"a\":\"0x65\",\"b\":\"%v566\",\"op\":\"add\",\"output\":\"%v567\"},{\"a\":\"0x0001\",\"b\":\"%v567\",\"op\":\"mul\",\"output\":\"%v568\"},{\"a\":\"0x6e\",\"b\":\"%v568\",\"op\":\"add\",\"output\":\"%v569\"},{\"a\":\"0x0001\",\"b\":\"%v569\",\"op\":\"mul\",\"output\":\"%v570\"},{\"a\":\"0x77\",\"b\":\"%v570\",\"op\":\"add\",\"output\":\"%v571\"},{\"a\":\"0x0001\",\"b\":\"%v571\",\"op\":\"mul\",\"output\":\"%v572\"},{\"a\":\"0x6f\",\"b\":\"%v572\",\"op\":\"add\",\"output\":\"%v573\"},{\"a\":\"0x0001\",\"b\":\"%v573\",\"op\":\"mul\",\"output\":\"%v574\"},{\"a\":\"0x5f\",\"b\":\"%v574\",\"op\":\"add\",\"output\":\"%v575\"},{\"a\":\"0x0001\",\"b\":\"%v575\",\"op\":\"mul\",\"output\":\"%v576\"},{\"a\":\"0x77\",\"b\":\"%v576\",\"op\":\"add\",\"output\":\"%v577\"},{\"a\":\"0x0001\",\"b\":\"%v577\",\"op\":\"mul\",\"output\":\"%v578\"},{\"a\":\"0x6f\",\"b\":\"%v578\",\"op\":\"add\",\"output\":\"%v579\"},{\"a\":\"0x0001\",\"b\":\"%v579\",\"op\":\"mul\",\"output\":\"%v580\"},{\"a\":\"0x72\",\"b\":\"%v580\",\"op\":\"add\",\"output\":\"%v581\"},{\"a\":\"0x0001\",\"b\":\"%v581\",\"op\":\"mul\",\"output\":\"%v582\"},{\"a\":\"0x63\",\"b\":\"%v582\",\"op\":\"add\",\"output\":\"%v583\"},{\"a\":\"0x0001\",\"b\":\"%v583\",\"op\":\"mul\",\"output\":\"%v584\"},{\"a\":\"0x73\",\"b\":\"%v584\",\"op\":\"add\",\"output\":\"%v585\"},{\"a\":\"0x0001\",\"b\":\"%v585\",\"op\":\"mul\",\"output\":\"%v586\"},{\"a\":\"0x65\",\"b\":\"%v586\",\"op\":\"add\",\"output\":\"%v587\"},{\"a\":\"0x0001\",\"b\":\"%v587\",\"op\":\"mul\",\"output\":\"%v588\"},{\"a\":\"0x5f\",\"b\":\"%v588\",\"op\":\"add\",\"output\":\"%v589\"},{\"a\":\"0x0001\",\"b\":\"%v589\",\"op\":\"mul\",\"output\":\"%v590\"},{\"a\":\"0x54\",\"b\":\"%v590\",\"op\":\"add\",\"output\":\"%v591\"},{\"a\":\"0x0001\",\"b\":\"%v591\",\"op\":\"mul\",\"output\":\"%v592\"},{\"a\":\"0x46\",\"b\":\"%v592\",\"op\":\"add\",\"output\":\"%v593\"},{\"a\":\"0x0001\",\"b\":\"%v593\",\"op\":\"mul\",\"output\":\"%v594\"},{\"a\":\"0x43\",\"b\":\"%v594\",\"op\":\"add\",\"output\":\"%v595\"},{\"a\":\"0x0001\",\"b\":\"%v595\",\"op\":\"mul\",\"output\":\"%v596\"},{\"a\":\"0x5f\",\"b\":\"%v596\",\"op\":\"add\",\"output\":\"%v597\"},{\"a\":\"0x0001\",\"b\":\"%v597\",\"op\":\"mul\",\"output\":\"%v598\"},{\"a\":\"0x5a\",\"b\":\"%v598\",\"op\":\"add\",\"output\":\"%v599\"},{\"a\":\"0x0001\",\"b\":\"%v599\",\"op\":\"mul\",\"output\":\"%v600\"},{\"a\":\"0x4f\",\"b\":\"%v600\",\"op\":\"add\",\"output\":\"%v601\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}},{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}}],\"inputs\":[\"%v558\",\"%v557\",\"0x00\",\"%v601\"],\"op\":\"persistent_hash\",\"output\":\"%v602\"},{\"input\":\"%v602\",\"op\":\"encode\",\"outputs\":[\"%v603\",\"%v604\"]},{\"a\":\"%v281\",\"b\":\"%v603\",\"op\":\"add\",\"output\":\"%v605\"},{\"a\":\"%v540\",\"op\":\"ec_mul\",\"output\":\"%v606\",\"scalar\":\"%v205\"},{\"a\":\"%v606\",\"op\":\"neg\",\"output\":\"%v607\"},{\"a\":\"%v544\",\"b\":\"%v607\",\"op\":\"add\",\"output\":\"%v608\"},{\"native\":\"%v281\",\"op\":\"jubjub_scalar_from_native\",\"output\":\"%v609\"},{\"op\":\"ec_mul_generator\",\"output\":\"%v610\",\"scalar\":\"%v609\"},{\"a\":\"%v608\",\"b\":\"%v610\",\"op\":\"test_eq\",\"output\":\"%v611\"},{\"a\":\"%v611\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v612\"},{\"cond\":\"%v612\",\"op\":\"assert\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v613\",\"%v614\"],\"point\":\"%v206\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v615\",\"%v616\"],\"point\":\"%v540\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v617\",\"%v618\"],\"point\":\"%v544\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v619\",\"%v620\"],\"point\":\"%v547\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v621\",\"%v622\"],\"point\":\"%v551\"},{\"op\":\"into_coordinates\",\"outputs\":[\"%v623\",\"%v624\"],\"point\":\"%v552\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_$helper18\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v281\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_isInitialized\",\"type\":\"Scalar<BLS12-381>\"},{\"op\":\"constrain_to_boolean\",\"val\":\"%input_isInitialized\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerRegistered\",\"type\":\"Scalar<BLS12-381>\"},{\"op\":\"constrain_to_boolean\",\"val\":\"%input_ownerRegistered\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spenderRegistered\",\"type\":\"Scalar<BLS12-381>\"},{\"op\":\"constrain_to_boolean\",\"val\":\"%input_spenderRegistered\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_storedSpenderKey_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_storedSpenderKey_y\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_storedOwnerKey_x\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_storedOwnerKey_y\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_ownerEscrowPresent\",\"type\":\"Scalar<BLS12-381>\"},{\"op\":\"constrain_to_boolean\",\"val\":\"%input_ownerEscrowPresent\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_escrowPresent\",\"type\":\"Scalar<BLS12-381>\"},{\"op\":\"constrain_to_boolean\",\"val\":\"%input_escrowPresent\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_spenderCtC1X\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_spenderCtC1Y\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_spenderCtC2X\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_spenderCtC2Y\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_ownerCtC1X\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_ownerCtC1Y\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_ownerCtC2X\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_ownerCtC2Y\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_ownerMemoEphemeralX\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_ownerMemoEphemeralY\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_oldEscrow_ownerMemoAmount\",\"type\":\"Scalar<BLS12-381>\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spendEpochOwnerPresent\",\"type\":\"Scalar<BLS12-381>\"},{\"op\":\"constrain_to_boolean\",\"val\":\"%input_spendEpochOwnerPresent\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_spendEpochPresent\",\"type\":\"Scalar<BLS12-381>\"},{\"op\":\"constrain_to_boolean\",\"val\":\"%input_spendEpochPresent\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_actualSpendEpoch\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":64,\"op\":\"constrain_bits\",\"val\":\"%input_actualSpendEpoch\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_currentSupply\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%input_currentSupply\"},{\"a\":\"%input_isInitialized\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v625\"},{\"cond\":\"%v625\",\"op\":\"assert\"},{\"a\":\"%input_ownerRegistered\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v626\"},{\"cond\":\"%v626\",\"op\":\"assert\"},{\"a\":\"%input_spenderRegistered\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v627\"},{\"cond\":\"%v627\",\"op\":\"assert\"},{\"a\":\"%input_storedSpenderKey_x\",\"b\":\"%v613\",\"op\":\"test_eq\",\"output\":\"%v628\"},{\"cond\":\"%v628\",\"op\":\"assert\"},{\"a\":\"%input_storedSpenderKey_y\",\"b\":\"%v614\",\"op\":\"test_eq\",\"output\":\"%v629\"},{\"cond\":\"%v629\",\"op\":\"assert\"},{\"a\":\"%input_storedOwnerKey_x\",\"b\":\"%v1\",\"op\":\"test_eq\",\"output\":\"%v630\"},{\"cond\":\"%v630\",\"op\":\"assert\"},{\"a\":\"%input_storedOwnerKey_y\",\"b\":\"%v2\",\"op\":\"test_eq\",\"output\":\"%v631\"},{\"cond\":\"%v631\",\"op\":\"assert\"},{\"a\":\"%input_ownerEscrowPresent\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v632\"},{\"cond\":\"%v632\",\"op\":\"assert\"},{\"a\":\"%input_escrowPresent\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v633\"},{\"cond\":\"%v633\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_spenderCtC1X\",\"b\":\"%v4\",\"op\":\"test_eq\",\"output\":\"%v634\"},{\"cond\":\"%v634\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_spenderCtC1Y\",\"b\":\"%v5\",\"op\":\"test_eq\",\"output\":\"%v635\"},{\"cond\":\"%v635\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_spenderCtC2X\",\"b\":\"%v7\",\"op\":\"test_eq\",\"output\":\"%v636\"},{\"cond\":\"%v636\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_spenderCtC2Y\",\"b\":\"%v8\",\"op\":\"test_eq\",\"output\":\"%v637\"},{\"cond\":\"%v637\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_ownerCtC1X\",\"b\":\"%v10\",\"op\":\"test_eq\",\"output\":\"%v638\"},{\"cond\":\"%v638\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_ownerCtC1Y\",\"b\":\"%v11\",\"op\":\"test_eq\",\"output\":\"%v639\"},{\"cond\":\"%v639\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_ownerCtC2X\",\"b\":\"%v13\",\"op\":\"test_eq\",\"output\":\"%v640\"},{\"cond\":\"%v640\",\"op\":\"assert\"},{\"a\":\"%input_oldEscrow_ownerCtC2Y\",\"b\":\"%v14\",\"op\":\"test_eq\",\"output\":\"%v641\"},{\"cond\":\"%v641\",\"op\":\"assert\"},{\"a\":\"%input_actualSpendEpoch\",\"b\":\"%input_spendEpoch\",\"op\":\"test_eq\",\"output\":\"%v642\"},{\"cond\":\"%v642\",\"op\":\"assert\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_0\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_0\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_3\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_3\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_6\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_6\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_9\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_9\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_12\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_12\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_15\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_15\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_16\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_16\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_17\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_17\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_18\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_18\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_19\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_19\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_20\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_20\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_21\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_21\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_22\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_22\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_23\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_23\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_24\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_24\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_25\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_25\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_26\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_26\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_27\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_27\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_28\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_28\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_29\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_29\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_31\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_fromAddress_byte_31\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_0\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_0\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_3\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_3\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_6\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_6\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_9\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_9\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_12\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_12\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_15\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_15\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_16\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_16\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_17\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_17\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_18\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_18\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_19\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_19\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_20\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_20\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_21\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_21\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_22\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_22\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_23\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_23\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_24\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_24\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_25\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_25\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_26\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_26\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_27\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_27\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_28\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_28\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_29\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_29\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_31\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spenderId_byte_31\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spendEpoch\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_spendEpoch\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x50\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x05\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_isInitialized\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x50\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\"],\"op\":\"impact\"},{\"a\":\"%input_fromAddress_byte_31\",\"b\":\"%v15\",\"op\":\"add\",\"output\":\"%v643\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v643\",\"%v451\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x18\"],\"op\":\"impact\"},{\"a\":\"0x01\",\"b\":\"0x00\",\"bit\":\"%input_ownerRegistered\",\"op\":\"cond_select\",\"output\":\"%v644\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0x01\",\"%v644\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x50\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x18\"],\"op\":\"impact\"},{\"a\":\"0x01\",\"b\":\"0x00\",\"bit\":\"%input_spenderRegistered\",\"op\":\"cond_select\",\"output\":\"%v645\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0x01\",\"%v645\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x51\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x02\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_storedSpenderKey_x\",\"%input_storedSpenderKey_y\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x51\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\",\"0x01\",\"0x20\",\"%v643\",\"%v451\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x02\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_storedOwnerKey_x\",\"%input_storedOwnerKey_y\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x50\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x07\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v643\",\"%v451\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x18\"],\"op\":\"impact\"},{\"a\":\"0x01\",\"b\":\"0x00\",\"bit\":\"%input_ownerEscrowPresent\",\"op\":\"cond_select\",\"output\":\"%v646\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0x01\",\"%v646\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x51\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x07\",\"0x01\",\"0x20\",\"%v643\",\"%v451\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x18\"],\"op\":\"impact\"},{\"a\":\"0x01\",\"b\":\"0x00\",\"bit\":\"%input_escrowPresent\",\"op\":\"cond_select\",\"output\":\"%v647\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0x01\",\"%v647\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x52\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x07\",\"0x01\",\"0x20\",\"%v643\",\"%v451\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x0b\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_oldEscrow_spenderCtC1X\",\"%input_oldEscrow_spenderCtC1Y\",\"%input_oldEscrow_spenderCtC2X\",\"%input_oldEscrow_spenderCtC2Y\",\"%input_oldEscrow_ownerCtC1X\",\"%input_oldEscrow_ownerCtC1Y\",\"%input_oldEscrow_ownerCtC2X\",\"%input_oldEscrow_ownerCtC2Y\",\"%input_oldEscrow_ownerMemoEphemeralX\",\"%input_oldEscrow_ownerMemoEphemeralY\",\"%input_oldEscrow_ownerMemoAmount\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x50\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x08\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v643\",\"%v451\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x18\"],\"op\":\"impact\"},{\"a\":\"0x01\",\"b\":\"0x00\",\"bit\":\"%input_spendEpochOwnerPresent\",\"op\":\"cond_select\",\"output\":\"%v648\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0x01\",\"%v648\"],\"op\":\"impact\"},{\"a\":\"%input_spendEpochOwnerPresent\",\"b\":\"0x00\",\"op\":\"test_eq\",\"output\":\"%v649\"},{\"a\":\"%v649\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v650\"},{\"guard\":\"%v650\",\"inputs\":[\"0x70\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x08\"],\"op\":\"impact\"},{\"a\":\"0x00\",\"b\":\"%v502\",\"op\":\"add\",\"output\":\"%v651\"},{\"a\":\"0x0001\",\"b\":\"%v651\",\"op\":\"mul\",\"output\":\"%v652\"},{\"a\":\"0x00\",\"b\":\"%v652\",\"op\":\"add\",\"output\":\"%v653\"},{\"a\":\"0x0001\",\"b\":\"%v653\",\"op\":\"mul\",\"output\":\"%v654\"},{\"a\":\"0x00\",\"b\":\"%v654\",\"op\":\"add\",\"output\":\"%v655\"},{\"a\":\"0x0001\",\"b\":\"%v655\",\"op\":\"mul\",\"output\":\"%v656\"},{\"a\":\"0x00\",\"b\":\"%v656\",\"op\":\"add\",\"output\":\"%v657\"},{\"a\":\"0x0001\",\"b\":\"%v657\",\"op\":\"mul\",\"output\":\"%v658\"},{\"a\":\"0x00\",\"b\":\"%v658\",\"op\":\"add\",\"output\":\"%v659\"},{\"a\":\"0x0001\",\"b\":\"%v659\",\"op\":\"mul\",\"output\":\"%v660\"},{\"a\":\"0x00\",\"b\":\"%v660\",\"op\":\"add\",\"output\":\"%v661\"},{\"a\":\"0x0001\",\"b\":\"%v661\",\"op\":\"mul\",\"output\":\"%v662\"},{\"a\":\"0x00\",\"b\":\"%v662\",\"op\":\"add\",\"output\":\"%v663\"},{\"a\":\"0x0001\",\"b\":\"%v663\",\"op\":\"mul\",\"output\":\"%v664\"},{\"a\":\"0x00\",\"b\":\"%v664\",\"op\":\"add\",\"output\":\"%v665\"},{\"a\":\"0x0001\",\"b\":\"%v665\",\"op\":\"mul\",\"output\":\"%v666\"},{\"a\":\"0x00\",\"b\":\"%v666\",\"op\":\"add\",\"output\":\"%v667\"},{\"a\":\"0x0001\",\"b\":\"%v667\",\"op\":\"mul\",\"output\":\"%v668\"},{\"a\":\"0x00\",\"b\":\"%v668\",\"op\":\"add\",\"output\":\"%v669\"},{\"a\":\"0x0001\",\"b\":\"%v669\",\"op\":\"mul\",\"output\":\"%v670\"},{\"a\":\"0x00\",\"b\":\"%v670\",\"op\":\"add\",\"output\":\"%v671\"},{\"a\":\"0x0001\",\"b\":\"%v671\",\"op\":\"mul\",\"output\":\"%v672\"},{\"a\":\"0x00\",\"b\":\"%v672\",\"op\":\"add\",\"output\":\"%v673\"},{\"a\":\"0x0001\",\"b\":\"%v673\",\"op\":\"mul\",\"output\":\"%v674\"},{\"a\":\"0x00\",\"b\":\"%v674\",\"op\":\"add\",\"output\":\"%v675\"},{\"a\":\"0x0001\",\"b\":\"%v675\",\"op\":\"mul\",\"output\":\"%v676\"},{\"a\":\"0x00\",\"b\":\"%v676\",\"op\":\"add\",\"output\":\"%v677\"},{\"a\":\"0x0001\",\"b\":\"%v677\",\"op\":\"mul\",\"output\":\"%v678\"},{\"a\":\"0x00\",\"b\":\"%v678\",\"op\":\"add\",\"output\":\"%v679\"},{\"a\":\"0x0001\",\"b\":\"%v679\",\"op\":\"mul\",\"output\":\"%v680\"},{\"a\":\"0x00\",\"b\":\"%v680\",\"op\":\"add\",\"output\":\"%v681\"},{\"a\":\"%v451\",\"b\":\"%v681\",\"bit\":\"%v650\",\"op\":\"cond_select\",\"output\":\"%v682\"},{\"a\":\"%input_fromAddress_byte_31\",\"b\":\"0x00\",\"bit\":\"%v650\",\"op\":\"cond_select\",\"output\":\"%v683\"},{\"a\":\"%v451\",\"b\":\"%v681\",\"bit\":\"%v650\",\"op\":\"cond_select\",\"output\":\"%v684\"},{\"a\":\"%input_fromAddress_byte_31\",\"b\":\"0x00\",\"bit\":\"%v650\",\"op\":\"cond_select\",\"output\":\"%v685\"},{\"guard\":\"%v650\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v683\",\"%v684\"],\"op\":\"impact\"},{\"guard\":\"%v650\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x02\"],\"op\":\"impact\"},{\"guard\":\"%v650\",\"inputs\":[\"0x05\"],\"op\":\"impact\"},{\"guard\":\"%v650\",\"inputs\":[\"0x92\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x51\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x08\",\"0x01\",\"0x20\",\"%v643\",\"%v451\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x18\"],\"op\":\"impact\"},{\"a\":\"0x01\",\"b\":\"0x00\",\"bit\":\"%input_spendEpochPresent\",\"op\":\"cond_select\",\"output\":\"%v686\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0x01\",\"%v686\"],\"op\":\"impact\"},{\"a\":\"%input_spendEpochPresent\",\"b\":\"0x00\",\"op\":\"test_eq\",\"output\":\"%v687\"},{\"a\":\"%v687\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v688\"},{\"a\":\"%v451\",\"b\":\"%v681\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v689\"},{\"a\":\"%input_fromAddress_byte_31\",\"b\":\"0x00\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v690\"},{\"a\":\"%v451\",\"b\":\"%v681\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v691\"},{\"a\":\"%input_fromAddress_byte_31\",\"b\":\"0x00\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v692\"},{\"guard\":\"%v688\",\"inputs\":[\"0x71\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x08\",\"0x01\",\"0x20\",\"%v690\",\"%v691\"],\"op\":\"impact\"},{\"a\":\"%v269\",\"b\":\"%v681\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v693\"},{\"a\":\"%input_spenderId_byte_31\",\"b\":\"0x00\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v694\"},{\"a\":\"%v269\",\"b\":\"%v681\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v695\"},{\"a\":\"%input_spenderId_byte_31\",\"b\":\"0x00\",\"bit\":\"%v688\",\"op\":\"cond_select\",\"output\":\"%v696\"},{\"guard\":\"%v688\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v694\",\"%v695\"],\"op\":\"impact\"},{\"guard\":\"%v688\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0x08\",\"0x00\"],\"op\":\"impact\"},{\"guard\":\"%v688\",\"inputs\":[\"0x93\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x72\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x08\",\"0x01\",\"0x20\",\"%v643\",\"%v451\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0e\",\"0x01\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x93\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x52\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x08\",\"0x01\",\"0x20\",\"%v643\",\"%v451\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0x08\",\"%input_actualSpendEpoch\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x71\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x07\",\"0x01\",\"0x20\",\"%v643\",\"%v451\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v207\",\"%v269\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x0b\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v615\",\"%v616\",\"%v617\",\"%v618\",\"%v619\",\"%v620\",\"%v621\",\"%v622\",\"%v623\",\"%v624\",\"%v605\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x93\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x50\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x06\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_currentSupply\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x06\"],\"op\":\"impact\"},{\"a\":\"%input_currentSupply\",\"b\":\"%v280\",\"op\":\"add\",\"output\":\"%v697\"},{\"bits\":128,\"op\":\"constrain_bits\",\"val\":\"%v697\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%v697\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x91\"],\"op\":\"impact\"},{\"op\":\"output\",\"vals\":[\"%v207\",\"%v269\"]}],\"outputs\":[\"Scalar<BLS12-381>\",\"Scalar<BLS12-381>\"],\"version\":{\"major\":3,\"minor\":2}},\"schemaVersion\":1,\"signatures\":[{\"capability\":\"private_state:OpenZeppelinPort.Wallet\",\"name\":\"private_state.read.OpenZeppelinPort.Wallet.accountSecret.v1\",\"operation\":\"private_state.read.v1\",\"parameters\":[],\"privateKey\":\"noctium/OpenZeppelinPort.Wallet/accountSecret\",\"resultType\":\"Bytes<32>\"},{\"capability\":\"private_state:OpenZeppelinPort.Wallet\",\"name\":\"private_state.read.OpenZeppelinPort.Wallet.encryptionSecret.v1\",\"operation\":\"private_state.read.v1\",\"parameters\":[],\"privateKey\":\"noctium/OpenZeppelinPort.Wallet/encryptionSecret\",\"resultType\":\"Bytes<32>\"},{\"capability\":\"OpenZeppelinPort.plaintextBalance\",\"name\":\"OpenZeppelinPort.plaintextBalance\",\"operation\":\"noctium.witness.OpenZeppelinPort.plaintextBalance.v1\",\"parameters\":[{\"name\":\"c1\",\"type\":\"JubjubPoint\"},{\"name\":\"c2\",\"type\":\"JubjubPoint\"}],\"privateKey\":null,\"resultType\":\"UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>\"},{\"capability\":\"OpenZeppelinPort.freshSeed\",\"name\":\"OpenZeppelinPort.freshSeed\",\"operation\":\"noctium.witness.OpenZeppelinPort.freshSeed.v1\",\"parameters\":[],\"privateKey\":null,\"resultType\":\"Bytes<32>\"}],\"sourceExport\":\"noctium.witness-circuit.OpenZeppelinPort.burnFromEscrow.v1\",\"target\":{\"contractName\":\"OpenZeppelinPort.ConfidentialToken\",\"entrypoint\":\"burnFrom\",\"kind\":\"entrypoint\",\"nativeCircuitFile\":\"OpenZeppelinPort.ConfidentialToken.burnFrom.zkir\",\"targetProfile\":\"midnight-ledger-9-zkir-3.2.1\"},\"types\":[{\"id\":\"t0\",\"schema\":{\"counts\":{\"expandedNodes\":14,\"layoutNodes\":14,\"leaves\":13},\"layout\":{\"fields\":[{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"spenderKeyX\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"spenderKeyY\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextSpenderC1X\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextSpenderC1Y\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextSpenderC2X\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextSpenderC2Y\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextOwnerC1X\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextOwnerC1Y\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextOwnerC2X\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"nextOwnerC2Y\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"ownerMemoEphemeralX\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"ownerMemoEphemeralY\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"native\"}},\"name\":\"ownerMemoAmount\"}],\"id\":\"OpenZeppelinPort.burnFromEscrow.Output\",\"kind\":\"struct\"},\"schemaVersion\":1,\"typeFingerprint\":\"NoctiumCompositeTypeV1;r38:OpenZeppelinPort.burnFromEscrow.OutputNoctiumCompositeLayoutV1;1;R38:OpenZeppelinPort.burnFromEscrow.Output13;f11:spenderKeyXsNf11:spenderKeyYsNf14:nextSpenderC1XsNf14:nextSpenderC1YsNf14:nextSpenderC2XsNf14:nextSpenderC2YsNf12:nextOwnerC1XsNf12:nextOwnerC1YsNf12:nextOwnerC2XsNf12:nextOwnerC2YsNf19:ownerMemoEphemeralXsNf19:ownerMemoEphemeralYsNf15:ownerMemoAmountsN0;\"}}]}\n"}

@@ -110,6 +110,28 @@ fn artifacts(entry: &str) -> (&'static str, &'static str, &'static [u8]) {
                 "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.approve.zkir"
             ),
         ),
+        "transferFrom" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.transferFrom.witness.control.json"
+            ),
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.transferFrom.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.transferFrom.zkir"
+            ),
+        ),
+        "burnFrom" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.burnFrom.witness.control.json"
+            ),
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.burnFrom.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.burnFrom.zkir"
+            ),
+        ),
         _ => panic!("unknown confidential-token entrypoint {entry}"),
     }
 }
@@ -380,6 +402,10 @@ fn coordinates(point: EmbeddedGroupAffine) -> [Fr; 2] {
     [point.x().unwrap(), point.y().unwrap()]
 }
 
+fn point_from_coordinates(x: Fr, y: Fr) -> EmbeddedGroupAffine {
+    EmbeddedGroupAffine::new(x, y).expect("state coordinates form a Jubjub point")
+}
+
 fn expected_credit(
     seed: &[u8; 32],
     recipient: &[u8; 32],
@@ -428,8 +454,16 @@ fn expected_debit_with_domain(
     amount: u64,
     domain: &str,
 ) -> Ciphertext {
+    expected_debit_with_randomizer(owner, owner_key, amount, scalar(&[seed, &tag(domain)]))
+}
+
+fn expected_debit_with_randomizer(
+    owner: Ciphertext,
+    owner_key: EmbeddedGroupAffine,
+    amount: u64,
+    randomizer: EmbeddedFr,
+) -> Ciphertext {
     let generator = EmbeddedGroupAffine::generator();
-    let randomizer = scalar(&[seed, &tag(domain)]);
     let negative_randomizer = EmbeddedFr::from(0u64) - randomizer;
     let negative_one = EmbeddedFr::from(0u64) - EmbeddedFr::from(1u64);
     let value_point = generator * EmbeddedFr::from(amount);
@@ -454,7 +488,18 @@ fn expected_encryption(
 }
 
 fn expected_owner_memo(seed: &[u8; 32], owner_key: EmbeddedGroupAffine, amount: u64) -> Memo {
-    let randomizer = scalar(&[seed, &tag("approve_owner_memo")]);
+    expected_owner_memo_with_randomizer(
+        owner_key,
+        amount,
+        scalar(&[seed, &tag("approve_owner_memo")]),
+    )
+}
+
+fn expected_owner_memo_with_randomizer(
+    owner_key: EmbeddedGroupAffine,
+    amount: u64,
+    randomizer: EmbeddedFr,
+) -> Memo {
     let generator = EmbeddedGroupAffine::generator();
     let ephemeral = generator * randomizer;
     let shared = owner_key * randomizer;
@@ -468,6 +513,63 @@ fn expected_owner_memo(seed: &[u8; 32], owner_key: EmbeddedGroupAffine, amount: 
         ephemeral,
         amount: Fr::from(amount) + mask,
     }
+}
+
+fn spend_randomizer(
+    seed: &[u8; 32],
+    domain: &str,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    epoch: u64,
+) -> EmbeddedFr {
+    let epoch_bytes = Fr::from(epoch).as_le_bytes();
+    scalar(&[seed, &tag(domain), owner, spender, &epoch_bytes])
+}
+
+fn expected_escrow_spend(
+    seed: &[u8; 32],
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    epoch: u64,
+    amount: u64,
+    remaining_amount: u64,
+    spender_ciphertext: Ciphertext,
+    owner_ciphertext: Ciphertext,
+    spender_key: EmbeddedGroupAffine,
+    owner_key: EmbeddedGroupAffine,
+) -> (Ciphertext, Ciphertext, Memo) {
+    let next_spender = expected_debit_with_randomizer(
+        spender_ciphertext,
+        spender_key,
+        amount,
+        spend_randomizer(seed, "spend_escrow_spender", owner, spender, epoch),
+    );
+    let next_owner = expected_debit_with_randomizer(
+        owner_ciphertext,
+        owner_key,
+        amount,
+        spend_randomizer(seed, "spend_escrow_owner", owner, spender, epoch),
+    );
+    let owner_memo = expected_owner_memo_with_randomizer(
+        owner_key,
+        remaining_amount,
+        spend_randomizer(seed, "spend_owner_memo", owner, spender, epoch),
+    );
+    (next_spender, next_owner, owner_memo)
+}
+
+fn decrypt_owner_memo(memo: Memo, owner_secret: EmbeddedFr, maximum: u64) -> u64 {
+    let shared = memo.ephemeral * owner_secret;
+    let shared_digest = hash(&[
+        &shared.x().unwrap().as_le_bytes(),
+        &shared.y().unwrap().as_le_bytes(),
+    ]);
+    let mask_digest = hash(&[&shared_digest, &tag("OZ_CFT_escrow_owner_v1")]);
+    let mask = Fr::from_le_bytes(&mask_digest[..31]).unwrap();
+    let plaintext = memo.amount - mask;
+    (0..=maximum)
+        .find(|candidate| Fr::from(*candidate) == plaintext)
+        .expect("test escrow memo stays in the bounded search range")
 }
 
 fn decrypt_small(ciphertext: Ciphertext, secret: EmbeddedFr, maximum: u64) -> u64 {
@@ -525,6 +627,54 @@ fn escrow_record(
     let mut fields = Vec::new();
     record.value_only_field_repr(&mut fields);
     fields
+}
+
+fn escrow_spend_epoch_record(
+    plan: &Plan,
+    state: &ChargedState<Db>,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+) -> Vec<Fr> {
+    let StateValue::Map(owners) = state_slot(plan, state, "escrowSpendEpochs") else {
+        panic!("expected escrow-spend epoch owner map")
+    };
+    let owner: AlignedValue = (*owner).into();
+    let StateValue::Map(spenders) = &*owners.get(&owner).expect("spend epoch owner entry") else {
+        panic!("expected escrow-spend epoch spender map")
+    };
+    let spender: AlignedValue = (*spender).into();
+    let StateValue::Cell(epoch) = &*spenders.get(&spender).expect("spend epoch spender entry")
+    else {
+        panic!("expected spend epoch cell")
+    };
+    let mut fields = Vec::new();
+    epoch.value_only_field_repr(&mut fields);
+    fields
+}
+
+fn escrow_ciphertexts(fields: &[Fr]) -> (Ciphertext, Ciphertext, Memo) {
+    (
+        ciphertext_from_fields(fields, 0),
+        ciphertext_from_fields(fields, 4),
+        Memo {
+            ephemeral: point_from_coordinates(fields[8], fields[9]),
+            amount: fields[10],
+        },
+    )
+}
+
+fn ciphertext_from_fields(fields: &[Fr], offset: usize) -> Ciphertext {
+    Ciphertext {
+        c1: point_from_coordinates(fields[offset], fields[offset + 1]),
+        c2: point_from_coordinates(fields[offset + 2], fields[offset + 3]),
+    }
+}
+
+fn add_ciphertexts(left: Ciphertext, right: Ciphertext) -> Ciphertext {
+    Ciphertext {
+        c1: left.c1 + right.c1,
+        c2: left.c2 + right.c2,
+    }
 }
 
 fn assert_ciphertext(
@@ -617,7 +767,7 @@ fn run_entry(
     values: BTreeMap<String, Json>,
     account_secret: &[u8; 32],
     encryption_secret: &[u8; 32],
-    seed: Option<[u8; 32]>,
+    seeds: &[[u8; 32]],
     decrypt_balance: Option<Ciphertext>,
     attempt_number: u64,
     prior_state: &ChargedState<Db>,
@@ -626,7 +776,10 @@ fn run_entry(
     let control_plan: Json = serde_json::from_str(control_text).unwrap();
     let native_plan: Plan = serde_json::from_str(native_text).unwrap();
     let circuit = IrSource::load(circuit_bytes).unwrap();
-    let expected_caller = values.get("accountId").cloned();
+    let expected_caller = values
+        .get("accountId")
+        .or_else(|| values.get("spenderId"))
+        .cloned();
     let source_inputs = source_inputs(&control_plan, values);
     let attempt_id = attempt(attempt_number);
     let binding: Json = serde_json::from_str(control_plan["binding"].as_str().unwrap()).unwrap();
@@ -647,6 +800,7 @@ fn run_entry(
     .unwrap_or_else(|error| panic!("{entry}: {error:#}"));
     let mut callbacks = BTreeSet::new();
     let mut reads = BTreeSet::new();
+    let mut fresh_seeds = seeds.iter();
     loop {
         let status = session.advance().unwrap();
         if status["status"] != "need_host" {
@@ -666,9 +820,11 @@ fn run_entry(
             let name = request["name"].as_str().unwrap();
             callbacks.insert(name.to_owned());
             match name {
-                "OpenZeppelinPort.freshSeed" => {
-                    bytes(&seed.expect("seed callback needs deterministic test seed"))
-                }
+                "OpenZeppelinPort.freshSeed" => bytes(
+                    fresh_seeds
+                        .next()
+                        .expect("freshSeed callback needs a deterministic test seed"),
+                ),
                 "OpenZeppelinPort.plaintextBalance" => {
                     let expected =
                         decrypt_balance.expect("plaintext callback needs expected state balance");
@@ -684,6 +840,10 @@ fn run_entry(
             .resume_typed(reply(request, &attempt_id, value))
             .unwrap_or_else(|error| panic!("{entry} response {:?}: {error}", request["name"]));
     }
+    assert!(
+        fresh_seeds.next().is_none(),
+        "{entry} left deterministic seeds unused"
+    );
     let expected_reads = if wallet.is_empty() {
         BTreeSet::new()
     } else {
@@ -692,7 +852,7 @@ fn run_entry(
     assert_eq!(reads, expected_reads, "{entry} wallet reads");
     let expected_callbacks: BTreeSet<String> = match entry {
         "mint" => ["OpenZeppelinPort.freshSeed".into()].into(),
-        "transfer" | "_move" | "burn" | "approve" => [
+        "transfer" | "_move" | "burn" | "approve" | "transferFrom" | "burnFrom" => [
             "OpenZeppelinPort.freshSeed".into(),
             "OpenZeppelinPort.plaintextBalance".into(),
         ]
@@ -715,7 +875,14 @@ fn run_entry(
     check(&execution, &circuit).map_err(|error| error.to_string())?;
     if matches!(
         entry,
-        "registerWithKey" | "sweep" | "transfer" | "_move" | "burn" | "approve"
+        "registerWithKey"
+            | "sweep"
+            | "transfer"
+            | "_move"
+            | "burn"
+            | "approve"
+            | "transferFrom"
+            | "burnFrom"
     ) {
         assert_eq!(
             execution.returns_json()["caller"],
@@ -737,6 +904,7 @@ fn initial_state(plan: &Plan) -> ChargedState<Db> {
             ("creditEpochs".into(), json!([])),
             ("initialized".into(), json!(true)),
             ("totalSupply".into(), json!("0")),
+            ("escrowSpendEpochs".into(), json!([])),
         ]),
     )
     .unwrap()
@@ -782,6 +950,70 @@ fn approve_inputs(
         "previousOwnerC2".into(),
         point_json_from_coordinates(previous_owner[1]),
     );
+    inputs
+}
+
+fn escrow_spend_inputs(
+    plan: &Plan,
+    state: &ChargedState<Db>,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    owner_key: EmbeddedGroupAffine,
+    amount: u64,
+    spend_epoch: u64,
+) -> BTreeMap<String, Json> {
+    let escrow = escrow_record(plan, state, owner, spender);
+    BTreeMap::from([
+        ("fromAddress".into(), bytes(owner)),
+        ("spenderId".into(), bytes(spender)),
+        ("value".into(), json!(amount.to_string())),
+        ("ownerPk".into(), point_json(owner_key)),
+        (
+            "spenderC1".into(),
+            point_json_from_coordinates([escrow[0], escrow[1]]),
+        ),
+        (
+            "spenderC2".into(),
+            point_json_from_coordinates([escrow[2], escrow[3]]),
+        ),
+        (
+            "ownerC1".into(),
+            point_json_from_coordinates([escrow[4], escrow[5]]),
+        ),
+        (
+            "ownerC2".into(),
+            point_json_from_coordinates([escrow[6], escrow[7]]),
+        ),
+        ("spendEpoch".into(), json!(spend_epoch.to_string())),
+    ])
+}
+
+fn transfer_from_inputs(
+    plan: &Plan,
+    state: &ChargedState<Db>,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    recipient: &[u8; 32],
+    owner_key: EmbeddedGroupAffine,
+    recipient_key: EmbeddedGroupAffine,
+    amount: u64,
+    spend_epoch: u64,
+    credit_epoch: u64,
+) -> BTreeMap<String, Json> {
+    let pending = map_record(plan, state, "pending", recipient);
+    let mut inputs =
+        escrow_spend_inputs(plan, state, owner, spender, owner_key, amount, spend_epoch);
+    inputs.insert("to".into(), bytes(recipient));
+    inputs.insert("recipientPk".into(), point_json(recipient_key));
+    inputs.insert(
+        "pendingC1".into(),
+        point_json_from_coordinates([pending[0], pending[1]]),
+    );
+    inputs.insert(
+        "pendingC2".into(),
+        point_json_from_coordinates([pending[2], pending[3]]),
+    );
+    inputs.insert("creditEpoch".into(), json!(credit_epoch.to_string()));
     inputs
 }
 
@@ -921,6 +1153,33 @@ fn assert_rejects_previous_owner_mismatch(
     );
 }
 
+fn assert_rejects_spend_overspend(
+    plan: &Plan,
+    circuit: &IrSource,
+    inputs: &BTreeMap<String, Json>,
+    state: &ChargedState<Db>,
+    amount: u64,
+) {
+    let mut changed = inputs.clone();
+    changed.insert("value".into(), json!(amount.to_string()));
+    match prepare(
+        plan,
+        &changed,
+        state,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    ) {
+        Err(error) => assert!(
+            error.to_string().contains("unsigned subtraction underflow"),
+            "overspend failed for an unrelated reason: {error}"
+        ),
+        Ok(execution) => assert!(
+            check(&execution, circuit).is_err(),
+            "overspending the escrow passed the native relation"
+        ),
+    }
+}
+
 #[test]
 fn confidential_token_registration_pending_sweep_and_transfer_use_native_relations() {
     // These deterministic seeds and keys exercise test plumbing only. They do not establish
@@ -967,7 +1226,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
             values,
             account_secret,
             encryption_secret,
-            None,
+            &[],
             None,
             sequence,
             &state,
@@ -1026,7 +1285,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         mint_values,
         &alice_account_secret,
         &alice_encryption_secret,
-        Some(mint_seed),
+        &[mint_seed],
         None,
         3,
         &state,
@@ -1090,7 +1349,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         sweep_values,
         &alice_account_secret,
         &alice_encryption_secret,
-        None,
+        &[],
         None,
         4,
         &state,
@@ -1143,7 +1402,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         transfer_values,
         &alice_account_secret,
         &alice_encryption_secret,
-        Some(transfer_seed),
+        &[transfer_seed],
         Some(spendable),
         5,
         &state,
@@ -1230,7 +1489,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         burn_values,
         &alice_account_secret,
         &alice_encryption_secret,
-        Some(burn_seed),
+        &[burn_seed],
         Some(owner_after),
         6,
         &state,
@@ -1339,7 +1598,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         move_values,
         &alice_account_secret,
         &alice_encryption_secret,
-        Some(move_seed),
+        &[move_seed],
         Some(balance_after_burn),
         7,
         &state,
@@ -1406,7 +1665,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         clear_values("1"),
         &alice_account_secret,
         &alice_encryption_secret,
-        None,
+        &[],
         None,
         8,
         &state,
@@ -1420,7 +1679,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         clear_values("2"),
         &alice_account_secret,
         &bob_encryption_secret,
-        None,
+        &[],
         None,
         9,
         &state,
@@ -1435,7 +1694,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         clear_values("2"),
         &alice_account_secret,
         &alice_encryption_secret,
-        None,
+        &[],
         None,
         10,
         &state,
@@ -1517,7 +1776,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         approve_inputs(&approve_plan, &state, &alice, &bob, bob_key, 2, false),
         &alice_account_secret,
         &alice_encryption_secret,
-        Some(approve_seed),
+        &[approve_seed],
         Some(alice_after_move),
         11,
         &state,
@@ -1580,7 +1839,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         approve_inputs(&approve_plan, &state, &alice, &bob, bob_key, 3, true),
         &alice_account_secret,
         &alice_encryption_secret,
-        Some(reapprove_seed),
+        &[reapprove_seed],
         Some(refunded_balance),
         12,
         &state,
@@ -1646,4 +1905,236 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         map_record(&approve_plan, &state, "creditEpochs", &bob),
         vec![Fr::from(1u64)]
     );
+
+    let (_, transfer_from_text, transfer_from_bytes) = artifacts("transferFrom");
+    let transfer_from_plan: Plan = serde_json::from_str(transfer_from_text).unwrap();
+    let transfer_from_circuit = IrSource::load(transfer_from_bytes).unwrap();
+    let state_before_transfer_from = state.clone();
+    let (spender_before, owner_before, owner_memo_before) =
+        escrow_ciphertexts(&escrow_record(&transfer_from_plan, &state, &alice, &bob));
+    assert_eq!(decrypt_small(spender_before, bob_key_scalar, 64), 3);
+    assert_eq!(decrypt_small(owner_before, alice_key_scalar, 64), 3);
+    assert_eq!(
+        decrypt_owner_memo(owner_memo_before, alice_key_scalar, 64),
+        3
+    );
+    let pending_before_transfer_from =
+        ciphertext_from_fields(&map_record(&transfer_from_plan, &state, "pending", &bob), 0);
+    let bob_memos_before_transfer_from = memo_records(&transfer_from_plan, &state, &bob);
+    let transfer_spend_seed = [0x37u8; 32];
+    let transfer_credit_seed = [0x38u8; 32];
+    let (next_spender, next_owner, next_owner_memo) = expected_escrow_spend(
+        &transfer_spend_seed,
+        &alice,
+        &bob,
+        1,
+        2,
+        1,
+        spender_before,
+        owner_before,
+        bob_key,
+        alice_key,
+    );
+    let (pending_credit, transfer_from_memo) =
+        expected_credit(&transfer_credit_seed, &bob, bob_key, 2, 2);
+    let next_bob_pending = add_ciphertexts(pending_before_transfer_from, pending_credit);
+    let (after_transfer_from, transfer_from_native_inputs) = run_entry(
+        "transferFrom",
+        transfer_from_inputs(
+            &transfer_from_plan,
+            &state,
+            &alice,
+            &bob,
+            &bob,
+            alice_key,
+            bob_key,
+            2,
+            1,
+            2,
+        ),
+        &bob_account_secret,
+        &bob_encryption_secret,
+        &[transfer_spend_seed, transfer_credit_seed],
+        Some(spender_before),
+        13,
+        &state,
+    )
+    .unwrap();
+    assert_rejects_spend_overspend(
+        &transfer_from_plan,
+        &transfer_from_circuit,
+        &transfer_from_native_inputs,
+        &state_before_transfer_from,
+        4,
+    );
+    state = after_transfer_from;
+    assert_escrow(
+        &transfer_from_plan,
+        &state,
+        &alice,
+        &bob,
+        next_spender,
+        next_owner,
+        next_owner_memo,
+    );
+    let (actual_spender, actual_owner, actual_owner_memo) =
+        escrow_ciphertexts(&escrow_record(&transfer_from_plan, &state, &alice, &bob));
+    assert_eq!(decrypt_small(actual_spender, bob_key_scalar, 64), 1);
+    assert_eq!(decrypt_small(actual_owner, alice_key_scalar, 64), 1);
+    assert_eq!(
+        decrypt_owner_memo(actual_owner_memo, alice_key_scalar, 64),
+        1
+    );
+    assert_eq!(
+        escrow_spend_epoch_record(&transfer_from_plan, &state, &alice, &bob),
+        vec![Fr::from(1u64)]
+    );
+    assert_ciphertext(
+        &transfer_from_plan,
+        &state,
+        "balances",
+        &alice,
+        second_balance,
+    );
+    assert_ciphertext(
+        &transfer_from_plan,
+        &state,
+        "balances",
+        &bob,
+        Ciphertext {
+            c1: identity,
+            c2: identity,
+        },
+    );
+    assert_ciphertext(
+        &transfer_from_plan,
+        &state,
+        "pending",
+        &alice,
+        alice_pending_after_move,
+    );
+    assert_ciphertext(
+        &transfer_from_plan,
+        &state,
+        "pending",
+        &bob,
+        next_bob_pending,
+    );
+    assert_eq!(decrypt_small(next_bob_pending, bob_key_scalar, 64), 7);
+    let (bob_memo_count_after_transfer_from, bob_memos_after_transfer_from) =
+        memo_records(&transfer_from_plan, &state, &bob);
+    assert_eq!(
+        bob_memo_count_after_transfer_from,
+        bob_memos_before_transfer_from.0 + 1
+    );
+    assert_eq!(
+        bob_memos_after_transfer_from[0],
+        [
+            transfer_from_memo.ephemeral.x().unwrap(),
+            transfer_from_memo.ephemeral.y().unwrap(),
+            transfer_from_memo.amount,
+        ]
+    );
+    assert_eq!(
+        &bob_memos_after_transfer_from[1..],
+        bob_memos_before_transfer_from.1.as_slice()
+    );
+    assert_eq!(
+        map_record(&transfer_from_plan, &state, "creditEpochs", &bob),
+        vec![Fr::from(2u64)]
+    );
+    assert_eq!(view("totalSupply", None, &state)["supply"], "10");
+
+    let (_, burn_from_text, _) = artifacts("burnFrom");
+    let burn_from_plan: Plan = serde_json::from_str(burn_from_text).unwrap();
+    let (spender_before_burn_from, owner_before_burn_from, _) =
+        escrow_ciphertexts(&escrow_record(&burn_from_plan, &state, &alice, &bob));
+    let burn_from_seed = [0x39u8; 32];
+    let (burned_spender, burned_owner, burned_owner_memo) = expected_escrow_spend(
+        &burn_from_seed,
+        &alice,
+        &bob,
+        2,
+        1,
+        0,
+        spender_before_burn_from,
+        owner_before_burn_from,
+        bob_key,
+        alice_key,
+    );
+    state = run_entry(
+        "burnFrom",
+        escrow_spend_inputs(&burn_from_plan, &state, &alice, &bob, alice_key, 1, 2),
+        &bob_account_secret,
+        &bob_encryption_secret,
+        &[burn_from_seed],
+        Some(spender_before_burn_from),
+        14,
+        &state,
+    )
+    .unwrap()
+    .0;
+    assert_escrow(
+        &burn_from_plan,
+        &state,
+        &alice,
+        &bob,
+        burned_spender,
+        burned_owner,
+        burned_owner_memo,
+    );
+    let (actual_spender_after_burn, actual_owner_after_burn, actual_memo_after_burn) =
+        escrow_ciphertexts(&escrow_record(&burn_from_plan, &state, &alice, &bob));
+    assert_eq!(
+        decrypt_small(actual_spender_after_burn, bob_key_scalar, 64),
+        0
+    );
+    assert_eq!(
+        decrypt_small(actual_owner_after_burn, alice_key_scalar, 64),
+        0
+    );
+    assert_eq!(
+        decrypt_owner_memo(actual_memo_after_burn, alice_key_scalar, 64),
+        0
+    );
+    assert_eq!(
+        escrow_spend_epoch_record(&burn_from_plan, &state, &alice, &bob),
+        vec![Fr::from(2u64)]
+    );
+    assert_ciphertext(&burn_from_plan, &state, "balances", &alice, second_balance);
+    assert_ciphertext(
+        &burn_from_plan,
+        &state,
+        "balances",
+        &bob,
+        Ciphertext {
+            c1: identity,
+            c2: identity,
+        },
+    );
+    assert_ciphertext(
+        &burn_from_plan,
+        &state,
+        "pending",
+        &alice,
+        alice_pending_after_move,
+    );
+    assert_ciphertext(&burn_from_plan, &state, "pending", &bob, next_bob_pending);
+    assert_eq!(decrypt_small(next_bob_pending, bob_key_scalar, 64), 7);
+    assert_eq!(
+        memo_records(&burn_from_plan, &state, &bob),
+        (
+            bob_memo_count_after_transfer_from,
+            bob_memos_after_transfer_from
+        )
+    );
+    assert_eq!(
+        map_record(&burn_from_plan, &state, "creditEpochs", &alice),
+        vec![Fr::from(2u64)]
+    );
+    assert_eq!(
+        map_record(&burn_from_plan, &state, "creditEpochs", &bob),
+        vec![Fr::from(2u64)]
+    );
+    assert_eq!(view("totalSupply", None, &state)["supply"], "9");
 }

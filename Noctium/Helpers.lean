@@ -103,6 +103,7 @@ inductive BytesOp where
   | persistentHashNativeVector
   | persistentHashPoint
   | degradeToNative
+  | toBytes32 (source : Ty)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def BytesOp.operationName : BytesOp → String
@@ -112,6 +113,10 @@ def BytesOp.operationName : BytesOp → String
   | .persistentHashNativeVector => "persistentHashNativeVector"
   | .persistentHashPoint => "persistentHashPoint"
   | .degradeToNative => "degradeToNative"
+  | .toBytes32 .native => "nativeToBytes32"
+  | .toBytes32 .jubjubScalar => "jubjubScalarToBytes32"
+  | .toBytes32 .jubjubPoint => "jubjubPointToBytes32"
+  | .toBytes32 _ => "unsupportedToBytes32"
 
 def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except String (List Ty × Ty) := do
   match operation with
@@ -135,6 +140,11 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
   | .degradeToNative =>
     unless argumentCount == 1 do throw "degradeToNative requires one Bytes32 argument"
     pure ([.bytes 32], .native)
+  | .toBytes32 source =>
+    unless argumentCount == 1 do throw "toBytes32 requires one argument"
+    unless source == .native || source == .jubjubScalar || source == .jubjubPoint do
+      throw "toBytes32 requires Native, JubjubScalar or JubjubPoint"
+    pure ([source], .bytes 32)
 
 inductive Term where
   | unit
@@ -1544,6 +1554,9 @@ mutual
           let point ← liftD (typedExpr span .jubjubPoint value)
           pure (scalarValue (Expr.persistentHashNativeVector [
             Expr.jubjubCoordinate point 0, Expr.jubjubCoordinate point 1]))
+        | .toBytes32 source, [value] => do
+          let value ← liftD (typedExpr span source value)
+          pure (scalarValue (Expr.toBytes32 value))
         | .degradeToNative, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.bytesField value 1))
