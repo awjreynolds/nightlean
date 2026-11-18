@@ -717,6 +717,19 @@
         ],
         "limits": "Current 3.2.1 native checker and local state only. No new keys, proofs, deployment or historical compatibility campaign. Values are Native/Bool/UInt; the native case exercises Native. Nested ledger trees, aggregate values, integrated provider/private-state scheduling and generic preservation remain open.",
         "fullEquivalence": "unverified"
+      },
+      "runtimeCursorUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "2b9ff0a30c72fa347fbc0dd5088c260befe7b697",
+        "scope": "Rust PreparationCursor refactors the existing native executor into typed steps. Public inputs are required initially; missing private operands pause before execution. Read events expose only their bound values, input batches are atomic/immutable, and fatal step failures poison progress. Current source/native case derives private delta7 from ledger balance3, resumes to balance10 and passes the checker.",
+        "evidence": [
+          "runtime/src/lib.rs",
+          "tests/NativePreparationCursor.lean",
+          "runtime/tests/preparation_cursor.rs",
+          "docs/development/native-preparation-cursor.md"
+        ],
+        "limits": "Preparation API only. Source witness Session and ledger helper execution are not yet interleaved. No new keys/proofs/deployments, C ABI/mobile/WASM binding or preservation theorem. Existing source state/provider combination remains gated.",
+        "fullEquivalence": "unverified"
       }
     },
     {
@@ -1044,6 +1057,19 @@
           "docs/development/guarded-witnesses.md"
         ],
         "limits": "Native case uses scalar witness slots. Other defaults reuse existing typed codec/default paths. Legacy schema1 remains compatible. No new keys/proofs/deployments, complete guarded state/helper effect integration or general witness lowering preservation. Existing witness semantic model does not qualify schema2.",
+        "fullEquivalence": "unverified"
+      },
+      "runtimeCursorUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "2b9ff0a30c72fa347fbc0dd5088c260befe7b697",
+        "scope": "Rust PreparationCursor refactors the existing native executor into typed steps. Public inputs are required initially; missing private operands pause before execution. Read events expose only their bound values, input batches are atomic/immutable, and fatal step failures poison progress. Current source/native case derives private delta7 from ledger balance3, resumes to balance10 and passes the checker.",
+        "evidence": [
+          "runtime/src/lib.rs",
+          "tests/NativePreparationCursor.lean",
+          "runtime/tests/preparation_cursor.rs",
+          "docs/development/native-preparation-cursor.md"
+        ],
+        "limits": "Preparation API only. Source witness Session and ledger helper execution are not yet interleaved. No new keys/proofs/deployments, C ABI/mobile/WASM binding or preservation theorem. Existing source state/provider combination remains gated.",
         "fullEquivalence": "unverified"
       }
     },
