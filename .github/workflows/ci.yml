@@ -57,6 +57,7 @@ jobs:
           lake env lean tests/BytesStorage.lean
           lake env lean tests/ScalarFromBytes.lean
           lake env lean tests/TransientHash.lean
+          lake env lean tests/SignatureChecks.lean
           lake env lean --run tests/NativeProducer.lean
           lake env lean tests/ByteHashes.lean
           lake env lean tests/BooleanGates.lean

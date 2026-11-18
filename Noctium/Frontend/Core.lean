@@ -5,6 +5,7 @@ import Noctium.ComponentDisclosure
 import Noctium.Control
 import Noctium.Witness
 import Noctium.Modules
+import Noctium.Crypto.Signatures
 import Noctium.Backend.Impact
 import Lean
 
@@ -137,6 +138,11 @@ scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
 scoped syntax "sha512(" nlexpr ")" : nlexpr
 scoped syntax "keccak256(" nlexpr ")" : nlexpr
+scoped syntax "secp256k1EcdsaVerify(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "secp256r1EcdsaVerify(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "jubjubSchnorrVerify(" "[" nlexpr,* "]" "," nlexpr "," nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "ed25519Verify(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "secp256k1EthereumAddress(" nlexpr ")" : nlexpr
 scoped syntax "reverseBytes32(" nlexpr ")" : nlexpr
 scoped syntax "bytes(" num "," str ")" : nlexpr
 scoped syntax "reverseBytes(" nlexpr ")" : nlexpr
@@ -504,7 +510,12 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| curveY($_:nlexpr))
   | `(nlexpr| curveFromCoordinates($_:nlexpr, $_:nlexpr))
   | `(nlexpr| foreignToBytes($_:nlexpr))
-  | `(nlexpr| foreignFromBytes($_:nltype, $_:nlexpr)) => Bool.true
+  | `(nlexpr| foreignFromBytes($_:nltype, $_:nlexpr))
+  | `(nlexpr| secp256k1EcdsaVerify($_:nlexpr, $_:nlexpr, $_:nlexpr, $_:nlexpr))
+  | `(nlexpr| secp256r1EcdsaVerify($_:nlexpr, $_:nlexpr, $_:nlexpr, $_:nlexpr))
+  | `(nlexpr| ed25519Verify($_:nlexpr, $_:nlexpr, $_:nlexpr, $_:nlexpr))
+  | `(nlexpr| secp256k1EthereumAddress($_:nlexpr)) => Bool.true
+  | `(nlexpr| jubjubSchnorrVerify([$messages,*], $_:nlexpr, $_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| select($c, $a, $b)) =>
     hasPartialScalar c || hasPartialScalar a || hasPartialScalar b
   | _ => Bool.false
@@ -677,6 +688,41 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let .bytes _ := valueTy
       | throwErrorAt stx "keccak256 requires a Bytes expression"
     pure (.bytes 32, ← `(Noctium.Expr.keccak256 $value))
+  | `(nlexpr| secp256k1EcdsaVerify($msgHash, $r, $s, $pk)) => do
+    let msgHash ← expected env msgHash (.bytes 32)
+    let r ← expected env r (.foreign (.scalar .secp256k1))
+    let s ← expected env s (.foreign (.scalar .secp256k1))
+    let pk ← expected env pk (.foreign (.point .secp256k1))
+    pure (.bool, ← `(Noctium.Crypto.secp256k1EcdsaVerify $msgHash $r $s $pk))
+  | `(nlexpr| secp256r1EcdsaVerify($msgHash, $r, $s, $pk)) => do
+    let msgHash ← expected env msgHash (.bytes 32)
+    let r ← expected env r (.foreign (.scalar .secp256r1))
+    let s ← expected env s (.foreign (.scalar .secp256r1))
+    let pk ← expected env pk (.foreign (.point .secp256r1))
+    pure (.bool, ← `(Noctium.Crypto.secp256r1EcdsaVerify $msgHash $r $s $pk))
+  | `(nlexpr| jubjubSchnorrVerify([$message,*], $announcement, $response, $pk)) => do
+    let sourceMessages := message.getElems.toList
+    unless sourceMessages.length + 4 ≤ 1024 do
+      throwErrorAt stx "jubjubSchnorrVerify challenge input exceeds 1024 Native fields"
+    let messages ← sourceMessages.mapM fun value => expected env value .native
+    let messageList ← nativeExprListTerm messages
+    let announcement ← expected env announcement .jubjubPoint
+    let response ← expected env response .native
+    let pk ← expected env pk .jubjubPoint
+    pure (.bool, ← `(Noctium.Crypto.jubjubSchnorrVerify $messageList $announcement $response $pk))
+  | `(nlexpr| ed25519Verify($message, $r, $s, $pk)) => do
+    let (messageTy, message) ← expression env message
+    let .bytes length := messageTy
+      | throwErrorAt stx "ed25519Verify requires a Bytes message"
+    unless length + 64 ≤ 1024 do
+      throwErrorAt stx "ed25519Verify input exceeds 1024 bytes"
+    let r ← expected env r (.foreign (.point .curve25519))
+    let s ← expected env s (.foreign (.scalar .curve25519))
+    let pk ← expected env pk (.foreign (.point .curve25519))
+    pure (.bool, ← `(Noctium.Crypto.ed25519Verify $message $r $s $pk))
+  | `(nlexpr| secp256k1EthereumAddress($pk)) => do
+    let pk ← expected env pk (.foreign (.point .secp256k1))
+    pure (.bytes 20, ← `(Noctium.Crypto.secp256k1EthereumAddress $pk))
   | `(nlexpr| bytes($length:num, $literal:str)) => do
     let length := length.getNat
     if length > Noctium.maxBytesLength then

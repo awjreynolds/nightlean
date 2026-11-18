@@ -1,0 +1,321 @@
+#![cfg(feature = "zkir-321")]
+
+use noctium_runtime::{Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
+use num_bigint::BigUint;
+use serde_json::{Value as Json, json};
+use std::collections::BTreeMap;
+use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine, Fr};
+use transient_crypto::hash::transient_hash;
+
+const PLAN: &str =
+    include_str!("fixtures/signature-helpers/321/SignatureChecks.verify.impact.json");
+const CIRCUIT: &[u8] = include_bytes!("fixtures/signature-helpers/321/SignatureChecks.verify.zkir");
+
+fn bytes(value: &[u8]) -> Json {
+    json!({"kind":"bytes","values":value})
+}
+
+fn foreign(ty: &str, encoded: Vec<u8>) -> Json {
+    json!({"kind":"foreign","type":ty,"bytes":encoded})
+}
+
+fn scalar_le(hex_be: &str) -> Vec<u8> {
+    let mut bytes = hex::decode(hex_be).unwrap();
+    assert_eq!(bytes.len(), 32);
+    bytes.reverse();
+    bytes
+}
+
+fn alternate_scalar(hex_be: &str, order: &str) -> Vec<u8> {
+    let scalar = BigUint::parse_bytes(hex_be.as_bytes(), 16).unwrap();
+    let order = BigUint::parse_bytes(order.as_bytes(), 16).unwrap();
+    let mut bytes = (order - scalar).to_bytes_le();
+    bytes.resize(32, 0);
+    bytes
+}
+
+fn sec1_point(x: &str, y: &str) -> Vec<u8> {
+    let x = hex::decode(x).unwrap();
+    let y = hex::decode(y).unwrap();
+    let mut encoded = vec![2 | (y[31] & 1)];
+    encoded.extend(x);
+    encoded
+}
+
+fn jubjub_point(point: EmbeddedGroupAffine) -> Json {
+    json!({
+        "kind":"jubjubPoint",
+        "x":field_decimal(point.x().unwrap()),
+        "y":field_decimal(point.y().unwrap()),
+    })
+}
+
+fn jubjub_signature() -> (EmbeddedGroupAffine, EmbeddedGroupAffine, Fr) {
+    let generator = EmbeddedGroupAffine::generator();
+    let key = generator * EmbeddedFr::from(3u64);
+    let announcement = generator * EmbeddedFr::from(5u64);
+    let challenge = transient_hash(&[
+        announcement.x().unwrap(),
+        announcement.y().unwrap(),
+        key.x().unwrap(),
+        key.y().unwrap(),
+        Fr::from(11u64),
+        Fr::from(22u64),
+    ]);
+    let reduced = EmbeddedFr::from_le_bytes_wide(&challenge.as_le_bytes()).unwrap();
+    let response = Fr::try_from(EmbeddedFr::from(5u64) + reduced * EmbeddedFr::from(3u64)).unwrap();
+    (key, announcement, response)
+}
+
+fn jubjub_identity_announcement_signature() -> (EmbeddedGroupAffine, Fr) {
+    let announcement = EmbeddedGroupAffine::identity();
+    let key = EmbeddedGroupAffine::generator() * EmbeddedFr::from(3u64);
+    let challenge = transient_hash(&[
+        announcement.x().unwrap(),
+        announcement.y().unwrap(),
+        key.x().unwrap(),
+        key.y().unwrap(),
+        Fr::from(11u64),
+        Fr::from(22u64),
+    ]);
+    let response = Fr::try_from(
+        EmbeddedFr::from_le_bytes_wide(&challenge.as_le_bytes()).unwrap() * EmbeddedFr::from(3u64),
+    )
+    .unwrap();
+    (announcement, response)
+}
+
+fn inputs() -> BTreeMap<String, Json> {
+    let (j_key, j_announcement, j_response) = jubjub_signature();
+    // RustCrypto k256 0.13.4 test_vectors/ecdsa.rs, in source big-endian form.
+    BTreeMap::from([
+        (
+            "kDigest".into(),
+            bytes(
+                &hex::decode("4b688df40bcedbe641ddb16ff0a1842d9c67ea1c3bf63f3e0471baa664531d1a")
+                    .unwrap(),
+            ),
+        ),
+        (
+            "kR".into(),
+            foreign(
+                "Secp256k1Scalar",
+                scalar_le("241097efbf8b63bf145c8961dbdf10c310efbb3b2676bbc0f8b08505c9e2f795"),
+            ),
+        ),
+        (
+            "kS".into(),
+            foreign(
+                "Secp256k1Scalar",
+                scalar_le("021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e"),
+            ),
+        ),
+        (
+            "kKey".into(),
+            foreign(
+                "Secp256k1Point",
+                sec1_point(
+                    "779dd197a5df977ed2cf6cb31d82d43328b790dc6b3b7d4437a427bd5847dfcd",
+                    "e94b724a555b6d017bb7607c3e3281daf5b1699d6ef4124975c9237b917d426f",
+                ),
+            ),
+        ),
+        (
+            "pDigest".into(),
+            bytes(
+                &hex::decode("44acf6b7e36c1342c2c5897204fe09504e1e2efb1a900377dbc4e7a6a133ec56")
+                    .unwrap(),
+            ),
+        ),
+        // RustCrypto p256 0.13.2 test_vectors/ecdsa.rs, in source big-endian form.
+        (
+            "pR".into(),
+            foreign(
+                "Secp256r1Scalar",
+                scalar_le("f3ac8061b514795b8843e3d6629527ed2afd6b1f6a555a7acabb5e6f79c8c2ac"),
+            ),
+        ),
+        (
+            "pS".into(),
+            foreign(
+                "Secp256r1Scalar",
+                scalar_le("8bf77819ca05a6b2786c76262bf7371cef97b218e96f175a3ccdda2acc058903"),
+            ),
+        ),
+        (
+            "pKey".into(),
+            foreign(
+                "Secp256r1Point",
+                sec1_point(
+                    "1ccbe91c075fc7f4f033bfa248db8fccd3565de94bbfb12f3c59ff46c271bf83",
+                    "ce4014c68811f9a21a1fdb2c0e6113e06db7ca93b7404e78dc7ccd5ca89a4ca9",
+                ),
+            ),
+        ),
+        ("jMessage0".into(), json!(field_decimal(Fr::from(11u64)))),
+        ("jMessage1".into(), json!(field_decimal(Fr::from(22u64)))),
+        ("jAnnouncement".into(), jubjub_point(j_announcement)),
+        ("jResponse".into(), json!(field_decimal(j_response))),
+        ("jKey".into(), jubjub_point(j_key)),
+        ("edEmpty".into(), bytes(&[])),
+        ("edChanged".into(), bytes(&[0])),
+        (
+            "edR".into(),
+            foreign(
+                "Curve25519Point",
+                hex::decode("e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e06522490155")
+                    .unwrap(),
+            ),
+        ),
+        // RFC 8032 section 7.1, test 1.
+        (
+            "edS".into(),
+            foreign(
+                "Curve25519Scalar",
+                hex::decode("5fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b")
+                    .unwrap(),
+            ),
+        ),
+        (
+            "edKey".into(),
+            foreign(
+                "Curve25519Point",
+                hex::decode("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a")
+                    .unwrap(),
+            ),
+        ),
+        (
+            "ethKey".into(),
+            foreign(
+                "Secp256k1Point",
+                hex::decode("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+                    .unwrap(),
+            ),
+        ),
+    ])
+}
+
+fn returns(k: bool, p: bool, schnorr: bool) -> BTreeMap<String, Json> {
+    BTreeMap::from([
+        ("secp256k1Valid".into(), json!(k)),
+        ("p256Valid".into(), json!(p)),
+        ("schnorrValid".into(), json!(schnorr)),
+        ("ed25519Valid".into(), json!(true)),
+        ("changedEd25519Valid".into(), json!(false)),
+        (
+            "ethereumAddress".into(),
+            bytes(&hex::decode("7e5f4552091a69125d5dfcb7b8c2659029395bdf").unwrap()),
+        ),
+    ])
+}
+
+#[test]
+fn signature_helpers_match_known_vectors_and_reject_invalid_preconditions() {
+    let plan: Plan = serde_json::from_str(PLAN).unwrap();
+    let circuit = IrSource::load(CIRCUIT).unwrap();
+    let initial = create_state(&plan, &BTreeMap::new()).unwrap();
+    let params = &ledger::structure::INITIAL_PARAMETERS;
+    let address = coin_structure::contract::ContractAddress::default();
+    let supplied = inputs();
+    let mut execution = prepare(&plan, &supplied, &initial, params, address).unwrap();
+    assert_eq!(
+        check(&execution, &circuit).unwrap(),
+        execution.activity_schedule
+    );
+    assert_eq!(execution.returns_json(), returns(true, true, true));
+    assert_eq!(execution.preimage.private_transcript.len(), 105);
+    let original = execution.preimage.private_transcript[0];
+    execution.preimage.private_transcript[0] = original + Fr::from(1u64);
+    assert!(check(&execution, &circuit).is_err());
+
+    let mut high_low_s = supplied.clone();
+    high_low_s.insert(
+        "kS".into(),
+        foreign(
+            "Secp256k1Scalar",
+            alternate_scalar(
+                "021006b7838609339e8b415a7f9acb1b661828131aef1ecbc7955dfb01f3ca0e",
+                "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141",
+            ),
+        ),
+    );
+    high_low_s.insert(
+        "pS".into(),
+        foreign(
+            "Secp256r1Scalar",
+            alternate_scalar(
+                "8bf77819ca05a6b2786c76262bf7371cef97b218e96f175a3ccdda2acc058903",
+                "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551",
+            ),
+        ),
+    );
+    let high_low_s = prepare(&plan, &high_low_s, &initial, params, address).unwrap();
+    check(&high_low_s, &circuit).unwrap();
+    assert_eq!(high_low_s.returns_json(), returns(true, true, true));
+
+    let (announcement, response) = jubjub_identity_announcement_signature();
+    let mut identity_announcement = supplied.clone();
+    identity_announcement.insert("jAnnouncement".into(), jubjub_point(announcement));
+    identity_announcement.insert("jResponse".into(), json!(field_decimal(response)));
+    let identity_announcement =
+        prepare(&plan, &identity_announcement, &initial, params, address).unwrap();
+    check(&identity_announcement, &circuit).unwrap();
+    assert_eq!(
+        identity_announcement.returns_json(),
+        returns(true, true, true)
+    );
+
+    let mut changed = supplied.clone();
+    changed.get_mut("kDigest").unwrap()["values"][0] = json!(5);
+    changed.get_mut("pDigest").unwrap()["values"][0] = json!(5);
+    changed.insert("jMessage0".into(), json!(field_decimal(Fr::from(12u64))));
+    let changed = prepare(&plan, &changed, &initial, params, address).unwrap();
+    check(&changed, &circuit).unwrap();
+    assert_eq!(changed.returns_json(), returns(false, false, false));
+
+    let rejects = |name: &str, invalid: &BTreeMap<String, Json>| {
+        assert!(
+            prepare(&plan, invalid, &initial, params, address).is_err(),
+            "{name} should abort during prepare"
+        );
+    };
+    let mut zero_r = supplied.clone();
+    zero_r.insert("kR".into(), foreign("Secp256k1Scalar", vec![0; 32]));
+    rejects("zero secp256k1 r", &zero_r);
+    let mut zero_s = supplied.clone();
+    zero_s.insert("pS".into(), foreign("Secp256r1Scalar", vec![0; 32]));
+    rejects("zero P-256 s", &zero_s);
+    let mut identity_k = supplied.clone();
+    identity_k.insert("kKey".into(), foreign("Secp256k1Point", vec![0; 33]));
+    rejects("identity secp256k1 key", &identity_k);
+    let mut identity_key = supplied.clone();
+    identity_key.insert("jKey".into(), jubjub_point(EmbeddedGroupAffine::identity()));
+    rejects("identity Jubjub key", &identity_key);
+    let mut identity_ed = supplied.clone();
+    identity_ed.insert(
+        "edKey".into(),
+        foreign("Curve25519Point", [vec![1], vec![0; 31]].concat()),
+    );
+    rejects("identity Ed25519 key", &identity_ed);
+    let mut identity_eth = supplied.clone();
+    identity_eth.insert("ethKey".into(), foreign("Secp256k1Point", vec![0; 33]));
+    rejects("identity Ethereum key", &identity_eth);
+
+    let mut computed_identity = supplied;
+    let mut digest_one = vec![0; 32];
+    digest_one[31] = 1;
+    let mut scalar_one = vec![0; 32];
+    scalar_one[0] = 1;
+    computed_identity.insert("kDigest".into(), bytes(&digest_one));
+    computed_identity.insert("kR".into(), foreign("Secp256k1Scalar", scalar_one.clone()));
+    computed_identity.insert("kS".into(), foreign("Secp256k1Scalar", scalar_one));
+    computed_identity.insert(
+        "kKey".into(),
+        foreign(
+            "Secp256k1Point",
+            hex::decode("0379be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+                .unwrap(),
+        ),
+    );
+    rejects("computed identity ECDSA point", &computed_identity);
+}

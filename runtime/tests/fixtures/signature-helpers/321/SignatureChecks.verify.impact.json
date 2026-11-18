@@ -1,0 +1,468 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Bool",
+   "name": "secp256k1Valid",
+   "expression": {"tag": "reference", "name": "kValid"}},
+  {"visibility": "public",
+   "type": "Bool",
+   "name": "p256Valid",
+   "expression": {"tag": "reference", "name": "pValid"}},
+  {"visibility": "public",
+   "type": "Bool",
+   "name": "schnorrValid",
+   "expression": {"tag": "reference", "name": "jValid"}},
+  {"visibility": "public",
+   "type": "Bool",
+   "name": "ed25519Valid",
+   "expression": {"tag": "reference", "name": "edValid"}},
+  {"visibility": "public",
+   "type": "Bool",
+   "name": "changedEd25519Valid",
+   "expression": {"tag": "reference", "name": "edChangedValid"}},
+  {"visibility": "public",
+   "type": "Bytes<20>",
+   "name": "ethereumAddress",
+   "expression": {"tag": "reference", "name": "address"}}],
+ "reads": [],
+ "operations": [],
+ "nativeCircuitFile": "SignatureChecks.verify.zkir",
+ "guards": [],
+ "entrypoint": "verify",
+ "contractName": "SignatureChecks",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Bool",
+    "name": "kValid",
+    "expression":
+    {"tag": "assertThen",
+     "condition":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"type": "Secp256k1Point",
+        "tag": "foreignConstant",
+        "encoding":
+        ["6277101735386680763835789423207666416102355444459739544622",
+         "18446744073709551615",
+         "6277101735386680763835789423207666416102355444459739544622",
+         "18446744073709551615",
+         "1"]},
+       "left": {"tag": "reference", "name": "kKey"}}},
+     "body":
+     {"tag": "assertThen",
+      "condition":
+      {"tag": "eq",
+       "right": {"value": false, "tag": "bool"},
+       "left":
+       {"tag": "eq",
+        "right":
+        {"type": "Secp256k1Scalar",
+         "tag": "foreignConstant",
+         "encoding":
+         ["6277101735386680763403369036642006759249934578069066367296",
+          "18446744073709551615"]},
+        "left": {"tag": "reference", "name": "kR"}}},
+      "body":
+      {"tag": "assertThen",
+       "condition":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left":
+        {"tag": "eq",
+         "right":
+         {"type": "Secp256k1Scalar",
+          "tag": "foreignConstant",
+          "encoding":
+          ["6277101735386680763403369036642006759249934578069066367296",
+           "18446744073709551615"]},
+         "left": {"tag": "reference", "name": "kS"}}},
+       "body":
+       {"tag": "eq",
+        "right": {"tag": "reference", "name": "kR"},
+        "left":
+        {"value":
+         {"value":
+          {"value":
+           {"tag": "foreignBinary",
+            "right":
+            {"tag": "foreignBinary",
+             "right":
+             {"tag": "foreignBinary",
+              "right":
+              {"value": {"tag": "reference", "name": "kS"},
+               "tag": "foreignUnary",
+               "operation": "inv"},
+              "operation": "mul",
+              "left": {"tag": "reference", "name": "kR"}},
+             "operation": "ecMul",
+             "left": {"tag": "reference", "name": "kKey"}},
+            "operation": "add",
+            "left":
+            {"value":
+             {"tag": "foreignBinary",
+              "right":
+              {"value": {"tag": "reference", "name": "kS"},
+               "tag": "foreignUnary",
+               "operation": "inv"},
+              "operation": "mul",
+              "left":
+              {"value":
+               {"value": {"tag": "reference", "name": "kDigest"},
+                "tag": "reverseBytes32"},
+               "type": "Secp256k1Scalar",
+               "tag": "foreignFromBytes",
+               "length": 32}},
+             "tag": "foreignUnary",
+             "operation": "mulGenerator"}},
+           "tag": "foreignUnary",
+           "operation": "x"},
+          "tag": "foreignToBytes"},
+         "type": "Secp256k1Scalar",
+         "tag": "foreignFromBytes",
+         "length": 32}}}}}},
+   {"visibility": "public",
+    "type": "Bool",
+    "name": "pValid",
+    "expression":
+    {"tag": "assertThen",
+     "condition":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"type": "Secp256r1Point",
+        "tag": "foreignConstant",
+        "encoding":
+        ["79228162514264337593543950334",
+         "18446744069414584321",
+         "79228162514264337593543950334",
+         "18446744069414584321",
+         "1"]},
+       "left": {"tag": "reference", "name": "pKey"}}},
+     "body":
+     {"tag": "assertThen",
+      "condition":
+      {"tag": "eq",
+       "right": {"value": false, "tag": "bool"},
+       "left":
+       {"tag": "eq",
+        "right":
+        {"type": "Secp256r1Scalar",
+         "tag": "foreignConstant",
+         "encoding":
+         ["6277101735386680763746601232132340725505247534258992653648",
+          "18446744069414584320"]},
+        "left": {"tag": "reference", "name": "pR"}}},
+      "body":
+      {"tag": "assertThen",
+       "condition":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left":
+        {"tag": "eq",
+         "right":
+         {"type": "Secp256r1Scalar",
+          "tag": "foreignConstant",
+          "encoding":
+          ["6277101735386680763746601232132340725505247534258992653648",
+           "18446744069414584320"]},
+         "left": {"tag": "reference", "name": "pS"}}},
+       "body":
+       {"tag": "eq",
+        "right": {"tag": "reference", "name": "pR"},
+        "left":
+        {"value":
+         {"value":
+          {"value":
+           {"tag": "foreignBinary",
+            "right":
+            {"tag": "foreignBinary",
+             "right":
+             {"tag": "foreignBinary",
+              "right":
+              {"value": {"tag": "reference", "name": "pS"},
+               "tag": "foreignUnary",
+               "operation": "inv"},
+              "operation": "mul",
+              "left": {"tag": "reference", "name": "pR"}},
+             "operation": "ecMul",
+             "left": {"tag": "reference", "name": "pKey"}},
+            "operation": "add",
+            "left":
+            {"value":
+             {"tag": "foreignBinary",
+              "right":
+              {"value": {"tag": "reference", "name": "pS"},
+               "tag": "foreignUnary",
+               "operation": "inv"},
+              "operation": "mul",
+              "left":
+              {"value":
+               {"value": {"tag": "reference", "name": "pDigest"},
+                "tag": "reverseBytes32"},
+               "type": "Secp256r1Scalar",
+               "tag": "foreignFromBytes",
+               "length": 32}},
+             "tag": "foreignUnary",
+             "operation": "mulGenerator"}},
+           "tag": "foreignUnary",
+           "operation": "x"},
+          "tag": "foreignToBytes"},
+         "type": "Secp256r1Scalar",
+         "tag": "foreignFromBytes",
+         "length": 32}}}}}},
+   {"visibility": "public",
+    "type": "Bool",
+    "name": "jValid",
+    "expression":
+    {"tag": "assertThen",
+     "condition":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"y": {"value": "1", "tag": "constant"},
+        "x": {"value": "0", "tag": "constant"},
+        "tag": "jubjubFromCoordinates"},
+       "left": {"tag": "reference", "name": "jKey"}}},
+     "body":
+     {"tag": "eq",
+      "right":
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMul",
+        "scalar":
+        {"value":
+         {"values":
+          [{"tag": "jubjubCoordinate",
+            "point": {"tag": "reference", "name": "jAnnouncement"},
+            "index": 0},
+           {"tag": "jubjubCoordinate",
+            "point": {"tag": "reference", "name": "jAnnouncement"},
+            "index": 1},
+           {"tag": "jubjubCoordinate",
+            "point": {"tag": "reference", "name": "jKey"},
+            "index": 0},
+           {"tag": "jubjubCoordinate",
+            "point": {"tag": "reference", "name": "jKey"},
+            "index": 1},
+           {"tag": "reference", "name": "jMessage0"},
+           {"tag": "reference", "name": "jMessage1"}],
+          "tag": "transientHash"},
+         "tag": "jubjubScalarFromNative"},
+        "point": {"tag": "reference", "name": "jKey"}},
+       "left": {"tag": "reference", "name": "jAnnouncement"}},
+      "left":
+      {"tag": "jubjubMulGenerator",
+       "scalar":
+       {"value": {"tag": "reference", "name": "jResponse"},
+        "tag": "jubjubScalarFromNative"}}}}},
+   {"visibility": "public",
+    "type": "Bool",
+    "name": "edValid",
+    "expression":
+    {"tag": "assertThen",
+     "condition":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"type": "Curve25519Base",
+        "tag": "foreignConstant",
+        "encoding":
+        ["6277101735386680763835789423207666416102355444464034512876",
+         "9223372036854775807"]},
+       "left":
+       {"value": {"tag": "reference", "name": "edKey"},
+        "tag": "foreignUnary",
+        "operation": "x"}}},
+     "body":
+     {"tag": "eq",
+      "right":
+      {"tag": "foreignBinary",
+       "right":
+       {"tag": "foreignBinary",
+        "right":
+        {"value":
+         {"value":
+          {"tag": "concatBytes",
+           "rightLength": 0,
+           "right": {"tag": "reference", "name": "edEmpty"},
+           "leftLength": 64,
+           "left":
+           {"tag": "concatBytes",
+            "rightLength": 32,
+            "right":
+            {"value": {"tag": "reference", "name": "edKey"},
+             "tag": "foreignToBytes"},
+            "leftLength": 32,
+            "left":
+            {"value": {"tag": "reference", "name": "edR"},
+             "tag": "foreignToBytes"}}},
+          "tag": "sha512",
+          "length": 64},
+         "type": "Curve25519Scalar",
+         "tag": "foreignFromBytes",
+         "length": 64},
+        "operation": "ecMul",
+        "left": {"tag": "reference", "name": "edKey"}},
+       "operation": "add",
+       "left": {"tag": "reference", "name": "edR"}},
+      "left":
+      {"value": {"tag": "reference", "name": "edS"},
+       "tag": "foreignUnary",
+       "operation": "mulGenerator"}}}},
+   {"visibility": "public",
+    "type": "Bool",
+    "name": "edChangedValid",
+    "expression":
+    {"tag": "assertThen",
+     "condition":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"type": "Curve25519Base",
+        "tag": "foreignConstant",
+        "encoding":
+        ["6277101735386680763835789423207666416102355444464034512876",
+         "9223372036854775807"]},
+       "left":
+       {"value": {"tag": "reference", "name": "edKey"},
+        "tag": "foreignUnary",
+        "operation": "x"}}},
+     "body":
+     {"tag": "eq",
+      "right":
+      {"tag": "foreignBinary",
+       "right":
+       {"tag": "foreignBinary",
+        "right":
+        {"value":
+         {"value":
+          {"tag": "concatBytes",
+           "rightLength": 1,
+           "right": {"tag": "reference", "name": "edChanged"},
+           "leftLength": 64,
+           "left":
+           {"tag": "concatBytes",
+            "rightLength": 32,
+            "right":
+            {"value": {"tag": "reference", "name": "edKey"},
+             "tag": "foreignToBytes"},
+            "leftLength": 32,
+            "left":
+            {"value": {"tag": "reference", "name": "edR"},
+             "tag": "foreignToBytes"}}},
+          "tag": "sha512",
+          "length": 65},
+         "type": "Curve25519Scalar",
+         "tag": "foreignFromBytes",
+         "length": 64},
+        "operation": "ecMul",
+        "left": {"tag": "reference", "name": "edKey"}},
+       "operation": "add",
+       "left": {"tag": "reference", "name": "edR"}},
+      "left":
+      {"value": {"tag": "reference", "name": "edS"},
+       "tag": "foreignUnary",
+       "operation": "mulGenerator"}}}},
+   {"visibility": "public",
+    "type": "Bytes<20>",
+    "name": "address",
+    "expression":
+    {"tag": "assertThen",
+     "condition":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"type": "Secp256k1Point",
+        "tag": "foreignConstant",
+        "encoding":
+        ["6277101735386680763835789423207666416102355444459739544622",
+         "18446744073709551615",
+         "6277101735386680763835789423207666416102355444459739544622",
+         "18446744073709551615",
+         "1"]},
+       "left": {"tag": "reference", "name": "ethKey"}}},
+     "body":
+     {"value":
+      {"value":
+       {"tag": "concatBytes",
+        "rightLength": 32,
+        "right":
+        {"value":
+         {"value":
+          {"value": {"tag": "reference", "name": "ethKey"},
+           "tag": "foreignUnary",
+           "operation": "y"},
+          "tag": "foreignToBytes"},
+         "tag": "reverseBytes",
+         "length": 32},
+        "leftLength": 32,
+        "left":
+        {"value":
+         {"value":
+          {"value": {"tag": "reference", "name": "ethKey"},
+           "tag": "foreignUnary",
+           "operation": "x"},
+          "tag": "foreignToBytes"},
+         "tag": "reverseBytes",
+         "length": 32}},
+       "tag": "keccak256",
+       "length": 64},
+      "tag": "sliceBytes",
+      "start": 12,
+      "length": 32,
+      "end": 32}}}],
+  "name": "signatureChecksValues",
+  "inputs":
+  [{"visibility": "private", "type": "Bytes<32>", "name": "kDigest"},
+   {"visibility": "private", "type": "Secp256k1Scalar", "name": "kR"},
+   {"visibility": "private", "type": "Secp256k1Scalar", "name": "kS"},
+   {"visibility": "private", "type": "Secp256k1Point", "name": "kKey"},
+   {"visibility": "private", "type": "Bytes<32>", "name": "pDigest"},
+   {"visibility": "private", "type": "Secp256r1Scalar", "name": "pR"},
+   {"visibility": "private", "type": "Secp256r1Scalar", "name": "pS"},
+   {"visibility": "private", "type": "Secp256r1Point", "name": "pKey"},
+   {"visibility": "private", "type": "Native", "name": "jMessage0"},
+   {"visibility": "private", "type": "Native", "name": "jMessage1"},
+   {"visibility": "private", "type": "JubjubPoint", "name": "jAnnouncement"},
+   {"visibility": "private", "type": "Native", "name": "jResponse"},
+   {"visibility": "private", "type": "JubjubPoint", "name": "jKey"},
+   {"visibility": "private", "type": "Bytes<0>", "name": "edEmpty"},
+   {"visibility": "private", "type": "Bytes<1>", "name": "edChanged"},
+   {"visibility": "private", "type": "Curve25519Point", "name": "edR"},
+   {"visibility": "private", "type": "Curve25519Scalar", "name": "edS"},
+   {"visibility": "private", "type": "Curve25519Point", "name": "edKey"},
+   {"visibility": "private", "type": "Secp256k1Point", "name": "ethKey"}],
+  "file": "signatureChecksValues.zkir",
+  "constraints": []}}
