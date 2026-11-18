@@ -20,7 +20,7 @@ Different instruction sequences and constraint counts are acceptable.
 | Guarded native execution | Missing accounts, balance checks and conditional updates | Scalar reads/writes/require and nested effect-block branches support guarded activity and safe inactive values. Selected-3.2.1 native checks pass; separate write fixtures have real proof/attachment evidence with native Noop/gas agreement. General helper/witness branches and aggregate reads remain open in issue 43. |
 | Composite ledger values and byte keys | Account identifiers, encrypted balances and escrow records | Bytes32 keys, nested scalar maps and Native-field record cells have focused 3.2.1 native evidence. Records reuse checked composite schemas and one aligned cell, with guarded reads and per-field disclosure. The four-field fixture qualifies ciphertext-shaped storage. Two-key owner/spender Native records now have a source/native example. Native Counter read/increment/decrement/reset now use the ledger Bytes8 codec. Native-field memo Lists now support prepend, length, head, pop and reset. Mixed records, optional List heads and Counter comparisons remain in [issue 69](https://github.com/awjreynolds/noctium/issues/69). |
 | Jubjub and cryptographic source operations | ElGamal balances, key registration, memos and account identifiers | Typed curve operations, byte-derived keys/randomness, affine point hashing, ElGamal binding and ECDH memo recovery have source/native examples. Bytes32 equality checks both field chunks. Typed scalar and point callbacks now use the existing private host protocol. Curve helper calculations now run through the same private host protocol. Curve ledger schemas and further helper byte operations remain open in [issue 70](https://github.com/awjreynolds/noctium/issues/70). |
-| Lean port integration | Register, mint, transfer, approve, transferFrom and burn | Ten source entrypoints now pass one integrated native lifecycle: registration, mint-to-pending, sweep, transfer, burn and five views. The other six reference entrypoints, nominal return layouts and complete localnet lifecycle remain open. |
+| Lean port integration | Register, mint, transfer, approve, transferFrom and burn | All sixteen source entrypoints have a completed native-proof localnet scenario with seventeen finalized calls. Nominal return layouts and composition remain open. See the [receipt evidence](../../tests/confidential-token-localnet-evidence.json). |
 
 The complete 47-instruction, 15-type native inventory remains the wider target.
 The token workload does not exercise every native instruction.
@@ -204,8 +204,11 @@ registration, pending credit, sweep, transfer, burn, self-moves, epoch-checked m
 clearing, encrypted escrow approval/replacement, delegated transfer/burn and views through native source-witness
 execution. It preserves the pending/spendable split and checks a valid forged
 candidate against actual ledger state. This covers all sixteen reference circuit entrypoints,
-with source-constructor initialization and sealed metadata. Nominal ABI and
-the completed-contract localnet demonstration remain open. No new deployment.
+with source-constructor initialization and sealed metadata. A native Rust host
+completed seventeen accepted localnet calls across all sixteen entrypoints.
+[Public receipts](../../tests/confidential-token-localnet-evidence.json) record
+exact state hashes and the final checked balances. Nominal ABI and composition
+remain open.
 
 ## Minimum checks
 

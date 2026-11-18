@@ -4701,9 +4701,9 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "67d2e54ccb1da2ccc3c360012aab902c7e38ec93",
+    "sourceCommit": "0ea50875ef47daf36b3edc57fd9a7d16063c2e1c",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 28,
+    "registeredOpcodeCount": 29,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4732,9 +4732,10 @@
       "to_bytes",
       "from_bytes",
       "bytes_from_natives",
-      "nth"
+      "nth",
+      "reverse"
     ],
-    "notExposedOpcodeCount": 19,
+    "notExposedOpcodeCount": 18,
     "notExposedOpcodes": [
       "copy",
       "hash_to_curve",
@@ -4753,7 +4754,6 @@
       "and",
       "or",
       "xor",
-      "reverse",
       "bytes_into_natives"
     ],
     "explicitNativeValueTypes": [
@@ -4960,6 +4960,11 @@
       "hostRevision": "6e19ce7",
       "evidence": "../../tests/confidential-token-localnet-evidence.json",
       "scope": "Seventeen accepted native-proof calls cover all sixteen reference token entrypoints on one isolated localnet contract after eight-key deployment, eight-key signed installation and permanent authority lock. Final supply, decrypted balances, escrow, memo and counters checked. This is not complete opcode, overload, composition or compiler preservation evidence."
+    },
+    "byteReversalEvidence": {
+      "source": "tests/NativeByteReverse.lean",
+      "native": "runtime/tests/native_byte_reverse.rs",
+      "scope": "Bytes32 reversal through modern reverse over raw octets, computed hashes, typed Native serialization and both select outcomes. Reverse-twice source semantics theorem, private-disclosure/type/producer-field rejection and altered public-output binding rejection. One selected-3.2.1 native checker case passes. No new keys, proofs or deployment for this feature. General Bytes(n) overload coverage remains open."
     }
   }
 }
