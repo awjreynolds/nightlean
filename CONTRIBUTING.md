@@ -4,20 +4,23 @@ Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/
 
 ## Development checks
 
+Follow the [POC workflow](AGENTS.md) for shared build directories, temporary-output cleanup and focused validation.
+
 Install [elan](https://github.com/leanprover/elan#installation), Git and Python 3. The repository pins Lean 4.35.0. From the repository root:
 
 ```sh
 python3 scripts/check-branding.py
-lake build
-bash scripts/check-lean.sh
+lake build noctium Noctium.Compiler
+lake env lean tests/StructuredCells.lean
 ```
 
-The compiler check script builds and checks the Lean modules and tests, checks and compiles the actual private claim, and runs its source-proof mutation regressions. This is the scope of the compiler CI job. Native Rust, prover and localnet qualification use separate workflows described in the [documentation index](docs/README.md).
+Choose the source example or focused test affected by your change. Cover essential invalid inputs and failure behavior. Broad proof audits, native proving and localnet qualification use the separate workflows in the [documentation index](docs/README.md).
 
 For Rust changes, install Rust 1.100.0 and a native C build toolchain, then run the runtime tests with the pinned dependencies:
 
 ```sh
-cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked
+cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321 --test structured_cells
 ```
 
 The [native client guide](docs/development/native-client.md#retained-qualification) adds the optional `localnet` feature, exclusive 3.2.1 profile and real-chain prerequisites. Do not interpret an ordinary test pass as a new proof or ledger qualification.

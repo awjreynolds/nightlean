@@ -54,6 +54,8 @@ midnight-storage-core = { git = "https://github.com/midnightntwrk/midnight-ledge
 
 [profile.dev]
 opt-level = 1
+debug = 0
+incremental = false
 
 [[example]]
 name = "native_client"
