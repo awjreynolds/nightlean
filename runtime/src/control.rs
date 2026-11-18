@@ -351,12 +351,38 @@ fn bytes_operation(
     operation: &str,
     count: usize,
 ) -> Result<(Vec<ScalarType>, ScalarType, crate::Expr)> {
-    use ScalarType::{Bytes32, JubjubPoint, Native};
+    use ScalarType::{Bytes32, JubjubPoint, JubjubScalar, Native};
     let argument = |index: usize| {
         Box::new(crate::Expr::Reference {
             name: index.to_string(),
         })
     };
+    if let Some(encoded) = operation.strip_prefix("fromBytes:") {
+        let fields = encoded.split(':').collect::<Vec<_>>();
+        ensure!(
+            fields.len() == 2 && count == 1,
+            "fromBytes operation encoding"
+        );
+        let (ty, type_name) = match fields[0] {
+            "Native" => (Native, "Native"),
+            "JubjubScalar" => (JubjubScalar, "JubjubScalar"),
+            _ => bail!("fromBytes requires Native or JubjubScalar"),
+        };
+        let length = canonical_byte_length(fields[1])?;
+        ensure!(
+            operation == format!("fromBytes:{type_name}:{length}"),
+            "noncanonical fromBytes operation"
+        );
+        return Ok((
+            vec![byte_scalar_type(length)],
+            ty,
+            crate::Expr::FromBytes {
+                ty: type_name.to_owned(),
+                length,
+                value: argument(0),
+            },
+        ));
+    }
     #[cfg(feature = "zkir-321")]
     if let Some(encoded_type) = operation.strip_prefix("foreignToBytes:") {
         use crate::foreign::ForeignType;
@@ -931,6 +957,28 @@ impl Parser<'_> {
                     parameters == [ScalarType::Foreign(foreign_type)]
                         && result == byte_scalar_type(foreign_type.byte_len()),
                     "foreignToBytes result type mismatch"
+                );
+                (
+                    Type::Scalar(result),
+                    ExprKind::Bytes(canonical, vec![value]),
+                )
+            }
+            "fromBytes" => {
+                ensure!(self.schema_version == 2, "byte operations require v2 plan");
+                shape(v, &["tag", "type", "length", "value"], true)?;
+                let token = text(v, "type")?;
+                let length = field(v, "length")?
+                    .as_u64()
+                    .and_then(|length| usize::try_from(length).ok())
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("fromBytes byte length"))?;
+                let canonical = format!("fromBytes:{token}:{length}");
+                let (parameters, result, _) = bytes_operation(&canonical, 1)?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                ensure!(
+                    parameters == [byte_scalar_type(length)]
+                        && value.ty == Type::Scalar(byte_scalar_type(length)),
+                    "fromBytes operand length mismatch"
                 );
                 (
                     Type::Scalar(result),
@@ -6137,6 +6185,80 @@ mod completed_invocation_tests {
         let completed = run_host_plan(host_plan("Bytes<0>", empty));
         assert_eq!(completed["status"], "completed");
         assert_eq!(completed["result"], json!({"kind":"bytes","values":[]}));
+    }
+
+    #[test]
+    fn generic_scalar_from_bytes_reduces_directly_and_checks_control_routes() {
+        const JUBJUB_ORDER: &str =
+            "6554484396890773809930967563523245729705921265872317281365359162392183254199";
+        let native_modulus =
+            num_bigint::BigUint::parse_bytes(crate::MODULUS.as_bytes(), 10).unwrap();
+        let jubjub_order = num_bigint::BigUint::parse_bytes(JUBJUB_ORDER.as_bytes(), 10).unwrap();
+        let raw_value = &native_modulus + &jubjub_order;
+        let mut raw_bytes = raw_value.to_bytes_le();
+        raw_bytes.resize(64, 0);
+        let literal =
+            |values: Vec<u8>| json!({"tag":"bytesLiteral","length":values.len(),"values":values});
+        let direct = |ty: &str, length: usize, value: Json| json!({"tag":"fromBytes","type":ty,"length":length,"value":value});
+
+        let native = run_host_plan(host_plan(
+            "Native",
+            direct("Native", raw_bytes.len(), literal(raw_bytes.clone())),
+        ));
+        assert_eq!(native["status"], "completed");
+        assert_eq!(native["result"], json!(jubjub_order.to_str_radix(10)));
+
+        let jubjub = run_host_plan(host_plan(
+            "JubjubScalar",
+            direct("JubjubScalar", raw_bytes.len(), literal(raw_bytes.clone())),
+        ));
+        assert_eq!(jubjub["status"], "completed");
+        assert_eq!(
+            jubjub["result"],
+            json!({"kind":"jubjubScalar","value":(&native_modulus % &jubjub_order).to_str_radix(10)})
+        );
+
+        let helper_route = json!({
+            "tag":"bytes",
+            "operation":"fromBytes:JubjubScalar:64",
+            "arguments":[literal(raw_bytes)]
+        });
+        let helper = run_host_plan(host_plan("JubjubScalar", helper_route));
+        assert_eq!(helper["status"], "completed");
+        assert_eq!(helper["result"], jubjub["result"]);
+
+        for enabled in [true, false] {
+            let mut plan = host_plan("Native", direct("Native", 0, literal(Vec::new())));
+            plan["functions"][0]["body"] = json!([
+                {"tag":"assert","condition":{"tag":"bool","value":enabled}},
+                {"tag":"return","value":direct("Native", 0, literal(Vec::new()))}
+            ]);
+            let result = run_host_plan(plan);
+            assert_eq!(
+                result["status"],
+                if enabled { "completed" } else { "failed" }
+            );
+            if enabled {
+                assert_eq!(result["result"], json!("0"));
+            }
+        }
+        let empty_scalar = run_host_plan(host_plan(
+            "JubjubScalar",
+            direct("JubjubScalar", 0, literal(Vec::new())),
+        ));
+        assert_eq!(empty_scalar["status"], "completed");
+        assert_eq!(
+            empty_scalar["result"],
+            json!({"kind":"jubjubScalar","value":"0"})
+        );
+
+        for malformed in [
+            direct("JubjubPoint", 0, literal(Vec::new())),
+            direct("Native", 1, literal(Vec::new())),
+        ] {
+            assert!(Plan::parse(&host_plan("Native", malformed), None).is_err());
+        }
+        assert!(super::bytes_operation("fromBytes:Native:1025", 1).is_err());
     }
 
     #[test]

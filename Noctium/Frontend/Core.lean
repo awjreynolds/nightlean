@@ -150,6 +150,7 @@ scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
 scoped syntax "fromBytes32(" nltype "," nlexpr ")" : nlexpr
+scoped syntax "fromBytes(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "byteAt(" nlexpr "," num ")" : nlexpr
 scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
@@ -451,6 +452,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| sub($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| inv($_:nlexpr)) => Bool.true
   | `(nlexpr| fromBytes32($_:nltype, $_:nlexpr)) => Bool.true
+  | `(nlexpr| fromBytes($_:nltype, $value:nlexpr)) => hasPartialScalar value
   | `(nlexpr| assertThen($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| let $_:ident := $value:nlexpr in $body:nlexpr) =>
     hasPartialScalar value || hasPartialScalar body
@@ -569,6 +571,16 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       throwErrorAt stx "fromBytes32 supports only Native, JubjubScalar or JubjubPoint"
     let value ← expected env value (.bytes 32)
     pure (target, ← `(Noctium.Expr.fromBytes32 (target := $(← tyTerm target)) $value))
+  | `(nlexpr| fromBytes($target:nltype, $value)) => do
+    let target ← readTy target
+    unless target == .native || target == .jubjubScalar do
+      throwErrorAt stx "fromBytes supports only Native and JubjubScalar"
+    let (valueTy, value) ← expression env value
+    let .bytes length := valueTy
+      | throwErrorAt stx "fromBytes requires a Bytes expression"
+    if length > maxBytesLength then
+      throwErrorAt stx s!"byte string length exceeds the maximum of {maxBytesLength}"
+    pure (target, ← `(Noctium.Expr.fromBytes (target := $(← tyTerm target)) $value))
   | `(nlexpr| byteAt($value, $index:num)) => do
     let (valueTy, value) ← expression env value
     let .bytes length := valueTy

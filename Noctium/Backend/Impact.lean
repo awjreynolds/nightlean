@@ -439,7 +439,7 @@ private def expressionNames : Expr ty → List String
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
   | .hashToCurve values | .persistentHashNativeVector values => values.flatMap expressionNames
-  | .toBytes32 value | .fromBytes32 value => expressionNames value
+  | .toBytes32 value | .fromBytes32 value | .fromBytes value => expressionNames value
   | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => expressionNames value
   | .concatBytes left right => expressionNames left ++ expressionNames right
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
@@ -572,6 +572,7 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
     let identity : Expr (.bytes 32) := .bytes32Literal (1 :: List.replicate 31 0)
     .fromBytes32 (.select guard (totalizeUnder guard value) identity)
   | .fromBytes32 value => .fromBytes32 (totalizeUnder guard value)
+  | .fromBytes value => .fromBytes (totalizeUnder guard value)
   | .jubjubScalarFromNative value => .jubjubScalarFromNative (totalizeUnder guard value)
   | .jubjubScalarToNative value => .jubjubScalarToNative (totalizeUnder guard value)
   | .jubjubMulGenerator scalar => .jubjubMulGenerator (totalizeUnder guard scalar)

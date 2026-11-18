@@ -226,12 +226,20 @@ private def toBytes32Term (valueType : NativeValueType) (value : Term) : Except 
   | .jubjubPoint => pure (.unary "to_bytes32_jubjub_point" value)
   | _ => throw "to_bytes requires Native, JubjubScalar or JubjubPoint"
 
-private def fromBytes32Term (typeName : String) (value : Term) : Except String (NativeValueType × Term × Nat) := do
+private def scalarFromBytesTerm (typeName : String) (length : Nat) (value : Term) :
+    Except String (NativeValueType × Term × Nat) := do
   match typeName with
   | "Scalar<BLS12-381>" =>
-    pure (.native, .unary "from_bytes32_native" value, Field.modulus - 1)
+    let (term, maximum) ← typedScalarFromBytesTerm .native length value
+    pure (.native, term, maximum)
   | "Scalar<Jubjub>" =>
-    pure (.jubjubScalar, .unary "from_bytes32_jubjub_scalar" value, Jubjub.scalarOrder - 1)
+    let (term, maximum) ← typedScalarFromBytesTerm .jubjubScalar length value
+    pure (.jubjubScalar, term, maximum)
+  | _ => throw "from_bytes has an unsupported output type"
+
+private def fromBytes32Term (typeName : String) (value : Term) : Except String (NativeValueType × Term × Nat) := do
+  match typeName with
+  | "Scalar<BLS12-381>" | "Scalar<Jubjub>" => scalarFromBytesTerm typeName 32 value
   | "Point<Jubjub>" =>
     pure (.jubjubPoint, .unary "from_bytes32_jubjub_point" value, Field.modulus - 1)
   | _ => throw "from_bytes has an unsupported output type"
@@ -603,8 +611,14 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       let fact ← combine (foreignFromBytesTerm kind length bytes.term) 0 [bytes]
       defineResult state instruction {fact with valueType := .foreign kind, foreignValid := true}
     else do
-      ensure (bytes.valueType == .bytes32) "from_bytes requires a typed Bytes32 operand"
-      let (valueType, term, maximum) ← fromBytes32Term typeName bytes.term
+      let some length := byteLength? bytes.valueType | throw "from_bytes requires typed bytes"
+      ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
+        "from_bytes length is unsupported"
+      let (valueType, term, maximum) ←
+        if typeName == "Point<Jubjub>" then do
+          ensure (bytes.valueType == .bytes32) "Jubjub point decoding requires a typed Bytes32 operand"
+          fromBytes32Term typeName bytes.term
+        else scalarFromBytesTerm typeName length bytes.term
       let fact ← combine term maximum [bytes]
       defineResult state instruction {fact with valueType}
   | "jubjub_scalar_from_native" => do

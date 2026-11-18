@@ -66,6 +66,9 @@ private def expressionJson : Expr ty → Json
       ("value", expressionJson value)]
   | .fromBytes32 (target := target) value => Json.mkObj [("tag", toJson ("fromBytes32" : String)),
       ("type", toJson (typeName target)), ("value", expressionJson value)]
+  | .fromBytes (target := target) (length := length) value => Json.mkObj [
+      ("tag", toJson ("fromBytes" : String)), ("type", toJson (typeName target)),
+      ("length", toJson length), ("value", expressionJson value)]
   | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
       ("value", expressionJson value)]
   | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),
@@ -173,6 +176,9 @@ private def nativeExpressionJson : Expr ty → Json
       ("value", nativeExpressionJson value)]
   | .fromBytes32 (target := target) value => Json.mkObj [("tag", toJson ("fromBytes32" : String)),
       ("type", toJson (typeName target)), ("value", nativeExpressionJson value)]
+  | .fromBytes (target := target) (length := length) value => Json.mkObj [
+      ("tag", toJson ("fromBytes" : String)), ("type", toJson (typeName target)),
+      ("length", toJson length), ("value", nativeExpressionJson value)]
   | .jubjubScalarFromNative value => Json.mkObj [("tag", toJson ("jubjubScalarFromNative" : String)),
       ("value", nativeExpressionJson value)]
   | .jubjubScalarToNative value => Json.mkObj [("tag", toJson ("jubjubScalarToNative" : String)),

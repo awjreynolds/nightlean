@@ -25,6 +25,11 @@ private def program (instructions : List Json) : Json := Json.mkObj [
 private def accepted (value : Except String α) : Bool := match value with | .ok _ => true | _ => false
 private def rejected (value : Except String α) : Bool := !accepted value
 private def check (body : List Json) : Except String Unit := Native.validate expected (program (input :: body ++ [output]))
+private def decodeBytes (target value : String) : Json := op "from_bytes" [
+  ("bytes", toJson value), ("type", toJson target), ("output", toJson ("%decoded" : String))]
+private def emptyBytes64 : Json := op "bytes_from_natives" [
+  ("inputs", toJson (["0x00", "0x00", "0x00"] : List String)),
+  ("len", toJson (64 : Nat)), ("output", toJson ("%bytes64" : String))]
 private def unary (name value result : String) : Json := op name [("a", toJson value), ("output", toJson result)]
 private def binary (name left right result : String) : Json := op name [
   ("a", toJson left), ("b", toJson right), ("output", toJson result)]
@@ -44,6 +49,9 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard valueTypeNames.eraseDups.length == 15
 #guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 38
 #guard rejected (requireInstruction "new_native_without_metadata")
+#guard rejected (check [decodeBytes "Scalar<BLS12-381>" "%x"])
+#guard rejected (check [emptyBytes64, decodeBytes "Bool" "%bytes64"])
+#guard rejected (check [emptyBytes64, decodeBytes "Point<Jubjub>" "%bytes64"])
 #guard accepted (requireInstruction "inv")
 #guard rejected (requireInstruction "copy")
 #guard match valueTypeSupport "Bool" with | .ok (.unsupported _) => true | _ => false

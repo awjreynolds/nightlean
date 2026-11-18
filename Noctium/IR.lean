@@ -61,6 +61,8 @@ inductive Expr : Ty → Type where
   | toBytes32 (value : Expr source) : Expr (.bytes 32)
   /-- Decode a Bytes32 value into one of the explicitly supported typed values. -/
   | fromBytes32 (value : Expr (.bytes 32)) : Expr target
+  /-- Decode little-endian bytes directly into Native or JubjubScalar. -/
+  | fromBytes {length : Nat} (value : Expr (.bytes length)) : Expr target
   /-- Explicitly reduce a Native field into the Jubjub scalar field. -/
   | jubjubScalarFromNative (value : Expr .native) : Expr .jubjubScalar
   /-- Losslessly expose a canonical Jubjub scalar as its Native limb. -/
@@ -534,6 +536,13 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
     unless target == .native || target == .jubjubScalar || target == .jubjubPoint do
       throw "fromBytes32 supports only Native, JubjubScalar and JubjubPoint"
+    value.validate caps env
+  | .fromBytes (target := target) (length := length) value => do
+    unless target == .native || target == .jubjubScalar do
+      throw "fromBytes supports only Native and JubjubScalar"
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    target.validate caps
     value.validate caps env
   | .jubjubScalarFromNative value => do
     unless caps.jubjub do throw "target lacks qualified Jubjub support"

@@ -521,6 +521,18 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if encoded != bytes then throw "noncanonical Jubjub Bytes32 point encoding"
     pure point
   | .fromBytes32 _ => .error "fromBytes32 supports only Native, JubjubScalar and JubjubPoint"
+  | .fromBytes (target := .native) (length := length) value => do
+    let bytes ← value.eval ctx env
+    if length > maxBytesLength then
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    if ctx.modulus == 0 then throw "invalid zero Native modulus for byte decoding"
+    pure (bytes32IntegerLE bytes % ctx.modulus)
+  | .fromBytes (target := .jubjubScalar) (length := length) value => do
+    let bytes ← value.eval ctx env
+    if length > maxBytesLength then
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    pure (bytes32IntegerLE bytes % Jubjub.scalarOrder)
+  | .fromBytes _ => .error "fromBytes supports only Native and JubjubScalar"
   | .inv (ty := .native) value => do
     checkedPrimeFieldInverse (← value.eval ctx env) ctx.modulus
   | .inv (ty := .jubjubScalar) value => do
@@ -1162,6 +1174,7 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
     | disclose span value => simp [pruneTrue, ConstraintsHold, ih]
     | inv value => simp [pruneTrue, ConstraintsHold, ih]
     | fromBytes32 value => simp [pruneTrue, ConstraintsHold, Expr.eval, ih]
+    | fromBytes value => simp [pruneTrue, ConstraintsHold, Expr.eval, ih]
 
 theorem unsigned_addition_no_wrap (a b m n : Nat) (ha : a ≤ m) (hb : b ≤ n)
     (hbound : m + n ≤ ScalarPolicy.maxUint) : (a + b) % Field.modulus = a + b :=

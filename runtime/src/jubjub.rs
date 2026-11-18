@@ -1,11 +1,21 @@
 use anyhow::{Result, anyhow, ensure};
+use num_bigint::BigUint;
 use serialize::Deserializable;
 use std::io::Cursor;
 use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine, Fr};
 
+const SCALAR_ORDER: &str =
+    "6554484396890773809930967563523245729705921265872317281365359162392183254199";
+
 pub(crate) fn scalar(text: &str) -> Result<EmbeddedFr> {
     EmbeddedFr::try_from(crate::canonical_field(text)?)
         .map_err(|_| anyhow!("Jubjub scalar out of range"))
+}
+
+pub(crate) fn reduce_bytes(bytes: &[u8]) -> Result<EmbeddedFr> {
+    let order = BigUint::parse_bytes(SCALAR_ORDER.as_bytes(), 10).unwrap();
+    let number = BigUint::from_bytes_le(bytes) % order;
+    scalar(&number.to_str_radix(10))
 }
 
 pub(crate) fn reduce_scalar(value: Fr) -> Result<EmbeddedFr> {

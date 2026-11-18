@@ -328,6 +328,13 @@ pub enum Expr {
         ty: String,
         value: Box<Expr>,
     },
+    #[serde(rename = "fromBytes")]
+    FromBytes {
+        #[serde(rename = "type")]
+        ty: String,
+        length: usize,
+        value: Box<Expr>,
+    },
     Cast {
         #[serde(rename = "type")]
         ty: String,
@@ -766,6 +773,26 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 ),
                 ScalarType::JubjubPoint => Value::JubjubPoint(jubjub::from_bytes(&bytes)?),
                 _ => bail!("fromBytes32 requires Native, JubjubScalar or JubjubPoint"),
+            }
+        }
+        Expr::FromBytes { ty, length, value } => {
+            let value = evaluate(value, env)?;
+            ensure!(
+                *length <= scalars::MAX_BYTES_LENGTH,
+                "byte length exceeds compiler limit"
+            );
+            let Value::Bytes(bytes) = value else {
+                bail!("fromBytes requires bytes")
+            };
+            ensure!(bytes.len() == *length, "fromBytes operand length mismatch");
+            match ScalarType::parse(ty)? {
+                ScalarType::Native => {
+                    let modulus = BigUint::parse_bytes(MODULUS.as_bytes(), 10).unwrap();
+                    let number = BigUint::from_bytes_le(&bytes) % modulus;
+                    Value::Native(canonical_field(&number.to_str_radix(10))?)
+                }
+                ScalarType::JubjubScalar => Value::JubjubScalar(jubjub::reduce_bytes(&bytes)?),
+                _ => bail!("fromBytes requires Native or JubjubScalar"),
             }
         }
         Expr::JubjubScalarToNative { value } => Value::Native(jubjub::scalar_native(

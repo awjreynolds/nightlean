@@ -59,6 +59,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
     pure result
   | .toBytes32 value => origins env value
   | .fromBytes32 value => origins env value
+  | .fromBytes value => origins env value
   | .jubjubScalarFromNative value | .jubjubMulGenerator value => origins env value
   | .jubjubScalarToNative value | .jubjubNeg value => origins env value
   | .jubjubCoordinate value _ => origins env value

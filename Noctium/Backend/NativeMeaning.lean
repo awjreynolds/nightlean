@@ -140,6 +140,22 @@ def foreignNonzeroTerm (kind : Foreign.Kind) (value : Term) : Term :=
 def foreignFromBytesTerm (kind : Foreign.Kind) (length : Nat) (value : Term) : Term :=
   .unary s!"foreign_from_bytes:{kind.nativeName}:{length}" value
 
+/-- Canonical source term for the native decoder's Native and JubjubScalar
+targets. Keep the Bytes32 marker stable for existing source expressions. -/
+def typedScalarFromBytesTerm (target : Ty) (length : Nat) (value : Term) : Except String (Term × Nat) := do
+  unless length ≤ maxBytesLength do throw "byte string length exceeds the source bound"
+  match target with
+  | .native =>
+    if length == 0 then pure (.constant 0, Field.modulus - 1)
+    else pure (.unary (if length == 32 then "from_bytes32_native" else s!"from_bytes_native:{length}") value,
+      Field.modulus - 1)
+  | .jubjubScalar =>
+    if length == 0 then
+      pure (.unary "jubjub_scalar_from_native" (.constant 0), Jubjub.scalarOrder - 1)
+    else pure (.unary (if length == 32 then "from_bytes32_jubjub_scalar"
+      else s!"from_bytes_jubjub_scalar:{length}") value, Jubjub.scalarOrder - 1)
+  | _ => throw "fromBytes supports only Native and JubjubScalar"
+
 /-- The native overload hashes the complete ordered Native preimage to Jubjub. -/
 def hashToCurveTerm (values : List Term) : Term :=
   .unary "hash_to_curve_jubjub" (.hash values)
@@ -479,23 +495,30 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let normalized ← normalize env value
     let (highByte, low31) ← alignedBytes32Fields normalized
     let rawBytes := bytes32FromChunksTerm low31 highByte
-    let (opcode, maximum?, assertions) ← match target with
-      | .native => pure ("from_bytes32_native", some (Field.modulus - 1),
-          normalized.assertions)
-      | .jubjubScalar => pure ("from_bytes32_jubjub_scalar", some (Jubjub.scalarOrder - 1),
-          normalized.assertions)
+    let (term, maximum?, assertions) ← match target with
+      | .native => do
+        let (term, maximum) ← typedScalarFromBytesTerm .native 32 rawBytes
+        pure (term, some maximum, normalized.assertions)
+      | .jubjubScalar => do
+        let (term, maximum) ← typedScalarFromBytesTerm .jubjubScalar 32 rawBytes
+        pure (term, some maximum, normalized.assertions)
       | .jubjubPoint => do
         let point := Term.unary "from_bytes32_jubjub_point" rawBytes
         let encoded := Term.unary "to_bytes32_jubjub_point" point
         let (encodedHigh, encodedLow) ← splitBytes32Fields encoded
-        pure ("from_bytes32_jubjub_point", none,
+        pure (point, none,
           normalized.assertions ++ [
             .binary "test_eq" highByte encodedHigh,
             .binary "test_eq" low31 encodedLow])
       | _ => throw "fromBytes32 supports only Native, JubjubScalar and JubjubPoint"
-    let term := .unary opcode rawBytes
     let bounds := normalized.bounds ++ (maximum?.toList.map fun maximum => (term, maximum))
     pure {term, bounds, assertions}
+  | .fromBytes (target := target) (length := length) value => do
+    let normalized ← normalize env value
+    let chunks ← bytesChunksTerm length normalized.term
+    let bytes := bytesFromChunksTerm length chunks
+    let (term, maximum) ← typedScalarFromBytesTerm target length bytes
+    pure {term, bounds := normalized.bounds ++ [(term, maximum)], assertions := normalized.assertions}
   | .jubjubScalarFromNative value => do
     let normalized ← normalize env value
     let term : Term := .unary "jubjub_scalar_from_native" normalized.term

@@ -50,6 +50,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .concatBytes left right => do checkConstants left; checkConstants right
   | .bytesLiteral _ _ => pure ()
   | .fromBytes32 value => checkConstants value
+  | .fromBytes value => checkConstants value
   | .inv value => checkConstants value
   | .sha512 value | .keccak256 value | .persistentHash32 value => checkConstants value
   | .bytes32Literal _ => pure ()
@@ -652,6 +653,35 @@ private def lowerFromBytes32 (target : Ty) (values : List String) : LowerM Strin
     emit "assert" [("cond", toJson lowEq)]
   pure output
 
+private def lowerFromBytes (target : Ty) (length : Nat) (value : ByteOperands) : LowerM String := do
+  let chunks ← byteChunks length value
+  if length == 0 then
+    match target with
+    | .native => pure "0x00"
+    | .jubjubScalar => lowerJubjubScalarFromNative "0x00"
+    | _ => do
+      rejectLowering "fromBytes supports only Native and JubjubScalar"
+      pure "0x00"
+  else
+    match target with
+    | .native | .jubjubScalar => do
+      let bytes ← lowerFixedBytesFromChunks length chunks
+      let typeName := nativeTypeName target
+      let key : ExpressionKey := ("from_bytes:" ++ typeName, [bytes], none)
+      match (← get).expressions.lookup key with
+      | some existing => pure existing
+      | none => do
+        let output ← fresh
+        emit "from_bytes" [
+          ("bytes", toJson bytes),
+          ("type", toJson typeName),
+          ("output", toJson output)]
+        modify fun state => {state with expressions := (key, output) :: state.expressions}
+        pure output
+    | _ => do
+      rejectLowering "fromBytes supports only Native and JubjubScalar"
+      pure "0x00"
+
 private def alignedBytes32Fields (values : List String) : LowerM (String × String) := do
   match values.length with
   | 32 =>
@@ -933,6 +963,9 @@ def lowerExpr : Expr ty → LowerM String
   | .fromBytes32 value => do
     let values ← lowerBytes value
     lowerFromBytes32 ty values.values
+  | .fromBytes (length := length) value => do
+    let bytes ← lowerBytes value
+    lowerFromBytes ty length bytes
   | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
   | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
   | .sub a b => do binary "add" (← lowerExpr a) (← unary "neg" (← lowerExpr b))

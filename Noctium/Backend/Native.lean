@@ -18,6 +18,7 @@ inductive EncodingRule where
   | bytes32ByteExtraction | nativeLimbs | foreignEncoding | qualifiedTypedValues
   | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
   | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks | bytes32Reversal | fixedBytes
+  | genericBytesDecoding
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -32,7 +33,7 @@ inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input | typedEncodeInput
   | typedBytes32Index | typedFixedBytes | fixedByteHashPreimage | canonicalBoolConstant | typedBoolOperands
-  | typedBytes32Conversion | canonicalQualifiedConstant | canonicalForeignValue
+  | typedBytes32Conversion | typedBytesInput | canonicalQualifiedConstant | canonicalForeignValue
   | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
 
@@ -43,7 +44,7 @@ inductive GuardRule where
 inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
   | sourceHashTerm | encodedHashChunks | canonicalScalarInput | exactCoordinateRoundtrip
-  | typedInverseResult | typedBytes32Conversion | bytes32ByteIndex | typedEncoding | bytes32Reversal | fixedBytes
+  | typedInverseResult | typedBytes32Conversion | typedBytesConversion | bytes32ByteIndex | typedEncoding | bytes32Reversal | fixedBytes
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -200,9 +201,9 @@ def instructionSupport (opcode : String) : Except String Support :=
       .noGuard .fixedBytes ["bytes", "output"]
     {descriptor with encoding := .fixedBytes}
   | "from_bytes" => .supported <|
-    let descriptor := scalar .qualifiedByteConversion .propagateAll .pure .matchingNativeSignature
-      .noGuard .typedBytes32Conversion ["bytes", "type", "output"]
-    {descriptor with encoding := .bytes32NativeDecoding}
+    let descriptor := scalar .qualifiedByteConversion .propagateAll .pure .typedBytesInput
+      .noGuard .typedBytesConversion ["bytes", "type", "output"]
+    {descriptor with encoding := .genericBytesDecoding}
   | "bytes_from_natives" => .supported <|
     let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
       .noGuard .fixedBytes ["inputs", "len", "output"]
