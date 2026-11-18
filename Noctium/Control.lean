@@ -385,6 +385,7 @@ private def projectionJson : Types.Projection → Json
   | .field name => Json.mkObj [("kind", toJson ("field" : String)), ("name", toJson name)]
   | .vectorIndex index => Json.mkObj [("kind", toJson ("vectorIndex" : String)), ("index", toJson (toString index))]
   | .byteIndex index => Json.mkObj [("kind", toJson ("byteIndex" : String)), ("index", toJson (toString index))]
+  | .enumTag => Json.mkObj [("kind", toJson ("enumTag" : String))]
   | .enumField variant name => Json.mkObj [("kind", toJson ("enumField" : String)),
       ("variant", toJson variant), ("name", toJson name)]
 

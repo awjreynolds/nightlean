@@ -473,3 +473,79 @@ private def emptyBytesFoldRun : Except String EvalEnv :=
 #guard match emptyBytesFoldRun with
   | .error "helper assertion failed" => true
   | _ => false
+
+private def enumChoiceType : Types.CompositeType := .enumeration "Iteration.Choice"
+private def enumPayloadType : Types.CompositeType := .structure "Iteration.Payload"
+private def enumResultType : Types.CompositeType := .structure "Iteration.EnumResult"
+
+private def enumMapComposites : Types.CompositeEnv := {
+  structures := [
+    {id := "Iteration.Payload", fields := [
+      {name := "values", type := .vector 2 (.scalar .native)}]},
+    {id := "Iteration.EnumResult", fields := [
+      {name := "choice", type := enumChoiceType}]}]
+  enumerations := [{id := "Iteration.Choice", variants := [
+    {name := "Empty"},
+    {name := "Filled", fields := [{name := "payload", type := enumPayloadType}]}]}]
+}
+
+private def enumMapProgram : Program :=
+  {unitMainProgram with composites := enumMapComposites}
+
+private def enumInputSequence : Term :=
+  .composite (.vector 2 (.scalar .native)) [.native 0, .native 1]
+
+private def enumResult (tag first second : Term) : Term :=
+  .composite enumResultType [tag, first, second]
+
+private def enumMapOperator : Operator := .anonymous [{name := "value"}] none [
+  .return (some (.ite (.eq (.ref "value") (.native 0))
+    (enumResult (.native 0) (.native 0) (.native 0))
+    (enumResult (.native 1) (.ref "value") (.binary .add (.ref "value") (.native 1)))))]
+
+private def enumMapCircuit (sequence : Term) (operator : Operator) : Except Diagnostic Circuit := do
+  let (program, term) ← Iteration.mapWithLimits {} enumMapProgram 0 [] {} [sequence] operator
+  Helpers.compile (installMainReturn program
+    (.composite (.vector 2 enumResultType)) term) "main"
+
+private def enumMapRun : Except String EvalEnv :=
+  match enumMapCircuit enumInputSequence enumMapOperator with
+  | .ok circuit => circuit.run iterationContext []
+  | .error diagnostic => .error diagnostic.message
+
+-- Map returns an empty and a filled nested enum. The empty variant's padded
+-- payload stays canonical, while the filled variant preserves its nested vector.
+#guard (enumMapCircuit enumInputSequence enumMapOperator).isOk
+#guard match enumMapRun with
+  | .ok values =>
+    values.lookup "result.0.choice.$tag" == some (.native 0) &&
+    values.lookup "result.0.choice.$payload0" == some (.native 0) &&
+    values.lookup "result.0.choice.$payload1" == some (.native 0) &&
+    values.lookup "result.1.choice.$tag" == some (.native 1) &&
+    values.lookup "result.1.choice.$payload0" == some (.native 1) &&
+    values.lookup "result.1.choice.$payload1" == some (.native 2)
+  | .error _ => false
+
+#guard errorContains
+  (Iteration.mapWithLimits {maxSourceNodes := 100} enumMapProgram 0 [] {}
+    [enumInputSequence] enumMapOperator)
+  "source nodes"
+
+private def enumInactivePayloadOperator : Operator := .anonymous [{name := "value"}] none [
+  .return (some (.ite (.eq (.ref "value") (.native 0))
+    (enumResult (.native 0) (.native 0) (.native 0))
+    (enumResult (.native 1) (.cast (.uint 7) (.native 8)) (.native 0))))]
+
+private def enumInactivePayloadCircuit : Except Diagnostic Circuit :=
+  enumMapCircuit (.composite (.vector 2 (.scalar .native)) [.native 0, .native 0])
+    enumInactivePayloadOperator
+
+-- An inactive filled-variant payload does not evaluate its failing cast.
+#guard (enumInactivePayloadCircuit).isOk
+#guard match (enumInactivePayloadCircuit.mapError (·.message)).bind
+    (fun circuit => circuit.run iterationContext []) with
+  | .ok values =>
+    values.lookup "result.0.choice.$tag" == some (.native 0) &&
+    values.lookup "result.0.choice.$payload0" == some (.native 0) &&
+    values.lookup "result.0.choice.$payload1" == some (.native 0)
+  | .error _ => false

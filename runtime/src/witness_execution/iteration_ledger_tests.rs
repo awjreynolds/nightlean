@@ -73,7 +73,7 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
             "capabilities":capabilities,"operations":operations,"providers":providers,"commitCapability":"commit"
         });
         let context = serde_json::from_value(context_json.clone()).unwrap();
-        let expected = if enabled { "30" } else { "0" };
+        let expected = if enabled { "22" } else { "0" };
         let inputs = BTreeMap::from([
             ("enabled".into(), json!(enabled)),
             ("expected".into(), json!(expected)),
@@ -114,12 +114,12 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
                 ("touch", json!({}), json!({"kind":"unit"})),
                 ("seed", json!({}), json!("0")),
                 ("values", json!({}), values),
-                ("double", json!({"value":"3"}), json!("6")),
                 (
                     "double",
-                    json!({"value":"4"}),
-                    json!(if corrupt { "9" } else { "8" }),
+                    json!({"value":"3"}),
+                    json!(if corrupt { "7" } else { "6" }),
                 ),
+                ("double", json!({"value":"4"}), json!("8")),
                 ("double", json!({"value":"5"}), json!("10")),
             ] {
                 let status = execution.advance().unwrap();
@@ -146,7 +146,7 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
         let relation = serde_json::from_slice(CIRCUIT).unwrap();
         let completion = session.private_completion(&relation).unwrap();
         if enabled {
-            assert_eq!(completion["hostWrites"]["iteration/last"]["value"], "30");
+            assert_eq!(completion["hostWrites"]["iteration/last"]["value"], "22");
         } else {
             assert_eq!(completion["hostWrites"], json!({}));
         }

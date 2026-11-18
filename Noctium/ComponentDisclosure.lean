@@ -72,6 +72,7 @@ private def projectionSlice (layout : Types.Layout) (projection : Types.Projecti
     let some index := selected.2.1.findIdx? (·.1 == name) | throw {span := {}, message := "unknown aggregate enum field"}
     let some field := selected.2.1[index]? | throw {span := {}, message := "aggregate enum layout mismatch"}
     pure (1 + ((selected.2.1.take index).map (fun item => item.2.leafCount)).sum, field.2.leafCount)
+  | .enumeration .., .enumTag => pure (0, 1)
   | _, _ => throw {span := {}, message := "aggregate projection kind/type mismatch"}
 
 private def scalarInfo (prepared : Prepared) (scope : Nat) (env : Environment)

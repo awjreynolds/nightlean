@@ -363,6 +363,71 @@ fn aggregate_leaf_codec_preserves_variant_shapes_and_checked_index_types() {
 }
 
 #[test]
+fn enum_tag_projection_returns_the_canonical_native_discriminant() {
+    let schema = json!({
+        "schemaVersion":1,
+        "typeFingerprint":"NoctiumCompositeTypeV1;e11:Test.ChoiceNoctiumCompositeLayoutV1;0;1;E11:Test.Choice2;V2:No0;V5:Other0;",
+        "layout":{"kind":"enum","id":"Test.Choice","variants":[
+            {"name":"No","fields":[]},
+            {"name":"Other","fields":[]}
+        ]},
+        "counts":{"leaves":1,"expandedNodes":3,"layoutNodes":3}
+    });
+    let mut enum_registry = Registry::default();
+    enum_registry
+        .register_json("Aggregate:t0", &serde_json::to_vec(&schema).unwrap())
+        .unwrap();
+    let choice = json!({
+        "kind":"enum",
+        "id":"Test.Choice",
+        "variant":"Other",
+        "fields":[]
+    });
+    let projection = Projection {
+        kind: "enumTag".into(),
+        index: None,
+        name: None,
+        variant: None,
+        type_token: "Native".into(),
+    };
+    let (token, projected, range) = enum_registry
+        .project_with_range("Aggregate:t0", &choice, &projection)
+        .unwrap();
+    assert_eq!(token, "Native");
+    assert_eq!(projected, json!("1"));
+    assert_eq!(range, 0..1);
+
+    let wrong_type = Projection {
+        type_token: "Bool".into(),
+        ..projection.clone()
+    };
+    assert!(
+        enum_registry
+            .projection_type("Aggregate:t0", &wrong_type)
+            .is_err()
+    );
+    assert!(
+        enum_registry
+            .project_with_range(
+                "Aggregate:t0",
+                &json!({
+                    "kind":"enum",
+                    "id":"Test.Choice",
+                    "variant":"Other",
+                    "fields":[{"name":"extra","value":{"kind":"native","value":"0"}}]
+                }),
+                &projection,
+            )
+            .is_err()
+    );
+    assert!(
+        registry()
+            .projection_type("Aggregate:t0", &projection)
+            .is_err()
+    );
+}
+
+#[test]
 fn typed_provider_correlates_and_validates_without_exposing_arguments_in_metadata() {
     let registry = registry();
     assert!(matches!(

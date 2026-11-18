@@ -1623,6 +1623,10 @@ impl Parser<'_> {
                             Some(name(text(raw, "variant")?)?),
                         )
                     }
+                    "enumTag" => {
+                        shape(raw, &["kind"], false)?;
+                        (None, None, None)
+                    }
                     _ => bail!("unsupported aggregate projection"),
                 };
                 let projection = witness::Projection {

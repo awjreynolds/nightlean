@@ -154,6 +154,31 @@ private def indexedUnit (index : Nat) : Except String NativeSelection := do
   unless evaluated.value == value.value && evaluated.leaves == value.leaves do
     throw "expression evaluation disagrees with canonical flattening")
 
+private def enumTagOrigins : Disclosure.Origins := [
+  {name := "choice.$tag", kind := .parameter, span := {}}]
+private def enumPayloadOrigins : Disclosure.Origins := [
+  {name := "choice.$payload0", kind := .parameter, span := {}}]
+
+-- Enum-tag projection returns the Native ordinal and carries only tag origins.
+#guard accepted (do
+  let type ← compiledEnum
+  let value ← checkValue type
+    (.enumeration "Demo.Choice" "Native" [("value", .scalar .native 9)])
+  let projected ← project type value .enumTag
+  unless projected.1.type == .scalar .native &&
+      projected.2.value == .scalar .native 1 do
+    throw "enumTag did not return the Native variant ordinal"
+  let tracked ← trackValue type value [enumTagOrigins, enumPayloadOrigins, []]
+  let selected ← projectTracked type tracked .enumTag
+  unless selected.componentOrigins == [enumTagOrigins] &&
+      selected.conservativeOrigins == [enumTagOrigins] do
+    throw "enumTag selection included unrelated payload origins"
+  let empty ← checkValue type (.enumeration "Demo.Choice" "Empty" [])
+  let emptyTag ← project type empty .enumTag
+  unless emptyTag.1.type == .scalar .native &&
+      emptyTag.2.value == .scalar .native 2 do
+    throw "enumTag did not return the Empty variant ordinal")
+
 -- A raw backend carrier's caller-supplied constraint list is never trusted.
 #guard rejected (do
   let type ← (compileType aggregateEnvironment (.vector 2 (.scalar (.uint 255)))).mapError (·.message)

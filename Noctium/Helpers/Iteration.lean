@@ -382,15 +382,8 @@ private def mapElementType : ResultType → Types.CompositeType
   | .scalar ty => .scalar ty
   | .composite type => type
 
-private partial def layoutHasEnum : Types.Layout → Bool
-  | .enumeration .. => true
-  | .tuple items => items.any layoutHasEnum
-  | .structure _ fields => fields.any fun (_, field) => layoutHasEnum field
-  | .vector _ element => layoutHasEnum element
-  | .unit | .scalar _ | .bytes _ _ => false
-
 private partial def layoutProjectionDepth : Types.Layout → Nat
-  | .unit | .scalar _ | .enumeration .. => 0
+  | .unit | .scalar _ => 0
   | .tuple items =>
     if items.all (fun item => item.leafCount == 0) then 0
     else 1 + (items.map layoutProjectionDepth).foldl max 0
@@ -400,6 +393,20 @@ private partial def layoutProjectionDepth : Types.Layout → Nat
   | .vector length element =>
     if length == 0 || element.leafCount == 0 then 0 else 1 + layoutProjectionDepth element
   | .bytes length _ => if length == 0 then 0 else 1
+  | .enumeration _ _ _ payloadLeaves _ variants =>
+    if payloadLeaves == 0 then 1
+    else 1 + variants.length + (variants.flatMap fun variant =>
+      variant.2.1.map fun field => 1 + layoutProjectionDepth field.2).foldl max 0
+
+private partial def enumProjectionExpansion (rootProjectionDepth : Nat) : Types.Layout → Nat
+  | .unit | .scalar _ | .bytes _ _ => 0
+  | .tuple items => (items.map (enumProjectionExpansion rootProjectionDepth)).sum
+  | .structure _ fields => (fields.map (enumProjectionExpansion rootProjectionDepth ∘ Prod.snd)).sum
+  | .vector length element => length * enumProjectionExpansion rootProjectionDepth element
+  | .enumeration _ _ _ payloadLeaves _ variants =>
+    payloadLeaves * (1 + variants.length * (5 + rootProjectionDepth)) +
+      (variants.flatMap fun variant =>
+        variant.2.1.map fun field => enumProjectionExpansion rootProjectionDepth field.2).sum
 
 private partial def flattenLayoutTerms (span : SourceSpan) : Types.Layout → Term →
     Except Diagnostic (List Term)
@@ -423,7 +430,23 @@ private partial def flattenLayoutTerms (span : SourceSpan) : Types.Layout → Te
     pure parts.flatten
   | .bytes length _, value =>
     (List.range length).mapM fun index => pure (.project value (.byteIndex index))
-  | .enumeration .., _ => failAt span "map results containing enum layouts are unsupported"
+  | .enumeration _ _ _ payloadLeaves _ variants, value => do
+    let variantLeaves ← variants.mapM fun (variant, fields, _) => do
+      let parts ← fields.mapM fun (name, field) => do
+        if field.leafCount == 0 then pure []
+        else flattenLayoutTerms span field (.project value (.enumField variant name))
+      pure parts.flatten
+    let payload ← (List.range payloadLeaves).mapM fun payloadIndex => do
+      let mut selected := Term.native 0
+      for ((_, _, _), index) in variants.zipIdx do
+        let some leaves := variantLeaves[index]? | failAt span "checked enum layout index mismatch"
+        let branch := (leaves[payloadIndex]?).getD (.native 0)
+        selected := .ite
+          (.eq (.project value .enumTag) (.native index))
+          (.cast .native branch)
+          selected
+      pure selected
+    pure (.project value .enumTag :: payload)
 
 private def flattenMapResult (span : SourceSpan) (result : ResultType)
     (layout : Types.Layout) (value : Term) : Except Diagnostic (List Term) := do
@@ -551,8 +574,6 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
     failAt span "map cannot flatten a composite scalar wrapper"
   let outputElementType := mapElementType compiled.result
   let compiledResultType ← checkedComposite compiled.program span outputElementType
-  if layoutHasEnum compiledResultType.checked.value then
-    failAt span "map results containing enum layouts are unsupported"
   let vectorType := Types.CompositeType.vector length outputElementType
   discard (checkedComposite compiled.program span vectorType)
   if compiled.captures.length + actualTypes.length > limits.maxParameters then
@@ -568,8 +589,10 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let projectedTerms := length * resultLeaves * (projectionDepth + 1)
   let projectionWork := length *
     (compiledResultType.checked.expandedNodes - resultLeaves)
+  let enumBranchWork := length *
+    enumProjectionExpansion projectionDepth compiledResultType.checked.value
   let estimatedNodes := length * (2 + compiled.captures.length + 2 * sequences.length) +
-    projectedTerms + projectionWork + 2
+    projectedTerms + projectionWork + enumBranchWork + 2
   checkGeneratedSourceBudget limits span estimatedNodes
   let used := appendMany [programNames compiled.program env, sequences.flatMap termNames,
     operatorNames operator, compiled.captures.map Prod.fst]

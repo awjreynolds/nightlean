@@ -5463,25 +5463,29 @@
       "implementation": "../../Noctium/Helpers/Iteration.lean",
       "documentation": "../development/iteration.md",
       "newOpcodes": 0,
-      "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vectors, compatible tuples or scalar/composite byte sequence expressions once and returns a vector of checked scalar, Unit, record, tuple, nested-vector or byte results. Fold evaluates initial before its list of equal-length sequences, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution. Unit parameters, captures and root inputs use the existing Unit marker and canonical host value; they retain logical arity and contribute no native fields. Generic Unit specializations use this same path.",
+      "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vectors, compatible tuples or scalar/composite byte sequence expressions once and returns a vector of checked scalar, Unit, record, tuple, nested-vector, byte or enum results. Enum tags retain their private origins and active payload projections are guarded with canonical zero padding. Fold evaluates initial before its list of equal-length sequences, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution. Unit parameters, captures and root inputs use the existing Unit marker and canonical host value; they retain logical arity and contribute no native fields. Generic Unit specializations use this same path.",
       "checks": {
-        "compilerBuild": "passed,76 jobs after Unit arguments/captures/root support",
+        "compilerBuild": "passed,76 jobs after enum tag projections and guarded enum map flattening",
         "operatorSource": "passed, captured/inferred and named apply, both lexical hiding rejects, map/fold compilation, empty vector map, unequal lengths, missing capture and accumulator mismatch",
         "sourceExport": "passed, selected3.2.1 with private source definitions and mandatory source disclosure rejection",
-        "native": "one case passed in0.09seconds: Unit root/capture/argument, touch then seed then one private Native/UInt3/Native tuple load, mapped callbacks3/4/5, record amounts plus scalar byte fees1/2/3 folded to30; inactive preserves0, altered reply fails, both completed paths pass native checker",
+        "native": "one case passed in0.21seconds: Unit root/capture/argument, touch then seed then one private Native/UInt3/Native tuple load, mapped callbacks3/4/5, record enum amounts6/Empty/10 plus scalar byte fees1/2/3 folded to22; inactive preserves0, altered reply fails, both completed paths pass native checker",
         "existingWitnessSource": "passed after raw composite witness canonical constraints moved to unconditional circuit input constraints",
         "aggregateSource": "passed, nested nominal record and Bool map compilation, Unit map callback active failure/zero-iteration success, empty-vector sequence compile success plus checked-cast failure, closed public-write guard active narrowing-cast failure and inactive skip",
         "unitSource": "passed, Unit argument/capture/vector map, zero-native-field Unit root, missing-root-schema arity rejection, computed Unit argument compile success and runtime failure",
         "genericUnit": "passed, actual Unit identity specialization compiles with one logical input and zero native fields",
-        "sequenceSource": "passed, compatible UInt3/Native tuple join, incompatible tuple and empty-tuple rejects, scalar/composite byte map/fold, multi-sequence fold and length rejection, strict initial evaluation on empty bytes"
+        "sequenceSource": "passed, compatible UInt3/Native tuple join, incompatible tuple and empty-tuple rejects, scalar/composite byte map/fold, multi-sequence fold and length rejection, strict initial evaluation on empty bytes",
+        "enumSource": "passed, Empty/Filled enum map inside records with nested vectors, canonical payload padding, inactive failing payload cast, resource preflight rejection and Native tag-only projection origins",
+        "enumDisclosure": "passed, private enum tag output rejects and explicit tag value disclosure accepts while payload selection retains tag control dependencies",
+        "enumHost": "passed, Native ordinal1 at physical leaf0, wrong type/malformed payload/non-enum source reject",
+        "privateAuthoringRefresh": "passed, exact source fixture comparison and native private read/provider/stage checks after removal of unused total lets"
       },
       "artifactBytes": {
-        "impact": 806375,
-        "zkir": 35870,
-        "binding": 83426,
-        "control": 124797
+        "impact": 3105625,
+        "zkir": 92156,
+        "binding": 197742,
+        "control": 280144
       },
-      "limits": "Staged source API only. Enum results, empty-tuple element inference, wider structural subtype joins, readable iteration syntax and general preservation remain open under issue48/21. Native evidence samples this typed tuple/record/byte workload, not full cross-host equivalence. No keys/proofs/deployments, cross-profile campaign, K/timing benchmark or general pass proof. Broader optimisation remains deferred under issue85.",
+      "limits": "Staged source API only. Empty-tuple element inference, wider structural subtype joins, readable iteration syntax and general preservation remain open under issue48/21. Native evidence samples this typed tuple/record/byte workload, not full cross-host equivalence. No keys/proofs/deployments, cross-profile campaign, K/timing benchmark or general pass proof. Broader optimisation remains deferred under issue85.",
       "closurePruning": {
         "impactBeforeBytes": 25167866,
         "impactAfterBytes": 3309220,
@@ -5490,7 +5494,7 @@
       "sourceReplicationFix": {
         "scope": "Synthetic value-only ledger forcing is skipped only for proven-total expressions. All explicit constraints and partial effects remain. Sequence pruning is per component/constraint with exact let shadowing; canonical byte literals and valid byte indexing extend the totality whitelist. No assumption that a prior require already executed.",
         "before": "Mixed tuple/byte intermediate export was approximately47MiB Impact and332KiB ZKIR;5969 native bit checks.",
-        "after": "Impact806375bytes, nativeZKIR35870bytes; no repeated proving, keygen or deployment campaign."
+        "after": "At the tuple/byte checkpoint: Impact806375bytes, nativeZKIR35870bytes. The current nested-enum workload sizes are listed in artifactBytes. No repeated proving, keygen or deployment campaign."
       }
     }
   }

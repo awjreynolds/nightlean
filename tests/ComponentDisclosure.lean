@@ -322,6 +322,15 @@ private def enumProgram : Program := exportedProgram [
 #guard rejectedWith (ComponentDisclosure.checkProgram enumProgram "entry")
   "undisclosed private control from parameter 'choice.$tag'"
 
+private def enumTagProgram (release : Bool) : Program :=
+  let tag := Term.project (.ref "choice") .enumTag
+  Helpers.mapDeclarationBodies (fun _ =>
+    [.return (some (if release then .disclose {} tag else tag))]) enumProgram
+
+#guard rejectedWith (ComponentDisclosure.checkProgram (enumTagProgram false) "entry")
+  "private parameter 'choice.$tag'"
+#guard accepted (ComponentDisclosure.checkProgram (enumTagProgram true) "entry")
+
 private def publicEnumProjection : Program := exportedProgram [
   withCompositeParameters
     {id := ⟨0, 0⟩, name := "entry", parameters := [{name := "choice", ty := .native}],

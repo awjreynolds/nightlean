@@ -9,6 +9,7 @@ inductive Projection where
   | field (name : String)
   | vectorIndex (index : Nat)
   | byteIndex (index : Nat)
+  | enumTag
   | enumField (variant name : String)
   deriving Repr, BEq
 
@@ -37,6 +38,12 @@ def project (parent : CompiledType) (value : TypedValue parent) (projection : Pr
     unless index < length do throw "aggregate byte index out of bounds"
     let some value := values[index]? | throw "aggregate byte value index out of bounds"
     makeChild parent (.scalar (.uint 255)) (.scalar (.uint 255) value)
+  | .enumeration id, .enumeration _ active _, .enumTag =>
+    let some declaration := parent.environment.enumerations.find? (·.id == id)
+      | throw "unknown aggregate enum"
+    let some tag := declaration.variants.findIdx? (·.name == active)
+      | throw "unknown aggregate enum variant"
+    makeChild parent (.scalar .native) (.scalar .native tag)
   | .enumeration id, .enumeration _ active values, .enumField variant name =>
     unless variant == active do throw "aggregate enum pattern does not match active variant"
     let some declaration := parent.environment.enumerations.find? (·.id == id) | throw "unknown aggregate enum"
@@ -105,6 +112,7 @@ private def layoutSlice (layout : Layout) (projection : Projection) : Except Str
     let some index := selected.2.1.findIdx? (·.1 == name) | throw "unknown aggregate variant layout field"
     let some field := selected.2.1[index]? | throw "aggregate variant layout index mismatch"
     pure (1 + ((selected.2.1.take index).map (fun item => item.2.leafCount)).sum, field.2.leafCount, true)
+  | .enumeration .., .enumTag => pure (0, 1, false)
   | _, _ => throw "aggregate projection layout mismatch"
 
 def projectTracked (parent : CompiledType) (value : TrackedValue parent) (projection : Projection)

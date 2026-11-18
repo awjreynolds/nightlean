@@ -1373,6 +1373,7 @@ impl Schema {
                 ensure!(index < *length, "aggregate byte index out of bounds");
                 Ok((None, index, "sU255;".to_owned()))
             }
+            ("enumTag", LayoutNode::Enum { .. }) => Ok((None, 0, "sN".to_owned())),
             ("enumField", LayoutNode::Enum { variants, .. }) => {
                 let variant_name = projection
                     .variant
@@ -1468,7 +1469,12 @@ impl Schema {
                 .is_some_and(|end| end <= leaves.len()),
             "aggregate projection range outside value"
         );
-        let selected_json = if projection.kind == "byteIndex" {
+        let selected_json = if projection.kind == "enumTag" {
+            let tag = leaves
+                .get(start)
+                .ok_or_else(|| anyhow!("missing aggregate enum tag"))?;
+            serde_json::json!({"kind":"native","value":tag.to_str_radix(10)})
+        } else if projection.kind == "byteIndex" {
             let value: serde_json::Value = serde_json::from_slice(json)?;
             let index = projection
                 .index

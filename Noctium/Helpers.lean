@@ -616,6 +616,7 @@ private def projectedType (program : Program) (span : SourceSpan)
         match selected.fields.find? (·.name == name) with
         | some field => pure field.type
         | none => fail span s!"unknown aggregate enum field '{name}'"
+  | .enumeration _, .enumTag => pure (.scalar .native)
   | _, _ => fail span "aggregate projection kind/type mismatch"
 
 private def validateResultType (program : Program) (span : SourceSpan) : ResultType → Except Diagnostic Unit
@@ -2002,6 +2003,7 @@ def projectionSlice (layout : Types.Layout) (projection : Types.Projection) :
     let some field := selected.2.1[index]? | throw "aggregate enum layout mismatch"
     pure (1 + ((selected.2.1.take index).map (fun item => item.2.leafCount)).sum,
       field.2.leafCount)
+  | .enumeration .., .enumTag => pure (0, 1)
   | _, _ => throw "aggregate projection kind/type mismatch"
 
 private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnostic (Expr .native) :=

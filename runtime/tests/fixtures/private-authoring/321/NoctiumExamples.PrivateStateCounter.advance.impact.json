@@ -82,11 +82,7 @@
       "tag": "let",
       "name": "$helper2",
       "body":
-      {"value":
-       {"value": {"tag": "reference", "name": "$helper2"},
-        "tag": "let",
-        "name": "$helper3",
-        "body": {"tag": "reference", "name": "$helper4"}},
+      {"value": {"tag": "reference", "name": "$helper4"},
        "tag": "let",
        "name": "$helper5",
        "body":
@@ -108,11 +104,7 @@
          {"tag": "eq",
           "right": {"tag": "reference", "name": "$helper0"},
           "left": {"tag": "reference", "name": "$helper5"}},
-         "body":
-         {"value": {"tag": "reference", "name": "$helper5"},
-          "tag": "let",
-          "name": "$helper6",
-          "body": {"tag": "reference", "name": "$helper0"}}}}}}}}],
+         "body": {"tag": "reference", "name": "$helper0"}}}}}}}],
   "name": "NoctiumExamples.advance",
   "inputs":
   [{"visibility": "public", "type": "UIntRange<256>", "name": "expected"},

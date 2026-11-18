@@ -7,10 +7,15 @@ private def iterationSource : Except Diagnostic Program := do
   let sequenceType := Types.CompositeType.tuple [
     .scalar .native, .scalar (.uint 3), .scalar .native]
   let item := Types.CompositeType.structure "Iteration.Item"
+  let amount := Types.CompositeType.enumeration "Iteration.Amount"
   let base : Program := {
-    composites := {structures := [{id := "Iteration.Item", fields := [
-      {name := "amount", type := .scalar .native},
-      {name := "metadata", type := .vector 2 (.scalar .native)}]}]}
+    composites := {
+      structures := [{id := "Iteration.Item", fields := [
+        {name := "amount", type := amount},
+        {name := "metadata", type := .vector 2 (.scalar .native)}]}]
+      enumerations := [{id := "Iteration.Amount", variants := [
+        {name := "Empty"}, {name := "Full", fields := [
+          {name := "value", type := .scalar .native}]}]}]}
     ledger := [{name := "total", kind := .cell .native}]
     witnesses := [
       {name := "touch", operation := "noctium.iteration-touch.v1", capability := "touch",
@@ -49,12 +54,22 @@ private def iterationSource : Except Diagnostic Program := do
       .evaluate (.ref "rootUnit"),
       .bind "shifted" (.scalar .native) (.binary .add (.ref "value") (.ref "offset")),
       .bind "doubled" (.scalar .native) (.witnessCall "double-value" "double" [.ref "shifted"]),
-      .return (some (.composite item [.ref "doubled", .ref "shifted", .ref "value"]))])
+      .bind "amount" (.composite amount) (.composite amount [
+        .select (.eq (.ref "value") (.native 2)) (.native 0) (.native 1),
+        .select (.eq (.ref "value") (.native 2)) (.native 0) (.ref "doubled")]),
+      .return (some (.composite item [
+        .project (.ref "amount") .enumTag,
+        .ite (.eq (.project (.ref "amount") .enumTag) (.native 1))
+          (.project (.ref "amount") (.enumField "Full" "value")) (.native 0),
+        .ref "shifted", .ref "value"]))])
   let (foldedProgram, folded) ← Iteration.foldWithLimits {} mappedProgram 0 env {}
     initial [mapped, .bytes (.bytesLiteral 3 [1, 2, 3]) []]
     (.anonymous [{name := "acc"}, {name := "value"}, {name := "fee"}] none [
+      .bind "amount" (.composite amount) (.project (.ref "value") (.field "amount")),
       .return (some (.binary .add
-        (.binary .add (.ref "acc") (.project (.ref "value") (.field "amount")))
+        (.binary .add (.ref "acc")
+          (.ite (.eq (.project (.ref "amount") .enumTag) (.native 1))
+            (.project (.ref "amount") (.enumField "Full" "value")) (.native 0)))
         (.cast .native (.ref "fee"))))])
   pure {foldedProgram with declarations := foldedProgram.declarations.map fun declaration =>
     if declaration.id == ⟨0, 0⟩ then {declaration with body := [
