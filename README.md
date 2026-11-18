@@ -117,7 +117,7 @@ Typed Jubjub operations support a [derived-key, ElGamal and ECDH memo example](t
 
 [Typed signature helpers](docs/development/signatures.md) expose secp256k1/P-256 ECDSA, Jubjub Schnorr, Ed25519 and Ethereum address derivation through Lean and existing native operations. Private verification results require explicit disclosure. Protocol bounds and abort-versus-false behavior are documented.
 
-[Native helper branches](docs/development/native-helper-branches.md) compile witness-free structured control and lazy expressions into existing native constraints. Focused checks cover inactive failures, lexical scope, aggregate sequencing and a guarded cell update. The separate [structured cell entry](docs/development/structured-cells.md) route now lowers typed cell reads and writes inside helper bodies. Integrated provider scheduling and complete guarded proof/ledger qualification remain open.
+[Native helper branches](docs/development/native-helper-branches.md) compile witness-free structured control and lazy expressions into existing native constraints. Focused checks cover inactive failures, lexical scope, aggregate sequencing and a guarded cell update. The separate [structured state entry](docs/development/structured-cells.md) route lowers typed cell and map reads, membership queries and writes inside helper bodies. Integrated provider scheduling and complete guarded proof/ledger qualification remain open.
 
 [Guarded typed witnesses](docs/development/guarded-witnesses.md) bind conditional provider calls to native slots, skip inactive callbacks and enforce canonical inactive defaults. Shared continuations, unit and empty results retain exact call records. Straight-line bindings keep their existing format.
 

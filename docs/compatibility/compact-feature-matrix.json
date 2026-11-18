@@ -625,6 +625,22 @@
         ],
         "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
         "fullEquivalence": "unverified"
+      },
+      "structuredMapUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fc5f3afb290c895135b5f92f4d2383312330577d",
+        "scope": "Typed map lookup, membership and upsert statements inside structured helper bodies reuse ordered native effects and closed lexical key/value expressions. Source/native evidence uses Bytes32 keys, Native values, nested guards, missing-entry insertion, existing-entry update and post-write returns.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/ComponentDisclosure.lean",
+          "tests/StructuredMaps.lean",
+          "runtime/tests/structured_maps.rs",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.zkir",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.impact.json",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Current 3.2.1 native checker and local state only. No new keys, proofs, deployment or historical compatibility campaign. Values are Native/Bool/UInt; the native case exercises Native. Nested ledger trees, aggregate values, integrated provider/private-state scheduling and generic preservation remain open.",
+        "fullEquivalence": "unverified"
       }
     },
     {
@@ -684,6 +700,22 @@
           "docs/development/structured-cells.md"
         ],
         "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
+        "fullEquivalence": "unverified"
+      },
+      "structuredMapUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fc5f3afb290c895135b5f92f4d2383312330577d",
+        "scope": "Typed map lookup, membership and upsert statements inside structured helper bodies reuse ordered native effects and closed lexical key/value expressions. Source/native evidence uses Bytes32 keys, Native values, nested guards, missing-entry insertion, existing-entry update and post-write returns.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/ComponentDisclosure.lean",
+          "tests/StructuredMaps.lean",
+          "runtime/tests/structured_maps.rs",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.zkir",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.impact.json",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Current 3.2.1 native checker and local state only. No new keys, proofs, deployment or historical compatibility campaign. Values are Native/Bool/UInt; the native case exercises Native. Nested ledger trees, aggregate values, integrated provider/private-state scheduling and generic preservation remain open.",
         "fullEquivalence": "unverified"
       }
     },
@@ -774,6 +806,22 @@
           "docs/development/structured-cells.md"
         ],
         "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
+        "fullEquivalence": "unverified"
+      },
+      "structuredMapUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fc5f3afb290c895135b5f92f4d2383312330577d",
+        "scope": "Typed map lookup, membership and upsert statements inside structured helper bodies reuse ordered native effects and closed lexical key/value expressions. Source/native evidence uses Bytes32 keys, Native values, nested guards, missing-entry insertion, existing-entry update and post-write returns.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/ComponentDisclosure.lean",
+          "tests/StructuredMaps.lean",
+          "runtime/tests/structured_maps.rs",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.zkir",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.impact.json",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Current 3.2.1 native checker and local state only. No new keys, proofs, deployment or historical compatibility campaign. Values are Native/Bool/UInt; the native case exercises Native. Nested ledger trees, aggregate values, integrated provider/private-state scheduling and generic preservation remain open.",
         "fullEquivalence": "unverified"
       }
     },
@@ -2000,7 +2048,23 @@
         "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "structuredMapUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fc5f3afb290c895135b5f92f4d2383312330577d",
+        "scope": "Typed map lookup, membership and upsert statements inside structured helper bodies reuse ordered native effects and closed lexical key/value expressions. Source/native evidence uses Bytes32 keys, Native values, nested guards, missing-entry insertion, existing-entry update and post-write returns.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/ComponentDisclosure.lean",
+          "tests/StructuredMaps.lean",
+          "runtime/tests/structured_maps.rs",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.zkir",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.impact.json",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Current 3.2.1 native checker and local state only. No new keys, proofs, deployment or historical compatibility campaign. Values are Native/Bool/UInt; the native case exercises Native. Nested ledger trees, aggregate values, integrated provider/private-state scheduling and generic preservation remain open.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ADT-MAP-INSERTCOIN",
@@ -2068,7 +2132,23 @@
         "LEDGER"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "structuredMapUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fc5f3afb290c895135b5f92f4d2383312330577d",
+        "scope": "Typed map lookup, membership and upsert statements inside structured helper bodies reuse ordered native effects and closed lexical key/value expressions. Source/native evidence uses Bytes32 keys, Native values, nested guards, missing-entry insertion, existing-entry update and post-write returns.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/ComponentDisclosure.lean",
+          "tests/StructuredMaps.lean",
+          "runtime/tests/structured_maps.rs",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.zkir",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.impact.json",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Current 3.2.1 native checker and local state only. No new keys, proofs, deployment or historical compatibility campaign. Values are Native/Bool/UInt; the native case exercises Native. Nested ledger trees, aggregate values, integrated provider/private-state scheduling and generic preservation remain open.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ADT-MAP-MEMBER",
@@ -2085,7 +2165,23 @@
         "LEDGER"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "structuredMapUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fc5f3afb290c895135b5f92f4d2383312330577d",
+        "scope": "Typed map lookup, membership and upsert statements inside structured helper bodies reuse ordered native effects and closed lexical key/value expressions. Source/native evidence uses Bytes32 keys, Native values, nested guards, missing-entry insertion, existing-entry update and post-write returns.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/ComponentDisclosure.lean",
+          "tests/StructuredMaps.lean",
+          "runtime/tests/structured_maps.rs",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.zkir",
+          "runtime/tests/fixtures/structured-maps/321/StructuredMaps.update.impact.json",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Current 3.2.1 native checker and local state only. No new keys, proofs, deployment or historical compatibility campaign. Values are Native/Bool/UInt; the native case exercises Native. Nested ledger trees, aggregate values, integrated provider/private-state scheduling and generic preservation remain open.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ADT-MAP-REMOVE",
