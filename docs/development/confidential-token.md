@@ -66,8 +66,8 @@ The delegated-spend nonce preimage fits existing source operations:
 The pinned mixed record hashes four Bytes32 values followed by one canonical
 Field, also 32 little-endian bytes. Alignment contributes no hash tags, so both
 encodings produce the same 160-byte preimage. This removes a compiler dependency
-for the remaining escrow work. Native nested-map leaf deletion is still needed
-for exact refund/replacement behavior.
+for the remaining escrow work. [Native nested-map leaf deletion](native-map-remove.md) now supplies the
+remaining ledger primitive for exact refund/replacement behavior.
 
 Deployment starts from explicitly configured initialized state, zero supply and
 empty maps. Constructor/sealed metadata, the remaining four reference entrypoints (`allowance`, `approve`,

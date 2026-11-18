@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "44ddfcac4b77d5419fc830b6a9b01ab1897fbb61",
+    "sourceCommit": "8860d35919cf582e9a7898179b8bd667616cdd49",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4769,13 +4769,14 @@
       "standalone and nested Counter cells with native Bytes8 encoding, reads, u32 immediate increments/decrements and reset",
       "standalone and nested Lists of checked Native-field records, with prepend, length/head reads, nonempty pop and reset",
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks",
-      "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves and epoch-checked memo clearing with supply/memos/counters"
+      "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves and epoch-checked memo clearing with supply/memos/counters",
+      "guarded native map leaf deletion with idempotent absent-leaf behavior, missing-parent rejection and separate VM activity groups"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
     "remainingTokenDependencies": [
       "mixed aligned record hashing and general byte-string operations",
-      "native map deletion, remaining helper operations and token escrow, allowance, delegated operations and constructor metadata",
+      "remaining helper operations and token escrow, allowance, delegated operations and constructor metadata",
       "mixed record values and optional List head API",
       "Counter comparison helpers",
       "remaining return layouts, contract-call arguments and cross-contract claim composition",
@@ -4920,6 +4921,12 @@
       "referenceEntrypointCount": 16,
       "scope": "One selected-3.2.1 source-witness/native lifecycle registers two wallets, mints12 to Alice pending, sweeps, transfers5 to Bob pending, then burns2. Checked views include absent accounts, encrypted-zero defaults, supply and full account hash. A self-move then shifts1 from Alice spendable to Alice pending, preserving supply10 and advancing her credit epoch to2. Self-transfer, stale-epoch memo clearing and wrong-key clearing reject; authenticated clearing with epoch2 empties only her memo List. Prior valid re-randomized wrong-ledger candidate rejects. Runtime0.30s, one focused testcase. Twelve of sixteen reference entrypoints implemented; named c1/c2 point returns do not establish nominal/composite ABI parity. Initialized=true genesis remains explicit; constructor/sealed metadata and remaining four escrow/allowance/delegated entrypoints stay open. Deterministic fixture entropy establishes no production freshness/privacy. No new opcode names, keys, proofs, deployment or broad regressions.",
       "initialMilestoneCommit": "496766c"
+    },
+    "nativeMapRemoveEvidence": {
+      "source": "tests/NativeMapRemove.lean",
+      "native": "runtime/tests/native_map_remove.rs",
+      "implementationCommit": "8860d35919cf582e9a7898179b8bd667616cdd49",
+      "scope": "One selected-3.2.1 native testcase passes deletion, repeat absent-leaf deletion, sibling/other-owner preservation, missing-parent rejection and inactive guarded deletion. Runtime0.02s. Uncached Idx/Push/Rem/Ins native VM operations use four separately bound Impact groups. No new ZKIR instruction names, keys, proofs, transactions or generic state-preservation claim."
     }
   }
 }
