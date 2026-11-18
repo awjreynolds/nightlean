@@ -36,7 +36,7 @@ Zero inversion, identity coordinate extraction, off-curve construction and malfo
 
 Structured inactive guards substitute safe typed values before partial operations. Inverse uses field one, coordinate access uses a nonidentity point, construction uses valid coordinates and point decoding uses canonical identity bytes. An eager `select` evaluates both operands and does not authorize these substitutions.
 
-Private origins flow through arithmetic, points and conversions. Public writes and results still require explicit `disclose`. Native marker writes in the focused example disclose their guard and result independently. No foreign ledger storage is enabled by this package.
+Private origins flow through arithmetic, points and conversions. Public writes and results still require explicit `disclose`. Native marker writes in the focused example disclose their guard and result independently. The separate [scalar storage package](foreign-storage.md) adds foreign cells and map values.
 
 ## Evidence and limits
 
@@ -44,4 +44,4 @@ Private origins flow through arithmetic, points and conversions. Public writes a
 
 Rust reuses the pinned native cryptographic operations. Lean reference semantics uses pure field arithmetic and explicit checked oracle hooks where point computation or compressed decoding needs them. Those assumptions are separate from [whole-language preservation](https://github.com/awjreynolds/noctium/issues/21).
 
-No new keys, proofs or deployment qualify this slice. Foreign ledger storage and Curve25519 remain separate work under the [full native goal](../compatibility/GOAL.md).
+No new keys, proofs or deployment qualify this slice. Foreign map keys, record/tree storage and Curve25519 remain work under the [full native goal](../compatibility/GOAL.md).

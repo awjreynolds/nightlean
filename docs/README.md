@@ -55,7 +55,8 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Hash-to-curve](development/hash-to-curve.md), from ordered Native fields to composable Jubjub points, including empty input.
 - [Typed Secp transport](development/foreign-transport.md), public/private inputs, literals, equality, selection and results across six foreign types.
 - [Secp arithmetic and bytes](development/foreign-operations.md), field/group operations, coordinates, canonical points, reducing field conversions and guarded partial operations.
-- [Foreign-field implementation plan](designs/foreign-types.md), the checked Secp codec foundation and pending source/operation integration.
+- [Secp cells and map values](development/foreign-storage.md), canonical multi-field storage, constructor defaults and guarded reads.
+- [Foreign-field implementation plan](designs/foreign-types.md), delivered Secp slices and remaining Curve25519, storage and assurance work.
 - [Sequential native cell reads](development/sequential-state.md), with source-generated read-after-write fixtures on both runtime profiles. Generic state preservation remains separate proof work.
 - [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) compile to native circuit leaves with disclosure checks. Bytes32-keyed ledger records support nonempty Native-only layouts.
 - [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/noctium-portable-runtime-boundary.md).
