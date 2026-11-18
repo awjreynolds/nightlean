@@ -27,5 +27,6 @@ The pinned recipes are
 Counter uses eight-byte alignment in
 [FAB alignments](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/base-crypto/src/fab/alignments.rs#L73-L81).
 These source operations add ledger VM support, not new ZKIR instruction names.
-Counter comparison helpers, memo Lists and full token integration remain open.
+Counter comparison helpers and full token integration remain open.
+[Native-field memo Lists](native-lists.md) have a separate source/native example.
 No new keys, proofs or deployments were generated for this slice.
