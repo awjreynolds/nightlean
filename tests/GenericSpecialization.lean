@@ -666,4 +666,14 @@ private def providerProgram (release : Bool) (type : GType := .native) : GProgra
   | .error _ => true
   | .ok _ => false
 
+-- A Unit specialization retains one logical argument and no physical fields.
+#guard match specialize (identityProgram .unit .private) "entry" with
+  | .ok result =>
+    match Helpers.compile result.program result.exportName with
+    | .ok circuit => circuit.inputs.isEmpty && circuit.outputs.isEmpty &&
+      result.program.exports.any (fun entry =>
+        entry.compositeInputs.any (fun input => input.type == .unit))
+    | .error _ => false
+  | .error _ => false
+
 end Noctium.GenericSpecializationTests

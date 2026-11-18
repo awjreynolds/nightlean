@@ -723,10 +723,9 @@ private def chargeExpanded (limits : Limits) (span : SourceSpan) (cost : Nat) : 
     liftM (resource span "expanded nodes before substitution")
   set {state with expandedNodes := state.expandedNodes + cost}
 
-private def helperParameter (span : SourceSpan) (name : String)
+private def helperParameter (_span : SourceSpan) (name : String)
     (type : Types.CompositeType) : SpecializeM (Helpers.Parameter × Option (String × Types.CompositeType)) := do
   match type with
-  | .unit => liftM (fail span "unit generic helper parameter is unsupported")
   | .scalar ty => pure (⟨name, ty⟩, none)
   | composite => pure (⟨name, .native⟩, some (name, composite))
 
@@ -977,8 +976,7 @@ def specializeRequestsWithLimits (limits : Limits) (source : Program)
       let mut compositeInputs : List Helpers.AggregateInput := []
       for input in entry.inputs do
         let type ← normalizeType limits input.span typeEnv naturalEnv input.type
-        match resultType type with
-        | .unit => liftM (fail input.span "unit helper export input is unsupported")
+        match type with
         | .scalar scalarTy => do
           let concreteInput : Noctium.Input := {
             name := input.name
@@ -986,7 +984,7 @@ def specializeRequestsWithLimits (limits : Limits) (source : Program)
             visibility := input.visibility
             span := input.span}
           scalarInputs := scalarInputs ++ [concreteInput]
-        | .composite compositeTy => do
+        | compositeTy => do
           let concreteInput : Helpers.AggregateInput := {
             name := input.name
             type := compositeTy

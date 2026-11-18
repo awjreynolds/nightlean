@@ -78,7 +78,11 @@ private def inputBindings (program : Program) (plan : Json) (entry : Export) : E
           {span := input.span, message := diagnostic.message}
         let names := (Helpers.sourceLeafPaths compiled.checked.value "").map fun path => input.name ++ path
         pure (input.name, ResultType.composite input.type, names)
-      | .unit => fail entry.span "witness source parameters cannot be Unit"
+      | .unit => do
+        let some input := aggregateInputs.head? | fail entry.span "witness source input mismatch"
+        aggregateInputs := aggregateInputs.drop 1
+        unless input.type == .unit do fail input.span "witness Unit input type mismatch"
+        pure (input.name, .unit, [])
     bindings := bindings ++ [Json.mkObj [("name", toJson name),
       ("type", toJson (← resultToken program plan entry.span type)), ("inputs", toJson names)]]
   pure (toJson bindings)

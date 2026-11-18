@@ -211,12 +211,6 @@ private def inferType (limits : Limits) (program : Program) (scope : Nat) (env :
     (span : SourceSpan) (term : Term) : Except Diagnostic ResultType := do
   return (← Noctium.Helpers.inferWithLimits limits program scope env span term).ty
 
--- Unit is not a legal helper parameter in the existing Helpers ABI.
-private def ensureParameterType (span : SourceSpan) (type : ResultType) : Except Diagnostic Unit :=
-  match type with
-  | .unit => failAt span "iteration operators cannot accept Unit parameters"
-  | .scalar _ | .composite _ => pure ()
-
 private def declarationParameters (parameters : List (String × ResultType)) :
     List Parameter × List (String × Types.CompositeType) := Id.run do
   let mut scalars := []
@@ -227,7 +221,9 @@ private def declarationParameters (parameters : List (String × ResultType)) :
     | .composite composite =>
       scalars := scalars ++ [({name := name, ty := .native} : Parameter)]
       composites := composites ++ [(name, composite)]
-    | .unit => pure ()
+    | .unit =>
+      scalars := scalars ++ [({name := name, ty := .native} : Parameter)]
+      composites := composites ++ [(name, .unit)]
   return (scalars, composites)
 
 private def addCheckedDeclaration (limits : Limits) (program : Program)
@@ -321,7 +317,6 @@ private def materializeOperator (limits : Limits) (program : Program) (scope : N
       failAt span "anonymous operator argument count mismatch"
     if specifications.length > limits.maxParameters then
       failAt span "helper resource limit exceeded: operator parameters"
-    for actual in actualTypes do ensureParameterType span actual
     preflightAnonymousBody limits program scope env span specifications actualTypes body
     unless (specifications.map (·.name)).eraseDups.length == specifications.length do
       failAt span "duplicate anonymous operator parameter"
@@ -329,13 +324,11 @@ private def materializeOperator (limits : Limits) (program : Program) (scope : N
     for (specification, actual) in specifications.zip actualTypes do
       let type := specification.type.getD actual
       unless subtype actual type do failAt span "anonymous operator parameter type mismatch"
-      ensureParameterType span type
       parameters := parameters ++ [(specification.name, type)]
     let freeNames := bodyFreeReferences (specifications.map (·.name)) body
     let mut captures : List (String × ResultType) := []
     for name in freeNames do
       if let some type := environmentType env name then
-        ensureParameterType span type
         captures := captures ++ [(name, type)]
     let parameterEnv := (captures ++ parameters)
     let returnType ← match resultAnnotation with
@@ -345,7 +338,6 @@ private def materializeOperator (limits : Limits) (program : Program) (scope : N
         commonReturnType span returns
     discard (bodyCallsHiddenBy span (env.map Prod.fst) (specifications.map (·.name)) body)
     let namedParameters := captures ++ parameters
-    for (_, type) in namedParameters do ensureParameterType span type
     if namedParameters.length > limits.maxParameters then
       failAt span "helper resource limit exceeded: parameters"
     let used := appendMany [programNames program env, statementNames body,
@@ -464,7 +456,6 @@ private def freshNames (used : List String) (stems : List String) : List String 
 private def makeWrapper (limits : Limits) (program : Program) (scope : Nat)
     (span : SourceSpan) (used : List String) (parameters : List (String × ResultType))
     (result : ResultType) (body : List Statement) : Except Diagnostic (Program × String) := do
-  for (_, type) in parameters do ensureParameterType span type
   if parameters.length > limits.maxParameters then
     failAt span "helper resource limit exceeded: wrapper parameters"
   let (name, id) ← generatedIdentity limits program scope used

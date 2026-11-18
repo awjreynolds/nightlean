@@ -48,6 +48,8 @@ Noctium cycle diagnostic. These are Noctium implementation caps,
 not Compact language limits. [Module visibility](https://github.com/awjreynolds/noctium/issues/47)
 and the remaining [iteration operators](https://github.com/awjreynolds/noctium/issues/48) have separate evidence.
 
+Unit specializations retain one logical parameter and export input with zero native fields. The Unit marker shares the checked helper and typed host representation described in [Unit arguments](iteration.md#unit-arguments).
+
 ## Generic finite ranges
 
 `Specialization.Statement.forRange` takes compile-time `Natural` expressions for both bounds. A declaration with Nat parameter `N` writes a range as:

@@ -1,5 +1,6 @@
 use super::ledger_tests::{advance_native, complete_native_inputs, source_execution};
 use super::*;
+use crate::control::AuthenticatedNativeTarget;
 use crate::{Plan, create_state};
 use serde_json::json;
 
@@ -19,6 +20,15 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
     let plan: Plan = serde_json::from_str(PLAN).unwrap();
     let initial = create_state(&plan, &BTreeMap::from([("total".into(), json!("0"))])).unwrap();
     let control: Json = serde_json::from_slice(CONTROL).unwrap();
+    let binding: Json = serde_json::from_slice(BINDING).unwrap();
+    let unit = binding["inputBindings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|input| input["name"] == "rootUnit")
+        .unwrap();
+    assert_eq!(unit["type"], "Unit");
+    assert_eq!(unit["inputs"], json!([]));
     for (enabled, corrupt) in [(true, false), (false, false), (true, true)] {
         let attempt = if corrupt {
             "c"
@@ -34,7 +44,7 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
         ];
         let mut operations = Vec::new();
         let mut providers = Vec::new();
-        for name in ["seed", "values", "double"] {
+        for name in ["touch", "seed", "values", "double"] {
             let signature = control["witnesses"]
                 .as_array()
                 .unwrap()
@@ -58,24 +68,42 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
             operations.push(json!({"operation":signature["operation"],"argumentSchema":arguments,"resultSchema":signature["resultType"]}));
             providers.push(json!({"input":name,"operation":signature["operation"],"capability":name,"arguments":{}}));
         }
-        let context = serde_json::from_value(json!({
+        let context_json = json!({
             "protocolVersion":1,"namespace":"noctium","baseRevision":"r0","attemptId":attempt,
             "capabilities":capabilities,"operations":operations,"providers":providers,"commitCapability":"commit"
-        })).unwrap();
+        });
+        let context = serde_json::from_value(context_json.clone()).unwrap();
         let expected = if enabled { "24" } else { "0" };
-        let (mut execution, plan, circuit) = source_execution(
-            PLAN,
-            CIRCUIT,
-            CONTROL,
-            BINDING,
-            BTreeMap::from([
-                ("enabled".into(), json!(enabled)),
-                ("expected".into(), json!(expected)),
-                ("offset".into(), json!("2")),
-            ]),
-            &initial,
-            context,
-        );
+        let inputs = BTreeMap::from([
+            ("enabled".into(), json!(enabled)),
+            ("expected".into(), json!(expected)),
+            ("offset".into(), json!("2")),
+            ("rootUnit".into(), json!({"kind":"unit"})),
+        ]);
+        if enabled && !corrupt {
+            let mut missing = inputs.clone();
+            missing.remove("rootUnit");
+            let target = AuthenticatedNativeTarget {
+                context_id: 1,
+                contract_address: "0".repeat(64),
+                entrypoint: "update".into(),
+                control_plan: control.clone(),
+                control_plan_bytes: CONTROL.to_vec(),
+                binding_bytes: BINDING.to_vec(),
+                relation: serde_json::from_slice(CIRCUIT).unwrap(),
+            };
+            assert!(
+                control::Session::from_authenticated_native_target(
+                    CONTROL,
+                    missing,
+                    serde_json::from_value(context_json).unwrap(),
+                    target,
+                )
+                .is_err()
+            );
+        }
+        let (mut execution, plan, circuit) =
+            source_execution(PLAN, CIRCUIT, CONTROL, BINDING, inputs, &initial, context);
         if enabled {
             let values = json!({"kind":"vector","items":[
                 {"kind":"native","value":"1"},
@@ -83,6 +111,7 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
                 {"kind":"native","value":"3"}
             ]});
             for (name, arguments, value) in [
+                ("touch", json!({}), json!({"kind":"unit"})),
                 ("seed", json!({}), json!("0")),
                 ("values", json!({}), values),
                 ("double", json!({"value":"3"}), json!("6")),

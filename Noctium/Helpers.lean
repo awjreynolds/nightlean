@@ -294,6 +294,7 @@ structure Declaration where
 
 def Declaration.parameterType (declaration : Declaration) (parameter : Parameter) : ResultType :=
   match declaration.compositeParameters.lookup parameter.name with
+  | some .unit => .unit
   | some type => .composite type
   | none => .scalar parameter.ty
 
@@ -1640,7 +1641,12 @@ def analyzeWithLimits (limits : Limits) (program : Program) : Except Diagnostic 
           | fail entry.span "helper entrypoint input signature mismatch"
         aggregateInputs := aggregateInputs.drop 1
         arguments := arguments ++ [.composite input.type]
-      | .unit => fail entry.span "helper parameters cannot have unit type"
+      | .unit =>
+        let some input := aggregateInputs.head?
+          | fail entry.span "helper entrypoint input signature mismatch"
+        aggregateInputs := aggregateInputs.drop 1
+        unless input.type == .unit do fail input.span "helper Unit input type mismatch"
+        arguments := arguments ++ [.unit]
     unless compatible arguments declaration do
       fail entry.span "helper entrypoint input signature mismatch"
     unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
@@ -2659,12 +2665,17 @@ private def compileHostedMode (limits : Limits) (program : Program) (entryName :
       let leaves := (sourceLeafPaths compiled.checked.value "").map fun path =>
         ⟨.native, Expr.ref (aggregateInputName input.name path)⟩
       values := values ++ [aggregateValue type leaves]
+    | .unit =>
+      let some input := aggregateInputs.head?
+        | fail entry.span s!"missing Unit helper input '{parameter.name}'"
+      aggregateInputs := aggregateInputs.drop 1
+      unless input.type == .unit do fail input.span "helper Unit input type mismatch"
+      values := values ++ [unitValue]
     | .scalar _ =>
       let some input := scalarInputs.head?
         | fail entry.span s!"missing scalar helper input '{parameter.name}'"
       scalarInputs := scalarInputs.drop 1
       values := values ++ [scalarValue (ty := input.ty) (Expr.ref input.name)]
-    | .unit => fail entry.span "helper parameters cannot have unit type"
   unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
     fail entry.span "helper entrypoint input signature mismatch"
   let (body, lowering) ← (lowerCall program declaration values entry.span).run
@@ -2763,12 +2774,17 @@ private def compileEntrypointForState (allowWitnesses : Bool) (limits : Limits) 
       let leaves := (sourceLeafPaths compiled.checked.value "").map fun path =>
         ⟨.native, Expr.ref (aggregateInputName input.name path)⟩
       values := values ++ [aggregateValue type leaves]
+    | .unit => do
+      let some input := aggregateInputs.head?
+        | fail exported.span s!"missing Unit helper input '{parameter.name}'"
+      aggregateInputs := aggregateInputs.drop 1
+      unless input.type == .unit do fail input.span "helper Unit input type mismatch"
+      values := values ++ [unitValue]
     | .scalar _ => do
       let some input := scalarInputs.head?
         | fail exported.span s!"missing scalar helper input '{parameter.name}'"
       scalarInputs := scalarInputs.drop 1
       values := values ++ [scalarValue (ty := input.ty) (Expr.ref input.name)]
-    | .unit => fail exported.span "helper parameters cannot have Unit type"
   unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
     fail exported.span "helper entrypoint input signature mismatch"
   let initial : LowerState := {

@@ -12,6 +12,8 @@ private def iterationSource : Except Diagnostic Program := do
       {name := "metadata", type := .vector 2 (.scalar .native)}]}]}
     ledger := [{name := "total", kind := .cell .native}]
     witnesses := [
+      {name := "touch", operation := "noctium.iteration-touch.v1", capability := "touch",
+        result := .unit},
       {name := "seed", operation := "noctium.iteration-seed.v1", capability := "seed",
         result := .scalar .native},
       {name := "values", operation := "noctium.iteration-values.v1", capability := "values",
@@ -20,28 +22,41 @@ private def iterationSource : Except Diagnostic Program := do
         parameters := [{name := "value", type := .scalar .native}], result := .scalar .native}]
     declarations := [{
       id := ⟨0, 0⟩, name := "update",
-      parameters := [⟨"enabled", .bool⟩, ⟨"expected", .native⟩, ⟨"offset", .native⟩],
+      parameters := [⟨"enabled", .bool⟩, ⟨"expected", .native⟩, ⟨"offset", .native⟩,
+        ⟨"rootUnit", .native⟩],
+      compositeParameters := [("rootUnit", .unit)],
       result := .scalar .native, body := [.return (some (.native 0))]}]
-    exports := [{name := "update", target := ⟨0, 0⟩, inputs := [
-      {name := "enabled", ty := .bool, visibility := .private},
-      {name := "expected", ty := .native, visibility := .public},
-      {name := "offset", ty := .native, visibility := .private}]}]
+    exports := [{
+      name := "update", target := ⟨0, 0⟩
+      inputs := [
+        {name := "enabled", ty := .bool, visibility := .private},
+        {name := "expected", ty := .native, visibility := .public},
+        {name := "offset", ty := .native, visibility := .private}]
+      compositeInputs := [{name := "rootUnit", type := .unit, visibility := .private}]}]
   }
   let env : Environment := [
-    ("enabled", .scalar .bool), ("expected", .scalar .native), ("offset", .scalar .native)]
-  let (mappedProgram, mapped) ← Iteration.mapWithLimits {} base 0 env {}
+    ("enabled", .scalar .bool), ("expected", .scalar .native), ("offset", .scalar .native),
+    ("u", .unit), ("rootUnit", .unit)]
+  let (seedProgram, initial) ← Iteration.applyWithLimits {} base 0 env {}
+    (.anonymous [{name := "unitArg"}] none [
+      .evaluate (.ref "unitArg"),
+      .return (some (.witnessCall "initial-seed" "seed" []))]) [.ref "u"]
+  let (mappedProgram, mapped) ← Iteration.mapWithLimits {} seedProgram 0 env {}
     [.witnessCall "input-values" "values" []]
     (.anonymous [{name := "value"}] none [
+      .evaluate (.ref "u"),
+      .evaluate (.ref "rootUnit"),
       .bind "shifted" (.scalar .native) (.binary .add (.ref "value") (.ref "offset")),
       .bind "doubled" (.scalar .native) (.witnessCall "double-value" "double" [.ref "shifted"]),
       .return (some (.composite item [.ref "doubled", .ref "shifted", .ref "value"]))])
   let (foldedProgram, folded) ← Iteration.foldWithLimits {} mappedProgram 0 env {}
-    (.witnessCall "initial-seed" "seed" []) mapped
+    initial mapped
     (.anonymous [{name := "acc"}, {name := "value"}] none [
       .return (some (.binary .add (.ref "acc") (.project (.ref "value") (.field "amount"))))])
   pure {foldedProgram with declarations := foldedProgram.declarations.map fun declaration =>
     if declaration.id == ⟨0, 0⟩ then {declaration with body := [
       .branch (.disclose {} (.ref "enabled")) [
+        .bind "u" .unit (.witnessCall "unit-touch" "touch" []),
         .bind "sum" (.scalar .native) folded,
         .assert (.eq (.ref "sum") (.ref "expected")),
         .writeCell "total" .native (.disclose {} (.ref "sum")),

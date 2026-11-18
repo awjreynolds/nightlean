@@ -198,7 +198,7 @@ mutual
   private partial def call (checked : Helpers.Prepared) (target : Helpers.Declaration) (arguments : List Abstract) : CheckM Abstract := do
     spend target.span
     let env := (target.parameters.zip arguments).map fun (parameter, argument) =>
-      (parameter.name, abstractCast (.scalar parameter.ty) argument)
+      (parameter.name, abstractCast (target.parameterType parameter) argument)
     let result ← body checked target env [] target.body
     let values := result.returns.map (abstractCast target.result)
     let candidate := values.head?.bind (·.literal)
@@ -264,8 +264,9 @@ is visible to the controller. Callback arguments/traces/journals use private cha
 private def checkPreparedDisclosure (limits : Helpers.Limits) (checked : Helpers.Prepared) (entryName : String) : Except Diagnostic Unit := do
   let program := checked.program
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown control entrypoint"
-  if !entry.compositeInputs.isEmpty || program.declarations.any fun declaration =>
-      !declaration.compositeParameters.isEmpty then
+  if entry.compositeInputs.any (fun input => input.type != .unit) ||
+      program.declarations.any fun declaration =>
+        declaration.compositeParameters.any (fun (_, type) => type != .unit) then
     fail entry.span "aggregate inputs are not supported by the portable control plan"
   for declaration in program.declarations do
     if let .composite type := declaration.result then
@@ -275,11 +276,26 @@ private def checkPreparedDisclosure (limits : Helpers.Limits) (checked : Helpers
       unless portableResultLayout compiled.checked.value do
         fail declaration.span "portable control aggregate results require supported scalar-field layouts"
   let target ← declaration program entry.target entry.span
-  let arguments := entry.inputs.map fun input =>
-    ({ty := .scalar input.ty, origins := if input.visibility == .private then
-      [{name := input.name, kind := .parameter, span := input.span}] else []} : Abstract)
+  let mut scalarInputs := entry.inputs
+  let mut aggregateInputs := entry.compositeInputs
+  let mut arguments : List Abstract := []
+  for parameter in target.parameters do
+    match target.parameterType parameter with
+    | .scalar _ => do
+      let some input := scalarInputs.head? | fail entry.span "control input signature mismatch"
+      scalarInputs := scalarInputs.drop 1
+      arguments := arguments ++ [({ty := .scalar input.ty, origins := if input.visibility == .private then
+        [{name := input.name, kind := .parameter, span := input.span}] else []} : Abstract)]
+    | .unit => do
+      let some input := aggregateInputs.head? | fail entry.span "control input signature mismatch"
+      aggregateInputs := aggregateInputs.drop 1
+      unless input.type == .unit do fail input.span "control Unit input type mismatch"
+      arguments := arguments ++ [({ty := .unit} : Abstract)]
+    | .composite _ => fail entry.span "aggregate inputs are not supported by the portable control plan"
+  unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
+    fail entry.span "control input signature mismatch"
   let env := (target.parameters.zip arguments).map fun (parameter, argument) =>
-    (parameter.name, abstractCast (.scalar parameter.ty) argument)
+    (parameter.name, abstractCast (target.parameterType parameter) argument)
   let (result, _) ← (body checked target env [] target.body).run limits.maxExecutionSteps
   for value in result.returns do
     if value.ty != .unit then Disclosure.checkSink {description := "public control-plan return", span := entry.span} value.origins value.control
@@ -572,7 +588,11 @@ def compileTypedWithLimits (limits : Helpers.Limits) (program : Program) (entryN
           let some input := aggregateInputs.head? | emitLift (fail entry.span "typed input signature mismatch")
           aggregateInputs := aggregateInputs.drop 1
           pure (input.name, ResultType.composite input.type, input.visibility, input.span)
-        | .unit => emitLift (fail entry.span "helper parameters cannot have unit type")
+        | .unit => do
+          let some input := aggregateInputs.head? | emitLift (fail entry.span "typed input signature mismatch")
+          aggregateInputs := aggregateInputs.drop 1
+          unless input.type == .unit do emitLift (fail input.span "typed Unit input type mismatch")
+          pure (input.name, .unit, input.visibility, input.span)
       emitLift (portableName span name)
       chargeBytes (512 + 6 * name.utf8ByteSize)
       inputValues := inputValues ++ [Json.mkObj [("name", toJson name),
@@ -621,7 +641,12 @@ def compileTypedWithLimits (limits : Helpers.Limits) (program : Program) (entryN
 
 def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
     (maxPlanBytes : Nat := 1048576) : Except Diagnostic Json :=
-  if program.witnesses.isEmpty then compileScalarWithLimits limits program entryName maxPlanBytes
+  let hasUnitParameters := program.declarations.any fun declaration =>
+    declaration.compositeParameters.any (fun (_, type) => type == .unit)
+  let hasUnitInputs := program.exports.any fun entry =>
+    entry.compositeInputs.any (fun input => input.type == .unit)
+  if program.witnesses.isEmpty && !hasUnitParameters && !hasUnitInputs then
+    compileScalarWithLimits limits program entryName maxPlanBytes
   else compileTypedWithLimits limits program entryName maxPlanBytes
 
 def compile (program : Program) (entryName : String) : Except Diagnostic Json :=

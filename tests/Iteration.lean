@@ -274,3 +274,95 @@ private def unusedNarrowingGuard (enabled : Bool) : Except String Bool := do
 #guard match unusedNarrowingGuard false with
   | .ok Bool.false => true
   | _ => false
+
+private def unitMainProgram : Program := {
+  declarations := [{id := ⟨0, 0⟩, name := "main", result := .unit, body := [.return none]}]
+  exports := [{name := "main", target := ⟨0, 0⟩}]
+}
+
+private def unitResultOperator : Operator := .anonymous [
+  {name := "unitValue", type := some .unit}]
+  (some (.scalar .native)) [.return (some (.native 7))]
+
+-- An anonymous operator accepts a typed Unit argument and returns Native.
+#guard match Iteration.applyWithLimits {} unitMainProgram 0 [] {} unitResultOperator [.unit] with
+  | .ok (program, term) => compilesMain program (.scalar .native) term
+  | .error _ => false
+
+private def unitRootProgram : Program := {
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "main"
+    parameters := [⟨"marker", .native⟩]
+    compositeParameters := [("marker", .unit)]
+    result := .unit
+    body := [.return none]
+  }]
+  exports := [{
+    name := "main"
+    target := ⟨0, 0⟩
+    compositeInputs := [{name := "marker", type := .unit, visibility := .public}]
+  }]
+}
+
+-- A Unit root input has a declared aggregate parameter but no Native fields.
+#guard match Helpers.compile unitRootProgram "main" with
+  | .ok circuit => circuit.inputs.isEmpty
+  | .error _ => false
+
+private def unitRootWithoutParameter : Program := {
+  unitRootProgram with declarations := unitRootProgram.declarations.map fun declaration =>
+    {declaration with parameters := [], compositeParameters := []}
+}
+
+#guard !(Helpers.compile unitRootWithoutParameter "main").isOk
+
+private def capturedUnitApply : Except Diagnostic (Program × Term) :=
+  Iteration.applyWithLimits {} unitRootProgram 0 [("marker", .unit)] {}
+    (.anonymous [{name := "argument", type := some .unit}]
+      (some (.scalar .native)) [
+        .evaluate (.ref "marker"), .return (some (.native 3))]) [.unit]
+
+-- A closure captures the bound Unit root value and compiles with zero input fields.
+#guard match capturedUnitApply with
+  | .ok (program, term) => compilesMain program (.scalar .native) term
+  | .error _ => false
+
+private def unitVectorType : Types.CompositeType := .vector 2 .unit
+private def unitVector : Term := .composite unitVectorType []
+
+private def unitMapOperator : Operator := .anonymous [
+  {name := "item", type := some .unit}]
+  (some (.scalar .native)) [.return (some (.native 11))]
+
+-- Mapping Unit elements passes the typed Unit argument and builds Native results.
+#guard match Iteration.mapWithLimits {} unitMainProgram 0 [] {} [unitVector] unitMapOperator with
+  | .ok (program, term) =>
+    compilesMain program (.composite (.vector 2 (.scalar .native))) term
+  | .error _ => false
+
+private def strictUnitArgumentProgram : Program := {
+  declarations := unitMainProgram.declarations ++ [{
+    id := ⟨0, 1⟩
+    name := "failUnit"
+    result := .unit
+    body := [.assert (.bool false), .return none]
+  }]
+  exports := unitMainProgram.exports
+}
+
+private def strictUnitArgumentCircuit : Except Diagnostic Circuit := do
+  let (program, term) ← Iteration.applyWithLimits {} strictUnitArgumentProgram 0 [] {}
+    unitResultOperator [.call "failUnit" []]
+  Helpers.compile (installMainReturn program (.scalar .native) term) "main"
+
+private def strictUnitArgumentRun : Except String EvalEnv :=
+  match strictUnitArgumentCircuit with
+  | .ok circuit => circuit.run iterationContext []
+  | .error diagnostic => .error diagnostic.message
+
+-- Compilation succeeds, then strict evaluation of a computed Unit argument fails.
+#guard strictUnitArgumentCircuit.isOk
+#guard match strictUnitArgumentRun with
+  | .error "helper assertion failed" => true
+  | _ => false

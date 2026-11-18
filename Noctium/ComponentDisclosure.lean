@@ -441,7 +441,13 @@ def analyzeEntry (program : Program) (entryName : String) : Except Diagnostic (E
           | throw {span := entry.span, message := "helper entrypoint input signature mismatch"}
         aggregateInputs := aggregateInputs.drop 1
         sourceInputValue input program
-      | .unit => throw {span := entry.span, message := "helper parameters cannot have unit type"}
+      | .unit => do
+        let some input := aggregateInputs.head?
+          | throw {span := entry.span, message := "helper entrypoint input signature mismatch"}
+        aggregateInputs := aggregateInputs.drop 1
+        unless input.type == .unit do
+          throw {span := input.span, message := "helper Unit input type mismatch"}
+        pure (zeroValue .unit)
     let value ← normalizeValue entry.span (declaration.parameterType parameter) inputValue
     arguments := arguments ++ [value]
   unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
