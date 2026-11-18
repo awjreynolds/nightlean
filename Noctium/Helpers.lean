@@ -418,10 +418,6 @@ private def statementTerms : Statement → List Term
   | .branch condition _ _ => [condition]
   | .return value => value.toList
 
-private def nativeCellType : Ty → Bool
-  | .native | .bool | .uint _ => true
-  | _ => false
-
 private def checkLedgerSchema (span : SourceSpan) (ledger : List StateDecl) : Except Diagnostic Unit := do
   unless uniqueNames (ledger.map (·.name)) do fail span "duplicate helper ledger declaration"
   for state in ledger do
@@ -1199,7 +1195,7 @@ private structure BodyInfo where
 
 private def checkedCell (program : Program) (span : SourceSpan) (name : String) (ty : Ty)
     (write : Bool) : Except Diagnostic Unit := do
-  unless nativeCellType ty do fail span "structured helper ledger cells require Native, Bool, or UInt"
+  liftError span (ty.validate Capabilities.source)
   let some state := program.ledger.find? (·.name == name)
     | fail span s!"unknown helper ledger cell '{name}'"
   match state.kind with
@@ -1218,7 +1214,6 @@ private def inputNames (program : Program) (target : DeclarationId) : List Strin
 private def checkedMap (program : Program) (span : SourceSpan) (name : String)
     (keyTy valueTy : Ty) : Except Diagnostic Unit := do
   liftError span ((LedgerValueType.map keyTy (.scalar valueTy)).validate Capabilities.source)
-  unless nativeCellType valueTy do fail span "structured helper map values require Native, Bool, or UInt"
   let some state := program.ledger.find? (·.name == name)
     | fail span s!"unknown helper ledger map '{name}'"
   unless state.kind == .map keyTy valueTy do
@@ -1728,6 +1723,20 @@ private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnos
 
 private def liftD (value : Except Diagnostic α) : LowerM α := liftM value
 
+private def scalarEquality : {ty : Ty} → Expr ty → Expr ty → LowerM (Expr .bool)
+  | .bytes length, left, right => do
+    let equalities := (List.range ((length + 30) / 31)).map fun chunk =>
+      Expr.eq (Expr.bytesField left chunk) (Expr.bytesField right chunk)
+    match equalities with
+    | [] => do
+      let leftName ← fresh
+      let rightName ← fresh
+      pure (Expr.letE leftName left (Expr.letE rightName right (.bool true)))
+    | first :: rest =>
+      pure (rest.foldl (fun accumulated next =>
+        Expr.select accumulated next (.bool false)) first)
+  | _, left, right => pure (.eq left right)
+
 mutual
   private partial def lowerTerm (program : Program) (scope : Nat) (env : LowerEnv)
       (span : SourceSpan) (term : Term) : LowerM Lowered := do
@@ -1781,27 +1790,9 @@ mutual
       let right ← lowerTerm program scope env span right
       let constraints := left.constraints ++ right.constraints
       let ty ← liftD (common span left.scalar.ty right.scalar.ty)
-      let value ← if ty.isBytes then do
-        let .bytes length := ty | liftD (fail span "byte equality requires a fixed byte-string type")
-        let left ← liftD (typedExpr span (.bytes length) left)
-        let right ← liftD (typedExpr span (.bytes length) right)
-        let equalities := (List.range ((length + 30) / 31)).map fun chunk =>
-          Expr.eq (Expr.bytesField left chunk) (Expr.bytesField right chunk)
-        let value := match equalities with
-          | [] => .bool true
-          | first :: rest => rest.foldl (fun accumulated next =>
-              Expr.select accumulated next (.bool false)) first
-        if length == 0 then do
-          let leftName ← fresh
-          let rightName ← fresh
-          pure (Expr.letE leftName left
-            (Expr.letE rightName right (.bool true)))
-        else
-          pure value
-      else do
-        let left ← liftD (typedExpr span ty left)
-        let right ← liftD (typedExpr span ty right)
-        pure (Expr.eq left right)
+      let left ← liftD (typedExpr span ty left)
+      let right ← liftD (typedExpr span ty right)
+      let value ← scalarEquality left right
       pure {scalarValue value with constraints}
     | .cast target value =>
       let value ← lowerTerm program scope env span value
@@ -1922,8 +1913,9 @@ mutual
         for (inputName, type) in inputs.zip leafTypes do
           let some zero := GuardedExpression.zeroValue type
             | liftD (fail span "native witness result has no canonical default")
+          let equal ← scalarEquality (.ref inputName) zero
           modify fun state => {state with witnessConstraints := state.witnessConstraints ++
-            [Expr.select callGuard (.bool true) (Expr.eq (.ref inputName) zero)]}
+            [Expr.select callGuard (.bool true) equal]}
       let value ← match signature.result with
         | .unit => pure unitValue
         | .scalar _ => pure {ty := signature.result, scalar := leaves.headD ⟨.bool, .bool true⟩}

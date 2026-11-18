@@ -1231,3 +1231,6 @@ mod tests {
 
 #[cfg(all(test, feature = "zkir-321"))]
 mod ledger_tests;
+
+#[cfg(all(test, feature = "zkir-321"))]
+mod typed_ledger_tests;

@@ -62,6 +62,24 @@ impl InvocationTarget {
 
 type Type = witness::Type;
 
+fn supported_ledger_read_type(ty: &ScalarType) -> bool {
+    match ty {
+        ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_) | ScalarType::JubjubScalar => {
+            true
+        }
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(_) => true,
+        _ => false,
+    }
+}
+
+fn supported_ledger_field_type(ty: &ScalarType) -> bool {
+    matches!(
+        ty,
+        ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_)
+    )
+}
+
 fn parse_type(text: &str, registry: &witness::Registry) -> Result<Type> {
     if text == "Unit" {
         Ok(Type::Unit)
@@ -1887,6 +1905,16 @@ fn matching_native_input_type(declared: &str, semantic: &str) -> bool {
             ))
 }
 
+fn native_relation_input_type(semantic: &str) -> Result<Json> {
+    #[cfg(feature = "zkir-321")]
+    if let ScalarType::Foreign(foreign) = ScalarType::parse(semantic)? {
+        return Ok(serde_json::to_value(foreign.native_type())?);
+    }
+    #[cfg(not(feature = "zkir-321"))]
+    let _ = ScalarType::parse(semantic)?;
+    Ok(json!("Scalar<BLS12-381>"))
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PublicBytes32Abi {
     LegacyBytes,
@@ -2014,10 +2042,11 @@ fn validate_relation_inputs(
         } else {
             vec![name.clone()]
         };
+        let native_type = native_relation_input_type(token)?;
         for name in names {
             ensure!(
                 physical_inputs
-                    .insert(name.clone(), visibility.clone())
+                    .insert(name.clone(), (visibility.clone(), native_type.clone()))
                     .is_none(),
                 "colliding native input coordinates"
             );
@@ -2037,9 +2066,13 @@ fn validate_relation_inputs(
             let input_name = output
                 .strip_prefix("%input_")
                 .ok_or_else(|| anyhow!("invalid native input operation"))?;
+            let expected = physical_inputs
+                .get(input_name)
+                .ok_or_else(|| anyhow!("unknown native relation input"))?;
+            let actual_type = field(instruction, "type")?.clone();
             ensure!(
-                text(instruction, "type")? == "Scalar<BLS12-381>",
-                "unsupported native circuit input type"
+                actual_type == expected.1,
+                "native relation input type differs from its typed source"
             );
             let visibility = if operation == "public_input" {
                 "public"
@@ -2048,7 +2081,7 @@ fn validate_relation_inputs(
             };
             ensure!(
                 declared
-                    .insert(input_name.to_owned(), visibility.to_owned())
+                    .insert(input_name.to_owned(), (visibility.to_owned(), actual_type))
                     .is_none(),
                 "duplicate native relation input"
             );
@@ -2473,10 +2506,7 @@ fn validate_native_binding(
         let input_type = text(input, "type")?.to_owned();
         let scalar = ScalarType::parse(&input_type)?;
         ensure!(
-            matches!(
-                scalar,
-                ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_)
-            ),
+            supported_ledger_read_type(&scalar),
             "unsupported native ledger input type"
         );
         let visibility = text(input, "visibility")?;
@@ -2802,10 +2832,8 @@ fn validate_native_ledger_calls(
             ("noctium.ledger.read.v1", Some(_)) => {
                 let ty = parse_type(&signature.result_type, registry)?;
                 ensure!(
-                    matches!(
-                        ty,
-                        Type::Scalar(ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_))
-                    ) && output_slots.len() == 1
+                    matches!(ty, Type::Scalar(_))
+                        && output_slots.len() == 1
                         && signature.parameters.len() <= 1,
                     "invalid native ledger read binding"
                 );
@@ -2870,12 +2898,159 @@ fn unwrap_guarded_operation(mut operation: &Json) -> &Json {
     operation
 }
 
+fn typed_scalar_field_count(ty: &ScalarType) -> Option<usize> {
+    match ty {
+        ScalarType::JubjubScalar => Some(1),
+        ScalarType::JubjubPoint => Some(2),
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(ty) => Some(ty.native_type().encoded_len()),
+        _ => None,
+    }
+}
+
+fn expected_point_projection_bindings(name: &str) -> Vec<(String, String)> {
+    (0..2)
+        .map(|index| {
+            (
+                format!("_noctium_jubjub_read_{name}_{index}"),
+                "Native".to_owned(),
+            )
+        })
+        .collect()
+}
+
+fn checked_impact_projections(read: &Json, expected: &[(String, String)]) -> Result<Vec<Json>> {
+    let object = read
+        .as_object()
+        .ok_or_else(|| anyhow!("invalid Impact projected read"))?;
+    ensure!(
+        object.contains_key("name")
+            && object.contains_key("type")
+            && object.contains_key("projections")
+            && !object.contains_key("components")
+            && !object.contains_key("schema")
+            && object
+                .keys()
+                .all(|key| { ["name", "type", "guard", "projections"].contains(&key.as_str()) }),
+        "invalid Impact projected read"
+    );
+    let projections = read
+        .get("projections")
+        .and_then(Json::as_array)
+        .ok_or_else(|| anyhow!("invalid Impact read projections"))?;
+    ensure!(
+        projections.len() == expected.len(),
+        "Impact read projection count mismatch"
+    );
+    let mut result = Vec::with_capacity(expected.len());
+    for (projection, (expected_name, expected_type)) in projections.iter().zip(expected) {
+        shape(projection, &["name", "type"], false)?;
+        ensure!(
+            text(projection, "name")? == expected_name
+                && text(projection, "type")? == expected_type,
+            "Impact read projection order or type mismatch"
+        );
+        result.push(json!({
+            "name": expected_name,
+            "type": expected_type,
+            "visibility": "public"
+        }));
+    }
+    Ok(result)
+}
+
+fn impact_ledger_read_inputs(read: &Json) -> Result<Vec<Json>> {
+    let read_name = name(text(read, "name")?)?;
+    let read_type = text(read, "type")?;
+    match ScalarType::parse(read_type)? {
+        scalar @ (ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
+            let length = scalar
+                .bytes_length()
+                .expect("byte scalar type has a checked length");
+            let expected = crate::byte_projection_bindings(&read_name, length)?;
+            checked_impact_projections(read, &expected)
+        }
+        ScalarType::JubjubPoint => {
+            let expected = expected_point_projection_bindings(&read_name);
+            checked_impact_projections(read, &expected)
+        }
+        _ => {
+            ensure!(
+                read.get("projections").is_none()
+                    && read.get("components").is_none()
+                    && read.get("schema").is_none(),
+                "native scalar ledger read has unexpected projections"
+            );
+            let mut names = BTreeSet::new();
+            let mut expected = Vec::new();
+            append_impact_ledger_input(read, true, 0, &mut names, &mut expected)?;
+            Ok(expected)
+        }
+    }
+}
+
+fn public_source_read_prologue_len(impact_plan: &Json) -> Result<usize> {
+    let inputs = list(field(impact_plan, "circuit")?, "inputs")?;
+    let reads = list(impact_plan, "reads")?;
+    let mut count = 0usize;
+    for input in inputs {
+        shape(input, &["name", "type", "visibility"], false)?;
+        if text(input, "visibility")? != "public" {
+            continue;
+        }
+        let input_name = text(input, "name")?;
+        let input_type = text(input, "type")?;
+        let scalar = ScalarType::parse(input_type)?;
+        let width = match scalar {
+            ScalarType::Bytes32 => {
+                let first = reads
+                    .get(count)
+                    .ok_or_else(|| anyhow!("Impact plan is missing its public input prologue"))?;
+                let packed = matches_public_input_prologue(
+                    std::slice::from_ref(first),
+                    &[(input_name.to_owned(), input_type.to_owned())],
+                );
+                let legacy = matches_public_input_prologue(
+                    std::slice::from_ref(first),
+                    &[(
+                        format!("_noctium_bytes_{input_name}_0"),
+                        "UIntRange<256>".to_owned(),
+                    )],
+                );
+                ensure!(
+                    packed ^ legacy,
+                    "Impact plan public input prologue mismatch"
+                );
+                if packed { 1 } else { 32 }
+            }
+            ScalarType::Bytes(length) => length,
+            ScalarType::JubjubScalar => 1,
+            ScalarType::JubjubPoint => 2,
+            #[cfg(feature = "zkir-321")]
+            ScalarType::Foreign(ty) => ty.native_type().encoded_len(),
+            _ => 1,
+        };
+        count = count
+            .checked_add(width)
+            .ok_or_else(|| anyhow!("Impact public input prologue overflow"))?;
+        ensure!(
+            count <= reads.len(),
+            "Impact plan is missing its public input prologue"
+        );
+    }
+    Ok(count)
+}
+
 fn validate_native_ledger_boundaries(binding: &Json, impact_plan: &Json) -> Result<()> {
     let Some(rows) = binding.get("ledgerCalls") else {
         return Ok(());
     };
     let operations = list(impact_plan, "operations")?;
     let reads = list(impact_plan, "reads")?;
+    let source_input_names = list(field(impact_plan, "circuit")?, "inputs")?
+        .iter()
+        .map(|input| Ok(text(input, "name")?.to_owned()))
+        .collect::<Result<BTreeSet<_>>>()?;
     let ledger_inputs = match binding.get("ledgerInputs") {
         Some(value) => value
             .as_array()
@@ -2902,19 +3077,18 @@ fn validate_native_ledger_boundaries(binding: &Json, impact_plan: &Json) -> Resu
         );
         match field(row, "read")? {
             Json::String(read) => {
-                ensure!(
-                    operation.get("op").and_then(Json::as_str) == Some("popeq")
-                        && operation
-                            .get("expression")
-                            .is_some_and(|expression| expression_references(expression, read)),
-                    "native ledger read boundary does not pop its bound read"
-                );
-                let read_descriptor = reads
+                let read_matches = reads
                     .iter()
-                    .find(|descriptor| {
+                    .enumerate()
+                    .filter(|(_, descriptor)| {
                         descriptor.get("name").and_then(Json::as_str) == Some(read.as_str())
                     })
-                    .ok_or_else(|| anyhow!("native ledger read is absent from selected plan"))?;
+                    .collect::<Vec<_>>();
+                ensure!(
+                    read_matches.len() == 1,
+                    "native ledger read is absent or duplicated in selected plan"
+                );
+                let (read_index, read_descriptor) = read_matches[0];
                 let ordinal = canonical_index(text(row, "ordinal")?)?;
                 let call = list(binding, "calls")?
                     .get(ordinal)
@@ -2926,16 +3100,59 @@ fn validate_native_ledger_boundaries(binding: &Json, impact_plan: &Json) -> Resu
                         signature.get("name").and_then(Json::as_str) == Some(signature_name)
                     })
                     .ok_or_else(|| anyhow!("native ledger signature is absent"))?;
+                let signature_result = text(signature, "resultType")?;
+                let result_scalar = ScalarType::parse(signature_result)?;
+                let operation_kind = operation.get("op").and_then(Json::as_str);
+                let operation_reads_root = match (&result_scalar, operation_kind) {
+                    (ScalarType::JubjubScalar | ScalarType::JubjubPoint, Some("popeqFields")) => {
+                        field(operation, "schema")?.as_str() == Some(signature_result)
+                            && typed_scalar_field_count(&result_scalar).is_some_and(|count| {
+                                operation
+                                    .get("expressions")
+                                    .and_then(Json::as_array)
+                                    .is_some_and(|expressions| {
+                                        expressions.len() == count
+                                            && expressions.iter().all(|expression| {
+                                                expression_references(expression, read)
+                                            })
+                                    })
+                            })
+                    }
+                    #[cfg(feature = "zkir-321")]
+                    (ScalarType::Foreign(_), Some("popeqFields")) => {
+                        field(operation, "schema")?.as_str() == Some(signature_result)
+                            && typed_scalar_field_count(&result_scalar).is_some_and(|count| {
+                                operation
+                                    .get("expressions")
+                                    .and_then(Json::as_array)
+                                    .is_some_and(|expressions| {
+                                        expressions.len() == count
+                                            && expressions.iter().all(|expression| {
+                                                expression_references(expression, read)
+                                            })
+                                    })
+                            })
+                    }
+                    (ScalarType::JubjubScalar | ScalarType::JubjubPoint, Some("popeq")) => false,
+                    #[cfg(feature = "zkir-321")]
+                    (ScalarType::Foreign(_), Some("popeq")) => false,
+                    (_, Some("popeq")) => operation
+                        .get("expression")
+                        .is_some_and(|expression| expression_references(expression, read)),
+                    _ => false,
+                };
+                let ledger_read_inputs = impact_ledger_read_inputs(read_descriptor)?;
                 ensure!(
-                    read_descriptor.get("components").is_none()
-                        && read_descriptor.get("projections").is_none()
+                    !source_input_names.contains(read)
+                        && read_index >= public_source_read_prologue_len(impact_plan)?
+                        && read_descriptor.get("components").is_none()
+                        && read_descriptor.get("schema").is_none()
                         && read_descriptor.get("type") == signature.get("resultType")
-                        && ledger_inputs.iter().any(|input| {
-                            input.get("name") == Some(&Json::String(read.clone()))
-                                && input.get("type") == read_descriptor.get("type")
-                                && input.get("visibility").and_then(Json::as_str) == Some("public")
+                        && operation_reads_root
+                        && ledger_read_inputs.iter().all(|expected| {
+                            ledger_inputs.iter().any(|actual| actual == expected)
                         }),
-                    "native ledger read is not a scalar ledger input"
+                    "native ledger read does not match its selected typed state read"
                 );
             }
             Json::Null => ensure!(
@@ -3318,13 +3535,12 @@ fn append_impact_ledger_input(
     let input_name = name(text(input, "name")?)?;
     let input_type = text(input, "type")?;
     let scalar = ScalarType::parse(input_type)?;
-    ensure!(
-        matches!(
-            scalar,
-            ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_)
-        ),
-        "unsupported Impact ledger input type"
-    );
+    let permitted_type = if impact_read {
+        supported_ledger_read_type(&scalar)
+    } else {
+        supported_ledger_field_type(&scalar)
+    };
+    ensure!(permitted_type, "unsupported Impact ledger input type");
     ensure!(
         names.insert(input_name.clone()),
         "duplicate Impact ledger input"
@@ -3463,40 +3679,25 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<(Vec<Json>, Option<Publi
             _ => None,
         };
         if let Some(length) = byte_length {
-            let object = read
-                .as_object()
-                .ok_or_else(|| anyhow!("invalid Impact byte read"))?;
-            ensure!(
-                object.contains_key("name")
-                    && object.contains_key("type")
-                    && object.contains_key("projections")
-                    && !object.contains_key("components")
-                    && !object.contains_key("schema")
-                    && object.keys().all(|key| {
-                        ["name", "type", "guard", "projections"].contains(&key.as_str())
-                    }),
-                "invalid Impact byte read"
-            );
             let projection_bindings = crate::byte_projection_bindings(text(read, "name")?, length)?;
-            let projections = read
-                .get("projections")
-                .and_then(Json::as_array)
-                .ok_or_else(|| anyhow!("invalid Impact byte read projections"))?;
-            ensure!(
-                projections.len() == projection_bindings.len(),
-                "Impact byte read projection count mismatch"
-            );
-            for (projection, (expected_name, expected_type)) in
-                projections.iter().zip(projection_bindings)
-            {
-                shape(projection, &["name", "type"], false)?;
-                ensure!(
-                    text(projection, "name")? == expected_name
-                        && text(projection, "type")? == expected_type,
-                    "Impact byte read projection order or range mismatch"
-                );
+            checked_impact_projections(read, &projection_bindings)?;
+            for (expected_name, expected_type) in projection_bindings {
                 append_impact_ledger_input(
-                    projection,
+                    &json!({"name": expected_name, "type": expected_type}),
+                    false,
+                    source_inputs.len(),
+                    &mut names,
+                    &mut expected,
+                )?;
+            }
+            continue;
+        }
+        if matches!(ScalarType::parse(read_type), Ok(ScalarType::JubjubPoint)) {
+            let projection_bindings = expected_point_projection_bindings(text(read, "name")?);
+            checked_impact_projections(read, &projection_bindings)?;
+            for (expected_name, expected_type) in projection_bindings {
+                append_impact_ledger_input(
+                    &json!({"name": expected_name, "type": expected_type}),
                     false,
                     source_inputs.len(),
                     &mut names,

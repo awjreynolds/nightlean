@@ -94,62 +94,93 @@ fn artifacts() -> (Json, Json, Json, Json, String) {
     (impact, control_plan, binding, relation, contract)
 }
 
-fn make_execution(
-    enabled: bool,
-    attempt_id: &str,
-) -> (WitnessExecution, Plan, IrSource, ChargedState<crate::Db>) {
-    let (impact_json, control_plan, _binding, relation, _contract) = artifacts();
-    let binding_bytes = WITNESS.to_vec();
-    let control_bytes = CONTROL.to_vec();
-    let impact_bytes = serde_json::to_vec(&impact_json).unwrap();
-    let plan: Plan = serde_json::from_slice(&impact_bytes).unwrap();
-    let circuit = IrSource::load(CIRCUIT).unwrap();
-    let initial = crate::create_state(&plan, &BTreeMap::from([("balance".into(), json!("3"))]))
-        .expect("initial ledger state is valid");
+pub(super) fn source_execution(
+    impact: &str,
+    circuit_bytes: &[u8],
+    control_bytes: &[u8],
+    binding_bytes: &[u8],
+    source_inputs: BTreeMap<String, Json>,
+    initial: &ChargedState<crate::Db>,
+    context: host::Context,
+) -> (WitnessExecution, Plan, IrSource) {
+    let impact_json: Json = serde_json::from_str(impact).unwrap();
+    let control_plan: Json = serde_json::from_slice(control_bytes).unwrap();
+    let relation: Json = serde_json::from_slice(circuit_bytes).unwrap();
+    let entrypoint = impact_json["entrypoint"].as_str().unwrap().to_owned();
+    control::validate_witness_artifacts(
+        &control_plan,
+        binding_bytes,
+        &relation,
+        &impact_json,
+        impact_json["contractName"].as_str().unwrap(),
+        &entrypoint,
+        impact_json["nativeCircuitFile"].as_str().unwrap(),
+        crate::profile::NAME,
+    )
+    .unwrap();
+    let plan: Plan = serde_json::from_str(impact).unwrap();
+    let circuit = IrSource::load(circuit_bytes).unwrap();
     let target = AuthenticatedNativeTarget {
         context_id: 1,
         contract_address: "0".repeat(64),
-        entrypoint: "advance".into(),
+        entrypoint: entrypoint.clone(),
         control_plan,
-        control_plan_bytes: control_bytes.clone(),
-        binding_bytes,
+        control_plan_bytes: control_bytes.to_vec(),
+        binding_bytes: binding_bytes.to_vec(),
         relation,
     };
     let mut session = control::Session::from_authenticated_native_target(
-        &control_bytes,
-        source_inputs(enabled),
-        host_context(attempt_id),
+        control_bytes,
+        source_inputs,
+        context,
         target,
     )
     .expect("authenticated source session accepts the emitted artifacts");
     assert!(session.has_ledger_calls());
     let native_inputs = session.partial_native_inputs().unwrap();
-    let address = coin_structure::contract::ContractAddress::default();
     let cursor = PreparationCursor::new(
         &plan,
         &native_inputs.values,
-        &initial,
+        initial,
         &ledger::structure::INITIAL_PARAMETERS,
-        address,
+        coin_structure::contract::ContractAddress::default(),
     )
     .expect("native cursor uses the same initial state and circuit inputs");
-    let ledger = LedgerPreparation::new(cursor, &native_inputs.values);
     let execution = WitnessExecution {
         target: None,
         contract_target: None,
         current_state: None,
         session: Some(session),
-        ledger: Some(ledger),
+        ledger: Some(LedgerPreparation::new(cursor, &native_inputs.values)),
         context_id: 1,
         ttl: 0,
         proof_parameters_sha256: String::new(),
         contract_address: "0".repeat(64),
-        entrypoint: "advance".into(),
+        entrypoint,
     };
+    (execution, plan, circuit)
+}
+
+fn make_execution(
+    enabled: bool,
+    attempt_id: &str,
+) -> (WitnessExecution, Plan, IrSource, ChargedState<crate::Db>) {
+    let plan: Plan = serde_json::from_str(IMPACT).unwrap();
+    let initial = crate::create_state(&plan, &BTreeMap::from([("balance".into(), json!("3"))]))
+        .expect("initial ledger state is valid");
+    let (execution, plan, circuit) = source_execution(
+        IMPACT,
+        CIRCUIT,
+        CONTROL,
+        WITNESS,
+        source_inputs(enabled),
+        &initial,
+        host_context(attempt_id),
+    );
     (execution, plan, circuit, initial)
 }
 
-fn advance_native(
+pub(super) fn advance_native(
     plan: &Plan,
     circuit: &IrSource,
     initial: &ChargedState<crate::Db>,
@@ -191,7 +222,10 @@ fn balance(state: &ChargedState<crate::Db>) -> String {
     crate::field_decimal(fields[0])
 }
 
-fn complete_native_inputs(session: &control::Session, relation: &Json) -> BTreeMap<String, Json> {
+pub(super) fn complete_native_inputs(
+    session: &control::Session,
+    relation: &Json,
+) -> BTreeMap<String, Json> {
     let mut inputs = session.completed_native_inputs(relation).unwrap();
     std::mem::take(&mut inputs.values)
 }
@@ -215,8 +249,10 @@ fn ledger_reads_drive_external_witness_and_later_reads_see_the_write() {
         "value": "999"
     }))
     .unwrap();
-    assert_eq!(session.resume_typed(forged).unwrap_err().to_string(),
-        "native ledger callback cannot be resumed by a host provider");
+    assert_eq!(
+        session.resume_typed(forged).unwrap_err().to_string(),
+        "native ledger callback cannot be resumed by a host provider"
+    );
 
     let request = execution.advance().unwrap();
     assert_eq!(request["status"], "need_host");

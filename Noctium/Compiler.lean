@@ -472,7 +472,7 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     let item := indexedRead.1
     let index := indexedRead.2
     let projections : List (String × Json) := if index < publicReadCount then [] else match item.ty with
-      | .bytes _ => [("projections", toJson ((Backend.Impact.Read.bindings item).map fun (binding : String × Ty) => Json.mkObj [
+      | .bytes _ | .jubjubPoint => [("projections", toJson ((Backend.Impact.Read.bindings item).map fun (binding : String × Ty) => Json.mkObj [
           ("name", toJson binding.1), ("type", toJson (typeName binding.2))]))]
       | _ => []
     Json.mkObj ([

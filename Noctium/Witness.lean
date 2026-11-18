@@ -153,8 +153,7 @@ def bindEntrypoint (compiled : Compiled) (relation : Json) (contractName entrypo
   let mut binding ← setField compiled.binding "nativeRelation" relation
   unless ledgerInputs.isEmpty do
     for (_, ty) in ledgerInputs do
-      if ty.isBytes || ty.isJubjub then
-        fail {} "ledger witness bindings require scalar read components"
+      (ty.validate Capabilities.crypto).mapError fun message => {span := {}, message}
     binding ← setField binding "ledgerInputs" (toJson (ledgerInputs.map fun (name, ty) =>
       Json.mkObj [("name", toJson name), ("type", toJson (scalarName ty)),
         ("visibility", toJson ("public" : String))]))
