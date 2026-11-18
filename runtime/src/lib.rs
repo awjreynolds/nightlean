@@ -529,6 +529,8 @@ pub struct Plan {
     pub state: Vec<StateDecl>,
     pub operations: Vec<Instruction>,
     pub reads: Vec<Read>,
+    #[serde(default)]
+    pub returns: Vec<Output>,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct Circuit {
@@ -1449,6 +1451,14 @@ fn native_member_result(
     }
 }
 
+fn aligned_call_returns(values: &[(String, Value)]) -> Result<AlignedValue> {
+    let fields = values
+        .iter()
+        .map(|(_, value)| value.field_encoding())
+        .collect::<Result<Vec<_>>>()?;
+    Ok(aligned_fields(&fields))
+}
+
 pub struct Execution {
     pub program: Program,
     /// Exact source schedule returned by the checked native Impact groups.
@@ -1457,6 +1467,22 @@ pub struct Execution {
     pub guaranteed: Option<Transcript<Db>>,
     pub fallible: Option<Transcript<Db>>,
     pub preimage: ProofPreimage,
+    return_values: Vec<(String, Value)>,
+}
+impl Execution {
+    /// Typed source-declared results. Call `check` before treating them as checked.
+    pub fn returns(&self) -> &[(String, Value)] {
+        &self.return_values
+    }
+    pub fn returns_json(&self) -> BTreeMap<String, Json> {
+        self.return_values
+            .iter()
+            .map(|(name, value)| (name.clone(), value.public_json()))
+            .collect()
+    }
+    pub(crate) fn call_output(&self) -> Result<AlignedValue> {
+        aligned_call_returns(&self.return_values)
+    }
 }
 pub fn prepare(
     plan: &Plan,
@@ -2125,12 +2151,36 @@ pub fn prepare(
     context.query(&program, None, cost).map_err(|_| {
         anyhow!("native state transcript rejected (spent nullifier or state mismatch)")
     })?;
+    ensure!(plan.returns.len() <= 256, "too many call returns");
+    let mut return_values = Vec::with_capacity(plan.returns.len());
+    let mut return_names = BTreeSet::new();
+    for output in &plan.returns {
+        ensure!(
+            output.visibility == "public"
+                && !output.name.is_empty()
+                && return_names.insert(output.name.as_str()),
+            "invalid call return declaration"
+        );
+        let ty = ScalarType::parse(&output.ty)?;
+        ensure!(
+            matches!(
+                ty,
+                ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_)
+            ),
+            "call returns currently require Native, Bool or UInt"
+        );
+        let value = evaluate(&output.expression, &env)?;
+        ensure!(value.scalar_type() == ty, "call return type mismatch");
+        value.validate()?;
+        return_values.push((output.name.clone(), value));
+    }
+    let output = aligned_call_returns(&return_values)?;
     let randomness = Fr::from(0u64); // Diagnostic checker context. Final transactions need fresh randomness.
     let empty = AlignedValue {
         value: FabValue(vec![]),
         alignment: Alignment(vec![]),
     };
-    let comm = onchain_runtime::communication_commitment(empty.clone(), empty, randomness);
+    let comm = onchain_runtime::communication_commitment(empty, output, randomness);
     let partition = partition_transcripts(
         &[PreTranscript {
             context: context.clone(),
@@ -2201,9 +2251,23 @@ pub fn prepare(
         guaranteed,
         fallible,
         preimage,
+        return_values,
     })
 }
 pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usize>>> {
+    let (commitment, randomness) = execution
+        .preimage
+        .communications_commitment
+        .ok_or_else(|| anyhow!("missing call output commitment"))?;
+    let empty = AlignedValue {
+        value: FabValue(vec![]),
+        alignment: Alignment(vec![]),
+    };
+    ensure!(
+        onchain_runtime::communication_commitment(empty, execution.call_output()?, randomness)
+            == commitment,
+        "call returns differ from the committed output"
+    );
     let active = execution
         .preimage
         .check(circuit)

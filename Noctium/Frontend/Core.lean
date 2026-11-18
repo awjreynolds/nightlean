@@ -212,8 +212,11 @@ declare_syntax_cat nlstatement
 scoped syntax nleffect : nlstatement
 scoped syntax "if" nlexpr "then" "{" nlstatement* "}" "else" "{" nlstatement* "}" : nlstatement
 
+declare_syntax_cat nlreturn
+scoped syntax "return" ident ":" nltype ":=" nlexpr : nlreturn
+
 declare_syntax_cat nlentry
-scoped syntax "entry" ident "uses" ident "where" nlstatement* "end" : nlentry
+scoped syntax "entry" ident "uses" ident "where" nlstatement* nlreturn* "end" : nlentry
 scoped syntax (name := contractCommand) "noctium_contract" ident "where" nlstate* nlentry* "end" : command
 
 open scoped Noctium
@@ -708,6 +711,7 @@ private structure EntryEffects where
   terms : Array (TSyntax `term) := #[]
   spans : Array (TSyntax `term) := #[]
   guards : Array (TSyntax `term) := #[]
+  returns : Array (TSyntax `term) := #[]
   nextLocal : Nat := 0
   usedLocalNames : List String := []
 
@@ -1127,6 +1131,31 @@ private partial def elaborateStatements (schema : List (String × StateKind))
     | _ => throwErrorAt statement "unsupported Noctium state statement"
   pure state
 
+private def elaborateReturns (statements : Array (TSyntax `nlreturn))
+    (initial : EntryEffects) : CommandElabM EntryEffects := do
+  let mut state := initial
+  let mut labels : List String := []
+  for statement in statements do
+    match statement with
+    | `(nlreturn| return $label:ident : $returnTy:nltype := $value:nlexpr) => do
+      let labelName := label.getId.toString
+      if labels.contains labelName then
+        throwErrorAt label "duplicate entry return label '{labelName}'"
+      if state.env.any (fun binding => binding.1 == labelName) then
+        throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
+      labels := labelName :: labels
+      let ty ← readTy returnTy
+      match ty with
+      | .native | .bool | .uint _ => pure ()
+      | _ => throwErrorAt returnTy "entry returns support only Native, Bool, and UInt values"
+      let value ← checkedExpression state.env value ty
+      let span ← spanTerm statement
+      state := {state with returns := state.returns.push (← `({
+        name := $(stringTerm labelName), ty := $(← tyTerm ty), value := $value,
+        span := $span : Noctium.Output }))}
+    | _ => throwErrorAt statement "unsupported Noctium entry return"
+  pure state
+
 private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
     (recordFields : Array (TSyntax `nlcompositefield)) (owner : Syntax) :
     CommandElabM (Types.CompositeEnv × Types.CompositeType × TSyntax `term × TSyntax `term) := do
@@ -1264,7 +1293,7 @@ private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
     let mut entryNames : List Name := []
     for entryStx in entries do
       match entryStx with
-      | `(nlentry| entry $id:ident uses $circuit:ident where $statements:nlstatement* end) =>
+      | `(nlentry| entry $id:ident uses $circuit:ident where $statements:nlstatement* $returns:nlreturn* end) =>
         if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
         entryNames := id.getId :: entryNames
         let registry := circuitRegistry.getState (← getEnv)
@@ -1272,11 +1301,13 @@ private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
         let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
           | throwErrorAt circuit "entrypoint requires a registered Noctium circuit"
         let env ← addReferences [] (info.inputs ++ info.outputs)
-        let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
+        let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw) ++
+          returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
         let initial : EntryEffects := {env, usedLocalNames := reserved}
         let lowered ← elaborateStatements schema none 0 statements initial
+        let lowered ← elaborateReturns returns lowered
         let circuitTerm := mkIdent info.declName
-        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Noctium.Entrypoint }))
+        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], returns := [$lowered.returns,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Noctium.Entrypoint }))
       | _ => throwErrorAt entryStx "unsupported Noctium entrypoint"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId

@@ -263,6 +263,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .emptyMapPath state keys =>
       checkSink {description := s!"public empty-map path '{state}'", span}
         (← pathExpression env span keys) activeControl
+  for output in value.returns do
+    checkSink {description := s!"public entrypoint return '{output.name}'", span := output.span}
+      (← expression env output.span output.value) control
 
 def contract (value : Contract) : Except Diagnostic Unit := do
   for entry in value.entrypoints do entrypoint entry

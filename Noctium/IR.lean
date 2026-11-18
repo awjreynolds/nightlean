@@ -244,6 +244,8 @@ structure Entrypoint where
   name : String
   circuit : Circuit
   effects : List Effect := []
+  /-- Proof-bound public values returned with the entrypoint call. -/
+  returns : List Output := []
   span : SourceSpan := {}
   effectSpans : List SourceSpan := []
   /-- Optional activity guards aligned with `effects`. Scalar reads, writes,
@@ -696,6 +698,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         if (env.lookup name).isSome then
           throw {span := e.span, message := s!"state read shadows '{name}'"}
         env := env ++ [(name, ty)]
+  unless uniqueNames (e.returns.map (·.name)) do
+    throw {span := e.span, message := "duplicate entrypoint return label"}
+  for output in e.returns do
+    if (env.lookup output.name).isSome then
+      throw {span := output.span, message := s!"entrypoint return '{output.name}' shadows a source binding"}
+    if output.ty.isBytes || output.ty.isJubjub then
+      throw {span := output.span, message := "entrypoint returns currently support only Native, Bool, and UInt values"}
+    match output.ty.validate caps with
+    | .error message => throw {span := output.span, message}
+    | .ok _ => pure ()
+    match output.value.validate caps env with
+    | .error message => throw {span := output.span, message}
+    | .ok _ => pure ()
 
 def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic Unit := do
   if !uniqueNames (c.state.map (·.name)) then

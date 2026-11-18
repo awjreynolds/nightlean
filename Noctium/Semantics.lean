@@ -423,10 +423,11 @@ private def listPayloadAt (root : LedgerValue) (keys : List Value) :
     | throw "missing or non-list state value"
   pure entries
 
-/-- Execute ordered effects against a private tentative state. Returning an error
-never exposes that tentative state, expressing atomic failure in the reference model. -/
-def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
-    (state : LedgerState) : Except String LedgerState := do
+/-- Execute ordered effects against a private tentative state and retain the
+ordered read environment for expressions evaluated after the effects. Returning
+an error never exposes that tentative state. -/
+private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
+    (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
   let mut env := env
   let mut next := state
   for effect in effects do
@@ -578,17 +579,23 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       let some updated := treeSet root evaluated (.map [])
         | throw s!"nested map parent is missing or not a map '{name}'"
       next := {next with trees := updateAssoc name updated next.trees}
+  pure (env, next)
+
+/-- Execute ordered effects while preserving the historical state-only result. -/
+def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
+    (state : LedgerState) : Except String LedgerState := do
+  let (_, next) ← runEffectsWithEnv ctx effects env state
   pure next
 
 /-- Execute source effects with optional scalar read/write and require guards.
 Inactive reads bind their canonical zero without touching state or keys. -/
-def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
+private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
     (guards : List (Option (Expr .bool))) (env : EvalEnv)
-    (state : LedgerState) : Except String LedgerState := do
+    (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
   unless guards.isEmpty || guards.length == effects.length do
     throw "effect guard metadata length mismatch"
   if guards.isEmpty then
-    runEffects ctx effects env state
+    runEffectsWithEnv ctx effects env state
   else do
     let mut env := env
     let mut next := state
@@ -796,7 +803,14 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
         | .listHead _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
-    pure next
+    pure (env, next)
+
+/-- Guarded state transition with the original state-only result type. -/
+def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
+    (guards : List (Option (Expr .bool))) (env : EvalEnv)
+    (state : LedgerState) : Except String LedgerState := do
+  let (_, next) ← runEffectsWithGuardsAndEnv ctx effects guards env state
+  pure next
 
 /-- This is a specification evaluator, not a substitute for ledger proof checks. -/
 def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
@@ -805,8 +819,13 @@ def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
   | .error diagnostic => throw diagnostic.message
   | .ok _ => pure ()
   let outputs ← entry.circuit.run ctx env
-  let next ← runEffectsWithGuards ctx entry.effects entry.effectGuards (outputs ++ env) state
-  pure (outputs, next)
+  let (finalEnv, next) ←
+    runEffectsWithGuardsAndEnv ctx entry.effects entry.effectGuards (outputs ++ env) state
+  let returned ← entry.returns.mapM fun output => do
+    let value ← output.value.eval ctx finalEnv
+    if !canonical ctx output.ty value then throw s!"noncanonical entrypoint return '{output.name}'"
+    pure (output.name, Value.pack output.ty value)
+  pure (outputs ++ returned, next)
 
 /-- A small optimization whose correctness does not depend on the backend or hash. -/
 def pruneTrue : List (Expr .bool) → List (Expr .bool)

@@ -146,6 +146,10 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   let guardConditions ← convert value.span (plan.guards.mapM (normalize aliases))
   let (groups, bounds, operationAssertions) ←
     collectOperations value.span aliases plan.operations outputBounds
+  let returnResults ← value.returns.mapM fun output =>
+    convert output.span (normalize aliases output.value)
+  let returnedBounds := returnResults.flatMap (·.bounds)
+  let returnedAssertions := returnResults.flatMap (·.assertions)
   let activityGuards := if plan.activityGuards.isEmpty then
       plan.operations.flatMap fun operation => List.replicate operation.fieldGroups.length none
     else
@@ -159,12 +163,13 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     inputs := inputs
     groups := groups
     groupGuards := guardResults.map (·.term)
-    returns := []
+    returns := returnResults.map (·.term)
     assertions := conditions.flatMap (fun result => result.assertions ++ [result.term]) ++
       outputAssertions ++ readAssertions ++
       guardConditions.flatMap (fun result => result.assertions ++ [result.term]) ++
-      operationAssertions ++ guardResults.flatMap (·.assertions)
-    bounds := bounds ++ constraints ++ readBounds ++ guards ++ guardResults.flatMap (·.bounds)
+      operationAssertions ++ returnedAssertions ++ guardResults.flatMap (·.assertions)
+    bounds := bounds ++ constraints ++ readBounds ++ guards ++ returnedBounds ++
+      guardResults.flatMap (·.bounds)
   }
 
 end Noctium.Backend.Native

@@ -436,6 +436,11 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
   let targetPlanFields := if profile.name == TargetProfile.selected321.name then [
     ("target", toJson profile.name), ("targetProfile", toJson profile)
   ] else []
+  let returnFields := if ep.returns.isEmpty then [] else [
+    ("returns", toJson (ep.returns.map fun returned => Json.mkObj [
+      ("name", toJson returned.name), ("type", toJson (typeName returned.ty)),
+      ("visibility", toJson ("public" : String)),
+      ("expression", nativeExpressionJson returned.value)]))]
   return Json.mkObj ([
     ("schemaVersion", toJson (1 : Nat))] ++ targetPlanFields ++ [
     ("contractName", toJson contractName.toString),
@@ -444,6 +449,7 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
+    ] ++ returnFields ++ [
     ("reads", toJson (plan.reads.map fun item => Json.mkObj ([
       ("name", toJson item.name),
       ("type", toJson (if item.schema.isSome then "Composite" else typeName item.ty))] ++
@@ -580,13 +586,18 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
   let contractMetadata := contracts.map fun (name, contract) => Json.mkObj [
     ("name", toJson name.toString),
     ("state", toJson (contract.state.map stateJson)),
-    ("entrypoints", toJson (contract.entrypoints.map fun ep => Json.mkObj [
+    ("entrypoints", toJson (contract.entrypoints.map fun ep => Json.mkObj ([
       ("name", toJson ep.name), ("circuit", toJson ep.circuit.name),
       ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
       ("nativePlanFile", toJson (nativePlanFile name ep)),
       ("nativeCircuitQualified", toJson Bool.false),
       ("effects", toJson (ep.effects.zipIdx.map fun (effect, index) =>
-        guardedEffectJson (ep.effectGuards[index]?.getD none) effect))]))]
+        guardedEffectJson (ep.effectGuards[index]?.getD none) effect))] ++
+      (if ep.returns.isEmpty then [] else [
+        ("returns", toJson (ep.returns.map fun returned => Json.mkObj [
+          ("name", toJson returned.name), ("type", toJson (typeName returned.ty)),
+          ("visibility", toJson ("public" : String)),
+          ("expression", nativeExpressionJson returned.value)]))]))))]
   let controlFields := if controls.isEmpty then [] else [
     ("hostControlPlans", toJson (controls.toList.map fun name => Json.mkObj [
       ("name", toJson name.toString), ("file", toJson (artifactName name ++ ".control.json")),

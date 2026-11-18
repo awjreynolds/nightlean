@@ -870,6 +870,7 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "entrypoint",
             "operations",
             "reads",
+            "returns",
             "state",
             "circuit",
             "guards",
@@ -968,6 +969,23 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             && matched[0]["circuit"] == plan["circuit"]["name"],
         "plan_mismatch",
         "metadata entrypoint does not match selected plan and circuit",
+    )?;
+    require(
+        matched[0].get("returns") == plan.get("returns"),
+        "plan_mismatch",
+        "call return schema differs from compiler metadata",
+    )?;
+    let return_count = match plan.get("returns") {
+        None => 0,
+        Some(Value::Array(values)) if values.len() <= 256 => values.len(),
+        _ => return Err(error("plan_mismatch", "invalid call return schema")),
+    };
+    require(
+        circuit["outputs"].as_array().is_some_and(|values| {
+            values.len() == return_count && values.iter().all(|value| value == "Scalar<BLS12-381>")
+        }),
+        "plan_mismatch",
+        "native output header differs from the call return schema",
     )?;
     let circuits = metadata["circuits"]
         .as_array()

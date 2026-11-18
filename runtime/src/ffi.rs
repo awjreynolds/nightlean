@@ -165,7 +165,7 @@ fn validate_circuit(value: &Json) -> Result<(), i32> {
         || !value
             .get("outputs")
             .and_then(Json::as_array)
-            .is_some_and(|a| a.is_empty())
+            .is_some_and(|a| a.len() <= 256 && a.iter().all(|value| value == "Scalar<BLS12-381>"))
     {
         return Err(INVALID_ARGUMENT);
     }
@@ -234,6 +234,7 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
         || plan.circuit.outputs.len() > MAX_INPUTS
         || plan.operations.len() > MAX_OPERATIONS
         || plan.reads.len() > MAX_INPUTS
+        || plan.returns.len() > 256
         || plan.state.len() > 16
     {
         return Err(LIMIT);
@@ -285,6 +286,9 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
         .map_err(|_| INVALID_ARGUMENT)?;
     create_state(plan, &begin.state).map_err(|_| INVALID_ARGUMENT)?;
     validate_circuit(&begin.circuit)?;
+    if begin.circuit["outputs"].as_array().map(Vec::len) != Some(begin.plan.returns.len()) {
+        return Err(INVALID_ARGUMENT);
+    }
     let circuit = serde_json::to_vec(&begin.circuit).map_err(|_| INVALID_ARGUMENT)?;
     IrSource::load(circuit.as_slice()).map_err(|_| INVALID_ARGUMENT)?;
     let private_inputs = plan
@@ -343,9 +347,12 @@ fn complete(session: &Session) -> Result<Json, ()> {
             (out.name.clone(), value)
         })
         .collect();
-    Ok(
-        json!({"abiVersion":ABI_VERSION,"status":"completed","result":{"publicOutputs":outputs,"operations":execution.program.len(),"activityGroups":active.len(),"officialCircuitChecked":true,"proofGenerated":false,"transactionSubmitted":false,"privateStateJournal":null}}),
-    )
+    let mut result = json!({"abiVersion":ABI_VERSION,"status":"completed","result":{"publicOutputs":outputs,"operations":execution.program.len(),"activityGroups":active.len(),"officialCircuitChecked":true,"proofGenerated":false,"transactionSubmitted":false,"privateStateJournal":null}});
+    if !execution.returns().is_empty() {
+        result["result"]["returns"] =
+            serde_json::to_value(execution.returns_json()).map_err(|_| ())?;
+    }
+    Ok(result)
 }
 fn host_error(error: crate::host::Error) -> i32 {
     match error {

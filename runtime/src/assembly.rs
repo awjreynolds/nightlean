@@ -307,7 +307,7 @@ fn build_for_deployment(
     };
     let randomness = nonzero_random(rng)?;
     let commitment =
-        onchain_runtime::communication_commitment(empty.clone(), empty.clone(), randomness);
+        onchain_runtime::communication_commitment(empty.clone(), evaluated.call_output()?, randomness);
     let context = QueryContext::new(initial.data.clone(), address);
     let mut partitions = partition_transcripts(
         &[PreTranscript {
@@ -362,7 +362,7 @@ fn build_for_deployment(
             .map(field_value)
             .collect(),
         input: empty.clone(),
-        output: empty,
+        output: evaluated.call_output()?,
         communication_commitment_rand: randomness,
         key_location: KeyLocation(Cow::Owned(plan.entrypoint.clone())),
     };

@@ -42,6 +42,7 @@ export function createState(plan,config){
  return new l.ChargedState(data);
 }
 export function materialize(plan,inputs,context,cost){
+ if(plan.returns?.length)throw Error('Committed call returns require the native Rust runtime');
  const env=environment(plan,inputs),program=[];let readIndex=0,previous;
  for(const instruction of plan.operations){
   let op;

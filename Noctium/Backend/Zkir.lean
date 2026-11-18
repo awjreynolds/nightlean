@@ -762,9 +762,11 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
     let guard := ((plan.activityGuards[index]?).getD none).getD (.bool true)
     for fields in operation.fieldGroups do
       bindPublicGuarded guard (← fields.mapM lowerExpr)
-  -- Contract outputs are named values used in state effects. The transaction
-  -- call has empty explicit return value; all disclosed values are in transcript.
-  emit "output" [("vals", toJson ([] : List String))]
+  -- Entrypoint returns are public outputs committed with the call statement.
+  let mut returned := []
+  for output in entry.returns do
+    returned := returned ++ [← lowerExpr output.value]
+  emit "output" [("vals", toJson returned)]
 
 /-- Compile a native ledger transcript relation. Public-input binding includes
 all opcode, alignment, key, read-result and write-value fields. The caller must
@@ -775,7 +777,8 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagn
   let (_, result) := (lowerEntrypointBody entry plan).run {}
   let program := Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
-    ("inputs", Json.arr #[]), ("outputs", Json.arr #[]),
+    ("inputs", Json.arr #[]),
+    ("outputs", Json.arr (entry.returns.toArray.map fun _ => nativeType)),
     -- Ledger ContractCall.public_inputs always includes the commitment after
     -- binding input. Standalone relations above deliberately keep it disabled.
     ("do_communications_commitment", toJson true),
