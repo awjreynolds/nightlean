@@ -2010,7 +2010,33 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
     for input in source_inputs {
         shape(input, &["name", "type", "visibility"], false)?;
         match text(input, "visibility")? {
-            "public" => public_source_inputs.push(input),
+            "public" => {
+                let input_name = text(input, "name")?;
+                let input_type = text(input, "type")?;
+                match ScalarType::parse(input_type)? {
+                    ScalarType::Bytes32 => {
+                        for index in 0..32 {
+                            public_source_inputs.push((
+                                format!("_noctium_bytes_{input_name}_{index}"),
+                                "UIntRange<256>".to_owned(),
+                            ));
+                        }
+                    }
+                    ScalarType::JubjubScalar => public_source_inputs.push((
+                        format!("_noctium_jubjub_scalar_{input_name}"),
+                        "Native".to_owned(),
+                    )),
+                    ScalarType::JubjubPoint => {
+                        for index in 0..2 {
+                            public_source_inputs.push((
+                                format!("_noctium_jubjub_point_{input_name}_{index}"),
+                                "Native".to_owned(),
+                            ));
+                        }
+                    }
+                    _ => public_source_inputs.push((input_name.to_owned(), input_type.to_owned())),
+                }
+            }
             "private" => {}
             _ => bail!("invalid Impact source input visibility"),
         }
@@ -2021,13 +2047,13 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
         reads.len() >= public_source_inputs.len(),
         "Impact plan is missing its public input prologue"
     );
-    for (input, read) in public_source_inputs.iter().zip(reads) {
+    for ((input_name, input_type), read) in public_source_inputs.iter().zip(reads) {
         ensure!(
             read.get("components").is_none()
                 && read.get("guard").is_none()
                 && read.get("schema").is_none()
-                && text(input, "name")? == text(read, "name")?
-                && text(input, "type")? == text(read, "type")?,
+                && input_name == text(read, "name")?
+                && input_type == text(read, "type")?,
             "Impact plan public input prologue mismatch"
         );
     }
@@ -4740,6 +4766,25 @@ mod aggregate_budget_tests {
 
 #[cfg(test)]
 mod completed_invocation_tests {
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    fn typed_public_prologue_uses_all_byte_and_curve_projection_reads() {
+        let mut plan: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.registerWithKey.impact.json"
+        )).unwrap();
+        let control: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.registerWithKey.witness.control.json"
+        )).unwrap();
+        let binding: serde_json::Value =
+            serde_json::from_str(control["binding"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            super::expected_ledger_inputs(&plan).unwrap(),
+            binding["ledgerInputs"].as_array().unwrap().clone()
+        );
+        plan["reads"][31]["name"] = serde_json::json!("changed_high_byte_projection");
+        assert!(super::expected_ledger_inputs(&plan).is_err());
+    }
+
     use super::{AuthenticatedNativeTarget, InvocationTarget, Session, TypedResponse};
     use crate::{control::Plan, host};
     use serde_json::{Value as Json, json};

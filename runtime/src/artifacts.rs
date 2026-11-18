@@ -1211,10 +1211,10 @@ fn validate_witness_payloads(
         circuit_name,
         crate::profile::NAME,
     )
-    .map_err(|_| {
+    .map_err(|cause| {
         error(
             "plan_mismatch",
-            "typed witness relation or input binding mismatch",
+            format!("typed witness relation or input binding mismatch: {cause}"),
         )
     })
 }
