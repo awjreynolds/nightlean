@@ -65,5 +65,6 @@ jobs:
           lake env lean tests/Issue43GuardedReads.lean
           lake env lean tests/Issue43EffectBlocks.lean
           lake env lean examples/openzeppelin/PublicSupply.lean
+          lake env lean examples/openzeppelin/ConfidentialToken.lean
       - name: Check readable private state source and disclosure
         run: bash tests/private-authoring-cli.sh

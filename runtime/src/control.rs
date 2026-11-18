@@ -1162,6 +1162,8 @@ fn validate_relation_inputs(
                 "duplicate native relation input"
             );
             declared_order.push((input_name.to_owned(), visibility.to_owned()));
+        } else if operation == "constrain_to_boolean" {
+            pending_constraints.push((text(instruction, "val")?.to_owned(), 1));
         } else if operation == "constrain_bits" {
             if let (Some(input), Some(bits)) = (
                 instruction.get("val").and_then(Json::as_str),
