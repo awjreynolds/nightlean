@@ -191,6 +191,65 @@ noctium_witness_circuit transferValue where
   output memoAmount : Native := disclose(memoValue)
 end
 
+noctium_witness_circuit debitBalance where
+  read private Wallet.accountSecret as accountSecret
+  read private Wallet.encryptionSecret as encryptionSecret
+  public accountId : Bytes32
+  private value : UInt 128
+  public balanceC1X : Native
+  public balanceC1Y : Native
+  public balanceC2X : Native
+  public balanceC2Y : Native
+  let seed : Bytes32 := witness freshSeed()
+  let plaintext : UInt 128 := witness plaintextBalance(
+    jubjubFromCoordinates(balanceC1X, balanceC1Y),
+    jubjubFromCoordinates(balanceC2X, balanceC2Y))
+  let identity : JubjubPoint := jubjubFromCoordinates(0, 1)
+  let derivedAccountId : Bytes32 := persistentHash32(accountSecret)
+  let encryptionScalar : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([bytes32("ElGamal:secretToScalar"), encryptionSecret])))
+  let ownerPk : JubjubPoint := jubjubMulGenerator(encryptionScalar)
+  let ownerC1 : JubjubPoint := jubjubFromCoordinates(balanceC1X, balanceC1Y)
+  let ownerC2 : JubjubPoint := jubjubFromCoordinates(balanceC2X, balanceC2Y)
+  let remaining : UInt 128 := sub(plaintext, value)
+  let valueField : Native := cast(Native, value)
+  let valuePoint : JubjubPoint := jubjubMulGenerator(jubjubScalarFromNative(valueField))
+  let debitHash : Bytes32 := persistentHashVector32([
+    seed, bytes32("debit_balance")])
+  let debitR : JubjubScalar := jubjubScalarFromNative(degradeToNative(debitHash))
+  let nextC1 : JubjubPoint := jubjubAdd(ownerC1, jubjubNeg(jubjubMulGenerator(debitR)))
+  let nextC2 : JubjubPoint := jubjubAdd(ownerC2,
+    jubjubNeg(jubjubAdd(valuePoint, jubjubMul(ownerPk, debitR))))
+  let recovered : JubjubPoint := jubjubAdd(nextC2,
+    jubjubNeg(jubjubMul(nextC1, encryptionScalar)))
+  let remainingPoint : JubjubPoint := jubjubMulGenerator(
+    jubjubScalarFromNative(cast(Native, remaining)))
+  prove eq(accountId, derivedAccountId)
+  prove eq(eq(ownerPk, identity), false)
+  prove eq(eq(jubjubScalarToNative(debitR), 0), false)
+  prove eq(jubjubAdd(ownerC2,
+    jubjubNeg(jubjubMul(ownerC1, encryptionScalar))),
+    jubjubMulGenerator(jubjubScalarFromNative(cast(Native, plaintext))))
+  prove eq(recovered, remainingPoint)
+  output keyX : Native := disclose(jubjubX(ownerPk))
+  output keyY : Native := disclose(jubjubY(ownerPk))
+  output nextC1X : Native := disclose(jubjubX(nextC1))
+  output nextC1Y : Native := disclose(jubjubY(nextC1))
+  output nextC2X : Native := disclose(jubjubX(nextC2))
+  output nextC2Y : Native := disclose(jubjubY(nextC2))
+end
+
+noctium_circuit accountView where
+  public account : Bytes32
+end
+
+noctium_circuit noViewInputs where
+end
+
+noctium_circuit accountSecretInput where
+  private secret : Bytes32
+end
+
 noctium_contract ConfidentialToken where
   tree encryptionKeys : Bytes32 => struct JubjubKey {
     x : Native
@@ -332,6 +391,66 @@ noctium_contract ConfidentialToken where
     pushFront memos[disclose(recipient)] := fields(
       result.memoX, result.memoY, result.memoAmount)
     return caller : Bytes32 := accountId
+  end
+
+  entry burn uses debitBalance where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    member encryptionKeys[disclose(accountId)] as registered
+    require eq(registered, true)
+    read encryptionKeys[disclose(accountId)] as senderKey
+    require eq(senderKey_x, result.keyX)
+    require eq(senderKey_y, result.keyY)
+    read balances[disclose(accountId)] as oldBalance
+    require eq(oldBalance_c1x, balanceC1X)
+    require eq(oldBalance_c1y, balanceC1Y)
+    require eq(oldBalance_c2x, balanceC2X)
+    require eq(oldBalance_c2y, balanceC2Y)
+    read totalSupply as oldSupply
+    write balances[disclose(accountId)] := fields(
+      result.nextC1X, result.nextC1Y, result.nextC2X, result.nextC2Y)
+    write totalSupply := disclose(sub(oldSupply, value))
+    return caller : Bytes32 := accountId
+  end
+
+  entry totalSupply uses noViewInputs where
+    read totalSupply as currentSupply
+    return supply : UInt 128 := currentSupply
+  end
+
+  entry isRegistered uses accountView where
+    member encryptionKeys[disclose(account)] as registered
+    return value : Bool := registered
+  end
+
+  entry balanceOf uses accountView where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    member balances[disclose(account)] as balancePresent
+    when eq(balancePresent, true) read balances[disclose(account)] as currentBalance
+    return c1 : JubjubPoint := jubjubFromCoordinates(
+      select(balancePresent, currentBalance_c1x, 0),
+      select(balancePresent, currentBalance_c1y, 1))
+    return c2 : JubjubPoint := jubjubFromCoordinates(
+      select(balancePresent, currentBalance_c2x, 0),
+      select(balancePresent, currentBalance_c2y, 1))
+  end
+
+  entry pendingOf uses accountView where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    member pending[disclose(account)] as pendingPresent
+    when eq(pendingPresent, true) read pending[disclose(account)] as currentPending
+    return c1 : JubjubPoint := jubjubFromCoordinates(
+      select(pendingPresent, currentPending_c1x, 0),
+      select(pendingPresent, currentPending_c1y, 1))
+    return c2 : JubjubPoint := jubjubFromCoordinates(
+      select(pendingPresent, currentPending_c2x, 0),
+      select(pendingPresent, currentPending_c2y, 1))
+  end
+
+  entry computeAccountId uses accountSecretInput where
+    return accountId : Bytes32 := disclose(persistentHash32(secret))
   end
 end
 

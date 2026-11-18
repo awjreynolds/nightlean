@@ -65,7 +65,64 @@ fn artifacts(entry: &str) -> (&'static str, &'static str, &'static [u8]) {
                 "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.transfer.zkir"
             ),
         ),
+        "burn" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.burn.witness.control.json"
+            ),
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.burn.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.burn.zkir"
+            ),
+        ),
         _ => panic!("unknown confidential-token entrypoint {entry}"),
+    }
+}
+
+fn view_artifacts(entry: &str) -> (&'static str, &'static [u8]) {
+    match entry {
+        "totalSupply" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.totalSupply.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.totalSupply.zkir"
+            ),
+        ),
+        "isRegistered" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.isRegistered.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.isRegistered.zkir"
+            ),
+        ),
+        "balanceOf" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.balanceOf.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.balanceOf.zkir"
+            ),
+        ),
+        "pendingOf" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.pendingOf.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.pendingOf.zkir"
+            ),
+        ),
+        "computeAccountId" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.computeAccountId.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.computeAccountId.zkir"
+            ),
+        ),
+        _ => panic!("unknown confidential-token view {entry}"),
     }
 }
 
@@ -503,7 +560,7 @@ fn run_entry(
     assert_eq!(reads, expected_reads, "{entry} wallet reads");
     let expected_callbacks: BTreeSet<String> = match entry {
         "mint" => ["OpenZeppelinPort.freshSeed".into()].into(),
-        "transfer" => [
+        "transfer" | "burn" => [
             "OpenZeppelinPort.freshSeed".into(),
             "OpenZeppelinPort.plaintextBalance".into(),
         ]
@@ -541,6 +598,37 @@ fn initial_state(plan: &Plan) -> ChargedState<Db> {
         ]),
     )
     .unwrap()
+}
+
+fn view(
+    entry: &str,
+    account: Option<&[u8; 32]>,
+    state: &ChargedState<Db>,
+) -> BTreeMap<String, Json> {
+    let (plan_text, circuit_bytes) = view_artifacts(entry);
+    let plan: Plan = serde_json::from_str(plan_text).unwrap();
+    let circuit = IrSource::load(circuit_bytes).unwrap();
+    let inputs = match entry {
+        "totalSupply" => BTreeMap::new(),
+        "computeAccountId" => BTreeMap::from([(
+            "secret".into(),
+            bytes(account.expect("computeAccountId needs a secret")),
+        )]),
+        _ => BTreeMap::from([(
+            "account".into(),
+            bytes(account.expect("account view needs an account")),
+        )]),
+    };
+    let execution = prepare(
+        &plan,
+        &inputs,
+        state,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .unwrap();
+    check(&execution, &circuit).unwrap();
+    execution.returns_json()
 }
 
 fn assert_rejects_candidate_mismatch(
@@ -592,6 +680,8 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
     let bob_encryption_secret = [8u8; 32];
     let alice = account_id(&alice_account_secret);
     let bob = account_id(&bob_account_secret);
+    let missing_account_secret = [19u8; 32];
+    let missing = account_id(&missing_account_secret);
     let alice_key_scalar = encryption_scalar(&alice_encryption_secret);
     let bob_key_scalar = encryption_scalar(&bob_encryption_secret);
     let generator = EmbeddedGroupAffine::generator();
@@ -862,5 +952,102 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         &state_before_transfer,
         spendable,
         alice_key,
+    );
+
+    state = after_transfer.clone();
+    let (_, burn_text, _) = artifacts("burn");
+    let burn_plan: Plan = serde_json::from_str(burn_text).unwrap();
+    let burn_seed = [0x33u8; 32];
+    let balance_before_burn = map_record(&burn_plan, &state, "balances", &alice);
+    let balance_after_burn = expected_debit(&burn_seed, owner_after, alice_key, 2);
+    let mut burn_values = BTreeMap::from([
+        ("accountId".into(), bytes(&alice)),
+        ("value".into(), json!("2")),
+    ]);
+    for (name, value) in ["balanceC1X", "balanceC1Y", "balanceC2X", "balanceC2Y"]
+        .into_iter()
+        .zip(balance_before_burn)
+    {
+        burn_values.insert(name.into(), json!(field_decimal(value)));
+    }
+    state = run_entry(
+        "burn",
+        burn_values,
+        &alice_account_secret,
+        &alice_encryption_secret,
+        Some(burn_seed),
+        Some(owner_after),
+        6,
+        &state,
+    )
+    .0;
+    assert_ciphertext(&burn_plan, &state, "balances", &alice, balance_after_burn);
+    assert_eq!(decrypt_small(balance_after_burn, alice_key_scalar, 64), 5);
+    assert_ciphertext(
+        &burn_plan,
+        &state,
+        "pending",
+        &alice,
+        Ciphertext {
+            c1: identity,
+            c2: identity,
+        },
+    );
+    assert_ciphertext(&burn_plan, &state, "pending", &bob, recipient_after);
+    assert_ciphertext(
+        &burn_plan,
+        &state,
+        "balances",
+        &bob,
+        Ciphertext {
+            c1: identity,
+            c2: identity,
+        },
+    );
+    assert_eq!(
+        memo_records(&burn_plan, &state, &alice),
+        memo_records(&burn_plan, &after_transfer, &alice)
+    );
+    assert_eq!(
+        memo_records(&burn_plan, &state, &bob),
+        memo_records(&burn_plan, &after_transfer, &bob)
+    );
+    assert_eq!(
+        map_record(&burn_plan, &state, "creditEpochs", &alice),
+        vec![Fr::from(1u64)]
+    );
+    assert_eq!(
+        map_record(&burn_plan, &state, "creditEpochs", &bob),
+        vec![Fr::from(1u64)]
+    );
+
+    assert_eq!(view("totalSupply", None, &state)["supply"], "10");
+    assert_eq!(view("isRegistered", Some(&alice), &state)["value"], true);
+    assert_eq!(view("isRegistered", Some(&missing), &state)["value"], false);
+    let alice_balance = view("balanceOf", Some(&alice), &state);
+    assert_eq!(alice_balance["c1"], point_json(balance_after_burn.c1));
+    assert_eq!(alice_balance["c2"], point_json(balance_after_burn.c2));
+    assert_eq!(decrypt_small(balance_after_burn, alice_key_scalar, 64), 5);
+    let bob_pending = view("pendingOf", Some(&bob), &state);
+    assert_eq!(bob_pending["c1"], point_json(recipient_after.c1));
+    assert_eq!(bob_pending["c2"], point_json(recipient_after.c2));
+    assert_eq!(decrypt_small(recipient_after, bob_key_scalar, 64), 5);
+    assert_eq!(
+        view("balanceOf", Some(&missing), &state),
+        BTreeMap::from([
+            ("c1".into(), point_json(identity)),
+            ("c2".into(), point_json(identity)),
+        ])
+    );
+    assert_eq!(
+        view("pendingOf", Some(&missing), &state),
+        BTreeMap::from([
+            ("c1".into(), point_json(identity)),
+            ("c2".into(), point_json(identity)),
+        ])
+    );
+    assert_eq!(
+        view("computeAccountId", Some(&alice_account_secret), &state)["accountId"],
+        bytes(&alice)
     );
 }

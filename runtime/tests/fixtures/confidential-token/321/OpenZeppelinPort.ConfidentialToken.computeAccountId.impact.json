@@ -1,0 +1,127 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "encryptionKeys",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"composite":
+       {"typeFingerprint":
+        "NoctiumCompositeTypeV1;r44:OpenZeppelinPort.ConfidentialToken.JubjubKeyNoctiumCompositeLayoutV1;1;R44:OpenZeppelinPort.ConfidentialToken.JubjubKey2;f1:xsNf1:ysN0;",
+        "schemaVersion": 1,
+        "layout":
+        {"kind": "struct",
+         "id": "OpenZeppelinPort.ConfidentialToken.JubjubKey",
+         "fields":
+         [{"name": "x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+        "counts": {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}}}]}}},
+  {"name": "balances",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"composite":
+       {"typeFingerprint":
+        "NoctiumCompositeTypeV1;r54:OpenZeppelinPort.ConfidentialToken.SpendableCiphertextNoctiumCompositeLayoutV1;1;R54:OpenZeppelinPort.ConfidentialToken.SpendableCiphertext4;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+        "schemaVersion": 1,
+        "layout":
+        {"kind": "struct",
+         "id": "OpenZeppelinPort.ConfidentialToken.SpendableCiphertext",
+         "fields":
+         [{"name": "c1x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c1y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+        "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}}}]}}},
+  {"name": "pending",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"composite":
+       {"typeFingerprint":
+        "NoctiumCompositeTypeV1;r52:OpenZeppelinPort.ConfidentialToken.PendingCiphertextNoctiumCompositeLayoutV1;1;R52:OpenZeppelinPort.ConfidentialToken.PendingCiphertext4;f3:c1xsNf3:c1ysNf3:c2xsNf3:c2ysN0;",
+        "schemaVersion": 1,
+        "layout":
+        {"kind": "struct",
+         "id": "OpenZeppelinPort.ConfidentialToken.PendingCiphertext",
+         "fields":
+         [{"name": "c1x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c1y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2x",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+          {"name": "c2y",
+           "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+        "counts": {"leaves": 4, "layoutNodes": 5, "expandedNodes": 5}}}]}}},
+  {"name": "memos",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"list":
+       {"composite":
+        {"typeFingerprint":
+         "NoctiumCompositeTypeV1;r39:OpenZeppelinPort.ConfidentialToken.MemoNoctiumCompositeLayoutV1;1;R39:OpenZeppelinPort.ConfidentialToken.Memo3;f10:ephemeralXsNf10:ephemeralYsNf6:amountsN0;",
+         "schemaVersion": 1,
+         "layout":
+         {"kind": "struct",
+          "id": "OpenZeppelinPort.ConfidentialToken.Memo",
+          "fields":
+          [{"name": "ephemeralX",
+            "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+           {"name": "ephemeralY",
+            "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+           {"name": "amount",
+            "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+         "counts": {"leaves": 3, "layoutNodes": 4, "expandedNodes": 4}}}}]}}},
+  {"name": "creditEpochs",
+   "kind": {"tree": {"map": ["Bytes<32>", {"counter": true}]}}},
+  {"name": "initialized", "kind": {"cell": "Bool"}},
+  {"name": "totalSupply",
+   "kind": {"cell": "UIntRange<340282366920938463463374607431768211456>"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Bytes<32>",
+   "name": "accountId",
+   "expression":
+   {"value": {"tag": "reference", "name": "secret"},
+    "tag": "persistentHash32"}}],
+ "reads": [],
+ "operations": [],
+ "nativeCircuitFile":
+ "OpenZeppelinPort.ConfidentialToken.computeAccountId.zkir",
+ "guards": [],
+ "entrypoint": "computeAccountId",
+ "contractName": "OpenZeppelinPort.ConfidentialToken",
+ "circuit":
+ {"outputs": [],
+  "name": "OpenZeppelinPort.accountSecretInput",
+  "inputs": [{"visibility": "private", "type": "Bytes<32>", "name": "secret"}],
+  "file": "OpenZeppelinPort.accountSecretInput.zkir",
+  "constraints": []}}
