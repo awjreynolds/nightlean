@@ -1577,8 +1577,13 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let exportSpanTerm ← quoteSpan entryExport.span
     let exportTerm ← `(Noctium.Helpers.Export.mk $(stringTerm entryExport.name) $idTerm
       [$inputTerms,*] [] $exportSpanTerm)
-    let programTerm ← `(Noctium.Helpers.Program.mk [{id := 0}] [$declarationTerm]
-      [$exportTerm] $compositeEnvTerm [$signatureTerms,*])
+    let programTerm ← `({
+      scopes := [{id := 0}]
+      declarations := [$declarationTerm]
+      exports := [$exportTerm]
+      composites := $compositeEnvTerm
+      witnesses := [$signatureTerms,*]
+      : Noctium.Helpers.Program })
     let metadataTerm ← observationTerm observation
     elabCommand (← `(def $(mkIdent programSyntaxName) : Noctium.Helpers.Program := $programTerm))
     elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))
