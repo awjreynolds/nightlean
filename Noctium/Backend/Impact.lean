@@ -438,7 +438,7 @@ private def expressionNames : Expr ty → List String
   | .bytes32Literal _ | .bytesLiteral _ _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
-  | .hashToCurve values | .persistentHashNativeVector values => values.flatMap expressionNames
+  | .hashToCurve values | .persistentHashNativeVector values | .transientHash values => values.flatMap expressionNames
   | .toBytes32 value | .fromBytes32 value | .fromBytes value => expressionNames value
   | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => expressionNames value
   | .concatBytes left right => expressionNames left ++ expressionNames right
@@ -565,6 +565,7 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalizeUnder guard))
   | .persistentHashNative value => .persistentHashNative (totalizeUnder guard value)
   | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalizeUnder guard))
+  | .transientHash values => .transientHash (values.map (totalizeUnder guard))
   | .hashToCurve values => .hashToCurve (values.map (totalizeUnder guard))
   | .toBytes32 value => .toBytes32 (totalizeUnder guard value)
   | .reverseBytes32 value => .reverseBytes32 (totalizeUnder guard value)

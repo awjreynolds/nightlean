@@ -62,6 +62,8 @@ private def expressionJson : Expr ty → Json
       ("value", expressionJson value)]
   | .persistentHashNativeVector values => Json.mkObj [("tag", toJson ("persistentHashNativeVector" : String)),
       ("values", toJson (values.map expressionJson))]
+  | .transientHash values => Json.mkObj [("tag", toJson ("transientHash" : String)),
+      ("values", toJson (values.map expressionJson))]
   | .toBytes32 value => Json.mkObj [("tag", toJson ("toBytes32" : String)),
       ("value", expressionJson value)]
   | .fromBytes32 (target := target) value => Json.mkObj [("tag", toJson ("fromBytes32" : String)),
@@ -171,6 +173,8 @@ private def nativeExpressionJson : Expr ty → Json
   | .persistentHashNative value => Json.mkObj [("tag", toJson ("persistentHashNative" : String)),
       ("value", nativeExpressionJson value)]
   | .persistentHashNativeVector values => Json.mkObj [("tag", toJson ("persistentHashNativeVector" : String)),
+      ("values", toJson (values.map nativeExpressionJson))]
+  | .transientHash values => Json.mkObj [("tag", toJson ("transientHash" : String)),
       ("values", toJson (values.map nativeExpressionJson))]
   | .toBytes32 value => Json.mkObj [("tag", toJson ("toBytes32" : String)),
       ("value", nativeExpressionJson value)]

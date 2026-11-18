@@ -98,6 +98,9 @@ and Jubjub operations before semantic evaluation can execute those expressions. 
 structure EvalContext where
   modulus : Nat
   poseidon2 : Nat → Nat → Nat → Except String Nat
+  /-- Qualified pinned native transient_hash oracle. -/
+  transientHash : List Nat → Except String Nat :=
+    fun _ => .error "qualified transient_hash oracle is unavailable"
   /-- Qualified host implementation of the pinned Bytes32 persistent hash.
   The default rejects, so evaluation never substitutes a placeholder hash. -/
   persistentHash32 : List Nat → Except String (List Nat) :=
@@ -587,6 +590,17 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     let value ← ctx.poseidon2 domain (← a.eval ctx env) (← b.eval ctx env)
     if value >= ctx.modulus then throw "hash oracle returned noncanonical value"
     pure value
+  | .transientHash values => do
+    if values.length > Types.defaultLimits.maxVectorLength then
+      throw s!"transient_hash input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    let mut inputs := []
+    for value in values do
+      let field ← value.eval ctx env
+      if field >= ctx.modulus then throw "noncanonical transient_hash Native input"
+      inputs := inputs ++ [field]
+    let result ← ctx.transientHash inputs
+    if result >= ctx.modulus then throw "transient_hash oracle returned noncanonical value"
+    pure result
 
 theorem Expr.eval_reverseBytes32_twice (ctx : EvalContext) (env : EvalEnv)
     (value : Expr (.bytes 32)) :

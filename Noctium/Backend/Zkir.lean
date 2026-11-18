@@ -56,7 +56,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
-  | .hashToCurve values | .persistentHashNativeVector values => checkNativeConstants values
+  | .hashToCurve values | .persistentHashNativeVector values | .transientHash values => checkNativeConstants values
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
   | .jubjubCoordinate value _ => checkConstants value
@@ -929,6 +929,14 @@ def lowerExpr : Expr ty → LowerM String
     emit "hash_to_curve" [("inputs", toJson operands), ("output", toJson output)]
     modify fun state => {state with expressions := (key, output) :: state.expressions}
     pure output
+  | .transientHash values => do
+    let operands ← lowerNativeVectorFields values
+    let key : ExpressionKey := ("transient_hash", operands, none)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "transient_hash" [("inputs", toJson operands), ("output", toJson output)]
+    modify fun state => {state with expressions := (key, output) :: state.expressions}
+    pure output
   | .jubjubMulGenerator scalar => do
     let scalar ← lowerExpr scalar
     let key : ExpressionKey := ("ec_mul_generator", [scalar], none)
@@ -1042,7 +1050,7 @@ def lowerExpr : Expr ty → LowerM String
   | .poseidon2 domain a b => do
     let a ← lowerExpr a
     let b ← lowerExpr b
-    let key : ExpressionKey := ("transient_hash", [a, b], some domain)
+    let key : ExpressionKey := ("transient_hash", [fieldImmediate domain, a, b], none)
     if let some existing := (← get).expressions.lookup key then return existing
     let output ← fresh
     emit "transient_hash" [("inputs", toJson [fieldImmediate domain, a, b]),

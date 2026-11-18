@@ -536,6 +536,15 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
       bounds := (normalized.map (·.bounds)).flatten
       assertions := (normalized.map (·.assertions)).flatten
     }
+  | .transientHash values => do
+    unless values.length ≤ Types.defaultLimits.maxVectorLength do
+      throw "transientHash exceeds the source field-vector bound"
+    let normalized ← values.mapM (normalize env)
+    pure {
+      term := .hash (normalized.map (·.term))
+      bounds := (normalized.map (·.bounds)).flatten
+      assertions := (normalized.map (·.assertions)).flatten
+    }
   | .jubjubMulGenerator scalar => do
     let normalized ← normalize env scalar
     let term : Term := .unary "ec_mul_generator_jubjub" normalized.term

@@ -52,6 +52,15 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard rejected (check [decodeBytes "Scalar<BLS12-381>" "%x"])
 #guard rejected (check [emptyBytes64, decodeBytes "Bool" "%bytes64"])
 #guard rejected (check [emptyBytes64, decodeBytes "Point<Jubjub>" "%bytes64"])
+#guard accepted (check [op "transient_hash" [
+  ("inputs", toJson ([] : List String)), ("output", toJson ("%h" : String))]])
+#guard accepted (check [op "transient_hash" [
+  ("inputs", toJson (List.replicate 1024 ("0x00" : String))), ("output", toJson ("%h" : String))]])
+#guard rejected (check [op "transient_hash" [
+  ("inputs", toJson (List.replicate 1025 ("0x00" : String))), ("output", toJson ("%h" : String))]])
+#guard rejected (check [
+  op "jubjub_scalar_from_native" [("native", toJson ("%x" : String)), ("output", toJson ("%s" : String))],
+  op "transient_hash" [("inputs", toJson (["%s"] : List String)), ("output", toJson ("%h" : String))]])
 #guard accepted (requireInstruction "inv")
 #guard rejected (requireInstruction "copy")
 #guard match valueTypeSupport "Bool" with | .ok (.unsupported _) => true | _ => false

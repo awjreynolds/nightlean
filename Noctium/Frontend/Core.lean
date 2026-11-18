@@ -146,6 +146,7 @@ scoped syntax "bytes32(" str ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
@@ -475,6 +476,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| transientHashNativeVector([$values,*])) =>
+    values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
   | `(nlexpr| hashToCurve([$values,*])) => Bool.true
   | `(nlexpr| toBytes32($value)) => hasPartialScalar value
@@ -740,6 +743,17 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       throwErrorAt stx "persistentHashNativeVector requires 1 to 32 Native fields"
     let valueList ← nativeExprListTerm expressions
     pure (.bytes 32, ← `(Noctium.Expr.persistentHashNativeVector $valueList))
+  | `(nlexpr| transientHashNativeVector([$values,*])) => do
+    let sourceValues := values.getElems.toList
+    unless sourceValues.length ≤ Types.defaultLimits.maxVectorLength do
+      throwErrorAt stx s!"transient hash input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    let values ← sourceValues.mapM fun value => do
+      let (valueTy, expression) ← expression env value
+      unless valueTy == .native do
+        throwErrorAt value "transientHashNativeVector accepts only Native fields"
+      pure expression
+    let valueList ← nativeExprListTerm values
+    pure (.native, ← `(Noctium.Expr.transientHash $valueList))
   | `(nlexpr| persistentHashPoint($point)) => do
     let point ← expected env point .jubjubPoint
     let x ← `(Noctium.Expr.jubjubCoordinate $point 0)

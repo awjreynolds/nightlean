@@ -53,7 +53,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
     for value in values do result := merge result (← origins env value)
     pure result
   | .persistentHashNative value => origins env value
-  | .persistentHashNativeVector values => do
+  | .persistentHashNativeVector values | .transientHash values => do
     let mut result : Origins := []
     for value in values do result := merge result (← origins env value)
     pure result

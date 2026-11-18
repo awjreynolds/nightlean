@@ -170,6 +170,16 @@ fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crat
         };
         return foreign_curve_operation(operation, count);
     }
+    if let Some(encoded_arity) = operation.strip_prefix("transientHashNativeVector:") {
+        let arity = canonical_transient_hash_arity(encoded_arity)?;
+        return Ok((
+            vec![Native; arity],
+            Native,
+            crate::Expr::TransientHash {
+                values: (0..arity).map(|index| *argument(index)).collect(),
+            },
+        ));
+    }
     if let Some(encoded_arity) = operation.strip_prefix("hashToCurve:") {
         let arity = canonical_hash_to_curve_arity(encoded_arity)?;
         return Ok((
@@ -318,6 +328,23 @@ fn canonical_hash_to_curve_arity(text: &str) -> Result<usize> {
     ensure!(
         arity <= crate::MAX_HASH_TO_CURVE_FIELDS,
         "control hashToCurve field limit"
+    );
+    Ok(arity)
+}
+
+fn canonical_transient_hash_arity(text: &str) -> Result<usize> {
+    ensure!(
+        !text.is_empty()
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "noncanonical control transientHashNativeVector arity"
+    );
+    let arity = text
+        .parse::<usize>()
+        .map_err(|_| anyhow!("control transientHashNativeVector arity"))?;
+    ensure!(
+        arity <= crate::MAX_TRANSIENT_HASH_FIELDS,
+        "control transientHashNativeVector field limit"
     );
     Ok(arity)
 }
@@ -610,6 +637,25 @@ fn evaluate_operation(
         values.len() == parameters.len(),
         "control operation argument count"
     );
+    if let crate::Expr::TransientHash {
+        values: expressions,
+    } = &expression
+    {
+        ensure!(
+            result == ScalarType::Native
+                && parameters == vec![ScalarType::Native; values.len()]
+                && expressions.len() == values.len()
+                && values.len() <= crate::MAX_TRANSIENT_HASH_FIELDS,
+            "control transientHashNativeVector type"
+        );
+        let fields = values
+            .iter()
+            .map(crate::Value::field)
+            .collect::<Result<Vec<_>>>()?;
+        return Ok(Value::Native(transient_crypto::hash::transient_hash(
+            &fields,
+        )));
+    }
     let env = values
         .into_iter()
         .zip(parameters)
@@ -1180,6 +1226,32 @@ impl Parser<'_> {
                     "control hash scalar types"
                 );
                 (Type::Scalar(ScalarType::Native), ExprKind::Hash(d, a, b))
+            }
+            "transientHash" => {
+                shape(v, &["tag", "values"], true)?;
+                let values = list(v, "values")?;
+                ensure!(
+                    values.len() <= crate::MAX_TRANSIENT_HASH_FIELDS,
+                    "control transientHashNativeVector field limit"
+                );
+                let arguments = values
+                    .iter()
+                    .map(|value| {
+                        let value = self.expr(value, env, depth + 1)?;
+                        ensure!(
+                            value.ty == Type::Scalar(ScalarType::Native),
+                            "control transientHashNativeVector argument type"
+                        );
+                        Ok(value)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (
+                    Type::Scalar(ScalarType::Native),
+                    ExprKind::Curve(
+                        format!("transientHashNativeVector:{}", arguments.len()),
+                        arguments,
+                    ),
+                )
             }
             "curve" => {
                 ensure!(self.schema_version == 2, "curve operations require v2 plan");
@@ -6398,6 +6470,129 @@ mod completed_invocation_tests {
             );
             assert!(Plan::parse(&plan, None).is_err(), "accepted {operation}");
         }
+    }
+
+    #[test]
+    fn transient_hash_native_vectors_preserve_native_order_and_bounds() {
+        use transient_crypto::curve::Fr;
+        use transient_crypto::hash::transient_hash;
+
+        fn native(value: usize) -> Json {
+            json!({"tag":"constant","value":value.to_string()})
+        }
+        fn run(value: Json, max_steps: usize) -> Json {
+            let mut plan = host_plan("Native", value);
+            plan["limits"]["maxSteps"] = json!(max_steps);
+            run_host_plan(plan)
+        }
+
+        for count in [0usize, 1, 3, 1024] {
+            let fields = (0..count)
+                .map(|value| Fr::from(value as u64))
+                .collect::<Vec<_>>();
+            let expected = json!(crate::field_decimal(transient_hash(&fields)));
+            let values = (0..count).map(native).collect::<Vec<_>>();
+            let direct = run(json!({"tag":"transientHash","values":values}), 4096);
+            let typed = run(
+                json!({
+                    "tag":"curve",
+                    "operation":format!("transientHashNativeVector:{count}"),
+                    "arguments":(0..count).map(native).collect::<Vec<_>>()
+                }),
+                4096,
+            );
+            assert_eq!(direct["status"], "completed");
+            assert_eq!(direct["result"], expected);
+            assert_eq!(typed["status"], "completed");
+            assert_eq!(typed["result"], expected);
+            if count == 0 {
+                assert_eq!(direct["result"], "0");
+            }
+        }
+
+        let direct = run(
+            json!({
+                "tag":"transientHash",
+                "values":[native(3),native(5),native(8)]
+            }),
+            256,
+        );
+        let typed = run(
+            json!({
+                "tag":"curve",
+                "operation":"transientHashNativeVector:3",
+                "arguments":[native(3),native(5),native(8)]
+            }),
+            256,
+        );
+        let legacy = run(
+            json!({
+                "tag":"poseidon2",
+                "domain":"3",
+                "left":native(5),
+                "right":native(8)
+            }),
+            256,
+        );
+        assert_eq!(direct["result"], legacy["result"]);
+        assert_eq!(typed["result"], legacy["result"]);
+
+        for value in [
+            json!({"tag":"bool","value":true}),
+            json!({"tag":"uint","maximum":"1","value":"1"}),
+            json!({
+                "tag":"curve",
+                "operation":"jubjubScalarFromNative",
+                "arguments":[native(1)]
+            }),
+        ] {
+            assert!(
+                Plan::parse(
+                    &host_plan(
+                        "Native",
+                        json!({"tag":"transientHash","values":[value.clone()]})
+                    ),
+                    None
+                )
+                .is_err()
+            );
+            assert!(
+                Plan::parse(
+                    &host_plan(
+                        "Native",
+                        json!({
+                            "tag":"curve",
+                            "operation":"transientHashNativeVector:1",
+                            "arguments":[value]
+                        })
+                    ),
+                    None
+                )
+                .is_err()
+            );
+        }
+
+        let oversized_values = (0..=crate::MAX_TRANSIENT_HASH_FIELDS)
+            .map(native)
+            .collect::<Vec<_>>();
+        assert!(
+            Plan::parse(
+                &host_plan(
+                    "Native",
+                    json!({"tag":"transientHash","values":oversized_values})
+                ),
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            super::curve_operation(&format!(
+                "transientHashNativeVector:{}",
+                crate::MAX_TRANSIENT_HASH_FIELDS + 1
+            ))
+            .is_err()
+        );
+        assert!(super::curve_operation("transientHashNativeVector:01").is_err());
     }
 
     #[cfg(feature = "zkir-321")]

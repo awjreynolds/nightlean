@@ -107,6 +107,8 @@ inductive Expr : Ty → Type where
   | eq (a b : Expr ty) : Expr .bool
   | select (condition : Expr .bool) (yes no : Expr ty) : Expr ty
   | poseidon2 (domain : Nat) (a b : Expr .native) : Expr .native
+  /-- Hash the exact ordered Native operands with the pinned transient_hash. -/
+  | transientHash (values : List (Expr .native)) : Expr .native
   deriving Repr
 
 structure Input where
@@ -668,6 +670,11 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     if !caps.poseidon2 then throw "target lacks qualified Poseidon support"
     a.validate caps env
     b.validate caps env
+  | .transientHash values => do
+    unless caps.poseidon2 do throw "target lacks qualified Poseidon support"
+    unless values.length ≤ Types.defaultLimits.maxVectorLength do
+      throw s!"transient_hash input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    for value in values do value.validate caps env
 
 def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except String Unit
   | .mk _ value => value.validate caps env

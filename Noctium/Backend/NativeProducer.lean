@@ -692,7 +692,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       define state yName y
   | "transient_hash" =>
     let values ← nativeArguments state instruction "inputs"
-    ensure (!values.isEmpty) "empty native transient hash is unsupported by this producer"
+    ensure (values.length ≤ Types.defaultLimits.maxVectorLength)
+      "transient_hash exceeds the source field-vector bound"
     defineResult state instruction (← combine (.hash (values.map (·.term)))
       (Field.modulus - 1) values)
   | "impact" =>
