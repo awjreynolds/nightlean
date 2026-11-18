@@ -358,7 +358,7 @@ private def nativeFieldAlignment : Json := Json.arr #[nativeFieldAtom]
 private def nativeFieldVectorAlignment (length : Nat) : Json :=
   Json.arr ((List.replicate length nativeFieldAtom).toArray)
 
-/-- Emit/reuse one typed aligned SHA-256 operation and its modern Encode outputs.
+/-- Emit/reuse one typed aligned SHA-256 operation and its typed byte-packing outputs.
 The key includes the preimage kind, so identical field strings under different
 FAB alignments never share a digest. The returned chunks use Encode order. -/
 private def lowerPersistentHash (preimageKind : String) (alignment : Json)
@@ -381,7 +381,7 @@ private def lowerPersistentHash (preimageKind : String) (alignment : Json)
   | _ => do
     let low ← fresh
     let high ← fresh
-    emit "encode" [("input", toJson hashOutput), ("outputs", toJson [low, high])]
+    emit "bytes_into_natives" [("bytes", toJson hashOutput), ("outputs", toJson [low, high])]
     modify fun state => {state with expressions :=
       (lowKey, low) :: (highKey, high) :: state.expressions}
     pure [low, high]
@@ -394,7 +394,7 @@ private def encodeBytes32 (bytes : String) : LowerM (String × String) := do
   | _ => do
     let low ← fresh
     let high ← fresh
-    emit "encode" [("input", toJson bytes), ("outputs", toJson [low, high])]
+    emit "bytes_into_natives" [("bytes", toJson bytes), ("outputs", toJson [low, high])]
     modify fun state => {state with expressions :=
       (lowKey, low) :: (highKey, high) :: state.expressions}
     pure (low, high)
@@ -504,7 +504,7 @@ private def encodeFixedBytes (length : Nat) (bytes : String) : LowerM ByteOperan
   if cached.all Option.isSome then
     return {values := cached.filterMap id, packed := true}
   let outputs ← keys.mapM fun _ => fresh
-  emit "encode" [("input", toJson bytes), ("outputs", toJson outputs)]
+  emit "bytes_into_natives" [("bytes", toJson bytes), ("outputs", toJson outputs)]
   modify fun state => {state with expressions := keys.zip outputs ++ state.expressions}
   pure {values := outputs, packed := true}
 

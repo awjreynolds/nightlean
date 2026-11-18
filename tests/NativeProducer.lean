@@ -47,7 +47,7 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard valueTypeNames.length == 15
 #guard instructionNames.eraseDups.length == 47
 #guard valueTypeNames.eraseDups.length == 15
-#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 38
+#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 39
 #guard rejected (requireInstruction "new_native_without_metadata")
 #guard rejected (check [decodeBytes "Scalar<BLS12-381>" "%x"])
 #guard rejected (check [emptyBytes64, decodeBytes "Bool" "%bytes64"])
@@ -65,6 +65,42 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard rejected (requireInstruction "copy")
 #guard match valueTypeSupport "Bool" with | .ok (.unsupported _) => true | _ => false
 #guard match valueTypeSupport "Bytes" with | .ok (.unsupported _) => true | _ => false
+
+private def packedBytes : Fact := {
+  term := .input "%bytes"
+  maximum := 0
+  valueType := .bytes 64}
+
+private def packingState (fact : Fact) : State :=
+  {definitions := [("%bytes", fact)]}
+
+private def packBytes64 (outputs : List String) : Json :=
+  op "bytes_into_natives" [("bytes", toJson ("%bytes" : String)), ("outputs", toJson outputs)]
+
+#guard match validateInstruction expected (packingState packedBytes)
+    (packBytes64 ["%low", "%middle", "%high"]) with
+  | .ok state =>
+    match state.definitions.lookup "%low", state.definitions.lookup "%middle",
+        state.definitions.lookup "%high" with
+    | some low, some middle, some high =>
+      low.term == encodedBytesChunkTerm 64 packedBytes.term 0 &&
+      middle.term == encodedBytesChunkTerm 64 packedBytes.term 1 &&
+      high.term == encodedBytesChunkTerm 64 packedBytes.term 2 &&
+      low.maximum == 2 ^ (31 * 8) - 1 && middle.maximum == 2 ^ (31 * 8) - 1 &&
+      high.maximum == 2 ^ (2 * 8) - 1
+    | _, _, _ => false
+  | .error _ => false
+
+#guard rejected (validateInstruction expected (packingState packedBytes)
+  (packBytes64 ["%low", "%middle"]))
+#guard rejected (validateInstruction expected
+  (packingState {packedBytes with valueType := .bytes 0}) (packBytes64 []))
+#guard rejected (validateInstruction expected
+  (packingState {packedBytes with valueType := .bytes 1025})
+  (packBytes64 (List.replicate 34 "%chunk")))
+#guard rejected (validateInstruction expected
+  (packingState {packedBytes with valueType := .native})
+  (packBytes64 ["%low", "%middle", "%high"]))
 
 -- A primitive cannot acquire default privacy/effect behavior silently.
 example : True := by

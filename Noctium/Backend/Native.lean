@@ -188,6 +188,10 @@ def instructionSupport (opcode : String) : Except String Support :=
     let descriptor := scalar .encodeValue .propagateAll .pure .typedEncodeInput
       .noGuard .typedEncoding ["input", "outputs"]
     {descriptor with encoding := .nativeLimbs}
+  | "bytes_into_natives" => .supported <|
+    let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
+      .noGuard .fixedBytes ["bytes", "outputs"]
+    {descriptor with encoding := .fixedBytes}
   | "nth" => .supported <|
     let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
       .noGuard .fixedBytes ["bytes", "index", "output"]

@@ -152,6 +152,19 @@ def define (state : State) (name : String) (fact : Fact) : Except String State :
 def defineResult (state : State) (instruction : Json) (fact : Fact) : Except String State := do
   define state (← stringField instruction "output") fact
 
+private def defineByteChunks (state : State) (input : Fact) (length : Nat)
+    (outputs : Array Json) : Except String State := do
+  ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
+    "byte encoding length is unsupported"
+  ensure (outputs.size == bytesChunkCount length) "byte encode chunk count mismatch"
+  let mut state := state
+  for index in List.range outputs.size do
+    let name ← outputs[index]!.getStr?
+    let fact ← combine (encodedBytesChunkTerm length input.term index)
+      (2 ^ (8 * bytesChunkWidth length index) - 1) [input]
+    state ← define state name fact
+  pure state
+
 def refine (state : State) (text : String) (maximum : Nat) : Except String State := do
   let fact ← operand state text
   requireNative fact
@@ -526,16 +539,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
         state ← define state name fact
       pure state
     else if let some length := byteLength? input.valueType then do
-      ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
-        "encode byte length is unsupported"
-      ensure (outputs.size == bytesChunkCount length) "byte encode chunk count mismatch"
-      let mut state := state
-      for index in List.range outputs.size do
-        let name ← outputs[index]!.getStr?
-        let fact ← combine (encodedBytesChunkTerm length input.term index)
-          (2 ^ (8 * bytesChunkWidth length index) - 1) [input]
-        state ← define state name fact
-      pure state
+      defineByteChunks state input length outputs
     else if input.valueType == .bool then do
       ensure (outputs.size == 1) "Bool encode requires exactly one Native output"
       requireBoolean input
@@ -564,6 +568,12 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       let term ← toBytes32Term input.valueType input.term
       let fact ← combine term 0 [input]
       defineResult state instruction {fact with valueType := .bytes32}
+  | "bytes_into_natives" => do
+    let bytes ← argument state instruction "bytes"
+    let some length := byteLength? bytes.valueType
+      | throw "bytes_into_natives requires typed bytes"
+    let outputs ← arrayField instruction "outputs"
+    defineByteChunks state bytes length outputs
   | "reverse" => do
     let bytes ← argument state instruction "bytes"
     let some length := byteLength? bytes.valueType | throw "reverse requires typed bytes"
