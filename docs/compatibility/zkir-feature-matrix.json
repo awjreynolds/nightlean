@@ -4757,11 +4757,21 @@
         "../../tests/ForeignTransport.lean",
         "../../runtime/tests/foreign_transport.rs"
       ]
+    },
+    {
+      "issue": 75,
+      "commit": "1d389cf",
+      "scope": "Complete requested Secp field/group operation and byte-conversion slice, with typed overloads and retained partial failures/guard totalization. Focused source/native/witness checks and legacy compile pass; no keys/proofs/deployment. Foreign storage remains open.",
+      "refs": [
+        "../development/foreign-operations.md",
+        "../../tests/ForeignOperations.lean",
+        "../../runtime/tests/foreign_operations.rs"
+      ]
     }
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "562b70400ac630a1c3bdb1af42aa41560cb8478e",
+    "sourceCommit": "1d389cfd230cf5f1b61e30efdd80f4fc335e2c62",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub paths and six typed Secp transport paths. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -5088,7 +5098,7 @@
       "checks": "Lean encoding/decoding guards and 12field boundary vectors plus2identities compared with pinned native conversion/encoding. One focused Rust test checks all6types, generator/identity roundtrips, malformed limbs, noncanonical field encodings, altered identity and off-curve rejection.",
       "compilerTypeIntegration": true,
       "opcodeCoverageChange": 0,
-      "limits": "Foundation scope at its recorded commit was codec only. Current typed integration is described in foreignTransportEvidence. Full arithmetic, curve operations and ledger storage remain open under issue75."
+      "limits": "Codec foundation at its recorded commit; current typed transport and operations have separate evidence below. Foreign ledger storage and broader assurance remain open under issue75."
     },
     "foreignTransportEvidence": {
       "issue": 75,
@@ -5101,7 +5111,20 @@
       "focusedChecks": "Compiler build, source guards, real Rust Session, one source-generated native checker case with both choose paths, six public and six private foreign values, field modulus-minus-one/scalar-order-minus-one and generator/identity points, exact19 private fields, altered public transcript/private point flag, wrong family tag and field byte alias rejection.",
       "nativeCheckerRuntimeSeconds": 0.02,
       "legacyScope": "The zkir-320 runtime library compiled after the shared value changes. New foreign runtime variants remain321-only. No legacy proof/ledger requalification.",
-      "limits": "No new opcode names, keys, proofs or deployment. Foreign field/group arithmetic, further byte-conversion syntax, ledger storage and formal witness/compiler preservation remain open. Nonidentity point load_constant is not qualified."
+      "limits": "Transport evidence at its recorded commit; field/group/byte operations have separate foreignOperationsEvidence. Foreign ledger storage and formal preservation remain open. Nonidentity point load_constant remains unqualified."
+    },
+    "foreignOperationsEvidence": {
+      "issue": 75,
+      "implementationCommit": "1d389cfd230cf5f1b61e30efdd80f4fc335e2c62",
+      "source": "../../tests/ForeignOperations.lean",
+      "native": "../../runtime/tests/foreign_operations.rs",
+      "guide": "../development/foreign-operations.md",
+      "scope": "Both Secp families and all six types: field add/sub/mul/neg/nonzero inverse, point add/sub/neg/matching scalar and generator multiplication, coordinate construction/extraction, field32/point33 encoding and reducing field0..1024/canonical point33 decoding.",
+      "partialOperations": "Active zero inverse, identity extraction, off-curve construction and malformed compressed decoding retain explicit assertion/roundtrip obligations. Structured inactive guards substitute safe typed values; eager select stays eager. Empty field decoding retains operand evaluation/assertions.",
+      "focusedChecks": "Compiler/source guards, real Rust witness Session, source-generated native checker case with BigUint field expectations, separate generator route point expectations,64-byte field reduction, empty field assertion, unchanged inactive marker cells and87private fields. Each of4guard failures rejects in host and raw native preimage. Legacy320 runtime compiles.",
+      "nativeCheckerRuntimeSeconds": 0.03,
+      "sourceSemantics": "Pure field arithmetic and directly checked point rules, with explicit fail-closed oracle hooks for other point math and SEC1 codecs. Oracle results are validated for kind/canonicality.",
+      "limits": "No new opcode names, keys, proofs or deployment. No claim of whole-language preservation. Foreign ledger storage, Curve25519 and nonidentity point load_constant remain separate work."
     }
   }
 }
