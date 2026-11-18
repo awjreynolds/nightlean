@@ -562,6 +562,8 @@ enum ExprKind {
     Or(Arc<Expr>, Arc<Expr>),
     Hash(String, Arc<Expr>, Arc<Expr>),
     Curve(String, Vec<Arc<Expr>>),
+    #[cfg(feature = "zkir-321")]
+    ForeignEncodedField(Arc<Expr>, usize),
     Bytes(String, Vec<Arc<Expr>>),
     Call(String, Vec<Arc<Expr>>),
     Witness(String),
@@ -659,6 +661,65 @@ impl Parser<'_> {
                 shape(v, &["tag", "value"], true)?;
                 let x = Value::Native(canonical_field(text(v, "value")?)?);
                 (Type::Scalar(x.scalar_type()), ExprKind::Literal(x))
+            }
+            #[cfg(feature = "zkir-321")]
+            "foreignConstant" => {
+                ensure!(self.schema_version == 2, "foreign values require v2 plan");
+                shape(v, &["tag", "type", "encoding"], true)?;
+                let token = text(v, "type")?;
+                let ScalarType::Foreign(foreign_type) = ScalarType::parse(token)? else {
+                    bail!("foreign constant requires a foreign source type")
+                };
+                let encoding = list(v, "encoding")?;
+                ensure!(
+                    encoding.len() == foreign_type.native_type().encoded_len(),
+                    "wrong native field count for foreign constant"
+                );
+                let encoding = encoding
+                    .iter()
+                    .map(|field| {
+                        field
+                            .as_str()
+                            .map(str::to_owned)
+                            .ok_or_else(|| anyhow!("foreign encoding fields must be decimal strings"))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                let value = crate::evaluate(
+                    &crate::Expr::ForeignConstant {
+                        ty: token.to_owned(),
+                        encoding,
+                    },
+                    &crate::Environment::new(),
+                )?;
+                ensure!(
+                    value.scalar_type() == ScalarType::Foreign(foreign_type),
+                    "foreign constant result type mismatch"
+                );
+                (
+                    Type::Scalar(ScalarType::Foreign(foreign_type)),
+                    ExprKind::Literal(value),
+                )
+            }
+            #[cfg(feature = "zkir-321")]
+            "foreignEncodedField" => {
+                ensure!(self.schema_version == 2, "foreign values require v2 plan");
+                shape(v, &["tag", "value", "index"], true)?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                let Type::Scalar(ScalarType::Foreign(foreign_type)) = &value.ty else {
+                    bail!("foreign encoded field projection requires a foreign value")
+                };
+                let index = field(v, "index")?
+                    .as_u64()
+                    .and_then(|index| usize::try_from(index).ok())
+                    .ok_or_else(|| anyhow!("invalid foreign encoded field index"))?;
+                ensure!(
+                    index < foreign_type.native_type().encoded_len(),
+                    "foreign encoded field index out of range"
+                );
+                (
+                    Type::Scalar(ScalarType::Native),
+                    ExprKind::ForeignEncodedField(value, index),
+                )
             }
             "bool" => {
                 shape(v, &["tag", "value"], true)?;
@@ -758,6 +819,10 @@ impl Parser<'_> {
                             (ScalarType::Bytes32 | ScalarType::Bytes(_), _)
                             | (_, ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
                                 bail!("control byte arithmetic")
+                            }
+                            #[cfg(feature = "zkir-321")]
+                            (ScalarType::Foreign(_), _) | (_, ScalarType::Foreign(_)) => {
+                                bail!("control foreign values do not support scalar arithmetic")
                             }
                             (ScalarType::Bool, _) | (_, ScalarType::Bool) => {
                                 bail!("control Boolean arithmetic")
@@ -1571,6 +1636,8 @@ fn validate_relation_inputs(
                 None
             }
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => None,
+            #[cfg(feature = "zkir-321")]
+            ScalarType::Foreign(_) => None,
         };
         if let Some(bits) = required_bits {
             ensure!(
@@ -2376,6 +2443,15 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
                             ));
                         }
                     }
+                    #[cfg(feature = "zkir-321")]
+                    ScalarType::Foreign(foreign_type) => {
+                        for index in 0..foreign_type.native_type().encoded_len() {
+                            public_source_inputs.push((
+                                format!("_noctium_foreign_{input_name}_{index}"),
+                                "Native".to_owned(),
+                            ));
+                        }
+                    }
                     _ => public_source_inputs.push((input_name.to_owned(), input_type.to_owned())),
                 }
             }
@@ -2654,6 +2730,11 @@ impl Abstractor<'_> {
             | ExprKind::Hash(_, _, _)
             | ExprKind::Curve(_, _)
             | ExprKind::Bytes(_, _) => None,
+            #[cfg(feature = "zkir-321")]
+            ExprKind::ForeignEncodedField(value, _) => {
+                let _ = self.expression(value, env)?;
+                None
+            }
         })
     }
     fn body(&mut self, body: &Block, initial: &Constants, result: &Type) -> Result<AbstractFlow> {
@@ -3151,6 +3232,8 @@ enum Task {
     Eq(Type),
     Hash(String),
     Curve(String, usize),
+    #[cfg(feature = "zkir-321")]
+    ForeignEncodedField(usize),
     Bytes(String, usize),
     EagerSelect(Type),
     Choose(Arc<Expr>, Arc<Expr>, Type, Env, Arc<Expr>),
@@ -4271,6 +4354,11 @@ impl Session {
                         self.tasks.push(Task::Eval(argument.clone(), env.clone()));
                     }
                 }
+                #[cfg(feature = "zkir-321")]
+                ExprKind::ForeignEncodedField(value, index) => {
+                    self.tasks.push(Task::ForeignEncodedField(*index));
+                    self.tasks.push(Task::Eval(value.clone(), env));
+                }
                 ExprKind::Bytes(operation, arguments) => {
                     self.tasks
                         .push(Task::Bytes(operation.clone(), arguments.len()));
@@ -4446,6 +4534,20 @@ impl Session {
                     evaluate_operation(curve_operation(&operation)?, values)?,
                     taint,
                 ));
+            }
+            #[cfg(feature = "zkir-321")]
+            Task::ForeignEncodedField(index) => {
+                let value = self.pop()?;
+                let taint = value.is_tainted();
+                let Some(Value::Foreign(value)) = value.value else {
+                    bail!("foreign encoded field projection requires a foreign value")
+                };
+                let encoding = value.encode()?;
+                let field = encoding
+                    .get(index)
+                    .copied()
+                    .ok_or_else(|| anyhow!("foreign encoded field index out of range"))?;
+                self.values.push(Tracked::scalar(Value::Native(field), taint));
             }
             Task::Bytes(operation, count) => {
                 ensure!(self.values.len() >= count, "control byte argument stack");
@@ -5503,6 +5605,82 @@ mod completed_invocation_tests {
                 json!({"tag":"curve","operation":operation,"arguments":arguments}),
             );
             assert!(Plan::parse(&plan, None).is_err(), "accepted {operation}");
+        }
+    }
+
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    fn typed_foreign_values_preserve_type_through_inputs_equality_and_select() {
+        use crate::foreign::{ForeignFamily, ForeignRole, ForeignType, ForeignValue};
+
+        let foreign_type = ForeignType::new(ForeignFamily::Secp256k1, ForeignRole::Base);
+        let zero = ForeignValue::from_bytes(foreign_type, &[0; 32]).unwrap();
+        let one = ForeignValue::from_bytes(
+            foreign_type,
+            &[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        )
+        .unwrap();
+        let encoded = |value: &ForeignValue| {
+            value
+                .encode()
+                .unwrap()
+                .iter()
+                .map(|field| crate::field_decimal(*field))
+                .collect::<Vec<_>>()
+        };
+        let literal = |value: &ForeignValue| {
+            json!({
+                "tag":"foreignConstant",
+                "type":foreign_type.source_name(),
+                "encoding":encoded(value)
+            })
+        };
+        let zero_literal = literal(&zero);
+        let one_literal = literal(&one);
+        let expression = json!({
+            "tag":"select",
+            "condition":{
+                "tag":"eq",
+                "left":{"tag":"reference","name":"candidate"},
+                "right":zero_literal
+            },
+            "yes":one_literal,
+            "no":literal(&zero)
+        });
+        let mut plan = host_plan(foreign_type.source_name(), expression);
+        plan["inputs"] = json!([{
+            "name":"candidate",
+            "type":foreign_type.source_name(),
+            "visibility":"public"
+        }]);
+        plan["functions"][0]["parameters"] = json!([{
+            "name":"candidate",
+            "type":foreign_type.source_name()
+        }]);
+
+        let parsed = Plan::parse(&plan, None).unwrap();
+        let context = source_context(&parsed, &"d".repeat(64));
+        let inputs = BTreeMap::from([("candidate".to_owned(),
+            crate::Value::Foreign(zero).public_json())]);
+        let mut session = Session::from_json(plan, inputs, context).unwrap();
+        let completed = session.advance().unwrap();
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(completed["result"], crate::Value::Foreign(one.clone()).public_json());
+
+        let projected = run_host_plan(host_plan(
+            "Native",
+            json!({"tag":"foreignEncodedField","value":literal(&one),"index":0}),
+        ));
+        let expected_native = crate::Value::Native(one.encode().unwrap()[0]).public_json();
+        assert_eq!(projected["status"], "completed");
+        assert_eq!(projected["result"], expected_native);
+
+        for malformed in [
+            json!({"tag":"foreignConstant","type":"Native","encoding":["0"]}),
+            json!({"tag":"foreignConstant","type":foreign_type.source_name(),"encoding":["0"]}),
+            json!({"tag":"foreignConstant","type":foreign_type.source_name(),"encoding":["00","0"]}),
+        ] {
+            assert!(Plan::parse(&host_plan(foreign_type.source_name(), malformed), None).is_err());
         }
     }
 

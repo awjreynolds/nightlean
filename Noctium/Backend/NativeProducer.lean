@@ -66,6 +66,7 @@ private def validIdentifier (name : String) : Bool :=
 
 inductive NativeValueType where
   | native | bool | byte | bytes32 | bytes (length : Nat) | jubjubScalar | jubjubPoint
+  | foreign (kind : Foreign.Kind)
   deriving Repr, BEq, DecidableEq
 
 private def byteLength? : NativeValueType → Option Nat
@@ -80,6 +81,8 @@ structure Fact where
   term : Term
   maximum : Nat
   valueType : NativeValueType := .native
+  /-- Native typed decoding or a checked codec established this foreign value. -/
+  foreignValid : Bool := false
   nodes : Nat := 1
   depth : Nat := 1
   assertedLessThan : Option (String × Nat) := none
@@ -111,6 +114,15 @@ def operand (state : State) (text : String) : Except String Fact := do
 
 private def requireNative (fact : Fact) : Except String Unit :=
   ensure (fact.valueType == .native) "native instruction operand must have Native type"
+
+private def requireForeignValid (fact : Fact) : Except String Unit :=
+  match fact.valueType with
+  | .foreign _ => ensure fact.foreignValid "foreign value lacks canonical typed validation"
+  | _ => pure ()
+
+private def isForeignType : NativeValueType → Bool
+  | .foreign _ => true
+  | _ => false
 
 private def nativeOperand (state : State) (text : String) : Except String Fact := do
   let fact ← operand state text
@@ -241,8 +253,15 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
   fields instruction ("op" :: descriptor.fields)
   match opcode with
   | "public_input" | "private_input" =>
-    nativeType (← instruction.getObjVal? "type")
     let some required := expected.inputs[state.inputCount]? | throw "unexpected native transcript input"
+    let valueType ← match required.ty with
+      | .foreign kind => do
+        ensure ((← stringField instruction "type") == kind.nativeName) "foreign input type differs from source"
+        ensure required.activityGuard.isNone "guarded foreign transcript inputs are not qualified"
+        pure (NativeValueType.foreign kind)
+      | _ => do
+        nativeType (← instruction.getObjVal? "type")
+        pure NativeValueType.native
     match required.activityGuard with
     | none =>
       ensure ((← instruction.getObjVal? "guard") == Json.null)
@@ -258,7 +277,13 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     ensure (output == required.identifier &&
       opcode == (if required.visibility == .«public» then "public_input" else "private_input"))
       "native transcript input schema/order mismatch"
-    let state ← define state output {term := .input output, maximum := Field.modulus - 1}
+    let foreignValid := isForeignType valueType
+    let state ← define state output {
+      term := .input output
+      valueType
+      foreignValid
+      maximum := if foreignValid then 0 else Field.modulus - 1
+    }
     pure {state with inputCount := state.inputCount + 1}
   | "mul" =>
     let left ← nativeArgument state instruction "a"
@@ -282,6 +307,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     ensure (left.valueType == right.valueType)
       "native equality/add operands have different typed values"
     if opcode == "test_eq" then do
+      requireForeignValid left
+      requireForeignValid right
       ensure ((byteLength? left.valueType).isNone) "typed byte equality is unsupported by this source surface"
       let fact ← combine (.binary "test_eq" left.term right.term) 1 [left, right]
       defineResult state instruction fact
@@ -309,13 +336,27 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       let maximum := if value.maximum == 0 then 0 else Field.modulus - 1
       defineResult state instruction (← combine (.unary "neg" value.term) maximum [value])
   | "load_constant" => do
-    ensure ((← stringField instruction "type") == "Bool")
-      "load_constant currently qualifies only the Bool codec"
+    let typeName ← stringField instruction "type"
     let encoding ← arrayField instruction "encoding"
-    ensure (encoding.size == 1) "Bool constant requires exactly one encoded field"
-    let value ← immediate (← encoding[0]!.getStr?)
-    ensure (value ≤ 1) "Bool constant encoding must be zero or one"
-    defineResult state instruction {term := typedBoolConstantTerm value, maximum := value, valueType := .bool}
+    if typeName == "Bool" then do
+      ensure (encoding.size == 1) "Bool constant requires exactly one encoded field"
+      let value ← immediate (← encoding[0]!.getStr?)
+      ensure (value ≤ 1) "Bool constant encoding must be zero or one"
+      defineResult state instruction {term := typedBoolConstantTerm value, maximum := value, valueType := .bool}
+    else do
+      let some kind := Foreign.kinds.find? (·.nativeName == typeName)
+        | throw "load_constant codec is not qualified"
+      ensure (encoding.size == kind.encodedFieldCount) "foreign constant encoded field count mismatch"
+      let values ← encoding.toList.mapM fun item => do immediate (← item.getStr?)
+      match kind with
+      | .base _ | .scalar _ => discard (Foreign.decodeField kind values)
+      | .point curve => ensure (values == Foreign.identityEncoding curve) "only identity foreign point constants are qualified"
+      defineResult state instruction {
+        term := foreignConstantTerm kind values
+        maximum := 0
+        valueType := .foreign kind
+        foreignValid := true
+      }
   | "and" | "or" | "xor" => do
     let values ← arguments state instruction "inputs"
     ensure (!values.isEmpty) "typed Boolean gate requires at least one operand"
@@ -329,8 +370,10 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     requireBoolean condition
     let yes ← argument state instruction "a"
     let no ← argument state instruction "b"
-    ensure (yes.valueType == no.valueType && (yes.valueType == .native || yes.valueType == .bool))
-      "cond_select requires matched Native or Bool arms"
+    ensure (yes.valueType == no.valueType && (yes.valueType == .native || yes.valueType == .bool || isForeignType yes.valueType))
+      "cond_select requires matched Native, Bool or qualified foreign arms"
+    requireForeignValid yes
+    requireForeignValid no
     if yes.valueType == .bool then do
       requireBoolean yes
       requireBoolean no
@@ -338,7 +381,10 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
         no.term == typedBoolConstantTerm 0 then nativeToBoolTerm condition.term
       else .select condition.term yes.term no.term
     let fact ← combine term (max yes.maximum no.maximum) [condition, yes, no]
-    defineResult state instruction {fact with valueType := yes.valueType}
+    defineResult state instruction {fact with
+      valueType := yes.valueType
+      foreignValid := isForeignType yes.valueType && yes.foreignValid && no.foreignValid
+    }
   | "constrain_to_boolean" => refine state (← stringField instruction "val") 1
   | "constrain_bits" =>
     refine state (← stringField instruction "val") (2 ^ (← width instruction) - 1)
@@ -433,7 +479,17 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
   | "encode" => do
     let input ← argument state instruction "input"
     let outputs ← arrayField instruction "outputs"
-    if let some length := byteLength? input.valueType then do
+    if let .foreign kind := input.valueType then do
+      requireForeignValid input
+      ensure (outputs.size == kind.encodedFieldCount) "foreign encode field count mismatch"
+      let mut state := state
+      for index in List.range outputs.size do
+        let name ← outputs[index]!.getStr?
+        let fact ← combine (foreignEncodedFieldTerm kind input.term index)
+          (foreignEncodedFieldMaximum kind index) [input]
+        state ← define state name fact
+      pure state
+    else if let some length := byteLength? input.valueType then do
       ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
         "encode byte length is unsupported"
       ensure (outputs.size == bytesChunkCount length) "byte encode chunk count mismatch"
@@ -600,7 +656,7 @@ def sourceMaximum : Ty → Nat
   | .uint maximum => maximum
   | .bytes _ => 0
   | .jubjubScalar => Jubjub.scalarOrder - 1
-  | .jubjubPoint => 0
+  | .jubjubPoint | .foreign _ => 0
 
 def checkBound (state : State) (term : Term) (maximum : Nat) : Except String Unit := do
   let bounded := match term with
@@ -640,9 +696,15 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   ensure (state.assertionCount == expected.assertions.length) "missing or reordered typed source assertion"
   for input in expected.inputs do
     ensure (!input.ty.isBytes) "Bytes32 must be expanded into UInt8 native inputs"
-    let maximum := if input.canonicalJubjubScalar then Jubjub.scalarOrder - 1
-      else sourceMaximum input.ty
-    checkBound state (.input input.identifier) maximum
+    match input.ty with
+    | .foreign kind => do
+      let value ← operand state input.identifier
+      ensure (value.valueType == .foreign kind) "foreign input lost its source type"
+      requireForeignValid value
+    | _ => do
+      let maximum := if input.canonicalJubjubScalar then Jubjub.scalarOrder - 1
+        else sourceMaximum input.ty
+      checkBound state (.input input.identifier) maximum
     if input.canonicalJubjubScalar then
       ensure (state.canonicalScalarInputs.contains input.identifier)
         "typed JubjubScalar input lacks its canonical reduce/encode equality bridge"

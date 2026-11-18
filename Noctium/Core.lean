@@ -21,6 +21,7 @@ inductive Ty where
   | uint (maximum : Nat)
   | bytes (length : Nat)
   | jubjubScalar | jubjubPoint
+  | foreign (kind : Foreign.Kind)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def Ty.scalarKind : Ty → ScalarPolicy.Kind
@@ -30,6 +31,7 @@ def Ty.scalarKind : Ty → ScalarPolicy.Kind
   | .bytes length => .bytes length
   | .jubjubScalar => .jubjubScalar
   | .jubjubPoint => .jubjubPoint
+  | .foreign kind => .foreign kind
 
 def Ty.isBytes : Ty → Bool
   | .bytes _ => true
@@ -45,6 +47,10 @@ def Ty.isJubjubScalar : Ty → Bool
 
 def Ty.isJubjubPoint : Ty → Bool
   | .jubjubPoint => true
+  | _ => false
+
+def Ty.isForeign : Ty → Bool
+  | .foreign _ => true
   | _ => false
 
 end Noctium

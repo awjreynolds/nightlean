@@ -1,4 +1,6 @@
 //! ScalarPolicy.lean-compatible unsigned bounds and checked conversions.
+#[cfg(feature = "zkir-321")]
+use crate::foreign::ForeignType;
 use crate::{MODULUS, Value, canonical_field};
 use anyhow::{Result, anyhow, bail, ensure};
 use num_bigint::BigUint;
@@ -42,6 +44,8 @@ pub enum ScalarType {
     Bytes(usize),
     JubjubScalar,
     JubjubPoint,
+    #[cfg(feature = "zkir-321")]
+    Foreign(ForeignType),
 }
 impl ScalarType {
     pub fn bytes_length(&self) -> Option<usize> {
@@ -55,10 +59,16 @@ impl ScalarType {
         match self {
             Self::Bytes32 | Self::JubjubPoint => 2,
             Self::Bytes(length) => length.div_ceil(31),
+            #[cfg(feature = "zkir-321")]
+            Self::Foreign(ty) => ty.native_type().encoded_len(),
             _ => 1,
         }
     }
     pub fn parse(text: &str) -> Result<Self> {
+        #[cfg(feature = "zkir-321")]
+        if let Ok(ty) = ForeignType::parse_source_name(text) {
+            return Ok(Self::Foreign(ty));
+        }
         match text {
             "Native" => Ok(Self::Native),
             "Bool" => Ok(Self::Bool),
@@ -124,6 +134,8 @@ impl Value {
             Self::Bytes(bytes) => ScalarType::Bytes(bytes.len()),
             Self::JubjubScalar(_) => ScalarType::JubjubScalar,
             Self::JubjubPoint(_) => ScalarType::JubjubPoint,
+            #[cfg(feature = "zkir-321")]
+            Self::Foreign(value) => ScalarType::Foreign(value.foreign_type()),
         }
     }
     pub fn validate(&self) -> Result<()> {
@@ -142,15 +154,20 @@ impl Value {
             Self::JubjubScalar(_) | Self::JubjubPoint(_) => {
                 bail!("Jubjub values require explicit typed conversions")
             }
+            #[cfg(feature = "zkir-321")]
+            Self::Foreign(_) => bail!("foreign values require explicit typed conversions"),
         })
     }
     pub fn cast(&self, target: &ScalarType) -> Result<Self> {
         self.validate()?;
         target.validate()?;
-        if matches!(
-            self,
-            Self::Bytes(_) | Self::JubjubScalar(_) | Self::JubjubPoint(_)
-        ) {
+        let opaque = match self {
+            Self::Bytes(_) | Self::JubjubScalar(_) | Self::JubjubPoint(_) => true,
+            #[cfg(feature = "zkir-321")]
+            Self::Foreign(_) => true,
+            _ => false,
+        };
+        if opaque {
             ensure!(
                 *target == self.scalar_type(),
                 "opaque values require an explicit typed conversion"
@@ -169,6 +186,8 @@ impl Value {
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                 bail!("scalars cannot be cast to Jubjub values")
             }
+            #[cfg(feature = "zkir-321")]
+            ScalarType::Foreign(_) => bail!("scalars cannot be cast to foreign values"),
         };
         result.validate()?;
         Ok(result)
@@ -194,6 +213,12 @@ impl Value {
                     "kind":"jubjubPoint", "x":crate::field_decimal(x), "y":crate::field_decimal(y)
                 })
             }
+            #[cfg(feature = "zkir-321")]
+            Self::Foreign(value) => serde_json::json!({
+                "kind":"foreign",
+                "type":value.foreign_type().source_name(),
+                "bytes":value.to_bytes().expect("checked foreign value serializes canonically")
+            }),
         }
     }
 }

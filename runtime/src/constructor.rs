@@ -91,6 +91,8 @@ fn scalar_zero(ty: &str) -> Result<Json> {
         ScalarType::Bytes(length) => json!({"kind":"bytes", "values":vec![0u8;length]}),
         ScalarType::JubjubScalar => json!({"kind":"jubjubScalar", "value":"0"}),
         ScalarType::JubjubPoint => json!({"kind":"jubjubPoint", "x":"0", "y":"1"}),
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(_) => bail!("foreign ledger storage is unsupported"),
     })
 }
 

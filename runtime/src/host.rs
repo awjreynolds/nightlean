@@ -1,12 +1,11 @@
 //! Explicit host capabilities and private journals. No ambient I/O or durable storage.
 use crate::{
-    input_value,
+    ScalarType, input_value,
     lifecycle::{Effect, Event, Lifecycle, Phase},
     witness::{Registry, WitnessSignature},
-    ScalarType,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value as Json};
+use serde_json::{Value as Json, json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use zeroize::Zeroize;
@@ -40,11 +39,7 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 pub type Result<T> = std::result::Result<T, Error>;
 fn require(value: bool, error: Error) -> Result<()> {
-    if value {
-        Ok(())
-    } else {
-        Err(error)
-    }
+    if value { Ok(()) } else { Err(error) }
 }
 fn wipe(value: &mut Json) {
     match value {
@@ -561,8 +556,10 @@ impl Runtime {
             Error::State,
         )?;
         require(
-            signature.name == input && identifier(input)
-                && signature.operation != STAGE && signature.operation != CAS,
+            signature.name == input
+                && identifier(input)
+                && signature.operation != STAGE
+                && signature.operation != CAS,
             Error::Descriptor,
         )?;
         let provider = self.provider(input).ok_or(Error::Descriptor)?;

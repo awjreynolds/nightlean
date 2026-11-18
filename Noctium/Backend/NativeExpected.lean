@@ -5,7 +5,7 @@ namespace Noctium.Backend.Native
 
 private def hashCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, jubjub := true}
 
 private def inputRequirement (input : Input) : InputRequirement :=
   {identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}
@@ -99,7 +99,10 @@ def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
       outputs := outputs ++ [← convert output.span (normalize aliases field)]
   let returns := outputs.map (·.term)
   let groups := (value.inputs.filter (·.visibility == .«public»)).flatMap fun input =>
-    input.nativeIdentifiers.map fun identifier => [.input identifier]
+    match input.ty with
+    | .foreign kind => (List.range kind.encodedFieldCount).map fun index =>
+        [foreignEncodedFieldTerm kind (Input.sourceTerm input) index]
+    | _ => input.nativeIdentifiers.map fun identifier => [.input identifier]
   pure {
     mode := .relation
     inputs := inputs

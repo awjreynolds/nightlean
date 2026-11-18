@@ -465,10 +465,7 @@ pub unsafe extern "C" fn noctium_control_private_completion(
 /// # Safety
 /// out_result must reference a writable uint64_t. The returned token is private.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn noctium_control_private_trace(
-    session: u64,
-    out_result: *mut u64,
-) -> i32 {
+pub unsafe extern "C" fn noctium_control_private_trace(session: u64, out_result: *mut u64) -> i32 {
     action(session, out_result, |s| Ok(s.private_trace()), true)
 }
 unsafe fn length(token: u64, out_length: *mut usize, private: bool) -> i32 {
@@ -534,10 +531,7 @@ fn free(token: u64, private: bool) -> i32 {
 /// # Safety
 /// out_length must reference a writable size_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn noctium_control_result_length(
-    token: u64,
-    out_length: *mut usize,
-) -> i32 {
+pub unsafe extern "C" fn noctium_control_result_length(token: u64, out_length: *mut usize) -> i32 {
     unsafe { length(token, out_length, false) }
 }
 /// # Safety
@@ -558,10 +552,7 @@ pub extern "C" fn noctium_control_result_free(token: u64) -> i32 {
 /// # Safety
 /// out_length must reference a writable size_t.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn noctium_control_private_length(
-    token: u64,
-    out_length: *mut usize,
-) -> i32 {
+pub unsafe extern "C" fn noctium_control_private_length(token: u64, out_length: *mut usize) -> i32 {
     unsafe { length(token, out_length, true) }
 }
 /// # Safety

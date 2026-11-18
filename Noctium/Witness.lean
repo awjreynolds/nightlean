@@ -28,6 +28,7 @@ private def scalarName : Ty → String
   | .bytes length => s!"Bytes<{length}>"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
+  | .foreign kind => kind.sourceName
 
 private def idName (id : DeclarationId) : String := s!"s{id.scope}d{id.ordinal}"
 

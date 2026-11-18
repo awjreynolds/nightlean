@@ -72,6 +72,8 @@ def origins (env : Environment) : Expr ty → Except String Origins
     let mut result : Origins := []
     for value in values do result := merge result (← origins env value)
     pure result
+  | .foreignBase _ _ | .foreignScalar _ _ | .foreignIdentity _ => pure []
+  | .foreignEncodedField value _ => origins env value
   | .boolAnd left right | .boolOr left right | .boolXor left right => do
     pure (merge (← origins env left) (← origins env right))
   | .ref name => match env.lookup name with

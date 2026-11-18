@@ -9,11 +9,11 @@ namespace Noctium.Backend.Impact
 
 private def expressionCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, jubjub := true}
 
 private def ledgerCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true,
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, jubjub := true,
     stateCells := true, stateMaps := true}
 
 /-- Symbols in the ledger public-input sequence are source expressions, not
@@ -185,7 +185,7 @@ structure Read where
 def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   if !read.components.isEmpty then none else
   match read.ty, read.guard with
-  | .bytes _, _ | .jubjubScalar, _ | .jubjubPoint, _ | _, none => none
+  | .bytes _, _ | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ | _, none => none
   | .native, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.native 0)))
   | .bool, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.bool false)))
   | .uint maximum, some guard => some (.eq (.ref read.name)
@@ -203,7 +203,7 @@ def Read.inactiveDefaultConstraints (read : Read) : List (Expr .bool) :=
       | .native => some (.eq (.ref name) (.select guard (.ref name) (.native 0)))
       | .bool => some (.eq (.ref name) (.select guard (.ref name) (.bool false)))
       | .uint maximum => some (.eq (.ref name) (.select guard (.ref name) (.uint maximum 0)))
-      | .bytes _ | .jubjubScalar | .jubjubPoint => none
+      | .bytes _ | .jubjubScalar | .jubjubPoint | .foreign _ => none
 
 structure Plan where
   operations : List Op := []
@@ -235,6 +235,7 @@ def publicInputReadCount (inputs : List Input) : Nat :=
     else count + match input.ty with
       | .bytes length => length
       | .jubjubPoint => 2
+      | .foreign kind => kind.encodedFieldCount
       | _ => 1) 0
 
 /-- Generated field expressions must retain the source/read types even though
@@ -265,7 +266,7 @@ private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
   | .bool, value => pure (.select value (.native 1) (.native 0))
   | .uint _, value => pure (.cast .native value)
   | .bytes _, _ => throw "Bytes32 requires byte alignment, not scalar conversion"
-  | .jubjubScalar, _ | .jubjubPoint, _ => throw "Jubjub values require explicit curve projections"
+  | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => throw "opaque values require explicit encoding projections"
 
 private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .native, value => pure (.field value)
@@ -273,7 +274,7 @@ private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .uint _, value => pure (.field (.cast .native value))
   | .bytes 32, value => pure (.bytes32 value)
   | .bytes _, _ => throw "unsupported byte alignment"
-  | .jubjubScalar, _ | .jubjubPoint, _ => throw "Jubjub values require explicit curve projections"
+  | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => throw "opaque values require explicit encoding projections"
 
 private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   match ty with
@@ -281,7 +282,7 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   | .bool => pure (.cast .native (.ref name : Expr .bool))
   | .uint maximum => pure (.cast .native (.ref name : Expr (.uint maximum)))
   | .bytes _ => throw "Bytes32 is read through byte alignment"
-  | .jubjubScalar | .jubjubPoint => throw "Jubjub inputs use reserved Native projections"
+  | .jubjubScalar | .jubjubPoint | .foreign _ => throw "opaque inputs use reserved Native projections"
 
 private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) :=
   keys.mapM fun key => match key with
@@ -340,7 +341,8 @@ private def resolveListState (state : List StateDecl) (name : String)
   schema.listPath keys
 
 private def expressionNames : Expr ty → List String
-  | .native _ | .bool _ | .uint _ _ => []
+  | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignIdentity _ => []
+  | .foreignEncodedField value _ => expressionNames value
   | .bytesField value _ | .bytesAt value _ => expressionNames value
   | .sha512 value | .keccak256 value | .persistentHash32 value => expressionNames value
   | .bytes32Literal _ | .bytesLiteral _ _ => []
@@ -390,6 +392,9 @@ private def zeroValue : (ty : Ty) → Option (Expr ty)
   | .bytes length => some (.bytesLiteral length (List.replicate length 0))
   | .jubjubScalar => some (.jubjubScalarFromNative (.native 0))
   | .jubjubPoint => some (.jubjubFromCoordinates (.native 0) (.native 1))
+  | .foreign (.base curve) => some (.foreignBase curve 0)
+  | .foreign (.scalar curve) => some (.foreignScalar curve 0)
+  | .foreign (.point curve) => some (.foreignIdentity curve)
 
 private def castMayFail (target source : Ty) : Bool :=
   match target, source with
@@ -402,6 +407,10 @@ private def castMayFail (target source : Ty) : Bool :=
 The native source guard is a collision-free outer let binding, so nested source
 lets cannot capture its references. Eager selects still evaluate both arms. -/
 private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
+  | .foreignBase curve value => .foreignBase curve value
+  | .foreignScalar curve value => .foreignScalar curve value
+  | .foreignIdentity curve => .foreignIdentity curve
+  | .foreignEncodedField value index => .foreignEncodedField (totalizeUnder guard value) index
   | .native value => .native value
   | .bool value => .bool value
   | .boolAnd left right => .boolAnd (totalizeUnder guard left) (totalizeUnder guard right)
@@ -859,6 +868,16 @@ private def publicInputStep (input : Input) (plan : Plan) : Except String Plan :
       let name := input.publicProjectionIdentifiers[index]!
       result := {result with
         operations := result.operations ++ [.push value, .popeq value]
+        reads := result.reads ++ [{name, ty := .native}]}
+    pure result
+  | .foreign kind => do
+    let value : Expr (.foreign kind) := .ref input.name
+    let mut result := plan
+    for index in List.range kind.encodedFieldCount do
+      let aligned := Aligned.field (.foreignEncodedField value index)
+      let name := input.publicProjectionIdentifiers[index]!
+      result := {result with
+        operations := result.operations ++ [.push aligned, .popeq aligned]
         reads := result.reads ++ [{name, ty := .native}]}
     pure result
   | .native | .bool | .uint _ => do

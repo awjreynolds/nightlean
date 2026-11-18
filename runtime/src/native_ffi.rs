@@ -1475,10 +1475,7 @@ pub unsafe extern "C" fn noctium_client_resume(
 /// # Safety
 /// out_reply must reference writable memory. This explicitly reports a host service failure, never rejection evidence.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn noctium_client_service_failure(
-    request: u64,
-    out_reply: *mut u64,
-) -> i32 {
+pub unsafe extern "C" fn noctium_client_service_failure(request: u64, out_reply: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_reply)? };
         let token = service_reply(request, crate::native_client::ServiceReply::Failure)?;

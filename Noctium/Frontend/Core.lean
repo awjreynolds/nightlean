@@ -103,6 +103,12 @@ scoped syntax "Bytes32" : nltype
 scoped syntax "Bytes" num : nltype
 scoped syntax "JubjubScalar" : nltype
 scoped syntax "JubjubPoint" : nltype
+scoped syntax "Secp256k1Base" : nltype
+scoped syntax "Secp256k1Scalar" : nltype
+scoped syntax "Secp256k1Point" : nltype
+scoped syntax "Secp256r1Base" : nltype
+scoped syntax "Secp256r1Scalar" : nltype
+scoped syntax "Secp256r1Point" : nltype
 
 declare_syntax_cat nlexpr
 scoped syntax ident : nlexpr
@@ -152,6 +158,12 @@ scoped syntax "jubjubNeg(" nlexpr ")" : nlexpr
 scoped syntax "jubjubX(" nlexpr ")" : nlexpr
 scoped syntax "jubjubY(" nlexpr ")" : nlexpr
 scoped syntax "jubjubFromCoordinates(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "secp256k1Base(" num ")" : nlexpr
+scoped syntax "secp256k1Scalar(" num ")" : nlexpr
+scoped syntax "secp256k1Identity()" : nlexpr
+scoped syntax "secp256r1Base(" num ")" : nlexpr
+scoped syntax "secp256r1Scalar(" num ")" : nlexpr
+scoped syntax "secp256r1Identity()" : nlexpr
 
 declare_syntax_cat nlcstmt
 scoped syntax "public" ident ":" nltype : nlcstmt
@@ -268,6 +280,12 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
     pure (.bytes length.getNat)
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
+  | `(nltype| Secp256k1Base) => pure (.foreign (.base .secp256k1))
+  | `(nltype| Secp256k1Scalar) => pure (.foreign (.scalar .secp256k1))
+  | `(nltype| Secp256k1Point) => pure (.foreign (.point .secp256k1))
+  | `(nltype| Secp256r1Base) => pure (.foreign (.base .secp256r1))
+  | `(nltype| Secp256r1Scalar) => pure (.foreign (.scalar .secp256r1))
+  | `(nltype| Secp256r1Point) => pure (.foreign (.point .secp256r1))
   | _ => throwErrorAt stx "unsupported Noctium type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
@@ -277,6 +295,12 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .bytes len => `(Noctium.Ty.bytes $(⟨Syntax.mkNumLit (toString len)⟩))
   | .jubjubScalar => `(Noctium.Ty.jubjubScalar)
   | .jubjubPoint => `(Noctium.Ty.jubjubPoint)
+  | .foreign (.base .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1))
+  | .foreign (.scalar .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256k1))
+  | .foreign (.point .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256k1))
+  | .foreign (.base .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256r1))
+  | .foreign (.scalar .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256r1))
+  | .foreign (.point .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256r1))
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
@@ -414,8 +438,8 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| cast($target:nltype, $value:nlexpr)) =>
     let target ← readTy target
     let (source, value) ← expression env value
-    if target.isJubjub || source.isJubjub then
-      throwErrorAt stx "Jubjub values require explicit Jubjub conversions"
+    if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
+      throwErrorAt stx "curve values require explicit typed conversions"
     pure (target, ← `(Noctium.Expr.cast $(← tyTerm target) $value))
   | `(nlexpr| default($target:nltype)) =>
     let target ← readTy target
@@ -425,6 +449,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .uint maximum => pure (target, ← `(Noctium.Expr.uint $(natTerm maximum) 0))
     | .bytes _ => throwErrorAt stx "byte strings have no scalar default expression"
     | .jubjubScalar | .jubjubPoint => throwErrorAt stx "Jubjub values have no generic default expression"
+    | .foreign _ => throwErrorAt stx "foreign values have no generic default expression"
   | `(nlexpr| disclose($value)) =>
     let (ty, value) ← expression env value
     pure (ty, ← `(Noctium.Expr.disclose $(← spanTerm stx) $value))
@@ -651,6 +676,26 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let x ← expected env x .native
     let y ← expected env y .native
     pure (.jubjubPoint, ← `(Noctium.Expr.jubjubFromCoordinates $x $y))
+  | `(nlexpr| secp256k1Base($value:num)) => do
+    unless value.getNat < Foreign.Curve.baseModulus .secp256k1 do
+      throwErrorAt value "Secp256k1Base literal is not canonical"
+    pure (.foreign (.base .secp256k1), ← `(Noctium.Expr.foreignBase Noctium.Foreign.Curve.secp256k1 $value))
+  | `(nlexpr| secp256k1Scalar($value:num)) => do
+    unless value.getNat < Foreign.Curve.scalarModulus .secp256k1 do
+      throwErrorAt value "Secp256k1Scalar literal is not canonical"
+    pure (.foreign (.scalar .secp256k1), ← `(Noctium.Expr.foreignScalar Noctium.Foreign.Curve.secp256k1 $value))
+  | `(nlexpr| secp256k1Identity()) =>
+    pure (.foreign (.point .secp256k1), ← `(Noctium.Expr.foreignIdentity Noctium.Foreign.Curve.secp256k1))
+  | `(nlexpr| secp256r1Base($value:num)) => do
+    unless value.getNat < Foreign.Curve.baseModulus .secp256r1 do
+      throwErrorAt value "Secp256r1Base literal is not canonical"
+    pure (.foreign (.base .secp256r1), ← `(Noctium.Expr.foreignBase Noctium.Foreign.Curve.secp256r1 $value))
+  | `(nlexpr| secp256r1Scalar($value:num)) => do
+    unless value.getNat < Foreign.Curve.scalarModulus .secp256r1 do
+      throwErrorAt value "Secp256r1Scalar literal is not canonical"
+    pure (.foreign (.scalar .secp256r1), ← `(Noctium.Expr.foreignScalar Noctium.Foreign.Curve.secp256r1 $value))
+  | `(nlexpr| secp256r1Identity()) =>
+    pure (.foreign (.point .secp256r1), ← `(Noctium.Expr.foreignIdentity Noctium.Foreign.Curve.secp256r1))
   | `(nlexpr| hashToCurve([$values,*])) => do
     let sourceValues := values.getElems.toList
     unless sourceValues.length ≤ Types.defaultLimits.maxVectorLength do
@@ -693,6 +738,7 @@ where
     | .bytes _ => throwErrorAt stx "Bytes32 does not support arithmetic"
     | .jubjubScalar | .jubjubPoint =>
       throwErrorAt stx "Jubjub values do not support scalar arithmetic"
+    | .foreign _ => throwErrorAt stx "foreign values require a qualified curve operation"
 
 private def checkedExpression (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) :
     CommandElabM (TSyntax `term) := do
@@ -1767,6 +1813,7 @@ private def moduleCapabilities : Capabilities := {
   bytes32Conversions := Bool.true
   hashToCurve := Bool.true
   jubjub := Bool.true
+  foreignValues := Bool.true
   stateCells := Bool.true
   stateMaps := Bool.true}
 

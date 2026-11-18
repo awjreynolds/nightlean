@@ -46,6 +46,7 @@ private def typeName : Ty → String
   | .bytes length => s!"Bytes {length}"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
+  | .foreign kind => kind.sourceName
 
 private def inputJson (input : ObservationInput) : Json := Json.mkObj [
   ("name", Lean.toJson input.name), ("type", Lean.toJson (typeName input.ty)),
@@ -179,6 +180,12 @@ private def readScalarTy (stx : TSyntax `nltype) : CommandElabM Ty := do
     pure (.bytes length.getNat)
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
+  | `(nltype| Secp256k1Base) => pure (.foreign (.base .secp256k1))
+  | `(nltype| Secp256k1Scalar) => pure (.foreign (.scalar .secp256k1))
+  | `(nltype| Secp256k1Point) => pure (.foreign (.point .secp256k1))
+  | `(nltype| Secp256r1Base) => pure (.foreign (.base .secp256r1))
+  | `(nltype| Secp256r1Scalar) => pure (.foreign (.scalar .secp256r1))
+  | `(nltype| Secp256r1Point) => pure (.foreign (.point .secp256r1))
   | _ => throwErrorAt stx "unsupported readable witness scalar type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
@@ -188,6 +195,12 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .bytes length => `(Noctium.Ty.bytes $(natTerm length))
   | .jubjubScalar => `(Noctium.Ty.jubjubScalar)
   | .jubjubPoint => `(Noctium.Ty.jubjubPoint)
+  | .foreign (.base .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1))
+  | .foreign (.scalar .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256k1))
+  | .foreign (.point .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256k1))
+  | .foreign (.base .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256r1))
+  | .foreign (.scalar .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256r1))
+  | .foreign (.point .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256r1))
 
 private def resultTypeTerm : ResultType → CommandElabM (TSyntax `term)
   | .unit => `(Noctium.Helpers.ResultType.unit)
@@ -278,6 +291,12 @@ private partial def renderType : TSyntax `nltype → String
   | `(nltype| Bytes $length:num) => s!"Bytes {length.getNat}"
   | `(nltype| JubjubScalar) => "JubjubScalar"
   | `(nltype| JubjubPoint) => "JubjubPoint"
+  | `(nltype| Secp256k1Base) => "Secp256k1Base"
+  | `(nltype| Secp256k1Scalar) => "Secp256k1Scalar"
+  | `(nltype| Secp256k1Point) => "Secp256k1Point"
+  | `(nltype| Secp256r1Base) => "Secp256r1Base"
+  | `(nltype| Secp256r1Scalar) => "Secp256r1Scalar"
+  | `(nltype| Secp256r1Point) => "Secp256r1Point"
   | _ => "?"
 
 private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
@@ -337,6 +356,12 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| jubjubY($point)) => s!"jubjubY({renderExpr point})"
   | `(nlexpr| jubjubFromCoordinates($x, $y)) =>
     s!"jubjubFromCoordinates({renderExpr x}, {renderExpr y})"
+  | `(nlexpr| secp256k1Base($value:num)) => s!"secp256k1Base({value.getNat})"
+  | `(nlexpr| secp256k1Scalar($value:num)) => s!"secp256k1Scalar({value.getNat})"
+  | `(nlexpr| secp256k1Identity()) => "secp256k1Identity()"
+  | `(nlexpr| secp256r1Base($value:num)) => s!"secp256r1Base({value.getNat})"
+  | `(nlexpr| secp256r1Scalar($value:num)) => s!"secp256r1Scalar({value.getNat})"
+  | `(nlexpr| secp256r1Identity()) => "secp256r1Identity()"
   | `(nlexpr| hashToCurve([$values,*])) =>
     s!"hashToCurve([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) =>
@@ -445,6 +470,12 @@ private def mergeLowered (type : ResultType) (term : Noctium.Helpers.Term) (valu
   generatedValidity := values.flatMap (·.generatedValidity) |>.eraseDups
 }
 
+private def lowerForeignFieldConstant (stx : Syntax) (kind : Foreign.Kind) (value : Nat) : ExprM Lowered := do
+  let encoding ← match Foreign.encodeField kind value with
+    | .ok encoding => pure encoding
+    | .error message => throwErrorAt stx message
+  pure {type := .scalar (.foreign kind), term := .foreignConstant kind encoding}
+
 private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEnv)
     (stx : TSyntax `nlexpr) : ExprM Lowered := do
   match stx with
@@ -548,6 +579,24 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let left ← coerce stx left .native
     let right ← coerce stx right .native
     pure (mergeLowered (.scalar .native) (.poseidon2 domain.getNat left.term right.term) [left, right])
+  | `(nlexpr| secp256k1Base($value:num)) =>
+    lowerForeignFieldConstant stx (.base .secp256k1) value.getNat
+  | `(nlexpr| secp256k1Scalar($value:num)) =>
+    lowerForeignFieldConstant stx (.scalar .secp256k1) value.getNat
+  | `(nlexpr| secp256k1Identity()) =>
+    pure {
+      type := .scalar (.foreign (.point .secp256k1))
+      term := .foreignConstant (.point .secp256k1) (Foreign.identityEncoding .secp256k1)
+    }
+  | `(nlexpr| secp256r1Base($value:num)) =>
+    lowerForeignFieldConstant stx (.base .secp256r1) value.getNat
+  | `(nlexpr| secp256r1Scalar($value:num)) =>
+    lowerForeignFieldConstant stx (.scalar .secp256r1) value.getNat
+  | `(nlexpr| secp256r1Identity()) =>
+    pure {
+      type := .scalar (.foreign (.point .secp256r1))
+      term := .foreignConstant (.point .secp256r1) (Foreign.identityEncoding .secp256r1)
+    }
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -782,6 +831,16 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
     `(Noctium.Helpers.Term.boolOr $(← termTerm left) $(← termTerm right))
   | .boolXor left right => do
     `(Noctium.Helpers.Term.boolXor $(← termTerm left) $(← termTerm right))
+  | .foreignConstant kind encoding => do
+    let kind ← match kind with
+      | .base .secp256k1 => `(Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1)
+      | .scalar .secp256k1 => `(Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256k1)
+      | .point .secp256k1 => `(Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256k1)
+      | .base .secp256r1 => `(Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256r1)
+      | .scalar .secp256r1 => `(Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256r1)
+      | .point .secp256r1 => `(Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256r1)
+    let encoding := encoding.map natTerm |>.toArray
+    `(Noctium.Helpers.Term.foreignConstant $kind [$encoding,*])
   | .eq left right => do `(Noctium.Helpers.Term.eq $(← termTerm left) $(← termTerm right))
   | .cast ty value => do `(Noctium.Helpers.Term.cast $(← tyTerm ty) $(← termTerm value))
   | .disclose span value => do

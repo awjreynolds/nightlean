@@ -77,7 +77,7 @@ private def requireSourceType (ty : Ty) (term : Term) (bounds : List (Term × Na
     | .native => bounds
     | .bool => bounds ++ [(term, 1)]
     | .uint maximum => bounds ++ [(term, maximum)]
-    | .bytes _ | .jubjubScalar | .jubjubPoint => bounds}
+    | .bytes _ | .jubjubScalar | .jubjubPoint | .foreign _ => bounds}
 
 def packByteTerms : List Term → Term
   | [] => .constant 0
@@ -106,6 +106,18 @@ def persistentHashNativeVectorTerm (values : List Term) : Term :=
   match values with
   | [value] => persistentHashNativeTerm value
   | _ => .unary s!"persistent_hash_native_vector:{values.length}" (.hash values)
+
+/-- Foreign values retain their kind and canonical Encode representation. -/
+def foreignConstantTerm (kind : Foreign.Kind) (encoding : List Nat) : Term :=
+  .unary ("foreign_constant:" ++ kind.nativeName) (.hash (encoding.map Term.constant))
+
+def foreignEncodedFieldTerm (kind : Foreign.Kind) (value : Term) (index : Nat) : Term :=
+  .unary s!"foreign_encode:{kind.nativeName}:{index}" value
+
+/-- Encode packs (x-1 mod p) as low192/high64, followed by the point identity flag. -/
+def foreignEncodedFieldMaximum (kind : Foreign.Kind) (index : Nat) : Nat :=
+  if kind.encodedFieldCount == 5 && index == 4 then 1
+  else if index % 2 == 0 then Foreign.lowRadix - 1 else Foreign.highRadix - 1
 
 /-- The native overload hashes the complete ordered Native preimage to Jubjub. -/
 def hashToCurveTerm (values : List Term) : Term :=
@@ -236,7 +248,7 @@ theorem requireSourceType_eq (ty : Ty) (term : Term) (bounds : List (Term × Nat
         | .native => bounds
         | .bool => bounds ++ [(term, 1)]
         | .uint maximum => bounds ++ [(term, maximum)]
-        | .bytes _ | .jubjubScalar | .jubjubPoint => bounds} := rfl
+        | .bytes _ | .jubjubScalar | .jubjubPoint | .foreign _ => bounds} := rfl
 
 theorem arithmetic_eq (ty : Ty) (opcode : String) (left right : Normalized) :
     arithmetic ty opcode left right =
@@ -252,6 +264,21 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .native value => pure {term := .constant value}
   | .bool value => pure (requireSourceType .bool (.constant (if value then 1 else 0)) [])
   | .uint maximum value => pure (requireSourceType (.uint maximum) (.constant value) [])
+  | .foreignBase curve value => do
+    pure {term := foreignConstantTerm (.base curve) (← Foreign.encodeField (.base curve) value)}
+  | .foreignScalar curve value => do
+    pure {term := foreignConstantTerm (.scalar curve) (← Foreign.encodeField (.scalar curve) value)}
+  | .foreignIdentity curve =>
+    pure {term := foreignConstantTerm (.point curve) (Foreign.identityEncoding curve)}
+  | .foreignEncodedField (kind := kind) value index => do
+    unless index < kind.encodedFieldCount do throw "foreign encoding projection index is out of range"
+    let normalized ← normalize env value
+    let term := foreignEncodedFieldTerm kind normalized.term index
+    pure {
+      term
+      bounds := normalized.bounds ++ [(term, foreignEncodedFieldMaximum kind index)]
+      assertions := normalized.assertions
+    }
   | .bytes32Literal values => pure {term := .bytes (values.map Term.constant)}
   | .bytesLiteral _ values => pure {term := .bytes (values.map Term.constant)}
   | .bytesField (length := length) value index => do

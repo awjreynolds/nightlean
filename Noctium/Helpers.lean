@@ -220,6 +220,8 @@ inductive Term where
   | curve (operation : CurveOp) (arguments : List Term)
   | bytes (operation : BytesOp) (arguments : List Term)
   | bytes32Literal (values : List Nat)
+  /-- A canonical typed foreign value, stored in its native wire encoding. -/
+  | foreignConstant (kind : Foreign.Kind) (encoding : List Nat)
   /-- Project one checked byte from a fixed-length source byte string. -/
   | bytesAt (value : Term) (index : Nat)
   | call (name : String) (arguments : List Term)
@@ -920,6 +922,17 @@ structure TermInfo where
 private def combine (ty : ResultType) (children : List TermInfo) (effects : Effects := []) : TermInfo :=
   {ty, calls := children.flatMap (·.calls), effects := (children.flatMap (·.effects) ++ effects).eraseDups, guarded := children.any (·.guarded)}
 
+/-- Validate the source's deliberately narrow foreign literal surface. Base and
+scalar values use the canonical two-limb encoding. Point literals currently
+admit only the canonical identity encoding. -/
+private def decodeForeignConstant (kind : Foreign.Kind) (encoding : List Nat) : Except String (Option Nat) := do
+  match kind with
+  | .base _ | .scalar _ => some <$> Foreign.decodeField kind encoding
+  | .point curve => do
+    unless encoding == Foreign.identityEncoding curve do
+      throw "foreign point literals currently support only the canonical identity"
+    pure none
+
 private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Environment) (span : SourceSpan)
     (value : Term) : Except Diagnostic TermInfo :=
   match fuel with
@@ -951,6 +964,7 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
         | .bytes _ => fail span "byte strings do not support scalar arithmetic"
         | .jubjubScalar | .jubjubPoint =>
           fail span "Jubjub values require a qualified curve operation"
+        | .foreign _ => fail span "foreign values require a qualified curve operation"
       pure (combine (.scalar ty) [left, right]
         (if op == .sub && lt != .native && rt != .native then [.fallibleCast] else []))
     | .boolAnd left right | .boolOr left right | .boolXor left right =>
@@ -1028,6 +1042,10 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       unless bytes.length == 32 && bytes.all (· ≤ 255) do
         fail span "Bytes32 literal must contain exactly 32 byte values"
       pure {ty := .scalar (.bytes 32)}
+    | .foreignConstant kind encoding => do
+      liftError span ((Ty.foreign kind).validate Capabilities.crypto)
+      discard (decodeForeignConstant kind encoding |>.mapError fun message => {span, message})
+      pure {ty := .scalar (.foreign kind)}
     | .bytes operation arguments => do
       let (expected, result) ← (operation.signature arguments.length).mapError fun message =>
         {span, message}
@@ -1455,6 +1473,7 @@ private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnos
   | ⟨.bytes _, _⟩ => fail span "byte strings require separate native byte leaves"
   | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
     fail span "Jubjub values require a qualified curve operation"
+  | ⟨.foreign _, _⟩ => fail span "foreign values require a qualified curve operation"
 
 private def liftD (value : Except Diagnostic α) : LowerM α := liftM value
 
@@ -1648,6 +1667,13 @@ mutual
         | _, _ => liftD (fail span "invalid checked curve operation shape")
       pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .bytes32Literal bytes => pure (scalarValue (Expr.bytes32Literal bytes))
+    | .foreignConstant kind encoding => do
+      let decoded ← liftD (decodeForeignConstant kind encoding |>.mapError fun message => {span, message})
+      match kind, decoded with
+        | .base curve, some number => pure (scalarValue (Expr.foreignBase curve number))
+        | .scalar curve, some number => pure (scalarValue (Expr.foreignScalar curve number))
+        | .point curve, none => pure (scalarValue (Expr.foreignIdentity curve))
+        | _, _ => liftD (fail span "invalid checked foreign constant shape")
     | .bytesAt value index => do
       let value ← lowerTerm program scope env span value
       let .scalar (.bytes length) := value.ty
@@ -1974,12 +2000,14 @@ private def traceType : TraceValue → ResultType
   | none => .unit
   | some value => .scalar (match value.kind with
     | .native => .native | .bool => .bool | .uint m => .uint m | .bytes length => .bytes length
-    | .jubjubScalar => .jubjubScalar | .jubjubPoint => .jubjubPoint)
+    | .jubjubScalar => .jubjubScalar | .jubjubPoint => .jubjubPoint
+    | .foreign kind => .foreign kind)
 
 private def traceCast (span : SourceSpan) (value : TraceValue) (ty : ResultType) : TraceM TraceValue := do
   match ty with
   | .unit => pure none
   | .scalar ty =>
+    if ty.isForeign then liftM (fail span "foreign helper evaluation requires the native control runtime")
     let value ← traceScalar span value
     some <$> liftM (liftError span (ScalarPolicy.cast value ty.scalarKind))
   | .composite _ => liftM (fail span "aggregate helper trace is unavailable")
@@ -1993,6 +2021,7 @@ mutual
     | .native n => pure (some ⟨.native, n⟩)
     | .bool b => pure (some ⟨.bool, if b then 1 else 0⟩)
     | .uint m n => pure (some ⟨.uint m, n⟩)
+    | .foreignConstant .. => liftM (fail span "foreign helper evaluation requires the native control runtime")
     | .ref name =>
       let some value := env.lookup name | liftM (fail span "unbound helper trace value")
       pure value

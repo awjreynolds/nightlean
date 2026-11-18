@@ -73,6 +73,13 @@ inductive Expr : Ty → Type where
   | jubjubFromCoordinates (x y : Expr .native) : Expr .jubjubPoint
   /-- Hash an ordered, bounded list of Native values to a Jubjub subgroup point. -/
   | hashToCurve (values : List (Expr .native)) : Expr .jubjubPoint
+  /-- Canonical literals for the pinned foreign field families. -/
+  | foreignBase (curve : Foreign.Curve) (value : Nat) : Expr (.foreign (.base curve))
+  | foreignScalar (curve : Foreign.Curve) (value : Nat) : Expr (.foreign (.scalar curve))
+  | foreignIdentity (curve : Foreign.Curve) : Expr (.foreign (.point curve))
+  /-- One canonical native Encode projection from a typed foreign value. -/
+  | foreignEncodedField {kind : Foreign.Kind} (value : Expr (.foreign kind))
+      (index : Nat) : Expr .native
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -98,23 +105,26 @@ structure Input where
   span : SourceSpan := {}
   deriving Repr
 
-/-- Native scalar leaves for one source input. Byte leaves keep source byte
-order and receive explicit range-constrained identifiers. -/
+/-- Native input identifiers. Byte leaves keep source order. Foreign values
+keep one typed identifier because the backend performs their native decoding. -/
 def Input.nativeIdentifiers (input : Input) : List String :=
   match input.ty with
   | .bytes length => (List.range length).map fun index =>
       s!"%input_{input.name}_byte_{index}"
   | .jubjubPoint => [s!"%input_{input.name}_x", s!"%input_{input.name}_y"]
+  | .foreign _ => ["%input_" ++ input.name]
   | _ => ["%input_" ++ input.name]
 
 /-- Reserved Native projections used by the public transcript prologue for
-opaque Jubjub inputs. These names never replace the typed source alias. -/
+opaque curve inputs. These names never replace the typed source alias. -/
 def Input.publicProjectionIdentifiers (input : Input) : List String :=
   if input.visibility != .«public» then [] else
   match input.ty with
   | .jubjubScalar => [s!"_noctium_jubjub_scalar_{input.name}"]
   | .jubjubPoint => [s!"_noctium_jubjub_point_{input.name}_0",
       s!"_noctium_jubjub_point_{input.name}_1"]
+  | .foreign kind => (List.range kind.encodedFieldCount).map fun index =>
+      s!"_noctium_foreign_{input.name}_{index}"
   | _ => []
 
 structure Output where
@@ -125,8 +135,7 @@ structure Output where
   deriving Repr
 
 /-- Encode one logical entrypoint return as the Native fields committed by the
-call relation. Opaque return layouts reuse the same canonical projections as
-ledger alignment and the existing Jubjub input bridge. -/
+call relation. Opaque return layouts reuse canonical curve projections. -/
 def Output.nativeReturnFields : Output → Except String (List (Expr .native))
   | {ty := .native, value, ..} => pure [value]
   | {ty := .bool, value, ..} => pure [.cast .native value]
@@ -136,11 +145,15 @@ def Output.nativeReturnFields : Output → Except String (List (Expr .native))
   | {ty := .jubjubScalar, value, ..} => pure [.jubjubScalarToNative value]
   | {ty := .jubjubPoint, value, ..} => pure [
       .jubjubCoordinate value 0, .jubjubCoordinate value 1]
+  | {ty := .foreign kind, value, ..} =>
+    pure ((List.range kind.encodedFieldCount).map fun index =>
+      .foreignEncodedField value index)
 
 def Output.nativeReturnFieldCount (output : Output) : Nat :=
   match output.ty with
   | .bytes length => (length + 30) / 31
   | .jubjubPoint => 2
+  | .foreign kind => kind.encodedFieldCount
   | _ => 1
 
 /-- Recursive ledger value descriptions. Scalar leaves use the existing typed
@@ -373,6 +386,7 @@ structure Capabilities where
   bytes32Conversions : Bool := false
   hashToCurve : Bool := false
   jubjub : Bool := false
+  foreignValues : Bool := false
   stateCells : Bool := false
   stateMaps : Bool := false
   deriving Repr
@@ -381,14 +395,14 @@ structure Capabilities where
 def Capabilities.crypto : Capabilities := {
   typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
-  bytes32Conversions := true, hashToCurve := true, jubjub := true
+  bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true
 }
 
 /-- Source checking includes the currently implemented ledger state features. -/
 def Capabilities.source : Capabilities := {
   typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
-  bytes32Conversions := true, hashToCurve := true, jubjub := true,
+  bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true,
   stateCells := true, stateMaps := true
 }
 
@@ -406,6 +420,8 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
   | .jubjubScalar | .jubjubPoint =>
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
+  | .foreign _ =>
+    unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
   | .native | .bool => ScalarPolicy.validate ty.scalarKind
   | .uint maximum =>
     ScalarPolicy.validate ty.scalarKind
@@ -530,6 +546,18 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless values.length ≤ Types.defaultLimits.maxVectorLength do
       throw s!"hash_to_curve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
     for value in values do value.validate caps env
+  | .foreignBase curve value => do
+    unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
+    unless value < curve.baseModulus do throw "foreign base-field constant is not canonical"
+  | .foreignScalar curve value => do
+    unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
+    unless value < curve.scalarModulus do throw "foreign scalar constant is not canonical"
+  | .foreignIdentity _ =>
+    unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
+  | .foreignEncodedField (kind := kind) value index => do
+    unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
+    value.validate caps env
+    unless index < kind.encodedFieldCount do throw "foreign encoded-field index is out of range"
   | .ref name => do
     ty.validate caps
     match env.lookup name with
@@ -555,8 +583,8 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .cast target (source := source) value => do
     if target.isBytes || source.isBytes then
       throw "byte strings do not support scalar casts"
-    if target.isJubjub || source.isJubjub then
-      throw "Jubjub values do not support scalar casts"
+    if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
+      throw "curve values do not support scalar casts"
     target.validate caps
     value.validate caps env
   | .letE (source := source) name value body => do
@@ -574,6 +602,8 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .select c a b => do
     if ty.isJubjub || (ty.isBytes && !caps.bytes32Conversions) then
       throw "byte string and Jubjub selection is not supported by this source surface"
+    if ty.isForeign && !caps.foreignValues then
+      throw "target lacks typed foreign-curve value support"
     if !caps.select then throw "target lacks conditional selection"
     c.validate caps env
     a.validate caps env
@@ -590,6 +620,7 @@ def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except 
 private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
   match keyTy with
   | .bytes length => unless length == 32 do throw "only Bytes32 is supported as a ledger map key"
+  | .foreign _ => throw "foreign values are not supported as ledger map keys"
   | _ => pure ()
 
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
@@ -597,6 +628,7 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
   | .scalar (.bytes _) => throw "Bytes32 state values are not supported"
   | .scalar .jubjubScalar | .scalar .jubjubPoint =>
     throw "Jubjub values require a qualified ledger schema"
+  | .scalar (.foreign _) => throw "foreign values require a qualified ledger schema"
   | .scalar ty => ty.validate caps
   | .map keyTy value => do
     validateLedgerMapKeyType keyTy
@@ -709,7 +741,7 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
   let projections := c.inputs.flatMap Input.publicProjectionIdentifiers
   if !uniqueNames projections || projections.any (fun name =>
       c.inputs.any (fun input => input.name == name)) then
-    throw {span := c.span, message := "input names collide with generated Jubjub public projections"}
+    throw {span := c.span, message := "input names collide with generated typed curve public projections"}
   if !uniqueNames (c.outputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit output"}
   validateConstraints caps env c.span c.constraints
@@ -740,6 +772,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
     match decl.kind with
     | .cell (.bytes _) | .map _ (.bytes _) =>
       throw {span := decl.span, message := "Bytes32 state values are not supported"}
+    | .cell (.foreign _) | .map _ (.foreign _) =>
+      throw {span := decl.span, message := "foreign values are not supported in ledger cells or maps"}
     | .cell .jubjubScalar | .cell .jubjubPoint
     | .map _ .jubjubScalar | .map _ .jubjubPoint =>
       throw {span := decl.span, message := "Jubjub ledger state requires a qualified point/scalar schema"}
@@ -959,6 +993,10 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       match validateLedgerMapKeyType keyTy with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
+    match decl.kind with
+    | .cell (.foreign _) | .map _ (.foreign _) =>
+      throw {span := decl.span, message := "foreign values are not supported in ledger cells or maps"}
+    | _ => pure ()
     let types := match decl.kind with
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]

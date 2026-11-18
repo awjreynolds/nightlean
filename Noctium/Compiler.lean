@@ -15,6 +15,13 @@ private def typeName : Ty → String
   | .bytes byteLength => s!"Bytes<{byteLength}>"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
+  | .foreign kind => kind.sourceName
+
+private def foreignConstantJson (kind : Foreign.Kind) (value : kind.Denote) : Json :=
+  Json.mkObj [
+    ("tag", toJson ("foreignConstant" : String)),
+    ("type", toJson kind.sourceName),
+    ("encoding", toJson ((Foreign.encodeValue kind value).toOption.getD [] |>.map toString))]
 
 private def expressionJson : Expr ty → Json
   | .native n => Json.mkObj [("native", toJson (toString n))]
@@ -77,6 +84,12 @@ private def expressionJson : Expr ty → Json
       ("x", expressionJson x), ("y", expressionJson y)]
   | .hashToCurve values => Json.mkObj [("tag", toJson ("hashToCurve" : String)),
       ("values", toJson (values.map expressionJson))]
+  | .foreignBase curve value => foreignConstantJson (.base curve) value
+  | .foreignScalar curve value => foreignConstantJson (.scalar curve) value
+  | .foreignIdentity curve => foreignConstantJson (.point curve) .identity
+  | .foreignEncodedField (kind := kind) value index => Json.mkObj [
+      ("tag", toJson ("foreignEncodedField" : String)),
+      ("value", expressionJson value), ("index", toJson index)]
   | .boolAnd left right => Json.mkObj [("tag", toJson ("boolAnd" : String)),
       ("left", expressionJson left), ("right", expressionJson right)]
   | .boolOr left right => Json.mkObj [("tag", toJson ("boolOr" : String)),
@@ -165,6 +178,12 @@ private def nativeExpressionJson : Expr ty → Json
       ("x", nativeExpressionJson x), ("y", nativeExpressionJson y)]
   | .hashToCurve values => Json.mkObj [("tag", toJson ("hashToCurve" : String)),
       ("values", toJson (values.map nativeExpressionJson))]
+  | .foreignBase curve value => foreignConstantJson (.base curve) value
+  | .foreignScalar curve value => foreignConstantJson (.scalar curve) value
+  | .foreignIdentity curve => foreignConstantJson (.point curve) .identity
+  | .foreignEncodedField (kind := kind) value index => Json.mkObj [
+      ("tag", toJson ("foreignEncodedField" : String)),
+      ("value", nativeExpressionJson value), ("index", toJson index)]
   | .boolAnd left right => Json.mkObj [("tag", toJson ("boolAnd" : String)),
       ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
   | .boolOr left right => Json.mkObj [("tag", toJson ("boolOr" : String)),

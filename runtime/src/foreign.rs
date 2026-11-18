@@ -1,10 +1,14 @@
 //! Checked native codecs for the supported Secp256k1 and Secp256r1 values.
 
 use crate::zkir::{
-    ir_instructions::encode::{decode_offcircuit, encode_offcircuit},
+    ir_instructions::{
+        encode::{decode_offcircuit, encode_offcircuit},
+        from_bytes::from_bytes_offcircuit,
+        to_bytes::to_bytes_offcircuit,
+    },
     ir_types::{IrType, IrValue},
 };
-use anyhow::{Result, ensure};
+use anyhow::{Result, bail, ensure};
 use transient_crypto::curve::Fr;
 
 /// A supported foreign curve family.
@@ -42,6 +46,36 @@ impl ForeignType {
         self.role
     }
 
+    pub fn parse_source_name(name: &str) -> Result<Self> {
+        match name {
+            "Secp256k1Base" => Ok(Self::new(ForeignFamily::Secp256k1, ForeignRole::Base)),
+            "Secp256k1Scalar" => Ok(Self::new(ForeignFamily::Secp256k1, ForeignRole::Scalar)),
+            "Secp256k1Point" => Ok(Self::new(ForeignFamily::Secp256k1, ForeignRole::Point)),
+            "Secp256r1Base" => Ok(Self::new(ForeignFamily::Secp256r1, ForeignRole::Base)),
+            "Secp256r1Scalar" => Ok(Self::new(ForeignFamily::Secp256r1, ForeignRole::Scalar)),
+            "Secp256r1Point" => Ok(Self::new(ForeignFamily::Secp256r1, ForeignRole::Point)),
+            _ => bail!("unsupported foreign type"),
+        }
+    }
+
+    pub const fn source_name(self) -> &'static str {
+        match (self.family, self.role) {
+            (ForeignFamily::Secp256k1, ForeignRole::Base) => "Secp256k1Base",
+            (ForeignFamily::Secp256k1, ForeignRole::Scalar) => "Secp256k1Scalar",
+            (ForeignFamily::Secp256k1, ForeignRole::Point) => "Secp256k1Point",
+            (ForeignFamily::Secp256r1, ForeignRole::Base) => "Secp256r1Base",
+            (ForeignFamily::Secp256r1, ForeignRole::Scalar) => "Secp256r1Scalar",
+            (ForeignFamily::Secp256r1, ForeignRole::Point) => "Secp256r1Point",
+        }
+    }
+
+    pub const fn byte_len(self) -> usize {
+        match self.role {
+            ForeignRole::Point => 33,
+            ForeignRole::Base | ForeignRole::Scalar => 32,
+        }
+    }
+
     pub fn native_type(self) -> IrType {
         match (self.family, self.role) {
             (ForeignFamily::Secp256k1, ForeignRole::Base) => IrType::Secp256k1Base,
@@ -77,6 +111,25 @@ impl ForeignValue {
         Ok(Self { ty, value })
     }
 
+    /// Construct from canonical little-endian bytes, rejecting modulo aliases.
+    pub fn from_bytes(ty: ForeignType, bytes: &[u8]) -> Result<Self> {
+        ensure!(bytes.len() == ty.byte_len(), "wrong foreign byte length");
+        let native_type = ty.native_type();
+        let value = from_bytes_offcircuit(&native_type, bytes)?;
+        ensure!(
+            value_matches_type(&value, ty),
+            "native decoder returned the wrong foreign type"
+        );
+        match to_bytes_offcircuit(&value)? {
+            IrValue::Bytes(canonical) => ensure!(
+                canonical.as_slice() == bytes,
+                "foreign bytes are not canonical"
+            ),
+            _ => bail!("native byte encoder returned a non-byte value"),
+        }
+        Ok(Self { ty, value })
+    }
+
     pub const fn foreign_type(&self) -> ForeignType {
         self.ty
     }
@@ -103,6 +156,24 @@ impl ForeignValue {
                 _ => anyhow::bail!("native encoder returned a non-native field"),
             })
             .collect()
+    }
+
+    /// Serialize to canonical field bytes or the native compressed point form.
+    pub fn to_bytes(&self) -> Result<Vec<u8>> {
+        ensure!(
+            value_matches_type(&self.value, self.ty),
+            "foreign value does not match its declared type"
+        );
+        match to_bytes_offcircuit(&self.value)? {
+            IrValue::Bytes(bytes) => {
+                ensure!(
+                    bytes.len() == self.ty.byte_len(),
+                    "native encoder returned wrong byte count"
+                );
+                Ok(bytes)
+            }
+            _ => bail!("native byte encoder returned a non-byte value"),
+        }
     }
 }
 

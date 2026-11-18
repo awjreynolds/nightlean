@@ -1,5 +1,5 @@
 //! Canonical composite schema/value transport. Compiler layout construction remains Lean.
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{Result, anyhow, bail, ensure};
 use num_bigint::BigUint;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::{Mutex, OnceLock};
@@ -1079,9 +1079,15 @@ impl Schema {
     }
 
     pub fn native_field_only(&self) -> bool {
-        self.nodes.iter().all(|node| matches!(node,
-            LayoutNode::Scalar(Leaf::Native) | LayoutNode::Tuple(_)
-                | LayoutNode::Struct { .. } | LayoutNode::Vector { .. }))
+        self.nodes.iter().all(|node| {
+            matches!(
+                node,
+                LayoutNode::Scalar(Leaf::Native)
+                    | LayoutNode::Tuple(_)
+                    | LayoutNode::Struct { .. }
+                    | LayoutNode::Vector { .. }
+            )
+        })
     }
 
     pub fn leaf_types(&self) -> Result<Vec<String>> {

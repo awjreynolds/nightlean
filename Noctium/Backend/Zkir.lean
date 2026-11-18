@@ -35,7 +35,10 @@ def nativeModulus : Nat :=
 mutual
 private def checkConstants : Expr ty → Except String Unit
   | .native n => if n < nativeModulus then pure () else throw "noncanonical Native constant"
-  | .bool _ | .ref _ => pure ()
+  | .bool _ | .ref _ | .foreignIdentity _ => pure ()
+  | .foreignBase curve value => discard (Foreign.encodeField (.base curve) value)
+  | .foreignScalar curve value => discard (Foreign.encodeField (.scalar curve) value)
+  | .foreignEncodedField value _ => checkConstants value
   | .uint maximum value =>
     if maximum ≤ ScalarPolicy.maxUint && value ≤ maximum then pure ()
     else throw "noncanonical unsigned constant"
@@ -168,7 +171,7 @@ def constrainType (ty : Ty) (value : String) : LowerM Unit :=
   | .bool => emit "constrain_to_boolean" [("val", toJson value)]
   | .uint maximum => constrainUnsigned maximum value
   | .bytes _ => rejectLowering "Bytes32 must be expanded into byte inputs"
-  | .jubjubScalar | .jubjubPoint => rejectLowering "Jubjub values require their typed input bridge"
+  | .jubjubScalar | .jubjubPoint | .foreign _ => rejectLowering "opaque values require their typed input bridge"
 
 private def lowerJubjubScalarFromNative (native : String) : LowerM String := do
   let key : ExpressionKey := ("jubjub_scalar_from_native", [native], none)
@@ -209,6 +212,31 @@ private def lowerPointFromCoordinates (x y : String) : LowerM String := do
   emit "constrain_eq" [("a", toJson x), ("b", toJson actualX)]
   emit "constrain_eq" [("a", toJson y), ("b", toJson actualY)]
   pure point
+
+private def lowerForeignConstant (kind : Foreign.Kind) (encoding : Except String (List Nat)) : LowerM String := do
+  let values ← match encoding with
+    | .ok values => pure values
+    | .error message => do
+      rejectLowering message
+      pure []
+  let operands := values.map fieldImmediate
+  let key : ExpressionKey := ("load_constant:" ++ kind.nativeName, operands, none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "load_constant" [("type", toJson kind.nativeName), ("encoding", toJson operands), ("output", toJson output)]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
+private def encodeForeign (kind : Foreign.Kind) (value : String) : LowerM (List String) := do
+  let keys := (List.range kind.encodedFieldCount).map fun index =>
+    (("encode_foreign:" ++ kind.nativeName, [value], some index) : ExpressionKey)
+  let expressions := (← get).expressions
+  let cached := keys.map (fun key => expressions.lookup key)
+  if cached.all Option.isSome then return cached.filterMap id
+  let outputs ← keys.mapM fun _ => fresh
+  emit "encode" [("input", toJson value), ("outputs", toJson outputs)]
+  modify fun state => {state with expressions := keys.zip outputs ++ state.expressions}
+  pure outputs
 
 private def lowerTypedBoolConstant (value : Bool) : LowerM String := do
   let encoded := if value then "0x01" else "0x00"
@@ -508,6 +536,7 @@ private def nativeTypeName : Ty → String
   | .native => "Scalar<BLS12-381>"
   | .jubjubScalar => "Scalar<Jubjub>"
   | .jubjubPoint => "Point<Jubjub>"
+  | .foreign kind => kind.nativeName
   | _ => "Unsupported"
 
 private def lowerFromBytes32 (target : Ty) (values : List String) : LowerM String := do
@@ -545,6 +574,11 @@ private def alignedBytes32Fields (values : List String) : LowerM (String × Stri
 
 private def lowerByteInput (input : Input) : LowerM Unit := do
   match input.ty with
+  | .foreign kind => do
+    let output := "%input_" ++ input.name
+    emit (if input.visibility == .«public» then "public_input" else "private_input")
+      [("guard", Json.null), ("type", toJson kind.nativeName), ("output", toJson output)]
+    modify fun state => {state with aliases := (input.name, output) :: state.aliases}
   | .bytes _ =>
     let identifiers := input.nativeIdentifiers
     for output in identifiers do
@@ -683,6 +717,17 @@ def lowerExpr : Expr ty → LowerM String
   | .native n => pure (fieldImmediate n)
   | .uint _ n => pure (fieldImmediate n)
   | .bool b => pure (if b then "0x01" else "0x00")
+  | .foreignBase curve value => lowerForeignConstant (.base curve) (Foreign.encodeField (.base curve) value)
+  | .foreignScalar curve value => lowerForeignConstant (.scalar curve) (Foreign.encodeField (.scalar curve) value)
+  | .foreignIdentity curve => lowerForeignConstant (.point curve) (.ok (Foreign.identityEncoding curve))
+  | .foreignEncodedField (kind := kind) value index => do
+    let value ← lowerExpr value
+    let fields ← encodeForeign kind value
+    match fields[index]? with
+    | some output => pure output
+    | none => do
+      rejectLowering "foreign encoding projection index is out of range"
+      pure "0x00"
   | .boolAnd left right => do
     let left ← lowerExpr left
     let right ← lowerExpr right
@@ -810,8 +855,8 @@ def lowerExpr : Expr ty → LowerM String
     | .bytes _ => do
       rejectLowering "byte strings do not support scalar casts"
       pure "0x00"
-    | .jubjubScalar | .jubjubPoint => do
-      rejectLowering "Jubjub values do not support generic scalar casts"
+    | .jubjubScalar | .jubjubPoint | .foreign _ => do
+      rejectLowering "opaque values do not support generic scalar casts"
       pure "0x00"
   | @Expr.letE (.bytes _) _ name value body => do
     let value ← lowerBytes value
@@ -873,7 +918,10 @@ def lowerBody (c : Circuit) : LowerM Unit := do
   for input in c.inputs do
     lowerByteInput input
     if input.visibility == .«public» then
-      for output in input.nativeIdentifiers do bindPublic [output]
+      match input.ty with
+      | .foreign kind => do
+        for output in (← encodeForeign kind ("%input_" ++ input.name)) do bindPublic [output]
+      | _ => for output in input.nativeIdentifiers do bindPublic [output]
   for condition in c.constraints do
     let value ← lowerExpr condition
     emit "assert" [("cond", toJson value)]
@@ -896,7 +944,7 @@ still bind this public-input sequence to its accepted ledger call transcript. -/
 private def loweringCapabilities : Capabilities :=
   { poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
-    bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true }
+    bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, jubjub := true }
 
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c

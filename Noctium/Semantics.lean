@@ -10,6 +10,7 @@ abbrev Ty.Denote : Ty → Type
   | .bytes _ => List Nat
   | .jubjubScalar => Nat
   | .jubjubPoint => Nat × Nat
+  | .foreign kind => kind.Denote
 
 inductive Value where
   | native (value : Nat)
@@ -18,6 +19,9 @@ inductive Value where
   | bytes (length : Nat) (value : List Nat)
   | jubjubScalar (value : Nat)
   | jubjubPoint (x y : Nat)
+  | foreignBase (curve : Foreign.Curve) (value : Nat)
+  | foreignScalar (curve : Foreign.Curve) (value : Nat)
+  | foreignPoint (curve : Foreign.Curve) (value : Foreign.Point)
   deriving Repr, BEq, DecidableEq
 
 def Value.as : (ty : Ty) → Value → Option ty.Denote
@@ -28,6 +32,12 @@ def Value.as : (ty : Ty) → Value → Option ty.Denote
     if length == found && values.length == length && values.all (· ≤ 255) then some values else none
   | .jubjubScalar, .jubjubScalar scalar => some scalar
   | .jubjubPoint, .jubjubPoint x y => some (x, y)
+  | .foreign (.base curve), .foreignBase found value =>
+    if curve == found && value < curve.baseModulus then some value else none
+  | .foreign (.scalar curve), .foreignScalar found value =>
+    if curve == found && value < curve.scalarModulus then some value else none
+  | .foreign (.point curve), .foreignPoint found value =>
+    if curve == found && Foreign.pointValid curve value then some value else none
   | _, _ => none
 
 def Value.pack : (ty : Ty) → ty.Denote → Value
@@ -37,6 +47,9 @@ def Value.pack : (ty : Ty) → ty.Denote → Value
   | .bytes length, values => .bytes length values
   | .jubjubScalar, scalar => .jubjubScalar scalar
   | .jubjubPoint, (x, y) => .jubjubPoint x y
+  | .foreign (.base curve), value => .foreignBase curve value
+  | .foreign (.scalar curve), value => .foreignScalar curve value
+  | .foreign (.point curve), value => .foreignPoint curve value
 
 /-- Recursive semantic form used by the nested-map source effects. -/
 inductive LedgerValue where
@@ -95,6 +108,7 @@ private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .bytes _, a, b => a == b
   | .jubjubScalar, a, b => a == b
   | .jubjubPoint, a, b => a == b
+  | .foreign _, a, b => a == b
 
 private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   match ty with
@@ -105,6 +119,7 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .jubjubScalar => v < Jubjub.scalarOrder
   | .jubjubPoint => v.1 < ctx.modulus && v.2 < ctx.modulus &&
       (ctx.jubjub.pointValid v).isOk
+  | .foreign kind => kind.canonical v
 
 /-- Public reduction equation for input-admission and preservation proofs. -/
 theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
@@ -115,7 +130,8 @@ theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
       | .bytes length => value.length == length && value.all (· ≤ 255)
       | .jubjubScalar => value < Jubjub.scalarOrder
       | .jubjubPoint => value.1 < ctx.modulus && value.2 < ctx.modulus &&
-          (ctx.jubjub.pointValid value).isOk := rfl
+          (ctx.jubjub.pointValid value).isOk
+      | .foreign kind => kind.canonical value := rfl
 
 private def scalarNumber : (ty : Ty) → ty.Denote → Except String Nat
   | .native, n | .uint _, n => pure n
@@ -123,6 +139,7 @@ private def scalarNumber : (ty : Ty) → ty.Denote → Except String Nat
   | .bytes _, _ => .error "byte strings do not support scalar conversion"
   | .jubjubScalar, _ => .error "Jubjub scalars do not support scalar conversion"
   | .jubjubPoint, _ => .error "Jubjub points do not support scalar conversion"
+  | .foreign _, _ => .error "foreign values do not support scalar conversion"
 
 private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except String target.Denote :=
   match target with
@@ -133,6 +150,7 @@ private def scalarCast (ctx : EvalContext) (target : Ty) (number : Nat) : Except
     else .error "scalar conversion exceeds unsigned bound"
   | .bytes _ => .error "byte strings do not support scalar conversion"
   | .jubjubScalar | .jubjubPoint => .error "Jubjub values do not support scalar conversion"
+  | .foreign _ => .error "foreign values do not support scalar conversion"
 
 private def checkedJubjubPoint (ctx : EvalContext) (point : Nat × Nat) :
     Except String (Nat × Nat) := do
@@ -274,6 +292,17 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
       reversedInputs := field :: reversedInputs
     let inputs := reversedInputs.reverse
     checkedJubjubPoint ctx (← ctx.jubjub.hashToCurve inputs)
+  | .foreignBase curve value =>
+    if value < curve.baseModulus then pure value else .error "foreign base-field constant is not canonical"
+  | .foreignScalar curve value =>
+    if value < curve.scalarModulus then pure value else .error "foreign scalar constant is not canonical"
+  | .foreignIdentity _ => pure .identity
+  | .foreignEncodedField (kind := kind) value index => do
+    let encoded ← Foreign.encodeValue kind (← value.eval ctx env)
+    match encoded[index]? with
+    | some field =>
+      if field < ctx.modulus then pure field else throw "foreign Encode field is noncanonical"
+    | none => throw "foreign encoded-field index is out of range"
   | .bytesAt (length := length) value index => do
     let values ← value.eval ctx env
     match values[index]? with
@@ -361,8 +390,9 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if a < b then throw "unsigned subtraction underflow"
     scalarCast ctx (.uint m) (a - b)
   | .cast (source := source) target value => do
-    if target.isBytes || source.isBytes || target.isJubjub || source.isJubjub then
-      throw "byte strings and Jubjub values do not support scalar conversion"
+    if target.isBytes || source.isBytes || target.isJubjub || source.isJubjub ||
+        target.isForeign || source.isForeign then
+      throw "byte strings and curve values do not support scalar conversion"
     scalarCast ctx target (← scalarNumber source (← value.eval ctx env))
   | .letE (source := source) name value body => do
     let value ← value.eval ctx env
@@ -411,7 +441,7 @@ private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, typedBoolean := true, poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
     sha512 := true, keccak256 := true,
-    bytes32Conversions := true, hashToCurve := true, jubjub := true}
+    bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true}
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
   match c.validate (evaluationCapabilities ctx) with
@@ -877,6 +907,8 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
             | .bytes length => List.replicate length 0
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
+            | .foreign (.base _) | .foreign (.scalar _) => 0
+            | .foreign (.point _) => .identity
           env := (destination, Value.pack ty zero) :: env
         | .readMap _ destination _ ty _ =>
           let zero : ty.Denote := match ty with
@@ -886,6 +918,8 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
             | .bytes length => List.replicate length 0
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
+            | .foreign (.base _) | .foreign (.scalar _) => 0
+            | .foreign (.point _) => .identity
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
@@ -900,6 +934,8 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
             | .bytes length => List.replicate length 0
             | .jubjubScalar => 0
             | .jubjubPoint => (0, 1)
+            | .foreign (.base _) | .foreign (.scalar _) => 0
+            | .foreign (.point _) => .identity
           env := (destination, Value.pack ty zero) :: env
         | .readCompositePath _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)

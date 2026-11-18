@@ -14,6 +14,8 @@ private def typeEncodingSize : CompositeType → Nat
   | .unit => 1
   | .scalar .native | .scalar .bool => 2
   | .scalar .jubjubScalar | .scalar .jubjubPoint => 3
+  | .scalar (.foreign kind) => 2 + (toString kind.sourceName.length).utf8ByteSize +
+      1 + kind.sourceName.utf8ByteSize
   | .scalar (.uint maximum) => 2 + encodedNatSize maximum
   | .scalar (.bytes length) => 2 + encodedNatSize length
   | .tuple items => 3 + encodedNatSize items.length + (items.map typeEncodingSize).sum

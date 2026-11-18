@@ -37,6 +37,7 @@ mutual
     | enumeration (id : Types.DeclId)
     | vector (length : Natural) (element : GenericType)
     | bytes (length : Natural)
+    | foreign (kind : Foreign.Kind)
     | alias (id : Types.DeclId) (arguments : List Argument)
 
   inductive Argument where
@@ -70,6 +71,7 @@ inductive Term where
   | boolAnd (left right : Term)
   | boolOr (left right : Term)
   | boolXor (left right : Term)
+  | foreignConstant (kind : Foreign.Kind) (encoding : List Nat)
   | eq (left right : Term)
   | cast (target : GenericType) (value : Term)
   | disclose (span : SourceSpan) (value : Term)
@@ -249,6 +251,7 @@ private def canonicalType : Types.CompositeType → String
   | .scalar (.bytes length) => s!"scalar-bytes({length})"
   | .scalar .jubjubScalar => "scalar-jubjub-scalar"
   | .scalar .jubjubPoint => "scalar-jubjub-point"
+  | .scalar (.foreign kind) => s!"scalar-foreign({kind.sourceName})"
   | .tuple items => s!"tuple({String.intercalate "," (items.map canonicalType)})"
   | .structure id => s!"struct({id})"
   | .enumeration id => s!"enum({id})"
@@ -263,6 +266,7 @@ private def canonicalTypeSize : Types.CompositeType → Nat
   | .scalar (.bytes length) => 14 + (toString length).length
   | .scalar .jubjubScalar => 20
   | .scalar .jubjubPoint => 19
+  | .scalar (.foreign kind) => 16 + kind.sourceName.utf8ByteSize
   | .tuple items => 7 + (if items.isEmpty then 0 else items.length - 1) +
       items.foldl (fun size item => size + canonicalTypeSize item) 0
   | .structure id => 8 + id.utf8ByteSize
@@ -377,6 +381,7 @@ mutual
         | .unit => pure .unit
         | .native => pure (.scalar .native)
         | .bool => pure (.scalar .bool)
+        | .foreign kind => pure (.scalar (.foreign kind))
         | .uint maximum => do
           let maximum ← evalNatural limits span naturals maximum
           liftError span (ScalarPolicy.validate (.uint maximum))
@@ -543,7 +548,7 @@ private def sourceChildren (limits : Limits) (span : SourceSpan) :
   | .argument (.type value) => pure [.typeExpr value]
   | .argument (.natural value) => pure [.natural value]
   | .typeExpr type => match type with
-    | .unit | .native | .bool | .parameter _ | .enumeration _ => pure []
+    | .unit | .native | .bool | .parameter _ | .enumeration _ | .foreign _ => pure []
     | .uint maximum | .bytes maximum => pure [.natural maximum]
     | .tuple items => do
       if items.length > limits.maxSourceNodes then resource span "source nodes"
@@ -553,7 +558,7 @@ private def sourceChildren (limits : Limits) (span : SourceSpan) :
       pure (arguments.map SourceNode.argument)
     | .vector length element => pure [.natural length, .typeExpr element]
   | .term term => match term with
-    | .unit | .native _ | .bool _ | .ref _ => pure []
+    | .unit | .native _ | .bool _ | .ref _ | .foreignConstant .. => pure []
     | .uint maximum _ => pure [.natural maximum]
     | .binary _ left right | .boolAnd left right | .boolOr left right
     | .boolXor left right | .eq left right | .poseidon2 _ left right
@@ -844,6 +849,7 @@ mutual
     | .boolXor left right =>
       .boolXor <$> convertTerm limits declaration types naturals values left <*>
         convertTerm limits declaration types naturals values right
+    | .foreignConstant kind encoding => pure (.foreignConstant kind encoding)
     | .eq left right =>
       .eq <$> convertTerm limits declaration types naturals values left <*>
         convertTerm limits declaration types naturals values right
@@ -1035,6 +1041,7 @@ inductive SignatureType where
   | bytes (length : String)
   | jubjubScalar
   | jubjubPoint
+  | foreign (sourceName : String)
   deriving Repr, BEq, Inhabited, Lean.FromJson, Lean.ToJson
 
 inductive SignatureArgument where
@@ -1073,6 +1080,7 @@ private def signatureType : Types.CompositeType → SignatureType
   | .scalar (.bytes length) => .bytes (toString length)
   | .scalar .jubjubScalar => .jubjubScalar
   | .scalar .jubjubPoint => .jubjubPoint
+  | .scalar (.foreign kind) => .foreign kind.sourceName
   | .tuple items => .tuple (items.map signatureType)
   | .structure id => .structure id
   | .enumeration id => .enumeration id
@@ -1087,6 +1095,7 @@ private def signatureResult : Helpers.ResultType → SignatureType
   | .scalar (.bytes length) => .bytes (toString length)
   | .scalar .jubjubScalar => .jubjubScalar
   | .scalar .jubjubPoint => .jubjubPoint
+  | .scalar (.foreign kind) => .foreign kind.sourceName
   | .composite value => signatureType value
 
 private def signatureArgument : SpecializationArgument → SignatureArgument
@@ -1106,7 +1115,8 @@ private partial def collectWitnessTerms (term : Helpers.Term) (result : Array Si
     collectWitnessTerms no (collectWitnessTerms yes (collectWitnessTerms condition result))
   | .call _ values | .witnessCall _ _ values | .composite _ values | .curve _ values | .bytes _ values =>
     values.foldl (fun acc value => collectWitnessTerms value acc) result
-  | .unit | .native _ | .bool _ | .uint _ _ | .ref _ | .bytes32Literal _ => result
+  | .unit | .native _ | .bool _ | .uint _ _ | .ref _ | .bytes32Literal _
+  | .foreignConstant .. => result
 
 private partial def collectWitnessStatements : List Helpers.Statement → Array SignatureValue → Array SignatureValue
   | [], result => result
@@ -1170,6 +1180,9 @@ private partial def validateSignatureType (fuel : Nat) (value : SignatureType) :
     | .unit | .native | .bool => pure ()
     | .jubjubScalar | .jubjubPoint =>
       throw "Jubjub helper signatures are not supported by specialization"
+    | .foreign sourceName => do
+      unless Foreign.kinds.any (fun kind => kind.sourceName == sourceName) do
+        throw "unsupported foreign helper signature type"
     | .uint maximum => do
       let maximum ← canonicalDecimal maximum
       unless maximum ≤ ScalarPolicy.maxUint do throw "unsigned signature exceeds target maximum"

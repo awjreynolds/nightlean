@@ -302,6 +302,7 @@ private partial def canonicalTypeSize (fuel : Nat) (value : Types.CompositeType)
     | .scalar (.bytes length) => some (2 + natSize length)
     | .scalar .jubjubScalar => some 3
     | .scalar .jubjubPoint => some 3
+    | .scalar (.foreign _) => none
     | .tuple items => do
       let sizes ← items.mapM (canonicalTypeSize fuel)
       pure (3 + natSize items.length + sizes.foldl (· + ·) 0)
@@ -334,6 +335,7 @@ private partial def consumeTypeNodes (span : SourceSpan) (remaining : Nat)
   | .scalar (.bytes _) => fail span "module byte types require a composite bytes layout"
   | .scalar .jubjubScalar | .scalar .jubjubPoint =>
     fail span "Jubjub types are not supported by module type parameters"
+  | .scalar (.foreign _) => fail span "foreign types are not supported by module type parameters"
   | .scalar .native | .scalar .bool | .unit => pure remaining
 
 private def encodeType : Types.CompositeType → String
@@ -344,6 +346,7 @@ private def encodeType : Types.CompositeType → String
   | .scalar (.bytes length) => "sx" ++ encodeNat length
   | .scalar .jubjubScalar => "sj;"
   | .scalar .jubjubPoint => "sp;"
+  | .scalar (.foreign kind) => "sf" ++ encodeText kind.sourceName
   | .tuple items => "t" ++ encodeNat items.length ++ "[" ++ String.join (items.map encodeType) ++ "]"
   | .structure id => "r" ++ encodeText id
   | .enumeration id => "e" ++ encodeText id
@@ -635,6 +638,7 @@ private def resolveStateScalar (limits : Limits) (span : SourceSpan)
       | .bytes _ => fail span "module byte state parameters require a composite bytes type"
       | .jubjubScalar | .jubjubPoint =>
         fail span "Jubjub state parameters are not supported by module specialization"
+      | .foreign _ => fail span "foreign state parameters are not supported by module specialization"
     | _ => fail span s!"Noctium ledger state parameter '{name}' must specialize to a scalar; aggregate ledger state is not supported"
 
 private def resolveModuleStateKind (limits : Limits) (span : SourceSpan)
@@ -1054,6 +1058,7 @@ private partial def genericTypeOfConcrete : Types.CompositeType → Except Strin
   | .scalar (.bytes _) => throw "scalar byte types cannot enter module specialization"
   | .scalar .jubjubScalar | .scalar .jubjubPoint =>
     throw "Jubjub types are not supported by module specialization"
+  | .scalar (.foreign kind) => pure (.foreign kind)
   | .tuple items => .tuple <$> items.mapM genericTypeOfConcrete
   | .structure id => pure (.structure id [])
   | .enumeration id => pure (.enumeration id)

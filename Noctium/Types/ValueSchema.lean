@@ -91,6 +91,7 @@ private def valueJsonAux : Nat → AggregateValue → Except String Json
     | .scalar (.bytes _) _ => throw "byte strings require an aggregate bytes value"
     | .scalar .jubjubScalar _ | .scalar .jubjubPoint _ =>
       throw "Jubjub values require a qualified curve schema"
+    | .scalar (.foreign _) _ => throw "foreign values require a qualified curve schema"
     | .tuple items => pure (Json.mkObj [("kind", toJson ("tuple" : String)), ("items", toJson (← items.mapM (valueJsonAux fuel)))])
     | .structure id fields =>
       let fields ← fields.mapM fun (name, value) => do

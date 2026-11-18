@@ -49,6 +49,8 @@ pub enum Value {
     Bytes(Vec<u8>),
     JubjubScalar(EmbeddedFr),
     JubjubPoint(EmbeddedGroupAffine),
+    #[cfg(feature = "zkir-321")]
+    Foreign(foreign::ForeignValue),
 }
 impl Value {
     fn field(&self) -> Result<Fr> {
@@ -128,7 +130,11 @@ fn evaluated_bytes(value: &Expr, length: usize, env: &Environment) -> Result<Vec
 
 fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
     match alignment {
-        "field" => Ok(field_value(value.field_encoding()?)),
+        "field" => match value {
+            #[cfg(feature = "zkir-321")]
+            Value::Foreign(_) => bail!("foreign values cannot use Native field alignment"),
+            _ => Ok(field_value(value.field_encoding()?)),
+        },
         "bit" => Ok(AlignedValue {
             value: FabValue(vec![ValueAtom(if value.boolean()? {
                 vec![1]
@@ -167,6 +173,13 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
 pub enum Expr {
     Constant {
         value: String,
+    },
+    #[cfg(feature = "zkir-321")]
+    #[serde(rename = "foreignConstant")]
+    ForeignConstant {
+        #[serde(rename = "type")]
+        ty: String,
+        encoding: Vec<String>,
     },
     Bool {
         value: bool,
@@ -260,6 +273,12 @@ pub enum Expr {
     },
     #[serde(rename = "bytesField")]
     BytesField {
+        value: Box<Expr>,
+        index: usize,
+    },
+    #[cfg(feature = "zkir-321")]
+    #[serde(rename = "foreignEncodedField")]
+    ForeignEncodedField {
         value: Box<Expr>,
         index: usize,
     },
@@ -435,6 +454,21 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             Value::Native(evaluate(left, env)?.field()? - evaluate(right, env)?.field()?)
         }
         Expr::Constant { value } => Value::Native(canonical_field(value)?),
+        #[cfg(feature = "zkir-321")]
+        Expr::ForeignConstant { ty, encoding } => {
+            let ScalarType::Foreign(ty) = ScalarType::parse(ty)? else {
+                bail!("foreign constant requires a foreign source type")
+            };
+            ensure!(
+                encoding.len() == ty.native_type().encoded_len(),
+                "wrong native field count for foreign constant"
+            );
+            let encoded = encoding
+                .iter()
+                .map(|field| canonical_field(field))
+                .collect::<Result<Vec<_>>>()?;
+            Value::Foreign(foreign::ForeignValue::decode(ty, &encoded)?)
+        }
         Expr::Bool { value } => Value::Bool(*value),
         Expr::Reference { name } => env
             .get(name)
@@ -460,6 +494,18 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 *fields
                     .get(*index)
                     .ok_or_else(|| anyhow!("byte field index out of range"))?,
+            )
+        }
+        #[cfg(feature = "zkir-321")]
+        Expr::ForeignEncodedField { value, index } => {
+            let Value::Foreign(value) = evaluate(value, env)? else {
+                bail!("foreign encoded field projection requires a foreign value")
+            };
+            let encoded = value.encode()?;
+            Value::Native(
+                *encoded
+                    .get(*index)
+                    .ok_or_else(|| anyhow!("foreign encoded field index out of range"))?,
             )
         }
         Expr::Bytes32Literal { values } => {
@@ -978,6 +1024,17 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
         .ok_or_else(|| anyhow!("invalid map key schema"))
 }
 
+fn reject_unqualified_foreign_storage(ty: &ScalarType) -> Result<()> {
+    #[cfg(feature = "zkir-321")]
+    ensure!(
+        !matches!(ty, ScalarType::Foreign(_)),
+        "foreign ledger storage is unsupported"
+    );
+    #[cfg(not(feature = "zkir-321"))]
+    let _ = ty;
+    Ok(())
+}
+
 fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<ScalarType>> {
     ensure!(count < 16, "map path exceeds native index limit");
     let state = plan
@@ -999,6 +1056,7 @@ fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<Scalar
                 .as_str()
                 .ok_or_else(|| anyhow!("invalid map key schema"))?;
             let key = ScalarType::parse(key)?;
+            reject_unqualified_foreign_storage(&key)?;
             ensure!(
                 !matches!(key, ScalarType::Bytes(_)),
                 "only Bytes32 byte map keys are supported"
@@ -1020,6 +1078,7 @@ fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<Scalar
             .as_str()
             .ok_or_else(|| anyhow!("invalid map key schema"))?,
     )?;
+    reject_unqualified_foreign_storage(&key)?;
     ensure!(
         !matches!(key, ScalarType::Bytes(_)),
         "only Bytes32 byte map keys are supported"
@@ -1049,8 +1108,10 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         return Ok(());
     }
     if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
+        let ty = ScalarType::parse(ty)?;
+        reject_unqualified_foreign_storage(&ty)?;
         ensure!(
-            ScalarType::parse(ty)?.bytes_length().is_none(),
+            ty.bytes_length().is_none(),
             "bytes ledger values are unsupported"
         );
         return Ok(());
@@ -1069,6 +1130,7 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
             .as_str()
             .ok_or_else(|| anyhow!("invalid state tree key type"))?,
     )?;
+    reject_unqualified_foreign_storage(&key)?;
     ensure!(
         !matches!(key, ScalarType::Bytes(_)),
         "only Bytes32 byte map keys are supported"
@@ -1150,6 +1212,8 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
             bail!("Jubjub ledger reads require typed coordinate records")
         }
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(_) => bail!("foreign ledger reads are unsupported"),
     })
 }
 #[derive(Clone, Deserialize)]
@@ -1257,6 +1321,35 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
             )?;
             Ok(Value::JubjubPoint(jubjub::point(x, y)?))
         }
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(ty) => {
+            let object = json
+                .as_object()
+                .ok_or_else(|| anyhow!("expected foreign value object"))?;
+            ensure!(
+                object.len() == 3
+                    && object.get("kind").and_then(Json::as_str) == Some("foreign")
+                    && object.get("type").and_then(Json::as_str) == Some(ty.source_name()),
+                "invalid foreign value object"
+            );
+            let values = object
+                .get("bytes")
+                .and_then(Json::as_array)
+                .ok_or_else(|| anyhow!("expected foreign byte array"))?;
+            ensure!(values.len() == ty.byte_len(), "foreign byte length mismatch");
+            let bytes = values
+                .iter()
+                .map(|value| {
+                    value
+                        .as_u64()
+                        .and_then(|value| u8::try_from(value).ok())
+                        .ok_or_else(|| anyhow!("expected canonical foreign byte"))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(Value::Foreign(foreign::ForeignValue::from_bytes(
+                ty, &bytes,
+            )?))
+        }
     }
 }
 pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Environment> {
@@ -1334,6 +1427,9 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                 )),
                 "general byte map schemas require explicit native ledger support"
             );
+            for ty in types {
+                reject_unqualified_foreign_storage(&ScalarType::parse(ty.as_str().unwrap())?)?;
+            }
             ensure!(
                 value.as_array().is_some_and(|a| a.is_empty()),
                 "initial map must be explicitly empty"
@@ -1445,6 +1541,8 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
             bail!("Jubjub ledger values require typed coordinate records")
         }
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(_) => bail!("foreign ledger values are unsupported"),
     }?;
     ensure!(
         *value == aligned(&decoded, alignment)?,
@@ -1671,6 +1769,8 @@ fn aligned_call_returns(values: &[(String, Value)]) -> Result<AlignedValue> {
             Value::Bytes(_) => aligned_bytes(value)?.value_only_field_repr(&mut fields),
             Value::JubjubScalar(value) => fields.push(jubjub::scalar_native(*value)?),
             Value::JubjubPoint(value) => fields.extend(jubjub::coordinates(*value)?),
+            #[cfg(feature = "zkir-321")]
+            Value::Foreign(value) => fields.extend(value.encode()?),
             _ => fields.push(value.field_encoding()?),
         }
     }
@@ -2467,6 +2567,8 @@ pub fn prepare(
             }
             Value::JubjubScalar(value) => private_transcript.push(jubjub::scalar_native(*value)?),
             Value::JubjubPoint(value) => private_transcript.extend(jubjub::coordinates(*value)?),
+            #[cfg(feature = "zkir-321")]
+            Value::Foreign(value) => private_transcript.extend(value.encode()?),
             value => aligned(value, "field")?.value_only_field_repr(&mut private_transcript),
         }
     }

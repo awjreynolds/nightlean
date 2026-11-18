@@ -27,6 +27,7 @@ private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
 private def fromKind : ScalarPolicy.Kind → Ty
   | .native => .native | .bool => .bool | .uint m => .uint m | .bytes length => .bytes length
   | .jubjubScalar => .jubjubScalar | .jubjubPoint => .jubjubPoint
+  | .foreign kind => .foreign kind
 
 private def declaration (program : Program) (id : DeclarationId) (span : SourceSpan) : Except Diagnostic Helpers.Declaration :=
   match program.declarations.find? (·.id == id) with
@@ -54,7 +55,8 @@ private def constantBool (value : Abstract) : Option Bool := do
 private def abstractCast (ty : ResultType) (value : Abstract) : Abstract :=
   {value with ty, literal := match ty, value.literal with
     | .scalar ty, some literal =>
-      if ty.isBytes || ty.isJubjub then none else (ScalarPolicy.cast literal ty.scalarKind).toOption
+      if ty.isBytes || ty.isJubjub || ty.isForeign then none
+      else (ScalarPolicy.cast literal ty.scalarKind).toOption
     | _, _ => none}
 
 private abbrev Environment := List (String × Abstract)
@@ -85,6 +87,7 @@ mutual
     | .native n => pure {ty := .scalar .native, literal := some ⟨.native, n⟩}
     | .bool b => pure {ty := .scalar .bool, literal := some ⟨.bool, if b then 1 else 0⟩}
     | .uint m n => pure {ty := .scalar (.uint m), literal := some ⟨.uint m, n⟩}
+    | .foreignConstant kind _ => pure {ty := .scalar (.foreign kind)}
     | .ref name =>
       let some value := env.lookup name | liftD (fail span "unknown control origin reference")
       pure value
@@ -286,6 +289,7 @@ private def typeName : ResultType → String
   | .scalar (.bytes length) => s!"Bytes<{length}>"
   | .scalar .jubjubScalar => "JubjubScalar"
   | .scalar .jubjubPoint => "JubjubPoint"
+  | .scalar (.foreign kind) => kind.sourceName
   | .composite _ => "Aggregate"
 
 private def idName (id : DeclarationId) : String := s!"s{id.scope}d{id.ordinal}"
@@ -398,6 +402,11 @@ mutual
       pure (node span "curve" [("operation", toJson operation.operationName),
         ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
     | .bytes32Literal values => pure (node span "bytes32" [("values", toJson values)])
+    | .foreignConstant kind encoding => do
+      unless (← get).typed do emitLift (fail span "foreign values require control schema version 2")
+      pure (node span "foreignConstant" [
+        ("type", toJson kind.sourceName),
+        ("encoding", toJson (encoding.map toString))])
     | .bytesAt value index => do
       unless (← get).typed do emitLift (fail span "Bytes32 operations require control schema version 2")
       pure (node span "byteAt" [("value", ← emitExpression checked scope env span value),

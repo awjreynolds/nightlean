@@ -77,6 +77,8 @@ impl Type {
             Self::Scalar(ScalarType::Bytes(length)) => format!("Bytes<{length}>"),
             Self::Scalar(ScalarType::JubjubScalar) => "JubjubScalar".to_owned(),
             Self::Scalar(ScalarType::JubjubPoint) => "JubjubPoint".to_owned(),
+            #[cfg(feature = "zkir-321")]
+            Self::Scalar(ScalarType::Foreign(ty)) => ty.source_name().to_owned(),
             Self::Scalar(ScalarType::UInt(maximum)) => {
                 format!("UIntRange<{}>", maximum + BigUint::from(1u8))
             }
@@ -102,6 +104,8 @@ fn scalar_type_key(ty: &ScalarType) -> String {
         ScalarType::Bytes(length) => format!("bytes{length}"),
         ScalarType::JubjubScalar => "jubjubScalar".to_owned(),
         ScalarType::JubjubPoint => "jubjubPoint".to_owned(),
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(ty) => format!("foreign:{}", ty.source_name()),
         ScalarType::UInt(maximum) => format!("sU{};", maximum.to_str_radix(10)),
     }
 }
@@ -135,6 +139,11 @@ fn validate_scalar(ty: &ScalarType, value: &Json) -> Result<()> {
         | ScalarType::Bytes(_)
         | ScalarType::JubjubScalar
         | ScalarType::JubjubPoint => {
+            let token = Type::Scalar(ty.clone()).token();
+            crate::input_value(&token, value)?;
+        }
+        #[cfg(feature = "zkir-321")]
+        ScalarType::Foreign(_) => {
             let token = Type::Scalar(ty.clone()).token();
             crate::input_value(&token, value)?;
         }
@@ -371,6 +380,10 @@ impl Registry {
                 ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                     bail!("Jubjub projections require a typed curve schema")
                 }
+                #[cfg(feature = "zkir-321")]
+                ScalarType::Foreign(_) => {
+                    bail!("foreign values require typed foreign projections")
+                }
             };
             ensure!(
                 projected_value.get("kind").and_then(Json::as_str) == Some(expected_kind),
@@ -403,6 +416,10 @@ impl Registry {
                 }
                 ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                     bail!("Jubjub projections require a typed curve schema")
+                }
+                #[cfg(feature = "zkir-321")]
+                ScalarType::Foreign(_) => {
+                    bail!("foreign values require typed foreign projections")
                 }
             };
             wipe_json(&mut projected_value);

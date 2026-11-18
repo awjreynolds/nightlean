@@ -1,4 +1,5 @@
 import Noctium.Field
+import Noctium.Foreign
 import Lean
 
 namespace Noctium.ScalarPolicy
@@ -11,6 +12,7 @@ inductive Kind where
   | uint (maximum : Nat)
   | bytes (length : Nat)
   | jubjubScalar | jubjubPoint
+  | foreign (kind : Foreign.Kind)
   deriving Repr, BEq, DecidableEq
 
 inductive Binary where
@@ -27,6 +29,7 @@ def validate : Kind → Except String Unit
   | .bytes _ => .error "byte strings are not scalar values"
   | .jubjubScalar => .error "Jubjub scalars require a qualified curve operation"
   | .jubjubPoint => .error "Jubjub points require a qualified curve operation"
+  | .foreign _ => .error "foreign values require a qualified curve operation"
 
 def sized (bits : Nat) : Except String Kind :=
   if bits ≤ maxBits then .ok (.uint (2 ^ bits - 1))
@@ -43,7 +46,7 @@ def accepts : Kind → Nat → Bool
   | .native, value => value < Field.modulus
   | .uint maximum, value => maximum ≤ maxUint && value ≤ maximum
   | .bytes _, _ => false
-  | .jubjubScalar, _ | .jubjubPoint, _ => false
+  | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => false
 
 def infer (op : Binary) (left right : Kind) : Except String Kind := do
   validate left
@@ -62,6 +65,8 @@ def infer (op : Binary) (left right : Kind) : Except String Kind := do
   | .bytes _, _ | _, .bytes _ => throw "byte strings do not support scalar arithmetic"
   | .jubjubScalar, _ | _, .jubjubScalar | .jubjubPoint, _ | _, .jubjubPoint =>
     throw "Jubjub values do not support scalar arithmetic"
+  | .foreign _, _ | _, .foreign _ =>
+    throw "foreign values require a qualified curve operation"
 
 structure Value where
   kind : Kind
@@ -93,6 +98,7 @@ def evaluate (op : Binary) (left right : Value) : Except String Value := do
     | .bytes _ => throw "byte strings do not support scalar arithmetic"
     | .jubjubScalar => throw "Jubjub scalars require a qualified curve operation"
     | .jubjubPoint => throw "Jubjub points require a qualified curve operation"
+    | .foreign _ => throw "foreign values require a qualified curve operation"
   let value := { kind := result, number : Value }
   value.validate
   return value
@@ -102,9 +108,11 @@ Nominal aliases and composites require separate rules and are not modeled here. 
 def cast (value : Value) (target : Kind) : Except String Value := do
   value.validate
   validate target
-  if value.kind == .jubjubScalar || value.kind == .jubjubPoint then
+  if value.kind == .jubjubScalar || value.kind == .jubjubPoint ||
+      (match value.kind with | .foreign _ => true | _ => false) then
     throw "Jubjub values do not support scalar casts"
-  if target == .jubjubScalar || target == .jubjubPoint then
+  if target == .jubjubScalar || target == .jubjubPoint ||
+      (match target with | .foreign _ => true | _ => false) then
     throw "Jubjub values do not support scalar casts"
   let number := if target == .bool then (if value.number == 0 then 0 else 1) else value.number
   let result := {kind := target, number : Value}

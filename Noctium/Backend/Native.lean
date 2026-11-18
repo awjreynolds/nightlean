@@ -10,11 +10,12 @@ inductive OperandRule where
   | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
   | bytes32Conversion | bytes32Reverse | fixedBytes | fixedByteHash | boolConstant | typedBoolVector
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
+  | qualifiedConstant | foreignTransport
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
-  | bytes32ByteExtraction | nativeLimbs
+  | bytes32ByteExtraction | nativeLimbs | foreignEncoding
   | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
   | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks | bytes32Reversal | fixedBytes
   deriving Repr, BEq, DecidableEq
@@ -31,7 +32,7 @@ inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input | typedEncodeInput
   | typedBytes32Index | typedFixedBytes | fixedByteHashPreimage | canonicalBoolConstant | typedBoolOperands
-  | typedBytes32Conversion
+  | typedBytes32Conversion | canonicalQualifiedConstant | canonicalForeignValue
   | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
 
@@ -151,9 +152,9 @@ def instructionSupport (opcode : String) : Except String Support :=
     scalar .nativeUnary .propagateAll .pure .nativeBoolean .noGuard .none ["a", "output"]
   | "assert" => .supported <|
     scalar .booleanAssertion .preserveConstraintOrigins .constraint .nativeBoolean .noGuard .none ["cond"]
-  -- Partial codec qualification: other native load_constant types remain unsupported.
+  -- Qualified constants are Bool, foreign fields and foreign point identities only.
   | "load_constant" => .supported <|
-    scalar .boolConstant .propagateAll .pure .canonicalBoolConstant .noGuard .typedEncoding
+    scalar .qualifiedConstant .propagateAll .pure .canonicalQualifiedConstant .noGuard .typedEncoding
       ["type", "encoding", "output"]
   | "and" | "or" | "xor" => .supported <|
     scalar .typedBoolVector .propagateAll .pure .typedBoolOperands .noGuard .typedEncoding
@@ -258,7 +259,11 @@ def valueTypeSupport (name : String) : Except String Support :=
   else if name == "JubjubPoint" then
     .ok (.supported (scalar .jubjubPointArithmetic .propagateAll .pure .validJubjubPoint
       .noGuard .exactCoordinateRoundtrip []))
-  else .ok (.unsupported "Native typed Bool, bytes and foreign-curve layouts require their own source/ABI/native conformance package")
+  else if Foreign.kinds.any (·.sourceName == name) then
+    let descriptor := scalar .foreignTransport .propagateAll .pure .canonicalForeignValue
+      .noGuard .typedEncoding []
+    .ok (.supported {descriptor with encoding := .foreignEncoding})
+  else .ok (.unsupported "Native typed Bool and byte layouts require their own source/ABI/native conformance package")
 
 def requireInstruction (opcode : String) : Except String Descriptor := do
   match ← instructionSupport opcode with
