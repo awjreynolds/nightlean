@@ -1,4 +1,5 @@
 import Noctium.IR
+import Noctium.GuardedExpression
 import Noctium.Field
 import Noctium.Semantics
 import Noctium.Disclosure
@@ -474,194 +475,47 @@ private def freshActivityName (names : List String) : String :=
   let longest := names.foldl (fun length name => max length name.length) 0
   "_noctium_activity_guard_" ++ String.ofList (List.replicate (longest + 1) 'x')
 
-private def zeroValue : (ty : Ty) → Option (Expr ty)
-  | .native => some (.native 0)
-  | .bool => some (.bool false)
-  | .uint maximum => some (.uint maximum 0)
-  | .bytes 32 => some (.bytes32Literal (List.replicate 32 0))
-  | .bytes length => some (.bytesLiteral length (List.replicate length 0))
-  | .jubjubScalar => some (.jubjubScalarFromNative (.native 0))
-  | .jubjubPoint => some (.jubjubFromCoordinates (.native 0) (.native 1))
-  | .foreign (.base curve) => some (.foreignBase curve 0)
-  | .foreign (.scalar curve) => some (.foreignScalar curve 0)
-  | .foreign (.point curve) => some (.foreignIdentity curve)
-
-private def castMayFail (target source : Ty) : Bool :=
-  match target, source with
-  | .uint _, .native => true
-  | .uint maximum, .uint sourceMaximum => sourceMaximum > maximum
-  | .uint maximum, .bool => maximum < 1
-  | _, _ => false
-
-private def foreignFieldOne : (field : Foreign.FieldKind) → Expr (.foreign field.kind)
-  | .base curve => .foreignBase curve 1
-  | .scalar curve => .foreignScalar curve 1
-
-private def safeForeignPoint (curve : Foreign.Curve) : Expr (.foreign (.point curve)) :=
-  .foreignUnary (.mulGenerator curve) (.foreignScalar curve 1)
-
-/-- Guard insertion is nonrecursive. The traversal below recurses only on
-original expression children, before these safe operands are introduced. -/
-private def guardForeignUnary (guard : Expr .bool) : (op : Foreign.UnaryOp) →
-    Expr (.foreign op.inputKind) → Expr (.foreign op.outputKind)
-  | .inv field, value =>
-    .foreignUnary (.inv field) (.select guard value (foreignFieldOne field))
-  | .x .curve25519, value => .foreignUnary (.x .curve25519) value
-  | .y .curve25519, value => .foreignUnary (.y .curve25519) value
-  | .x curve, value =>
-    .foreignUnary (.x curve) (.select guard value (safeForeignPoint curve))
-  | .y curve, value =>
-    .foreignUnary (.y curve) (.select guard value (safeForeignPoint curve))
-  | op, value => .foreignUnary op value
-
-private def guardForeignBinary (guard : Expr .bool) : (op : Foreign.BinaryOp) →
-    Expr (.foreign op.leftKind) → Expr (.foreign op.rightKind) → Expr (.foreign op.outputKind)
-  | .fromCoordinates curve, left, right =>
-    .foreignBinary (.fromCoordinates curve)
-      (.select guard left (.foreignUnary (.x curve) (safeForeignPoint curve)))
-      (.select guard right (.foreignUnary (.y curve) (safeForeignPoint curve)))
-  | op, left, right => .foreignBinary op left right
-
-private def guardForeignFromBytes (guard : Expr .bool) : (kind : Foreign.Kind) →
-    {length : Nat} → Expr (.bytes length) → Expr (.foreign kind)
-  | .point .secp256k1, 33, value =>
-    .foreignFromBytes (.point .secp256k1) (.select guard value (.bytesLiteral 33 (List.replicate 33 0)))
-  | .point .secp256r1, 33, value =>
-    .foreignFromBytes (.point .secp256r1) (.select guard value (.bytesLiteral 33 (List.replicate 33 0)))
-  | .point .curve25519, 32, value =>
-    .foreignFromBytes (.point .curve25519)
-      (.select guard value (.bytesLiteral 32 (1 :: List.replicate 31 0)))
-  | kind, _, value => .foreignFromBytes kind value
-
-/-- Replace every partial scalar operation with a safe inactive computation.
-The native source guard is a collision-free outer let binding, so nested source
-lets cannot capture its references. Eager selects still evaluate both arms. -/
-private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
-  | .foreignBase curve value => .foreignBase curve value
-  | .foreignScalar curve value => .foreignScalar curve value
-  | .foreignIdentity curve => .foreignIdentity curve
-  | .foreignEncodedField value index => .foreignEncodedField (totalizeUnder guard value) index
-  | .foreignUnary op value => guardForeignUnary guard op (totalizeUnder guard value)
-  | .foreignBinary op left right =>
-    guardForeignBinary guard op (totalizeUnder guard left) (totalizeUnder guard right)
-  | .foreignToBytes value => .foreignToBytes (totalizeUnder guard value)
-  | .foreignFromBytes kind value => guardForeignFromBytes guard kind (totalizeUnder guard value)
-  | .native value => .native value
-  | .bool value => .bool value
-  | .boolAnd left right => .boolAnd (totalizeUnder guard left) (totalizeUnder guard right)
-  | .boolOr left right => .boolOr (totalizeUnder guard left) (totalizeUnder guard right)
-  | .boolXor left right => .boolXor (totalizeUnder guard left) (totalizeUnder guard right)
-  | .uint maximum value => .uint maximum value
-  | .bytesField value index => .bytesField (totalizeUnder guard value) index
-  | .bytesAt value index => .bytesAt (totalizeUnder guard value) index
-  | .sha512 value => .sha512 (totalizeUnder guard value)
-  | .keccak256 value => .keccak256 (totalizeUnder guard value)
-  | .persistentHash32 value => .persistentHash32 (totalizeUnder guard value)
-  | .bytes32Literal values => .bytes32Literal values
-  | .bytesLiteral length values => .bytesLiteral length values
-  | .reverseBytes value => .reverseBytes (totalizeUnder guard value)
-  | .sliceBytes value start end_ => .sliceBytes (totalizeUnder guard value) start end_
-  | .concatBytes left right => .concatBytes (totalizeUnder guard left) (totalizeUnder guard right)
-  | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalizeUnder guard))
-  | .persistentHashNative value => .persistentHashNative (totalizeUnder guard value)
-  | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalizeUnder guard))
-  | .transientHash values => .transientHash (values.map (totalizeUnder guard))
-  | .hashToCurve values => .hashToCurve (values.map (totalizeUnder guard))
-  | .toBytes32 value => .toBytes32 (totalizeUnder guard value)
-  | .reverseBytes32 value => .reverseBytes32 (totalizeUnder guard value)
-  | .fromBytes32 (target := .jubjubPoint) value =>
-    let identity : Expr (.bytes 32) := .bytes32Literal (1 :: List.replicate 31 0)
-    .fromBytes32 (.select guard (totalizeUnder guard value) identity)
-  | .fromBytes32 value => .fromBytes32 (totalizeUnder guard value)
-  | .fromBytes value => .fromBytes (totalizeUnder guard value)
-  | .jubjubScalarFromNative value => .jubjubScalarFromNative (totalizeUnder guard value)
-  | .jubjubScalarToNative value => .jubjubScalarToNative (totalizeUnder guard value)
-  | .jubjubMulGenerator scalar => .jubjubMulGenerator (totalizeUnder guard scalar)
-  | .jubjubMul point scalar =>
-    .jubjubMul (totalizeUnder guard point) (totalizeUnder guard scalar)
-  | .jubjubAdd left right =>
-    .jubjubAdd (totalizeUnder guard left) (totalizeUnder guard right)
-  | .jubjubNeg point => .jubjubNeg (totalizeUnder guard point)
-  | .jubjubCoordinate point index => .jubjubCoordinate (totalizeUnder guard point) index
-  | .jubjubFromCoordinates x y => .jubjubFromCoordinates
-      (.select guard (totalizeUnder guard x) (.native 0))
-      (.select guard (totalizeUnder guard y) (.native 1))
-  | .ref name => .ref name
-  | .add left right => .add (totalizeUnder guard left) (totalizeUnder guard right)
-  | .mul left right => .mul (totalizeUnder guard left) (totalizeUnder guard right)
-  | .sub left right => .sub (totalizeUnder guard left) (totalizeUnder guard right)
-  | .uadd left right => .uadd (totalizeUnder guard left) (totalizeUnder guard right)
-  | .usub (m := m) (n := n) left right =>
-    .usub
-      (.select guard (totalizeUnder guard left) (.uint m 0))
-      (.select guard (totalizeUnder guard right) (.uint n 0))
-  | .umul left right => .umul (totalizeUnder guard left) (totalizeUnder guard right)
-  | .inv (ty := .native) value =>
-    .inv (.select guard (totalizeUnder guard value) (.native 1))
-  | .inv (ty := .jubjubScalar) value =>
-    .inv (.jubjubScalarFromNative
-      (.select guard (.jubjubScalarToNative (totalizeUnder guard value)) (.native 1)))
-  | .inv value => .inv (totalizeUnder guard value)
-  | .cast target (source := source) value =>
-    let value := totalizeUnder guard value
-    if castMayFail target source then
-      match zeroValue source with
-      | some zero => .cast target (.select guard value zero)
-      | none => .cast target value
-    else .cast target value
-  | .letE name value body =>
-    .letE name (totalizeUnder guard value) (totalizeUnder guard body)
-  | .assertE condition body =>
-    .assertE (.select guard (totalizeUnder guard condition) (.bool true))
-      (totalizeUnder guard body)
-  | .disclose span value => .disclose span (totalizeUnder guard value)
-  | .eq left right => .eq (totalizeUnder guard left) (totalizeUnder guard right)
-  | .select condition yes no =>
-    .select (totalizeUnder guard condition) (totalizeUnder guard yes) (totalizeUnder guard no)
-  | .poseidon2 domain left right =>
-    .poseidon2 domain (totalizeUnder guard left) (totalizeUnder guard right)
-
 private def totalizeActivityValue (guard : Expr .bool) (avoid : List String)
     (value : Expr ty) : Expr ty :=
   let name := freshActivityName (avoid ++ expressionNames guard ++ expressionNames value)
-  .letE name guard (totalizeUnder (.ref name) value)
+  .letE name guard (Noctium.GuardedExpression.totalize (.ref name) value)
 
 private def totalizePathKeys (condition : Expr .bool) (keys : List PathKey) : List PathKey :=
   let avoid := pathExpressionNames keys
   keys.map fun key => match key with
     | .mk .native value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
-      let guardedValue := totalizeUnder (.ref guardName) value
+      let guardedValue := Noctium.GuardedExpression.totalize (.ref guardName) value
       .mk .native (.letE guardName condition
         (.select (.ref guardName) guardedValue (.native 0)))
     | .mk .bool value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
-      let guardedValue := totalizeUnder (.ref guardName) value
+      let guardedValue := Noctium.GuardedExpression.totalize (.ref guardName) value
       .mk .bool (.letE guardName condition
         (.select (.ref guardName) guardedValue (.bool false)))
     | .mk (.uint maximum) value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
-      let guardedValue := totalizeUnder (.ref guardName) value
+      let guardedValue := Noctium.GuardedExpression.totalize (.ref guardName) value
       .mk (.uint maximum) (.letE guardName condition
         (.select (.ref guardName) guardedValue (.uint maximum 0)))
     | .mk (.bytes 32) value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
-      let guardedValue := totalizeUnder (.ref guardName) value
+      let guardedValue := Noctium.GuardedExpression.totalize (.ref guardName) value
       .mk (.bytes 32) (.letE guardName condition (.select (.ref guardName) guardedValue
         (.bytes32Literal (List.replicate 32 0))))
     | .mk (.bytes length) value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
-      let guardedValue := totalizeUnder (.ref guardName) value
+      let guardedValue := Noctium.GuardedExpression.totalize (.ref guardName) value
       .mk (.bytes length) (.letE guardName condition (.select (.ref guardName) guardedValue
         (.bytesLiteral length (List.replicate length 0))))
     | .mk ty value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
-      .mk ty (.letE guardName condition (totalizeUnder (.ref guardName) value))
+      .mk ty (.letE guardName condition (Noctium.GuardedExpression.totalize (.ref guardName) value))
 
 private def totalizeActivityCondition (guard condition : Expr .bool) : Expr .bool :=
   let name := freshActivityName (expressionNames guard ++ expressionNames condition)
   .letE name guard
-    (.select (.ref name) (totalizeUnder (.ref name) condition) (.bool true))
+    (.select (.ref name) (Noctium.GuardedExpression.totalize (.ref name) condition) (.bool true))
 
 /-- Evaluate a nested branch condition only when its enclosing branch is active.
 The inactive arm becomes false, and partial condition expressions are totalized
@@ -669,7 +523,7 @@ under the captured parent guard before eager `select` lowering. -/
 def activityGuardWithin (parent condition : Expr .bool) : Expr .bool :=
   let name := freshActivityName (expressionNames parent ++ expressionNames condition)
   .letE name parent
-    (.select (.ref name) (totalizeUnder (.ref name) condition) (.bool false))
+    (.select (.ref name) (Noctium.GuardedExpression.totalize (.ref name) condition) (.bool false))
 
 /-- One effect in the production ordered ledger plan. The current read count
 fixes generated absence names and therefore belongs to the accumulator. -/

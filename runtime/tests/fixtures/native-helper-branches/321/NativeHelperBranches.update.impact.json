@@ -1,0 +1,151 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "balance", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Native",
+   "name": "observed",
+   "expression": {"tag": "reference", "name": "result"}}],
+ "reads": [{"type": "Native", "name": "value"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "value"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "value"},
+   "alignment": "field"},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "enabled"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxx",
+      "body":
+      {"yes": {"tag": "reference", "name": "enabled"},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
+     "tag": "let",
+     "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"tag": "reference", "name": "result"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "enabled"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "enabled"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}}],
+ "nativeCircuitFile": "NativeHelperBranches.update.zkir",
+ "guards": [],
+ "entrypoint": "update",
+ "contractName": "NativeHelperBranches",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Native",
+    "name": "result",
+    "expression":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "value"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper1"},
+       "tag": "let",
+       "name": "$helper2",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper0"},
+        "tag": "let",
+        "name": "$helper3",
+        "body":
+        {"yes":
+         {"value": {"value": "99", "tag": "constant"},
+          "tag": "let",
+          "name": "$helper4",
+          "body":
+          {"tag": "assertThen",
+           "condition":
+           {"yes":
+            {"tag": "eq",
+             "right": {"value": "7", "tag": "constant"},
+             "left": {"tag": "reference", "name": "$helper1"}},
+            "tag": "select",
+            "no": {"value": true, "tag": "bool"},
+            "condition": {"tag": "reference", "name": "$helper3"}},
+           "body":
+           {"value":
+            {"value":
+             {"yes": {"tag": "reference", "name": "$helper1"},
+              "tag": "select",
+              "no": {"value": "0", "tag": "constant"},
+              "condition": {"tag": "reference", "name": "$helper3"}},
+             "type": "UIntRange<8>",
+             "tag": "cast"},
+            "tag": "let",
+            "name": "$helper5",
+            "body": {"tag": "reference", "name": "$helper2"}}}},
+         "tag": "select",
+         "no": {"tag": "reference", "name": "$helper2"},
+         "condition": {"tag": "reference", "name": "$helper3"}}}}}}}],
+  "name": "nativeBranchValues",
+  "inputs":
+  [{"visibility": "private", "type": "Bool", "name": "enabled"},
+   {"visibility": "public", "type": "Native", "name": "value"}],
+  "file": "nativeBranchValues.zkir",
+  "constraints": []}}

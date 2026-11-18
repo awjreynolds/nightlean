@@ -61,7 +61,7 @@ private def field (name : String) : Term := .project (.ref "record") (.field nam
 #guard accepted (ComponentDisclosure.checkProgram
   (recordEntry [.return (some (.disclose {} (field "secret")))]) "entry")
 #guard rejectedWith (Control.compile (recordEntry [.return (some (.ref "record"))] (.composite recordType)) "entry")
-  "aggregate values are not supported by the portable control plan"
+  "aggregate inputs are not supported by the portable control plan"
 
 -- Tuple and nested vector projections retain the precise leaf path.
 private def tupleType : Types.CompositeType := .tuple [

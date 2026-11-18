@@ -1,6 +1,7 @@
 import Noctium.Semantics
 import Noctium.Types.ValueExpressions
 import Noctium.Types.ValueViews
+import Noctium.GuardedExpression
 
 namespace Noctium.Helpers
 
@@ -1162,21 +1163,24 @@ private structure BodyInfo where
   deriving Inhabited
 
 private def checkBody (limits : Limits) (program : Program) (declaration : Declaration)
-    (fuel : Nat) (env : Environment) (body : List Statement) : Except Diagnostic BodyInfo :=
+    (fuel : Nat) (env : Environment) (body : List Statement)
+    (locals : List String) : Except Diagnostic BodyInfo :=
   match fuel with
   | 0 => resource declaration.span "statement-analysis depth"
   | fuel + 1 => do
     let span := declaration.span
     let mut env := env
+    let mut locals := locals
     let mut result : BodyInfo := {}
     for statement in body do
       let info ← match statement with
         | .bind name ty value => do
           validateResultType program span ty
-          if (env.lookup name).isSome then fail span s!"duplicate helper value '{name}'"
+          if locals.contains name then fail span s!"duplicate helper value '{name}'"
           let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
           unless subtype info.ty ty do fail span "helper binding type mismatch"
           env := (name, ty) :: env
+          locals := name :: locals
           pure info
         | .evaluate value => inferTerm limits.maxSourceDepth program declaration.id.scope env span value
         | .assert condition => do
@@ -1193,8 +1197,8 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
         | .branch condition yes no => do
           let condition ← inferTerm limits.maxSourceDepth program declaration.id.scope env span condition
           unless condition.ty == .scalar .bool do fail span "helper condition requires Bool"
-          let yes ← checkBody limits program declaration fuel env yes
-          let no ← checkBody limits program declaration fuel env no
+          let yes ← checkBody limits program declaration fuel env yes []
+          let no ← checkBody limits program declaration fuel env no []
           result := {result with returned := result.returned || (yes.returned && no.returned)}
           pure {ty := .unit, calls := condition.calls ++ yes.calls ++ no.calls, effects := (condition.effects ++ yes.effects ++ no.effects).eraseDups, guarded := true}
         | .stage _ _ ty value => do
@@ -1215,6 +1219,7 @@ private def checkDeclarationUnchecked (limits : Limits) (program : Program) (dec
   for parameter in declaration.parameters do validateResultType program span (declaration.parameterType parameter)
   validateResultType program span declaration.result
   let info ← checkBody limits program declaration limits.maxSourceDepth env declaration.body
+    (env.map (·.1))
   unless info.returned || declaration.result == .unit do fail span "helper fall-through returns unit, incompatible with declared result"
   pure {id := declaration.id, calls := info.calls, direct := info.effects, guarded := info.guarded}
 
@@ -1424,6 +1429,55 @@ private def sequence (name : String) (value body : Lowered) : Lowered :=
       ⟨component.ty, bind component.value⟩
     constraints := body.constraints.map fun condition => bind condition}
 
+private def selectExpr {ty : Ty} (condition : Expr .bool) (yes no : Expr ty) : Expr ty :=
+  match ty with
+  | .jubjubScalar => .jubjubScalarFromNative (.select condition
+      (.jubjubScalarToNative yes) (.jubjubScalarToNative no))
+  | .jubjubPoint => .jubjubFromCoordinates
+      (.select condition (.jubjubCoordinate yes 0) (.jubjubCoordinate no 0))
+      (.select condition (.jubjubCoordinate yes 1) (.jubjubCoordinate no 1))
+  | _ => .select condition yes no
+
+private def selectScalar (span : SourceSpan) (condition : Expr .bool)
+    (yes no : Scalar) : Except Diagnostic Scalar := do
+  if h : yes.ty = no.ty then
+    pure ⟨yes.ty, selectExpr condition yes.value (h.symm ▸ no.value)⟩
+  else
+    fail span "native helper branch scalar type mismatch"
+
+private def guardConstraint (condition : Expr .bool) (active : Bool)
+    (constraint : Expr .bool) : Expr .bool :=
+  let guard := if active then condition else .eq condition (.bool false)
+  .select guard (GuardedExpression.totalize guard constraint) (.bool true)
+
+private def selectLowered (span : SourceSpan) (condition : Expr .bool)
+    (yes no : Lowered) : Except Diagnostic Lowered := do
+  unless yes.ty == no.ty do fail span "native helper branch result type mismatch"
+  unless (components yes).length == (components no).length do
+    fail span "native helper branch component count mismatch"
+  let inactive := Expr.eq condition (.bool false)
+  let components ← (components yes).zip (components no) |>.mapM fun (left, right) => do
+    selectScalar span condition
+      ⟨left.ty, GuardedExpression.totalize condition left.value⟩
+      ⟨right.ty, GuardedExpression.totalize inactive right.value⟩
+  let scalar ← selectScalar span condition
+    ⟨yes.scalar.ty, GuardedExpression.totalize condition yes.scalar.value⟩
+    ⟨no.scalar.ty, GuardedExpression.totalize inactive no.scalar.value⟩
+  let value : Lowered := {yes with
+    scalar := scalar
+    components := components
+    constraints := yes.constraints.map (guardConstraint condition true) ++
+      no.constraints.map (guardConstraint condition false)}
+  pure value
+
+private def bindCondition (name : String) (condition : Expr .bool)
+    (value : Lowered) : Lowered :=
+  let bind {ty : Ty} (expression : Expr ty) : Expr ty := .letE name condition expression
+  {value with
+    scalar := ⟨value.scalar.ty, bind value.scalar.value⟩
+    components := value.components.map fun component => ⟨component.ty, bind component.value⟩
+    constraints := value.constraints.map bind}
+
 private abbrev LowerEnv := List (String × Lowered)
 structure WitnessCallBinding where
   ordinal : Nat
@@ -1593,8 +1647,43 @@ mutual
       let result := scalarValue (.select (← liftD (boolExpr span condition))
         (← liftD (typedExpr span ty yes)) (← liftD (typedExpr span ty no)))
       pure {result with constraints}
-    | .ite .. | .andThen .. | .orElse .. =>
-      liftD (fail span "native helper capability unavailable: structured control (CF-02)")
+    | .ite condition yes no => do
+      let condition ← lowerTerm program scope env span condition
+      let yes ← lowerTerm program scope env span yes
+      let no ← lowerTerm program scope env span no
+      let ty ← if subtype yes.ty no.ty then pure no.ty
+        else if subtype no.ty yes.ty then pure yes.ty
+        else liftD (fail span "conditional branches require one type to be a subtype of the other")
+      let yes ← liftD (coerce span yes ty)
+      let no ← liftD (coerce span no ty)
+      let conditionExpr ← liftD (boolExpr span condition)
+      let name ← freshTyped .bool
+      let conditionRef : Expr .bool := .ref name
+      let selected ← liftD (selectLowered span conditionRef yes no)
+      let selected := bindCondition name conditionExpr selected
+      pure {selected with constraints := condition.constraints ++ selected.constraints}
+    | .andThen left right | .orElse left right => do
+      let left ← lowerTerm program scope env span left
+      let right ← lowerTerm program scope env span right
+      let leftExpr ← liftD (boolExpr span left)
+      let rightExpr ← liftD (boolExpr span right)
+      let name ← freshTyped .bool
+      let leftRef : Expr .bool := .ref name
+      let active := match term with
+        | .andThen .. => leftRef
+        | .orElse .. => .eq leftRef (.bool false)
+        | _ => .bool false
+      let result := match term with
+        | .andThen .. => Expr.select leftRef (GuardedExpression.totalize leftRef rightExpr) (.bool false)
+        | .orElse .. => Expr.select leftRef (.bool true)
+            (GuardedExpression.totalize active rightExpr)
+        | _ => Expr.bool false
+      let result : Lowered := {
+        scalarValue result with
+        constraints := left.constraints ++ right.constraints.map (guardConstraint leftRef
+          (match term with | .andThen .. => true | _ => false))}
+      let result := bindCondition name leftExpr result
+      pure result
     | .witness _ ty => do
       let inputName ← freshTyped ty
       modify fun state => {state with
@@ -1878,10 +1967,15 @@ mutual
       sequence name {ty := .scalar value.ty, scalar := value} body) body)
 
   private partial def lowerBody (program : Program) (declaration : Declaration)
-      (env : LowerEnv) (body : List Statement) : LowerM Lowered := do
+      (env : LowerEnv) (body : List Statement) : LowerM Lowered :=
+    lowerBodyWith program declaration env body (fun _ => pure unitValue)
+
+  private partial def lowerBodyWith (program : Program) (declaration : Declaration)
+      (env : LowerEnv) (body : List Statement)
+      (continuation : LowerEnv → LowerM Lowered) : LowerM Lowered := do
     spendLower declaration.span
     match body with
-    | [] => pure unitValue
+    | [] => continuation env
     | .return value :: _ =>
       let value ← match value with
         | none => pure unitValue
@@ -1902,7 +1996,7 @@ mutual
           | .unit => unitValue
           | .scalar _ => {value with scalar := references.headD value.scalar}
           | .composite type => aggregateValue type references
-        let body ← lowerBody program declaration ((name, reference) :: env) rest
+        let body ← lowerBodyWith program declaration ((name, reference) :: env) rest continuation
         let body := {body with constraints := value.constraints ++ body.constraints}
         pure (bindings.foldr (fun (localName, component) body =>
           sequence localName {ty := .scalar component.ty, scalar := component} body) body)
@@ -1912,7 +2006,7 @@ mutual
         for component in components value do
           let name ← freshTyped component.ty
           bindings := bindings ++ [(name, component)]
-        let body ← lowerBody program declaration env rest
+        let body ← lowerBodyWith program declaration env rest continuation
         let body := {body with constraints := value.constraints ++ body.constraints}
         if bindings.isEmpty && value.ty == .unit then
           let name ← freshTyped .bool
@@ -1922,7 +2016,7 @@ mutual
             sequence name {ty := .scalar component.ty, scalar := component} body) body)
       | .assert condition =>
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
-        let body ← lowerBody program declaration env rest
+        let body ← lowerBodyWith program declaration env rest continuation
         let conditionExpr ← liftD (boolExpr declaration.span condition)
         if let .composite _ := body.ty then
           pure {body with constraints := condition.constraints ++
@@ -1931,7 +2025,18 @@ mutual
           pure {body with
             scalar := ⟨body.scalar.ty, .assertE conditionExpr body.scalar.value⟩
             constraints := condition.constraints ++ body.constraints}
-      | .branch .. => liftD (fail declaration.span "native helper capability unavailable: structured control (CF-02)")
+      | .branch condition yes no => do
+        let condition ← lowerTerm program declaration.id.scope env declaration.span condition
+        let conditionExpr ← liftD (boolExpr declaration.span condition)
+        let name ← freshTyped .bool
+        let conditionRef : Expr .bool := .ref name
+        let resume : LowerEnv → LowerM Lowered := fun _ =>
+          lowerBodyWith program declaration env rest continuation
+        let yes ← lowerBodyWith program declaration env yes resume
+        let no ← lowerBodyWith program declaration env no resume
+        let selected ← liftD (selectLowered declaration.span conditionRef yes no)
+        let selected := bindCondition name conditionExpr selected
+        pure {selected with constraints := condition.constraints ++ selected.constraints}
       | .stage .. => liftD (fail declaration.span "native helper capability unavailable: private state")
       | .return _ => liftD (fail declaration.span "invalid helper statement sequence")
 end
@@ -1941,7 +2046,8 @@ No caller-supplied summary or disclosure exemption is accepted. -/
 def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : String) : Except Diagnostic HostedCircuit := do
   let summaries ← analyzeWithLimits limits program
   for summary in summaries do
-    if summary.guarded then fail {} "native helper capability unavailable: structured control (CF-02)"
+    if summary.guarded && summary.effects.contains .witness then
+      fail {} "native helper capability unavailable: witness-dependent guarded control (CF-02)"
     if let some effect := summary.effects.find? fun effect => effect.impure && effect != .witness then
       let declaration ← lookup program summary.id {}
       fail declaration.span s!"native helper capability unavailable: {repr effect}"
@@ -2009,7 +2115,7 @@ def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : S
     name := entry.name, inputs, outputs, span := entry.span
     privateOrigins := lowering.privateOrigins
     constraints := inputConstraints ++ body.constraints ++ outputConstraints ++
-      (if declaration.result == .unit then [.letE "$unit" body.scalar.value (.bool true)] else [])
+      (if outputValues.isEmpty then [.letE "$unit" body.scalar.value (.bool true)] else [])
   }
   circuit.validate Capabilities.crypto
   Disclosure.circuit circuit

@@ -27,7 +27,7 @@ private def inactive := program [.branch (.bool false) [
   | .ok (some value, events) => value.number == 9 && events.isEmpty
   | _ => false
 #guard accepted (Control.compile inactive "main")
-#guard errorContains (Helpers.compile inactive "main") "structured control (CF-02)"
+#guard accepted (Helpers.compile inactive "main")
 
 -- CF-SHORT-AND / CF-SHORT-OR, with effect fixtures solely for reference order.
 #guard match trace (program (returned (.andThen (.bool false) (.effect .witness "inactive" (.bool true)))) (.scalar .bool)) ctx "main" [] with
