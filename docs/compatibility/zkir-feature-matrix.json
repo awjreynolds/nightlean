@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "705e5bb1f1bd6bfef874bb7756c0f920ae63e49d",
+    "sourceCommit": "67e5f9b68b0153fa4784e07ded5ec73b01b221ac",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -4860,7 +4860,8 @@
       "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves epoch-checked memo clearing and encrypted escrow approval/refund/replacement and delegated spend/burn with supply/memos/permanent pair counters",
       "guarded native map leaf deletion with idempotent absent-leaf behavior, missing-parent rejection and separate VM activity groups",
       "public source constructors and sealed deployment cells, with exact UTF8 Compress metadata and source/runtime immutability checks",
-      "checked JubjubScalar/JubjubPoint direct cells, scalar map values and nested scalar leaves, with canonical scalar/subgroup point codecs and guarded zero/identity defaults"
+      "checked JubjubScalar/JubjubPoint direct cells, scalar map values and nested scalar leaves, with canonical scalar/subgroup point codecs and guarded zero/identity defaults",
+      "packed public Bytes32 prologue: one bytes-aligned Push/Popeq pair, two bounded Native public chunks, private byte ABI unchanged and retained bytewise artifact compatibility"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
@@ -5186,6 +5187,35 @@
       "nativeCheckerRuntimeSeconds": 0.07,
       "foreignRegressionRuntimeSeconds": 0.05,
       "limits": "No key/proof generation, deployment or repeated witness Session campaign. General byte ledger values, unsupported typed keys, composite curve leaves, broader overload qualification and full formal preservation remain open."
+    },
+    "publicBytes32Evidence": {
+      "issue": 72,
+      "implementationCommit": "67e5f9b68b0153fa4784e07ded5ec73b01b221ac",
+      "source": "../../tests/Issue69Bytes32Map.lean",
+      "native": "../../runtime/tests/public_bytes32.rs",
+      "guide": "../development/public-bytes32.md",
+      "scope": "Public Bytes32 only: one logical bytes-aligned Push/Popeq prologue pair and one read. Private Bytes32 and other byte lengths retain their per-byte input ABI. Logical source values remain canonical32-byte arrays.",
+      "wire": "FAB public order is high byte constrained8bits then low31 integer constrained248bits. Logical chunk reconstruction uses low31/high order. Source/native reserved identifiers, expected terms and standalone/entrypoint public grouping match. No field reduction or hash substitution.",
+      "compatibility": "Runtime control validates packed two-chunk and retained32-byte prologues separately and rejects crossed plan/relation layouts. Existing historical artifacts remain unchanged.",
+      "focusedChecks": "66-job compiler build; focused source guards and export; one native case compares exact old/new state through zero,Native-modulus,fullFF and repeated keys, checksprivatepreimage32 and malformed logical inputs, then rejects changed chunk bounds/order. Two focused control cases pass packed and retained validation. Legacy320 library compiles.",
+      "nativeCheckerRuntimeSeconds": 0.06,
+      "before": {
+        "publicPrologueVmOperations": 64,
+        "publicPrologueReads": 32,
+        "fixtureVmOperations": 84,
+        "fixtureReads": 36,
+        "zkirInstructions": 357,
+        "zkirJsonBytes": 36520
+      },
+      "after": {
+        "publicPrologueVmOperations": 2,
+        "publicPrologueReads": 1,
+        "fixtureVmOperations": 22,
+        "fixtureReads": 5,
+        "zkirInstructions": 173,
+        "zkirJsonBytes": 15479
+      },
+      "limits": "Structural fixture comparison only. No new keygen, proofs, deployment, proving-time/K benchmark or Compact efficiency claim. Public packing for other byte lengths, byte ledger values and broader preservation remain open."
     }
   }
 }
