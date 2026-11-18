@@ -104,6 +104,7 @@ inductive LedgerValueType where
   | scalar (ty : Ty)
   | map (keyTy : Ty) (value : LedgerValueType)
   | composite (environment : Types.CompositeEnv) (type : Types.CompositeType)
+  | list (environment : Types.CompositeEnv) (type : Types.CompositeType)
   | counter
   deriving Repr, BEq, DecidableEq
 
@@ -127,6 +128,7 @@ def LedgerValueType.resolvePath (schema : LedgerValueType) : List PathKey →
       unless keyTy == expected do throw "nested map key type mismatch"
       value.resolvePath rest
     | .composite .. => throw "nested map path continues through a composite value"
+    | .list .. => throw "nested map path continues through a list value"
 
 def LedgerValueType.counterPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String Unit := do
@@ -143,6 +145,14 @@ private def checkedNativeRecord (environment : Types.CompositeEnv)
   unless checked.expandedLeaves > 0 && checked.value.nativeFieldOnly do
     throw "ledger composite values must contain one or more Native fields only"
   pure checked
+
+def LedgerValueType.listPath (schema : LedgerValueType) (keys : List PathKey) :
+    Except String (Types.CompositeEnv × Types.CompositeType × Types.CheckedLayout Types.defaultLimits) := do
+  if keys.length > 13 then throw "list path exceeds the native insertion depth"
+  let .list environment type ← schema.resolvePath keys
+    | throw "list operation path must select a List value"
+  let checked ← checkedNativeRecord environment type
+  pure (environment, type, checked)
 
 def LedgerValueType.compositeSchema (schema : LedgerValueType) :
     Except String (Types.CompositeEnv × Types.CompositeType × Types.CheckedLayout Types.defaultLimits) :=
@@ -220,6 +230,13 @@ inductive Effect where
       (type : Types.CompositeType) (destinations : List String)
   | writeCompositePath (state : String) (keys : List PathKey)
       (type : Types.CompositeType) (values : List (Expr .native))
+  | listLength (state destination : String) (keys : List PathKey)
+  | listHead (state destination : String) (keys : List PathKey)
+      (type : Types.CompositeType) (destinations : List String)
+  | listPushFront (state : String) (keys : List PathKey)
+      (type : Types.CompositeType) (values : List (Expr .native))
+  | listPopFront (state : String) (keys : List PathKey)
+  | listReset (state : String) (keys : List PathKey)
   | emptyMapPath (state : String) (keys : List PathKey)
   deriving Repr
 
@@ -422,6 +439,9 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
   | .composite environment type => do
     let _ ← checkedNativeRecord environment type
     pure ()
+  | .list environment type => do
+    let _ ← checkedNativeRecord environment type
+    pure ()
 
 private def resolveTreeState (decls : List StateDecl) (state : String)
     (keys : List PathKey) : Except String LedgerValueType := do
@@ -430,6 +450,13 @@ private def resolveTreeState (decls : List StateDecl) (state : String)
   if keys.isEmpty then throw "nested map path must contain at least one key"
   if keys.length > 14 then throw "nested map path exceeds the native insertion depth"
   schema.resolvePath keys
+
+private def resolveListState (decls : List StateDecl) (state : String)
+    (keys : List PathKey) :
+    Except String (Types.CompositeEnv × Types.CompositeType × Types.CheckedLayout Types.defaultLimits) := do
+  let some decl := decls.find? (·.name == state) | throw s!"unknown list state '{state}'"
+  let .tree schema := decl.kind | throw s!"state '{state}' is not a recursive tree"
+  schema.listPath keys
 
 private def validateCounterEffect (decls : List StateDecl) (state : String)
     (keys : List PathKey) (amount? : Option Nat := none) : Except String Unit := do
@@ -526,10 +553,11 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
-          .counterAdjust .. | .counterReset .. => pure ()
+          .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
+          .listPushFront .. | .listPopFront .. | .listReset .. => pure ()
       | .require _ => pure ()
       | _ =>
-        throw {span := span, message := "native guards are supported only on scalar reads, writes, and require effects"}
+        throw {span := span, message := "native guards are supported only on ledger reads, writes, and require effects"}
     let result : Except String (List (String × Ty)) := do
       match effect with
       | .readCell state destination ty =>
@@ -595,6 +623,35 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
         validateCounterEffect decls state keys
+        pure []
+      | .listLength state destination keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveListState decls state keys)
+        pure [(destination, .uint (2 ^ 64 - 1))]
+      | .listHead state _ keys type destinations => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let (compositeEnv, foundType, _) ← resolveListState decls state keys
+        unless foundType == type do throw "list head record type mismatch"
+        let names ← LedgerValueType.nativeLeafNames compositeEnv type
+        unless names.length == destinations.length do
+          throw "list head destination count mismatch"
+        unless uniqueNames destinations do throw "duplicate list head destination"
+        pure (destinations.map fun name => (name, .native))
+      | .listPushFront state keys type values => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let (compositeEnv, foundType, _) ← resolveListState decls state keys
+        unless foundType == type do throw "list push record type mismatch"
+        let names ← LedgerValueType.nativeLeafNames compositeEnv type
+        unless names.length == values.length do throw "list push record leaf count mismatch"
+        for value in values do value.validate caps env
+        pure []
+      | .listPopFront state keys | .listReset state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveListState decls state keys)
         pure []
       | .insertPath state keys valueTy value
       | .writePath state keys valueTy value => do

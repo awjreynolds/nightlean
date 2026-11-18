@@ -16,7 +16,7 @@ private def typeName : Ty → String
   | .native => "Native"
   | .bool => "Bool"
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
-  | .bytes length => s!"Bytes<{length}>"
+  | .bytes byteLength => s!"Bytes<{byteLength}>"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
 
@@ -190,6 +190,24 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
   | .addImmediate amount => Json.mkObj [("op", toJson ("addImmediate" : String)), ("amount", toJson amount)]
   | .subImmediate amount => Json.mkObj [("op", toJson ("subImmediate" : String)), ("amount", toJson amount)]
+  | .listLength slot keys expression => Json.mkObj [
+      ("op", toJson ("listLength" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("expression", nativeExpressionJson expression)]
+  | .listHead slot keys schema expressions => Json.mkObj [
+      ("op", toJson ("listHead" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("schema", schema), ("expressions", toJson (expressions.map nativeExpressionJson))]
+  | .listPushFront slot keys schema expressions => Json.mkObj [
+      ("op", toJson ("listPushFront" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("schema", schema), ("expressions", toJson (expressions.map nativeExpressionJson))]
+  | .listPopFront slot keys => Json.mkObj [
+      ("op", toJson ("listPopFront" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
+  | .listReset slot keys => Json.mkObj [
+      ("op", toJson ("listReset" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
 
 private def operationJson (activityGuard : Option (Expr .bool))
     (operation : Backend.Impact.Op) : Json :=
@@ -241,6 +259,30 @@ private def effectJson : Effect → Json
       ("op", toJson ("counterReset" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value))]
+  | .listLength state destination keys => Json.mkObj [
+      ("op", toJson ("listLength" : String)), ("state", toJson state),
+      ("destination", toJson destination), ("type", toJson (typeName (.uint (2 ^ 64 - 1)))),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .listHead state destination keys _ destinations => Json.mkObj [
+      ("op", toJson ("listHead" : String)), ("state", toJson state),
+      ("destination", toJson destination),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value)),
+      ("destinations", toJson destinations)]
+  | .listPushFront state keys _ values => Json.mkObj [
+      ("op", toJson ("listPushFront" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value)),
+      ("values", toJson (values.map expressionJson))]
+  | .listPopFront state keys => Json.mkObj [
+      ("op", toJson ("listPopFront" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .listReset state keys => Json.mkObj [
+      ("op", toJson ("listReset" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
   | .insertPath state keys _ value => Json.mkObj [
       ("op", toJson ("insertPath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
@@ -282,6 +324,8 @@ private def stateJson (state : StateDecl) : Json :=
     | .scalar ty => Json.mkObj [("scalar", toJson (typeName ty))]
     | .map keyTy value => Json.mkObj [("map", toJson [toJson (typeName keyTy), treeJson value])]
     | .composite environment type => Json.mkObj [("composite", compositeSchema environment type)]
+    | .list environment type => Json.mkObj [("list", Json.mkObj [
+        ("composite", compositeSchema environment type)])]
     | .counter => Json.mkObj [("counter", toJson Bool.true)]
   let kind := match state.kind with
     | .cell ty => Json.mkObj [("cell", toJson (typeName ty))]

@@ -160,13 +160,16 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .insertPath .. | some condition, .writePath ..
       | some condition, .readCompositePath .. | some condition, .writeCompositePath ..
       | some condition, .emptyMapPath .. | some condition, .counterRead ..
-      | some condition, .counterAdjust .. | some condition, .counterReset .. =>
+      | some condition, .counterAdjust .. | some condition, .counterReset ..
+      | some condition, .listLength .. | some condition, .listHead ..
+      | some condition, .listPushFront .. | some condition, .listPopFront ..
+      | some condition, .listReset .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
         pure []
       | some _, _ =>
-        throw {span, message := "native guards are supported only on scalar reads, writes, and require effects"}
+        throw {span, message := "native guards are supported only on ledger reads, writes, and require effects"}
     let activeControl := merge control activityControl
     match effect with
     | .readCell state destination _ =>
@@ -224,6 +227,27 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       env := env ++ [(destination, [])]
     | .counterAdjust state keys .. | .counterReset state keys =>
       checkSink {description := s!"public Counter mutation path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+    | .listLength state destination keys =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public List length guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public List length path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ [(destination, [])]
+    | .listHead state _ keys _ destinations =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public List head guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public List head path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ destinations.map fun destination => (destination, [])
+    | .listPushFront state keys _ payloads =>
+      checkSink {description := s!"public List push path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      for (payload, index) in payloads.zipIdx do
+        checkSink {description := s!"public List push field {index} of '{state}'", span}
+          (← expression env span payload) activeControl
+    | .listPopFront state keys | .listReset state keys =>
+      checkSink {description := s!"public List mutation path '{state}'", span}
         (← pathExpression env span keys) activeControl
     | .insertPath state keys _ payload | .writePath state keys _ payload =>
       checkSink {description := s!"public nested map write path '{state}'", span}

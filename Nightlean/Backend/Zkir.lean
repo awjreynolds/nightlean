@@ -756,11 +756,12 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
       emit "assert" [("cond", toJson (← lowerExpr condition))]
   for condition in plan.guards do
     emit "assert" [("cond", toJson (← lowerExpr condition))]
-  -- The ledger consumes one activity/skip entry per VM opcode. Flattening
-  -- these groups preserves field values but breaks transaction proving.
+  -- The ledger consumes one activity/skip entry per VM opcode. Compound
+  -- Impact operations split their field vectors at each native opcode.
   for (operation, index) in plan.operations.zipIdx do
     let guard := ((plan.activityGuards[index]?).getD none).getD (.bool true)
-    bindPublicGuarded guard (← operation.fields.mapM lowerExpr)
+    for fields in operation.fieldGroups do
+      bindPublicGuarded guard (← fields.mapM lowerExpr)
   -- Contract outputs are named values used in state effects. The transaction
   -- call has empty explicit return value; all disclosed values are in transcript.
   emit "output" [("vals", toJson ([] : List String))]

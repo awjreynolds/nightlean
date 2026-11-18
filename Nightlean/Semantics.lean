@@ -43,6 +43,7 @@ inductive LedgerValue where
   | scalar (value : Value)
   | map (entries : List (Value × LedgerValue))
   | composite (type : Types.CompositeType) (leaves : List Nat)
+  | list (entries : List (List Nat))
   deriving Repr, BEq
 
 abbrev EvalEnv := List (String × Value)
@@ -368,6 +369,7 @@ private def treeLookup (root : LedgerValue) : List Value → Option LedgerValue
   | key :: rest => match root with
     | .scalar _ => none
     | .composite .. => none
+    | .list _ => none
     | .map entries => (entries.lookup key).bind fun value => treeLookup value rest
 
 private def treeMember (root : LedgerValue) (keys : List Value) : Except String Bool := do
@@ -387,6 +389,7 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
     match root with
     | .scalar _ => none
     | .composite .. => none
+    | .list _ => none
     | .map entries =>
       if rest.isEmpty then
         pure (.map (updateAssoc key value entries))
@@ -413,6 +416,12 @@ private def adjustCounter (current amount : Nat) (subtract : Bool) : Except Stri
   else
     if current > maximum - amount then throw "Counter addition overflow"
     pure (current + amount)
+
+private def listPayloadAt (root : LedgerValue) (keys : List Value) :
+    Except String (List (List Nat)) := do
+  let some (.list entries) := treeLookup root keys
+    | throw "missing or non-list state value"
+  pure entries
 
 /-- Execute ordered effects against a private tentative state. Returning an error
 never exposes that tentative state, expressing atomic failure in the reference model. -/
@@ -502,6 +511,53 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
       let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) 0))
         | throw s!"nested Counter parent is missing or not a map '{name}'"
       next := {next with trees := updateAssoc name updated next.trees}
+    | .listLength name destination keys => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+      let entries ← listPayloadAt root evaluated
+      let maximum := 2 ^ 64 - 1
+      if entries.length > maximum then throw "List length exceeds u64"
+      env := (destination, .uint maximum entries.length) :: env
+    | .listHead name _ keys _type destinations => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+      let entries ← listPayloadAt root evaluated
+      let some leaves := entries.head? | throw "cannot read the head of an empty List"
+      unless leaves.length == destinations.length do
+        throw "List head record leaf count mismatch"
+      unless leaves.all (· < ctx.modulus) do throw "noncanonical List record field"
+      env := env ++ (destinations.zip leaves).map fun (destination, value) =>
+        (destination, .native value)
+    | .listPushFront name keys _type values => do
+      let evaluated ← evaluatePath ctx env keys
+      let leaves ← values.mapM fun value => do
+        let result ← value.eval ctx env
+        if result ≥ ctx.modulus then throw "noncanonical List record field"
+        pure result
+      if leaves.isEmpty then throw "List record must contain at least one field"
+      let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+      let entries ← listPayloadAt root evaluated
+      let maximum := 2 ^ 64 - 1
+      if entries.length ≥ maximum then throw "List length overflow"
+      let some updated := treeSet root evaluated (.list (leaves :: entries))
+        | throw s!"nested List parent is missing or not a map '{name}'"
+      next := {next with trees := updateAssoc name updated next.trees}
+    | .listPopFront name keys => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+      let entries ← listPayloadAt root evaluated
+      let rest ← match entries with
+        | [] => throw "cannot pop from an empty List"
+        | _ :: rest => pure rest
+      let some updated := treeSet root evaluated (.list rest)
+        | throw s!"nested List parent is missing or not a map '{name}'"
+      next := {next with trees := updateAssoc name updated next.trees}
+    | .listReset name keys => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+      let some updated := treeSet root evaluated (.list [])
+        | throw s!"nested List parent is missing or not a map '{name}'"
+      next := {next with trees := updateAssoc name updated next.trees}
     | .insertPath name keys ty value | .writePath name keys ty value => do
       let evaluated ← evaluatePath ctx env keys
       let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -544,7 +600,7 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. => pure ()
-        | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
+        | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
         | _ => pure true
@@ -630,6 +686,53 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
           let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) 0))
             | throw s!"nested Counter parent is missing or not a map '{name}'"
           next := {next with trees := updateAssoc name updated next.trees}
+        | .listLength name destination keys => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+          let entries ← listPayloadAt root evaluated
+          let maximum := 2 ^ 64 - 1
+          if entries.length > maximum then throw "List length exceeds u64"
+          env := (destination, .uint maximum entries.length) :: env
+        | .listHead name _ keys _type destinations => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+          let entries ← listPayloadAt root evaluated
+          let some leaves := entries.head? | throw "cannot read the head of an empty List"
+          unless leaves.length == destinations.length do
+            throw "List head record leaf count mismatch"
+          unless leaves.all (· < ctx.modulus) do throw "noncanonical List record field"
+          env := env ++ (destinations.zip leaves).map fun (destination, value) =>
+            (destination, .native value)
+        | .listPushFront name keys _type values => do
+          let evaluated ← evaluatePath ctx env keys
+          let leaves ← values.mapM fun value => do
+            let result ← value.eval ctx env
+            if result ≥ ctx.modulus then throw "noncanonical List record field"
+            pure result
+          if leaves.isEmpty then throw "List record must contain at least one field"
+          let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+          let entries ← listPayloadAt root evaluated
+          let maximum := 2 ^ 64 - 1
+          if entries.length ≥ maximum then throw "List length overflow"
+          let some updated := treeSet root evaluated (.list (leaves :: entries))
+            | throw s!"nested List parent is missing or not a map '{name}'"
+          next := {next with trees := updateAssoc name updated next.trees}
+        | .listPopFront name keys => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+          let entries ← listPayloadAt root evaluated
+          let rest ← match entries with
+            | [] => throw "cannot pop from an empty List"
+            | _ :: rest => pure rest
+          let some updated := treeSet root evaluated (.list rest)
+            | throw s!"nested List parent is missing or not a map '{name}'"
+          next := {next with trees := updateAssoc name updated next.trees}
+        | .listReset name keys => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive List state '{name}'"
+          let some updated := treeSet root evaluated (.list [])
+            | throw s!"nested List parent is missing or not a map '{name}'"
+          next := {next with trees := updateAssoc name updated next.trees}
         | .insertPath name keys ty value | .writePath name keys ty value => do
           let evaluated ← evaluatePath ctx env keys
           let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -673,7 +776,8 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
         | .writeCell .. | .writeMap .. | .require .. | .insertPath .. | .writePath .. |
-            .writeCompositePath .. | .emptyMapPath .. => pure ()
+            .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
+            .listPopFront .. | .listReset .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with
             | .native => 0
@@ -688,7 +792,10 @@ def runEffectsWithGuards (ctx : EvalContext) (effects : List Effect)
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .counterAdjust .. | .counterReset .. => pure ()
-        | _ => throw "native guards are supported only on scalar reads, writes, and require effects"
+        | .listLength _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
+        | .listHead _ _ _ _ destinations =>
+          env := env ++ destinations.map fun destination => (destination, .native 0)
+        | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
     pure next
 
 /-- This is a specification evaluator, not a substitute for ledger proof checks. -/

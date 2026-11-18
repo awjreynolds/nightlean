@@ -627,6 +627,36 @@ pub enum Instruction {
     Insert {
         n: u8,
     },
+    #[serde(rename = "listLength")]
+    ListLength {
+        slot: u32,
+        keys: Vec<PathPart>,
+        expression: Expr,
+    },
+    #[serde(rename = "listHead")]
+    ListHead {
+        slot: u32,
+        keys: Vec<PathPart>,
+        schema: Json,
+        expressions: Vec<Expr>,
+    },
+    #[serde(rename = "listPushFront")]
+    ListPushFront {
+        slot: u32,
+        keys: Vec<PathPart>,
+        schema: Json,
+        expressions: Vec<Expr>,
+    },
+    #[serde(rename = "listPopFront")]
+    ListPopFront {
+        slot: u32,
+        keys: Vec<PathPart>,
+    },
+    #[serde(rename = "listReset")]
+    ListReset {
+        slot: u32,
+        keys: Vec<PathPart>,
+    },
     #[serde(rename = "addImmediate")]
     AddImmediate {
         amount: u32,
@@ -635,6 +665,69 @@ pub enum Instruction {
     SubImmediate {
         amount: u32,
     },
+}
+
+fn path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> {
+    let types = map_path_key_types(plan, slot, keys.len())?;
+    let mut fields = 4;
+    for (part, ty) in keys.iter().zip(types) {
+        ensure!(
+            part.alignment == key_alignment(&ty),
+            "map path key alignment mismatch"
+        );
+        fields += match part.alignment.as_str() {
+            "field" | "bit" => 3,
+            "bytes32" => 4,
+            _ => bail!("unsupported path alignment"),
+        };
+    }
+    Ok(fields)
+}
+
+fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usize>> {
+    Ok(match instruction {
+        Instruction::ListLength { slot, keys, .. } => {
+            vec![1, path_field_count(plan, *slot, keys)?, 4, 4]
+        }
+        Instruction::ListHead {
+            slot,
+            keys,
+            schema,
+            expressions,
+        }
+        | Instruction::ListPushFront {
+            slot,
+            keys,
+            schema,
+            expressions,
+        } => {
+            let parsed = checked_record_schema(schema)?;
+            ensure!(
+                expressions.len() == parsed.counts().leaves,
+                "list record expression count mismatch"
+            );
+            let path = path_field_count(plan, *slot, keys)?;
+            let n = expressions.len();
+            if matches!(instruction, Instruction::ListHead { .. }) {
+                vec![1, path, 4, 2 + 2 * n]
+            } else {
+                vec![path, 1, 4, 2, 6 + 2 * n, 1, 5, 1, 1, 1, 5, 1, 1]
+            }
+        }
+        Instruction::ListPopFront { slot, keys } => {
+            vec![path_field_count(plan, *slot, keys)?, 1, 4, 2, 1, 4, 1]
+        }
+        Instruction::ListReset { slot, keys } => {
+            if let Some((_, parents)) = keys.split_last() {
+                let full = path_field_count(plan, *slot, keys)?;
+                let parent = path_field_count(plan, *slot, parents)?;
+                vec![parent, 2 + full - parent, 8, 1]
+            } else {
+                vec![5, 8, 1]
+            }
+        }
+        _ => vec![impact_field_count(instruction, plan)?],
+    })
 }
 
 /// Number of transcript fields in one statically scheduled Impact group.
@@ -657,17 +750,13 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             let key_type = map_key_type(plan, *slot)?;
             6 + value_fields(key_alignment(&key_type))?
         }
-        Instruction::IndexPath { slot, keys, .. } => {
-            let types = map_path_key_types(plan, *slot, keys.len())?;
-            let mut fields = 4;
-            for (part, ty) in keys.iter().zip(types) {
-                ensure!(
-                    part.alignment == key_alignment(&ty),
-                    "map path key alignment mismatch"
-                );
-                fields += 2 + value_fields(&part.alignment)?;
-            }
-            fields
+        Instruction::IndexPath { slot, keys, .. } => path_field_count(plan, *slot, keys)?,
+        Instruction::ListLength { .. }
+        | Instruction::ListHead { .. }
+        | Instruction::ListPushFront { .. }
+        | Instruction::ListPopFront { .. }
+        | Instruction::ListReset { .. } => {
+            impact_field_counts(instruction, plan)?.into_iter().sum()
         }
         Instruction::Push { alignment, .. } => 4 + value_fields(alignment)?,
         Instruction::Popeq { alignment, .. } => 3 + value_fields(alignment)?,
@@ -750,6 +839,18 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         .ok_or_else(|| anyhow!("invalid state tree schema"))?;
     ensure!(fields.len() == 1, "invalid state tree schema");
     if fields.get("counter") == Some(&Json::Bool(true)) {
+        return Ok(());
+    }
+    if let Some(element) = fields.get("list") {
+        let parts = element
+            .as_object()
+            .ok_or_else(|| anyhow!("invalid list element schema"))?;
+        ensure!(parts.len() == 1, "invalid list element schema");
+        checked_record_schema(
+            parts
+                .get("composite")
+                .ok_or_else(|| anyhow!("list requires a Native record element"))?,
+        )?;
         return Ok(());
     }
     if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
@@ -1026,7 +1127,13 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
             values.push(StateValue::Map(Default::default()));
         } else if let Some(schema) = d.kind.get("tree") {
             validate_tree_schema(schema, 0)?;
-            if schema.get("counter") == Some(&Json::Bool(true)) {
+            if schema.get("list").is_some() {
+                ensure!(
+                    value.as_array().is_some_and(Vec::is_empty),
+                    "initial list must be empty"
+                );
+                values.push(empty_native_list());
+            } else if schema.get("counter") == Some(&Json::Bool(true)) {
                 values.push(StateValue::Cell(Sp::new(aligned(
                     &input_value("UIntRange<18446744073709551616>", value)?,
                     "u64",
@@ -1064,11 +1171,11 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
         values.into_iter().collect(),
     )))
 }
-fn read_state_aligned(
+fn read_state_value(
     context: &QueryContext<Db>,
     slot: u32,
     keys: &[AlignedValue],
-) -> Result<AlignedValue> {
+) -> Result<StateValue<Db>> {
     let StateValue::Array(array) = context.state.get_ref() else {
         bail!("expected array state")
     };
@@ -1086,7 +1193,15 @@ fn read_state_aligned(
             _ => bail!("state path does not address a map"),
         };
     }
-    let StateValue::Cell(value) = &*cell else {
+    Ok((*cell).clone())
+}
+
+fn read_state_aligned(
+    context: &QueryContext<Db>,
+    slot: u32,
+    keys: &[AlignedValue],
+) -> Result<AlignedValue> {
+    let StateValue::Cell(ref value) = read_state_value(context, slot, keys)? else {
         bail!("expected state cell")
     };
     Ok((**value).clone())
@@ -1099,7 +1214,10 @@ fn read_state_cell(
     ty: &str,
     alignment: &str,
 ) -> Result<Value> {
-    let value = read_state_aligned(context, slot, keys)?;
+    decode_state_cell(&read_state_aligned(context, slot, keys)?, ty, alignment)
+}
+
+fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<Value> {
     let mut fields = Vec::new();
     value.value_only_field_repr(&mut fields);
     ensure!(fields.len() == 1, "expected scalar state cell");
@@ -1115,7 +1233,7 @@ fn read_state_cell(
         }
     }?;
     ensure!(
-        value == aligned(&decoded, alignment)?,
+        *value == aligned(&decoded, alignment)?,
         "state cell alignment or encoding mismatch"
     );
     Ok(decoded)
@@ -1137,6 +1255,91 @@ fn tree_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
             .ok_or_else(|| anyhow!("record path exceeds declared schema"))?;
     }
     Ok(schema)
+}
+
+fn list_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
+    ensure!(depth <= 13, "list path exceeds native insertion depth");
+    tree_schema_at_path(plan, slot, depth)?
+        .get("list")
+        .and_then(|value| value.get("composite"))
+        .ok_or_else(|| anyhow!("path does not select a Native-record List"))
+}
+
+fn empty_native_list() -> StateValue<Db> {
+    StateValue::Array(
+        vec![
+            StateValue::Null,
+            StateValue::Null,
+            StateValue::Cell(Sp::new(0u64.into())),
+        ]
+        .into(),
+    )
+}
+
+fn native_list_value(
+    context: &QueryContext<Db>,
+    slot: u32,
+    keys: &[AlignedValue],
+    schema: &Json,
+) -> Result<(u64, Option<AlignedValue>)> {
+    let StateValue::Array(ref node) = read_state_value(context, slot, keys)? else {
+        bail!("expected native List array")
+    };
+    ensure!(node.len() == 3, "invalid native List node width");
+    let StateValue::Cell(length) = node.get(2).unwrap() else {
+        bail!("invalid List length cell")
+    };
+    let Value::UInt { number, .. } =
+        decode_state_cell(length, "UIntRange<18446744073709551616>", "u64")?
+    else {
+        unreachable!()
+    };
+    let length = u64::try_from(number).map_err(|_| anyhow!("invalid List length"))?;
+    if length == 0 {
+        ensure!(
+            matches!(node.get(0), Some(StateValue::Null))
+                && matches!(node.get(1), Some(StateValue::Null)),
+            "invalid empty List sentinel"
+        );
+        return Ok((0, None));
+    }
+    ensure!(
+        matches!(node.get(1), Some(StateValue::Array(_))),
+        "invalid List tail"
+    );
+    let StateValue::Cell(head) = node.get(0).unwrap() else {
+        bail!("invalid List head cell")
+    };
+    let checked = checked_record_schema(schema)?;
+    let mut fields = Vec::new();
+    head.value_only_field_repr(&mut fields);
+    ensure!(
+        **head == aligned_fields(&fields),
+        "List head alignment mismatch"
+    );
+    validate_record_fields(&checked, &fields)?;
+    Ok((length, Some((**head).clone())))
+}
+
+fn list_index(index: u8) -> Op<ResultModeVerify, Db> {
+    Op::Idx {
+        cached: false,
+        push_path: false,
+        path: vec![Key::Value(
+            AlignedValue::from(index).try_into().expect("u8 index"),
+        )]
+        .try_into()
+        .expect("one index"),
+    }
+}
+
+fn push_native_state(value: StateValue<Db>, storage: bool) -> Result<Op<ResultModeVerify, Db>> {
+    Ok(Op::Push {
+        storage,
+        value: value
+            .try_into_checked()
+            .map_err(|_| anyhow!("invalid native List storage value"))?,
+    })
 }
 
 fn record_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
@@ -1275,6 +1478,7 @@ pub fn prepare(
     let mut has_written = false;
     let mut activity_schedule = Vec::with_capacity(plan.operations.len());
     for i in &plan.operations {
+        let operation_start = program.len();
         let mut instruction_guard = None;
         let instruction = match i {
             Instruction::Guarded { guard, operation } => {
@@ -1301,16 +1505,21 @@ pub fn prepare(
                             | Instruction::PopeqFields { .. }
                             | Instruction::AddImmediate { .. }
                             | Instruction::SubImmediate { .. }
+                            | Instruction::ListLength { .. }
+                            | Instruction::ListHead { .. }
+                            | Instruction::ListPushFront { .. }
+                            | Instruction::ListPopFront { .. }
+                            | Instruction::ListReset { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
                 let active = evaluate(guard, &env)?.boolean()?;
-                activity_schedule.push(if active {
-                    None
-                } else {
-                    Some(impact_field_count(operation.as_ref(), plan)?)
-                });
                 if !active {
+                    activity_schedule.extend(
+                        impact_field_counts(operation.as_ref(), plan)?
+                            .into_iter()
+                            .map(Some),
+                    );
                     if let Instruction::Popeq {
                         expression,
                         alignment,
@@ -1365,16 +1574,77 @@ pub fn prepare(
                         }
                         read_index += 1;
                     }
+                    match operation.as_ref() {
+                        Instruction::ListLength { expression, .. } => {
+                            let read = plan
+                                .reads
+                                .get(read_index)
+                                .ok_or_else(|| anyhow!("missing inactive List length read"))?;
+                            ensure!(
+                                read.guard.as_ref() == Some(guard)
+                                    && read.ty == "UIntRange<18446744073709551616>",
+                                "inactive List length read schema mismatch"
+                            );
+                            ensure!(
+                                matches!(expression, Expr::Reference { name } if name == &read.name),
+                                "List length must bind its declared read"
+                            );
+                            ensure!(
+                                !env.contains_key(&read.name),
+                                "List length shadows an existing value"
+                            );
+                            env.insert(read.name.clone(), inactive_read_value(&read.ty)?);
+                            read_index += 1;
+                        }
+                        Instruction::ListHead {
+                            schema,
+                            expressions,
+                            ..
+                        } => {
+                            let read = plan
+                                .reads
+                                .get(read_index)
+                                .ok_or_else(|| anyhow!("missing inactive List head read"))?;
+                            ensure!(
+                                read.guard.as_ref() == Some(guard),
+                                "inactive List head guard mismatch"
+                            );
+                            for name in record_component_names(read, expressions, schema)? {
+                                ensure!(
+                                    !env.contains_key(name),
+                                    "List head component shadows an existing value"
+                                );
+                                env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
+                            }
+                            read_index += 1;
+                        }
+                        _ => {}
+                    }
                     continue;
                 }
                 instruction_guard = Some(guard);
                 operation.as_ref()
             }
-            _ => {
-                activity_schedule.push(None);
-                i
-            }
+            _ => i,
         };
+        if has_written
+            && matches!(
+                instruction,
+                Instruction::ListLength { .. }
+                    | Instruction::ListHead { .. }
+                    | Instruction::ListPushFront { .. }
+                    | Instruction::ListPopFront { .. }
+                    | Instruction::ListReset { .. }
+            )
+        {
+            advance_native_state_prefix(
+                &mut prefix_context,
+                &program,
+                &mut materialized_prefix,
+                mutation_boundary,
+                cost,
+            )?;
+        }
         let mut current_index = None;
         let op = match instruction {
             Instruction::Guarded { .. } => {
@@ -1579,6 +1849,210 @@ pub fn prepare(
                     result: value,
                 }
             }
+            Instruction::ListLength {
+                slot,
+                keys,
+                expression,
+            } => {
+                let schema = list_schema_at_path(plan, *slot, keys.len())?;
+                let (index, values) = native_index(plan, *slot, keys, false, &env)?;
+                let read = plan
+                    .reads
+                    .get(read_index)
+                    .ok_or_else(|| anyhow!("missing List length read"))?;
+                ensure!(
+                    read.guard.as_ref() == instruction_guard
+                        && read.ty == "UIntRange<18446744073709551616>",
+                    "List length read schema mismatch"
+                );
+                ensure!(
+                    matches!(expression, Expr::Reference { name } if name == &read.name),
+                    "List length must bind its declared read"
+                );
+                let (length, _) = native_list_value(
+                    if has_written {
+                        &prefix_context
+                    } else {
+                        &context
+                    },
+                    *slot,
+                    &values,
+                    schema,
+                )?;
+                ensure!(
+                    !env.contains_key(&read.name),
+                    "List length shadows an existing value"
+                );
+                env.insert(
+                    read.name.clone(),
+                    Value::UInt {
+                        number: length.into(),
+                        maximum: u64::MAX.into(),
+                    },
+                );
+                read_index += 1;
+                program.extend([Op::Dup { n: 0 }, index, list_index(2)]);
+                Op::Popeq {
+                    cached: false,
+                    result: length.into(),
+                }
+            }
+            Instruction::ListHead {
+                slot,
+                keys,
+                schema,
+                expressions,
+            } => {
+                ensure!(
+                    list_schema_at_path(plan, *slot, keys.len())? == schema,
+                    "List head schema mismatch"
+                );
+                let (index, values) = native_index(plan, *slot, keys, false, &env)?;
+                let read = plan
+                    .reads
+                    .get(read_index)
+                    .ok_or_else(|| anyhow!("missing List head read"))?;
+                ensure!(
+                    read.guard.as_ref() == instruction_guard,
+                    "List head guard mismatch"
+                );
+                let names = record_component_names(read, expressions, schema)?;
+                let (_, head) = native_list_value(
+                    if has_written {
+                        &prefix_context
+                    } else {
+                        &context
+                    },
+                    *slot,
+                    &values,
+                    schema,
+                )?;
+                let head = head.ok_or_else(|| anyhow!("head of empty List"))?;
+                let mut fields = Vec::new();
+                head.value_only_field_repr(&mut fields);
+                for (name, value) in names.into_iter().zip(fields) {
+                    ensure!(
+                        !env.contains_key(name),
+                        "List head component shadows an existing value"
+                    );
+                    env.insert(name.to_owned(), Value::Native(value));
+                }
+                read_index += 1;
+                program.extend([Op::Dup { n: 0 }, index, list_index(0)]);
+                Op::Popeq {
+                    cached: false,
+                    result: head,
+                }
+            }
+            Instruction::ListPushFront {
+                slot,
+                keys,
+                schema,
+                expressions,
+            } => {
+                ensure!(
+                    list_schema_at_path(plan, *slot, keys.len())? == schema,
+                    "List push schema mismatch"
+                );
+                let (index, values) = native_index(plan, *slot, keys, true, &env)?;
+                native_list_value(
+                    if has_written {
+                        &prefix_context
+                    } else {
+                        &context
+                    },
+                    *slot,
+                    &values,
+                    schema,
+                )?;
+                let fields = expressions
+                    .iter()
+                    .map(|value| evaluate(value, &env)?.field())
+                    .collect::<Result<Vec<_>>>()?;
+                validate_record_fields(&checked_record_schema(schema)?, &fields)?;
+                let node = StateValue::Array(
+                    vec![
+                        StateValue::Cell(Sp::new(aligned_fields(&fields))),
+                        StateValue::Null,
+                        StateValue::Null,
+                    ]
+                    .into(),
+                );
+                program.extend([
+                    index,
+                    Op::Dup { n: 0 },
+                    list_index(2),
+                    Op::Addi { immediate: 1 },
+                    push_native_state(node, true)?,
+                    Op::Swap { n: 0 },
+                    push_native_state(StateValue::Cell(Sp::new(2u8.into())), false)?,
+                    Op::Swap { n: 0 },
+                    Op::Ins {
+                        cached: false,
+                        n: 1,
+                    },
+                    Op::Swap { n: 0 },
+                    push_native_state(StateValue::Cell(Sp::new(1u8.into())), false)?,
+                    Op::Swap { n: 0 },
+                ]);
+                has_written = true;
+                Op::Ins {
+                    cached: false,
+                    n: (keys.len() + 2).try_into()?,
+                }
+            }
+            Instruction::ListPopFront { slot, keys } => {
+                let schema = list_schema_at_path(plan, *slot, keys.len())?;
+                let (index, values) = native_index(plan, *slot, keys, true, &env)?;
+                let (length, _) = native_list_value(
+                    if has_written {
+                        &prefix_context
+                    } else {
+                        &context
+                    },
+                    *slot,
+                    &values,
+                    schema,
+                )?;
+                ensure!(length > 0, "pop of empty List");
+                // Subi enforces nonempty in the ledger VM as well as host preparation.
+                program.extend([
+                    index,
+                    Op::Dup { n: 0 },
+                    list_index(2),
+                    Op::Subi { immediate: 1 },
+                    Op::Pop,
+                    list_index(1),
+                ]);
+                has_written = true;
+                Op::Ins {
+                    cached: false,
+                    n: (keys.len() + 1).try_into()?,
+                }
+            }
+            Instruction::ListReset { slot, keys } => {
+                list_schema_at_path(plan, *slot, keys.len())?;
+                let (_, values) = native_index(plan, *slot, keys, false, &env)?;
+                if let Some((_, parents)) = keys.split_last() {
+                    let (index, _) = native_index(plan, *slot, parents, true, &env)?;
+                    program.push(index);
+                    program.push(push_native_state(
+                        StateValue::Cell(Sp::new(values.last().expect("nonempty path").clone())),
+                        false,
+                    )?);
+                } else {
+                    program.push(push_native_state(
+                        StateValue::Cell(Sp::new(field_value(Fr::from(*slot as u64)))),
+                        false,
+                    )?);
+                }
+                program.push(push_native_state(empty_native_list(), true)?);
+                has_written = true;
+                Op::Ins {
+                    cached: false,
+                    n: (keys.len() + 1).try_into()?,
+                }
+            }
             Instruction::Member => Op::Member,
             Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {
                 let (slot, keys) = previous_index
@@ -1627,14 +2101,25 @@ pub fn prepare(
         };
         previous_index = current_index;
         program.push(op);
+        activity_schedule.extend(std::iter::repeat_n(None, program.len() - operation_start));
         member_result_pending = matches!(instruction, Instruction::Member);
-        if matches!(instruction, Instruction::Insert { .. }) {
+        if matches!(
+            instruction,
+            Instruction::Insert { .. }
+                | Instruction::ListPushFront { .. }
+                | Instruction::ListPopFront { .. }
+                | Instruction::ListReset { .. }
+        ) {
             mutation_boundary = program.len();
         }
     }
     ensure!(
-        activity_schedule.len() == plan.operations.len(),
-        "native activity schedule does not match source operations"
+        activity_schedule
+            .iter()
+            .filter(|entry| entry.is_none())
+            .count()
+            == program.len(),
+        "native activity schedule does not match emitted operations"
     );
     ensure!(read_index == plan.reads.len(), "read schema mismatch");
     context.query(&program, None, cost).map_err(|_| {

@@ -1,0 +1,173 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "inbox",
+   "kind":
+   {"tree":
+    {"list":
+     {"composite":
+      {"typeFingerprint":
+       "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+       "schemaVersion": 1,
+       "layout":
+       {"kind": "struct",
+        "id": "NativeList.Memo",
+        "fields":
+        [{"name": "x",
+          "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+         {"name": "y",
+          "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+       "counts": {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}}}}}},
+  {"name": "memos",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"map":
+       ["Bytes<32>",
+        {"list":
+         {"composite":
+          {"typeFingerprint":
+           "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+           "schemaVersion": 1,
+           "layout":
+           {"kind": "struct",
+            "id": "NativeList.Memo",
+            "fields":
+            [{"name": "x",
+              "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+             {"name": "y",
+              "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+           "counts":
+           {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}}}}]}]}}}],
+ "schemaVersion": 1,
+ "reads":
+ [{"type": "Bool", "name": "enabled"},
+  {"type": "UIntRange<18446744073709551616>", "name": "inboxLength"},
+  {"type": "Composite",
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "NativeList.Memo",
+     "fields":
+     [{"name": "x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}},
+   "name": "inboxHead",
+   "components":
+   [{"type": "Native", "name": "inboxHead_x"},
+    {"type": "Native", "name": "inboxHead_y"}]},
+  {"type": "UIntRange<18446744073709551616>", "name": "memoLength"},
+  {"type": "Composite",
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "NativeList.Memo",
+     "fields":
+     [{"name": "x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}},
+   "name": "memoHead",
+   "components":
+   [{"type": "Native", "name": "memoHead_x"},
+    {"type": "Native", "name": "memoHead_y"}]}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"slot": 0,
+   "op": "listLength",
+   "keys": [],
+   "expression": {"tag": "reference", "name": "inboxLength"}},
+  {"slot": 0,
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "NativeList.Memo",
+     "fields":
+     [{"name": "x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}},
+   "op": "listHead",
+   "keys": [],
+   "expressions":
+   [{"tag": "reference", "name": "inboxHead_x"},
+    {"tag": "reference", "name": "inboxHead_y"}]},
+  {"slot": 1,
+   "op": "listLength",
+   "keys":
+   [{"expression": {"tag": "reference", "name": "owner"},
+     "alignment": "bytes32"},
+    {"expression": {"tag": "reference", "name": "spender"},
+     "alignment": "bytes32"}],
+   "expression": {"tag": "reference", "name": "memoLength"}},
+  {"slot": 1,
+   "schema":
+   {"typeFingerprint":
+    "NightleanCompositeTypeV1;r15:NativeList.MemoNightleanCompositeLayoutV1;1;R15:NativeList.Memo2;f1:xsNf1:ysN0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "NativeList.Memo",
+     "fields":
+     [{"name": "x", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+      {"name": "y", "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 2, "layoutNodes": 3, "expandedNodes": 3}},
+   "op": "listHead",
+   "keys":
+   [{"expression": {"tag": "reference", "name": "owner"},
+     "alignment": "bytes32"},
+    {"expression": {"tag": "reference", "name": "spender"},
+     "alignment": "bytes32"}],
+   "expressions":
+   [{"tag": "reference", "name": "memoHead_x"},
+    {"tag": "reference", "name": "memoHead_y"}]}],
+ "nativeCircuitFile": "NativeList.inspect.zkir",
+ "guards": [],
+ "entrypoint": "inspect",
+ "contractName": "NativeList",
+ "circuit":
+ {"outputs": [],
+  "name": "memoInput",
+  "inputs":
+  [{"visibility": "private", "type": "Bytes<32>", "name": "owner"},
+   {"visibility": "private", "type": "Bytes<32>", "name": "spender"},
+   {"visibility": "private", "type": "Native", "name": "x"},
+   {"visibility": "private", "type": "Native", "name": "y"},
+   {"visibility": "public", "type": "Bool", "name": "enabled"}],
+  "file": "memoInput.zkir",
+  "constraints": []}}

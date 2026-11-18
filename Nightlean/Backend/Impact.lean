@@ -43,6 +43,11 @@ inductive Op where
   | insert (levels : Nat)
   | addImmediate (amount : Nat)
   | subImmediate (amount : Nat)
+  | listLength (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
+  | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
+  | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
+  | listPopFront (slot : Nat) (keys : List Aligned)
+  | listReset (slot : Nat) (keys : List Aligned)
 
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
@@ -57,15 +62,32 @@ def Aligned.fields : Aligned → List Scalar
       List.replicate values.length (.native (Field.modulus - 2)) ++ values
   | .counter value => [.native 1, .native 8, .cast .native value]
 
+private def indexPathFields (slot : Nat) (pushPath : Bool) (keys : List Aligned) : List Scalar :=
+  [.native ((if pushPath then 0x70 else 0x50) + keys.length)] ++
+    (Aligned.field (.native slot)).fields ++ keys.flatMap Aligned.fields
+
+private def listIndexFields (index : Nat) : List Scalar :=
+  [.native 0x50, .native 1, .native 1, .native index]
+
+private def listU8CellPushFields (index : Nat) : List Scalar :=
+  [.native 0x10, .native 1, .native 1, .native 1, .native index]
+
+private def listNodePushFields (values : List Scalar) : List Scalar :=
+  [.native 0x11, .native 51, .native 1, .native values.length] ++
+    List.replicate values.length (.native (Field.modulus - 2)) ++ values ++
+    [.native 0, .native 0]
+
+private def emptyListPushFields : List Scalar :=
+  [.native 0x11, .native 51, .native 0, .native 0,
+    .native 1, .native 1, .native 8, .native 0]
+
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
   | .index slot pushPath => [.native (if pushPath then 0x70 else 0x50)] ++
       (Aligned.field (.native slot)).fields
   | .mapIndex slot key => [.native 0x51] ++
       (Aligned.field (.native slot)).fields ++ key.fields
-  | .indexPath slot pushPath keys =>
-      [.native ((if pushPath then 0x70 else 0x50) + keys.length)] ++
-      (Aligned.field (.native slot)).fields ++ keys.flatMap Aligned.fields
+  | .indexPath slot pushPath keys => indexPathFields slot pushPath keys
   | .push value storage => [.native (if storage then 0x11 else 0x10), .native 1] ++ value.fields
   | .newMap => [.native 0x05]
   | .popeq value => [.native 0x0c] ++ value.fields
@@ -77,6 +99,64 @@ def Op.fields : Op → List Scalar
   | .insert levels => [.native (0x90 + levels)]
   | .addImmediate amount => [.native 0x0e, .native amount]
   | .subImmediate amount => [.native 0x0f, .native amount]
+  | .listLength slot keys value =>
+      [.native 0x30] ++ indexPathFields slot false keys ++
+      listIndexFields 2 ++ [.native 0x0c] ++ (Aligned.counter value).fields
+  | .listHead slot keys _schema values =>
+      [.native 0x30] ++ indexPathFields slot false keys ++ listIndexFields 0 ++
+      [.native 0x0c] ++ (Aligned.nativeFields values).fields
+  | .listPushFront slot keys _ values =>
+      indexPathFields slot true keys ++ [.native 0x30] ++ listIndexFields 2 ++
+      [.native 0x0e, .native 1] ++ listNodePushFields values ++
+      [.native 0x40, .native 0x10, .native 1, .native 1, .native 1, .native 2] ++
+      [.native 0x40, .native 0x91, .native 0x40, .native 0x10, .native 1,
+        .native 1, .native 1, .native 1, .native 0x40, .native (0x90 + keys.length + 2)]
+  | .listPopFront slot keys =>
+      indexPathFields slot true keys ++ [.native 0x30] ++ listIndexFields 2 ++
+      [.native 0x0f, .native 1, .native 0x0b] ++ listIndexFields 1 ++
+      [.native (0x90 + keys.length + 1)]
+  | .listReset slot keys =>
+      match keys with
+      | [] => [.native 0x10, .native 1] ++ (Aligned.field (.native slot)).fields ++
+          emptyListPushFields ++ [.native 0x91]
+      | _ => match keys.getLast? with
+        | none => []
+        | some finalKey =>
+          let parents := keys.take (keys.length - 1)
+          indexPathFields slot true parents ++ [.native 0x10, .native 1] ++
+            finalKey.fields ++ emptyListPushFields ++ [.native (0x90 + keys.length + 1)]
+
+/-- Native transcript groups correspond one-to-one with VM operations. List
+macros remain one typed source effect, but their field vectors split at each
+elementary opcode so activity schedules match the ledger VM. -/
+def Op.fieldGroups : Op → List (List Scalar)
+  | .listLength slot keys value =>
+      [[.native 0x30], indexPathFields slot false keys, listIndexFields 2,
+        [.native 0x0c] ++ (Aligned.counter value).fields]
+  | .listHead slot keys _schema values =>
+      [[.native 0x30], indexPathFields slot false keys, listIndexFields 0,
+        [.native 0x0c] ++ (Aligned.nativeFields values).fields]
+  | .listPushFront slot keys _ values =>
+      [indexPathFields slot true keys, [.native 0x30], listIndexFields 2,
+        [.native 0x0e, .native 1], listNodePushFields values, [.native 0x40],
+        listU8CellPushFields 2, [.native 0x40], [.native 0x91], [.native 0x40],
+        listU8CellPushFields 1, [.native 0x40], [.native (0x90 + keys.length + 2)]]
+  | .listPopFront slot keys =>
+      [indexPathFields slot true keys, [.native 0x30], listIndexFields 2,
+        [.native 0x0f, .native 1], [.native 0x0b], listIndexFields 1,
+        [.native (0x90 + keys.length + 1)]]
+  | .listReset slot [] =>
+      [[.native 0x10, .native 1] ++ (Aligned.field (.native slot)).fields,
+        emptyListPushFields, [.native 0x91]]
+  | .listReset slot keys =>
+      match keys.getLast? with
+      | none => []
+      | some finalKey =>
+        let parents := keys.take (keys.length - 1)
+        [indexPathFields slot true parents,
+          [.native 0x10, .native 1] ++ finalKey.fields,
+          emptyListPushFields, [.native (0x90 + keys.length + 1)]]
+  | operation => [operation.fields]
 
 structure Read where
   name : String
@@ -118,6 +198,9 @@ structure Plan where
   guards : List (Expr .bool) := []
 
 def Plan.fields (plan : Plan) : List Scalar := plan.operations.flatMap Op.fields
+
+def Plan.fieldGroups (plan : Plan) : List (List Scalar) :=
+  plan.operations.flatMap Op.fieldGroups
 
 /-- Public byte inputs are exposed to the pinned native transcript as one
 field-aligned UInt8 projection per source byte. -/
@@ -232,6 +315,13 @@ private def resolveCounterState (state : List StateDecl) (name : String)
   let some declaration := state.find? (·.name == name) | throw s!"unknown Counter state '{name}'"
   let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
   schema.counterPath keys
+
+private def resolveListState (state : List StateDecl) (name : String)
+    (keys : List PathKey) :
+    Except String (Types.CompositeEnv × Types.CompositeType × Types.CheckedLayout Types.defaultLimits) := do
+  let some declaration := state.find? (·.name == name) | throw s!"unknown List state '{name}'"
+  let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
+  schema.listPath keys
 
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ => []
@@ -466,6 +556,48 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.counter value)]
       reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
+  | .listLength name destination keys => do
+    let slot ← stateSlot state name
+    discard (resolveListState state name keys)
+    let alignedKeys ← nativePathKeys keys
+    let value : Expr (.uint (2 ^ 64 - 1)) := .ref destination
+    pure {plan with
+      operations := plan.operations ++ [.listLength slot alignedKeys value]
+      reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
+  | .listHead name destination keys type destinations => do
+    let slot ← stateSlot state name
+    let (environment, foundType, _) ← resolveListState state name keys
+    unless foundType == type do throw "List head record type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == destinations.length do throw "List head destination count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    let values := destinations.map fun field => Expr.ref (ty := .native) field
+    let components := destinations.map fun field => (field, Ty.native)
+    let read : Read := {name := destination, ty := Ty.native, components := components, schema := some schema}
+    pure {plan with
+      operations := plan.operations ++ [.listHead slot alignedKeys schema values]
+      reads := plan.reads ++ [read]}
+  | .listPushFront name keys type values => do
+    let slot ← stateSlot state name
+    let (environment, foundType, _) ← resolveListState state name keys
+    unless foundType == type do throw "List push record type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == values.length do throw "List push record leaf count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    pure {plan with operations := plan.operations ++ [
+      .listPushFront slot alignedKeys schema values]}
+  | .listPopFront name keys => do
+    let slot ← stateSlot state name
+    discard (resolveListState state name keys)
+    let alignedKeys ← nativePathKeys keys
+    pure {plan with operations := plan.operations ++ [.listPopFront slot alignedKeys]}
+  | .listReset name keys => do
+    let slot ← stateSlot state name
+    discard (resolveListState state name keys)
+    let alignedKeys ← nativePathKeys keys
+    pure {plan with operations := plan.operations ++ [.listReset slot alignedKeys]}
   | .readCompositePath name destination keys type destinations => do
     let slot ← stateSlot state name
     let .composite environment foundType ← resolveTreeState state name keys
@@ -567,6 +699,18 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.counterAdjust name (totalizePathKeys condition keys) subtract amount)
     | some condition, .counterReset name keys =>
       pure (.counterReset name (totalizePathKeys condition keys))
+    | some condition, .listLength name destination keys =>
+      pure (.listLength name destination (totalizePathKeys condition keys))
+    | some condition, .listHead name destination keys type destinations =>
+      pure (.listHead name destination (totalizePathKeys condition keys) type destinations)
+    | some condition, .listPushFront name keys type values =>
+      let avoid := pathExpressionNames keys ++ values.flatMap expressionNames
+      pure (.listPushFront name (totalizePathKeys condition keys) type
+        (values.map (totalizeActivityValue condition avoid)))
+    | some condition, .listPopFront name keys =>
+      pure (.listPopFront name (totalizePathKeys condition keys))
+    | some condition, .listReset name keys =>
+      pure (.listReset name (totalizePathKeys condition keys))
     | some condition, .insertPath name keys ty value =>
       let avoid := pathExpressionNames keys ++ expressionNames value
       pure (.insertPath name (totalizePathKeys condition keys) ty
@@ -584,7 +728,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some _, .readCell .. => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
-    | some _, _ => throw "native guards are supported only on scalar reads, writes, and require effects"
+    | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
   let before := plan.operations.length
   let result ← appendEffect state loweredEffect plan
   let added := result.operations.length - before
@@ -600,7 +744,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       reads := reads
       activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .readPath .. | some condition, .readCompositePath .. |
-      some condition, .memberPath .. | some condition, .counterRead .. =>
+      some condition, .memberPath .. | some condition, .counterRead .. |
+      some condition, .listLength .. | some condition, .listHead .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -615,7 +760,9 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .insertPath .. | some condition, .writePath .. |
       some condition, .writeCompositePath .. | some condition, .emptyMapPath .. |
-      some condition, .counterAdjust .. | some condition, .counterReset .. =>
+      some condition, .counterAdjust .. | some condition, .counterReset .. |
+      some condition, .listPushFront .. | some condition, .listPopFront .. |
+      some condition, .listReset .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -624,7 +771,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     else
       let priorGuards := plan.activityGuards
       pure {result with activityGuards := priorGuards ++ List.replicate added none}
-  | some _, _ => throw "native guards are supported only on scalar reads, writes, and require effects"
+  | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
 
 /-- Lower ordered effects while keeping optional activity guards aligned with
 each emitted opcode group. -/
@@ -780,6 +927,48 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.counter value)]
       reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
+  | .listLength name destination keys => do
+    let slot ← stateSlot state name
+    discard (resolveListState state name keys)
+    let alignedKeys ← nativePathKeys keys
+    let value : Expr (.uint (2 ^ 64 - 1)) := .ref destination
+    plan := {plan with
+      operations := plan.operations ++ [.listLength slot alignedKeys value]
+      reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
+  | .listHead name destination keys type destinations => do
+    let slot ← stateSlot state name
+    let (environment, foundType, _) ← resolveListState state name keys
+    unless foundType == type do throw "List head record type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == destinations.length do throw "List head destination count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    let values := destinations.map fun field => Expr.ref (ty := .native) field
+    let components := destinations.map fun field => (field, Ty.native)
+    let read : Read := {name := destination, ty := Ty.native, components := components, schema := some schema}
+    plan := {plan with
+      operations := plan.operations ++ [.listHead slot alignedKeys schema values]
+      reads := plan.reads ++ [read]}
+  | .listPushFront name keys type values => do
+    let slot ← stateSlot state name
+    let (environment, foundType, _) ← resolveListState state name keys
+    unless foundType == type do throw "List push record type mismatch"
+    let names ← LedgerValueType.nativeLeafNames environment type
+    unless names.length == values.length do throw "List push record leaf count mismatch"
+    let alignedKeys ← nativePathKeys keys
+    let schema ← compositeSchema environment type
+    plan := {plan with operations := plan.operations ++ [
+      .listPushFront slot alignedKeys schema values]}
+  | .listPopFront name keys => do
+    let slot ← stateSlot state name
+    discard (resolveListState state name keys)
+    let alignedKeys ← nativePathKeys keys
+    plan := {plan with operations := plan.operations ++ [.listPopFront slot alignedKeys]}
+  | .listReset name keys => do
+    let slot ← stateSlot state name
+    discard (resolveListState state name keys)
+    let alignedKeys ← nativePathKeys keys
+    plan := {plan with operations := plan.operations ++ [.listReset slot alignedKeys]}
   | .readCompositePath name destination keys type destinations => do
     let slot ← stateSlot state name
     let .composite environment foundType ← resolveTreeState state name keys
@@ -906,8 +1095,10 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
       entry.effects.flatMap (fun effect => match effect with
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
-            .memberPath _ destination .. | .counterRead _ destination .. => [destination]
+            .memberPath _ destination .. | .counterRead _ destination .. |
+            .listLength _ destination .. => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
+        | .listHead _ _ _ _ destinations => destinations
         | _ => [])
     if sourceNames.any (·.startsWith "_nightlean_") then
       throw "source names beginning '_nightlean_' are reserved by the native transcript producer"
@@ -993,6 +1184,24 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("immediate", Lean.toJson amount)])])
   | .subImmediate amount => pure (Lean.Json.mkObj [("subi", Lean.Json.mkObj [
       ("immediate", Lean.toJson amount)])])
+  | .listLength slot keys value => do
+    pure (Lean.Json.mkObj [("listLength", Lean.Json.mkObj [
+      ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length),
+      ("value", Lean.toJson (← value.eval ctx env))])])
+  | .listHead slot keys schema values => do
+    let values ← values.mapM (fun value => value.eval ctx env)
+    pure (Lean.Json.mkObj [("listHead", Lean.Json.mkObj [
+      ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length),
+      ("schema", schema), ("values", Lean.toJson values)])])
+  | .listPushFront slot keys schema values => do
+    let values ← values.mapM (fun value => value.eval ctx env)
+    pure (Lean.Json.mkObj [("listPushFront", Lean.Json.mkObj [
+      ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length),
+      ("schema", schema), ("values", Lean.toJson values)])])
+  | .listPopFront slot keys => pure (Lean.Json.mkObj [("listPopFront", Lean.Json.mkObj [
+      ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
+  | .listReset slot keys => pure (Lean.Json.mkObj [("listReset", Lean.Json.mkObj [
+      ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do
   pure (Lean.Json.arr (← plan.operations.mapM (Op.toJson ctx env)).toArray)

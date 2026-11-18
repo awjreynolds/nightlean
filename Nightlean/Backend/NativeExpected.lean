@@ -66,8 +66,10 @@ theorem collect_eq (env : AliasEnvironment) (values : List (Expr ty)) :
 /-- The exact production normalizer call for one Impact operation. -/
 def collectOperation (span : SourceSpan) (aliases : AliasEnvironment)
     (operation : Impact.Op) :
-    Except Diagnostic (List Term × List (Term × Nat) × List Term) :=
-  convert span (collect aliases operation.fields)
+    Except Diagnostic (List (List Term) × List (Term × Nat) × List Term) := do
+  let pieces ← operation.fieldGroups.mapM fun fields =>
+    convert span (collect aliases fields)
+  pure (pieces.map (·.1), pieces.flatMap (·.2.1), pieces.flatMap (·.2.2))
 
 /-- The production operation fold keeps each normalized Impact opcode in its
 own ordered native public-input group. It also retains field bounds and nested
@@ -76,7 +78,7 @@ def collectOperations (span : SourceSpan) (aliases : AliasEnvironment)
     (operations : List Impact.Op) (initialBounds : List (Term × Nat)) :
     Except Diagnostic (List (List Term) × List (Term × Nat) × List Term) := do
   let pieces ← operations.mapM (collectOperation span aliases)
-  pure (pieces.map (fun piece => piece.1),
+  pure (pieces.flatMap (fun piece => piece.1),
     initialBounds ++ pieces.flatMap (fun piece => piece.2.1),
     pieces.flatMap (fun piece => piece.2.2))
 
@@ -145,7 +147,10 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   let (groups, bounds, operationAssertions) ←
     collectOperations value.span aliases plan.operations outputBounds
   let activityGuards := if plan.activityGuards.isEmpty then
-      List.replicate groups.length none else plan.activityGuards
+      plan.operations.flatMap fun operation => List.replicate operation.fieldGroups.length none
+    else
+      plan.operations.zip plan.activityGuards |>.flatMap fun (operation, guard) =>
+        List.replicate operation.fieldGroups.length guard
   let guardResults ← activityGuards.mapM fun guard => match guard with
     | none => pure ({term := .constant 1} : Normalized)
     | some guard => convert value.span (normalize aliases guard)
