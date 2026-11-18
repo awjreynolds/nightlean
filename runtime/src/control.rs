@@ -134,6 +134,26 @@ fn scalar_type(ty: &Type) -> Result<&ScalarType> {
     }
 }
 
+fn boolean_operation(operation: BooleanOperation) -> (Vec<ScalarType>, ScalarType, crate::Expr) {
+    let argument = |index: usize| {
+        Box::new(crate::Expr::Reference {
+            name: index.to_string(),
+        })
+    };
+    let left = argument(0);
+    let right = argument(1);
+    let expression = match operation {
+        BooleanOperation::And => crate::Expr::BoolAnd { left, right },
+        BooleanOperation::Or => crate::Expr::BoolOr { left, right },
+        BooleanOperation::Xor => crate::Expr::BoolXor { left, right },
+    };
+    (
+        vec![ScalarType::Bool, ScalarType::Bool],
+        ScalarType::Bool,
+        expression,
+    )
+}
+
 fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crate::Expr)> {
     use ScalarType::{JubjubPoint, JubjubScalar, Native};
     let argument = |index: usize| {
@@ -491,12 +511,21 @@ struct Expr {
     ty: Type,
     kind: ExprKind,
 }
+#[derive(Clone, Copy)]
+enum BooleanOperation {
+    And,
+    Or,
+    Xor,
+}
 #[derive(Clone)]
 enum ExprKind {
     Unit,
     Literal(Value),
     Ref(String),
     Binary(String, Arc<Expr>, Arc<Expr>),
+    BoolAnd(Arc<Expr>, Arc<Expr>),
+    BoolOr(Arc<Expr>, Arc<Expr>),
+    BoolXor(Arc<Expr>, Arc<Expr>),
     Eq(Type, Arc<Expr>, Arc<Expr>),
     Cast(Arc<Expr>),
     Disclose(Arc<Expr>),
@@ -640,6 +669,22 @@ impl Parser<'_> {
                 shape(v, &["tag", "value"], true)?;
                 let x = self.expr(field(v, "value")?, env, depth + 1)?;
                 (x.ty.clone(), ExprKind::Disclose(x))
+            }
+            "boolAnd" | "boolOr" | "boolXor" => {
+                shape(v, &["tag", "left", "right"], true)?;
+                let left = self.expr(field(v, "left")?, env, depth + 1)?;
+                let right = self.expr(field(v, "right")?, env, depth + 1)?;
+                ensure!(
+                    left.ty == Type::Scalar(ScalarType::Bool)
+                        && right.ty == Type::Scalar(ScalarType::Bool),
+                    "control eager Boolean operands require Bool"
+                );
+                let kind = match tag {
+                    "boolAnd" => ExprKind::BoolAnd(left, right),
+                    "boolOr" => ExprKind::BoolOr(left, right),
+                    _ => ExprKind::BoolXor(left, right),
+                };
+                (Type::Scalar(ScalarType::Bool), kind)
             }
             "binary" | "eq" | "and" | "or" => {
                 if tag == "binary" {
@@ -2515,6 +2560,19 @@ impl Abstractor<'_> {
                     _ => None,
                 }
             }
+            ExprKind::BoolAnd(a, b) | ExprKind::BoolOr(a, b) | ExprKind::BoolXor(a, b) => {
+                let a = self.expression(a, env)?;
+                let b = self.expression(b, env)?;
+                match (known_bool(&a), known_bool(&b)) {
+                    (Some(a), Some(b)) => Some(Some(Value::Bool(match &expr.kind {
+                        ExprKind::BoolAnd(_, _) => a && b,
+                        ExprKind::BoolOr(_, _) => a || b,
+                        ExprKind::BoolXor(_, _) => a != b,
+                        _ => false,
+                    }))),
+                    _ => None,
+                }
+            }
             ExprKind::Eq(ty, a, b) => {
                 let a = known_cast(ty, self.expression(a, env)?);
                 let b = known_cast(ty, self.expression(b, env)?);
@@ -3062,6 +3120,7 @@ enum Task {
     Unary(Type, bool),
     Merge(Type, bool),
     Binary(String, Type),
+    Boolean(BooleanOperation),
     Eq(Type),
     Hash(String),
     Curve(String, usize),
@@ -4157,6 +4216,17 @@ impl Session {
                     self.tasks.push(Task::Eval(b.clone(), env.clone()));
                     self.tasks.push(Task::Eval(a.clone(), env));
                 }
+                ExprKind::BoolAnd(a, b) | ExprKind::BoolOr(a, b) | ExprKind::BoolXor(a, b) => {
+                    let operation = match &expr.kind {
+                        ExprKind::BoolAnd(_, _) => BooleanOperation::And,
+                        ExprKind::BoolOr(_, _) => BooleanOperation::Or,
+                        ExprKind::BoolXor(_, _) => BooleanOperation::Xor,
+                        _ => return Err(anyhow!("invalid eager Boolean operation")),
+                    };
+                    self.tasks.push(Task::Boolean(operation));
+                    self.tasks.push(Task::Eval(b.clone(), env.clone()));
+                    self.tasks.push(Task::Eval(a.clone(), env));
+                }
                 ExprKind::Eq(t, a, b) => {
                     self.tasks.push(Task::Eq(t.clone()));
                     self.tasks.push(Task::Eval(b.clone(), env.clone()));
@@ -4277,6 +4347,16 @@ impl Session {
                 let mut value = ty.coerce(value)?;
                 value.add_control_taint(taint);
                 self.values.push(value);
+            }
+            Task::Boolean(operation) => {
+                let right = self.pop()?;
+                let left = self.pop()?;
+                let taint = left.is_tainted() || right.is_tainted();
+                let values = vec![Value::Bool(left.boolean()?), Value::Bool(right.boolean()?)];
+                self.values.push(Tracked::scalar(
+                    evaluate_operation(boolean_operation(operation), values)?,
+                    taint,
+                ));
             }
             Task::Binary(op, ty) => {
                 let b = self.pop()?;
@@ -5193,11 +5273,11 @@ mod completed_invocation_tests {
         panic!("control source call sequence exceeded test bound");
     }
 
-    fn byte_host_plan(result_type: &str, value: Json) -> Json {
+    fn host_plan(result_type: &str, value: Json) -> Json {
         json!({
             "schemaVersion": 2,
             "kind": "host-control",
-            "name": "genericBytesTest",
+            "name": "genericSourceControlTest",
             "types": [],
             "mode": "host",
             "binding": null,
@@ -5215,7 +5295,7 @@ mod completed_invocation_tests {
         })
     }
 
-    fn run_byte_host_plan(plan: Json) -> Json {
+    fn run_host_plan(plan: Json) -> Json {
         let parsed = Plan::parse(&plan, None).unwrap();
         let context = source_context(&parsed, &"d".repeat(64));
         let mut session = Session::from_json(plan, BTreeMap::new(), context).unwrap();
@@ -5240,8 +5320,8 @@ mod completed_invocation_tests {
             "operation":"concatBytes:2:0",
             "arguments":[slice,{"tag":"bytesLiteral","length":0,"values":[]}]
         });
-        let nonempty_plan = byte_host_plan("Bytes<2>", joined);
-        let completed = run_byte_host_plan(nonempty_plan.clone());
+        let nonempty_plan = host_plan("Bytes<2>", joined);
+        let completed = run_host_plan(nonempty_plan.clone());
         assert_eq!(completed["status"], "completed");
         assert_eq!(completed["result"], json!({"kind":"bytes","values":[3,2]}));
 
@@ -5255,7 +5335,7 @@ mod completed_invocation_tests {
             "operation":"sliceBytes:4:2:2",
             "arguments":[{"tag":"bytesLiteral","length":4,"values":[9,8,7,6]}]
         });
-        let completed = run_byte_host_plan(byte_host_plan("Bytes<0>", empty));
+        let completed = run_host_plan(host_plan("Bytes<0>", empty));
         assert_eq!(completed["status"], "completed");
         assert_eq!(completed["result"], json!({"kind":"bytes","values":[]}));
     }
@@ -5268,7 +5348,7 @@ mod completed_invocation_tests {
             values: Vec<u8>,
             result_type: &str,
         ) -> Json {
-            let plan = byte_host_plan(
+            let plan = host_plan(
                 result_type,
                 json!({
                         "tag":"bytes",
@@ -5276,7 +5356,7 @@ mod completed_invocation_tests {
                         "arguments":[{"tag":"bytesLiteral","length":input_length,"values":values}]
                 }),
             );
-            run_byte_host_plan(plan)
+            run_host_plan(plan)
         }
 
         let abc = b"abc".to_vec();
@@ -5322,6 +5402,98 @@ mod completed_invocation_tests {
         assert!(super::bytes_operation("sha512:1025", 1).is_err());
         assert!(super::bytes_operation("keccak256:03", 1).is_err());
         assert!(super::bytes_operation("keccak256:0", 2).is_err());
+    }
+
+    #[test]
+    fn eager_boolean_gates_match_truth_tables_and_evaluate_both_operands() {
+        fn boolean(value: bool) -> Json {
+            json!({"tag":"bool","value":value})
+        }
+
+        fn gate(tag: &str, left: Json, right: Json) -> Json {
+            json!({"tag":tag,"left":left,"right":right})
+        }
+
+        let cases = [
+            ("boolAnd", true, true, true),
+            ("boolAnd", true, false, false),
+            ("boolAnd", false, true, false),
+            ("boolAnd", false, false, false),
+            ("boolOr", true, true, true),
+            ("boolOr", true, false, true),
+            ("boolOr", false, true, true),
+            ("boolOr", false, false, false),
+            ("boolXor", true, true, false),
+            ("boolXor", true, false, true),
+            ("boolXor", false, true, true),
+            ("boolXor", false, false, false),
+        ];
+        let mut checks = cases
+            .into_iter()
+            .map(|(operator, left, right, expected)| {
+                json!({
+                    "tag":"eq",
+                    "left":gate(operator, boolean(left), boolean(right)),
+                    "right":boolean(expected)
+                })
+            })
+            .collect::<Vec<_>>();
+        let chained_xor = gate(
+            "boolXor",
+            gate(
+                "boolXor",
+                gate("boolXor", boolean(true), boolean(false)),
+                boolean(true),
+            ),
+            boolean(false),
+        );
+        checks.push(json!({
+            "tag":"eq",
+            "left":chained_xor,
+            "right":boolean(false)
+        }));
+        let all = checks
+            .into_iter()
+            .reduce(|left, right| gate("boolAnd", left, right))
+            .unwrap();
+        let completed = run_host_plan(host_plan("Bool", all));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(completed["result"], json!(true));
+
+        let failing_bool = json!({
+            "tag":"eq",
+            "left":{
+                "tag":"cast",
+                "type":"UIntRange<256>",
+                "value":{"tag":"constant","value":"300"}
+            },
+            "right":{"tag":"uint","maximum":"255","value":"0"}
+        });
+        let failed_and = run_host_plan(host_plan(
+            "Bool",
+            gate("boolAnd", boolean(false), failing_bool.clone()),
+        ));
+        assert_eq!(failed_and["status"], "failed");
+        let failed_or = run_host_plan(host_plan(
+            "Bool",
+            gate("boolOr", boolean(true), failing_bool),
+        ));
+        assert_eq!(failed_or["status"], "failed");
+
+        let invalid_type = host_plan(
+            "Bool",
+            gate(
+                "boolAnd",
+                boolean(true),
+                json!({"tag":"constant","value":"1"}),
+            ),
+        );
+        assert!(Plan::parse(&invalid_type, None).is_err());
+        let invalid_arity = host_plan(
+            "Bool",
+            json!({"tag":"boolXor","left":{"tag":"bool","value":true}}),
+        );
+        assert!(Plan::parse(&invalid_arity, None).is_err());
     }
 
     #[test]

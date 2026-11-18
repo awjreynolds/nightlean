@@ -67,6 +67,9 @@ inductive Term where
   | uint (maximum : Natural) (number : Nat)
   | ref (name : String)
   | binary (op : ScalarPolicy.Binary) (left right : Term)
+  | boolAnd (left right : Term)
+  | boolOr (left right : Term)
+  | boolXor (left right : Term)
   | eq (left right : Term)
   | cast (target : GenericType) (value : Term)
   | disclose (span : SourceSpan) (value : Term)
@@ -552,7 +555,8 @@ private def sourceChildren (limits : Limits) (span : SourceSpan) :
   | .term term => match term with
     | .unit | .native _ | .bool _ | .ref _ => pure []
     | .uint maximum _ => pure [.natural maximum]
-    | .binary _ left right | .eq left right | .poseidon2 _ left right
+    | .binary _ left right | .boolAnd left right | .boolOr left right
+    | .boolXor left right | .eq left right | .poseidon2 _ left right
     | .andThen left right | .orElse left right | .index left right =>
       pure [.term left, .term right]
     | .cast target value => pure [.typeExpr target, .term value]
@@ -831,6 +835,15 @@ mutual
     | .binary op left right =>
       .binary op <$> convertTerm limits declaration types naturals values left <*>
         convertTerm limits declaration types naturals values right
+    | .boolAnd left right =>
+      .boolAnd <$> convertTerm limits declaration types naturals values left <*>
+        convertTerm limits declaration types naturals values right
+    | .boolOr left right =>
+      .boolOr <$> convertTerm limits declaration types naturals values left <*>
+        convertTerm limits declaration types naturals values right
+    | .boolXor left right =>
+      .boolXor <$> convertTerm limits declaration types naturals values left <*>
+        convertTerm limits declaration types naturals values right
     | .eq left right =>
       .eq <$> convertTerm limits declaration types naturals values left <*>
         convertTerm limits declaration types naturals values right
@@ -1083,7 +1096,8 @@ private def signatureArgument : SpecializationArgument → SignatureArgument
 private partial def collectWitnessTerms (term : Helpers.Term) (result : Array SignatureValue) : Array SignatureValue :=
   match term with
   | .witness name type => result.push {name, type := signatureType (.scalar type)}
-  | .binary _ left right | .eq left right | .poseidon2 _ left right
+  | .binary _ left right | .boolAnd left right | .boolOr left right
+  | .boolXor left right | .eq left right | .poseidon2 _ left right
   | .andThen left right | .orElse left right | .index left right =>
     collectWitnessTerms right (collectWitnessTerms left result)
   | .cast _ value | .disclose _ value | .effect _ _ value

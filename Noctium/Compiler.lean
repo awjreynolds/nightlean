@@ -75,6 +75,12 @@ private def expressionJson : Expr ty → Json
       ("point", expressionJson point), ("index", toJson index)]
   | .jubjubFromCoordinates x y => Json.mkObj [("tag", toJson ("jubjubFromCoordinates" : String)),
       ("x", expressionJson x), ("y", expressionJson y)]
+  | .boolAnd left right => Json.mkObj [("tag", toJson ("boolAnd" : String)),
+      ("left", expressionJson left), ("right", expressionJson right)]
+  | .boolOr left right => Json.mkObj [("tag", toJson ("boolOr" : String)),
+      ("left", expressionJson left), ("right", expressionJson right)]
+  | .boolXor left right => Json.mkObj [("tag", toJson ("boolXor" : String)),
+      ("left", expressionJson left), ("right", expressionJson right)]
   | .ref name => Json.mkObj [("ref", toJson name)]
   | .add a b => Json.mkObj [("add", toJson [expressionJson a, expressionJson b])]
   | .mul a b => Json.mkObj [("mul", toJson [expressionJson a, expressionJson b])]
@@ -155,6 +161,12 @@ private def nativeExpressionJson : Expr ty → Json
       ("point", nativeExpressionJson point), ("index", toJson index)]
   | .jubjubFromCoordinates x y => Json.mkObj [("tag", toJson ("jubjubFromCoordinates" : String)),
       ("x", nativeExpressionJson x), ("y", nativeExpressionJson y)]
+  | .boolAnd left right => Json.mkObj [("tag", toJson ("boolAnd" : String)),
+      ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
+  | .boolOr left right => Json.mkObj [("tag", toJson ("boolOr" : String)),
+      ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
+  | .boolXor left right => Json.mkObj [("tag", toJson ("boolXor" : String)),
+      ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
   | .ref name => Json.mkObj [("tag", toJson ("reference" : String)), ("name", toJson name)]
   | .add a b => binary "add" (nativeExpressionJson a) (nativeExpressionJson b)
   | .mul a b => binary "mul" (nativeExpressionJson a) (nativeExpressionJson b)

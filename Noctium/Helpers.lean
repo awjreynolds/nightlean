@@ -201,6 +201,9 @@ inductive Term where
   | uint (maximum number : Nat)
   | ref (name : String)
   | binary (op : ScalarPolicy.Binary) (left right : Term)
+  | boolAnd (left right : Term)
+  | boolOr (left right : Term)
+  | boolXor (left right : Term)
   | eq (left right : Term)
   | cast (target : Ty) (value : Term)
   | disclose (span : SourceSpan) (value : Term)
@@ -370,7 +373,8 @@ where
       if depth > limits.maxSourceDepth then resource span "source depth"
       termMetadata term
       let children ← match term with
-        | .binary _ a b | .eq a b | .poseidon2 _ a b
+        | .binary _ a b | .boolAnd a b | .boolOr a b | .boolXor a b
+        | .eq a b | .poseidon2 _ a b
         | .andThen a b | .orElse a b => pure [a, b]
         | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
         | .project value _ | .bytesAt value _ => pure [value]
@@ -417,7 +421,8 @@ where
         | .term value => do
           termMetadata value
           let terms ← match value with
-            | .binary _ a b | .eq a b | .poseidon2 _ a b
+            | .binary _ a b | .boolAnd a b | .boolOr a b | .boolXor a b
+            | .eq a b | .poseidon2 _ a b
             | .andThen a b | .orElse a b => pure [a, b]
             | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
             | .project value _ | .bytesAt value _ => pure [value]
@@ -462,7 +467,8 @@ where
           | .call _ arguments | .composite _ arguments => (arguments, none)
           | .curve _ arguments => (arguments, none)
           | .bytes _ arguments => (arguments, none)
-          | .binary _ a b | .eq a b | .poseidon2 _ a b | .andThen a b | .orElse a b
+          | .binary _ a b | .boolAnd a b | .boolOr a b | .boolXor a b
+          | .eq a b | .poseidon2 _ a b | .andThen a b | .orElse a b
           | .index a b => ([a, b], none)
           | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
           | .project value _ | .bytesAt value _ => ([value], none)
@@ -928,6 +934,12 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
           fail span "Jubjub values require a qualified curve operation"
       pure (combine (.scalar ty) [left, right]
         (if op == .sub && lt != .native && rt != .native then [.fallibleCast] else []))
+    | .boolAnd left right | .boolOr left right | .boolXor left right =>
+      let left ← inferTerm fuel program scope env span left
+      let right ← inferTerm fuel program scope env span right
+      unless left.ty == .scalar .bool && right.ty == .scalar .bool do
+        fail span "eager Boolean operands require Bool"
+      pure (combine (.scalar .bool) [left, right])
     | .eq left right =>
       let left ← inferTerm fuel program scope env span left
       let right ← inferTerm fuel program scope env span right
@@ -1451,6 +1463,18 @@ mutual
         let value := match op with | .add => Expr.add left right | .sub => .sub left right | .mul => .mul left right
         pure (scalarValue value)
       pure {result with constraints := left.constraints ++ right.constraints ++ result.constraints}
+    | .boolAnd left right | .boolOr left right | .boolXor left right => do
+      let leftValue ← lowerTerm program scope env span left
+      let rightValue ← lowerTerm program scope env span right
+      let constraints := leftValue.constraints ++ rightValue.constraints
+      let leftExpr ← liftD (typedExpr span .bool leftValue)
+      let rightExpr ← liftD (typedExpr span .bool rightValue)
+      let result ← match term with
+        | .boolAnd .. => pure (Expr.boolAnd leftExpr rightExpr)
+        | .boolOr .. => pure (Expr.boolOr leftExpr rightExpr)
+        | .boolXor .. => pure (Expr.boolXor leftExpr rightExpr)
+        | _ => liftD (fail span "invalid eager Boolean term")
+      pure {scalarValue result with constraints}
     | .eq left right =>
       let left ← lowerTerm program scope env span left
       let right ← lowerTerm program scope env span right
@@ -1948,6 +1972,17 @@ mutual
       let left ← traceTerm program ctx scope env span left >>= traceScalar span
       let right ← traceTerm program ctx scope env span right >>= traceScalar span
       some <$> liftM (liftError span (ScalarPolicy.evaluate op left right))
+    | .boolAnd left right | .boolOr left right | .boolXor left right => do
+      let left ← traceTerm program ctx scope env span left >>= traceScalar span
+      let right ← traceTerm program ctx scope env span right >>= traceScalar span
+      let leftBool := left.number != 0
+      let rightBool := right.number != 0
+      let result ← match term with
+        | .boolAnd .. => pure (leftBool && rightBool)
+        | .boolOr .. => pure (leftBool || rightBool)
+        | .boolXor .. => pure (leftBool != rightBool)
+        | _ => liftM (fail span "invalid eager Boolean trace term")
+      pure (some ⟨.bool, if result then 1 else 0⟩)
     | .cast target value =>
       let value ← traceTerm program ctx scope env span value
       traceCast span value (.scalar target)

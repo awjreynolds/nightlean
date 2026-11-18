@@ -96,6 +96,19 @@ mutual
       let result ← liftD (liftError span (ScalarPolicy.infer op leftType.scalarKind rightType.scalarKind))
       let literal := do ScalarPolicy.evaluate op (← a.literal) (← b.literal) |>.toOption
       pure {combined (.scalar (fromKind result)) [a, b] with literal}
+    | .boolAnd left right | .boolOr left right | .boolXor left right => do
+      let left ← expression checked scope env span left
+      let right ← expression checked scope env span right
+      let literal := do
+        let left ← constantBool left
+        let right ← constantBool right
+        let value := match term with
+          | .boolAnd .. => left && right
+          | .boolOr .. => left || right
+          | .boolXor .. => left != right
+          | _ => false
+        pure (⟨.bool, if value then 1 else 0⟩ : ScalarPolicy.Value)
+      pure {combined (.scalar .bool) [left, right] with literal}
     | .eq a b =>
       let a ← expression checked scope env span a
       let b ← expression checked scope env span b
@@ -360,6 +373,15 @@ mutual
     | .binary op a b =>
       let op := match op with | .add => "add" | .sub => "sub" | .mul => "mul"
       pure (node span "binary" [("operation", toJson op), ("left", ← emitExpression checked scope env span a), ("right", ← emitExpression checked scope env span b)])
+    | .boolAnd left right | .boolOr left right | .boolXor left right => do
+      let tag := match value with
+        | .boolAnd .. => "boolAnd"
+        | .boolOr .. => "boolOr"
+        | .boolXor .. => "boolXor"
+        | _ => "boolAnd"
+      pure (node span tag [
+        ("left", ← emitExpression checked scope env span left),
+        ("right", ← emitExpression checked scope env span right)])
     | .eq a b | .andThen a b | .orElse a b =>
       let tag := match value with | .eq .. => "eq" | .andThen .. => "and" | _ => "or"
       pure (node span tag [("left", ← emitExpression checked scope env span a), ("right", ← emitExpression checked scope env span b)])

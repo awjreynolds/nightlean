@@ -9,11 +9,11 @@ namespace Noctium.Backend.Impact
 
 private def expressionCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, jubjub := true}
 
 private def ledgerCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, jubjub := true,
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, jubjub := true,
     stateCells := true, stateMaps := true}
 
 /-- Symbols in the ledger public-input sequence are source expressions, not
@@ -357,6 +357,7 @@ private def expressionNames : Expr ty → List String
     expressionNames point ++ expressionNames scalar
   | .jubjubFromCoordinates x y => expressionNames x ++ expressionNames y
   | .ref name => [name]
+  | .boolAnd left right | .boolOr left right | .boolXor left right
   | .add left right => expressionNames left ++ expressionNames right
   | .mul left right => expressionNames left ++ expressionNames right
   | .sub left right => expressionNames left ++ expressionNames right
@@ -403,6 +404,9 @@ lets cannot capture its references. Eager selects still evaluate both arms. -/
 private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .native value => .native value
   | .bool value => .bool value
+  | .boolAnd left right => .boolAnd (totalizeUnder guard left) (totalizeUnder guard right)
+  | .boolOr left right => .boolOr (totalizeUnder guard left) (totalizeUnder guard right)
+  | .boolXor left right => .boolXor (totalizeUnder guard left) (totalizeUnder guard right)
   | .uint maximum value => .uint maximum value
   | .bytesField value index => .bytesField (totalizeUnder guard value) index
   | .bytesAt value index => .bytesAt (totalizeUnder guard value) index

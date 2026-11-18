@@ -181,7 +181,8 @@ private partial def analyzeTerm (fuel : Nat) (program : Program) (prepared : Pre
     | none =>
       let message := "missing component origin rule for reference '" ++ name ++ "'"
       throw {span := span, message := message}
-  | .binary _ left right | .eq left right | .poseidon2 _ left right => do
+  | .binary _ left right | .boolAnd left right | .boolOr left right
+  | .boolXor left right | .eq left right | .poseidon2 _ left right => do
     let left ← analyzeTerm fuel program prepared scope env span left
     let right ← analyzeTerm fuel program prepared scope env span right
     pure (makeValue info.ty [merge (payloadOrigins left) (payloadOrigins right)]

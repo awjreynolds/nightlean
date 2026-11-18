@@ -17,6 +17,12 @@ inductive PrivateOriginKind where
 inductive Expr : Ty → Type where
   | native (value : Nat) : Expr .native
   | bool (value : Bool) : Expr .bool
+  /-- Eager Boolean conjunction. Both operands evaluate before the result. -/
+  | boolAnd (left right : Expr .bool) : Expr .bool
+  /-- Eager Boolean disjunction. Both operands evaluate before the result. -/
+  | boolOr (left right : Expr .bool) : Expr .bool
+  /-- Eager Boolean exclusive-or. Both operands evaluate before the result. -/
+  | boolXor (left right : Expr .bool) : Expr .bool
   | uint (maximum value : Nat) : Expr (.uint maximum)
   /-- Pack one field-sized chunk of a typed byte string using the pinned
   little-endian chunk encoding. This constructor is for backend transcript
@@ -355,6 +361,7 @@ structure Capabilities where
   nativeArithmetic : Bool := true
   equality : Bool := true
   select : Bool := true
+  typedBoolean : Bool := false
   poseidon2 : Bool := false
   persistentHash32 : Bool := false
   persistentHashVector32 : Bool := false
@@ -369,14 +376,14 @@ structure Capabilities where
 
 /-- Pure expression capabilities implemented by the pinned native crypto path. -/
 def Capabilities.crypto : Capabilities := {
-  poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
+  typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
   bytes32Conversions := true, jubjub := true
 }
 
 /-- Source checking includes the currently implemented ledger state features. -/
 def Capabilities.source : Capabilities := {
-  poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
+  typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
   bytes32Conversions := true, jubjub := true,
   stateCells := true, stateMaps := true
@@ -404,6 +411,10 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
 def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except String Unit
   | .native value =>
     if value < caps.nativeModulus then pure () else .error "noncanonical native constant"
+  | .boolAnd left right | .boolOr left right | .boolXor left right => do
+    unless caps.typedBoolean do throw "target lacks typed Boolean support"
+    left.validate caps env
+    right.validate caps env
   | .uint maximum value => do
     (Ty.uint maximum).validate caps
     if value ≤ maximum then pure () else .error "unsigned constant exceeds its type"

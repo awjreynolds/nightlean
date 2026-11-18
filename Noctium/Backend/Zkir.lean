@@ -60,6 +60,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .jubjubFromCoordinates x y => do
     checkConstants x
     checkConstants y
+  | .boolAnd a b | .boolOr a b | .boolXor a b
   | .add a b | .mul a b | .sub a b | .eq a b
   | .uadd a b | .usub a b | .umul a b => do checkConstants a; checkConstants b
   | .cast _ value => checkConstants value
@@ -208,6 +209,39 @@ private def lowerPointFromCoordinates (x y : String) : LowerM String := do
   emit "constrain_eq" [("a", toJson x), ("b", toJson actualX)]
   emit "constrain_eq" [("a", toJson y), ("b", toJson actualY)]
   pure point
+
+private def lowerTypedBoolConstant (value : Bool) : LowerM String := do
+  let encoded := if value then "0x01" else "0x00"
+  let key : ExpressionKey := ("load_constant:Bool", [encoded], none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "load_constant" [("type", toJson ("Bool" : String)),
+    ("encoding", toJson [encoded]), ("output", toJson output)]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
+private def lowerNativeToBool (value : String) : LowerM String := do
+  let key : ExpressionKey := ("native_to_bool", [value], none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let yes ← lowerTypedBoolConstant true
+  let no ← lowerTypedBoolConstant false
+  let output ← fresh
+  emit "cond_select" [("bit", toJson value), ("a", toJson yes),
+    ("b", toJson no), ("output", toJson output)]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
+private def lowerBoolGate (opcode left right : String) : LowerM String := do
+  let left ← lowerNativeToBool left
+  let right ← lowerNativeToBool right
+  let key : ExpressionKey := ("typed_bool:" ++ opcode, [left, right], none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let result ← fresh
+  emit opcode [("inputs", toJson [left, right]), ("output", toJson result)]
+  let output ← fresh
+  emit "encode" [("input", toJson result), ("outputs", toJson [output])]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
 
 private def packBytes : List String → LowerM String
   | [] => pure "0x00"
@@ -644,11 +678,23 @@ termination_by values => sizeOf values
 decreasing_by
   all_goals simp_wf <;> omega
 
-/-- All bools use constrained Native 0/1 values, matching test_eq's result type. -/
+/-- Source Bool values retain the constrained Native 0/1 ABI. Typed gates bridge locally. -/
 def lowerExpr : Expr ty → LowerM String
   | .native n => pure (fieldImmediate n)
   | .uint _ n => pure (fieldImmediate n)
   | .bool b => pure (if b then "0x01" else "0x00")
+  | .boolAnd left right => do
+    let left ← lowerExpr left
+    let right ← lowerExpr right
+    lowerBoolGate "and" left right
+  | .boolOr left right => do
+    let left ← lowerExpr left
+    let right ← lowerExpr right
+    lowerBoolGate "or" left right
+  | .boolXor left right => do
+    let left ← lowerExpr left
+    let right ← lowerExpr right
+    lowerBoolGate "xor" left right
   | .ref name => do
     match ty with
     | .bytes _ => do
@@ -842,7 +888,7 @@ still bind this public-input sequence to its accepted ledger call transcript. -/
 private def loweringCapabilities : Capabilities :=
   { poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
-    bytes32Conversions := true, sha512 := true, keccak256 := true, jubjub := true }
+    bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, jubjub := true }
 
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c

@@ -203,6 +203,22 @@ def bytesByteAtTerm (length : Nat) (bytes : Term) (index : Nat) : Term :=
   if length == 32 then bytes32ByteAtTerm bytes index
   else .unary s!"bytes_byte_at:{length}:{index}" bytes
 
+/-- Typed Bool constants and bridges stay distinct from Native field values. -/
+def typedBoolConstantTerm (value : Nat) : Term := .unary "bool_constant" (.constant value)
+
+def nativeToBoolTerm (value : Term) : Term := .unary "native_to_bool" value
+
+def boolToNativeTerm (value : Term) : Term := .unary "bool_to_native" value
+
+def typedBoolGateTerm (opcode : String) (values : List Term) : Term :=
+  .unary ("typed_bool_" ++ opcode) (.hash values)
+
+private def normalizeBoolGate (opcode : String) (left right : Normalized) : Normalized :=
+  let term := boolToNativeTerm (typedBoolGateTerm opcode
+    [nativeToBoolTerm left.term, nativeToBoolTerm right.term])
+  {term, bounds := left.bounds ++ right.bounds ++ [(term, 1)],
+    assertions := left.assertions ++ right.assertions}
+
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
   {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
 
@@ -387,6 +403,12 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .ref name => do
     let some term := env.lookup name | throw s!"unbound native source symbol '{name}'"
     pure (requireSourceType ty term [])
+  | .boolAnd left right => do
+    pure (normalizeBoolGate "and" (← normalize env left) (← normalize env right))
+  | .boolOr left right => do
+    pure (normalizeBoolGate "or" (← normalize env left) (← normalize env right))
+  | .boolXor left right => do
+    pure (normalizeBoolGate "xor" (← normalize env left) (← normalize env right))
   | .add left right => do pure (arithmetic ty "add" (← normalize env left) (← normalize env right))
   | .mul left right => do pure (arithmetic ty "mul" (← normalize env left) (← normalize env right))
   | .sub left right => do pure (subtraction ty (← normalize env left) (← normalize env right))

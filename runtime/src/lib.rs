@@ -340,6 +340,21 @@ pub enum Expr {
         left: Box<Expr>,
         right: Box<Expr>,
     },
+    #[serde(rename = "boolAnd")]
+    BoolAnd {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    #[serde(rename = "boolOr")]
+    BoolOr {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    #[serde(rename = "boolXor")]
+    BoolXor {
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
     Select {
         condition: Box<Expr>,
         yes: Box<Expr>,
@@ -605,6 +620,21 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         }
         Expr::Mul { left, right } => {
             Value::Native(evaluate(left, env)?.field()? * evaluate(right, env)?.field()?)
+        }
+        Expr::BoolAnd { left, right } => {
+            let left = evaluate(left, env)?.boolean()?;
+            let right = evaluate(right, env)?.boolean()?;
+            Value::Bool(left && right)
+        }
+        Expr::BoolOr { left, right } => {
+            let left = evaluate(left, env)?.boolean()?;
+            let right = evaluate(right, env)?.boolean()?;
+            Value::Bool(left || right)
+        }
+        Expr::BoolXor { left, right } => {
+            let left = evaluate(left, env)?.boolean()?;
+            let right = evaluate(right, env)?.boolean()?;
+            Value::Bool(left ^ right)
         }
         Expr::Eq { left, right } => {
             let a = evaluate(left, env)?;

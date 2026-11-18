@@ -16,6 +16,9 @@ theorem prune_validation (caps : Capabilities) (env : TypeEnv) (span : SourceSpa
   | cons condition rest ih =>
     cases condition with
     | bool b => cases b <;> simp [pruneTrue, validateConstraints, Expr.validate, ih]
+    | boolAnd left right => simp only [pruneTrue, validateConstraints, ih]
+    | boolOr left right => simp only [pruneTrue, validateConstraints, ih]
+    | boolXor left right => simp only [pruneTrue, validateConstraints, ih]
     | ref name => simp only [pruneTrue, validateConstraints, ih]
     | eq a b => simp only [pruneTrue, validateConstraints, ih]
     | select condition a b => simp only [pruneTrue, validateConstraints, ih]
@@ -34,6 +37,9 @@ theorem prune_evaluation (ctx : EvalContext) (env : EvalEnv)
   | cons condition rest ih =>
     cases condition with
     | bool b => cases b <;> simp [pruneTrue, runConstraints, Expr.eval, ih]
+    | boolAnd left right => simp only [pruneTrue, runConstraints, ih]
+    | boolOr left right => simp only [pruneTrue, runConstraints, ih]
+    | boolXor left right => simp only [pruneTrue, runConstraints, ih]
     | ref name => simp only [pruneTrue, runConstraints, ih]
     | eq a b => simp only [pruneTrue, runConstraints, ih]
     | select condition a b => simp only [pruneTrue, runConstraints, ih]
@@ -58,6 +64,9 @@ theorem prune_disclosure_constraints (env : Disclosure.Environment) (span : Sour
   | cons condition rest ih =>
     cases condition with
     | bool b => cases b <;> simp [pruneTrue, Disclosure.checkConstraints_literal, ih]
+    | boolAnd left right => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | boolOr left right => simp only [pruneTrue, Disclosure.checkConstraints, ih]
+    | boolXor left right => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | ref name => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | eq a b => simp only [pruneTrue, Disclosure.checkConstraints, ih]
     | select condition a b => simp only [pruneTrue, Disclosure.checkConstraints, ih]

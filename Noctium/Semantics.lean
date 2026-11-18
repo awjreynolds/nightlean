@@ -185,6 +185,18 @@ noncanonical field data, rather than silently inventing witness values. -/
 def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty.Denote
   | .native n => if n < ctx.modulus then pure n else .error "noncanonical native constant"
   | .bool b => .ok b
+  | .boolAnd left right => do
+    let left ← left.eval ctx env
+    let right ← right.eval ctx env
+    pure (left && right)
+  | .boolOr left right => do
+    let left ← left.eval ctx env
+    let right ← right.eval ctx env
+    pure (left || right)
+  | .boolXor left right => do
+    let left ← left.eval ctx env
+    let right ← right.eval ctx env
+    pure (left != right)
   | .uint maximum n =>
     if canonical ctx (.uint maximum) n then pure n else .error "noncanonical unsigned constant"
   | .bytesField (length := length) value index => do
@@ -383,7 +395,7 @@ theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSp
   simp [Expr.eval]
 
 private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
-  {nativeModulus := ctx.modulus, poseidon2 := true, persistentHash32 := true,
+  {nativeModulus := ctx.modulus, typedBoolean := true, poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
     sha512 := true, keccak256 := true,
     bytes32Conversions := true, jubjub := true}
@@ -926,6 +938,9 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
   | cons condition rest ih =>
     cases condition with
     | bool b => cases b <;> simp [pruneTrue, ConstraintsHold, Expr.eval, ih]
+    | boolAnd left right => simp [pruneTrue, ConstraintsHold, ih]
+    | boolOr left right => simp [pruneTrue, ConstraintsHold, ih]
+    | boolXor left right => simp [pruneTrue, ConstraintsHold, ih]
     | ref name => simp [pruneTrue, ConstraintsHold, ih]
     | eq a b => simp [pruneTrue, ConstraintsHold, ih]
     | select condition a b => simp [pruneTrue, ConstraintsHold, ih]

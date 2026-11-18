@@ -8,7 +8,7 @@ inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
-  | bytes32Conversion | bytes32Reverse | fixedBytes | fixedByteHash
+  | bytes32Conversion | bytes32Reverse | fixedBytes | fixedByteHash | boolConstant | typedBoolVector
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
   deriving Repr, BEq, DecidableEq
 
@@ -30,7 +30,7 @@ inductive EffectRule where
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input | typedEncodeInput
-  | typedBytes32Index | typedFixedBytes | fixedByteHashPreimage
+  | typedBytes32Index | typedFixedBytes | fixedByteHashPreimage | canonicalBoolConstant | typedBoolOperands
   | typedBytes32Conversion
   | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
@@ -151,6 +151,13 @@ def instructionSupport (opcode : String) : Except String Support :=
     scalar .nativeUnary .propagateAll .pure .nativeBoolean .noGuard .none ["a", "output"]
   | "assert" => .supported <|
     scalar .booleanAssertion .preserveConstraintOrigins .constraint .nativeBoolean .noGuard .none ["cond"]
+  -- Partial codec qualification: other native load_constant types remain unsupported.
+  | "load_constant" => .supported <|
+    scalar .boolConstant .propagateAll .pure .canonicalBoolConstant .noGuard .typedEncoding
+      ["type", "encoding", "output"]
+  | "and" | "or" | "xor" => .supported <|
+    scalar .typedBoolVector .propagateAll .pure .typedBoolOperands .noGuard .typedEncoding
+      ["inputs", "output"]
   | "cond_select" => .supported <|
     scalar .nativeSelect .propagateAll .pure .nativeBoolean .noGuard .none ["bit", "a", "b", "output"]
   | "constrain_bits" => .supported <|

@@ -119,6 +119,9 @@ scoped syntax "uint(" num ")" : nlexpr
 scoped syntax "cast(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "default(" nltype ")" : nlexpr
 scoped syntax "disclose(" nlexpr ")" : nlexpr
+scoped syntax "boolAnd(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "boolOr(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "boolXor(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
@@ -346,7 +349,9 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
     hasPartialScalar value || hasPartialScalar body
   | `(nlexpr| disclose($value)) => hasPartialScalar value
   | `(nlexpr| add($a, $b)) | `(nlexpr| mul($a, $b))
-  | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
+  | `(nlexpr| eq($a, $b)) | `(nlexpr| boolAnd($a, $b))
+  | `(nlexpr| boolOr($a, $b)) | `(nlexpr| boolXor($a, $b))
+  | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
   | `(nlexpr| sha512($value)) | `(nlexpr| keccak256($value)) => hasPartialScalar value
@@ -497,6 +502,18 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       let a ← coerceExpression stx ta ty a
       let b ← coerceExpression stx tb ty b
       pure (.bool, ← `(Noctium.Expr.eq $a $b))
+  | `(nlexpr| boolAnd($left, $right)) => do
+    let left ← expected env left .bool
+    let right ← expected env right .bool
+    pure (.bool, ← `(Noctium.Expr.boolAnd $left $right))
+  | `(nlexpr| boolOr($left, $right)) => do
+    let left ← expected env left .bool
+    let right ← expected env right .bool
+    pure (.bool, ← `(Noctium.Expr.boolOr $left $right))
+  | `(nlexpr| boolXor($left, $right)) => do
+    let left ← expected env left .bool
+    let right ← expected env right .bool
+    pure (.bool, ← `(Noctium.Expr.boolXor $left $right))
   | `(nlexpr| select($c, $a, $b)) =>
     let c ← expected env c .bool
     let (ta, a) ← expression env a
@@ -1731,6 +1748,7 @@ private def moduleCircuitDeclName (contractName : Name) (outputName : String) : 
   contractName ++ Name.str .anonymous "__moduleCircuit" ++ Name.str .anonymous outputName
 
 private def moduleCapabilities : Capabilities := {
+  typedBoolean := Bool.true
   poseidon2 := Bool.true
   persistentHash32 := Bool.true
   persistentHashVector32 := Bool.true

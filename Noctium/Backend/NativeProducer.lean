@@ -65,7 +65,7 @@ private def validIdentifier (name : String) : Bool :=
   name.startsWith "%" && name.length > 1 && name.utf8ByteSize ≤ 1024
 
 inductive NativeValueType where
-  | native | byte | bytes32 | bytes (length : Nat) | jubjubScalar | jubjubPoint
+  | native | bool | byte | bytes32 | bytes (length : Nat) | jubjubScalar | jubjubPoint
   deriving Repr, BEq, DecidableEq
 
 private def byteLength? : NativeValueType → Option Nat
@@ -308,13 +308,37 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       requireNative value
       let maximum := if value.maximum == 0 then 0 else Field.modulus - 1
       defineResult state instruction (← combine (.unary "neg" value.term) maximum [value])
+  | "load_constant" => do
+    ensure ((← stringField instruction "type") == "Bool")
+      "load_constant currently qualifies only the Bool codec"
+    let encoding ← arrayField instruction "encoding"
+    ensure (encoding.size == 1) "Bool constant requires exactly one encoded field"
+    let value ← immediate (← encoding[0]!.getStr?)
+    ensure (value ≤ 1) "Bool constant encoding must be zero or one"
+    defineResult state instruction {term := typedBoolConstantTerm value, maximum := value, valueType := .bool}
+  | "and" | "or" | "xor" => do
+    let values ← arguments state instruction "inputs"
+    ensure (!values.isEmpty) "typed Boolean gate requires at least one operand"
+    for value in values do
+      ensure (value.valueType == .bool) "typed Boolean gate requires Bool operands"
+      requireBoolean value
+    let fact ← combine (typedBoolGateTerm opcode (values.map (·.term))) 1 values
+    defineResult state instruction {fact with valueType := .bool}
   | "cond_select" =>
     let condition ← nativeArgument state instruction "bit"
     requireBoolean condition
-    let yes ← nativeArgument state instruction "a"
-    let no ← nativeArgument state instruction "b"
-    defineResult state instruction (← combine (.select condition.term yes.term no.term)
-      (max yes.maximum no.maximum) [condition, yes, no])
+    let yes ← argument state instruction "a"
+    let no ← argument state instruction "b"
+    ensure (yes.valueType == no.valueType && (yes.valueType == .native || yes.valueType == .bool))
+      "cond_select requires matched Native or Bool arms"
+    if yes.valueType == .bool then do
+      requireBoolean yes
+      requireBoolean no
+    let term := if yes.valueType == .bool && yes.term == typedBoolConstantTerm 1 &&
+        no.term == typedBoolConstantTerm 0 then nativeToBoolTerm condition.term
+      else .select condition.term yes.term no.term
+    let fact ← combine term (max yes.maximum no.maximum) [condition, yes, no]
+    defineResult state instruction {fact with valueType := yes.valueType}
   | "constrain_to_boolean" => refine state (← stringField instruction "val") 1
   | "constrain_bits" =>
     refine state (← stringField instruction "val") (2 ^ (← width instruction) - 1)
@@ -420,6 +444,12 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
           (2 ^ (8 * bytesChunkWidth length index) - 1) [input]
         state ← define state name fact
       pure state
+    else if input.valueType == .bool then do
+      ensure (outputs.size == 1) "Bool encode requires exactly one Native output"
+      requireBoolean input
+      let output ← outputs[0]!.getStr?
+      let fact ← combine (boolToNativeTerm input.term) 1 [input]
+      define state output fact
     else if input.valueType == .jubjubScalar then do
       ensure (outputs.size == 1) "JubjubScalar encode requires exactly one Native output"
       let output ← outputs[0]!.getStr?
@@ -431,7 +461,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       ensure (input.maximum ≤ 255) "Byte encode operand lacks its byte range precondition"
       let output ← outputs[0]!.getStr?
       define state output {input with valueType := .native}
-    else throw "encode accepts only typed Bytes32 values, Byte values or Jubjub scalars"
+    else throw "encode accepts only qualified typed bytes, Bool, Byte or JubjubScalar values"
   | "to_bytes" => do
     let input ← argument state instruction "input"
     let term ← toBytes32Term input.valueType input.term

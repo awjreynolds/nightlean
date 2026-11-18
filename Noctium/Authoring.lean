@@ -298,6 +298,9 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"cast({renderType ty}, {renderExpr value})"
   | `(nlexpr| disclose($value)) => s!"disclose({renderExpr value})"
   | `(nlexpr| eq($left, $right)) => s!"eq({renderExpr left}, {renderExpr right})"
+  | `(nlexpr| boolAnd($left, $right)) => s!"boolAnd({renderExpr left}, {renderExpr right})"
+  | `(nlexpr| boolOr($left, $right)) => s!"boolOr({renderExpr left}, {renderExpr right})"
+  | `(nlexpr| boolXor($left, $right)) => s!"boolXor({renderExpr left}, {renderExpr right})"
   | `(nlexpr| select($condition, $yes, $no)) =>
     s!"select({renderExpr condition}, {renderExpr yes}, {renderExpr no})"
   | `(nlexpr| poseidon2($domain:num, $left, $right)) =>
@@ -344,7 +347,9 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| let $_:ident := $value:nlexpr in $body:nlexpr) => disclosedValues value ++ disclosedValues body
   | `(nlexpr| assertThen($condition, $body)) => disclosedValues condition ++ disclosedValues body
   | `(nlexpr| add($left, $right)) | `(nlexpr| sub($left, $right))
-  | `(nlexpr| mul($left, $right)) | `(nlexpr| eq($left, $right)) =>
+  | `(nlexpr| mul($left, $right)) | `(nlexpr| eq($left, $right))
+  | `(nlexpr| boolAnd($left, $right)) | `(nlexpr| boolOr($left, $right))
+  | `(nlexpr| boolXor($left, $right)) =>
     disclosedValues left ++ disclosedValues right
   | `(nlexpr| cast($_:nltype, $value:nlexpr)) => disclosedValues value
   | `(nlexpr| select($condition, $yes, $no)) =>
@@ -379,7 +384,9 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| let $_:ident := $value:nlexpr in $body:nlexpr) =>
     inlineAssertions value ++ inlineAssertions body
   | `(nlexpr| add($left, $right)) | `(nlexpr| sub($left, $right))
-  | `(nlexpr| mul($left, $right)) | `(nlexpr| eq($left, $right)) =>
+  | `(nlexpr| mul($left, $right)) | `(nlexpr| eq($left, $right))
+  | `(nlexpr| boolAnd($left, $right)) | `(nlexpr| boolOr($left, $right))
+  | `(nlexpr| boolXor($left, $right)) =>
     inlineAssertions left ++ inlineAssertions right
   | `(nlexpr| cast($_:nltype, $value:nlexpr)) | `(nlexpr| disclose($value)) => inlineAssertions value
   | `(nlexpr| select($condition, $yes, $no)) =>
@@ -502,6 +509,24 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let left ← coerce stx left ty
     let right ← coerce stx right ty
     pure (mergeLowered (.scalar .bool) (.eq left.term right.term) [left, right])
+  | `(nlexpr| boolAnd($left, $right)) => do
+    let left ← lowerExpr programName callPrefix env left
+    let right ← lowerExpr programName callPrefix env right
+    unless left.type == .scalar .bool && right.type == .scalar .bool do
+      throwErrorAt stx "boolAnd operands require Bool"
+    pure (mergeLowered (.scalar .bool) (.boolAnd left.term right.term) [left, right])
+  | `(nlexpr| boolOr($left, $right)) => do
+    let left ← lowerExpr programName callPrefix env left
+    let right ← lowerExpr programName callPrefix env right
+    unless left.type == .scalar .bool && right.type == .scalar .bool do
+      throwErrorAt stx "boolOr operands require Bool"
+    pure (mergeLowered (.scalar .bool) (.boolOr left.term right.term) [left, right])
+  | `(nlexpr| boolXor($left, $right)) => do
+    let left ← lowerExpr programName callPrefix env left
+    let right ← lowerExpr programName callPrefix env right
+    unless left.type == .scalar .bool && right.type == .scalar .bool do
+      throwErrorAt stx "boolXor operands require Bool"
+    pure (mergeLowered (.scalar .bool) (.boolXor left.term right.term) [left, right])
   | `(nlexpr| select($condition, $yes, $no)) => do
     let condition ← lowerExpr programName callPrefix env condition
     let condition ← coerce stx condition .bool
@@ -737,6 +762,12 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .sub => `(Noctium.ScalarPolicy.Binary.sub)
       | .mul => `(Noctium.ScalarPolicy.Binary.mul)
     `(Noctium.Helpers.Term.binary $op $(← termTerm left) $(← termTerm right))
+  | .boolAnd left right => do
+    `(Noctium.Helpers.Term.boolAnd $(← termTerm left) $(← termTerm right))
+  | .boolOr left right => do
+    `(Noctium.Helpers.Term.boolOr $(← termTerm left) $(← termTerm right))
+  | .boolXor left right => do
+    `(Noctium.Helpers.Term.boolXor $(← termTerm left) $(← termTerm right))
   | .eq left right => do `(Noctium.Helpers.Term.eq $(← termTerm left) $(← termTerm right))
   | .cast ty value => do `(Noctium.Helpers.Term.cast $(← tyTerm ty) $(← termTerm value))
   | .disclose span value => do
