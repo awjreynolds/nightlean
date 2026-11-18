@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "885dff0d536de8fac2863405c77d91ebfee675ab",
+    "sourceCommit": "b82cca0b05939c5a8f559eab680582a630fccebf",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -5267,6 +5267,30 @@
         "outputFields": 6
       },
       "limits": "No new keys, proofs, deployments, K/proving-time benchmark, broad validation campaign or C/C++/web/mobile qualification. Scalar reduction does not validate canonical signature encodings or implement signature verification APIs. Full source/native preservation remains separate work."
+    },
+    "orderedTransientHash": {
+      "issue": 81,
+      "source": "../../tests/TransientHash.lean",
+      "native": "../../runtime/tests/transient_hash.rs",
+      "guide": "../development/transient-hash.md",
+      "scope": "Raw ordered Native field vectors of length 0..1024 through the existing transient_hash opcode. No inserted domain, alignment, type or length operands. Existing poseidon2 remains the exact three-field form and shares equivalent vector computations. No new opcode name.",
+      "semantics": "Configured Lean oracle is required and fails closed by default. Native CPU/circuit fixed-size empty hashing returns zero. Runtime operands must be Native, and source/control type checks reject implicit Bool/UInt/JubjubScalar interpretation. All operands and assertions evaluate before cache reuse; private origins propagate.",
+      "focusedChecks": "67-job compiler/Claim build, Source validation/disclosure guards, producer inventory/empty/1024/1025/non-Native guards and guide snippet pass. Native case covers empty/singleton/legacy3/long5 vectors, exact native reference hashes, changed order/length, raw input, false cached-operand assertion and forged committed return rejection. One focused host/control case covers direct/helper routes at lengths 0/1/3/1024 and bad types/arity. Legacy 3.2.0 library compilation passes. Re-exported artifacts match retained fixture bytes.",
+      "nativeSeconds": 0.02,
+      "controlSeconds": 0.05,
+      "artifactMetrics": {
+        "zkirInstructions": 15,
+        "privateInputs": 6,
+        "outputFields": 6,
+        "hashArities": [
+          3,
+          0,
+          1,
+          5
+        ]
+      },
+      "schnorrReference": "Pinned Compact 7fa3a117 standard-library.compact lines 360-381 defines msg Vector<N,Field>. flatten-datatypes.ss lines 80-135/221-232 and reduce-to-zkir.ss lines 255-257 yield [annX,annY,pkX,pkY]++messageFields without extra operands. Raw field API does not establish generic typed Bytes/record host-hash equivalence.",
+      "limits": "No new keys, proofs, deployments, K/proving-time benchmark or mobile/WASM qualification. Signature helpers #82 and full compiler preservation remain separate work."
     }
   }
 }

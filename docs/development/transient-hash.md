@@ -1,0 +1,42 @@
+# Ordered Native transient hashing
+
+`transientHashNativeVector([values...])` hashes an ordered list of zero through 1024 Native fields with the pinned ZKIR `transient_hash` instruction. It adds no domain, alignment, type or length operands. The native algorithm itself binds the vector length.
+
+```lean
+import Noctium.Frontend
+open scoped Noctium
+
+noctium_circuit hashFields where
+  private first : Native
+  private second : Native
+  private third : Native
+  output commitment : Native := disclose(
+    transientHashNativeVector([17, first, second, third]))
+end
+```
+
+The leading 17 is an explicit application choice. The compiler does not insert one. Field order and vector length form part of the native hash definition. Native inputs require canonical field values. Bool, UInt and JubjubScalar values need an explicit supported conversion before entering the raw vector.
+
+`poseidon2(domain, left, right)` retains its existing meaning: the hash of exactly `[domain, left, right]`. The compiler shares an equivalent vector computation, while evaluating every operand and its assertions before reusing a result. Chaining pairwise calls produces a different hash from a single longer vector.
+
+## Empty vectors and semantic evaluation
+
+The pinned fixed-length Poseidon implementation returns zero for an empty vector. This is native behavior, not a replacement for a missing hash implementation. Lean semantic evaluation requires a configured transient-hash oracle and fails closed by default, including for empty vectors. The Rust evaluator calls the native implementation directly.
+
+Private origins propagate from every operand. Publishing the derived hash requires explicit disclosure. A cached hash result does not skip operand assertions.
+
+## Schnorr reference boundary
+
+The pinned Compact Schnorr message is `Vector<N, Field>`. Its challenge preimage is exactly `[announcement.x, announcement.y, publicKey.x, publicKey.y] ++ messageFields`. Source struct/vector flattening preserves that order and emits no extra operands. [Pinned standard library](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/standard-library.compact#L360), [datatype flattening](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/circuit-passes/flatten-datatypes.ss#L80), [ZKIR lowering](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/reduce-to-zkir.ss#L255).
+
+This raw field API does not implement a general typed serializer. Generic Bytes/record host-hash equivalence remains separate. Signature helpers are tracked in [issue 82](https://github.com/awjreynolds/noctium/issues/82).
+
+## Evidence
+
+[Issue 81](https://github.com/awjreynolds/noctium/issues/81), [Source fixture](../../tests/TransientHash.lean), [native case](../../runtime/tests/transient_hash.rs). The focused case checks empty, singleton, legacy three-field and longer vectors, exact native reference values, order/length binding, cached operand assertions and committed results.
+
+The 67-job compiler/Claim build, source fixture, producer inventory/bounds/type guards, guide snippet and legacy 3.2.0 runtime library compilation pass. The native case passes in 0.02 seconds. One focused host/control case covers both operation routes at lengths 0, 1, 3 and 1024, legacy equivalence and malformed type/arity rejection in 0.05 seconds. Re-exported Source artifacts match the retained fixture bytes.
+
+The entrypoint has 15 instructions, six private inputs and six output fields. Four hash operations have arities 3, 0, 1 and 5. Equivalent legacy/vector expressions and repeated longer vectors share their computations. These are structural counts, not proving-time measurements.
+
+No new keys, proofs, deployments or K/proving-time benchmarks qualify this slice. Full signature helpers and compiler preservation remain separate work.
