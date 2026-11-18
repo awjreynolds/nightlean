@@ -4707,13 +4707,23 @@
         "../../tests/NativeBytes.lean",
         "../../runtime/tests/native_bytes.rs"
       ]
+    },
+    {
+      "issue": 25,
+      "commit": "229de02",
+      "scope": "Direct native SHA512/Keccak256 from bounded byte values, including actual empty FAB hashing and preserved private assertions. Focused source/native/sizing/interpreter evidence only.",
+      "refs": [
+        "../development/byte-hashes.md",
+        "../../tests/ByteHashes.lean",
+        "../../runtime/tests/byte_hashes.rs"
+      ]
     }
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "937bacbc220e543893aa2fccb7f4d999c96c11e3",
+    "sourceCommit": "229de02440c3da0e328888f3e27826293360243a",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded fixed-byte values, persistent hashing and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 31,
+    "registeredOpcodeCount": 33,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4745,9 +4755,11 @@
       "nth",
       "reverse",
       "slice",
-      "concat"
+      "concat",
+      "sha512",
+      "keccak256"
     ],
-    "notExposedOpcodeCount": 16,
+    "notExposedOpcodeCount": 14,
     "notExposedOpcodes": [
       "copy",
       "hash_to_curve",
@@ -4758,9 +4770,7 @@
       "bytes32_from_low_high",
       "div_mod_power_of_two",
       "reconstitute_field",
-      "keccak256",
       "load_constant",
-      "sha512",
       "and",
       "or",
       "xor",
@@ -4986,6 +4996,15 @@
       "hostScope": "One real control Session test executes generic operators and rejects bad bounds. Scalar/private transport codecs check lengths 0,1,31,32,33,62,63,64,1024 and malformed tokens.",
       "legacyScope": "The retained Bytes32 reversal plan and circuit JSON objects remain unchanged.",
       "limits": "No new keys, proofs or deployment. General byte ledger cells/non-Bytes32 map keys and full byte/curve overload and portable SDK qualification stay open."
+    },
+    "byteHashEvidence": {
+      "source": "tests/ByteHashes.lean",
+      "native": "runtime/tests/byte_hashes.rs",
+      "guide": "../development/byte-hashes.md",
+      "scope": "SHA512 and Keccak256 for bounded raw byte preimages, lengths 0..1024, with typed 64/32-byte results. Hashing preserves private origins and uses separate fail-closed semantic oracles.",
+      "emptyInput": "Direct native hash opcodes accept empty FAB alignment/operands. Official checking and circuit sizing passed. No native Bytes0 value or compiler constant substitution is required. An empty-preimage private assertion remains enforced.",
+      "focusedChecks": "Empty/abc/64-byte inputs, 31/32/33-byte boundaries, typed digest returns and SHA512 output composition. Changed final input byte, false private guard, SHA3 substitution, malformed producer alignment/count/range, wrong source types and bad oracle digests reject. One real host Session hash case passed.",
+      "limits": "No new keys/proofs/deployment for these primitives. Mixed FAB source overloads, other curves, full profile/SDK qualification and compiler-wide preservation remain open."
     }
   }
 }
