@@ -382,7 +382,8 @@ private def moduleWitnessProgramFor (outputs : Array (Name × ModuleBuildOutput)
   pure circuit.program
 
 /-- Evaluate only definitions generated and registered by the Noctium elaborators. -/
-private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuildOutput)) :
+private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuildOutput))
+    (contracts : Array (Name × Contract)) :
     CommandElabM (Array (Name × Circuit)) := do
   let env ← getEnv
   let mut circuits := #[]
@@ -399,9 +400,14 @@ private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuil
         match Helpers.Specialization.parseSignatureArtifactText text with
         | .ok _ => pure ()
         | .error message => throwError "invalid generic specialization signature artifact: {message}"
-      let circuit ← match moduleCircuit with
-        | some fresh => pure fresh.circuit
-        | none => evalConstCheck Circuit ``Circuit info.declName
+      let circuit ← if info.stateProgram?.isSome then
+          let some compiledEntry := contracts.toList.flatMap (·.2.entrypoints) |>.find?
+            (·.circuit.name == info.declName.toString)
+            | throwError "structured ledger circuit has no owning contract: {info.declName}"
+          pure compiledEntry.circuit
+        else match moduleCircuit with
+          | some fresh => pure fresh.circuit
+          | none => evalConstCheck Circuit ``Circuit info.declName
       match circuit.validate sourceCapabilities with
       | .error d => failDiagnostic d
       | .ok _ =>
@@ -419,6 +425,20 @@ private unsafe def registeredContracts (moduleOutputs : Array (Name × ModuleBui
       let contract ← match moduleOutputs.toList.find? (·.1 == name) with
         | some (_, rebuilt) => pure rebuilt.contract
         | none => evalConstCheck Contract ``Contract name
+      let mut entries := []
+      for compiledEntry in contract.entrypoints do
+        let source := (circuitRegistry.getState env).find? fun info =>
+          info.declName.toString == compiledEntry.circuit.name && info.stateProgram?.isSome
+        let compiledEntry ← match source.bind (·.stateProgram?) with
+          | none => pure compiledEntry
+          | some (sourceName, exportName) => do
+            let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+            let fresh ← match Helpers.compileEntrypointFor program exportName contract.state with
+              | .ok value => pure value
+              | .error d => failDiagnostic d
+            pure {fresh with name := compiledEntry.name, circuit := {fresh.circuit with name := compiledEntry.circuit.name}}
+        entries := entries ++ [compiledEntry]
+      let contract := {contract with entrypoints := entries}
       match contract.validate sourceCapabilities with
       | .error d => failDiagnostic d
       | .ok _ =>
@@ -494,8 +514,8 @@ private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuil
     CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
   if (← get).messages.hasErrors then
     throwError "cannot export Noctium artifacts after source elaboration errors"
-  let circuits ← registeredCircuits moduleOutputs
   let contracts ← registeredContracts moduleOutputs
+  let circuits ← registeredCircuits moduleOutputs contracts
   let sourceEnv ← getEnv
   let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
   if circuits.isEmpty && controls.isEmpty then throwError "source contains no Noctium circuit declarations"

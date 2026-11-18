@@ -1,0 +1,1043 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "balance", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Native",
+   "name": "result",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"yes":
+       {"value":
+        {"value":
+         {"yes": {"tag": "reference", "name": "$helper1"},
+          "tag": "select",
+          "no": {"value": "0", "tag": "constant"},
+          "condition": {"tag": "reference", "name": "$helper4"}},
+         "type": "UIntRange<8>",
+         "tag": "cast"},
+        "tag": "let",
+        "name": "$helper7",
+        "body": {"tag": "reference", "name": "$helper12"}},
+       "tag": "select",
+       "no": {"tag": "reference", "name": "$helper14"},
+       "condition": {"tag": "reference", "name": "$helper4"}}}}}}],
+ "reads":
+ [{"type": "Native", "name": "amount"},
+  {"type": "Native",
+   "name": "$helper8",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"type": "Native",
+   "name": "$helper12",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"type": "Native",
+   "name": "$helper14",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "$helper4"}},
+       "left": {"value": true, "tag": "bool"}}}}}}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "amount"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "amount"},
+   "alignment": "field"},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation": {"slot": 0, "pushPath": false, "op": "index"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation":
+   {"op": "popeq",
+    "expression": {"tag": "reference", "name": "$helper8"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "$helper0",
+      "body":
+      {"value": {"tag": "reference", "name": "amount"},
+       "tag": "let",
+       "name": "$helper1",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper0"},
+        "tag": "let",
+        "name": "$helper4",
+        "body":
+        {"value":
+         {"value":
+          {"yes": {"tag": "reference", "name": "$helper1"},
+           "tag": "select",
+           "no": {"value": "0", "tag": "constant"},
+           "condition":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}},
+          "type": "UIntRange<8>",
+          "tag": "cast"},
+         "tag": "let",
+         "name": "$helper7",
+         "body":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}}}}},
+     "tag": "let",
+     "name": "_noctium_activity_guard_xxxxxxxxx",
+     "body":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "$helper0",
+      "body":
+      {"value": {"tag": "reference", "name": "amount"},
+       "tag": "let",
+       "name": "$helper1",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper0"},
+        "tag": "let",
+        "name": "$helper4",
+        "body":
+        {"value":
+         {"value":
+          {"yes":
+           {"yes": {"tag": "reference", "name": "$helper1"},
+            "tag": "select",
+            "no": {"value": "0", "tag": "constant"},
+            "condition":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}},
+           "tag": "select",
+           "no": {"value": "0", "tag": "constant"},
+           "condition":
+           {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}},
+          "type": "UIntRange<8>",
+          "tag": "cast"},
+         "tag": "let",
+         "name": "$helper7",
+         "body":
+         {"tag": "add",
+          "right": {"tag": "reference", "name": "$helper1"},
+          "left": {"tag": "reference", "name": "$helper8"}}}}}}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation": {"slot": 0, "pushPath": false, "op": "index"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation":
+   {"op": "popeq",
+    "expression": {"tag": "reference", "name": "$helper12"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}}},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "$helper4"}},
+       "left": {"value": true, "tag": "bool"}}}}}},
+  {"operation": {"slot": 0, "pushPath": false, "op": "index"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "$helper4"}},
+       "left": {"value": true, "tag": "bool"}}}}}},
+  {"operation":
+   {"op": "popeq",
+    "expression": {"tag": "reference", "name": "$helper14"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "$helper4"}},
+       "left": {"value": true, "tag": "bool"}}}}}}],
+ "nativeCircuitFile": "StructuredCells.update.zkir",
+ "guards":
+ [{"value": {"tag": "reference", "name": "enabled"},
+   "tag": "let",
+   "name": "$helper0",
+   "body":
+   {"value": {"tag": "reference", "name": "amount"},
+    "tag": "let",
+    "name": "$helper1",
+    "body":
+    {"value": {"tag": "reference", "name": "$helper0"},
+     "tag": "let",
+     "name": "$helper2",
+     "body": {"value": true, "tag": "bool"}}}},
+  {"value": {"tag": "reference", "name": "enabled"},
+   "tag": "let",
+   "name": "$helper0",
+   "body":
+   {"value": {"tag": "reference", "name": "amount"},
+    "tag": "let",
+    "name": "$helper1",
+    "body":
+    {"value": {"tag": "reference", "name": "$helper0"},
+     "tag": "let",
+     "name": "$helper3",
+     "body": {"value": true, "tag": "bool"}}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper1"},
+        "tag": "let",
+        "name": "$helper5",
+        "body": {"value": true, "tag": "bool"}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value":
+        {"value":
+         {"yes": {"tag": "reference", "name": "$helper1"},
+          "tag": "select",
+          "no": {"value": "0", "tag": "constant"},
+          "condition":
+          {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}},
+         "type": "UIntRange<8>",
+         "tag": "cast"},
+        "tag": "let",
+        "name": "$helper6",
+        "body": {"value": true, "tag": "bool"}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value":
+        {"value":
+         {"yes":
+          {"yes": {"tag": "reference", "name": "$helper1"},
+           "tag": "select",
+           "no": {"value": "0", "tag": "constant"},
+           "condition":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}},
+          "tag": "select",
+          "no": {"value": "0", "tag": "constant"},
+          "condition":
+          {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}},
+         "type": "UIntRange<8>",
+         "tag": "cast"},
+        "tag": "let",
+        "name": "$helper7",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper8"},
+         "tag": "let",
+         "name": "$helper9",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value":
+        {"value":
+         {"yes":
+          {"yes": {"tag": "reference", "name": "$helper1"},
+           "tag": "select",
+           "no": {"value": "0", "tag": "constant"},
+           "condition":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}},
+          "tag": "select",
+          "no": {"value": "0", "tag": "constant"},
+          "condition":
+          {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}},
+         "type": "UIntRange<8>",
+         "tag": "cast"},
+        "tag": "let",
+        "name": "$helper7",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper1"},
+         "tag": "let",
+         "name": "$helper10",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value":
+        {"value":
+         {"yes":
+          {"yes": {"tag": "reference", "name": "$helper1"},
+           "tag": "select",
+           "no": {"value": "0", "tag": "constant"},
+           "condition":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}},
+          "tag": "select",
+          "no": {"value": "0", "tag": "constant"},
+          "condition":
+          {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}},
+         "type": "UIntRange<8>",
+         "tag": "cast"},
+        "tag": "let",
+        "name": "$helper7",
+        "body":
+        {"value":
+         {"tag": "add",
+          "right": {"tag": "reference", "name": "$helper1"},
+          "left": {"tag": "reference", "name": "$helper8"}},
+         "tag": "let",
+         "name": "$helper11",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value":
+       {"value":
+        {"yes": {"tag": "reference", "name": "$helper1"},
+         "tag": "select",
+         "no": {"value": "0", "tag": "constant"},
+         "condition":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}},
+        "type": "UIntRange<8>",
+        "tag": "cast"},
+       "tag": "let",
+       "name": "$helper7",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value":
+        {"value":
+         {"yes":
+          {"yes": {"tag": "reference", "name": "$helper1"},
+           "tag": "select",
+           "no": {"value": "0", "tag": "constant"},
+           "condition":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}},
+          "tag": "select",
+          "no": {"value": "0", "tag": "constant"},
+          "condition":
+          {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}},
+         "type": "UIntRange<8>",
+         "tag": "cast"},
+        "tag": "let",
+        "name": "$helper7",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper12"},
+         "tag": "let",
+         "name": "$helper13",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "amount"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "$helper4"}},
+       "left": {"value": true, "tag": "bool"}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "amount"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper14"},
+        "tag": "let",
+        "name": "$helper15",
+        "body": {"value": true, "tag": "bool"}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}}],
+ "entrypoint": "update",
+ "contractName": "StructuredCells",
+ "circuit":
+ {"outputs": [],
+  "name": "StructuredCells.update.circuit",
+  "inputs":
+  [{"visibility": "private", "type": "Bool", "name": "enabled"},
+   {"visibility": "public", "type": "Native", "name": "amount"}],
+  "file": "StructuredCells.update.circuit.zkir",
+  "constraints": []}}

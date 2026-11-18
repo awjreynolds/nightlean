@@ -1163,6 +1163,8 @@ private def statementTerm : Statement → CommandElabM (TSyntax `term)
   | .stage capability key ty value => do
     `(Noctium.Helpers.Statement.stage $(stringTerm capability) $(stringTerm key)
       $(← tyTerm ty) $(← termTerm value))
+  | .readCell .. => throwError "readable witness source does not support ledger cell reads"
+  | .writeCell .. => throwError "readable witness source does not support ledger cell writes"
   | .branch .. => throwError "readable witness source does not support branch statements yet"
 
 private def inputTerm (name : String) (ty : Ty) (visibility : Noctium.Visibility)

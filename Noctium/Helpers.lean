@@ -270,6 +270,8 @@ inductive Statement where
   | «return» (value : Option Term := none)
   | branch (condition : Term) (yes no : List Statement)
   | stage (capability key : String) (ty : Ty) (value : Term)
+  | readCell (state destination : String) (ty : Ty)
+  | writeCell (state : String) (ty : Ty) (value : Term)
   deriving Repr
 
 structure Declaration where
@@ -310,6 +312,7 @@ structure Program where
   exports : List Export := []
   composites : Types.CompositeEnv := {}
   witnesses : List WitnessSignature := []
+  ledger : List StateDecl := []
   deriving Repr
 
 private def fail (span : SourceSpan) (message : String) : Except Diagnostic α :=
@@ -396,12 +399,34 @@ private def termMetadata : Term → Except Diagnostic Unit
 private def statementMetadata : Statement → Except Diagnostic Unit
   | .bind name _ _ => textMetadata name
   | .stage capability key _ _ => do textMetadata capability; textMetadata key
+  | .readCell state destination _ => do textMetadata state; textMetadata destination
+  | .writeCell state _ _ => textMetadata state
   | _ => pure ()
 
 private def statementTerms : Statement → List Term
   | .bind _ _ value | .evaluate value | .assert value | .stage _ _ _ value => [value]
+  | .writeCell _ _ value => [value]
+  | .readCell .. => []
   | .branch condition _ _ => [condition]
   | .return value => value.toList
+
+private def nativeCellType : Ty → Bool
+  | .native | .bool | .uint _ => true
+  | _ => false
+
+private def checkLedgerSchema (span : SourceSpan) (ledger : List StateDecl) : Except Diagnostic Unit := do
+  unless uniqueNames (ledger.map (·.name)) do fail span "duplicate helper ledger declaration"
+  for state in ledger do
+    textMetadata state.name
+    match state.kind with
+    | .cell ty =>
+      liftError state.span (ty.validate Capabilities.source)
+    | .map keyTy valueTy => do
+      liftError state.span (keyTy.validate Capabilities.source)
+      liftError state.span (valueTy.validate Capabilities.source)
+    | .tree schema => liftError state.span (schema.validate Capabilities.source)
+    | .opaqueString =>
+      unless state.sealed do fail state.span "OpaqueString state must be sealed"
 
 /-- Traverse syntax with a bounded work list before invoking recursive passes. -/
 private def scanTerms (limits : Limits) (span : SourceSpan) (available : Nat)
@@ -615,6 +640,8 @@ private def aggregateInputs (program : Program) (entry : Export) : Except Diagno
 private def sourcePreflight (limits : Limits) (program : Program) :
     Except Diagnostic (List (DeclarationId × SourceSize)) := do
   validateLimits limits
+  if program.ledger.length > limits.maxDeclarations then resource {} "ledger declarations"
+  checkLedgerSchema {} program.ledger
   if program.declarations.length > limits.maxDeclarations then resource {} "declarations"
   if program.scopes.length > limits.maxScopes then resource {} "scopes"
   if program.exports.length > limits.maxExports then resource {} "exports"
@@ -1162,6 +1189,31 @@ private structure BodyInfo where
   returned : Bool := false
   deriving Inhabited
 
+private def checkedCell (program : Program) (span : SourceSpan) (name : String) (ty : Ty)
+    (write : Bool) : Except Diagnostic Unit := do
+  unless nativeCellType ty do fail span "structured helper ledger cells require Native, Bool, or UInt"
+  let some state := program.ledger.find? (·.name == name)
+    | fail span s!"unknown helper ledger cell '{name}'"
+  match state.kind with
+  | .cell actual =>
+    unless actual == ty do fail span s!"ledger cell '{name}' type mismatch"
+    if write && state.sealed then fail span s!"sealed state '{name}' cannot be written"
+  | _ => fail span s!"state '{name}' is not a scalar cell"
+
+private def inputNames (program : Program) (target : DeclarationId) : List String :=
+  program.exports.filter (·.target == target) |>.flatMap fun entry =>
+    entry.inputs.map (·.name) ++ entry.compositeInputs.flatMap fun input =>
+      match Types.compileType program.composites input.type with
+      | .ok compiled => sourceLeafPaths compiled.checked.value input.name
+      | .error _ => [input.name]
+
+private def exportedInputNames (program : Program) (target : DeclarationId) : List String :=
+  program.exports.filter (·.target == target) |>.flatMap fun entry =>
+    entry.inputs.map (·.name) ++ entry.compositeInputs.flatMap fun input =>
+      match Types.compileType program.composites input.type with
+      | .ok compiled => sourceLeafPaths compiled.checked.value input.name
+      | .error _ => [input.name]
+
 private def checkBody (limits : Limits) (program : Program) (declaration : Declaration)
     (fuel : Nat) (env : Environment) (body : List Statement)
     (locals : List String) : Except Diagnostic BodyInfo :=
@@ -1206,6 +1258,18 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
           let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
           unless subtype info.ty (.scalar ty) do fail span "private stage type mismatch"
           pure {info with effects := (.privateState :: info.effects).eraseDups}
+        | .readCell state destination ty => do
+          checkedCell program span state ty false
+          if locals.contains destination || (inputNames program declaration.id).contains destination then
+            fail span s!"ledger read destination '{destination}' shadows an existing binding"
+          env := (destination, .scalar ty) :: env
+          locals := destination :: locals
+          pure {ty := .unit, effects := [.ledgerRead]}
+        | .writeCell state ty value => do
+          checkedCell program span state ty true
+          let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
+          unless subtype info.ty (.scalar ty) do fail span "ledger cell write type mismatch"
+          pure {info with effects := (.ledgerWrite :: info.effects).eraseDups}
       result := {result with
         calls := result.calls ++ info.calls
         effects := (result.effects ++ info.effects).eraseDups
@@ -1509,6 +1573,10 @@ private structure LowerState where
   privateOrigins : List (String × PrivateOriginKind) := []
   witnessCalls : List WitnessCallBinding := []
   witnessConstraints : List (Expr .bool) := []
+  ledgerMode : Bool := false
+  ledgerEffects : List Effect := []
+  ledgerGuards : List (Option (Expr .bool)) := []
+  ledgerSpans : List SourceSpan := []
   allowGuardedWitnesses : Bool := false
   guard : Expr .bool := .bool true
   guardActive : Bool := false
@@ -1548,6 +1616,38 @@ private def closeGuard (guard : Expr .bool) (bindings : List LocalBinding) : Exp
     match binding.value with
     | ⟨_, value⟩ => .letE binding.name
         (GuardedExpression.totalize binding.creationGuard value) body) guard
+
+private def closeExpression (bindings : List LocalBinding) (value : Expr ty) : Expr ty :=
+  bindings.foldl (fun body binding =>
+    match binding.value with
+    | ⟨_, source⟩ => Expr.letE binding.name
+        (GuardedExpression.totalize binding.creationGuard source) body) value
+
+private def closeLedgerEffect (bindings : List LocalBinding) : Effect → Effect
+  | .require condition => .require (closeExpression bindings condition)
+  | .writeCell state ty value => .writeCell state ty (closeExpression bindings value)
+  | effect => effect
+
+private def appendLedgerEffect (span : SourceSpan) (effect : Effect) : LowerM Unit := do
+  let state ← get
+  let guard := if state.guardActive then
+    some (closeGuard state.guard state.localBindings) else none
+  modify fun state => {state with
+    ledgerEffects := state.ledgerEffects ++ [closeLedgerEffect state.localBindings effect]
+    ledgerGuards := state.ledgerGuards ++ [guard]
+    ledgerSpans := state.ledgerSpans ++ [span]}
+
+private def appendLedgerConstraints (span : SourceSpan) (conditions : List (Expr .bool)) : LowerM Unit := do
+  for condition in conditions do
+    appendLedgerEffect span (.require condition)
+
+/-- Retain strict term evaluation even when a Unit result discards its value. -/
+private def evaluateLedgerTerm (span : SourceSpan) (value : Lowered) : LowerM Unit := do
+  appendLedgerConstraints span value.constraints
+  let values := if (components value).isEmpty then [value.scalar] else components value
+  for component in values do
+    let name ← fresh
+    appendLedgerEffect span (.require (.letE name component.value (.bool true)))
 
 private def andGuard (left right : Expr .bool) : Expr .bool := .boolAnd left right
 
@@ -1592,6 +1692,15 @@ private def liftD (value : Except Diagnostic α) : LowerM α := liftM value
 
 mutual
   private partial def lowerTerm (program : Program) (scope : Nat) (env : LowerEnv)
+      (span : SourceSpan) (term : Term) : LowerM Lowered := do
+    let value ← lowerTermCore program scope env span term
+    if (← get).ledgerMode then
+      evaluateLedgerTerm span value
+      pure {value with constraints := []}
+    else
+      pure value
+
+  private partial def lowerTermCore (program : Program) (scope : Nat) (env : LowerEnv)
       (span : SourceSpan) (term : Term) : LowerM Lowered := do
     spendLower span
     match term with
@@ -2022,13 +2131,16 @@ mutual
         | .scalar _ => {actual with scalar := references.headD actual.scalar}
         | .unit => unitValue
       env := (parameter.name, reference) :: env
+    let argumentConstraints := values.flatMap (·.constraints)
+    if (← get).ledgerMode then appendLedgerConstraints span argumentConstraints
     let body ← lowerBody program declaration env declaration.body
     modify fun state => {state with
       callPath := callerPath
       guard := initial.guard
       guardActive := initial.guardActive
       localBindings := initial.localBindings}
-    let body := {body with constraints := values.flatMap (·.constraints) ++ body.constraints}
+    let body := {body with constraints :=
+      (if initial.ledgerMode then [] else argumentConstraints ++ body.constraints)}
     pure (bindings.foldr (fun (name, value) body =>
       sequence name {ty := .scalar value.ty, scalar := value} body) body)
 
@@ -2046,12 +2158,15 @@ mutual
       let value ← match value with
         | none => pure unitValue
         | some value => lowerTerm program declaration.id.scope env declaration.span value
-      liftD (coerce declaration.span value declaration.result)
+      let value ← liftD (coerce declaration.span value declaration.result)
+      if (← get).ledgerMode then appendLedgerConstraints declaration.span value.constraints
+      pure {value with constraints := if (← get).ledgerMode then [] else value.constraints}
     | statement :: rest =>
       match statement with
       | .bind name ty value =>
         let value ← lowerTerm program declaration.id.scope env declaration.span value
         let value ← liftD (coerce declaration.span value ty)
+        if (← get).ledgerMode then appendLedgerConstraints declaration.span value.constraints
         let mut references : List Scalar := []
         let mut bindings := []
         for component in components value do
@@ -2064,17 +2179,18 @@ mutual
           | .scalar _ => {value with scalar := references.headD value.scalar}
           | .composite type => aggregateValue type references
         let body ← lowerBodyWith program declaration ((name, reference) :: env) rest continuation
-        let body := {body with constraints := value.constraints ++ body.constraints}
+        let body := {body with constraints := if (← get).ledgerMode then [] else value.constraints ++ body.constraints}
         pure (bindings.foldr (fun (localName, component) body =>
           sequence localName {ty := .scalar component.ty, scalar := component} body) body)
       | .evaluate value =>
         let value ← lowerTerm program declaration.id.scope env declaration.span value
+        if (← get).ledgerMode then appendLedgerConstraints declaration.span value.constraints
         let mut bindings := []
         for component in components value do
           let name ← freshTyped component.ty
           bindings := bindings ++ [(name, component)]
         let body ← lowerBodyWith program declaration env rest continuation
-        let body := {body with constraints := value.constraints ++ body.constraints}
+        let body := {body with constraints := if (← get).ledgerMode then [] else value.constraints ++ body.constraints}
         if bindings.isEmpty && value.ty == .unit then
           let name ← freshTyped .bool
           pure (sequence name value body)
@@ -2083,17 +2199,24 @@ mutual
             sequence name {ty := .scalar component.ty, scalar := component} body) body)
       | .assert condition =>
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
-        let body ← lowerBodyWith program declaration env rest continuation
+        if (← get).ledgerMode then appendLedgerConstraints declaration.span condition.constraints
         let conditionExpr ← liftD (boolExpr declaration.span condition)
-        if let .composite _ := body.ty then
-          pure {body with constraints := condition.constraints ++
-            [Expr.eq conditionExpr (.bool true)] ++ body.constraints}
-        else
-          pure {body with
-            scalar := ⟨body.scalar.ty, .assertE conditionExpr body.scalar.value⟩
-            constraints := condition.constraints ++ body.constraints}
+        if (← get).ledgerMode then do
+          appendLedgerEffect declaration.span (.require conditionExpr)
+          let body ← lowerBodyWith program declaration env rest continuation
+          pure {body with constraints := []}
+        else do
+          let body ← lowerBodyWith program declaration env rest continuation
+          if let .composite _ := body.ty then
+            pure {body with constraints := condition.constraints ++
+              [Expr.eq conditionExpr (.bool true)] ++ body.constraints}
+          else
+            pure {body with
+              scalar := ⟨body.scalar.ty, .assertE conditionExpr body.scalar.value⟩
+              constraints := condition.constraints ++ body.constraints}
       | .branch condition yes no => do
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
+        if (← get).ledgerMode then appendLedgerConstraints declaration.span condition.constraints
         let conditionExpr ← liftD (boolExpr declaration.span condition)
         let entryState ← get
         let name ← freshTyped .bool
@@ -2114,7 +2237,23 @@ mutual
           localBindings := entryState.localBindings}
         let selected ← liftD (selectLowered declaration.span conditionRef yes no)
         let selected := bindCondition name conditionExpr selected
-        pure {selected with constraints := condition.constraints ++ selected.constraints}
+        pure {selected with constraints :=
+          if (← get).ledgerMode then [] else condition.constraints ++ selected.constraints}
+      | .readCell stateName destination ty => do
+        unless (← get).ledgerMode do
+          liftD (fail declaration.span "native helper capability unavailable: ledger read")
+        let readName ← freshTyped ty
+        appendLedgerEffect declaration.span (.readCell stateName readName ty)
+        let reference : Lowered := scalarValue (ty := ty) (Expr.ref readName)
+        lowerBodyWith program declaration ((destination, reference) :: env) rest continuation
+      | .writeCell stateName ty value => do
+        unless (← get).ledgerMode do
+          liftD (fail declaration.span "native helper capability unavailable: ledger write")
+        let value ← lowerTerm program declaration.id.scope env declaration.span value
+        appendLedgerConstraints declaration.span value.constraints
+        let value ← liftD (typedExpr declaration.span ty value)
+        appendLedgerEffect declaration.span (.writeCell stateName ty value)
+        lowerBodyWith program declaration env rest continuation
       | .stage .. => liftD (fail declaration.span "native helper capability unavailable: private state")
       | .return _ => liftD (fail declaration.span "invalid helper statement sequence")
 end
@@ -2214,6 +2353,109 @@ def compileWithLimits (limits : Limits) (program : Program) (entryName : String)
 
 def compile (program : Program) (entryName : String) : Except Diagnostic Circuit :=
   compileWithLimits {} program entryName
+
+private def compileEntrypointForState (limits : Limits) (program : Program)
+    (entryName : String) (ledger : List StateDecl) : Except Diagnostic Entrypoint := do
+  let summaries ← analyzeWithLimits limits program
+  for summary in summaries do
+    for effect in summary.effects do
+      unless effect == .assertion || effect == .fallibleCast ||
+          effect == .ledgerRead || effect == .ledgerWrite do
+        let declaration ← lookup program summary.id {}
+        fail declaration.span s!"native ledger helper capability unavailable: {repr effect}"
+  let some exported := program.exports.find? (·.name == entryName)
+    | fail {} "unknown helper entrypoint"
+  let declaration ← lookup program exported.target exported.span
+  if !(match declaration.result with | .unit | .scalar _ => true | .composite _ => false) then
+    fail declaration.span "native ledger helper results must be scalar or Unit"
+  let inputs ← aggregateInputs program exported
+  unless uniqueNames (inputs.map (·.name)) do fail exported.span "aggregate input component names collide"
+  let inputTypes : TypeEnv := inputs.map fun input => (input.name, input.ty)
+  let mut inputConstraints := []
+  for input in exported.compositeInputs do
+    let compiled ← checkedComposite program input.span input.type
+    let leaves := (sourceLeafPaths compiled.checked.value "").map fun path =>
+      Expr.ref (aggregateInputName input.name path)
+    let checked ← liftError input.span ((Types.checkNativeExpression compiled inputTypes leaves).mapError id)
+    inputConstraints := inputConstraints ++ checked.constraints
+  let mut values := []
+  let mut scalarInputs := exported.inputs
+  let mut aggregateInputs := exported.compositeInputs
+  for parameter in declaration.parameters do
+    match declaration.parameterType parameter with
+    | .composite type => do
+      let some input := aggregateInputs.head?
+        | fail exported.span s!"missing composite helper input '{parameter.name}'"
+      aggregateInputs := aggregateInputs.drop 1
+      unless input.type == type do fail input.span "helper composite input identity mismatch"
+      let compiled ← checkedComposite program input.span type
+      let leaves := (sourceLeafPaths compiled.checked.value "").map fun path =>
+        ⟨.native, Expr.ref (aggregateInputName input.name path)⟩
+      values := values ++ [aggregateValue type leaves]
+    | .scalar _ => do
+      let some input := scalarInputs.head?
+        | fail exported.span s!"missing scalar helper input '{parameter.name}'"
+      scalarInputs := scalarInputs.drop 1
+      values := values ++ [scalarValue (ty := input.ty) (Expr.ref input.name)]
+    | .unit => fail exported.span "helper parameters cannot have Unit type"
+  unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
+    fail exported.span "helper entrypoint input signature mismatch"
+  let initial : LowerState := {
+    reserved := inputs.map (·.name), types := inputTypes, ledgerMode := true,
+    remaining := limits.maxExecutionSteps}
+  let action : LowerM Lowered := do
+    appendLedgerConstraints exported.span inputConstraints
+    lowerCall program declaration values exported.span
+  let (body, lowering) ← action.run initial
+  unless lowering.witnessInputs.isEmpty && lowering.witnessCalls.isEmpty do
+    fail exported.span "native ledger helper witness scheduling is unavailable"
+  let readNames := lowering.ledgerEffects.filterMap fun
+    | .readCell _ destination _ => some destination
+    | _ => none
+  let outputName := ((List.range (inputs.length + readNames.length + 1)).map fun index =>
+    if index == 0 then "result" else s!"result{index}").find?
+      (fun name => !inputs.any (·.name == name) && !readNames.contains name) |>.getD "result"
+  let returns ← match declaration.result with
+    | .unit => pure []
+    | .scalar ty => do
+      let value ← typedExpr exported.span ty body
+      pure [{name := outputName, ty, value, span := exported.span}]
+    | .composite _ => pure []
+  let circuit : Circuit := {
+    name := exported.name, inputs, outputs := [], constraints := [], span := exported.span,
+    privateOrigins := lowering.privateOrigins}
+  let result : Entrypoint := {
+    name := exported.name, circuit, effects := lowering.ledgerEffects, returns,
+    span := exported.span, effectSpans := lowering.ledgerSpans,
+    effectGuards := lowering.ledgerGuards}
+  let capabilities := {Capabilities.crypto with stateCells := true, stateMaps := true}
+  match result.validate capabilities ledger with
+  | .error diagnostic => .error diagnostic
+  | .ok _ => pure ()
+  match Disclosure.entrypoint result with
+  | .error diagnostic => .error diagnostic
+  | .ok _ => pure ()
+  pure result
+
+def compileEntrypointWithLimits (limits : Limits) (program : Program) (entryName : String) :
+    Except Diagnostic Entrypoint :=
+  compileEntrypointForState limits program entryName program.ledger
+
+def compileEntrypoint (program : Program) (entryName : String) : Except Diagnostic Entrypoint :=
+  compileEntrypointWithLimits {} program entryName
+
+/-- Bind source cell declarations to the owning contract's authoritative state
+schema before compiling source reads and writes. -/
+def compileEntrypointFor (program : Program) (entryName : String) (ledger : List StateDecl) :
+    Except Diagnostic Entrypoint := do
+  checkLedgerSchema {} ledger
+  for declared in program.ledger do
+    let some actual := ledger.find? (·.name == declared.name)
+      | fail declared.span s!"source ledger state '{declared.name}' is absent from its contract"
+    unless actual.kind == declared.kind && actual.sealed == declared.sealed do
+      fail declared.span s!"source ledger state '{declared.name}' does not match its contract declaration"
+  let program := {program with ledger}
+  compileEntrypointForState {} program entryName ledger
 
 private abbrev TraceValue := Option ScalarPolicy.Value
 private abbrev TraceEnv := List (String × TraceValue)
@@ -2380,6 +2622,10 @@ mutual
       let condition ← traceTerm program ctx declaration.id.scope env declaration.span condition >>= traceScalar declaration.span
       let result ← traceBlock program ctx declaration env (if condition.number == 0 then no else yes)
       if result.1 then pure result else traceBlock program ctx declaration env rest
+    | .readCell .. :: _ =>
+      liftM (fail declaration.span "ledger reads require the native contract runtime")
+    | .writeCell .. :: _ =>
+      liftM (fail declaration.span "ledger writes require the native contract runtime")
     | .stage _ _ _ _ :: _ => liftM (fail declaration.span "private staging requires the portable control runtime")
 end
 

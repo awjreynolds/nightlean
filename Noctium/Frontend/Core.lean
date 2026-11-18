@@ -22,6 +22,8 @@ structure CircuitInfo where
   expanded into native leaves. The names point to typed Expr constants. -/
   logicalOutputs : List (String × Ty × Name) := []
   sourceProgram? : Option (Name × String) := none
+  /-- Structured ledger bodies are rebuilt from their typed source at export. -/
+  stateProgram? : Option (Name × String) := none
   specializationArtifact? : Option String := none
   deriving Inhabited
 
@@ -281,6 +283,7 @@ scoped syntax "return" ident ":" nltype ":=" nlexpr : nlreturn
 
 declare_syntax_cat nlentry
 scoped syntax "entry" ident "uses" ident "where" nlstatement* nlreturn* "end" : nlentry
+scoped syntax "entry" ident "from" ident "entry" str "end" : nlentry
 scoped syntax (name := contractCommand) "noctium_contract" ident "where" nlstate* nlentry* "end" : command
 
 open scoped Noctium
@@ -1751,11 +1754,12 @@ private def elaborateConstructor (source : TSyntax `nlstate)
   let initializers := initializerTerms
   `(some ({parameters := [$parameters,*], initializers := [$initializers,*] : Noctium.Constructor}))
 
-@[command_elab contractCommand] def elabContract : CommandElab := fun stx => do
+@[command_elab contractCommand] unsafe def elabContract : CommandElab := fun stx => do
   match stx with
   | `(noctium_contract $name:ident where $states:nlstate* $entries:nlentry* end) =>
     let mut stateTerms : Array (TSyntax `term) := #[]
     let mut schema : List (String × StateKind) := []
+    let mut concreteSchema : List StateDecl := []
     let mut stateDeclarations : Array (TSyntax `nlstate) := #[]
     let mut constructorSyntax? : Option (TSyntax `nlstate) := none
     for state in states do
@@ -1871,6 +1875,7 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         | _ => throwErrorAt state "unsupported Noctium state declaration"
       if schema.any (fun p => p.1 == id.getId.toString) then throwErrorAt id "duplicate Noctium state"
       schema := schema ++ [(id.getId.toString, kind)]
+      concreteSchema := concreteSchema ++ [{name := id.getId.toString, kind := kind, «sealed» := state.raw[0].getAtomVal == "sealed"}]
       if state.raw[0].getAtomVal == "sealed" then
         stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
           $term Bool.true $(← spanTerm state)))
@@ -1900,6 +1905,36 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         let lowered ← elaborateReturns returns lowered
         let circuitTerm := mkIdent info.declName
         entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], returns := [$lowered.returns,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Noctium.Entrypoint }))
+      | `(nlentry| entry $id:ident from $source:ident entry $exportName:str end) =>
+        if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
+        entryNames := id.getId :: entryNames
+        let namespaceName := (← getCurrNamespace) ++ source.getId
+        let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+        let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
+        let value ← match Helpers.compileEntrypointFor program exportName.getString concreteSchema with
+          | .ok value => pure value
+          | .error diagnostic => failDisclosure diagnostic *> throwError "structured ledger compilation failed"
+        let localCircuitName := name.getId ++ id.getId ++ `circuit
+        let fullCircuitName := (← getCurrNamespace) ++ localCircuitName
+        let circuitId := mkIdent localCircuitName
+        let circuitName := stringTerm fullCircuitName.toString
+        let sourceTerm := mkIdent sourceName
+        elabCommand (← `(def $circuitId : Noctium.Circuit :=
+          match Noctium.Helpers.compileEntrypointFor $sourceTerm $exportName [$stateTerms,*] with
+          | .ok compiledEntry => {compiledEntry.circuit with name := $circuitName}
+          | .error _ => {name := $circuitName}))
+        unsafe checkGeneratedCircuit fullCircuitName
+        modifyEnv fun env => circuitRegistry.addEntry env {
+          declName := fullCircuitName
+          inputs := value.circuit.inputs.map fun input => (input.name, input.ty)
+          publicInputs := (value.circuit.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty)
+          outputs := []
+          stateProgram? := some (sourceName, exportName.getString)}
+        let circuitTerm := mkIdent fullCircuitName
+        entryTerms := entryTerms.push (← `(
+          match Noctium.Helpers.compileEntrypointFor $sourceTerm $exportName [$stateTerms,*] with
+          | .ok compiledEntry => {compiledEntry with name := $(stringTerm id.getId.toString), circuit := $circuitTerm}
+          | .error _ => {name := $(stringTerm id.getId.toString), circuit := $circuitTerm}))
       | _ => throwErrorAt entryStx "unsupported Noctium entrypoint"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId

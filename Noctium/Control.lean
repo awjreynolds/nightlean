@@ -227,6 +227,10 @@ mutual
     | .stage _ _ _ value :: rest =>
       discard (expression checked target.id.scope env target.span value)
       body checked target env control rest
+    | .readCell .. :: _ =>
+      liftD (fail target.span "portable control capability unavailable: ledger reads")
+    | .writeCell .. :: _ =>
+      liftD (fail target.span "portable control capability unavailable: ledger writes")
     | .branch condition yes no :: rest =>
       let condition ← expression checked target.id.scope env target.span condition
       let guarded := merge control condition.origins
@@ -480,6 +484,8 @@ mutual
           pure (node target.span "stage" [
           ("capability", toJson capability), ("key", toJson key), ("type", toJson (typeName (.scalar ty))),
           ("value", ← emitExpression checked target.id.scope env target.span value)])
+        | .readCell .. => emitLift (fail target.span "portable control capability unavailable: ledger reads")
+        | .writeCell .. => emitLift (fail target.span "portable control capability unavailable: ledger writes")
       result := result ++ [item]
     pure result
 end

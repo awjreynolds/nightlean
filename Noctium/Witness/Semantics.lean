@@ -14,6 +14,8 @@ def expressionSchedule : List Statement → List Term
   | .assert value :: rest => value :: expressionSchedule rest
   | .return value :: _ => value.toList
   | .stage _ _ _ value :: rest => value :: expressionSchedule rest
+  | .readCell .. :: rest => expressionSchedule rest
+  | .writeCell _ _ value :: rest => value :: expressionSchedule rest
   | .branch condition yes no :: rest =>
       condition :: expressionSchedule yes ++ expressionSchedule no ++ expressionSchedule rest
 termination_by body => sizeOf body
@@ -68,6 +70,12 @@ theorem eraseStages_preserves_expressionSchedule (body : List Statement) :
           simpa [eraseStages, expressionSchedule] using hr
         | «return» value => cases value <;> simp [eraseStages, expressionSchedule]
         | stage capability key type value =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [eraseStages, expressionSchedule] using hr
+        | readCell state destination type =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [eraseStages, expressionSchedule] using hr
+        | writeCell state type value =>
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [eraseStages, expressionSchedule] using hr
         | branch condition yes no =>
@@ -142,6 +150,8 @@ def stageObservations : List Statement → List Observation
   | .return value :: _ => value.toList.map Observation.evaluate
   | .stage capability key type value :: rest =>
       .evaluate value :: .privateWrite capability key type value :: stageObservations rest
+  | .readCell .. :: rest => stageObservations rest
+  | .writeCell _ _ value :: rest => .evaluate value :: stageObservations rest
   | .branch condition yes no :: rest =>
       .evaluate condition :: stageObservations yes ++ stageObservations no ++ stageObservations rest
 termination_by body => sizeOf body
@@ -178,6 +188,12 @@ theorem stageObservations_preserve_evaluations (body : List Statement) :
           simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
         | «return» value => cases value <;> simp [stageObservations, evaluatedObservations, expressionSchedule]
         | stage capability key type value =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
+        | readCell state destination type =>
+          have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
+          simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
+        | writeCell state type value =>
           have hr := ih (statementWeight rest) (by rw [← sizeEq]; simp [statementWeight]) rest rfl
           simpa [stageObservations, evaluatedObservations, expressionSchedule] using hr
         | branch condition yes no =>
@@ -242,6 +258,12 @@ theorem stageObservations_preserve_exact_write_frame (body : List Statement) :
         | stage capability key type value =>
             have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
             simpa [stageObservations, privateWrites, sourceStageEvents] using hr
+        | readCell state destination type =>
+            have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
+            simpa [stageObservations, privateWrites, sourceStageEvents] using hr
+        | writeCell state type value =>
+            have hr := ih (statementWeight rest) (by rw [← weightEq]; simp [statementWeight]) rest rfl
+            simpa [stageObservations, privateWrites, sourceStageEvents] using hr
         | branch condition yes no =>
             have hy := ih (statementWeight yes) (by rw [← weightEq]; simp [statementWeight]; omega) yes rfl
             have hn := ih (statementWeight no) (by rw [← weightEq]; simp [statementWeight]; omega) no rfl
@@ -276,6 +298,7 @@ private def eligibilityChildren : EligibilityNode → Option (List EligibilityNo
   | .statement statement => match statement with
     | .bind _ _ value | .evaluate value | .assert value | .stage _ _ _ value =>
         some [.term value]
+    | .readCell .. | .writeCell .. => none
     | .return none => some []
     | .return (some value) => some [.term value]
     | .branch .. => none
@@ -1302,6 +1325,8 @@ mutual
               let state ← get
               stageContinue grants capability key value state
                 (evalBody fuel program context grants provider declaration environment rest)
+          | .readCell .. | .writeCell .. =>
+              fail "ledger state statements are outside the bounded native replay semantics"
           | .branch .. => fail "structured control is outside the bounded native replay semantics"
   termination_by fuel _ _ _ _ _ _ _ => fuel
   decreasing_by all_goals omega
@@ -1839,6 +1864,12 @@ private theorem body_recordSafe_step (fuel : Nat)
           exact recordSafe_getStageContinue grants capability key value _
             (bodySafe program context grants provider declaration environment rest)
     | branch condition yes no =>
+      simp only [evalBody]
+      exact recordSafe_fail _
+    | readCell state destination ty =>
+      simp only [evalBody]
+      exact recordSafe_fail _
+    | writeCell state ty value =>
       simp only [evalBody]
       exact recordSafe_fail _
 
@@ -3797,6 +3828,12 @@ private theorem evalBody_successSim_step (fuel : Nat) (program : Program)
     | branch condition yes no =>
       simp only [Noctium.Witness.eraseStages, evalBody]
       exact successSim_fail _
+    | readCell state destination ty =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact successSim_fail _
+    | writeCell state ty value =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact successSim_fail _
 
 end Noctium.Witness.Semantics
 
@@ -4613,6 +4650,12 @@ private theorem evalBody_failureSim_step (fuel : Nat) (program : Program)
             simpa [replayShape, replayTermRun, replayContinuationRun,
               machineMMonad, Monad.toBind, Bind.bind]
     | branch condition yes no =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact failureSim_fail _
+    | readCell state destination ty =>
+      simp only [Noctium.Witness.eraseStages, evalBody]
+      exact failureSim_fail _
+    | writeCell state ty value =>
       simp only [Noctium.Witness.eraseStages, evalBody]
       exact failureSim_fail _
 
