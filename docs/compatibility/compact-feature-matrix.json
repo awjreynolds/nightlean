@@ -610,6 +610,21 @@
         ],
         "limits": "Guarded witness scheduling and ledger/private-state/event/call statements inside helper bodies remain gated. Host-control plans remain nativeGuardQualified:false. Pure host condition computations repeat across distinct output/constraint expressions. No new keys/proofs/deployments or general preservation qualification.",
         "fullEquivalence": "unverified"
+      },
+      "structuredCellUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0ab7fd38ee952ab5d1a69ced4dc33f4de9d04059",
+        "scope": "Typed Native/Bool/UInt cell statements inside structured helper bodies lower to ordered guarded native effects. Owning contract schemas constrain state identity, type and sealed status. The focused source/native case uses a Native cell, a disclosed private Bool guard, strict unused narrowing, read-after-write and a proof-bound return.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Frontend/Core.lean",
+          "Noctium/Compiler.lean",
+          "tests/StructuredCells.lean",
+          "runtime/tests/structured_cells.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
+        "fullEquivalence": "unverified"
       }
     },
     {
@@ -654,6 +669,21 @@
           "docs/development/guarded-witnesses.md"
         ],
         "limits": "Native case uses scalar witness slots. Other defaults reuse existing typed codec/default paths. Legacy schema1 remains compatible. No new keys/proofs/deployments, complete guarded state/helper effect integration or general witness lowering preservation. Existing witness semantic model does not qualify schema2.",
+        "fullEquivalence": "unverified"
+      },
+      "structuredCellUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0ab7fd38ee952ab5d1a69ced4dc33f4de9d04059",
+        "scope": "Typed Native/Bool/UInt cell statements inside structured helper bodies lower to ordered guarded native effects. Owning contract schemas constrain state identity, type and sealed status. The focused source/native case uses a Native cell, a disclosed private Bool guard, strict unused narrowing, read-after-write and a proof-bound return.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Frontend/Core.lean",
+          "Noctium/Compiler.lean",
+          "tests/StructuredCells.lean",
+          "runtime/tests/structured_cells.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
         "fullEquivalence": "unverified"
       }
     },
@@ -729,6 +759,21 @@
           "docs/development/native-helper-branches.md"
         ],
         "limits": "Guarded witness scheduling and ledger/private-state/event/call statements inside helper bodies remain gated. Host-control plans remain nativeGuardQualified:false. Pure host condition computations repeat across distinct output/constraint expressions. No new keys/proofs/deployments or general preservation qualification.",
+        "fullEquivalence": "unverified"
+      },
+      "structuredCellUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0ab7fd38ee952ab5d1a69ced4dc33f4de9d04059",
+        "scope": "Typed Native/Bool/UInt cell statements inside structured helper bodies lower to ordered guarded native effects. Owning contract schemas constrain state identity, type and sealed status. The focused source/native case uses a Native cell, a disclosed private Bool guard, strict unused narrowing, read-after-write and a proof-bound return.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Frontend/Core.lean",
+          "Noctium/Compiler.lean",
+          "tests/StructuredCells.lean",
+          "runtime/tests/structured_cells.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
         "fullEquivalence": "unverified"
       }
     },
@@ -1629,7 +1674,22 @@
         "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "structuredCellUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0ab7fd38ee952ab5d1a69ced4dc33f4de9d04059",
+        "scope": "Typed Native/Bool/UInt cell statements inside structured helper bodies lower to ordered guarded native effects. Owning contract schemas constrain state identity, type and sealed status. The focused source/native case uses a Native cell, a disclosed private Bool guard, strict unused narrowing, read-after-write and a proof-bound return.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Frontend/Core.lean",
+          "Noctium/Compiler.lean",
+          "tests/StructuredCells.lean",
+          "runtime/tests/structured_cells.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ADT-CELL-RESETTODEFAULT",
@@ -1667,7 +1727,22 @@
         "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "structuredCellUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0ab7fd38ee952ab5d1a69ced4dc33f4de9d04059",
+        "scope": "Typed Native/Bool/UInt cell statements inside structured helper bodies lower to ordered guarded native effects. Owning contract schemas constrain state identity, type and sealed status. The focused source/native case uses a Native cell, a disclosed private Bool guard, strict unused narrowing, read-after-write and a proof-bound return.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Frontend/Core.lean",
+          "Noctium/Compiler.lean",
+          "tests/StructuredCells.lean",
+          "runtime/tests/structured_cells.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker and exact local state only. No new keys, proofs or deployments. Provider/private-state scheduling in the same body, maps/aggregates, finite loops and full structured proof/ledger qualification remain open. The optional historical Witness.Semantics model still has unmatched older Boolean/byte/curve families and does not qualify this extension.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-ADT-CELL-WRITECOIN",

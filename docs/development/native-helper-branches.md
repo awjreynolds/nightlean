@@ -23,13 +23,13 @@ The helper's private Bool condition also needs explicit disclosure before contro
 
 ## Execution boundary
 
-This path compiles witness-free structured helper control into native circuit expressions, then connects those results to the established contract effect API. It does not add ledger-effect statements inside `Helpers.Program` bodies. It does not reinterpret private host `stage` operations as public ledger writes.
+This path compiles witness-free structured helper control into native circuit expressions, then connects those results to the established contract effect API. The separate [structured cell entry](structured-cells.md) route adds typed cell reads and writes inside `Helpers.Program` bodies. Ordinary standalone helper compilation still rejects ledger effects. It does not reinterpret private host `stage` operations as public ledger writes.
 
 Ordinary helper compilation retains its guarded-witness gate. The separate [typed witness route](guarded-witnesses.md) now binds conditional providers and canonical skipped slots through `Witness.compile`. External ledger, event and call effects retain their existing capability checks. Host-control plans emitted by `noctium_control` keep `nativeGuardQualified: false`; selecting that authoring route does not implicitly produce a native contract.
 
 The circuit model has no shared temporary across separate outputs and constraints. Pure condition computations therefore repeat in host evaluation across those expressions. Native instruction sharing follows the existing compiler cache. Effectful condition evaluation is outside this slice.
 
-The remaining state-aware helper bridge, private-state/witness scheduling and complete integrated prover/ledger requirements stay under [issue 43](https://github.com/awjreynolds/noctium/issues/43). This prerequisite slice is tracked in [issue 83](https://github.com/awjreynolds/noctium/issues/83). Finite iteration remains downstream in [issue 48](https://github.com/awjreynolds/noctium/issues/48).
+Maps and aggregate helper effects, integrated private-state/witness scheduling and complete prover/ledger requirements stay under [issue 43](https://github.com/awjreynolds/noctium/issues/43). This prerequisite slice is tracked in [issue 83](https://github.com/awjreynolds/noctium/issues/83). Finite iteration remains downstream in [issue 48](https://github.com/awjreynolds/noctium/issues/48).
 
 ## Focused evidence
 
