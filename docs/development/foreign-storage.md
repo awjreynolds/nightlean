@@ -1,6 +1,6 @@
 # Secp cells and map values
 
-All six Secp256k1/Secp256r1 Base, Scalar and Point types support direct scalar cells and scalar map values. Map keys retain their existing Native or Bytes32 representation. Foreign map keys, record leaves and tree storage need separate qualification.
+All six Secp256k1/Secp256r1 Base, Scalar and Point types support direct scalar cells and scalar map values. Map keys retain their existing Native or Bytes32 representation. [Nested scalar tree leaves](foreign-trees.md) share these encodings. Foreign map keys and record leaves need separate qualification.
 
 ```lean
 import Noctium.Frontend
@@ -15,7 +15,7 @@ noctium_contract KeyRegistry where
   entry update uses setKey where
     write storedKey := disclose(key)
     read storedKey as currentKey
-    return key : Secp256k1Point := disclose(currentKey)
+    return saved : Secp256k1Point := disclose(currentKey)
   end
 end
 ```
