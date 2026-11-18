@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "496766c6238da840599f095b714fdfbbcf86424d",
+    "sourceCommit": "28993cbfcdd46a1eeb509f61e6501a7b73cb15b7",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4775,7 +4775,7 @@
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
     "remainingTokenDependencies": [
       "mixed aligned record hashing and general byte-string operations",
-      "remaining helper operations and token escrow, allowance, burn, memo clearing, full getters and constructor metadata",
+      "remaining helper operations and token escrow, allowance, delegated operations, memo clearing and constructor metadata",
       "mixed record values and optional List head API",
       "Counter comparison helpers",
       "remaining return layouts, contract-call arguments and cross-contract claim composition",
@@ -4901,16 +4901,23 @@
     "confidentialTokenEvidence": {
       "source": "examples/openzeppelin/ConfidentialToken.lean",
       "native": "runtime/tests/confidential_token.rs",
-      "implementationCommit": "496766c6238da840599f095b714fdfbbcf86424d",
+      "implementationCommit": "28993cbfcdd46a1eeb509f61e6501a7b73cb15b7",
       "referenceRevision": "f85f1a23685c6bbedfc8c2589ae3aa128aff7c46",
       "implementedEntrypoints": [
         "registerWithKey",
         "mint",
         "sweep",
-        "transfer"
+        "transfer",
+        "burn",
+        "totalSupply",
+        "isRegistered",
+        "balanceOf",
+        "pendingOf",
+        "computeAccountId"
       ],
       "referenceEntrypointCount": 16,
-      "scope": "One selected-3.2.1 source-witness/native sequence registers two wallets, mints12 into Alice pending, sweeps, then transfers5 to Bob pending. Independent group arithmetic checks ciphertexts and balances Alice7/Bobpending5/Bobspendable0, supply12, memos and credit counters. A valid re-randomized ciphertext preserving plaintext prepares but rejects in native relation checks because it differs from actual ledger state. Runtime0.16s. Derived random scalars are nonzero; deterministic fixture seeds do not establish production freshness/privacy. Initialized=true genesis is an explicit premise; constructor/sealed metadata remain open. Public account candidates bind by full SHA equality to private wallet secrets. Witness width validation now recognizes constrain_to_boolean as a legitimate one-bit constraint. No new opcode names, keys, proofs, deployments or broad regressions. Remaining twelve reference entrypoints and integrated localnet lifecycle stay open."
+      "scope": "One selected-3.2.1 source-witness/native lifecycle registers two wallets, mints12 to Alice pending, sweeps, transfers5 to Bob pending, then burns2. Independent group arithmetic checks Alice5 spendable, Bob5 pending/Bob0 spendable and supply10. Burn preserves pending/memos/counters. Checked views include registered/absent accounts, identity encrypted-zero defaults, supply and full account hash. Prior valid re-randomized wrong-ledger candidate still rejects. Runtime0.20s, one focused testcase. Ten of sixteen reference entrypoints implemented; named c1/c2 point returns do not establish nominal/composite ABI parity. Initialized=true genesis remains explicit; constructor/sealed metadata and remaining six reference entrypoints stay open. Deterministic fixture entropy establishes no production freshness/privacy. No new opcode names, keys, proofs, deployment or broad regressions.",
+      "initialMilestoneCommit": "496766c"
     }
   }
 }
