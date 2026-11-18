@@ -53,6 +53,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [SHA-512 and Keccak-256](development/byte-hashes.md), with explicit preimages, private origins and direct native empty-input hashing.
 - [Typed Boolean gates](development/boolean-gates.md), with eager operand checks, typed native bridges and preserved Boolean input encodings.
 - [Hash-to-curve](development/hash-to-curve.md), from ordered Native fields to composable Jubjub points, including empty input.
+- [Foreign-field implementation plan](designs/foreign-types.md), planned Secp and Curve25519 types, native codecs and operation coverage.
 - [Sequential native cell reads](development/sequential-state.md), with source-generated read-after-write fixtures on both runtime profiles. Generic state preservation remains separate proof work.
 - [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) compile to native circuit leaves with disclosure checks. Bytes32-keyed ledger records support nonempty Native-only layouts.
 - [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/noctium-portable-runtime-boundary.md).
