@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "b9657a415b68928066f6f72bfee72d59eb60e800",
+    "sourceCommit": "9f1bd8ef768f4b28937126743524f56a1f7d68a5",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4874,6 +4874,15 @@
       "native": "runtime/tests/native_list.rs",
       "implementationCommit": "b9657a415b68928066f6f72bfee72d59eb60e800",
       "scope": "Standalone and two-key nested memo Lists use native three-slot linked Arrays with checked Native-field record heads and Bytes8 u64 lengths. Each guarded List macro emits direct native opcodes. Build and one selected-3.2.1 native sequence pass prepend order, length/head reads after writes, pop, reset, independent owner/spender paths and inactive missing-path reads/writes. Empty head/pop and malformed record payloads reject. The emitted pop program rejects empty state without host preparation through a native Subi nonempty check. Head is partial, not the full optional presence-plus-default API. No new ZKIR opcode names, keys, proofs, deployments or broad regressions. Mixed element types and token policy integration remain open."
+    },
+    "namespaceMigration": {
+      "status": "canonical-noctium-only",
+      "moduleRoot": "Noctium",
+      "rustPackage": "noctium-runtime",
+      "cSymbols": "noctium_*",
+      "artifactManifest": "noctium.json",
+      "evidenceScope": "Historical proof/deployment receipts identify original immutable records. The renamed source and ABI are not newly qualified by those receipts.",
+      "checks": "Public Lake build, focused native List sequence, exact aggregate wire roundtrip, C/C++ header parsing and current source fixture regeneration."
     }
   }
 }
