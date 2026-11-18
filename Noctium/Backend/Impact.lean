@@ -56,6 +56,24 @@ inductive Op where
   | listPopFront (slot : Nat) (keys : List Aligned)
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
+  | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
+
+private def claimContractCallFieldGroups
+    (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar) : List (List Scalar) :=
+  [ [.native 0x40]
+  , [.native 0x80, .native 1, .native 1, .native 3]
+  , [.native 0x30]
+  , [.native 0x04]
+  , [.native 0x10, .native 1, .native 3, .native 32, .native 32,
+      .native (Field.modulus - 2),
+      .bytesField address 0, .bytesField address 1,
+      .bytesField entryPointHash 0, .bytesField entryPointHash 1,
+      commitment]
+  , [.native 0x17, .native 160]
+  , [.native 0x10, .native 0]
+  , [.native 0xa2]
+  , [.native 0x40]
+  ]
 
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
@@ -143,6 +161,8 @@ def Op.fields : Op → List Scalar
         let parents := keys.take (keys.length - 1)
         indexPathFields slot true parents ++ [.native 0x10, .native 1] ++
           finalKey.fields ++ [.native 0x19, .native (0x90 + keys.length)]
+  | .claimContractCall address entryPointHash commitment =>
+      (claimContractCallFieldGroups address entryPointHash commitment).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
 macros remain one typed source effect, but their field vectors split at each
@@ -182,6 +202,8 @@ def Op.fieldGroups : Op → List (List Scalar)
         [indexPathFields slot true parents,
           [.native 0x10, .native 1] ++ finalKey.fields,
           [.native 0x19], [.native (0x90 + keys.length)]]
+  | .claimContractCall address entryPointHash commitment =>
+      claimContractCallFieldGroups address entryPointHash commitment
   | operation => [operation.fields]
 
 structure Read where
@@ -549,6 +571,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
       reads := plan.reads ++ [{name := destination, ty}] }
   | .require condition =>
     pure {plan with guards := plan.guards ++ [condition]}
+  | .claimContractCall address entryPointHash commitment =>
+    pure {plan with operations := plan.operations ++ [
+      .claimContractCall address entryPointHash commitment]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -738,6 +763,13 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.writeMap name keyTy valueTy
         (totalizeActivityValue condition avoid key)
         (totalizeActivityValue condition avoid value))
+    | some condition, .claimContractCall address entryPointHash commitment =>
+      let avoid := expressionNames address ++ expressionNames entryPointHash ++
+        expressionNames commitment
+      pure (.claimContractCall
+        (totalizeActivityValue condition avoid address)
+        (totalizeActivityValue condition avoid entryPointHash)
+        (totalizeActivityValue condition avoid commitment))
     | some condition, .readMap name destination keyTy valueTy key =>
       pure (.readMap name destination keyTy valueTy
         (totalizeActivityValue condition (expressionNames key) key))
@@ -821,7 +853,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .writeCompositePath .. | some condition, .emptyMapPath .. |
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
-      some condition, .listReset .. | some condition, .removePath .. =>
+      some condition, .listReset .. | some condition, .removePath .. |
+      some condition, .claimContractCall .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -959,6 +992,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
       reads := plan.reads ++ [{name := destination, ty}] }
   | .require condition =>
     plan := {plan with guards := plan.guards ++ [condition]}
+  | .claimContractCall address entryPointHash commitment =>
+    plan := {plan with operations := plan.operations ++ [
+      .claimContractCall address entryPointHash commitment]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -1311,6 +1347,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .mapRemove slot keys => pure (Lean.Json.mkObj [("mapRemove", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
+  | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do
   pure (Lean.Json.arr (← plan.operations.mapM (Op.toJson ctx env)).toArray)

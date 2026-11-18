@@ -3,9 +3,11 @@ use crate::artifacts::{Role, VerifiedBundle};
 #[cfg(test)]
 use crate::create_state;
 use crate::zkir::IrSource;
-use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare};
+use crate::{Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare};
 use anyhow::{Context, Result, anyhow, ensure};
+use base_crypto::hash::HashOutput;
 use base_crypto::time::Timestamp;
+use coin_structure::contract::ContractAddress;
 use ledger::{
     construct::{ContractCallPrototype, PreTranscript, partition_transcripts},
     structure::{
@@ -28,6 +30,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     fs,
     io::Write,
+    ops::Deref,
     path::{Path, PathBuf},
 };
 use transient_crypto::{
@@ -37,6 +40,169 @@ use transient_crypto::{
 };
 
 pub type NativeIntent = Intent<Signature, ProofPreimageMarker, PedersenRandomness, Db>;
+
+/// One prepared source call and the initial ledger context used to replay it.
+pub struct CheckedNativeCall<'a> {
+    pub execution: &'a Execution,
+    pub circuit: &'a IrSource,
+    pub initial_context: QueryContext<Db>,
+    pub entry_point: EntryPointBuf,
+    pub communication_commitment_rand: Fr,
+}
+
+/// Native output of the bounded caller-to-callee partition check.
+pub struct CheckedTwoCallPartition {
+    pub caller_preimage: ProofPreimage,
+    pub callee_preimage: ProofPreimage,
+    pub caller_commitment: Fr,
+    pub callee_commitment: Fr,
+    /// Caller pair first, callee pair second.
+    pub transcripts: [(Option<Transcript<Db>>, Option<Transcript<Db>>); 2],
+}
+
+fn check_native_call(
+    call: &CheckedNativeCall<'_>,
+    parameters: &LedgerParameters,
+) -> Result<(ProofPreimage, Fr)> {
+    ensure!(
+        call.initial_context
+            .effects
+            .claimed_contract_calls
+            .is_empty(),
+        "two-call partition requires a fresh call-claim context"
+    );
+    ensure!(
+        call.communication_commitment_rand != Fr::from(0u64),
+        "native call commitment randomness must be nonzero"
+    );
+    let key_name =
+        std::str::from_utf8(&call.entry_point).context("native entrypoint name is not UTF-8")?;
+    ensure!(
+        call.execution.preimage.key_location.0 == key_name,
+        "native entrypoint differs from the checked relation"
+    );
+    let replay = call
+        .initial_context
+        .query(
+            &call.execution.program,
+            None,
+            &parameters.cost_model.runtime_cost_model,
+        )
+        .map_err(|_| anyhow!("native execution does not replay from the supplied context"))?;
+    ensure!(
+        replay.context.address == call.execution.after.address
+            && replay.context.state == call.execution.after.state
+            && replay.context.effects == call.execution.after.effects,
+        "native execution differs from the supplied initial context"
+    );
+    let mut preimage = call.execution.preimage.clone();
+    let communication_commitment = onchain_runtime::communication_commitment(
+        call.execution.call_input()?,
+        call.execution.call_output()?,
+        call.communication_commitment_rand,
+    );
+    preimage.communications_commitment =
+        Some((communication_commitment, call.communication_commitment_rand));
+    let active = preimage
+        .check(call.circuit)
+        .map_err(|_| anyhow!("native call preimage failed the official circuit checker"))?;
+    ensure!(
+        active == call.execution.activity_schedule
+            && active.iter().filter(|skip| skip.is_none()).count() == call.execution.program.len(),
+        "native call activity metadata differs from its checked relation"
+    );
+    Ok((preimage, communication_commitment))
+}
+
+fn claimed_calls(context: &QueryContext<Db>) -> Vec<(u64, ContractAddress, HashOutput, Fr)> {
+    context
+        .effects
+        .claimed_contract_calls
+        .iter()
+        .map(|claim| (*claim).deref().into_inner())
+        .collect()
+}
+
+fn partition_claims(
+    partition: &(Option<Transcript<Db>>, Option<Transcript<Db>>),
+) -> Vec<(u64, ContractAddress, HashOutput, Fr)> {
+    partition
+        .0
+        .iter()
+        .chain(partition.1.iter())
+        .flat_map(|transcript| {
+            transcript
+                .effects
+                .claimed_contract_calls
+                .iter()
+                .map(|claim| (*claim).deref().into_inner())
+        })
+        .collect()
+}
+
+/// Validate and partition one checked source caller with one checked source callee.
+/// This helper prepares native transcripts only. It does not construct keys, proofs, or intents.
+pub fn partition_checked_two_call(
+    caller: CheckedNativeCall<'_>,
+    callee: CheckedNativeCall<'_>,
+    parameters: &LedgerParameters,
+) -> Result<CheckedTwoCallPartition> {
+    let (caller_preimage, caller_commitment) = check_native_call(&caller, parameters)?;
+    let (callee_preimage, callee_commitment) = check_native_call(&callee, parameters)?;
+    ensure!(
+        caller_commitment != callee_commitment,
+        "two-call partition requires unique communication commitments"
+    );
+
+    let expected_claim = (
+        0,
+        callee.initial_context.address,
+        callee.entry_point.ep_hash(),
+        callee_commitment,
+    );
+    ensure!(
+        claimed_calls(&caller.execution.after).as_slice() == std::slice::from_ref(&expected_claim),
+        "caller must claim the callee at sequence zero with the exact call identity"
+    );
+    ensure!(
+        claimed_calls(&callee.execution.after).is_empty(),
+        "two-call partition does not accept callee claims"
+    );
+
+    let calls = [
+        PreTranscript {
+            context: caller.initial_context.clone(),
+            program: caller.execution.program.clone(),
+            comm_comm: Some(caller_commitment),
+        },
+        PreTranscript {
+            context: callee.initial_context.clone(),
+            program: callee.execution.program.clone(),
+            comm_comm: Some(callee_commitment),
+        },
+    ];
+    let partitions = partition_transcripts(&calls, parameters)
+        .map_err(|_| anyhow!("official native two-call partition failed"))?;
+    ensure!(
+        partitions.len() == 2,
+        "official partition returned an invalid call count"
+    );
+    ensure!(
+        partition_claims(&partitions[0]).as_slice() == std::slice::from_ref(&expected_claim)
+            && partition_claims(&partitions[1]).is_empty(),
+        "official partition changed the checked contract call identity"
+    );
+    let transcripts: [(Option<Transcript<Db>>, Option<Transcript<Db>>); 2] = partitions
+        .try_into()
+        .map_err(|_| anyhow!("official partition returned an invalid call count"))?;
+    Ok(CheckedTwoCallPartition {
+        caller_preimage,
+        callee_preimage,
+        caller_commitment,
+        callee_commitment,
+        transcripts,
+    })
+}
 /// Explicit input bytes. Keys must come from a trusted, pinned key-generation step.
 /// The assembler checks native encodings and k, not cryptographic key/IR correspondence.
 pub struct Inputs<'a> {

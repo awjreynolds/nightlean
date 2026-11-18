@@ -192,6 +192,11 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .mapRemove slot keys => Json.mkObj [
       ("op", toJson ("mapRemove" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
+  | .claimContractCall address entryPointHash commitment => Json.mkObj [
+      ("op", toJson ("claimcontractcall" : String)),
+      ("address", nativeExpressionJson address),
+      ("entryPointHash", nativeExpressionJson entryPointHash),
+      ("commitment", nativeExpressionJson commitment)]
 
 private def operationJson (activityGuard : Option (Expr .bool))
     (operation : Backend.Impact.Op) : Json :=
@@ -213,6 +218,11 @@ private def effectJson : Effect → Json
       ("state", toJson state), ("destination", toJson destination),
       ("type", toJson (typeName .bool)), ("key", expressionJson key)]
   | .require condition => Json.mkObj [("op", toJson ("require" : String)), ("condition", expressionJson condition)]
+  | .claimContractCall address entryPointHash commitment => Json.mkObj [
+      ("op", toJson ("claimContractCall" : String)),
+      ("address", expressionJson address),
+      ("entryPointHash", expressionJson entryPointHash),
+      ("commitment", expressionJson commitment)]
   | .writeCell state _ value => Json.mkObj [("op", toJson ("writeCell" : String)),
       ("state", toJson state), ("value", expressionJson value)]
   | .writeMap state _ _ key value => Json.mkObj [("op", toJson ("writeMap" : String)),

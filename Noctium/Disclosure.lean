@@ -175,6 +175,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | none, _ => pure []
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
       | some condition, .writeCell .. | some condition, .writeMap ..
+      | some condition, .claimContractCall ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .insertPath .. | some condition, .writePath ..
       | some condition, .readCompositePath .. | some condition, .writeCompositePath ..
@@ -218,6 +219,13 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
         (← expression env span key) activeControl
       checkSink {description := s!"public map write value '{state}'", span}
         (← expression env span payload) activeControl
+    | .claimContractCall address entryPointHash commitment =>
+      checkSink {description := "contract-call claim address", span}
+        (← expression env span address) activeControl
+      checkSink {description := "contract-call claim entrypoint hash", span}
+        (← expression env span entryPointHash) activeControl
+      checkSink {description := "contract-call claim commitment", span}
+        (← expression env span commitment) activeControl
     | .requireAbsent state _ key =>
       checkSink {description := s!"public map query path '{state}'", span}
         (← expression env span key) control

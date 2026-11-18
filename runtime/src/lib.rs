@@ -3,6 +3,7 @@ use crate::aggregates::Schema;
 use crate::zkir::IrSource;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
+use base_crypto::hash::HashOutput;
 use base_crypto::repr::BinaryHashRepr;
 use coin_structure::contract::ContractAddress;
 use ledger::{
@@ -119,6 +120,17 @@ fn aligned_bytes(value: &Value) -> Result<AlignedValue> {
             length: bytes.len() as u32,
         }),
     })
+}
+
+fn claim_hash_output(value: Value, label: &str) -> Result<HashOutput> {
+    let Value::Bytes(bytes) = value else {
+        bail!("{label} must be Bytes32")
+    };
+    ensure!(bytes.len() == 32, "{label} must be Bytes32");
+    let bytes: [u8; 32] = bytes
+        .try_into()
+        .map_err(|_| anyhow!("{label} must be Bytes32"))?;
+    Ok(HashOutput(bytes))
 }
 
 fn byte_alignment_length(alignment: &str) -> Result<Option<usize>> {
@@ -1078,6 +1090,13 @@ pub enum Instruction {
     SubImmediate {
         amount: u32,
     },
+    #[serde(rename = "claimcontractcall")]
+    ClaimContractCall {
+        address: Expr,
+        #[serde(rename = "entryPointHash")]
+        entry_point_hash: Expr,
+        commitment: Expr,
+    },
 }
 
 fn path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> {
@@ -1147,6 +1166,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
                 vec![5, 8, 1]
             }
         }
+        Instruction::ClaimContractCall { .. } => vec![1, 4, 1, 1, 11, 2, 2, 1, 1],
         _ => vec![impact_field_count(instruction, plan)?],
     })
 }
@@ -1165,6 +1185,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     };
     Ok(match instruction {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
+        Instruction::ClaimContractCall { .. } => 24,
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
         Instruction::Index {
@@ -2656,6 +2677,16 @@ fn probe_instruction(
         Instruction::PushFields { expressions, .. } => {
             probe_expressions(expressions, plan, env, deferred_outputs)
         }
+        Instruction::ClaimContractCall {
+            address,
+            entry_point_hash,
+            commitment,
+        } => probe_expressions(
+            [address, entry_point_hash, commitment],
+            plan,
+            env,
+            deferred_outputs,
+        ),
         // Read expressions bind values produced by the state read itself.
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
@@ -2729,6 +2760,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
+                | Instruction::ClaimContractCall { .. }
         ),
         "guarded native operation has an unsupported shape"
     );
@@ -3007,6 +3039,7 @@ impl PreparationCursor {
                             | Instruction::ListPopFront { .. }
                             | Instruction::ListReset { .. }
                             | Instruction::MapRemove { .. }
+                            | Instruction::ClaimContractCall { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -3713,6 +3746,25 @@ impl PreparationCursor {
                     cached: false,
                     n: (keys.len() + 1).try_into()?,
                 }
+            }
+            Instruction::ClaimContractCall {
+                address,
+                entry_point_hash,
+                commitment,
+            } => {
+                let address = claim_hash_output(evaluate(address, &env)?, "contract address")?;
+                let entry_point_hash =
+                    claim_hash_output(evaluate(entry_point_hash, &env)?, "entrypoint hash")?;
+                let commitment = evaluate(commitment, &env)?.field()?;
+                let claim_ops = onchain_runtime::program_fragments::kernel_claim_contract_call!(
+                    (),
+                    (),
+                    AlignedValue::from(address),
+                    AlignedValue::from(entry_point_hash),
+                    field_value(commitment)
+                );
+                program.extend(claim_ops[..8].iter().cloned());
+                claim_ops[8].clone()
             }
             Instruction::Member => Op::Member,
             Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {

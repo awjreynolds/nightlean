@@ -352,6 +352,10 @@ inductive Effect where
   | writeCell (state : String) (ty : Ty) (value : Expr ty)
   | writeMap (state : String) (keyTy valueTy : Ty) (key : Expr keyTy) (value : Expr valueTy)
   | requireAbsent (state : String) (keyTy : Ty) (key : Expr keyTy)
+  /-- Direct-IR/direct-contract-DSL claim using the ledger's fixed contract-call
+  transcript slot. The commitment is the native transient input/output hash.
+  Helper and witness-statement authoring APIs do not expose this effect yet. -/
+  | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
   | counterRead (state destination : String) (keys : List PathKey)
@@ -387,8 +391,8 @@ structure Entrypoint where
   returnViews : List ReturnView := []
   span : SourceSpan := {}
   effectSpans : List SourceSpan := []
-  /-- Optional activity guards aligned with `effects`. Scalar reads, writes,
-  and require effects accept a guard. An empty list preserves legacy behavior. -/
+  /-- Optional activity guards aligned with `effects`. An empty list preserves
+  legacy behavior. -/
   effectGuards : List (Option (Expr .bool)) := []
   deriving Repr
 
@@ -885,6 +889,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
+          .claimContractCall .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -910,6 +915,11 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         pure [(destination, .bool)]
       | .require condition =>
         condition.validate caps env
+        pure []
+      | .claimContractCall address entryPointHash commitment => do
+        address.validate caps env
+        entryPointHash.validate caps env
+        commitment.validate caps env
         pure []
       | .writeCell state ty value =>
         if !caps.stateCells then throw "target lacks state cells"

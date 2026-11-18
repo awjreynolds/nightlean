@@ -5510,6 +5510,16 @@
       "checks": "Passed source admission rejects unknown/duplicate/public/non-Native selections. One native state sequence passes getters and argument-driven updates3/4, verifies exact raw input fields and empty private transcript, and rejects a changed argument even with a recomputed communication commitment.",
       "newOpcodes": 0,
       "limits": "Private Native arguments only,256maximum. Other types, raw-hosted witness integration, call claims and two-contract forest assembly remain open. No new keys/proofs/deployments or broad qualification."
+    },
+    "nativeCallClaims": {
+      "checkedOn": "2026-11-18",
+      "source": "../../tests/NativeCallClaims.lean",
+      "native": "../../runtime/tests/native_composition.rs",
+      "documentation": "../development/native-call-claims.md",
+      "scope": "Direct contract Effect/DSL supports Bytes32 address, Bytes32 entrypoint hash and Native commitment. One checked Impact pseudo-op binds nine groups matching the official kernel_claim_contract_call macro. The ledger assigns sequence. All payload/control flows require disclosure. Rust checks two relative initial contexts and preimages, nonzero randomness, distinct commitments and the full ordinal-zero callee tuple before official partitioning.",
+      "checks": "One native case passed in0.02seconds: caller and actualcallee circuits checked; callee rawNative argument3 gives balance13/count1/false; exactclaim and2partitions; wrongaddressandpreloadedclaimcontextsreject; inactiveguards skipall9groupsandrecordnoclaim. Source rejects unapproved address/hash/commitment/privatecontrol. RequiredNativeProducer inventorymain andresourcepreflight regression passed.",
+      "newOpcodes": 0,
+      "limits": "Checked native two-call partition only. No finalized Intent, verifier-key agreement, fresh proofs or localnet deployment. No generalgraph/call-declaration/hosted-witness/helperstatement support. Referenceinterpreter rejects activeclaims. Initialcontexts areapplication-supplied, notnetwork-authenticated."
     }
   }
 }

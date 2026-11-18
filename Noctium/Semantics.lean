@@ -769,6 +769,8 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       env := (destination, Value.bool (entries.lookup key).isSome) :: env
     | .require condition =>
       if !(← condition.eval ctx env) then throw "state transition guard failed"
+    | .claimContractCall .. =>
+      throw "reference evaluator does not execute cross-contract claims"
     | .writeCell name ty value =>
       let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
       if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -926,7 +928,7 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
         | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
-            .counterAdjust .. | .counterReset .. | .removePath .. => pure ()
+            .counterAdjust .. | .counterReset .. | .removePath .. | .claimContractCall .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -956,6 +958,8 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
           env := (destination, Value.bool (entries.lookup key).isSome) :: env
         | .require condition =>
           if !(← condition.eval ctx env) then throw "state transition guard failed"
+        | .claimContractCall .. =>
+          throw "reference evaluator does not execute cross-contract claims"
         | .writeCell name ty value =>
           let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
           if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -1112,7 +1116,8 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
-        | .writeCell .. | .writeMap .. | .require .. | .insertPath .. | .writePath .. |
+        | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
+            .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
             .listPopFront .. | .listReset .. | .removePath .. => pure ()
         | .readPath _ destination _ ty =>

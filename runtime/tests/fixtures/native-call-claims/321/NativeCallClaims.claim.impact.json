@@ -1,0 +1,142 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "marker", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Bool",
+   "name": "didClaim",
+   "expression": {"tag": "reference", "name": "enabled"}}],
+ "reads":
+ [{"type": "Bytes<32>", "name": "target"},
+  {"type": "Bytes<32>", "name": "entryHash"},
+  {"type": "Bool", "name": "enabled"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "target"},
+   "alignment": "bytes32"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "target"},
+   "alignment": "bytes32"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "entryHash"},
+   "alignment": "bytes32"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "entryHash"},
+   "alignment": "bytes32"},
+  {"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"operation":
+   {"op": "claimcontractcall",
+    "entryPointHash":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxx",
+      "body":
+      {"yes": {"tag": "reference", "name": "enabled"},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
+     "tag": "let",
+     "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"tag": "reference", "name": "entryHash"}},
+    "commitment":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxx",
+      "body":
+      {"yes": {"tag": "reference", "name": "enabled"},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
+     "tag": "let",
+     "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body":
+     {"values":
+      [{"tag": "reference", "name": "opening"},
+       {"tag": "reference", "name": "argument"},
+       {"tag": "reference", "name": "expectedBalance"},
+       {"value": {"tag": "reference", "name": "expectedCount"},
+        "type": "Native",
+        "tag": "cast"},
+       {"value": {"tag": "reference", "name": "expectedEnabled"},
+        "type": "Native",
+        "tag": "cast"}],
+      "tag": "transientHash"}},
+    "address":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxx",
+      "body":
+      {"yes": {"tag": "reference", "name": "enabled"},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
+     "tag": "let",
+     "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"tag": "reference", "name": "target"}}},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "enabled"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}}],
+ "nativeCircuitFile": "NativeCallClaims.claim.zkir",
+ "guards": [],
+ "entrypoint": "claim",
+ "contractName": "NativeCallClaims",
+ "circuit":
+ {"outputs": [],
+  "name": "callClaimInput",
+  "inputs":
+  [{"visibility": "public", "type": "Bytes<32>", "name": "target"},
+   {"visibility": "public", "type": "Bytes<32>", "name": "entryHash"},
+   {"visibility": "public", "type": "Bool", "name": "enabled"},
+   {"visibility": "private", "type": "Native", "name": "opening"},
+   {"visibility": "private", "type": "Native", "name": "argument"},
+   {"visibility": "private", "type": "Native", "name": "expectedBalance"},
+   {"visibility": "private",
+    "type": "UIntRange<18446744073709551616>",
+    "name": "expectedCount"},
+   {"visibility": "private", "type": "Bool", "name": "expectedEnabled"}],
+  "file": "callClaimInput.zkir",
+  "constraints": []}}

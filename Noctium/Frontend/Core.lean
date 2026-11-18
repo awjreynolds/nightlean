@@ -232,7 +232,12 @@ declare_syntax_cat nlpath
 scoped syntax ident : nlpath
 scoped syntax nlpath "[" nlexpr "]" : nlpath
 
+declare_syntax_cat nlupdate
+scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+
 declare_syntax_cat nleffect
+scoped syntax nlupdate : nleffect
+scoped syntax "when" nlexpr nlupdate : nleffect
 scoped syntax "read" nlpath "as" ident : nleffect
 scoped syntax "member" nlpath "as" ident : nleffect
 scoped syntax ident nlpath "as" ident : nleffect
@@ -1200,6 +1205,7 @@ private structure EntryEffects where
 
 private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `nlexpr) :=
   match effect with
+  | `(nleffect| when $condition:nlexpr $update:nlupdate) => some condition
   | `(nleffect| when $condition:nlexpr write $_state:ident := $_value:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insert $_state:ident [ $_key:nlexpr ] := $_value:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr require $_value:nlexpr) => some condition
@@ -1506,6 +1512,16 @@ private def elaborateEffect (schema : List (String × StateKind))
     spans := state.spans.push span
     guards := state.guards.push guard}
   match effect with
+  | `(nleffect| $update:nlupdate)
+  | `(nleffect| when $_:nlexpr $update:nlupdate) =>
+    match update with
+    | `(nlupdate| claimContractCall($address:nlexpr, $entryPointHash:nlexpr, $commitment:nlexpr)) => do
+      let address ← checkedExpression state.env address (.bytes 32)
+      let entryPointHash ← checkedExpression state.env entryPointHash (.bytes 32)
+      let commitment ← checkedExpression state.env commitment .native
+      let term ← `(Noctium.Effect.claimContractCall $address $entryPointHash $commitment)
+      state := {state with terms := state.terms.push term}
+    | _ => throwErrorAt update "unsupported Noctium update"
   | `(nleffect| require $value:nlexpr) =>
     let condition ← checkedExpression state.env value .bool
     let term ← `(Noctium.Effect.require $condition)

@@ -761,6 +761,12 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   fields version ["major", "minor"]
   ensure ((← natField version "major") == 3 && (← natField version "minor") == 2)
     "unsupported native producer IR version"
+  let instructions ← arrayField program "instructions"
+  ensure (instructions.size ≤ maxInstructions &&
+    expected.rawInputs.length + expected.inputs.length ≤ maxInputs &&
+    expected.returns.length ≤ 256 && expected.groups.length ≤ maxInstructions &&
+    expected.assertions.length ≤ maxInstructions)
+    "native producer resource limit exceeded"
   let rawInputs ← arrayField program "inputs"
   ensure (rawInputs.size == expected.rawInputs.length)
     "native raw call input header count mismatch"
@@ -786,12 +792,6 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   for output in returns do nativeType output
   ensure ((← (← program.getObjVal? "do_communications_commitment").getBool?) ==
     (expected.mode == .ledgerCall)) "native communication commitment policy mismatch"
-  let instructions ← arrayField program "instructions"
-  ensure (instructions.size ≤ maxInstructions &&
-    expected.rawInputs.length + expected.inputs.length ≤ maxInputs &&
-    expected.returns.length ≤ 256 && expected.groups.length ≤ maxInstructions &&
-    expected.assertions.length ≤ maxInstructions)
-    "native producer resource limit exceeded"
   requireFinalOutput instructions.toList
   for (instruction, index) in instructions.toList.zipIdx do
     match validateInstruction expected state instruction with
