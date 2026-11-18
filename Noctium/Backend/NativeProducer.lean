@@ -314,6 +314,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       maximum := if foreignValid then 0 else Field.modulus - 1
     }
     pure {state with inputCount := state.inputCount + 1}
+  | "copy" => defineResult state instruction (← argument state instruction "val")
   | "mul" => do
     let left ← argument state instruction "a"
     let right ← argument state instruction "b"

@@ -491,7 +491,7 @@ private def expressionNames : Expr ty → List String
   | .usub left right => expressionNames left ++ expressionNames right
   | .umul left right => expressionNames left ++ expressionNames right
   | .inv value => expressionNames value
-  | .cast _ value => expressionNames value
+  | .copyValue value | .cast _ value => expressionNames value
   | .letE name value body => name :: (expressionNames value ++ expressionNames body)
   | .assertE condition body => expressionNames condition ++ expressionNames body
   | .disclose _ value => expressionNames value

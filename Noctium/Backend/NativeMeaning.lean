@@ -618,7 +618,7 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     pure {body with
       bounds := condition.bounds ++ body.bounds
       assertions := condition.assertions ++ [condition.term] ++ body.assertions}
-  | .disclose _ value => normalize env value
+  | .copyValue value | .disclose _ value => normalize env value
   | .select condition yes no => do
     let condition ← normalize env condition
     let yes ← normalize env yes

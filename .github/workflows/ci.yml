@@ -99,6 +99,7 @@ jobs:
           lake env lean tests/NativeList.lean
           lake env lean tests/NativeReturns.lean
           lake env lean tests/NativeCallClaims.lean
+          lake env lean tests/NativeCopy.lean
           lake env lean tests/NativeOpaqueReturns.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean

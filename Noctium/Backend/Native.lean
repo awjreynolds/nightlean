@@ -5,7 +5,7 @@ namespace Noctium.Backend.Native
 def inventoryRevision : String := "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
 
 inductive OperandRule where
-  | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
+  | typedIdentity | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
   | bytes32Conversion | bytes32Reverse | fixedBytes | fixedByteHash | boolConstant | typedBoolVector
@@ -141,6 +141,9 @@ def instructionSupport (opcode : String) : Except String Support :=
   else .ok <| match opcode with
   | "add" | "mul" => .supported <|
     scalar .qualifiedArithmetic .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "b", "output"]
+  | "copy" => .supported <|
+    {scalar .typedIdentity .propagateAll .pure .matchingNativeSignature .noGuard .none ["val", "output"]
+      with encoding := .qualifiedTypedValues}
   | "test_eq" => .supported <|
     scalar .nativeBinary .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "b", "output"]
   | "neg" => .supported <|

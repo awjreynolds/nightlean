@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
   <title id="title">Noctium | Prove contract behavior. Compile for Midnight.</title>
-  <desc id="desc">Noctium is a Lean 4 compiler and proof framework for Midnight. Authors specify and prove source properties in Lean. Its typed compiler emits ZKIR v3 circuits and Impact ledger plans directly. Tuples and vectors support checked structural widening while records and enums retain nominal identity. Checked composite entrypoint returns reconstruct into typed SDK results. Private Native call arguments bind through the native ABI and communication commitment. Native call claims assemble into checked intents with verified proofs. A funded two-contract call finalized on localnet with both states verified. The Rust host uses Midnight libraries. Current scope includes 39 of 47 registered native operations and scoped support across 15 native type families. A historical 16-entrypoint token recorded 17 accepted localnet calls. Full ZKIR v3, contract composition and web and mobile SDKs are goals. Proof audits cover selected contracts and recorded revisions.</desc>
+  <desc id="desc">Noctium is a Lean 4 compiler and proof framework for Midnight. Authors specify and prove source properties in Lean. Its typed compiler emits ZKIR v3 circuits and Impact ledger plans directly. Tuples and vectors support checked structural widening while records and enums retain nominal identity. Checked composite entrypoint returns reconstruct into typed SDK results. Private Native call arguments bind through the native ABI and communication commitment. Native call claims assemble into checked intents with verified proofs. A funded two-contract call finalized on localnet with both states verified. The Rust host uses Midnight libraries. Current scope includes all 40 non-deprecated native opcode names out of 47 total and scoped support across 15 native type families. A historical 16-entrypoint token recorded 17 accepted localnet calls. Full ZKIR v3, contract composition and web and mobile SDKs are goals. Proof audits cover selected contracts and recorded revisions.</desc>
   <defs>
     <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#101d30"/><stop offset="1" stop-color="#080f1b"/></linearGradient>
     <linearGradient id="foil" x1=".1" y1=".2" x2=".95" y2=".9"><stop stop-color="#9af5dd"/><stop offset=".52" stop-color="#79cbef"/><stop offset="1" stop-color="#b6acff"/></linearGradient>
@@ -61,7 +61,7 @@
     </g>
     <path d="M790 639v119" stroke="#36465a"/>
     <g font-size="57" font-weight="700" letter-spacing="-2">
-      <text x="74" y="715" fill="#eaf6f5">39<tspan font-size="35" fill="#9ebbc3" letter-spacing="-1"> / 47</tspan></text>
+      <text x="74" y="715" fill="#eaf6f5">40<tspan font-size="35" fill="#9ebbc3" letter-spacing="-1"> / 47</tspan></text>
       <text x="457" y="715" fill="#eaf6f5">15</text>
       <text x="834" y="715" fill="#eeeefd">16</text><text x="1188" y="715" fill="#eeeefd">17</text>
     </g>

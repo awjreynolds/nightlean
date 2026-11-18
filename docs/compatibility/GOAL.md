@@ -122,3 +122,5 @@ The [source proof-audit foundation](../development/proof-registration.md) provid
 [Composed proof attachment](../development/native-call-claims.md#prove-a-composed-intent) now checks retained keys against installed operations and attaches two native V3 proofs to one intent. The sealed transaction passes the pinned ledger verifier with fee balancing disabled. Funded node submission, finality and state equality remain open.
 
 [The first funded native composed transaction](../development/native-composition-receipt.json) finalized at block 27627. The native Rust adapter verified both call events in the exact extrinsic and matched each finalized contract state against the strict ledger prediction. This qualifies a caller and one leaf callee through the Rust client. Private-journal and foreign-language composition remain open.
+
+[Explicit typed copy](../development/native-copy.md) closes the remaining non-deprecated opcode name in the pinned registry. The compiler registers 40 of 47 names across the scoped source paths. Seven deprecated instructions remain unexposed. Full type and overload coverage, compiler assurance and application flows remain separate gates.

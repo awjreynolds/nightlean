@@ -577,7 +577,7 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
   | .assertE condition body => do
     unless (← condition.eval ctx env) do throw "helper assertion failed"
     body.eval ctx env
-  | .disclose _ value => value.eval ctx env
+  | .copyValue value | .disclose _ value => value.eval ctx env
   | .eq (ty := ty) a b => do
     pure (sameValue ty (← a.eval ctx env) (← b.eval ctx env))
   | .select c a b => do
@@ -1184,6 +1184,7 @@ theorem pruneTrue_preserves (ctx : EvalContext) (env : EvalEnv) (conditions : Li
     | boolAnd left right => simp [pruneTrue, ConstraintsHold, ih]
     | boolOr left right => simp [pruneTrue, ConstraintsHold, ih]
     | boolXor left right => simp [pruneTrue, ConstraintsHold, ih]
+    | copyValue value => simp [pruneTrue, ConstraintsHold, ih]
     | ref name => simp [pruneTrue, ConstraintsHold, ih]
     | eq a b => simp [pruneTrue, ConstraintsHold, ih]
     | select condition a b => simp [pruneTrue, ConstraintsHold, ih]

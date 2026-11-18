@@ -20,6 +20,7 @@ def foreignConstantJson (kind : Foreign.Kind) (value : kind.Denote) : Json :=
     ("encoding", toJson ((Foreign.encodeValue kind value).toOption.getD [] |>.map toString))]
 
 private def nativeExpressionJson : Expr ty → Json
+  | .copyValue value => nativeExpressionJson value
   | .native n => Json.mkObj [("tag", toJson ("constant" : String)), ("value", toJson (toString n))]
   | .bool b => Json.mkObj [("tag", toJson ("bool" : String)), ("value", toJson b)]
   | .uint maximum value => Json.mkObj [("tag", toJson ("uint" : String)),

@@ -143,6 +143,7 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .assertE condition body =>
     .assertE (.select guard (totalize guard condition) (.bool true))
       (totalize guard body)
+  | .copyValue value => .copyValue (totalize guard value)
   | .disclose span value => .disclose span (totalize guard value)
   | .eq left right => .eq (totalize guard left) (totalize guard right)
   | .select condition yes no =>

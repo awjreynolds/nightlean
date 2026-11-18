@@ -91,6 +91,7 @@ inductive Expr : Ty → Type where
       Expr (.bytes kind.byteLength)
   | foreignFromBytes (kind : Foreign.Kind) {length : Nat}
       (value : Expr (.bytes length)) : Expr (.foreign kind)
+  | copyValue (value : Expr ty) : Expr ty
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -668,7 +669,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .assertE condition body => do
     condition.validate caps env
     body.validate caps env
-  | .disclose _ value => value.validate caps env
+  | .copyValue value | .disclose _ value => value.validate caps env
   | .eq (ty := operandTy) a b => do
     if operandTy.isBytes then throw "byte string equality is not supported by this source surface"
     if !caps.equality then throw "target lacks equality"

@@ -46,7 +46,7 @@ private def checkConstants : Expr ty → Except String Unit
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
   | .toBytes32 value => checkConstants value
-  | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => checkConstants value
+  | .copyValue value | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => checkConstants value
   | .concatBytes left right => do checkConstants left; checkConstants right
   | .bytesLiteral _ _ => pure ()
   | .fromBytes32 value => checkConstants value
@@ -146,11 +146,11 @@ def binary (op a b : String) : LowerM String := do
   modify fun s => {s with expressions := (key, output) :: s.expressions}
   return output
 
-def unary (op a : String) : LowerM String := do
+def unary (op a : String) (operandField : String := "a") : LowerM String := do
   let key : ExpressionKey := (op, [a], none)
   if let some existing := (← get).expressions.lookup key then return existing
   let output ← fresh
-  emit op [("a", toJson a), ("output", toJson output)]
+  emit op [(operandField, toJson a), ("output", toJson output)]
   modify fun s => {s with expressions := (key, output) :: s.expressions}
   return output
 
@@ -755,6 +755,9 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
       rejectLowering s!"unbound Bytes32 source symbol '{name}'"
       pure {values := []}
   | .disclose _ value => lowerBytes value
+  | .copyValue value => do
+    let operand ← lowerBytes value
+    pure {operand with values := ← operand.values.mapM (fun value => unary "copy" value "val")}
   | .bytes32Literal values | .bytesLiteral _ values => pure {values := values.map fieldImmediate}
   | .reverseBytes (length := length) value => do
     lowerFixedReverse length (← lowerBytes value)
@@ -854,6 +857,7 @@ decreasing_by
 
 /-- Source Bool values retain the constrained Native 0/1 ABI. Typed gates bridge locally. -/
 def lowerExpr : Expr ty → LowerM String
+  | .copyValue value => do unary "copy" (← lowerExpr value) "val"
   | .native n => pure (fieldImmediate n)
   | .uint _ n => pure (fieldImmediate n)
   | .bool b => pure (if b then "0x01" else "0x00")

@@ -47,7 +47,7 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard valueTypeNames.length == 15
 #guard instructionNames.eraseDups.length == 47
 #guard valueTypeNames.eraseDups.length == 15
-#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 39
+#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 40
 #guard rejected (requireInstruction "new_native_without_metadata")
 #guard rejected (check [decodeBytes "Scalar<BLS12-381>" "%x"])
 #guard rejected (check [emptyBytes64, decodeBytes "Bool" "%bytes64"])
@@ -62,7 +62,7 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
   op "jubjub_scalar_from_native" [("native", toJson ("%x" : String)), ("output", toJson ("%s" : String))],
   op "transient_hash" [("inputs", toJson (["%s"] : List String)), ("output", toJson ("%h" : String))]])
 #guard accepted (requireInstruction "inv")
-#guard rejected (requireInstruction "copy")
+#guard accepted (requireInstruction "copy")
 #guard match valueTypeSupport "Bool" with | .ok (.unsupported _) => true | _ => false
 #guard match valueTypeSupport "Bytes" with | .ok (.unsupported _) => true | _ => false
 
@@ -70,6 +70,14 @@ private def packedBytes : Fact := {
   term := .input "%bytes"
   maximum := 0
   valueType := .bytes 64}
+
+private def nativeCopy (value result : String) : Json := op "copy" [
+  ("val", toJson value), ("output", toJson result)]
+
+#guard accepted (check [bits "%x" 8, nativeCopy "%x" "%alias", less "%alias" "0xff" "%b" 8])
+#guard rejected (check [nativeCopy "%future" "%alias"])
+#guard rejected (check [nativeCopy "%x" "%x"])
+#guard rejected (check [nativeCopy "%x" "%alias", less "%alias" "0xff" "%b" 8])
 
 private def packingState (fact : Fact) : State :=
   {definitions := [("%bytes", fact)]}

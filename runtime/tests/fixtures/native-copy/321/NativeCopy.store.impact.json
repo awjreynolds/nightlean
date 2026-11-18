@@ -1,0 +1,139 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "stored", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "UIntRange<256>",
+   "name": "copiedByte",
+   "expression":
+   {"value": {"tag": "reference", "name": "payload"},
+    "tag": "byteAt",
+    "index": 31}},
+  {"visibility": "public",
+   "type": "Bool",
+   "name": "copiedEnabled",
+   "expression": {"tag": "reference", "name": "enabled"}}],
+ "reads":
+ [{"type": "Bool", "name": "enabled"}, {"type": "Native", "name": "expected"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "expected"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "expected"},
+   "alignment": "field"},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "enabled"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"value": true, "tag": "bool"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxx",
+      "body":
+      {"yes": {"tag": "reference", "name": "enabled"},
+       "tag": "select",
+       "no": {"value": false, "tag": "bool"},
+       "condition":
+       {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}},
+     "tag": "let",
+     "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+     "body": {"tag": "reference", "name": "released"}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "enabled"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "enabled"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxx"}}}}],
+ "nativeCircuitFile": "NativeCopy.store.zkir",
+ "guards": [],
+ "entrypoint": "store",
+ "contractName": "NativeCopy",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Native",
+    "name": "released",
+    "expression": {"tag": "reference", "name": "amount"}}],
+  "name": "copyInput",
+  "inputs":
+  [{"visibility": "private", "type": "Native", "name": "amount"},
+   {"visibility": "private", "type": "Bytes<32>", "name": "payload"},
+   {"visibility": "public", "type": "Bool", "name": "enabled"},
+   {"visibility": "public", "type": "Native", "name": "expected"}],
+  "file": "copyInput.zkir",
+  "constraints":
+  [{"tag": "eq",
+    "right": {"tag": "reference", "name": "expected"},
+    "left": {"tag": "reference", "name": "amount"}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256k1Base", "tag": "foreignConstant", "encoding": ["1", "0"]},
+    "left":
+    {"type": "Secp256k1Base",
+     "tag": "foreignConstant",
+     "encoding": ["1", "0"]}}]}}

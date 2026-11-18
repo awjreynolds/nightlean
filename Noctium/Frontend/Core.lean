@@ -127,6 +127,7 @@ scoped syntax "add(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "mul(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "sub(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "inv(" nlexpr ")" : nlexpr
+scoped syntax "copyValue(" nlexpr ")" : nlexpr
 scoped syntax "uint(" num ")" : nlexpr
 scoped syntax "cast(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "default(" nltype ")" : nlexpr
@@ -481,7 +482,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
   | `(nlexpr| sha512($value)) | `(nlexpr| keccak256($value)) => hasPartialScalar value
   | `(nlexpr| bytes($_:num, $_:str)) => Bool.false
-  | `(nlexpr| reverseBytes($value)) => hasPartialScalar value
+  | `(nlexpr| copyValue($value)) | `(nlexpr| reverseBytes($value)) => hasPartialScalar value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => Bool.true
   | `(nlexpr| concatBytes($left, $right)) =>
     hasPartialScalar left || hasPartialScalar right
@@ -741,6 +742,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       throwErrorAt literal s!"byte string literal exceeds its declared length {length}"
     let values ← natListTerm (bytes ++ List.replicate (length - bytes.length) 0)
     pure (.bytes length, ← `(Noctium.Expr.bytesLiteral $(natTerm length) $values))
+  | `(nlexpr| copyValue($value)) => do
+    let (ty, value) ← expression env value
+    pure (ty, ← `(Noctium.Expr.copyValue $value))
   | `(nlexpr| reverseBytes($value)) => do
     let (valueTy, value) ← expression env value
     let .bytes _ := valueTy

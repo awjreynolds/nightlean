@@ -116,7 +116,7 @@ private def expressionJson : Expr ty → Json
   | .letE name value body => Json.mkObj [("let", Json.mkObj [
       ("name", toJson name), ("value", expressionJson value), ("body", expressionJson body)])]
   | .assertE condition body => Json.mkObj [("assertThen", toJson [expressionJson condition, expressionJson body])]
-  | .disclose _ value => expressionJson value
+  | .copyValue value | .disclose _ value => expressionJson value
   | .eq a b => Json.mkObj [("eq", toJson [expressionJson a, expressionJson b])]
   | .select c a b => Json.mkObj [("select", toJson [expressionJson c, expressionJson a, expressionJson b])]
   | .poseidon2 domain a b => Json.mkObj [("poseidon2", Json.mkObj [

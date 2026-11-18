@@ -266,6 +266,15 @@
     }
   },
   "evidenceRegister": {
+    "E-NOCTIUM321-COPY": {
+      "description": "Direct Lean source emits Copy in a checked ledger entrypoint. The 3.2.1 native checker accepts valid active and inactive executions and rejects a changed public assertion operand. Source and producer checks reject disclosure and SSA misuse.",
+      "refs": [
+        "../../tests/NativeCopy.lean",
+        "../../tests/NativeProducer.lean",
+        "../../runtime/tests/native_copy.rs",
+        "../development/native-copy.md"
+      ]
+    },
     "E-NATIVE321-CLAIM": {
       "kind": "executed-workload",
       "refs": [
@@ -1310,8 +1319,8 @@
         "preconditionsAndLimits": "Typed aliases must preserve identity and visibility. Redefinition/use-before-definition remain compiler errors."
       },
       "safeLeanSourceSupport": {
-        "status": "not-exposed-by-current-lean-lowerer",
-        "scope": "Backend source availability does not establish a safe source feature.",
+        "status": "direct-source-lowering-observed",
+        "scope": "Direct circuits and contract entrypoints emit Copy over existing native operands. Byte strings retain their existing leaf or chunk representation. Copy preserves the producer fact and source disclosure origins.",
         "fullyVerified": false
       },
       "requirements": [
@@ -1335,9 +1344,11 @@
         }
       ],
       "evidence": {
-        "ids": [],
+        "ids": [
+          "E-NOCTIUM321-COPY"
+        ],
         "keygenWorkloadObserved": false,
-        "checkerWorkloadObserved": false,
+        "checkerWorkloadObserved": true,
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
@@ -4773,7 +4784,7 @@
     "checkedOn": "2026-11-18",
     "sourceCommit": "fe73696b64e3d1170aab3e31a17f3ae97b799d6a",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 39,
+    "registeredOpcodeCount": 40,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4813,11 +4824,11 @@
       "or",
       "xor",
       "hash_to_curve",
-      "bytes_into_natives"
+      "bytes_into_natives",
+      "copy"
     ],
-    "notExposedOpcodeCount": 8,
+    "notExposedOpcodeCount": 7,
     "notExposedOpcodes": [
-      "copy",
       "into_bytes32",
       "from_bytes32",
       "reverse_bytes",

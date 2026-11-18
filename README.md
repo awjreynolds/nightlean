@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/noctium-pitch.png" alt="Noctium research preview. Lean 4 contracts and checked specifications compile directly to native Midnight artifacts. Scoped support covers 39 of 47 native operations and 15 native type families. Native Rust and C/C++ SDKs, typed helpers, modules, generics, composite values, guarded control and witnesses are implemented. Full native coverage, contract composition and web/mobile SDKs remain goals." width="100%">
+  <img src="docs/assets/noctium-pitch.png" alt="Noctium research preview. Lean 4 contracts and checked specifications compile directly to native Midnight artifacts. Scoped support covers 40 of 47 native operations and 15 native type families. Native Rust and C/C++ SDKs, typed helpers, modules, generics, composite values, guarded control and witnesses are implemented. Full native coverage, contract composition and web/mobile SDKs remain goals." width="100%">
 </p>
 
 <p align="center">
@@ -98,6 +98,8 @@ Typed Jubjub operations support a [derived-key, ElGamal and ECDH memo example](t
 [SHA-512 and Keccak-256](docs/development/byte-hashes.md) compile directly from bounded byte preimages, including empty inputs. Their typed digests compose with byte operators, and private origins still require explicit disclosure. Focused source, native-checker, circuit-sizing and host-interpreter cases pass.
 
 [Typed Boolean gates](docs/development/boolean-gates.md) add eager `boolAnd`, `boolOr` and `boolXor`, with explicit native Bool bridges. Both operands retain their assertions, and private results still require disclosure.
+
+[Explicit typed copy](docs/development/native-copy.md) completes registration of all 40 non-deprecated opcode names in the pinned ZKIR inventory. The seven deprecated names remain unexposed. The opcode count measures scoped source support.
 
 [Hash-to-curve](docs/development/hash-to-curve.md) maps ordered Native fields to a typed Jubjub point, including empty input. Results compose with point arithmetic and byte encoding. Application domain fields stay explicit.
 
