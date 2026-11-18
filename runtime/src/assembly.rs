@@ -1,9 +1,9 @@
 //! Native assembly of private, unbalanced deploy/call intents. No proving or network.
 use crate::artifacts::{Role, VerifiedBundle};
-use crate::zkir::IrSource;
-use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare};
 #[cfg(test)]
 use crate::create_state;
+use crate::zkir::IrSource;
+use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare};
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::{
     fab::{AlignedValue, Alignment, Value as FabValue},
@@ -19,7 +19,7 @@ use ledger::{
 use onchain_runtime::{
     context::QueryContext,
     result_mode::ResultModeVerify,
-    state::{ContractOperation, ContractState, EntryPointBuf},
+    state::{ContractMaintenanceAuthority, ContractOperation, ContractState, EntryPointBuf},
     transcript::Transcript,
 };
 use rand::{CryptoRng, Rng, rngs::OsRng};
@@ -130,6 +130,94 @@ impl PreparedOperationMapDeployment {
 
     pub(crate) fn address(&self) -> &str {
         &self.address
+    }
+
+    pub(crate) fn ready_state(&self) -> Result<ContractState<Db>> {
+        let Some(ContractAction::Deploy(deployment)) = self.intent.actions.iter_deref().next()
+        else {
+            return Err(anyhow!("native target deployment missing"));
+        };
+        Ok(deployment.initial_state.clone())
+    }
+
+    pub(crate) fn with_installation_subset(
+        &self,
+        installed: &BTreeSet<String>,
+        authority: ContractMaintenanceAuthority,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        ensure!(ttl > 0, "TTL must be explicit Unix seconds");
+        ensure!(
+            self.intent.actions.len() == 1,
+            "native target deployment missing"
+        );
+        let Some(ContractAction::Deploy(deployment)) = self.intent.actions.iter_deref().next()
+        else {
+            return Err(anyhow!("native target deployment missing"));
+        };
+        ensure!(
+            hex::encode(deployment.address().0.0) == self.address,
+            "native target address mismatch"
+        );
+
+        let mut initial = deployment.initial_state.clone();
+        let known: BTreeSet<String> = initial
+            .operations
+            .iter()
+            .map(|pair| {
+                let (name, _) = &*pair;
+                String::from_utf8((**name).0.clone()).context("invalid operation name in target")
+            })
+            .collect::<Result<_>>()?;
+        ensure!(
+            !installed.is_empty(),
+            "installation subset must be nonempty"
+        );
+        ensure!(
+            installed.is_subset(&known),
+            "installation subset contains an unknown operation"
+        );
+        ensure!(
+            installed.len() < known.len(),
+            "installation subset must be a strict subset"
+        );
+
+        for name in known.difference(installed) {
+            initial.operations = initial
+                .operations
+                .remove(&EntryPointBuf(name.as_bytes().to_vec()));
+        }
+        initial.maintenance_authority = authority;
+
+        let deployment = ContractDeploy::new(rng, initial);
+        let address = hex::encode(deployment.address().0.0);
+        let intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl)).add_deploy(deployment);
+        Ok(Self {
+            intent,
+            address,
+            contract: self.contract.clone(),
+        })
+    }
+
+    pub(crate) fn with_retained_deployment(
+        &self,
+        deployment: ContractDeploy<Db>,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        ensure!(ttl > 0, "TTL must be explicit Unix seconds");
+        ensure!(
+            deployment.initial_state == self.ready_state()?,
+            "retained deployment differs from authenticated initialization"
+        );
+        let address = hex::encode(deployment.address().0.0);
+        let intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl)).add_deploy(deployment);
+        Ok(Self {
+            intent,
+            address,
+            contract: self.contract.clone(),
+        })
     }
 }
 
@@ -308,8 +396,11 @@ fn build_for_deployment(
         alignment: Alignment(vec![]),
     };
     let randomness = nonzero_random(rng)?;
-    let commitment =
-        onchain_runtime::communication_commitment(empty.clone(), evaluated.call_output()?, randomness);
+    let commitment = onchain_runtime::communication_commitment(
+        empty.clone(),
+        evaluated.call_output()?,
+        randomness,
+    );
     let context = QueryContext::new(initial.data.clone(), address);
     let mut partitions = partition_transcripts(
         &[PreTranscript {
@@ -324,13 +415,12 @@ fn build_for_deployment(
     let (mut guaranteed, fallible) = partitions.pop().unwrap();
     let mut after = context.clone();
     let cost = &parameters.cost_model.runtime_cost_model;
-    if evaluated.program.is_empty() && evaluated.activity_schedule.iter().any(Option::is_some) {
+    if evaluated.program.is_empty() {
         ensure!(
             guaranteed.is_none() && fallible.is_none(),
-            "all-inactive source unexpectedly produced a native transcript"
+            "empty source program unexpectedly produced a native transcript"
         );
-        // The upstream partitioner drops empty programs. Keep a native empty transcript
-        // so the proof attachment path has a segment for the skipped activity schedule.
+        // Ledger sequencing requires a transcript, including pure and all-inactive calls.
         let empty_query = context
             .query::<ResultModeVerify>(&[], None, cost)
             .map_err(|_| anyhow!("empty native transcript query rejected"))?;
@@ -440,6 +530,7 @@ pub(crate) fn prepare_call_for_target(
 }
 
 /// Prepare a call against current public state while retaining the original deployment address.
+#[cfg(test)]
 pub(crate) fn prepare_call_for_current_state(
     plan: &Plan,
     contract: &str,
@@ -450,6 +541,39 @@ pub(crate) fn prepare_call_for_current_state(
     circuit: &IrSource,
     ttl: u64,
     target: &PreparedOperationMapDeployment,
+    current: &ContractState<Db>,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<(NativeIntent, ContractState<Db>)> {
+    let ready = target.ready_state()?;
+    prepare_call_for_ready_state(
+        plan,
+        contract,
+        selected_operation,
+        config,
+        parameters,
+        operation,
+        circuit,
+        ttl,
+        target,
+        &ready,
+        current,
+        rng,
+    )
+}
+
+/// Prepare a call against the authenticated ready state while retaining the
+/// original partial deployment address and nonce.
+pub(crate) fn prepare_call_for_ready_state(
+    plan: &Plan,
+    contract: &str,
+    selected_operation: &str,
+    config: &Config,
+    parameters: &LedgerParameters,
+    operation: ContractOperation,
+    circuit: &IrSource,
+    ttl: u64,
+    target: &PreparedOperationMapDeployment,
+    ready: &ContractState<Db>,
     current: &ContractState<Db>,
     rng: &mut (impl Rng + CryptoRng),
 ) -> Result<(NativeIntent, ContractState<Db>)> {
@@ -474,14 +598,16 @@ pub(crate) fn prepare_call_for_current_state(
         "native target address mismatch"
     );
     ensure!(
-        current.operations == deployment.initial_state.operations,
-        "current contract operation revision differs from retained deployment"
+        current.operations == ready.operations
+            && current.maintenance_authority.committee == ready.maintenance_authority.committee
+            && current.maintenance_authority.threshold == ready.maintenance_authority.threshold,
+        "current contract operation revision or authority differs from ready state"
     );
     let entry = EntryPointBuf(selected_operation.as_bytes().to_vec());
     ensure!(
-        deployment.initial_state.operations.get(&entry).as_deref() == Some(&operation)
+        ready.operations.get(&entry).as_deref() == Some(&operation)
             && current.operations.get(&entry).as_deref() == Some(&operation),
-        "selected operation verifier differs from retained deployment"
+        "selected operation verifier differs from ready state"
     );
 
     let built = build_for_deployment(
@@ -833,6 +959,58 @@ mod tests {
         let (decoded, _) = roundtrip(&first.deploy).unwrap();
         assert_eq!(decoded.ttl.to_secs(), 2_000_000_000);
     }
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    fn pure_call_retains_the_transcript_required_by_ledger_sequencing() {
+        let plan: Plan = serde_json::from_slice(include_bytes!(
+            "../tests/fixtures/curve-witness/321/CurveWitness.claim.impact.json"
+        ))
+        .unwrap();
+        let circuit = IrSource::load(
+            include_bytes!("../tests/fixtures/curve-witness/321/CurveWitness.claim.zkir")
+                .as_slice(),
+        )
+        .unwrap();
+        let config: Config = serde_json::from_value(json!({
+            "state": {},
+            "inputs": {
+                "scalar": {"kind": "jubjubScalar", "value": "0"},
+                "expectedScalar": {"kind": "jubjubScalar", "value": "0"},
+                "$helper5": {"kind": "jubjubScalar", "value": "0"},
+                "point": {"kind": "jubjubPoint", "x": "0", "y": "1"},
+                "expectedPoint": {"kind": "jubjubPoint", "x": "0", "y": "1"},
+                "$helper8": {"kind": "jubjubPoint", "x": "0", "y": "1"}
+            }
+        }))
+        .unwrap();
+        let built = build(
+            &plan,
+            &config,
+            &ledger::structure::INITIAL_PARAMETERS,
+            ContractOperation::new(None, None),
+            &circuit,
+            2_000_000_000,
+        )
+        .unwrap();
+        let Some(ContractAction::Call(call)) = built.call.actions.iter_deref().next() else {
+            panic!("expected a call");
+        };
+        assert!(
+            call.guaranteed_transcript
+                .as_ref()
+                .unwrap()
+                .program
+                .is_empty()
+        );
+        assert!(call.fallible_transcript.is_none());
+        assert!(
+            real_preimage(&built.call)
+                .unwrap()
+                .check(&circuit)
+                .unwrap()
+                .is_empty()
+        );
+    }
     #[test]
     fn wrong_inputs_reject_the_real_constructor_preimage() {
         let (plan, mut config, circuit) = sample();
@@ -879,10 +1057,8 @@ mod tests {
     }
     #[test]
     fn invalid_assembly_leaves_destination_absent() {
-        let path = std::env::temp_dir().join(format!(
-            "noctium-assembly-invalid-{}",
-            OsRng.r#gen::<u64>()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("noctium-assembly-invalid-{}", OsRng.r#gen::<u64>()));
         assert!(
             assemble(
                 Inputs {
@@ -902,10 +1078,8 @@ mod tests {
     }
     #[test]
     fn malformed_private_config_discards_value_bearing_parser_cause() {
-        let path = std::env::temp_dir().join(format!(
-            "noctium-assembly-privacy-{}",
-            OsRng.r#gen::<u64>()
-        ));
+        let path =
+            std::env::temp_dir().join(format!("noctium-assembly-privacy-{}", OsRng.r#gen::<u64>()));
         let selected_plan = serde_json::to_vec(&selected_fixture_json()).unwrap();
         let error = assemble(
             Inputs {

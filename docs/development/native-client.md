@@ -1,6 +1,6 @@
 # Native Rust client
 
-The Rust SDK prepares, funds, approves, seals and submits one native contract deployment or call. The application path uses native Rust libraries throughout. `runtime/examples/native_client.rs` deploys the retained Lean claim and submits its claim call without a Node runtime, Compact compiler, toolkit executable or proof-server subprocess. C and C++ hosts use the [native client ABI](native-client-abi.md), which drives this same Rust transaction state machine through explicit host requests.
+The Rust SDK prepares, funds, approves, seals and submits native contract deployments, verifier installation updates and calls. The application path uses native Rust libraries throughout. `runtime/examples/native_client.rs` deploys the retained Lean claim and submits its claim call without a Node runtime, Compact compiler, toolkit executable or proof-server subprocess. C and C++ hosts use the [native client ABI](native-client-abi.md), which drives this same Rust transaction state machine through explicit host requests.
 
 The host-neutral modules are `proof`, `funding` and `client`. The `localnet` feature adds an explicit loopback RPC adapter, development wallet adapter and filesystem journal. The added HTTP, BIP32 and metadata adapters build only with `localnet`. The core exposes no endpoint or seed policy.
 

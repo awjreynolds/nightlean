@@ -61,3 +61,7 @@ required-features = ["localnet"]
 [[example]]
 name = "audit_claim_deployment"
 required-features = ["localnet", "zkir-321"]
+
+[[example]]
+name = "confidential_token_localnet"
+required-features = ["localnet", "zkir-321"]

@@ -96,6 +96,11 @@ pub(crate) enum Contract {
         intent: ProvedNativeIntent,
         entrypoint: String,
     },
+    /// Proof-free maintenance action. `entrypoint` names its local host journal target.
+    Maintenance {
+        intent: ProvedNativeIntent,
+        entrypoint: String,
+    },
 }
 fn snapshot_copy(s: &Snapshot) -> Snapshot {
     Snapshot {
@@ -382,6 +387,10 @@ fn address(c: &Contract) -> Result<(String, String), client::Error> {
             Some(ContractAction::Deploy(d)) => (d.address(), entrypoint.clone()),
             _ => return Err(client::Error::Identity),
         },
+        Contract::Maintenance { intent, entrypoint } => match intent.actions.iter_deref().next() {
+            Some(ContractAction::Maintain(update)) => (update.address, entrypoint.clone()),
+            _ => return Err(client::Error::Identity),
+        },
     };
     Ok((hex::encode(a.0.0), entry))
 }
@@ -535,12 +544,35 @@ pub(crate) fn prove_deployment(
     intent: &NativeIntent,
     parameters: &ledger::structure::LedgerParameters,
 ) -> Result<ProvedNativeIntent, client::Error> {
+    prove_proofless_action(intent, parameters, ProoflessAction::Deployment)
+}
+
+pub(crate) fn prove_maintenance(
+    intent: &NativeIntent,
+    parameters: &ledger::structure::LedgerParameters,
+) -> Result<ProvedNativeIntent, client::Error> {
+    prove_proofless_action(intent, parameters, ProoflessAction::Maintenance)
+}
+
+#[derive(Clone, Copy)]
+enum ProoflessAction {
+    Deployment,
+    Maintenance,
+}
+
+fn prove_proofless_action(
+    intent: &NativeIntent,
+    parameters: &ledger::structure::LedgerParameters,
+    expected: ProoflessAction,
+) -> Result<ProvedNativeIntent, client::Error> {
     use ledger::structure::ContractAction;
+    let action_matches = match (expected, intent.actions.iter_deref().next()) {
+        (ProoflessAction::Deployment, Some(ContractAction::Deploy(_)))
+        | (ProoflessAction::Maintenance, Some(ContractAction::Maintain(_))) => true,
+        _ => false,
+    };
     if intent.actions.len() != 1
-        || !matches!(
-            intent.actions.iter_deref().next(),
-            Some(ContractAction::Deploy(_))
-        )
+        || !action_matches
         || intent.dust_actions.is_some()
         || intent.guaranteed_unshielded_offer.is_some()
         || intent.fallible_unshielded_offer.is_some()
@@ -568,7 +600,9 @@ async fn step(
         match command {
             Command::Prepare => {
                 let contract = match &state.contract {
-                    Some(Contract::Proved(i)) | Some(Contract::Deployment { intent: i, .. }) => i,
+                    Some(Contract::Proved(i))
+                    | Some(Contract::Deployment { intent: i, .. })
+                    | Some(Contract::Maintenance { intent: i, .. }) => i,
                     _ => return Err(client::Error::State),
                 };
                 let bound = BoundTransaction::prepare(
@@ -662,6 +696,7 @@ type Task = Pin<Box<dyn Future<Output = (State, Result<Json, client::Error>)> + 
 pub(crate) struct Driver {
     state: Option<State>,
     task: Option<Task>,
+    recovery_binding: Option<ContractStateBinding>,
     adapter: Adapter,
     mode: Option<Command>,
     last: Json,
@@ -787,10 +822,31 @@ impl Driver {
         contract: &Contract,
         binding: &ContractStateBinding,
     ) -> Result<(), client::Error> {
+        use ledger::structure::ContractAction;
+
         let (address, operation) = address(contract)?;
         let deployment = matches!(contract, Contract::Deployment { .. });
+        let explicit_action = match contract {
+            Contract::Proved(intent) => {
+                matches!(
+                    intent.actions.iter_deref().next(),
+                    Some(ContractAction::Call(_))
+                )
+            }
+            Contract::Deployment { intent, .. } => {
+                matches!(
+                    intent.actions.iter_deref().next(),
+                    Some(ContractAction::Deploy(_))
+                )
+            }
+            Contract::Maintenance { intent, .. } => matches!(
+                intent.actions.iter_deref().next(),
+                Some(ContractAction::Maintain(_))
+            ),
+        };
         require(
-            binding.matches_target(&address, &operation)
+            explicit_action
+                && binding.matches_target(&address, &operation)
                 && binding.matches_event(deployment)
                 && if deployment {
                     binding.current_state_bytes().is_none()
@@ -805,6 +861,7 @@ impl Driver {
         Self {
             state: Some(state),
             task: None,
+            recovery_binding: None,
             adapter: Adapter {
                 mailbox: Arc::new(Mutex::new(Mailbox {
                     pending: None,
@@ -843,6 +900,25 @@ impl Driver {
         driver.command(Command::Reload)?;
         Ok(driver)
     }
+
+    /// Recover the journaled attempt first, then restore its privately validated source binding.
+    /// Current-state admission still waits for the recovered attempt's receipt and journal CAS.
+    pub(crate) fn recover_with_state_binding(
+        descriptor: Descriptor,
+        context: &[u8],
+        binding: ContractStateBinding,
+    ) -> Result<Self, client::Error> {
+        let mut driver = Self::recover(descriptor, context)?;
+        require(
+            driver.mode == Some(Command::Reload)
+                && driver.task.is_some()
+                && driver.recovery_binding.is_none(),
+            client::Error::State,
+        )?;
+        driver.recovery_binding = Some(binding);
+        Ok(driver)
+    }
+
     pub fn command(&mut self, command: Command) -> Result<(), client::Error> {
         if self.task.is_some() {
             if command == Command::Cancel && self.mode == Some(Command::Prepare) {
@@ -933,6 +1009,11 @@ impl Driver {
             let mut context = Context::from_waker(&waker);
             match task.as_mut().poll(&mut context) {
                 Poll::Ready((mut state, result)) => {
+                    if self.mode == Some(Command::Reload) {
+                        if let Some(binding) = self.recovery_binding.take() {
+                            state.state_binding = Some(binding);
+                        }
+                    }
                     if self.cancel_prepare {
                         self.cancel_prepare = false;
                         // The last signing reply can win the race with cancellation.
@@ -1017,6 +1098,10 @@ impl Driver {
                 if let Some(cas) = attempt.record().cas_receipt() {
                     status["privateCommitted"] = json!(cas.committed);
                     status["privateRevision"] = json!(cas.revision);
+                    status["privateAcknowledged"] =
+                        json!(state.runtime.as_ref().is_some_and(|runtime| {
+                            runtime.matches_cas(cas.committed, &cas.revision)
+                        }));
                 }
             } else if let Some(contract) = &state.contract {
                 if let Ok((a, e)) = address(contract) {
@@ -1086,7 +1171,10 @@ impl Driver {
         } else {
             return Err(client::Error::State);
         }
-        let deployment = transaction.event() == client::ContractEvent::Deploy;
+        let deployment = match transaction.event() {
+            client::ContractEvent::Deploy => true,
+            client::ContractEvent::Call | client::ContractEvent::Maintain => false,
+        };
         let journal_identity = attempt.record().identity();
         let checkpoint =
             serde_json::to_vec(&(receipt, journal_identity, cas, binding.context_identity()))

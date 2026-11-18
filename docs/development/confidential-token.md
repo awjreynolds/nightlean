@@ -114,3 +114,53 @@ without a constructor proof on the ledger. Mint is the ungated public-supply
 benchmark operation, not a production issuance policy. Native acceptance here
 is checker evidence. No new keys, proofs or deployment were created for this
 source milestone.
+
+## Native host and staged installation
+
+`runtime/examples/confidential_token_localnet.rs` drives the sixteen-operation
+contract through native Rust witness callbacks, proving, DUST funding, signing,
+submission and finalized receipt checks. Each accepted private journal commit
+provides the opaque state token for the next operation. Input candidates come
+from the preceding verified receipt state.
+
+```sh
+cargo +1.100.0 run --manifest-path runtime/Cargo.toml \
+  --no-default-features --features zkir-321,localnet \
+  --example confidential_token_localnet -- HOST_CONFIG.json
+```
+
+The host config selects `endpoint`, `policy`, `bundleIndex`,
+`bundleIndexSha256`, `parameterCache`, `parameterSource`, `journalDirectory`,
+`approveLocalDevelopment` and `waitSeconds` (1–300). The bundle index contains
+one object per entrypoint, with `name`, `directory` and `manifestSha256`.
+Assemble each source-generated circuit, plan and optional witness sidecars with
+matching native keys, compiler metadata, profile, ledger parameters and native
+toolchain manifest using `noctium-bundle assemble`. Pin the index digest and
+every manifest digest externally. Populate the explicit parameter cache with
+the verified public SRS and native DUST material before running the host.
+
+The localnet rejected installing all sixteen keys in one deployment because its
+transaction weight exceeded the normal extrinsic limit. The host deploys eight
+keys, then installs the remaining eight through a signed native maintenance
+update. The same update replaces the temporary maintenance authority with an
+empty committee and threshold one, permanently disabling further maintenance.
+The SDK prevents calls until the complete authenticated verifier map and locked
+authority match the intended contract. Both installation transactions finalized
+on the isolated localnet. Pure circuits retain an empty guaranteed transcript,
+as required by native ledger sequencing.
+
+`WitnessContractTarget::from_staged_state_config` and
+`start_installation_client` expose this bootstrap path. Recovery uses
+`restore_deployment` and `recover_client` with trusted durable journal records,
+then reobserves finality and acknowledges the private CAS before issuing a new
+state token. The example accepts paired `deploymentAttempt` and `resumeAttempt`
+identifiers for recovery. Its scripted scenario starts from the beginning, so
+these fields do not resume midway through the token scenario.
+
+This example accepts only the isolated development genesis in the
+[localnet guide](../../scripts/localnet/README.md). Wallet and bootstrap signing
+secrets are public fixtures. The plaintext callback decrypts the actual witness
+request and searches fixture amounts up to 64. Each seed request receives fresh
+host entropy. These callbacks demonstrate the host boundary and require a real
+wallet implementation for production use. The complete token scenario's
+finalized execution is still in progress.

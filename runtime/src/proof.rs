@@ -14,7 +14,10 @@ use ledger::structure::{
 };
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
 use midnight_zk_stdlib::{MidnightPK, Relation, ZkStdLib, ZkStdLibArch};
-use onchain_runtime::state::{ContractOperation, ContractState};
+use onchain_runtime::state::{
+    ContractMaintenanceAuthority, ContractMaintenanceVerifyingKey, ContractOperation,
+    ContractState, EntryPointBuf,
+};
 use rand::{CryptoRng, Rng};
 use serde_json::Value as Json;
 use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
@@ -216,6 +219,7 @@ struct WitnessContractInner {
     deployment: crate::assembly::PreparedOperationMapDeployment,
     deployment_identity: String,
     state_schema_sha256: String,
+    ready_state: ContractState<Db>,
 }
 
 /// An operation-specific target. It binds its own circuit degree and trusted SRS before
@@ -264,6 +268,35 @@ impl WitnessContractTarget {
         state_config: &[u8],
         deployment_ttl: u64,
         rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        Self::from_state_config_inner(bundles, state_config, deployment_ttl, rng, None)
+    }
+
+    /// Bootstrap a complete authenticated contract through a smaller initial verifier map.
+    /// Calls remain unavailable until every verifier is installed and the authority is locked.
+    pub fn from_staged_state_config(
+        bundles: ContractBundleSet,
+        state_config: &[u8],
+        initial_operations: &[String],
+        bootstrap_key: base_crypto::schnorr::VerifyingKey,
+        deployment_ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        Self::from_state_config_inner(
+            bundles,
+            state_config,
+            deployment_ttl,
+            rng,
+            Some((initial_operations, bootstrap_key)),
+        )
+    }
+
+    fn from_state_config_inner(
+        bundles: ContractBundleSet,
+        state_config: &[u8],
+        deployment_ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+        staging: Option<(&[String], base_crypto::schnorr::VerifyingKey)>,
     ) -> Result<Self> {
         if state_config.len() > MAX_PRIVATE_CONFIG {
             return Err(Error::Limit);
@@ -315,7 +348,7 @@ impl WitnessContractTarget {
                 ContractOperation::new(Some(material.verifier), None),
             ));
         }
-        let deployment = crate::assembly::prepare_operation_map_deployment_target(
+        let mut deployment = crate::assembly::prepare_operation_map_deployment_target(
             &plan,
             contract,
             &state.state,
@@ -325,13 +358,33 @@ impl WitnessContractTarget {
             rng,
         )
         .map_err(|_| Error::InvalidPrivateInput)?;
-        let deployment_identity = hex::encode(Sha256::digest(encode(deployment.intent())?));
+        let ready_state = deployment.ready_state().map_err(|_| Error::InvalidIntent)?;
+        if let Some((names, key)) = staging {
+            let installed: std::collections::BTreeSet<_> = names.iter().cloned().collect();
+            if installed.len() != names.len() {
+                return Err(Error::BindingMismatch);
+            }
+            deployment = deployment
+                .with_installation_subset(
+                    &installed,
+                    ContractMaintenanceAuthority {
+                        committee: vec![ContractMaintenanceVerifyingKey::Schnorr(key)],
+                        threshold: 1,
+                        counter: 0,
+                    },
+                    deployment_ttl,
+                    rng,
+                )
+                .map_err(|_| Error::InvalidIntent)?;
+        }
+        let deployment_identity = deployment_identity(deployment.intent())?;
         Ok(Self {
             inner: Arc::new(WitnessContractInner {
                 bundles,
                 deployment,
                 deployment_identity,
                 state_schema_sha256,
+                ready_state,
             }),
         })
     }
@@ -342,6 +395,162 @@ impl WitnessContractTarget {
 
     pub fn identity(&self) -> &str {
         self.inner.bundles.identity()
+    }
+
+    /// Authenticate the original deployment from a trusted durable attempt.
+    /// Receipt and private-CAS recovery remain necessary before state admission.
+    pub fn restore_deployment(
+        self,
+        attempt: &crate::client::SubmissionAttempt,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        if attempt.transaction().event() != crate::client::ContractEvent::Deploy
+            || attempt.transaction().policy().profile != crate::profile::NAME
+        {
+            return Err(Error::BindingMismatch);
+        }
+        let transaction: crate::funding::SealedTransaction = decode(attempt.transaction().bytes())?;
+        let ledger::structure::Transaction::Standard(transaction) = transaction else {
+            return Err(Error::BindingMismatch);
+        };
+        let intent = transaction
+            .intents
+            .get(&crate::funding::CONTRACT_SEGMENT)
+            .ok_or(Error::BindingMismatch)?;
+        if intent.actions.len() != 1 {
+            return Err(Error::BindingMismatch);
+        }
+        let Some(ContractAction::Deploy(deployment)) = intent.actions.iter_deref().next() else {
+            return Err(Error::BindingMismatch);
+        };
+        let mut inner = Arc::try_unwrap(self.inner).map_err(|_| Error::BindingMismatch)?;
+        inner.deployment = inner
+            .deployment
+            .with_retained_deployment((**deployment).clone(), ttl, rng)
+            .map_err(|_| Error::BindingMismatch)?;
+        if inner.deployment.address() != attempt.transaction().contract_address()
+            || encode(
+                &inner
+                    .deployment
+                    .ready_state()
+                    .map_err(|_| Error::BindingMismatch)?,
+            )? != attempt.transaction().expected_state()
+        {
+            return Err(Error::BindingMismatch);
+        }
+        inner.deployment_identity = deployment_identity(inner.deployment.intent())?;
+        Ok(Self {
+            inner: Arc::new(inner),
+        })
+    }
+
+    pub(crate) fn recovery_binding(
+        &self,
+        attempt: &crate::client::SubmissionAttempt,
+    ) -> Result<ContractStateBinding> {
+        use crate::client::ContractEvent;
+        let transaction = attempt.transaction();
+        if transaction.contract_address() != self.contract_address()
+            || transaction.policy().profile != crate::profile::NAME
+        {
+            return Err(Error::BindingMismatch);
+        }
+        let journal: Json = serde_json::from_slice(attempt.record().journal_bytes())
+            .map_err(|_| Error::BindingMismatch)?;
+        let operation = journal["entrypoint"]
+            .as_str()
+            .ok_or(Error::BindingMismatch)?;
+        let state: ContractState<Db> = decode(transaction.expected_state())?;
+        if encode(&state)? != transaction.expected_state() {
+            return Err(Error::BindingMismatch);
+        }
+        match transaction.event() {
+            ContractEvent::Deploy => {
+                let expected = self
+                    .inner
+                    .deployment
+                    .ready_state()
+                    .map_err(|_| Error::BindingMismatch)?;
+                if state != expected || self.inner.bundles.operation(operation).is_none() {
+                    return Err(Error::BindingMismatch);
+                }
+            }
+            ContractEvent::Maintain => {
+                if operation != "__noctium_maintenance"
+                    || state.data != self.inner.ready_state.data
+                    || state.balance != self.inner.ready_state.balance
+                {
+                    return Err(Error::BindingMismatch);
+                }
+                for pair in state.operations.iter() {
+                    let (name, value) = &*pair;
+                    if self.inner.ready_state.operations.get(&**name).as_deref() != Some(&**value) {
+                        return Err(Error::BindingMismatch);
+                    }
+                }
+                let initial = self
+                    .inner
+                    .deployment
+                    .ready_state()
+                    .map_err(|_| Error::BindingMismatch)?;
+                let policy = &state.maintenance_authority;
+                let locked = policy.committee
+                    == self.inner.ready_state.maintenance_authority.committee
+                    && policy.threshold == self.inner.ready_state.maintenance_authority.threshold;
+                let installing = policy.committee == initial.maintenance_authority.committee
+                    && policy.threshold == initial.maintenance_authority.threshold;
+                if (!locked && !installing)
+                    || (locked && state.operations != self.inner.ready_state.operations)
+                {
+                    return Err(Error::BindingMismatch);
+                }
+            }
+            ContractEvent::Call => {
+                if self.inner.bundles.operation(operation).is_none()
+                    || state.operations != self.inner.ready_state.operations
+                    || state.maintenance_authority.committee
+                        != self.inner.ready_state.maintenance_authority.committee
+                    || state.maintenance_authority.threshold
+                        != self.inner.ready_state.maintenance_authority.threshold
+                {
+                    return Err(Error::BindingMismatch);
+                }
+                let plan: Plan = serde_json::from_slice(
+                    self.deployment_bundle()?
+                        .file(Role::Plan)
+                        .map_err(|_| Error::InvalidArtifacts)?,
+                )
+                .map_err(|_| Error::InvalidArtifacts)?;
+                crate::constructor::check_sealed_state(
+                    &plan,
+                    &self.inner.ready_state.data,
+                    &state.data,
+                )
+                .map_err(|_| Error::BindingMismatch)?;
+            }
+        }
+        let checkpoint = attempt
+            .record()
+            .immutable_digest()
+            .map_err(|_| Error::BindingMismatch)?;
+        // Recovery admits a verified post-state, not an unexecuted source pre-state.
+        let previous = (transaction.event() != ContractEvent::Deploy)
+            .then(|| transaction.expected_state().to_vec());
+        Ok(ContractStateBinding {
+            contract_set_identity: self.identity().to_owned(),
+            deployment_identity: self.inner.deployment_identity.clone(),
+            state_schema_sha256: self.inner.state_schema_sha256.clone(),
+            address: self.contract_address().to_owned(),
+            operation: operation.to_owned(),
+            context_identity: checkpoint,
+            current_state_sha256: previous
+                .as_ref()
+                .map(|bytes| hex::encode(Sha256::digest(bytes))),
+            current_state: previous,
+            expected_state: transaction.expected_state().to_vec(),
+            deployment: transaction.event() == ContractEvent::Deploy,
+        })
     }
 
     /// Select one operation with its own trusted parameters and fresh native call TTL.
@@ -439,6 +648,115 @@ impl WitnessContractTarget {
             deployment: true,
         })
     }
+
+    pub(crate) fn prepare_installation(
+        &self,
+        current: &CurrentStateContext,
+        names: &[String],
+        signer: &base_crypto::schnorr::SigningKey,
+        lock: bool,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<(NativeIntent, ContractStateBinding)> {
+        use ledger::structure::{
+            ContractOperationVersionedVerifierKey, MaintenanceUpdate, SingleUpdate,
+        };
+        if ttl == 0
+            || current.contract_set_identity != self.identity()
+            || current.deployment_identity != self.inner.deployment_identity
+            || current.state_schema_sha256 != self.inner.state_schema_sha256
+            || current.address != self.contract_address()
+            || current.state.data != self.inner.ready_state.data
+            || current.state.balance != self.inner.ready_state.balance
+            || (names.is_empty() && !lock)
+            || names.len() > self.inner.bundles.iter().count()
+        {
+            return Err(Error::BindingMismatch);
+        }
+        let authority = &current.state.maintenance_authority;
+        if authority.threshold != 1
+            || authority.committee
+                != vec![ContractMaintenanceVerifyingKey::Schnorr(
+                    signer.verifying_key(),
+                )]
+            || authority.counter == u32::MAX
+        {
+            return Err(Error::BindingMismatch);
+        }
+        for pair in current.state.operations.iter() {
+            let (entry, operation) = &*pair;
+            if self.inner.ready_state.operations.get(&**entry).as_deref() != Some(&**operation) {
+                return Err(Error::BindingMismatch);
+            }
+        }
+        let mut expected = current.state.clone();
+        expected.maintenance_authority.counter += 1;
+        let mut updates = Vec::new();
+        let mut unique = std::collections::BTreeSet::new();
+        for name in names {
+            if !unique.insert(name) {
+                return Err(Error::BindingMismatch);
+            }
+            let entry = EntryPointBuf(name.as_bytes().to_vec());
+            if expected.operations.get(&entry).is_some() {
+                return Err(Error::BindingMismatch);
+            }
+            let operation = self
+                .inner
+                .ready_state
+                .operations
+                .get(&entry)
+                .ok_or(Error::BindingMismatch)?;
+            let verifier = operation.v3.clone().ok_or(Error::BindingMismatch)?;
+            updates.push(SingleUpdate::VerifierKeyInsert(
+                entry.clone(),
+                ContractOperationVersionedVerifierKey::V4(verifier),
+            ));
+            expected.operations = expected.operations.insert(entry, (*operation).clone());
+        }
+        if lock {
+            if expected.operations != self.inner.ready_state.operations {
+                return Err(Error::BindingMismatch);
+            }
+            let counter = expected.maintenance_authority.counter;
+            expected.maintenance_authority = self.inner.ready_state.maintenance_authority.clone();
+            expected.maintenance_authority.counter = counter;
+            updates.push(SingleUpdate::ReplaceAuthority(
+                expected.maintenance_authority.clone(),
+            ));
+        }
+        let address = coin_structure::contract::ContractAddress(base_crypto::hash::HashOutput(
+            hex::decode(self.contract_address())
+                .map_err(|_| Error::BindingMismatch)?
+                .try_into()
+                .map_err(|_| Error::BindingMismatch)?,
+        ));
+        let mut update = MaintenanceUpdate::<Db> {
+            address,
+            updates: updates.into(),
+            counter: authority.counter,
+            signatures: vec![].into(),
+        };
+        let signature = Signature::Schnorr(signer.sign(rng, &update.data_to_sign()));
+        update.signatures = vec![ledger::structure::SignaturesValue(0, signature)].into();
+        let intent = NativeIntent::empty(rng, base_crypto::time::Timestamp::from_secs(ttl))
+            .add_maintenance_update(update);
+        Ok((
+            intent,
+            ContractStateBinding {
+                contract_set_identity: self.identity().to_owned(),
+                deployment_identity: self.inner.deployment_identity.clone(),
+                state_schema_sha256: self.inner.state_schema_sha256.clone(),
+                address: self.contract_address().to_owned(),
+                operation: "__noctium_maintenance".into(),
+                context_identity: current.identity.clone(),
+                current_state_sha256: Some(hex::encode(Sha256::digest(&current.state_bytes))),
+                current_state: Some(current.state_bytes.clone()),
+                expected_state: encode(&expected)?,
+                deployment: false,
+            },
+        ))
+    }
 }
 
 impl ContractOperationTarget {
@@ -517,14 +835,16 @@ impl ContractOperationTarget {
     }
 
     pub(crate) fn context_matches(&self, state: &CurrentStateContext) -> bool {
-        let Ok(initial) = deployment_operations(self.inner.deployment.intent()) else {
-            return false;
-        };
+        // Bootstrap advances the replay counter; readiness depends on the locked authority policy.
         state.contract_set_identity == self.inner.bundles.identity()
             && state.deployment_identity == self.inner.deployment_identity
             && state.state_schema_sha256 == self.inner.state_schema_sha256
             && state.address == self.contract_address()
-            && state.state.operations == initial.operations
+            && state.state.operations == self.inner.ready_state.operations
+            && state.state.maintenance_authority.committee
+                == self.inner.ready_state.maintenance_authority.committee
+            && state.state.maintenance_authority.threshold
+                == self.inner.ready_state.maintenance_authority.threshold
     }
 
     pub(crate) fn parameters_sha256(&self) -> &str {
@@ -659,11 +979,11 @@ fn digest_parts(parts: &[&[u8]]) -> String {
     hex::encode(hash.finalize())
 }
 
-fn deployment_operations(intent: &NativeIntent) -> Result<ContractState<Db>> {
+fn deployment_identity(intent: &NativeIntent) -> Result<String> {
     let Some(ContractAction::Deploy(deployment)) = intent.actions.iter_deref().next() else {
         return Err(Error::InvalidIntent);
     };
-    Ok(deployment.initial_state.clone())
+    Ok(hex::encode(Sha256::digest(encode(&**deployment)?)))
 }
 
 fn authenticated_control_target(
@@ -1218,7 +1538,7 @@ impl PreparedProof {
             state: BTreeMap::new(),
             negative_cases: Vec::new(),
         });
-        let (call, predicted) = crate::assembly::prepare_call_for_current_state(
+        let (call, predicted) = crate::assembly::prepare_call_for_ready_state(
             &plan,
             &target.inner.bundles.contract_name(),
             &target.operation,
@@ -1228,6 +1548,7 @@ impl PreparedProof {
             &material.circuit,
             target.ttl,
             &target.inner.deployment,
+            &target.inner.ready_state,
             &current.state,
             rng,
         )
@@ -1751,6 +2072,136 @@ mod tests {
     use futures::{executor::block_on, future::pending};
     use rand::rngs::OsRng;
 
+    #[test]
+    #[cfg(feature = "zkir-321")]
+    #[ignore = "requires the externally pinned confidential-token bundle index"]
+    fn staged_installation_requires_authority_and_locks_the_complete_map() {
+        let index = std::fs::read(std::env::var("NOCTIUM_STAGED_BUNDLE_INDEX").unwrap()).unwrap();
+        assert_eq!(
+            crate::artifacts::digest(&index),
+            std::env::var("NOCTIUM_STAGED_BUNDLE_INDEX_SHA256").unwrap()
+        );
+        let locations: Json = serde_json::from_slice(&index).unwrap();
+        let locations = locations.as_array().unwrap();
+        let names: Vec<_> = locations
+            .iter()
+            .map(|entry| entry["name"].as_str().unwrap().to_owned())
+            .collect();
+        let bundles = ContractBundleSet::new(
+            locations
+                .iter()
+                .map(|entry| {
+                    crate::artifacts::verify(
+                        std::path::Path::new(entry["directory"].as_str().unwrap()),
+                        Some(entry["manifestSha256"].as_str().unwrap()),
+                    )
+                    .unwrap()
+                })
+                .collect(),
+        )
+        .unwrap();
+        let owner = base_crypto::schnorr::SigningKey::sample(&mut OsRng);
+        let foreign = base_crypto::schnorr::SigningKey::sample(&mut OsRng);
+        let target = WitnessContractTarget::from_staged_state_config(
+            bundles,
+            br#"{"state":{"name_":"Noctium Token","symbol_":"NOC","decimals_":"6"}}"#,
+            &names[..8],
+            owner.verifying_key(),
+            2_000_000_000,
+            &mut OsRng,
+        )
+        .unwrap();
+        let initial = target.inner.deployment.ready_state().unwrap();
+        let bytes = encode(&initial).unwrap();
+        let current = target
+            .deployment_binding("registerWithKey")
+            .unwrap()
+            .admit_committed_state(&bytes, &bytes, &"a".repeat(64), true)
+            .unwrap();
+        assert_eq!(initial.operations.size(), 8);
+        assert!(
+            target
+                .prepare_installation(
+                    &current,
+                    &names[8..],
+                    &foreign,
+                    true,
+                    2_000_000_000,
+                    &mut OsRng
+                )
+                .is_err()
+        );
+        assert!(
+            target
+                .prepare_installation(
+                    &current,
+                    &names[..1],
+                    &owner,
+                    false,
+                    2_000_000_000,
+                    &mut OsRng
+                )
+                .is_err()
+        );
+        assert!(
+            target
+                .prepare_installation(
+                    &current,
+                    &names[8..9],
+                    &owner,
+                    true,
+                    2_000_000_000,
+                    &mut OsRng
+                )
+                .is_err()
+        );
+        let (intent, binding) = target
+            .prepare_installation(
+                &current,
+                &names[8..],
+                &owner,
+                true,
+                2_000_000_000,
+                &mut OsRng,
+            )
+            .unwrap();
+        let expected: ContractState<Db> = decode(&binding.expected_state).unwrap();
+        let mut ready = target.inner.ready_state.clone();
+        ready.maintenance_authority.counter = 1;
+        assert!(expected == ready);
+        assert_eq!(expected.operations.size(), 16);
+        assert!(expected.maintenance_authority.committee.is_empty());
+        let Some(ContractAction::Maintain(update)) = intent.actions.iter_deref().next() else {
+            panic!("expected native maintenance")
+        };
+        assert_eq!(update.counter, 0);
+        let signature = update.signatures.iter_deref().next().unwrap();
+        let Signature::Schnorr(signature) = &signature.1 else {
+            panic!("expected Schnorr signature")
+        };
+        assert!(
+            owner
+                .verifying_key()
+                .verify(&update.data_to_sign(), signature)
+        );
+        let proved = crate::native_client::prove_maintenance(
+            &intent,
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .unwrap();
+        assert_eq!(proved.actions.len(), 1);
+        let admitted = binding
+            .admit_committed_state(
+                &binding.expected_state,
+                &binding.expected_state,
+                &"b".repeat(64),
+                false,
+            )
+            .unwrap();
+        assert!(admitted.state.operations == target.inner.ready_state.operations);
+        assert!(admitted.state.maintenance_authority == ready.maintenance_authority);
+    }
+
     #[cfg(feature = "zkir-321")]
     fn issue67_supply_fixture(name: &str) -> String {
         std::env::var(format!("NOCTIUM_ISSUE67_SUPPLY_{name}"))
@@ -1890,13 +2341,9 @@ mod tests {
         let bundles = issue67_supply_bundles();
         let state_config = br#"{"state":{"totalSupply":"0"}}"#;
         let ttl = 2_000_000_000;
-        let contract = WitnessContractTarget::from_state_config(
-            bundles,
-            state_config,
-            ttl,
-            &mut OsRng,
-        )
-        .unwrap();
+        let contract =
+            WitnessContractTarget::from_state_config(bundles, state_config, ttl, &mut OsRng)
+                .unwrap();
         let params9 = issue67_supply_parameters(
             "PARAMETERS_K9",
             9,
@@ -1919,12 +2366,7 @@ mod tests {
         let initial_bytes = deployment_binding.expected_state.clone();
         let mut current = Some(
             deployment_binding
-                .admit_committed_state(
-                    &initial_bytes,
-                    &initial_bytes,
-                    &"a".repeat(64),
-                    true,
-                )
+                .admit_committed_state(&initial_bytes, &initial_bytes, &"a".repeat(64), true)
                 .unwrap(),
         );
         assert_eq!(issue67_supply_total(&initial_bytes), "0");
@@ -1938,7 +2380,10 @@ mod tests {
         let prepared_add = add
             .prepare_call(&mut current, &params9, amount5, &mut OsRng)
             .unwrap();
-        assert!(current.is_none(), "successful preparation consumes the token");
+        assert!(
+            current.is_none(),
+            "successful preparation consumes the token"
+        );
         let add_binding = prepared_add.contract_binding.as_ref().unwrap();
         assert!(add_binding.matches_operation_target(&add));
         let state5_bytes = add_binding.expected_state.clone();
@@ -1958,23 +2403,26 @@ mod tests {
         let setup = issue67_client_setup();
         assert!(matches!(
             contract.start_call_client(&sub, &mut proved, &descriptor, &setup),
-            Err(crate::witness_execution::Error::Proof(Error::BindingMismatch))
+            Err(crate::witness_execution::Error::Proof(
+                Error::BindingMismatch
+            ))
         ));
-        assert!(proved.is_some(), "wrong operation must preserve the proved value");
+        assert!(
+            proved.is_some(),
+            "wrong operation must preserve the proved value"
+        );
         let client = contract
             .start_call_client(&add, &mut proved, &descriptor, &setup)
             .unwrap();
         assert_eq!(client.status()["status"], "ready");
-        assert!(proved.is_none(), "successful startup consumes the proved value");
+        assert!(
+            proved.is_none(),
+            "successful startup consumes the proved value"
+        );
 
         let mut current5 = Some(
             add_binding
-                .admit_committed_state(
-                    &state5_bytes,
-                    &state5_bytes,
-                    &"b".repeat(64),
-                    false,
-                )
+                .admit_committed_state(&state5_bytes, &state5_bytes, &"b".repeat(64), false)
                 .unwrap(),
         );
         let amount2 = BTreeMap::from([("amount".to_owned(), serde_json::json!("2"))]);
@@ -1982,7 +2430,10 @@ mod tests {
             sub.prepare_call(&mut current5, &params9, amount2.clone(), &mut OsRng),
             Err(Error::InvalidParameters)
         ));
-        assert!(current5.is_some(), "bad per-operation SRS must preserve state");
+        assert!(
+            current5.is_some(),
+            "bad per-operation SRS must preserve state"
+        );
 
         // A fresh deployment over the same immutable bundle set has a different retained
         // address/deployment identity, so its test token cannot satisfy this selected CALL.
@@ -1997,19 +2448,17 @@ mod tests {
         let other_initial = other_binding.expected_state.clone();
         let mut wrong_state = Some(
             other_binding
-                .admit_committed_state(
-                    &other_initial,
-                    &other_initial,
-                    &"d".repeat(64),
-                    true,
-                )
+                .admit_committed_state(&other_initial, &other_initial, &"d".repeat(64), true)
                 .unwrap(),
         );
         assert!(matches!(
             sub.prepare_call(&mut wrong_state, &params8, amount2.clone(), &mut OsRng),
             Err(Error::BindingMismatch)
         ));
-        assert!(wrong_state.is_some(), "foreign deployment token must remain owned");
+        assert!(
+            wrong_state.is_some(),
+            "foreign deployment token must remain owned"
+        );
 
         let prepared_sub = sub
             .prepare_call(&mut current5, &params8, amount2, &mut OsRng)
@@ -2018,7 +2467,10 @@ mod tests {
         let sub_binding = prepared_sub.contract_binding.as_ref().unwrap();
         assert!(sub_binding.matches_operation_target(&sub));
         assert_eq!(sub_binding.address, add_binding.address);
-        assert_eq!(sub_binding.deployment_identity, add_binding.deployment_identity);
+        assert_eq!(
+            sub_binding.deployment_identity,
+            add_binding.deployment_identity
+        );
         assert_eq!(issue67_supply_total(&sub_binding.expected_state), "3");
     }
 
@@ -2226,8 +2678,7 @@ mod tests {
     fn real_crypto_rejects_each_statement_field_and_wrong_key() {
         let root = std::env::var("NOCTIUM_TEST_BUNDLE").unwrap();
         let digest = std::env::var("NOCTIUM_TEST_MANIFEST_SHA256").unwrap();
-        let config =
-            std::fs::read(std::env::var("NOCTIUM_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
+        let config = std::fs::read(std::env::var("NOCTIUM_TEST_PRIVATE_CONFIG").unwrap()).unwrap();
         let parameters =
             std::fs::read(std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS").unwrap()).unwrap();
         let parameter_digest = std::env::var("NOCTIUM_TEST_PROOF_PARAMETERS_SHA256").unwrap();

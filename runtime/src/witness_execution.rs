@@ -444,6 +444,25 @@ impl WitnessExecution {
 }
 
 impl WitnessContractTarget {
+    /// Rebind a trusted durable attempt to authenticated artifacts, then reobserve finality and CAS.
+    pub async fn recover_client(
+        &self,
+        store: &impl client::JournalStore,
+        attempt_id: &str,
+        descriptor_json: &[u8],
+        context_json: &[u8],
+    ) -> Result<WitnessClient> {
+        let attempt = client::SubmissionAttempt::recover(store, attempt_id)
+            .await
+            .map_err(Error::Client)?;
+        let binding = self.recovery_binding(&attempt).map_err(Error::Proof)?;
+        let descriptor: Descriptor =
+            serde_json::from_slice(descriptor_json).map_err(|_| Error::InvalidClientDescriptor)?;
+        let driver = Driver::recover_with_state_binding(descriptor, context_json, binding)
+            .map_err(Error::Client)?;
+        Ok(WitnessClient { driver })
+    }
+
     /// Prove and start the one retained operation-map deployment. The setup Runtime belongs to
     /// this deployment client, while each later source CALL gets its own Runtime and journal.
     pub fn start_deployment_client(
@@ -477,6 +496,51 @@ impl WitnessContractTarget {
             binding,
         )
         .map_err(Error::Client)?;
+        Ok(WitnessClient { driver })
+    }
+
+    /// Append authenticated verifiers during bootstrap and optionally lock the authority.
+    /// The caller retains the current token if construction or client startup fails.
+    pub fn start_installation_client(
+        &self,
+        current_state: &mut Option<CurrentStateContext>,
+        operations: &[String],
+        signer: &base_crypto::schnorr::SigningKey,
+        lock: bool,
+        ttl: u64,
+        descriptor_json: &[u8],
+        setup_json: &[u8],
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<WitnessClient> {
+        let current = current_state.as_ref().ok_or(Error::State)?;
+        let (intent, binding) = self
+            .prepare_installation(current, operations, signer, lock, ttl, rng)
+            .map_err(Error::Proof)?;
+        let bundle = self.deployment_bundle().map_err(Error::Proof)?;
+        let bytes = bundle
+            .file(Role::LedgerParameters)
+            .map_err(|_| Error::InvalidArtifacts)?;
+        let mut reader = bytes;
+        let parameters: ledger::structure::LedgerParameters =
+            serialize::tagged_deserialize(&mut reader).map_err(|_| Error::InvalidArtifacts)?;
+        if !reader.is_empty() {
+            return Err(Error::InvalidArtifacts);
+        }
+        let intent =
+            native_client::prove_maintenance(&intent, &parameters).map_err(Error::Client)?;
+        let descriptor: Descriptor =
+            serde_json::from_slice(descriptor_json).map_err(|_| Error::InvalidClientDescriptor)?;
+        let driver = Driver::start_with_state_binding(
+            descriptor,
+            setup_json,
+            Contract::Maintenance {
+                intent,
+                entrypoint: "__noctium_maintenance".into(),
+            },
+            binding,
+        )
+        .map_err(Error::Client)?;
+        current_state.take().ok_or(Error::State)?;
         Ok(WitnessClient { driver })
     }
 

@@ -1082,14 +1082,23 @@ impl Node {
                 let parent = hash_text(&block["block"]["header"]["parentHash"])?;
                 validate_parent(previous.as_deref(), &parent)?;
                 previous = Some(hashes[offset].clone());
-                let Some(index) = block["block"]["extrinsics"]
+                let extrinsics = block["block"]["extrinsics"]
                     .as_array()
-                    .ok_or(Error::Response)?
+                    .ok_or(Error::Response)?;
+                let matching = extrinsics
                     .iter()
-                    .position(|e| hex_bytes(e).is_ok_and(|bytes| bytes == expected))
-                else {
+                    .enumerate()
+                    .filter_map(|(index, encoded)| {
+                        hex_bytes(encoded)
+                            .is_ok_and(|bytes| bytes == expected)
+                            .then_some(index)
+                    })
+                    .collect::<Vec<_>>();
+                if matching.is_empty() {
                     continue;
-                };
+                }
+                check(matching.len() == 1, Error::Replay)?;
+                let index = matching[0];
                 let encoded = self.rpc.call(
                     "state_getStorage",
                     json!([
@@ -1138,6 +1147,9 @@ impl Node {
                         let expected_event = match transaction.event() {
                             crate::client::ContractEvent::Deploy => "ContractDeploy",
                             crate::client::ContractEvent::Call => "ContractCall",
+                            crate::client::ContractEvent::Maintain => {
+                                return Err(Error::Replay);
+                            }
                         };
                         check(
                             name == expected_event
@@ -1147,7 +1159,14 @@ impl Node {
                         contract += 1;
                     }
                 }
-                check(applied == 1 && contract == 1, Error::Replay)?;
+                let expected_contract_events = match transaction.event() {
+                    crate::client::ContractEvent::Deploy | crate::client::ContractEvent::Call => 1,
+                    crate::client::ContractEvent::Maintain => 0,
+                };
+                check(
+                    applied == 1 && contract == expected_contract_events,
+                    Error::Replay,
+                )?;
                 let state_bytes = hex_bytes(&self.rpc.call(
                     "midnight_contractState",
                     json!([

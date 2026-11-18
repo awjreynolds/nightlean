@@ -160,6 +160,8 @@ impl Snapshot {
 pub enum ContractEvent {
     Deploy,
     Call,
+    /// A maintenance action. Ledger semantics report TxApplied without a contract event.
+    Maintain,
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -190,7 +192,8 @@ pub enum Observation {
 }
 #[derive(Clone, Copy, Debug)]
 pub struct HostFailure;
-/// The adapter verifies canonical finalized ancestry, exact extrinsic payload and events.
+/// The adapter verifies canonical finalized ancestry, exact extrinsic payload and event shape.
+/// Maintenance has no contract-specific event, so its finalized state supplies the second check.
 /// Credentials, endpoints, transport limits and deadlines stay in the host adapter.
 #[allow(async_fn_in_trait)]
 pub trait ChainAdapter {
@@ -278,7 +281,7 @@ impl BoundTransaction {
         {
             ContractAction::Deploy(deploy) => (deploy.address(), ContractEvent::Deploy),
             ContractAction::Call(call) => (call.address, ContractEvent::Call),
-            _ => return Err(Error::InvalidTransaction),
+            ContractAction::Maintain(update) => (update.address, ContractEvent::Maintain),
         };
         let funded = funding
             .fund(contract, &snapshot, &policy)
@@ -531,7 +534,7 @@ impl PublicTransactionReference {
                 (deploy.address(), ContractEvent::Deploy)
             }
             ContractAction::Call(call) => (call.address, ContractEvent::Call),
-            _ => return Err(Error::InvalidTransaction),
+            ContractAction::Maintain(update) => (update.address, ContractEvent::Maintain),
         };
         let intent_id = hex::encode(
             intent
