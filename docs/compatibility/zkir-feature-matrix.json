@@ -4697,13 +4697,23 @@
         "../development/confidential-token.md",
         "../../tests/confidential-token-localnet-evidence.json"
       ]
+    },
+    {
+      "issue": 25,
+      "commit": "937bacb",
+      "scope": "Bounded fixed byte values, native slice/concat, generic reversal/indexing/equality and typed byte returns. Zero-field operations retain operand checks. Focused source/native/interpreter evidence only.",
+      "refs": [
+        "../development/fixed-bytes.md",
+        "../../tests/NativeBytes.lean",
+        "../../runtime/tests/native_bytes.rs"
+      ]
     }
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "0ea50875ef47daf36b3edc57fd9a7d16063c2e1c",
-    "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 29,
+    "sourceCommit": "937bacbc220e543893aa2fccb7f4d999c96c11e3",
+    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded fixed-byte values, persistent hashing and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
+    "registeredOpcodeCount": 31,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4733,9 +4743,11 @@
       "from_bytes",
       "bytes_from_natives",
       "nth",
-      "reverse"
+      "reverse",
+      "slice",
+      "concat"
     ],
-    "notExposedOpcodeCount": 18,
+    "notExposedOpcodeCount": 16,
     "notExposedOpcodes": [
       "copy",
       "hash_to_curve",
@@ -4747,8 +4759,6 @@
       "div_mod_power_of_two",
       "reconstitute_field",
       "keccak256",
-      "slice",
-      "concat",
       "load_constant",
       "sha512",
       "and",
@@ -4789,8 +4799,8 @@
     ],
     "minimumChecksPolicy": "Until feature implementation is complete: build changed code and run one focused source/native example per feature group with necessary rejection coverage. Reuse existing evidence. Defer broad regressions, new proof/key generation and deployment campaigns. Run one completed-token localnet demonstration.",
     "restrictedInternalValueTypes": [
-      "Bytes32 from persistent hashes, typed serialization and bounded native-chunk reconstruction; general Bytes(n) support remains unqualified",
-      "Byte from a constant Bytes32 nth projection, converted to Native by one-output Encode; no standalone Byte inputs or general Byte arithmetic"
+      "Bytes(n), 1 through 1024, reconstructed from checked Native chunks for fixed-byte operators. Source Bytes0 erases to zero fields because native Bytes0 is not representable. Complete overload/proof/ledger qualification remains open.",
+      "Byte from a constant-index fixed-byte nth projection, converted to Native by one-output Encode; no standalone Byte inputs or general Byte arithmetic"
     ],
     "persistentHashEvidence": {
       "source": "tests/Issue70PersistentHash.lean",
@@ -4965,6 +4975,17 @@
       "source": "tests/NativeByteReverse.lean",
       "native": "runtime/tests/native_byte_reverse.rs",
       "scope": "Bytes32 reversal through modern reverse over raw octets, computed hashes, typed Native serialization and both select outcomes. Reverse-twice source semantics theorem, private-disclosure/type/producer-field rejection and altered public-output binding rejection. One selected-3.2.1 native checker case passes. No new keys, proofs or deployment for this feature. General Bytes(n) overload coverage remains open."
+    },
+    "fixedBytesEvidence": {
+      "source": "tests/NativeBytes.lean",
+      "native": "runtime/tests/native_bytes.rs",
+      "guide": "../development/fixed-bytes.md",
+      "sourceLengths": "0 through 1024, using the existing fixed-vector resource limit",
+      "nativeLengths": "Positive lengths only. Source empty values preserve operand evaluation and assertions without a native Bytes0 value.",
+      "checkerScope": "31/32/33/64-byte chunk boundaries, both select outcomes, reversal, slicing, concatenation, equality, logical typed returns, malformed lengths, altered output commitment, and a false private guard in a zero-field return. One focused native test passes.",
+      "hostScope": "One real control Session test executes generic operators and rejects bad bounds. Scalar/private transport codecs check lengths 0,1,31,32,33,62,63,64,1024 and malformed tokens.",
+      "legacyScope": "The retained Bytes32 reversal plan and circuit JSON objects remain unchanged.",
+      "limits": "No new keys, proofs or deployment. General byte ledger cells/non-Bytes32 map keys and full byte/curve overload and portable SDK qualification stay open."
     }
   }
 }
