@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "4fc4a706d869f75cdc4da60514862f68344088b1",
+    "sourceCommit": "6da74886000759ec3083e97669ae7164c3e9e45b",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4769,13 +4769,12 @@
       "standalone and nested Counter cells with native Bytes8 encoding, reads, u32 immediate increments/decrements and reset",
       "standalone and nested Lists of checked Native-field records, with prepend, length/head reads, nonempty pop and reset",
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks",
-      "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves epoch-checked memo clearing and encrypted escrow approval/refund/replacement with supply/memos/counters",
+      "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves epoch-checked memo clearing and encrypted escrow approval/refund/replacement and delegated spend/burn with supply/memos/permanent pair counters",
       "guarded native map leaf deletion with idempotent absent-leaf behavior, missing-parent rejection and separate VM activity groups"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
     "remainingTokenDependencies": [
-      "remaining transferFrom/burnFrom operations with permanent escrow-spend epochs and owner memo updates",
       "constructor and sealed token metadata",
       "nominal composite result layouts and cross-contract claim composition",
       "completed-token localnet lifecycle"
@@ -4900,7 +4899,7 @@
     "confidentialTokenEvidence": {
       "source": "examples/openzeppelin/ConfidentialToken.lean",
       "native": "runtime/tests/confidential_token.rs",
-      "implementationCommit": "4fc4a706d869f75cdc4da60514862f68344088b1",
+      "implementationCommit": "6da74886000759ec3083e97669ae7164c3e9e45b",
       "referenceRevision": "f85f1a23685c6bbedfc8c2589ae3aa128aff7c46",
       "implementedEntrypoints": [
         "registerWithKey",
@@ -4916,10 +4915,12 @@
         "_move",
         "clearMemos",
         "approve",
-        "allowance"
+        "allowance",
+        "transferFrom",
+        "burnFrom"
       ],
       "referenceEntrypointCount": 16,
-      "scope": "One selected-3.2.1 source-witness/native lifecycle covers registration, mint-to-pending, authenticated sweep, transfer, burn, checked views, conserving self-moves and epoch-checked memo clearing. It then approves2 Alice-to-Bob and replaces the approval with3 after refunding the prior owner ciphertext. Independent group arithmetic checks Alice1 spendable, Alice1 pending, escrow3, Bob5 pending and supply10, both encrypted escrow copies and owner memo. Allowance views check actual values and absent-owner/spender encrypted-zero defaults. A valid rerandomized prior owner ciphertext rejects against stored escrow, alongside prior transfer-ledger mismatch, self-transfer, stale-epoch and wrong-key rejections. Runtime0.46s, one focused testcase. Fourteen of sixteen reference entrypoints implemented. UInt248 balance witness schemas now pass the native host parser while aggregate-token and canonical scalar bounds remain enforced. Named component returns do not establish nominal/composite ABI parity. Initialized=true genesis, constructor/sealed metadata, direct Bytes32 witness-helper outputs, checked helper-depth capacity and the two delegated operations remain explicit limits. Fixture entropy establishes no production freshness/privacy. No new opcode names, keys, proofs, deployment or broad regressions.",
+      "scope": "One selected-3.2.1 source-witness/native lifecycle covers all sixteen pinned reference circuit entrypoints: registration, mint-to-pending, authenticated sweep, transfer, burn, checked views, conserving self-moves, epoch-checked memo clearing, escrow approval/refund/replacement, allowance, delegated transfer and delegated burn. After approval3, Bob transfers2 from Alice escrow to Bob pending, then burns1. Independent group arithmetic checks both escrow copies and owner memo remaining3->1->0, permanent spend epochs1->2, Bob pending5->7 and credit epoch1->2, Alice1 spendable/1pending and supply10->9. TransferFrom consumes distinct spend and credit seeds. Overspend rejects during preparation with checked unsigned subtraction; prior ledger mismatch, self-transfer, stale-epoch and wrong-key negatives remain. Runtime0.55s, one focused testcase. Exact delegated nonce uses four Bytes32 values plus canonical LE32 Field epoch. Named component results do not establish nominal/composite ABI parity. Initialized=true genesis, constructor/sealed metadata, grouped Bytes32 helper outputs and completed-contract localnet demonstration remain open. Fixture entropy establishes no production freshness/privacy. No new opcode names, keys, proofs, deployment or broad regressions.",
       "initialMilestoneCommit": "496766c"
     },
     "nativeMapRemoveEvidence": {
@@ -4927,6 +4928,12 @@
       "native": "runtime/tests/native_map_remove.rs",
       "implementationCommit": "8860d35919cf582e9a7898179b8bd667616cdd49",
       "scope": "One selected-3.2.1 native testcase passes deletion, repeat absent-leaf deletion, sibling/other-owner preservation, missing-parent rejection and inactive guarded deletion. Runtime0.02s. Uncached Idx/Push/Rem/Ins native VM operations use four separately bound Impact groups. No new ZKIR instruction names, keys, proofs, transactions or generic state-preservation claim."
+    },
+    "bytes32WitnessOutputEvidence": {
+      "source": "tests/NativeBytes32WitnessOutput.lean",
+      "native": "runtime/tests/native_bytes32_witness_output.rs",
+      "implementationCommit": "6da74886000759ec3083e97669ae7164c3e9e45b",
+      "scope": "One logical disclosed Bytes32 witness-circuit output lowers to two canonical Native fields and remains a full byte-aligned ledger key. Source/control Session/native execution passes against independent SHA256; changing digest byte31 rejects the helper equality during preparation. Missing disclosure rejects in source. Focused case0.01s. Single logical result only; grouped output record layout stays open. Readable toBytes32 dispatch uses existing Native/Jubjub scalar/point serializers; delegated-native lifecycle qualifies Native epoch serialization. No new opcode, key, proof or transaction."
     }
   }
 }

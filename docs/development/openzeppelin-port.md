@@ -201,9 +201,9 @@ needs its claim/argument protocol.
 
 The [confidential-token source milestone](confidential-token.md) now runs
 registration, pending credit, sweep, transfer, burn, self-moves, epoch-checked memo
-clearing, encrypted escrow approval/replacement and views through native source-witness
+clearing, encrypted escrow approval/replacement, delegated transfer/burn and views through native source-witness
 execution. It preserves the pending/spendable split and checks a valid forged
-candidate against actual ledger state. This is fourteen of sixteen entrypoints,
+candidate against actual ledger state. This covers all sixteen reference circuit entrypoints,
 with an explicit initialized-genesis premise and no new deployment.
 
 ## Minimum checks
