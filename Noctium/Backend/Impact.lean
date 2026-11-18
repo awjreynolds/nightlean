@@ -25,9 +25,15 @@ inductive Aligned where
   | bit (value : Bool)
   | bitExpr (value : Expr .bool)
   | bytes32 (value : Expr (.bytes 32))
+  | bytes (length : Nat) (value : Expr (.bytes length))
   | nativeFields (values : List Scalar)
   | counter (value : Expr (.uint (2 ^ 64 - 1)))
   deriving Repr
+
+private def alignedByteChunkCount (length : Nat) : Nat := (length + 30) / 31
+
+private def alignedByteChunkWidth (length chunkIndex : Nat) : Nat :=
+  min 31 (length - chunkIndex * 31)
 
 inductive Op where
   | dup
@@ -59,6 +65,9 @@ def Aligned.fields : Aligned → List Scalar
       .select value (.native 1) (.native 0)]
   | .bytes32 value => [.native 1, .native 32,
       .bytesField value 0, .bytesField value 1]
+  | .bytes 0 value => [.native 1, .letE "_noctium_empty_bytes" value (.native 0)]
+  | .bytes length value => [.native 1, .native length] ++
+      (List.range (alignedByteChunkCount length)).map (.bytesField value)
   | .nativeFields values => [.native values.length] ++
       List.replicate values.length (.native (Field.modulus - 2)) ++ values
   | .counter value => [.native 1, .native 8, .cast .native value]
@@ -190,6 +199,9 @@ private def foreignReadDefault : (kind : Foreign.Kind) → Expr (.foreign kind)
 def Read.jubjubPointCoordinateName (name : String) (index : Nat) : String :=
   s!"_noctium_jubjub_read_{name}_{index}"
 
+private def Read.byteChunkName (name : String) (index : Nat) : String :=
+  s!"_noctium_bytes_{name}_{index}"
+
 def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   if !read.components.isEmpty then none else
   match read.ty, read.guard with
@@ -207,10 +219,17 @@ def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
 
 def Read.bindings (read : Read) : List (String × Ty) :=
   if !read.components.isEmpty then read.components else
-  if read.ty == .jubjubPoint then
+  match read.ty with
+  | .bytes length =>
+    let count := alignedByteChunkCount length
+    (List.range count).map fun index =>
+      let lowChunkIndex := count - index - 1
+      let width := alignedByteChunkWidth length lowChunkIndex
+      (Read.byteChunkName read.name index, .uint (2 ^ (width * 8) - 1))
+  | .jubjubPoint =>
     [(Read.jubjubPointCoordinateName read.name 0, .native),
       (Read.jubjubPointCoordinateName read.name 1, .native)]
-  else [(read.name, read.ty)]
+  | _ => [(read.name, read.ty)]
 
 def Read.inactiveDefaultConstraints (read : Read) : List (Expr .bool) :=
   if read.components.isEmpty then
@@ -274,7 +293,9 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
   let env := entry.circuit.inputs.map (fun input => (input.name, input.ty)) ++
     entry.circuit.outputs.map (fun output => (output.name, output.ty)) ++
     (plan.reads.drop publicCount).flatMap fun read =>
-      (if read.ty == .jubjubPoint then [(read.name, read.ty)] else []) ++ read.bindings
+      (match read.ty with
+        | .bytes _ | .jubjubPoint => [(read.name, read.ty)]
+        | _ => []) ++ read.bindings
   for field in plan.fields do field.validate expressionCapabilities env
   for guard in plan.guards do guard.validate expressionCapabilities env
   unless plan.activityGuards.isEmpty || plan.activityGuards.length == plan.operations.length do
@@ -303,7 +324,7 @@ private def nativeAligned : (ty : Ty) → Expr ty → Except String Aligned
   | .bool, value => pure (.field (.select value (.native 1) (.native 0)))
   | .uint _, value => pure (.field (.cast .native value))
   | .bytes 32, value => pure (.bytes32 value)
-  | .bytes _, _ => throw "unsupported byte alignment"
+  | .bytes length, value => pure (.bytes length value)
   | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => throw "opaque values require explicit encoding projections"
 
 private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
@@ -326,11 +347,19 @@ private def storageWriteValue : (ty : Ty) → Expr ty → Except String Op
   | .jubjubPoint, value =>
     pure (.pushFields (Lean.Json.str "JubjubPoint")
       [.jubjubCoordinate value 0, .jubjubCoordinate value 1] true)
+  | .bytes 32, value => pure (.push (.bytes32 value) true)
+  | .bytes length, value => pure (.push (.bytes length value) true)
   | ty, value => do
     pure (.push (.field (← nativeValue ty value)) true)
 
 private def storageReadValue (ty : Ty) (name : String) : Except String Op := do
   match ty with
+  | .bytes 32 =>
+    let value : Expr (.bytes 32) := .ref name
+    pure (.popeq (.bytes32 value))
+  | .bytes length =>
+    let value : Expr (.bytes length) := .ref name
+    pure (.popeq (.bytes length value))
   | .foreign kind =>
     let value : Expr (.foreign kind) := .ref name
     pure (.popeqFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value))
@@ -1298,7 +1327,7 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
     pure plan
   finishPlan entry result
 
-private def bytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
+private def natBytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
 where
   go (n : Nat) : Nat → List Nat
     | 0 => []
@@ -1308,21 +1337,26 @@ where
 def Aligned.toJson (ctx : EvalContext) (env : EvalEnv) (value : Aligned) : Except String Lean.Json := do
   let (atoms, alignment) ← match value with
     | .field expression => do
-      pure (Lean.toJson [bytes (← expression.eval ctx env)],
+      pure (Lean.toJson [natBytes (← expression.eval ctx env)],
         Lean.Json.mkObj [("tag", Lean.toJson ("field" : String))])
-    | .bit b => pure (Lean.toJson [bytes (if b then 1 else 0)],
+    | .bit b => pure (Lean.toJson [natBytes (if b then 1 else 0)],
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (1 : Nat))])
-    | .bitExpr expression => pure (Lean.toJson [bytes (if ← expression.eval ctx env then 1 else 0)],
+    | .bitExpr expression => pure (Lean.toJson [natBytes (if ← expression.eval ctx env then 1 else 0)],
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (1 : Nat))])
     | .bytes32 expression => do
       let values ← expression.eval ctx env
       pure (Lean.Json.arr #[Lean.Json.arr (values.toArray.map Lean.toJson)],
         Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)),
           ("length", Lean.toJson (32 : Nat))])
+    | .bytes length expression => do
+      let values ← expression.eval ctx env
+      pure (Lean.Json.arr #[Lean.Json.arr (values.toArray.map Lean.toJson)],
+        Lean.Json.mkObj [("tag", Lean.toJson ("bytes" : String)),
+          ("length", Lean.toJson length)])
     | .nativeFields _ => throw "grouped Native fields serialize through pushFields/popeqFields"
     | .counter expression => do
       let value ← expression.eval ctx env
-      pure (Lean.toJson [bytes value], Lean.Json.mkObj [
+      pure (Lean.toJson [natBytes value], Lean.Json.mkObj [
         ("tag", Lean.toJson ("bytes" : String)), ("length", Lean.toJson (8 : Nat))])
   pure (Lean.Json.mkObj [("value", atoms),
     ("alignment", Lean.Json.arr #[Lean.Json.mkObj [

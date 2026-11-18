@@ -5,7 +5,9 @@ import Lean
 namespace Noctium.Backend.Native
 open Lean
 
-def maxInstructions : Nat := 4096
+def maxInstructions : Nat := 8192
+-- Keep the bytewise Source Bytes1024 ABI within a bounded aggregate input budget.
+def maxInputs : Nat := 2048
 def maxVectorLength : Nat := 4096
 def maxSymbolicNodes : Nat := 65536
 def maxSymbolicDepth : Nat := 256
@@ -741,7 +743,7 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   ensure ((← (← program.getObjVal? "do_communications_commitment").getBool?) ==
     (expected.mode == .ledgerCall)) "native communication commitment policy mismatch"
   let instructions ← arrayField program "instructions"
-  ensure (instructions.size ≤ maxInstructions && expected.inputs.length ≤ 512 &&
+  ensure (instructions.size ≤ maxInstructions && expected.inputs.length ≤ maxInputs &&
     expected.returns.length ≤ 256 && expected.groups.length ≤ maxInstructions &&
     expected.assertions.length ≤ maxInstructions)
     "native producer resource limit exceeded"

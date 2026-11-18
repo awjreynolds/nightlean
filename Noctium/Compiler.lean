@@ -249,6 +249,7 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   | .bit b => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson (.bool b))]
   | .bitExpr expression => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson expression)]
   | .bytes32 expression => [("alignment", toJson ("bytes32" : String)), ("expression", nativeExpressionJson expression)]
+  | .bytes length expression => [("alignment", toJson (s!"bytes:{length}")), ("expression", nativeExpressionJson expression)]
   | .nativeFields expressions => [("alignment", toJson ("nativeFields" : String)),
       ("expressions", toJson (expressions.map nativeExpressionJson))]
   | .counter expression => [("alignment", toJson ("u64" : String)),
@@ -260,6 +261,7 @@ private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   | .bit value => nativeExpressionJson (.bool value)
   | .bitExpr expression => nativeExpressionJson expression
   | .bytes32 expression => nativeExpressionJson expression
+  | .bytes _ expression => nativeExpressionJson expression
   | .nativeFields expressions => toJson (expressions.map nativeExpressionJson)
   | .counter expression => nativeExpressionJson expression
 
@@ -563,6 +565,26 @@ also gives proof modules a kernel-visible artifact boundary. -/
 def nativePlanJson (profile : TargetProfile) (contractName : Name)
     (state : List StateDecl) (ctor : Option Constructor)
     (ep : Entrypoint) (plan : Backend.Impact.Plan) : Json := Id.run do
+  let publicReadCount := Backend.Impact.publicInputReadCount ep.circuit.inputs
+  let reads := plan.reads.zipIdx.map fun (indexedRead : Backend.Impact.Read × Nat) =>
+    let item := indexedRead.1
+    let index := indexedRead.2
+    let projections : List (String × Json) := if index < publicReadCount then [] else match item.ty with
+      | .bytes _ => [("projections", toJson ((Backend.Impact.Read.bindings item).map fun (binding : String × Ty) => Json.mkObj [
+          ("name", toJson binding.1), ("type", toJson (typeName binding.2))]))]
+      | _ => []
+    Json.mkObj ([
+      ("name", toJson item.name),
+      ("type", toJson (if item.schema.isSome then "Composite" else typeName item.ty))] ++
+      (match item.schema with
+        | none => []
+        | some schema => [
+            ("components", toJson (item.components.map fun (name, ty) => Json.mkObj [
+              ("name", toJson name), ("type", toJson (typeName ty))])),
+            ("schema", schema)]) ++ projections ++
+      (match item.guard with
+        | none => []
+        | some guard => [("guard", nativeExpressionJson guard)]))
   let targetPlanFields := if profile.name == TargetProfile.selected321.name then [
     ("target", toJson profile.name), ("targetProfile", toJson profile)
   ] else []
@@ -583,18 +605,7 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
     ] ++ constructorFields ++ returnFields ++ [
-    ("reads", toJson (plan.reads.map fun item => Json.mkObj ([
-      ("name", toJson item.name),
-      ("type", toJson (if item.schema.isSome then "Composite" else typeName item.ty))] ++
-      (match item.schema with
-        | none => []
-        | some schema => [
-            ("components", toJson (item.components.map fun (name, ty) => Json.mkObj [
-              ("name", toJson name), ("type", toJson (typeName ty))])),
-            ("schema", schema)]) ++
-      (match item.guard with
-        | none => []
-        | some guard => [("guard", nativeExpressionJson guard)])))),
+    ("reads", toJson reads),
     ("guards", toJson (plan.guards.map nativeExpressionJson))])
 
 private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuildOutput)) :

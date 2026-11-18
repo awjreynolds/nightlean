@@ -42,7 +42,7 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard valueTypeNames.length == 15
 #guard instructionNames.eraseDups.length == 47
 #guard valueTypeNames.eraseDups.length == 15
-#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 28
+#guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 38
 #guard rejected (requireInstruction "new_native_without_metadata")
 #guard accepted (requireInstruction "inv")
 #guard rejected (requireInstruction "copy")
@@ -87,6 +87,16 @@ example : True := by
 #guard rejected (Native.validate expected (program [replace input "output" (toJson ("x" : String)), output]))
 #guard rejected (Native.validate expected (replace (program [input, output]) "extra" Json.null))
 #guard rejected (Native.validate expected (replace (program [input, output]) "do_communications_commitment" (toJson true)))
+#guard match Native.validate
+  {expected with inputs := (List.replicate (Native.maxInputs + 1)
+    ({identifier := "%x", visibility := .«private», ty := .native} : InputRequirement))}
+  (program [input, output]) with
+  | .error message => message == "native producer resource limit exceeded"
+  | .ok _ => false
+#guard match Native.validate expected
+  (program (List.replicate (Native.maxInstructions + 1) input)) with
+  | .error message => message == "native producer resource limit exceeded"
+  | .ok _ => false
 
 -- Native Assert is safe only after a genuine 0/1 fact. Nonzero is insufficient.
 #guard rejected (check [assertion "%x"])

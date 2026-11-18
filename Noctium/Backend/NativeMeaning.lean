@@ -224,13 +224,24 @@ def bytesChunksTerm (length : Nat) : Term → Except String (List Term)
   | .unary "bytes32_from_chunks" (.hash [low31, highByte]) => do
     unless length == 32 do throw "byte source term has wrong length"
     pure [low31, highByte]
+  | .unary opcode (.hash chunks) =>
+    if opcode == s!"bytes_from_chunks:{length}" then do
+      unless chunks.length == bytesChunkCount length do
+        throw "byte source chunk count does not match its length"
+      pure chunks
+    else
+      let term := .unary opcode (.hash chunks)
+      if opaqueBytes32Value term then
+        pure ((List.range (bytesChunkCount length)).map (encodedBytesChunkTerm length term))
+      else .error "byte normalization lost byte identity"
   | term =>
     if opaqueBytes32Value term then
       pure ((List.range (bytesChunkCount length)).map (encodedBytesChunkTerm length term))
     else .error "byte normalization lost byte identity"
 
 def bytesFromChunksTerm (length : Nat) (chunks : List Term) : Term :=
-  if length == 32 then .unary "bytes32_from_chunks" (.hash chunks)
+  if length == 0 then .bytes []
+  else if length == 32 then .unary "bytes32_from_chunks" (.hash chunks)
   else .unary s!"bytes_from_chunks:{length}" (.hash chunks)
 
 def bytesFromChunksTerm32 (low31 highByte : Term) : Term :=

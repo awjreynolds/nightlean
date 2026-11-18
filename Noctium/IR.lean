@@ -671,7 +671,6 @@ private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
 
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
   | .counter => pure ()
-  | .scalar (.bytes _) => throw "Bytes32 state values are not supported"
   | .scalar ty => ty.validate caps
   | .map keyTy value => do
     validateLedgerMapKeyType keyTy
@@ -813,8 +812,6 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
     match decl.kind with
-    | .cell (.bytes _) | .map _ (.bytes _) =>
-      throw {span := decl.span, message := "Bytes32 state values are not supported"}
     | .tree schema =>
       match schema.validate caps with
       | .error message => throw {span := decl.span, message}

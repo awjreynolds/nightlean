@@ -119,6 +119,50 @@ fn aligned_bytes(value: &Value) -> Result<AlignedValue> {
     })
 }
 
+fn byte_alignment_length(alignment: &str) -> Result<Option<usize>> {
+    if alignment == "bytes32" {
+        return Ok(Some(32));
+    }
+    let Some(length) = alignment.strip_prefix("bytes:") else {
+        return Ok(None);
+    };
+    ensure!(
+        !length.is_empty()
+            && length.bytes().all(|byte| byte.is_ascii_digit())
+            && (length == "0" || !length.starts_with('0')),
+        "noncanonical byte alignment length"
+    );
+    let length = length.parse::<usize>()?;
+    ensure!(
+        length <= scalars::MAX_BYTES_LENGTH && length != 32,
+        "byte alignment length outside the source limit"
+    );
+    Ok(Some(length))
+}
+
+pub(crate) fn byte_projection_bindings(name: &str, length: usize) -> Result<Vec<(String, String)>> {
+    ensure!(
+        length <= scalars::MAX_BYTES_LENGTH,
+        "byte length exceeds compiler limit"
+    );
+    let chunks = length.div_ceil(31);
+    (0..chunks)
+        .map(|index| {
+            let remainder = length % 31;
+            let width = if index == 0 && remainder != 0 {
+                remainder
+            } else {
+                31
+            };
+            let exclusive = BigUint::from(1u8) << (width * 8);
+            Ok((
+                format!("_noctium_bytes_{name}_{index}"),
+                format!("UIntRange<{}>", exclusive.to_str_radix(10)),
+            ))
+        })
+        .collect()
+}
+
 fn evaluated_bytes(value: &Expr, length: usize, env: &Environment) -> Result<Vec<u8>> {
     ensure!(
         length <= scalars::MAX_BYTES_LENGTH,
@@ -132,6 +176,13 @@ fn evaluated_bytes(value: &Expr, length: usize, env: &Environment) -> Result<Vec
 }
 
 fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
+    if let Some(length) = byte_alignment_length(alignment)? {
+        let Value::Bytes(bytes) = value else {
+            bail!("expected bytes value")
+        };
+        ensure!(bytes.len() == length, "byte alignment length mismatch");
+        return aligned_bytes(value);
+    }
     match alignment {
         "field" => match value {
             #[cfg(feature = "zkir-321")]
@@ -146,16 +197,6 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
             })]),
             alignment: Alignment::singleton(AlignmentAtom::Bytes { length: 1 }),
         }),
-        "bytes32" => {
-            let Value::Bytes(bytes) = value else {
-                bail!("expected bytes value")
-            };
-            ensure!(bytes.len() == 32, "expected 32 bytes");
-            Ok(AlignedValue {
-                value: FabValue(vec![ValueAtom::from(bytes.as_slice())]),
-                alignment: Alignment::singleton(AlignmentAtom::Bytes { length: 32 }),
-            })
-        }
         "u64" => {
             let Value::UInt { number, maximum } = value else {
                 bail!("counter alignment requires UInt64")
@@ -857,6 +898,8 @@ pub struct Read {
     #[serde(default)]
     pub components: Vec<ReadComponent>,
     #[serde(default)]
+    pub projections: Option<Vec<ReadComponent>>,
+    #[serde(default)]
     pub schema: Option<Json>,
 }
 #[derive(Clone, Debug, Deserialize)]
@@ -1041,8 +1084,10 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     let value_fields = |alignment: &str| -> Result<usize> {
         match alignment {
             "field" | "bit" | "u64" => Ok(1),
-            "bytes32" => Ok(2),
-            _ => bail!("unsupported alignment"),
+            _ => match byte_alignment_length(alignment)? {
+                Some(length) => Ok(length.div_ceil(31)),
+                None => bail!("unsupported alignment"),
+            },
         }
     };
     Ok(match instruction {
@@ -1238,10 +1283,6 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         }
         #[cfg(not(feature = "zkir-321"))]
         reject_unqualified_foreign_storage(&ty)?;
-        ensure!(
-            ty.bytes_length().is_none(),
-            "bytes ledger values are unsupported"
-        );
         return Ok(());
     }
     if let Some(schema) = fields.get("composite") {
@@ -1328,6 +1369,7 @@ fn decode_typed_scalar(ty: &ScalarType, fields: &[Fr]) -> Result<Value> {
 
 fn aligned_storage_cell(value: &Value) -> Result<AlignedValue> {
     match value {
+        Value::Bytes(_) => aligned_bytes(value),
         Value::JubjubScalar(_) | Value::JubjubPoint(_) => {
             Ok(aligned_fields(&typed_scalar_fields(value)?))
         }
@@ -1387,6 +1429,30 @@ fn record_component_names<'a>(
         .iter()
         .map(|component| component.name.as_str())
         .collect())
+}
+
+fn validate_byte_read_projections(read: &Read, ty: &ScalarType) -> Result<()> {
+    let length = ty
+        .bytes_length()
+        .ok_or_else(|| anyhow!("byte read requires a byte scalar"))?;
+    ensure!(
+        read.schema.is_none() && read.components.is_empty(),
+        "byte read has record projections"
+    );
+    let expected = byte_projection_bindings(&read.name, length)?;
+    let projections = read
+        .projections
+        .as_ref()
+        .ok_or_else(|| anyhow!("byte read is missing its projections"))?;
+    ensure!(
+        projections.len() == expected.len()
+            && projections
+                .iter()
+                .zip(expected)
+                .all(|(actual, (name, ty))| actual.name == name && actual.ty == ty),
+        "byte read projections differ from its declared length"
+    );
+    Ok(())
 }
 
 fn key_alignment(ty: &ScalarType) -> &'static str {
@@ -1620,16 +1686,13 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                         .all(|t| t.as_str().is_some_and(|t| ScalarType::parse(t).is_ok())),
                 "unsupported map schema"
             );
-            ensure!(
-                types.iter().all(|ty| !matches!(
-                    ScalarType::parse(ty.as_str().unwrap()),
-                    Ok(ScalarType::Bytes(_))
-                )),
-                "general byte map schemas require explicit native ledger support"
-            );
             let key_type = ScalarType::parse(types[0].as_str().unwrap())?;
             reject_unqualified_foreign_storage(&key_type)?;
             reject_jubjub_map_key(&key_type)?;
+            ensure!(
+                !matches!(key_type, ScalarType::Bytes(_)),
+                "only Bytes32 byte map keys are supported"
+            );
             ensure!(
                 value.as_array().is_some_and(|a| a.is_empty()),
                 "initial map must be explicitly empty"
@@ -1727,36 +1790,60 @@ fn read_state_cell(
 }
 
 fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<Value> {
-    let mut fields = Vec::new();
-    value.value_only_field_repr(&mut fields);
     let parsed = ScalarType::parse(ty)?;
-    let decoded = match &parsed {
-        ScalarType::Native => {
-            ensure!(fields.len() == 1, "expected scalar state cell");
-            Ok(Value::Native(fields[0]))
+    let decoded = if let Some(length) = parsed.bytes_length() {
+        ensure!(
+            byte_alignment_length(alignment)? == Some(length),
+            "byte state read alignment mismatch"
+        );
+        ensure!(
+            value.alignment
+                == Alignment::singleton(AlignmentAtom::Bytes {
+                    length: length as u32,
+                }),
+            "byte state cell alignment mismatch"
+        );
+        ensure!(value.value.0.len() == 1, "invalid byte state atom count");
+        let atom = value.value.0.first().expect("one atom checked");
+        ensure!(atom.0.len() <= length, "byte state cell length mismatch");
+        let mut bytes = atom.0.clone();
+        bytes.resize(length, 0);
+        Value::Bytes(bytes)
+    } else {
+        let mut fields = Vec::new();
+        value.value_only_field_repr(&mut fields);
+        match &parsed {
+            ScalarType::Native => {
+                ensure!(fields.len() == 1, "expected scalar state cell");
+                Value::Native(fields[0])
+            }
+            ScalarType::Bool => {
+                ensure!(fields.len() == 1, "expected scalar state cell");
+                Value::Bool(
+                    bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
+                )
+            }
+            ScalarType::UInt(_) => {
+                ensure!(fields.len() == 1, "expected scalar state cell");
+                input_value(ty, &Json::String(field_decimal(fields[0])))?
+            }
+            ScalarType::Bytes32 | ScalarType::Bytes(_) => unreachable!("decoded above"),
+            ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+                decode_typed_scalar(&parsed, &fields)?
+            }
+            #[cfg(feature = "zkir-321")]
+            ScalarType::Foreign(_) => decode_typed_scalar(&parsed, &fields)?,
         }
-        ScalarType::Bool => {
-            ensure!(fields.len() == 1, "expected scalar state cell");
-            Ok(Value::Bool(
-                bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
-            ))
-        }
-        ScalarType::UInt(_) => {
-            ensure!(fields.len() == 1, "expected scalar state cell");
-            input_value(ty, &Json::String(field_decimal(fields[0])))
-        }
-        ScalarType::Bytes32 | ScalarType::Bytes(_) => bail!("bytes ledger values are unsupported"),
-        ScalarType::JubjubScalar | ScalarType::JubjubPoint => decode_typed_scalar(&parsed, &fields),
-        #[cfg(feature = "zkir-321")]
-        ScalarType::Foreign(_) => decode_typed_scalar(&parsed, &fields),
-    }?;
+    };
     let typed_scalar = match &parsed {
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => true,
         #[cfg(feature = "zkir-321")]
         ScalarType::Foreign(_) => true,
         _ => false,
     };
-    let encoded = if typed_scalar {
+    let encoded = if parsed.bytes_length().is_some() {
+        aligned_bytes(&decoded)?
+    } else if typed_scalar {
         aligned_storage_cell(&decoded)?
     } else {
         aligned(&decoded, alignment)?
@@ -2108,10 +2195,19 @@ pub fn prepare(
                             read_reference == Some(&read.name),
                             "inactive read result differs from the source read schema"
                         );
-                        ensure!(
-                            matches!(alignment.as_str(), "field" | "bit" | "u64"),
-                            "unsupported inactive read alignment"
-                        );
+                        let read_type = ScalarType::parse(&read.ty)?;
+                        if let Some(length) = byte_alignment_length(alignment)? {
+                            ensure!(
+                                read_type.bytes_length() == Some(length),
+                                "inactive byte read alignment mismatch"
+                            );
+                            validate_byte_read_projections(read, &read_type)?;
+                        } else {
+                            ensure!(
+                                matches!(alignment.as_str(), "field" | "bit" | "u64"),
+                                "unsupported inactive read alignment"
+                            );
+                        }
                         read_index += 1;
                         env.insert(read.name.clone(), inactive_read_value(&read.ty)?);
                     }
@@ -2391,7 +2487,10 @@ pub fn prepare(
                                 );
                             }
                             let read_type = ScalarType::parse(&read.ty)?;
-                            if is_typed_scalar(&read_type) {
+                            if read_type.bytes_length().is_some() {
+                                validate_byte_read_projections(read, &read_type)?;
+                            }
+                            if is_typed_scalar(&read_type) || read_type.bytes_length().is_some() {
                                 validate_scalar_storage_type(plan, *slot, keys.len(), &read_type)?;
                             }
                             read_state_cell(read_context, *slot, keys, &read.ty, alignment)?

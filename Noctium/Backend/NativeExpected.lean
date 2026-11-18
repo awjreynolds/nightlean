@@ -143,6 +143,11 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     let guard ← read.guard.mapM fun guard =>
       convert value.span (normalize aliases guard)
     match read.ty with
+    | .bytes length =>
+      let chunks := read.bindings.map fun (name, _) =>
+        let input := Term.input ("%input_" ++ name)
+        guard.map (fun value => Term.select value.term input (.constant 0)) |>.getD input
+      aliases := (read.name, bytesFromChunksTerm length chunks.reverse) :: aliases
     | .jubjubScalar =>
       let raw := Term.input ("%input_" ++ read.name)
       aliases := (read.name, .unary "jubjub_scalar_from_native" raw) :: aliases

@@ -1160,6 +1160,14 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
           ("guard", activityJson),
           ("type", nativeType), ("output", toJson output)]
         constrainType ty output
+    if let .bytes _ := read.ty then do
+      let values ← read.bindings.mapM fun (name, ty) => do
+        match read.guard, ty with
+        | some guard, .uint maximum =>
+          lowerExpr (.select guard (.ref name : Expr (.uint maximum)) (.uint maximum 0))
+        | _, _ => pure ("%input_" ++ name)
+      modify fun state => {state with byteAliases :=
+        (read.name, {values := values.reverse, packed := true}) :: state.byteAliases}
     if read.ty == .jubjubPoint then do
       let xName := read.bindings[0]!.1
       let yName := read.bindings[1]!.1

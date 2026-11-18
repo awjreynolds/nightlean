@@ -2759,9 +2759,9 @@ fn append_impact_ledger_input(
             object.contains_key("name")
                 && object.contains_key("type")
                 && !object.contains_key("schema")
-                && object
-                    .keys()
-                    .all(|key| { ["name", "type", "guard", "components"].contains(&key.as_str()) }),
+                && object.keys().all(|key| {
+                    ["name", "type", "guard", "components", "projections"].contains(&key.as_str())
+                }),
             "invalid Impact ledger read"
         );
     } else {
@@ -2799,6 +2799,7 @@ fn matches_public_input_prologue(reads: &[Json], expected: &[(String, String)]) 
     expected.len() <= reads.len()
         && expected.iter().zip(reads).all(|((name, ty), read)| {
             read.get("components").is_none()
+                && read.get("projections").is_none()
                 && read.get("guard").is_none()
                 && read.get("schema").is_none()
                 && read.get("name").and_then(Json::as_str) == Some(name)
@@ -2907,6 +2908,59 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<(Vec<Json>, Option<Publi
     let mut expected = Vec::new();
     let mut names = BTreeSet::new();
     for read in reads.iter().skip(public_source_inputs.len()) {
+        let read_type = text(read, "type")?;
+        let byte_length = match ScalarType::parse(read_type) {
+            Ok(ScalarType::Bytes32) => Some(32),
+            Ok(ScalarType::Bytes(length)) => Some(length),
+            _ => None,
+        };
+        if let Some(length) = byte_length {
+            let object = read
+                .as_object()
+                .ok_or_else(|| anyhow!("invalid Impact byte read"))?;
+            ensure!(
+                object.contains_key("name")
+                    && object.contains_key("type")
+                    && object.contains_key("projections")
+                    && !object.contains_key("components")
+                    && !object.contains_key("schema")
+                    && object.keys().all(|key| {
+                        ["name", "type", "guard", "projections"].contains(&key.as_str())
+                    }),
+                "invalid Impact byte read"
+            );
+            let projection_bindings = crate::byte_projection_bindings(text(read, "name")?, length)?;
+            let projections = read
+                .get("projections")
+                .and_then(Json::as_array)
+                .ok_or_else(|| anyhow!("invalid Impact byte read projections"))?;
+            ensure!(
+                projections.len() == projection_bindings.len(),
+                "Impact byte read projection count mismatch"
+            );
+            for (projection, (expected_name, expected_type)) in
+                projections.iter().zip(projection_bindings)
+            {
+                shape(projection, &["name", "type"], false)?;
+                ensure!(
+                    text(projection, "name")? == expected_name
+                        && text(projection, "type")? == expected_type,
+                    "Impact byte read projection order or range mismatch"
+                );
+                append_impact_ledger_input(
+                    projection,
+                    false,
+                    source_inputs.len(),
+                    &mut names,
+                    &mut expected,
+                )?;
+            }
+            continue;
+        }
+        ensure!(
+            read.get("projections").is_none(),
+            "non-byte Impact read has byte projections"
+        );
         if let Some(components) = read.get("components") {
             let components = components
                 .as_array()
@@ -5743,7 +5797,144 @@ mod completed_invocation_tests {
         assert!(super::validate_relation_inputs(&wrong_width, &inputs, &order).is_err());
     }
 
-    use super::{AuthenticatedNativeTarget, InvocationTarget, Session, TypedResponse};
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    fn byte_storage_reads_bind_ordered_bounded_chunks_and_empty_defaults() {
+        let impact: Json = serde_json::from_str(include_str!(
+            "../tests/fixtures/byte-storage/321/BytesStorage.update.impact.json"
+        ))
+        .unwrap();
+        let reads = impact["reads"].as_array().unwrap();
+        let (expected, bytes32_abi) = super::expected_ledger_inputs(&impact).unwrap();
+        assert_eq!(bytes32_abi, Some(super::PublicBytes32Abi::PackedFields));
+        let byte_reads: Vec<_> = reads
+            .iter()
+            .filter(|read| read.get("projections").is_some())
+            .collect();
+        assert!(byte_reads.iter().any(|read| {
+            read["type"] == "Bytes<0>" && read["projections"].as_array().unwrap().is_empty()
+        }));
+        for read in byte_reads.iter().filter(|read| read["type"] == "Bytes<0>") {
+            let prefix = format!("_noctium_bytes_{}_", read["name"].as_str().unwrap());
+            assert!(expected.iter().all(|input| {
+                !input["name"]
+                    .as_str()
+                    .is_some_and(|name| name.starts_with(&prefix))
+            }));
+        }
+        let expected_byte_bindings: Vec<_> = byte_reads
+            .iter()
+            .flat_map(|read| read["projections"].as_array().unwrap())
+            .map(|input| {
+                json!({
+                    "name":input["name"],
+                    "type":input["type"],
+                    "visibility":"public"
+                })
+            })
+            .collect();
+        let actual_byte_bindings: Vec<_> = expected
+            .iter()
+            .filter(|input| {
+                input["name"]
+                    .as_str()
+                    .is_some_and(|name| name.starts_with("_noctium_bytes_"))
+            })
+            .cloned()
+            .collect();
+        assert_eq!(actual_byte_bindings, expected_byte_bindings);
+
+        let mut relation_inputs = BTreeMap::new();
+        let mut input_order = Vec::new();
+        let mut instructions = Vec::new();
+        for input in &expected {
+            let name = input["name"].as_str().unwrap().to_owned();
+            let ty = input["type"].as_str().unwrap().to_owned();
+            let visibility = input["visibility"].as_str().unwrap().to_owned();
+            relation_inputs.insert(name.clone(), (ty.clone(), visibility.clone()));
+            input_order.push((name.clone(), visibility));
+            instructions.push(json!({
+                "op":"public_input",
+                "output":format!("%input_{name}"),
+                "type":"Scalar<BLS12-381>"
+            }));
+            match ScalarType::parse(&ty).unwrap() {
+                ScalarType::UInt(maximum) => instructions.push(json!({
+                    "op":"constrain_bits",
+                    "val":format!("%input_{name}"),
+                    "bits":maximum.bits().max(1)
+                })),
+                ScalarType::Bool => instructions.push(json!({
+                    "op":"constrain_to_boolean",
+                    "val":format!("%input_{name}")
+                })),
+                _ => {}
+            }
+        }
+        let relation = json!({
+            "version":{"major":3,"minor":2},
+            "instructions":instructions
+        });
+        super::validate_relation_inputs(&relation, &relation_inputs, &input_order).unwrap();
+
+        let wrong_width = input_order
+            .iter()
+            .find_map(|(name, _)| {
+                let ty = &relation_inputs[name].0;
+                let ScalarType::UInt(maximum) = ScalarType::parse(ty).ok()? else {
+                    return None;
+                };
+                Some((name, maximum.bits().max(1)))
+            })
+            .unwrap();
+        let mut bad_relation = relation.clone();
+        for instruction in bad_relation["instructions"].as_array_mut().unwrap() {
+            if instruction["op"] == "constrain_bits"
+                && instruction["val"] == format!("%input_{}", wrong_width.0)
+            {
+                instruction["bits"] = json!(wrong_width.1 - 1);
+                break;
+            }
+        }
+        assert!(
+            super::validate_relation_inputs(&bad_relation, &relation_inputs, &input_order).is_err()
+        );
+
+        let read_index = reads
+            .iter()
+            .position(|read| {
+                read["type"] == "Bytes<33>"
+                    && read["projections"]
+                        .as_array()
+                        .is_some_and(|items| items.len() == 2)
+            })
+            .unwrap();
+        let mut wrong_order = impact.clone();
+        wrong_order["reads"][read_index]["projections"]
+            .as_array_mut()
+            .unwrap()
+            .swap(0, 1);
+        assert!(super::expected_ledger_inputs(&wrong_order).is_err());
+
+        let mut wrong_range = impact.clone();
+        let first_type = wrong_range["reads"][read_index]["projections"][0]["type"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        wrong_range["reads"][read_index]["projections"][0]["type"] =
+            json!(if first_type == "UIntRange<65536>" {
+                "UIntRange<256>"
+            } else {
+                "UIntRange<65536>"
+            });
+        assert!(super::expected_ledger_inputs(&wrong_range).is_err());
+
+        let mut wrong_length = impact;
+        wrong_length["reads"][read_index]["type"] = json!("Bytes<0>");
+        assert!(super::expected_ledger_inputs(&wrong_length).is_err());
+    }
+
+    use super::{AuthenticatedNativeTarget, InvocationTarget, ScalarType, Session, TypedResponse};
     use crate::{control::Plan, host};
     use serde_json::{Value as Json, json};
     use sha2::{Digest, Sha256};
