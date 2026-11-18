@@ -58,6 +58,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Secp cells and map values](development/foreign-storage.md), canonical multi-field storage, constructor defaults and guarded reads.
 - [Packed public Bytes32](development/public-bytes32.md), full byte identity with two bounded public chunks and retained artifact compatibility.
 - [Byte ledger values](development/byte-storage.md), exact-length cells, map values and nested leaves, including empty cells.
+- [Scalar byte decoding](development/scalar-from-bytes.md), direct Native/Jubjub reduction of bounded byte strings with empty-input checks.
 - [Jubjub ledger storage](development/jubjub-storage.md), checked scalar/point values across cells, maps and nested leaves.
 - [Nested foreign ledger state](development/foreign-trees.md), typed scalar leaves, parent creation, guarded defaults and preserved sibling entries.
 - [Curve25519 types](development/curve25519.md), prime-order Edwards points, distinct scalar encoding, typed operations and point storage.

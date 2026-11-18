@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "11784a1942690b4891df5455a79efa0dc13fd684",
+    "sourceCommit": "885dff0d536de8fac2863405c77d91ebfee675ab",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -4814,7 +4814,7 @@
       "xor",
       "hash_to_curve"
     ],
-    "notExposedOpcodeCount": 14,
+    "notExposedOpcodeCount": 9,
     "notExposedOpcodes": [
       "copy",
       "into_bytes32",
@@ -5247,6 +5247,26 @@
         "symbolicDepth": 256
       },
       "supersedes": "Earlier byte scalar storage exclusions are superseded for direct cells, map values and nested scalar leaves. Composite leaves and non-Bytes32 byte keys remain separate work."
+    },
+    "genericScalarByteDecoding": {
+      "issue": 80,
+      "source": "../../tests/ScalarFromBytes.lean",
+      "native": "../../runtime/tests/scalar_from_bytes.rs",
+      "guide": "../development/scalar-from-bytes.md",
+      "scope": "fromBytes(Native|JubjubScalar, value) for Source Bytes0 through Bytes1024. Full little-endian reduction directly modulo the target field. Existing fromBytes32 and foreignFromBytes APIs remain compatible. Existing from_bytes opcode, no new opcode name.",
+      "zeroSemantics": "Evaluate the byte operand and retain its assertions before returning Native zero or the typed JubjubScalar bridge of Native zero. No native Bytes0 input or decoder operation is emitted. Disclosure origins propagate through the conversion.",
+      "producerBoundary": "Native and JubjubScalar accept typed bytes of lengths 1..1024. JubjubPoint remains exact Bytes32 with its retained canonical roundtrip path. Non-byte operands, unsupported Bool target and non-32 point decode reject. Shared source/producer terms preserve legacy 32-byte markers.",
+      "focusedChecks": "67-job compiler/Claim build, Source fixture, producer inventory/negative guards and guide snippet pass. Native case checks both targets at lengths 0/32/64/1024, direct scalar reduction differing from Native-then-scalar reduction, independent raw false-assertion rejection for both empty decoders, malformed input lengths, changed octet and forged committed return. Retained field/scalar/strict-point conversion native case and one direct/helper host-control case pass. Legacy 3.2.0 runtime library compilation passes.",
+      "nativeSeconds": 0.03,
+      "retainedConversionSeconds": 0.04,
+      "artifactMetrics": {
+        "zkirInstructions": 4342,
+        "nativeInputs": 1090,
+        "fromBytesInstructions": 6,
+        "nativeEmptyByteReconstructions": 0,
+        "outputFields": 6
+      },
+      "limits": "No new keys, proofs, deployments, K/proving-time benchmark, broad validation campaign or C/C++/web/mobile qualification. Scalar reduction does not validate canonical signature encodings or implement signature verification APIs. Full source/native preservation remains separate work."
     }
   }
 }
