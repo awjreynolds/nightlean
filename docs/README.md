@@ -73,6 +73,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) compile to native circuit leaves with disclosure checks. Bytes32-keyed ledger records support nonempty Native-only layouts.
 - [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/noctium-portable-runtime-boundary.md).
 - [Typed source witnesses](development/typed-witnesses.md), including canonical composite calls, source-staged reads, public witness artifacts and the consuming native proof/client handoff.
+- [Compiler optimisation strategy](research/compiler-optimisation-strategy.md), a primary-source review of Lean compilation, explicit artifact targets, ZKIR constraints and plan size.
 - [ZKIR capability research](research/zkir-v3-full-coverage.md), [native inventory](compatibility/zkir-feature-matrix.json) and [ledger capability research](research/midnight-ledger9-capabilities.md). The [raw native guard experiment](research/native-guard-prerequisites.md) records verified prerequisites, with source guard support still gated.
 - [Compact comparison baseline](research/compact-equivalence-baseline.md). Inventory entries are not a completion percentage.
 - [Glossary](../GLOSSARY.md) for the distinctions between circuits, Impact execution, target profiles and ledger state.
