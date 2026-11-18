@@ -87,10 +87,10 @@ private def issue70HashAsConstraint (program : Json) : Json :=
         ("op", toJson ("constrain_bits" : String)), ("val", toJson digest),
         ("bits", toJson (8 : Nat))])
 
-private def issue70ShortEncode (program : Json) : Json :=
+private def issue70ShortBytePacking (program : Json) : Json :=
   issue70MutateInstructions program fun instructions => instructions.map fun instruction =>
-    if issue70InstructionName instruction == some "encode" then
-      issue70Replace instruction "outputs" (toJson (["%short_encode"] : List String))
+    if issue70InstructionName instruction == some "bytes_into_natives" then
+      issue70Replace instruction "outputs" (toJson (["%short_packing"] : List String))
     else instruction
 
 private def issue70WrongHashAlignment (program : Json) : Json :=
@@ -103,5 +103,5 @@ private def issue70WrongHashAlignment (program : Json) : Json :=
 
 #guard issue70ProducerRejects issue70HashAsNativeArithmetic
 #guard issue70ProducerRejects issue70HashAsConstraint
-#guard issue70ProducerRejects issue70ShortEncode
+#guard issue70ProducerRejects issue70ShortBytePacking
 #guard issue70ProducerRejects issue70WrongHashAlignment
