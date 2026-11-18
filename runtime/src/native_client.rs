@@ -11,7 +11,7 @@ use crate::{
     lifecycle::Phase,
     proof::{ContractStateBinding, CurrentStateContext, ProvedNativeIntent},
 };
-use futures::{Future, channel::oneshot, task::noop_waker};
+use futures::{Future, FutureExt, channel::oneshot, task::noop_waker};
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
 use std::{
@@ -547,13 +547,17 @@ pub(crate) fn prove_deployment(
     {
         return Err(client::Error::InvalidTransaction);
     }
-    futures::executor::block_on(intent.prove(
-        crate::funding::CONTRACT_SEGMENT,
-        NoProof,
-        &parameters.cost_model.runtime_cost_model,
-    ))
-    .map(|(_, i)| i)
-    .map_err(|_| client::Error::InvalidTransaction)
+    // This deployment has no proof work or external awaits, including inside an async host.
+    intent
+        .prove(
+            crate::funding::CONTRACT_SEGMENT,
+            NoProof,
+            &parameters.cost_model.runtime_cost_model,
+        )
+        .now_or_never()
+        .ok_or(client::Error::InvalidTransaction)?
+        .map(|(_, i)| i)
+        .map_err(|_| client::Error::InvalidTransaction)
 }
 async fn step(
     mut state: State,
@@ -1106,6 +1110,35 @@ mod tests {
     use base_crypto::{hash::HashOutput, time::Timestamp};
     use rand::{Rng, SeedableRng, rngs::StdRng};
     use storage::arena::Sp;
+
+    #[test]
+    fn deployment_conversion_is_ready_inside_an_executor() {
+        use ledger::structure::{ContractAction, ContractDeploy, Intent};
+        let mut rng = StdRng::from_seed([23; 32]);
+        let deployment = ContractDeploy {
+            initial_state: onchain_runtime::state::ContractState::<crate::Db>::default(),
+            nonce: HashOutput([4; 32]),
+        };
+        let address = deployment.address();
+        let intent: NativeIntent = Intent {
+            actions: vec![ContractAction::Deploy(Sp::new(deployment))].into(),
+            guaranteed_unshielded_offer: None,
+            fallible_unshielded_offer: None,
+            dust_actions: None,
+            binding_commitment: rng.r#gen(),
+            ttl: Timestamp::from_secs(2_000_000_000),
+        };
+        let converted = futures::executor::block_on(async {
+            prove_deployment(&intent, &ledger::structure::INITIAL_PARAMETERS)
+        })
+        .unwrap();
+        let Some(ContractAction::Deploy(actual)) = converted.actions.iter_deref().next() else {
+            panic!("expected native deployment")
+        };
+        assert_eq!(actual.address(), address);
+        assert_eq!(converted.ttl, intent.ttl);
+        assert_eq!(converted.binding_commitment, intent.binding_commitment);
+    }
 
     fn witness_test_contract() -> (Contract, String) {
         use ledger::structure::{ContractAction, ContractDeploy, Intent};
