@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "28993cbfcdd46a1eeb509f61e6501a7b73cb15b7",
+    "sourceCommit": "44ddfcac4b77d5419fc830b6a9b01ab1897fbb61",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4769,13 +4769,13 @@
       "standalone and nested Counter cells with native Bytes8 encoding, reads, u32 immediate increments/decrements and reset",
       "standalone and nested Lists of checked Native-field records, with prepend, length/head reads, nonempty pop and reset",
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks",
-      "integrated confidential-token registration, mint-to-pending, authenticated sweep and transfer with supply/memos/counters"
+      "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves and epoch-checked memo clearing with supply/memos/counters"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
     "remainingTokenDependencies": [
       "mixed aligned record hashing and general byte-string operations",
-      "remaining helper operations and token escrow, allowance, delegated operations, memo clearing and constructor metadata",
+      "native map deletion, remaining helper operations and token escrow, allowance, delegated operations and constructor metadata",
       "mixed record values and optional List head API",
       "Counter comparison helpers",
       "remaining return layouts, contract-call arguments and cross-contract claim composition",
@@ -4901,7 +4901,7 @@
     "confidentialTokenEvidence": {
       "source": "examples/openzeppelin/ConfidentialToken.lean",
       "native": "runtime/tests/confidential_token.rs",
-      "implementationCommit": "28993cbfcdd46a1eeb509f61e6501a7b73cb15b7",
+      "implementationCommit": "44ddfcac4b77d5419fc830b6a9b01ab1897fbb61",
       "referenceRevision": "f85f1a23685c6bbedfc8c2589ae3aa128aff7c46",
       "implementedEntrypoints": [
         "registerWithKey",
@@ -4913,10 +4913,12 @@
         "isRegistered",
         "balanceOf",
         "pendingOf",
-        "computeAccountId"
+        "computeAccountId",
+        "_move",
+        "clearMemos"
       ],
       "referenceEntrypointCount": 16,
-      "scope": "One selected-3.2.1 source-witness/native lifecycle registers two wallets, mints12 to Alice pending, sweeps, transfers5 to Bob pending, then burns2. Independent group arithmetic checks Alice5 spendable, Bob5 pending/Bob0 spendable and supply10. Burn preserves pending/memos/counters. Checked views include registered/absent accounts, identity encrypted-zero defaults, supply and full account hash. Prior valid re-randomized wrong-ledger candidate still rejects. Runtime0.20s, one focused testcase. Ten of sixteen reference entrypoints implemented; named c1/c2 point returns do not establish nominal/composite ABI parity. Initialized=true genesis remains explicit; constructor/sealed metadata and remaining six reference entrypoints stay open. Deterministic fixture entropy establishes no production freshness/privacy. No new opcode names, keys, proofs, deployment or broad regressions.",
+      "scope": "One selected-3.2.1 source-witness/native lifecycle registers two wallets, mints12 to Alice pending, sweeps, transfers5 to Bob pending, then burns2. Checked views include absent accounts, encrypted-zero defaults, supply and full account hash. A self-move then shifts1 from Alice spendable to Alice pending, preserving supply10 and advancing her credit epoch to2. Self-transfer, stale-epoch memo clearing and wrong-key clearing reject; authenticated clearing with epoch2 empties only her memo List. Prior valid re-randomized wrong-ledger candidate rejects. Runtime0.30s, one focused testcase. Twelve of sixteen reference entrypoints implemented; named c1/c2 point returns do not establish nominal/composite ABI parity. Initialized=true genesis remains explicit; constructor/sealed metadata and remaining four escrow/allowance/delegated entrypoints stay open. Deterministic fixture entropy establishes no production freshness/privacy. No new opcode names, keys, proofs, deployment or broad regressions.",
       "initialMilestoneCommit": "496766c"
     }
   }

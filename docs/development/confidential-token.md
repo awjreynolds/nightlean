@@ -1,8 +1,8 @@
 # Confidential-token integration
 
-`examples/openzeppelin/ConfidentialToken.lean` adapts the registration, credit, sweep, transfer, burn and query paths from OpenZeppelin's confidential fungible token at
+`examples/openzeppelin/ConfidentialToken.lean` adapts the registration, credit, sweep, transfer, burn, memo maintenance and query paths from OpenZeppelin's confidential fungible token at
 revision `f85f1a23685c6bbedfc8c2589ae3aa128aff7c46`. Noctium compiles the source
-directly to native ZKIR and ledger operations. This milestone covers ten
+directly to native ZKIR and ledger operations. This milestone covers twelve
 entrypoints from the sixteen-entrypoint reference workload.
 
 `registerWithKey` proves the account ID is SHA-256 of the private account secret
@@ -15,6 +15,10 @@ recipient's credit counter and changes public supply in the same transaction.
 credits the recipient's pending funds with a memo and counter update.
 `burn` authenticates the sender, subtracts encrypted spendable funds and public
 supply atomically, and preserves pending funds, memos and credit counters.
+`_move` uses the same conserving debit/credit path and permits self-moves.
+`transfer` retains its self-transfer rejection. `clearMemos` authenticates both
+wallet secrets and checks the current credit epoch before resetting only the
+caller's memo List. A stale epoch rejects clearing after a concurrent credit.
 The views expose supply, registration, spendable/pending ciphertexts and account
 ID computation. Missing ciphertext entries return curve-identity encrypted zero.
 Ciphertext results use named typed `c1` and `c2` point components; nominal
@@ -50,12 +54,25 @@ two from the sender. Alice ends with five spendable, Bob with five pending and
 zero spendable, and public supply is ten. It checks
 decrypted balances with independent group arithmetic, public supply, memo Lists
 and credit counters, then rejects a valid re-randomized old-ciphertext candidate which preserves
-plaintext but differs from the ledger record. The one selected-3.2.1 native
-sequence also checks all five views and passes in 0.20 seconds.
+plaintext but differs from the ledger record. The same selected-3.2.1 native
+sequence checks all five views, then self-moves one from Alice spendable to
+Alice pending. Supply stays ten and Alice's credit epoch advances to two.
+Clearing with epoch one rejects. Clearing with epoch two empties only Alice's
+memo List and preserves the epoch and other ledger state. Self-transfer and
+wrong-key clearing also reject. The focused native case passes in 0.30 seconds.
+
+The delegated-spend nonce preimage fits existing source operations:
+`persistentHashVector32([seed, domain, owner, spender, toBytes32(epochNative)])`.
+The pinned mixed record hashes four Bytes32 values followed by one canonical
+Field, also 32 little-endian bytes. Alignment contributes no hash tags, so both
+encodings produce the same 160-byte preimage. This removes a compiler dependency
+for the remaining escrow work. Native nested-map leaf deletion is still needed
+for exact refund/replacement behavior.
 
 Deployment starts from explicitly configured initialized state, zero supply and
-empty maps. Constructor/sealed metadata, the remaining six reference entrypoints, escrow/allowance,
-memo clearing, nominal return layouts and composition remain open. Mint is the ungated
+empty maps. Constructor/sealed metadata, the remaining four reference entrypoints (`allowance`, `approve`,
+`transferFrom` and `burnFrom`), escrow, nominal return layouts and composition
+remain open. Mint is the ungated
 public-supply benchmark operation, not a production issuance policy. Native
 acceptance here is checker evidence. No new keys, proofs or deployment were
 created for this source milestone.
