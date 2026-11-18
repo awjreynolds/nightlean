@@ -1,7 +1,7 @@
 # Committed getter results
 
-Entrypoints now return named Native, Bool and bounded UInt values. Return
-expressions resolve after state effects, including ledger reads after writes.
+Entrypoints return named Native, Bool, bounded UInt, Bytes32, JubjubScalar and
+JubjubPoint values. Return expressions resolve after state effects, including ledger reads after writes.
 `tests/NativeReturns.lean` contains a getter and an update operation:
 
 ```lean
@@ -18,8 +18,19 @@ read environment. Returning private data requires explicit `disclose(...)`.
 This authorizes release to the application result channel. The return itself
 does not put clear values in the transaction's ledger call.
 
-Each scalar return uses one canonical Native Field in declaration order. Bool
-values are constrained to 0/1, and UInt values retain their declared bounds.
+Logical returns expand into canonical Native Fields in declaration order:
+
+| Logical type | Native fields |
+| --- | --- |
+| Native, Bool, UInt | One field; Bool and UInt retain their bounds |
+| Bytes32 | Two chunks, using the existing FAB byte-alignment order |
+| JubjubScalar | One canonical scalar-to-Native encoding |
+| JubjubPoint | Two affine coordinates, x then y |
+
+Point and scalar values retain the existing canonical/subgroup input and
+expression checks. Bytes32 results retain every digest bit. The 256-field output
+limit applies after expansion.
+
 The compiler emits those values as ZKIR outputs. The native call prototype's
 `output` contains the same fields, and Midnight commits them with the call input
 and communication randomness. The ledger stores that commitment. It does not
@@ -28,7 +39,9 @@ need a separate clear return field.
 Rust callers prepare the operation, run `check(&execution, &circuit)`, then read
 `execution.returns()` or `execution.returns_json()`. Values retain their logical
 types, so JSON uses booleans for Bool and decimal strings for Native and UInt.
-The C runtime's completed JSON response adds `result.returns` when nonempty.
+Bytes32 uses `{kind:"bytes", values:[...]}`; scalar and point JSON use their
+existing `jubjubScalar` and `jubjubPoint` shapes. The C runtime's completed JSON
+response adds `result.returns` when nonempty.
 Native transaction assembly uses the evaluated output and fresh communication
 randomness. Bundle validation checks agreement among the plan return schema,
 compiler metadata and native output header.
@@ -44,6 +57,11 @@ results. It compares the output commitment and rejects a forged commitment,
 a forged return expression and a mismatched declared return type. The source
 fixture rejects a private return without disclosure.
 
-This is native-checker evidence for scalar SDK results. No new keys, proofs or
-deployments were generated. Composite/byte/curve return layouts, generated
-language bindings and the cross-contract claim protocol remain separate work.
+`tests/NativeOpaqueReturns.lean` and `runtime/tests/native_opaque_returns.rs`
+add one source/native example for Bytes32 and Jubjub results. Independent SHA-256
+and group arithmetic agree with the named results and their six-field commitment.
+The case covers a full-range scalar and rejects an altered digest high byte.
+
+This is native-checker evidence for primitive SDK results. No new keys, proofs or
+deployments were generated. Composite/general-byte layouts, generated language
+bindings and the cross-contract claim protocol remain separate work.

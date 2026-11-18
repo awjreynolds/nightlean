@@ -4692,7 +4692,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "92cd43546e4185fe84b14e537fd1c1fdb9904312",
+    "sourceCommit": "b956204bbf5541a411d8d81df6347171d977ef4d",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, Bytes32 and Native-vector persistent hashing, and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
     "registeredOpcodeCount": 28,
     "registeredOpcodes": [
@@ -4771,7 +4771,7 @@
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
-    "nativeContractReturns": "Named Native, Bool and bounded UInt SDK results evaluate after ledger effects and bind to native communication output commitments. Clear values remain off-chain. Composite/byte/curve result layouts and the cross-contract claim protocol remain in issue 50.",
+    "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
     "remainingTokenDependencies": [
       "mixed aligned record hashing and general byte-string operations",
       "curve composite schemas, remaining helper inverses and byte conversions/indexing and integration of derived ElGamal/ECDH helpers into token operations",
@@ -4890,6 +4890,12 @@
       "native": "runtime/tests/native_returns.rs",
       "implementationCommit": "92cd43546e4185fe84b14e537fd1c1fdb9904312",
       "scope": "Named Native, Bool and bounded UInt returns resolve after state effects and emit one Native field each. Runtime results, native call output commitments, compiler metadata and bundle output headers agree. Public Lake build and one selected-3.2.1 native getter/update sequence pass with balances10/13/17 and counters0/1/2. Direct native preimage checks reject forged output commitments and forged return expressions; host preparation rejects a mismatched logical type. Source rejects undisclosed private returns. The C runtime JSON path exposes nonempty named results; no additional C/C++ qualification was run. No new opcode names, keys, proofs, deployments or broad regressions. Other return layouts and the cross-contract claim protocol remain open."
+    },
+    "opaqueReturnEvidence": {
+      "source": "tests/NativeOpaqueReturns.lean",
+      "native": "runtime/tests/native_opaque_returns.rs",
+      "implementationCommit": "b956204bbf5541a411d8d81df6347171d977ef4d",
+      "scope": "Logical Bytes32 outputs preserve both FAB chunks, JubjubScalar outputs preserve canonical scalar encoding and JubjubPoint outputs preserve x/y coordinates. Header counts, metadata/FFI admission and native output commitments use expanded field counts. Public Lake build and one selected-3.2.1 native case pass independent SHA256/group calculations, two secrets and full-range scalar q-1; altered digest byte31 rejects in the native checker. Existing four scalar-return fixtures remain byte-identical. No new opcode names, keys, proofs, deployments or broad regressions. Additional C/C++ qualification, general byte lengths, composite returns and cross-contract claim protocol remain open."
     }
   }
 }
