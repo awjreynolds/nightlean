@@ -1124,9 +1124,15 @@ impl Parser<'_> {
             "cast" => {
                 shape(v, &["tag", "type", "value"], true)?;
                 let target = parse_type(text(v, "type")?, self.registry)?;
-                scalar_type(&target)?;
                 let x = self.expr(field(v, "value")?, env, depth + 1)?;
-                scalar_type(&x.ty)?;
+                match (&x.ty, &target) {
+                    (Type::Scalar(_), Type::Scalar(_)) => {}
+                    (Type::Aggregate(source), Type::Aggregate(destination)) => ensure!(
+                        self.registry.can_widen_aggregate(source, destination)?,
+                        "unsafe aggregate cast"
+                    ),
+                    _ => bail!("control cast cannot mix aggregate and scalar types"),
+                }
                 (target, ExprKind::Cast(x))
             }
             "disclose" => {
@@ -5876,6 +5882,35 @@ impl Session {
         }
         .expression(expression, &known_environment(env))
     }
+    fn coerce_aggregate_cast(&self, target: &str, value: Tracked) -> Result<Tracked> {
+        ensure!(
+            value.value.is_none(),
+            "control aggregate cast requires aggregate"
+        );
+        let source = value
+            .aggregate
+            .as_ref()
+            .ok_or_else(|| anyhow!("control aggregate cast requires aggregate"))?;
+        if source.token == target {
+            return Type::Aggregate(target.to_owned()).coerce(value);
+        }
+        let widened = self.plan.registry.widen_aggregate_value(
+            &source.token,
+            target,
+            &source.payload.value,
+        )?;
+        ensure!(
+            value.leaf_taints.len() == self.plan.registry.leaf_types(target)?.len(),
+            "aggregate widening changed leaf taint shape"
+        );
+        let payload = AggregatePayload::from_owned(widened, &self.aggregate_budget)?;
+        Ok(Tracked::aggregate(
+            target.to_owned(),
+            payload,
+            value.leaf_taints.as_ref().clone(),
+            value.control_taint,
+        ))
+    }
     fn step(&mut self, task: Task) -> Result<()> {
         match task {
             Task::Eval(expr, env) => match &expr.kind {
@@ -6023,7 +6058,10 @@ impl Session {
             },
             Task::Unary(ty, disclose) => {
                 let value = self.pop()?;
-                let mut value = ty.coerce(value)?;
+                let mut value = match &ty {
+                    Type::Aggregate(target) => self.coerce_aggregate_cast(target, value)?,
+                    _ => ty.coerce(value)?,
+                };
                 if disclose {
                     value.disclose();
                 }

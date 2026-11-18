@@ -953,15 +953,14 @@ theorem mapDeclarationBodies_findDeclarationById
 def syntacticPreflight (limits : Limits) (program : Program) : Except Diagnostic Unit := do
   (sourcePreflight limits program).map fun _ => ()
 
-def subtype : ResultType → ResultType → Bool
-  | .unit, .unit => true
-  | .scalar left, .scalar right =>
-    left == right || match left, right with
-      | .uint m, .uint n => m ≤ n
-      | .uint _, .native => true
-      | _, _ => false
-  | .composite left, .composite right => left == right
-  | _, _ => false
+def commonType : ResultType → ResultType → Option ResultType
+  | .unit, .unit => some .unit
+  | .scalar left, .scalar right => (.scalar ·) <$> Types.scalarLeastUpperBound? left right
+  | .composite left, .composite right =>
+    (.composite ·) <$> Types.CompositeType.leastUpperBound? left right
+  | _, _ => none
+
+def subtype (source target : ResultType) : Bool := commonType source target == some target
 
 private def compatible (arguments : List ResultType) (declaration : Declaration) : Bool :=
   arguments.length == declaration.parameters.length &&
@@ -1251,9 +1250,8 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       unless condition.ty == .scalar .bool do fail span "helper condition requires Bool"
       let yes ← inferTerm fuel program scope env span yes
       let no ← inferTerm fuel program scope env span no
-      let ty ← if subtype yes.ty no.ty then pure no.ty
-        else if subtype no.ty yes.ty then pure yes.ty
-        else fail span "conditional branches require one type to be a subtype of the other"
+      let some ty := commonType yes.ty no.ty
+        | fail span "conditional branches require a common type"
       pure {combine ty [condition, yes, no] with guarded := true}
     | .andThen left right | .orElse left right =>
       let left ← inferTerm fuel program scope env span left
@@ -1724,6 +1722,16 @@ private def aggregateValue (type : Types.CompositeType) (values : List Scalar)
   { ty := .composite type, scalar := values.headD ⟨.bool, .bool true⟩,
     components := values, constraints }
 
+private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnostic (Expr .native) :=
+  match value with
+  | ⟨.native, value⟩ => pure value
+  | ⟨.bool, value⟩ => pure (.cast .native value)
+  | ⟨.uint _, value⟩ => pure (.cast .native value)
+  | ⟨.bytes _, _⟩ => fail span "byte strings require separate native byte leaves"
+  | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
+    fail span "Jubjub values require a qualified curve operation"
+  | ⟨.foreign _, _⟩ => fail span "foreign values require a qualified curve operation"
+
 private def coerce (span : SourceSpan) (value : Lowered) (target : ResultType) : Except Diagnostic Lowered := do
   unless subtype value.ty target do fail span "helper lowering type mismatch"
   match target with
@@ -1731,7 +1739,13 @@ private def coerce (span : SourceSpan) (value : Lowered) (target : ResultType) :
   | .scalar ty =>
     if h : value.scalar.ty = ty then pure {value with ty := target, scalar := ⟨ty, h ▸ value.scalar.value⟩}
     else pure {value with ty := target, scalar := ⟨ty, .cast ty value.scalar.value⟩}
-  | .composite _ => pure value
+  | .composite type => do
+    let leaves ← (components value).mapM (nativeOfScalar span)
+    let normalized := leaves.map fun leaf => ⟨.native, leaf⟩
+    pure {value with
+      ty := .composite type
+      scalar := normalized.headD value.scalar
+      components := normalized}
 
 private def boolExpr (span : SourceSpan) (value : Lowered) : Except Diagnostic (Expr .bool) :=
   if h : value.scalar.ty = .bool then pure (h ▸ value.scalar.value)
@@ -2006,16 +2020,6 @@ def projectionSlice (layout : Types.Layout) (projection : Types.Projection) :
   | .enumeration .., .enumTag => pure (0, 1)
   | _, _ => throw "aggregate projection kind/type mismatch"
 
-private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnostic (Expr .native) :=
-  match value with
-  | ⟨.native, value⟩ => pure value
-  | ⟨.bool, value⟩ => pure (.cast .native value)
-  | ⟨.uint _, value⟩ => pure (.cast .native value)
-  | ⟨.bytes _, _⟩ => fail span "byte strings require separate native byte leaves"
-  | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
-    fail span "Jubjub values require a qualified curve operation"
-  | ⟨.foreign _, _⟩ => fail span "foreign values require a qualified curve operation"
-
 private def liftD (value : Except Diagnostic α) : LowerM α := liftM value
 
 private def scalarEquality : {ty : Ty} → Expr ty → Expr ty → LowerM (Expr .bool)
@@ -2124,9 +2128,8 @@ mutual
       modify fun state => {noState with
         guard := entryState.guard, guardActive := entryState.guardActive,
         localBindings := entryState.localBindings}
-      let ty ← if subtype yes.ty no.ty then pure no.ty
-        else if subtype no.ty yes.ty then pure yes.ty
-        else liftD (fail span "conditional branches require one type to be a subtype of the other")
+      let some ty := commonType yes.ty no.ty
+        | liftD (fail span "conditional branches require a common type")
       let yes ← liftD (coerce span yes ty)
       let no ← liftD (coerce span no ty)
       let name ← freshTyped .bool
@@ -2183,10 +2186,16 @@ mutual
       let mut constraints := arguments.flatMap (·.constraints)
       for (argument, parameter) in arguments.zip signature.parameters do
         let argument ← liftD (coerce span argument parameter.type)
-        for component in components argument do
-          let binding ← freshTyped component.ty
-          recordLocal binding component
-          bindings := bindings ++ [(binding, component)]
+        let argumentComponents := components argument
+        if argumentComponents.isEmpty then
+          let binding ← freshTyped argument.scalar.ty
+          recordLocal binding argument.scalar
+          bindings := bindings ++ [(binding, argument.scalar)]
+        else
+          for component in argumentComponents do
+            let binding ← freshTyped component.ty
+            recordLocal binding component
+            bindings := bindings ++ [(binding, component)]
       let leafTypes ← match signature.result with
         | .unit => pure []
         | .scalar type => pure [type]

@@ -389,6 +389,108 @@ private def incompatibleTupleSequence : Term := .composite
     tupleIdentityOperator)
   "tuple sequence elements have no common type"
 
+private def crossedTupleSequence : Term := .composite
+  (.tuple [
+    .tuple [.scalar (.uint 7), .scalar .native],
+    .tuple [.scalar .native, .scalar (.uint 7)]])
+  [.uint 7 1, .native 0, .native 1, .uint 7 2]
+
+private def inferredTupleIdentity : Operator := .anonymous [{name := "pair"}] none [
+  .return (some (.ref "pair"))]
+
+private def sumTupleFold : Operator := .anonymous [
+  {name := "acc", type := some (.scalar .native)}, {name := "pair"}] none [
+  .return (some (.binary .add (.ref "acc")
+    (.binary .add
+      (.project (.ref "pair") (.tupleIndex 0))
+      (.project (.ref "pair") (.tupleIndex 1)))))]
+
+private def crossedTupleMapFold : Except Diagnostic (Program × Term) := do
+  let (mappedProgram, mapped) ← Iteration.mapWithLimits {} unitMainProgram 0 [] {}
+    [crossedTupleSequence] inferredTupleIdentity
+  Iteration.foldWithLimits {} mappedProgram 0 [] {} (.native 0) [mapped] sumTupleFold
+
+private def crossedTupleMapFoldRun : Except String EvalEnv := do
+  let (program, term) ← crossedTupleMapFold.mapError (·.message)
+  let circuit ← (Helpers.compile (installMainReturn program (.scalar .native) term) "main").mapError (·.message)
+  circuit.run iterationContext []
+
+-- The recursive join is (Native, Native) in both map inference and fold input.
+#guard match crossedTupleMapFoldRun with
+  | .ok values => values.lookup "result" == some (.native 4)
+  | .error _ => false
+
+private def crossedTupleBranches : Operator := .anonymous [{name := "pair"}] none [
+  .branch (.eq (.project (.ref "pair") (.tupleIndex 0)) (.native 0))
+    [.return (some (.composite
+      (.tuple [.scalar (.uint 7), .scalar .native]) [.uint 7 1, .native 0]))]
+    [.return (some (.composite
+      (.tuple [.scalar .native, .scalar (.uint 7)]) [.native 1, .uint 7 2]))]]
+
+-- Anonymous return inference joins different tuple branches before compiling the map.
+#guard match Iteration.mapWithLimits {} unitMainProgram 0 [] {}
+    [crossedTupleSequence] crossedTupleBranches with
+  | .ok (program, term) => compilesMain program
+      (.composite (.vector 2 (.tuple [.scalar .native, .scalar .native]))) term
+  | .error _ => false
+
+private def boundedNestedTupleSequence : Term := .composite
+  (.tuple [
+    .vector 2 (.tuple [.scalar (.uint 7), .scalar .bool]),
+    .vector 2 (.tuple [.scalar (.uint 15), .scalar .bool])])
+  [.uint 7 3, .bool true, .uint 7 5, .bool false,
+    .uint 15 9, .bool true, .uint 15 11, .bool false]
+
+-- Coercing a nested Vector/Tuple checks semantic source leaves, then casts
+-- their Native physical representation. Bool remains a typed Bool leaf.
+#guard match Iteration.mapWithLimits {} unitMainProgram 0 [] {}
+    [boundedNestedTupleSequence] inferredTupleIdentity with
+  | .ok (program, term) => compilesMain program
+      (.composite (.vector 2 (.vector 2
+        (.tuple [.scalar (.uint 15), .scalar .bool])))) term
+  | .error _ => false
+
+private def boundedTupleBranches : Operator := .anonymous [{name := "item"}] none [
+  .branch (.eq (.ref "item") (.native 0))
+    [.return (some (.composite
+      (.tuple [.scalar (.uint 7), .scalar .bool]) [.uint 7 3, .bool true]))]
+    [.return (some (.composite
+      (.tuple [.scalar (.uint 15), .scalar .bool]) [.uint 15 5, .bool false]))]]
+
+-- Anonymous return joins widen the UInt field and retain the Bool field type.
+#guard match Iteration.mapWithLimits {} unitMainProgram 0 [] {}
+    [.composite (.tuple [.scalar .native, .scalar .native]) [.native 0, .native 1]]
+    boundedTupleBranches with
+  | .ok (program, term) => compilesMain program
+      (.composite (.vector 2 (.tuple [.scalar (.uint 15), .scalar .bool]))) term
+  | .error _ => false
+
+private def mismatchedShapeTupleSequence : Term := .composite
+  (.tuple [
+    .tuple [.scalar .native, .scalar .native],
+    .tuple [.scalar .native]])
+  [.native 1, .native 2, .native 3]
+
+#guard errorContains
+  (Iteration.mapWithLimits {} unitMainProgram 0 [] {} [mismatchedShapeTupleSequence]
+    inferredTupleIdentity)
+  "tuple sequence elements have no common type"
+
+private def nominalJoinProgram : Program := {
+  unitMainProgram with composites := {
+    structures := [
+      {id := "Join.Left", fields := [{name := "value", type := .scalar .native}]},
+      {id := "Join.Right", fields := [{name := "value", type := .scalar .native}]}]}
+}
+
+private def nominalTupleSequence : Term := .composite
+  (.tuple [.structure "Join.Left", .structure "Join.Right"]) [.native 1, .native 2]
+
+#guard errorContains
+  (Iteration.mapWithLimits {} nominalJoinProgram 0 [] {} [nominalTupleSequence]
+    inferredTupleIdentity)
+  "tuple sequence elements have no common type"
+
 #guard errorContains
   (Iteration.mapWithLimits {} unitMainProgram 0 [] {}
     [.composite (.tuple []) []] tupleIdentityOperator)

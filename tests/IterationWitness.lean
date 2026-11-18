@@ -5,7 +5,9 @@ open Noctium Noctium.Helpers
 
 private def iterationSource : Except Diagnostic Program := do
   let sequenceType := Types.CompositeType.tuple [
-    .scalar .native, .scalar (.uint 3), .scalar .native]
+    .tuple [.scalar (.uint 3), .scalar .native],
+    .tuple [.scalar .native, .scalar (.uint 3)],
+    .tuple [.scalar (.uint 7), .scalar (.uint 3)]]
   let item := Types.CompositeType.structure "Iteration.Item"
   let amount := Types.CompositeType.enumeration "Iteration.Amount"
   let base : Program := {
@@ -49,9 +51,12 @@ private def iterationSource : Except Diagnostic Program := do
       .return (some (.witnessCall "initial-seed" "seed" []))]) [.ref "u"]
   let (mappedProgram, mapped) ← Iteration.mapWithLimits {} seedProgram 0 env {}
     [.witnessCall "input-values" "values" []]
-    (.anonymous [{name := "value"}] none [
+    (.anonymous [{name := "pair"}] none [
       .evaluate (.ref "u"),
       .evaluate (.ref "rootUnit"),
+      .bind "value" (.scalar .native) (.binary .add
+        (.project (.ref "pair") (.tupleIndex 0))
+        (.project (.ref "pair") (.tupleIndex 1))),
       .bind "shifted" (.scalar .native) (.binary .add (.ref "value") (.ref "offset")),
       .bind "doubled" (.scalar .native) (.witnessCall "double-value" "double" [.ref "shifted"]),
       .bind "amount" (.composite amount) (.composite amount [

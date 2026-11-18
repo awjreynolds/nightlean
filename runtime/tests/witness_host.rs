@@ -51,6 +51,53 @@ fn fixed_vector_schema() -> Vec<u8> {
     })).unwrap()
 }
 
+fn vector_schema(length: usize, element: Json, element_type_encoding: &str) -> Vec<u8> {
+    let type_fingerprint = format!(
+        "NoctiumCompositeTypeV1;v{length};{element_type_encoding}NoctiumCompositeLayoutV1;0;0;"
+    );
+    serde_json::to_vec(&json!({
+        "schemaVersion":1,
+        "typeFingerprint":type_fingerprint,
+        "layout":{"kind":"vector","length":length,"element":element},
+        "counts":{
+            "leaves":length,
+            "expandedNodes":length + 1,
+            "layoutNodes":2
+        }
+    }))
+    .unwrap()
+}
+
+fn tuple_schema(first: Json, second: Json, type_encoding: &str) -> Vec<u8> {
+    serde_json::to_vec(&json!({
+        "schemaVersion":1,
+        "typeFingerprint":format!("NoctiumCompositeTypeV1;{type_encoding}NoctiumCompositeLayoutV1;0;0;"),
+        "layout":{"kind":"tuple","items":[first,second]},
+        "counts":{"leaves":2,"expandedNodes":3,"layoutNodes":3}
+    }))
+    .unwrap()
+}
+
+fn unsigned_struct_schema(id: &str, maximum: &str) -> Vec<u8> {
+    let fingerprint = format!(
+        "NoctiumCompositeTypeV1;r{}:{}NoctiumCompositeLayoutV1;1;R{}:{}1;f1:xsU{};0;",
+        id.len(),
+        id,
+        id.len(),
+        id,
+        maximum
+    );
+    serde_json::to_vec(&json!({
+        "schemaVersion":1,
+        "typeFingerprint":fingerprint,
+        "layout":{"kind":"struct","id":id,"fields":[
+            {"name":"x","layout":{"kind":"scalar","leaf":{"kind":"uint","maximum":maximum}}}
+        ]},
+        "counts":{"leaves":1,"expandedNodes":2,"layoutNodes":2}
+    }))
+    .unwrap()
+}
+
 fn fixed_bytes_schema() -> Vec<u8> {
     serde_json::to_vec(&json!({
         "schemaVersion":1,
@@ -360,6 +407,162 @@ fn aggregate_leaf_codec_preserves_variant_shapes_and_checked_index_types() {
         .unwrap();
     assert_eq!(projected, json!("255"));
     assert_eq!(range, 1..2);
+}
+
+#[test]
+fn registry_widens_structural_aggregate_leaves_and_reencodes_values() {
+    let uint_vector = |length, maximum: &str| {
+        vector_schema(
+            length,
+            json!({"kind":"scalar","leaf":{"kind":"uint","maximum":maximum}}),
+            &format!("sU{maximum};"),
+        )
+    };
+    let native_vector = |length| {
+        vector_schema(
+            length,
+            json!({"kind":"scalar","leaf":{"kind":"native"}}),
+            "sN",
+        )
+    };
+    let mut registry = Registry::default();
+    registry
+        .register_json("Aggregate:t0", &uint_vector(2, "15"))
+        .unwrap();
+    registry
+        .register_json("Aggregate:t1", &uint_vector(2, "255"))
+        .unwrap();
+    registry
+        .register_json("Aggregate:t2", &native_vector(2))
+        .unwrap();
+    registry
+        .register_json("Aggregate:t3", &uint_vector(2, "7"))
+        .unwrap();
+    registry
+        .register_json("Aggregate:t4", &uint_vector(3, "255"))
+        .unwrap();
+    registry
+        .register_json(
+            "Aggregate:t5",
+            &tuple_schema(
+                json!({"kind":"scalar","leaf":{"kind":"uint","maximum":"15"}}),
+                json!({"kind":"scalar","leaf":{"kind":"bool"}}),
+                "t2;[sU15;sB]",
+            ),
+        )
+        .unwrap();
+    registry
+        .register_json(
+            "Aggregate:t6",
+            &tuple_schema(
+                json!({"kind":"scalar","leaf":{"kind":"native"}}),
+                json!({"kind":"scalar","leaf":{"kind":"bool"}}),
+                "t2;[sNsB]",
+            ),
+        )
+        .unwrap();
+    registry
+        .register_json(
+            "Aggregate:t7",
+            &tuple_schema(
+                json!({"kind":"scalar","leaf":{"kind":"native"}}),
+                json!({"kind":"scalar","leaf":{"kind":"native"}}),
+                "t2;[sNsN]",
+            ),
+        )
+        .unwrap();
+
+    let value = json!({"kind":"vector","items":[
+        {"kind":"uint","maximum":"15","value":"9"},
+        {"kind":"uint","maximum":"15","value":"12"}
+    ]});
+    assert!(
+        registry
+            .can_widen_aggregate("Aggregate:t0", "Aggregate:t1")
+            .unwrap()
+    );
+    assert_eq!(
+        registry
+            .widen_aggregate_value("Aggregate:t0", "Aggregate:t1", &value)
+            .unwrap(),
+        json!({"kind":"vector","items":[
+            {"kind":"uint","maximum":"255","value":"9"},
+            {"kind":"uint","maximum":"255","value":"12"}
+        ]})
+    );
+    assert_eq!(
+        registry
+            .widen_aggregate_value("Aggregate:t0", "Aggregate:t2", &value)
+            .unwrap(),
+        json!({"kind":"vector","items":[
+            {"kind":"native","value":"9"},
+            {"kind":"native","value":"12"}
+        ]})
+    );
+    assert!(
+        !registry
+            .can_widen_aggregate("Aggregate:t0", "Aggregate:t3")
+            .unwrap()
+    );
+    assert!(
+        !registry
+            .can_widen_aggregate("Aggregate:t0", "Aggregate:t4")
+            .unwrap()
+    );
+    assert!(
+        registry
+            .can_widen_aggregate("Aggregate:t5", "Aggregate:t6")
+            .unwrap()
+    );
+    assert!(
+        !registry
+            .can_widen_aggregate("Aggregate:t5", "Aggregate:t7")
+            .unwrap()
+    );
+    assert_eq!(
+        registry
+            .widen_aggregate_value(
+                "Aggregate:t5",
+                "Aggregate:t6",
+                &json!({"kind":"tuple","items":[
+                    {"kind":"uint","maximum":"15","value":"9"},
+                    {"kind":"bool","value":true}
+                ]})
+            )
+            .unwrap(),
+        json!({"kind":"tuple","items":[
+            {"kind":"native","value":"9"},
+            {"kind":"bool","value":true}
+        ]})
+    );
+    assert!(
+        registry
+            .widen_aggregate_value(
+                "Aggregate:t0",
+                "Aggregate:t1",
+                &json!({"kind":"vector","items":[
+                    {"kind":"uint","maximum":"15","value":"16"},
+                    {"kind":"uint","maximum":"15","value":"12"}
+                ]})
+            )
+            .is_err()
+    );
+}
+
+#[test]
+fn registry_does_not_widen_conflicting_layouts_with_the_same_nominal_id() {
+    let mut registry = Registry::default();
+    registry
+        .register_json("Aggregate:t0", &native_struct_schema("Test.A"))
+        .unwrap();
+    registry
+        .register_json("Aggregate:t1", &unsigned_struct_schema("Test.A", "255"))
+        .unwrap();
+    assert!(
+        !registry
+            .can_widen_aggregate("Aggregate:t0", "Aggregate:t1")
+            .unwrap()
+    );
 }
 
 #[test]

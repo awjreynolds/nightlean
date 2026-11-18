@@ -264,6 +264,27 @@ impl Registry {
         Ok(serde_json::from_slice(&bytes)?)
     }
 
+    pub fn can_widen_aggregate(&self, source: &str, target: &str) -> Result<bool> {
+        let Type::Aggregate(source) = Type::parse(source, self)? else {
+            bail!("aggregate widening requires an aggregate source")
+        };
+        let Type::Aggregate(target) = Type::parse(target, self)? else {
+            bail!("aggregate widening requires an aggregate target")
+        };
+        self.schemas[&source].can_widen_to(&self.schemas[&target])
+    }
+
+    pub fn widen_aggregate_value(&self, source: &str, target: &str, value: &Json) -> Result<Json> {
+        ensure!(
+            self.can_widen_aggregate(source, target)?,
+            "incompatible aggregate widening"
+        );
+        let mut leaves = self.flatten_leaves(source, value)?;
+        let widened = self.from_leaves(target, &leaves);
+        leaves.iter_mut().for_each(wipe_json);
+        widened
+    }
+
     pub fn index_type(&self, token: &str) -> Result<String> {
         let Type::Aggregate(token) = Type::parse(token, self)? else {
             bail!("dynamic indexing requires an aggregate vector or bytes")

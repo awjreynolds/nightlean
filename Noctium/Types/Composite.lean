@@ -285,6 +285,8 @@ mutual
     | unsigned {source target : Nat} (bound : source ≤ target)
         (supported : target ≤ ScalarPolicy.maxUint) :
         CompositeSubtype (.scalar (.uint source)) (.scalar (.uint target))
+    | unsignedNative {source : Nat} (supported : source ≤ ScalarPolicy.maxUint) :
+        CompositeSubtype (.scalar (.uint source)) (.scalar .native)
     | tuple {source target : List CompositeType}
         (items : CompositeSubtypeList source target) :
         CompositeSubtype (.tuple source) (.tuple target)
@@ -304,6 +306,46 @@ mutual
         (tail : CompositeSubtypeList sources targets) :
         CompositeSubtypeList (source :: sources) (target :: targets)
 end
+
+def scalarLeastUpperBound? : Ty → Ty → Option Ty
+  | source, target =>
+    if source == target then some source
+    else match source, target with
+      | .uint left, .uint right =>
+        let maximum := max left right
+        if maximum ≤ ScalarPolicy.maxUint then some (.uint maximum) else none
+      | .uint _, .native | .native, .uint _ => some .native
+      | _, _ => none
+
+mutual
+  /-- Least common type for same-shape composite values. Nominal declarations
+  and byte lengths stay exact. -/
+  def CompositeType.leastUpperBound? : CompositeType → CompositeType → Option CompositeType
+    | .unit, .unit => some .unit
+    | .scalar left, .scalar right => (.scalar ·) <$> scalarLeastUpperBound? left right
+    | .tuple left, .tuple right => do
+      if left.length != right.length then none
+      .tuple <$> CompositeTypeList.leastUpperBound? left right
+    | .structure left, .structure right => if left == right then some (.structure left) else none
+    | .enumeration left, .enumeration right => if left == right then some (.enumeration left) else none
+    | .vector leftLength left, .vector rightLength right =>
+      if leftLength == rightLength then
+        .vector leftLength <$> CompositeType.leastUpperBound? left right
+      else none
+    | .bytes left, .bytes right => if left == right then some (.bytes left) else none
+    | _, _ => none
+
+  def CompositeTypeList.leastUpperBound? : List CompositeType → List CompositeType → Option (List CompositeType)
+    | [], [] => some []
+    | left :: leftRest, right :: rightRest => do
+      let item ← CompositeType.leastUpperBound? left right
+      let rest ← CompositeTypeList.leastUpperBound? leftRest rightRest
+      pure (item :: rest)
+    | _, _ => none
+end
+
+def CompositeType.isSubtype (source target : CompositeType) : Bool :=
+  CompositeType.leastUpperBound? source target == some target
 
 theorem CompositeSubtype.structure_id_eq {left right : DeclId}
     (proof : CompositeSubtype (.structure left) (.structure right)) : left = right := by

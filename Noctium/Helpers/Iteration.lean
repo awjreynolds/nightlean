@@ -245,9 +245,9 @@ private def commonReturnType (span : SourceSpan) (types : List ResultType) :
   match types with
   | [] => pure .unit
   | first :: rest => rest.foldlM (fun common next =>
-      if subtype common next then pure next
-      else if subtype next common then pure common
-      else failAt span "anonymous operator return types have no common type") first
+      match Noctium.Helpers.commonType common next with
+      | some joined => pure joined
+      | none => failAt span "anonymous operator return types have no common type") first
 
 /-- Infer only missing return signatures. The full generated body still passes
 through Helpers.checkDeclarationWithLimits before it is exposed. -/
@@ -476,9 +476,9 @@ private def commonSequenceElementType (span : SourceSpan)
   match types with
   | [] => failAt span "tuple sequence has no element type"
   | first :: rest => rest.foldlM (fun common next =>
-      if subtype common next then pure next
-      else if subtype next common then pure common
-      else failAt span "tuple sequence elements have no common type") first
+      match Noctium.Helpers.commonType common next with
+      | some joined => pure joined
+      | none => failAt span "tuple sequence elements have no common type") first
 
 private def sequenceDescriptor (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (sequence : Term) :

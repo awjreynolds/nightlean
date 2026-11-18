@@ -16,8 +16,9 @@ private def liftError (span : SourceSpan) : Except String α → Except Diagnost
 private def merge (a b : Disclosure.Origins) : Disclosure.Origins := (a ++ b).eraseDups
 
 private def join (span : SourceSpan) (a b : ResultType) : Except Diagnostic ResultType :=
-  if subtype a b then pure b else if subtype b a then pure a
-  else fail span "conditional branches require one type to be a subtype of the other"
+  match Helpers.commonType a b with
+  | some common => pure common
+  | none => fail span "conditional branches require a common type"
 
 private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
   | .scalar ty => pure ty
@@ -390,6 +391,21 @@ private def projectionJson : Types.Projection → Json
       ("variant", toJson variant), ("name", toJson name)]
 
 mutual
+  private partial def emitCoercedExpression (checked : Helpers.Prepared) (scope : Nat)
+      (env : Helpers.Environment) (span : SourceSpan) (target : ResultType)
+      (value : Helpers.Term) : EmitM Json := do
+    let info ← emitLift (checked.infer scope env span value)
+    unless Helpers.subtype info.ty target do
+      emitLift (fail span "control coercion does not match its checked target")
+    let encoded ← emitExpression checked scope env span value
+    match info.ty, target with
+    | .composite source, .composite target =>
+      if source == target then pure encoded
+      else
+        let targetName ← emitType checked span (.composite target)
+        pure (node span "cast" [("type", toJson targetName), ("value", encoded)])
+    | _, _ => pure encoded
+
   private partial def emitExpression (checked : Helpers.Prepared) (scope : Nat) (env : Helpers.Environment)
       (span : SourceSpan) (value : Helpers.Term) : EmitM Json := do
     emitSpend span
@@ -417,10 +433,15 @@ mutual
     | .eq a b | .andThen a b | .orElse a b =>
       let tag := match value with | .eq .. => "eq" | .andThen .. => "and" | _ => "or"
       pure (node span tag [("left", ← emitExpression checked scope env span a), ("right", ← emitExpression checked scope env span b)])
-    | .select c a b | .ite c a b =>
+    | .select c a b | .ite c a b => do
       let tag := match value with | .select .. => "select" | _ => "if"
+      let (yes, no) ← if let .ite .. := value then do
+        let info ← emitLift (checked.infer scope env span value)
+        pure (← emitCoercedExpression checked scope env span info.ty a,
+          ← emitCoercedExpression checked scope env span info.ty b)
+      else pure (← emitExpression checked scope env span a, ← emitExpression checked scope env span b)
       pure (node span tag [("condition", ← emitExpression checked scope env span c),
-        ("yes", ← emitExpression checked scope env span a), ("no", ← emitExpression checked scope env span b)])
+        ("yes", yes), ("no", no)])
     | .cast ty value => pure (node span "cast" [("type", toJson (typeName (.scalar ty))), ("value", ← emitExpression checked scope env span value)])
     | .disclose _ value => pure (node span "disclose" [("value", ← emitExpression checked scope env span value)])
     | .poseidon2 domain a b => pure (node span "poseidon2" [("domain", toJson (toString domain)),
@@ -449,8 +470,10 @@ mutual
     | .call name arguments =>
       let types ← emitLift (arguments.mapM fun argument => do pure (← checked.infer scope env span argument).ty)
       let target ← emitLift (checked.resolve scope name types span)
+      let encodedArguments ← (arguments.zip target.parameters).mapM fun (argument, parameter) =>
+        emitCoercedExpression checked scope env span (target.parameterType parameter) argument
       pure (node span "call" [("function", toJson (idName target.id)),
-        ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
+        ("arguments", toJson encodedArguments)])
     | .witness name ty =>
       if (← get).typed then emitLift (fail span "typed control plans require declared witnessCall providers")
       unless hostName name do emitLift (fail span "invalid control witness provider name")
@@ -466,8 +489,11 @@ mutual
     | .witnessCall site name arguments =>
       unless (← get).typed do emitLift (fail span "typed witness calls require control schema version 2")
       chargeBytes (6 * (site.utf8ByteSize + name.utf8ByteSize))
+      let signature ← emitLift (Helpers.witnessSignature checked.program name span)
+      let encodedArguments ← (arguments.zip signature.parameters).mapM fun (argument, parameter) =>
+        emitCoercedExpression checked scope env span parameter.type argument
       pure (node span "witnessCall" [("site", toJson site), ("name", toJson name),
-        ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
+        ("arguments", toJson encodedArguments)])
     | .effect .. => emitLift (fail span "portable control capability unavailable: labelled effect fixture")
     | .composite type leaves =>
       unless (← get).typed do emitLift (fail span "aggregate control values require schema version 2")
@@ -495,14 +521,14 @@ mutual
         | .bind name ty value => do
           emitLift (portableName target.span name)
           chargeBytes (6 * name.utf8ByteSize)
-          let value ← emitExpression checked target.id.scope env target.span value
+          let value ← emitCoercedExpression checked target.id.scope env target.span ty value
           env := (name, ty) :: env
           pure (node target.span "bind" [("name", toJson name), ("type", toJson (← emitType checked target.span ty)), ("value", value)])
         | .evaluate value => pure (node target.span "evaluate" [("value", ← emitExpression checked target.id.scope env target.span value)])
         | .assert condition => pure (node target.span "assert" [("condition", ← emitExpression checked target.id.scope env target.span condition)])
         | .return value => pure (node target.span "return" [("value", ← match value with
           | none => pure Json.null
-          | some value => emitExpression checked target.id.scope env target.span value)])
+          | some value => emitCoercedExpression checked target.id.scope env target.span target.result value)])
         | .branch condition yes no => pure (node target.span "if" [
           ("condition", ← emitExpression checked target.id.scope env target.span condition),
           ("yes", toJson (← emitBody checked target env yes)), ("no", toJson (← emitBody checked target env no))])

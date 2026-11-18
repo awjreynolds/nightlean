@@ -106,9 +106,18 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
             source_execution(PLAN, CIRCUIT, CONTROL, BINDING, inputs, &initial, context);
         if enabled {
             let values = json!({"kind":"tuple","items":[
-                {"kind":"native","value":"1"},
-                {"kind":"uint","maximum":"3","value":"2"},
-                {"kind":"native","value":"3"}
+                {"kind":"tuple","items":[
+                    {"kind":"uint","maximum":"3","value":"1"},
+                    {"kind":"native","value":"0"}
+                ]},
+                {"kind":"tuple","items":[
+                    {"kind":"native","value":"1"},
+                    {"kind":"uint","maximum":"3","value":"1"}
+                ]},
+                {"kind":"tuple","items":[
+                    {"kind":"uint","maximum":"7","value":"1"},
+                    {"kind":"uint","maximum":"3","value":"2"}
+                ]}
             ]});
             for (name, arguments, value) in [
                 ("touch", json!({}), json!({"kind":"unit"})),

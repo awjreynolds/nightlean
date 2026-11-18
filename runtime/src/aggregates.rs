@@ -1447,6 +1447,78 @@ impl Schema {
         self.node_type_key(self.root)
     }
 
+    pub(crate) fn can_widen_to(&self, target: &Self) -> Result<bool> {
+        let mut pending = vec![(self.root, target.root)];
+        let mut discovered = BTreeSet::from([(self.root, target.root)]);
+        while let Some((source, destination)) = pending.pop() {
+            ensure!(
+                discovered.len() <= MAX_NODES,
+                "aggregate widening comparison limit exceeded"
+            );
+            let compatible = match (&self.nodes[source], &target.nodes[destination]) {
+                (LayoutNode::Unit, LayoutNode::Unit)
+                | (LayoutNode::Scalar(Leaf::Native), LayoutNode::Scalar(Leaf::Native))
+                | (LayoutNode::Scalar(Leaf::Bool), LayoutNode::Scalar(Leaf::Bool)) => true,
+                (
+                    LayoutNode::Scalar(Leaf::UInt(source)),
+                    LayoutNode::Scalar(Leaf::UInt(target)),
+                ) => source <= target,
+                (LayoutNode::Scalar(Leaf::UInt(_)), LayoutNode::Scalar(Leaf::Native)) => true,
+                (LayoutNode::Tuple(source), LayoutNode::Tuple(target))
+                    if source.len() == target.len() =>
+                {
+                    for pair in source.iter().copied().zip(target.iter().copied()) {
+                        if discovered.insert(pair) {
+                            ensure!(
+                                discovered.len() <= MAX_NODES,
+                                "aggregate widening comparison limit exceeded"
+                            );
+                            pending.push(pair);
+                        }
+                    }
+                    true
+                }
+                (
+                    LayoutNode::Vector {
+                        length: source_length,
+                        element: source_element,
+                    },
+                    LayoutNode::Vector {
+                        length: target_length,
+                        element: target_element,
+                    },
+                ) if source_length == target_length => {
+                    let pair = (*source_element, *target_element);
+                    if discovered.insert(pair) {
+                        ensure!(
+                            discovered.len() <= MAX_NODES,
+                            "aggregate widening comparison limit exceeded"
+                        );
+                        pending.push(pair);
+                    }
+                    true
+                }
+                (
+                    LayoutNode::Bytes {
+                        length: source_length,
+                    },
+                    LayoutNode::Bytes {
+                        length: target_length,
+                    },
+                ) => source_length == target_length,
+                (LayoutNode::Struct { .. }, LayoutNode::Struct { .. })
+                | (LayoutNode::Enum { .. }, LayoutNode::Enum { .. }) => {
+                    self.node_type_key(source)? == target.node_type_key(destination)?
+                }
+                _ => false,
+            };
+            if !compatible {
+                return Ok(false);
+            }
+        }
+        Ok(self.measures[self.root].leaves == target.measures[target.root].leaves)
+    }
+
     pub fn projection_value_json(
         &self,
         json: &[u8],

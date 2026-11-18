@@ -514,16 +514,22 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "SEM"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Scalar widening and Native embedding are implemented. Internal composite type rules preserve nominal identity and kernel-proved UInt widening. Public source composite/helper argument execution and full subtyping equivalence remain open.",
+        "checkedOn": "2026-11-18",
+        "scope": "Shared source subtype and least-upper-bound rules support equal-arity tuples and equal-length vectors with inclusive UInt widening and UInt-to-Native conversion. Bool, byte lengths and nominal record/enum identities stay exact. Lean emits explicit aggregate casts at helper/witness arguments, bindings, returns and lazy conditional arms. The native host validates layout compatibility, canonicalizes values and preserves private leaf/control taints. Root input/provider result schemas stay exact. Full subtyping equivalence and compiler preservation remain unverified.",
         "evidence": [
           "tests/BoundedScalars.lean",
           "Noctium/Frontend.lean",
           "Noctium/Types/Composite.lean",
-          "tests/CompositeTypes.lean"
+          "tests/CompositeTypes.lean",
+          "tests/Iteration.lean",
+          "tests/IterationWitness.lean",
+          "runtime/tests/witness_host.rs",
+          "runtime/src/witness_execution/iteration_ledger_tests.rs"
         ],
         "fullEquivalence": "unverified"
       }
@@ -779,7 +785,7 @@
       "layer": "language",
       "surface": "map, fold and anonymous circuits",
       "noctiumStatus": "subset",
-      "notes": "Staged Lean Iteration.applyWithLimits/mapWithLimits/foldWithLimits construct checked ordinary Helpers programs. Named helpers and anonymous statement bodies support inferred signatures and typed lexical captures. Fixed sequence map and fold accept vectors, compatible tuples and scalar/composite byte sequences with equal lengths and checked scalar, Unit, record, tuple, nested-vector, byte and enum results with guarded tag/payload projections and canonical padding. Fold evaluates initial before sequence and requires exact accumulator/result types. Empty-tuple element inference, broader structural subtype joins and readable operator grammar remain open. See docs/development/iteration.md and tests/IterationWitness.lean. Unit arguments/captures and root Unit inputs retain logical arity with zero native fields, including generic specialization.",
+      "notes": "Staged Lean Iteration.applyWithLimits/mapWithLimits/foldWithLimits construct checked ordinary Helpers programs. Named helpers and anonymous statement bodies support inferred signatures and typed lexical captures. Fixed sequence map and fold accept vectors, structurally compatible tuples and scalar/composite byte sequences with equal lengths and checked scalar, Unit, record, tuple, nested-vector, byte and enum results with guarded tag/payload projections and canonical padding. Fold evaluates initial before sequence and requires exact accumulator/result types. Empty-tuple element inference and readable operator grammar remain open. See docs/development/iteration.md and tests/IterationWitness.lean. Unit arguments/captures and root Unit inputs retain logical arity with zero native fields, including generic specialization.",
       "source": [
         "reference"
       ],
