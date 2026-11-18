@@ -2,7 +2,7 @@
 
 `examples/openzeppelin/ConfidentialToken.lean` adapts the registration, credit, sweep, transfer, burn, memo maintenance and query paths from OpenZeppelin's confidential fungible token at
 revision `f85f1a23685c6bbedfc8c2589ae3aa128aff7c46`. Noctium compiles the source
-directly to native ZKIR and ledger operations. This milestone covers twelve
+directly to native ZKIR and ledger operations. This milestone covers fourteen
 entrypoints from the sixteen-entrypoint reference workload.
 
 `registerWithKey` proves the account ID is SHA-256 of the private account secret
@@ -21,8 +21,11 @@ wallet secrets and checks the current credit epoch before resetting only the
 caller's memo List. A stale epoch rejects clearing after a concurrent credit.
 The views expose supply, registration, spendable/pending ciphertexts and account
 ID computation. Missing ciphertext entries return curve-identity encrypted zero.
-Ciphertext results use named typed `c1` and `c2` point components; nominal
-composite ABI layouts remain separate work.
+Ciphertext results use named typed point components; nominal composite ABI
+layouts remain separate work. `approve` refunds the prior owner ciphertext,
+proves the refunded spendable balance, then replaces the escrow with paired
+owner/spender encryptions and an owner memo. `allowance` returns those encrypted
+components, with identity/zero defaults for an absent owner or spender.
 
 | State | Representation |
 | --- | --- |
@@ -30,6 +33,7 @@ composite ABI layouts remain separate work.
 | balances, pending | Account ID to four Native ciphertext coordinates |
 | memos | Account ID to a List of three-Native ECDH memo records |
 | creditEpochs | Account ID to a native u64 Counter |
+| escrow | Owner and spender IDs to two ciphertexts and an owner memo |
 | initialized | Public initialization precondition |
 | totalSupply | Public UInt128 supply |
 
@@ -39,8 +43,17 @@ keys, and every candidate ciphertext against actual ordered ledger reads before
 writing. A candidate input is not trusted state. The account ID is returned as
 a typed Bytes32 result bound to the native output commitment.
 
+The current witness-helper output surface does not carry a direct Bytes32
+result. Approval therefore checks a public account-ID candidate against the
+private account secret, matching the earlier authenticated operations. This
+boundary does not release the secret. Typed byte helper-output layouts remain
+part of the broader authoring/ABI work. The current helper analyzer enforces
+a maximum expanded depth of 256. Approval takes typed ciphertext points and
+reads overwritten escrow fields directly from state, avoiding unused candidate
+parameters. This preserves refund checks within the present bound.
+
 Private account and encryption secrets come from wallet-scoped native witness
-reads. A typed callback supplies a UInt128 plaintext claim indexed by the sender's
+reads. A typed callback supplies a UInt248 plaintext claim indexed by the sender's
 ciphertext. The circuit checks the claim through ElGamal decryption. The host also
 supplies a private seed for encryption and memos. The credit epoch is cast to a
 Native/Field before hashing, matching the reference's explicit Field cast.
@@ -59,7 +72,7 @@ sequence checks all five views, then self-moves one from Alice spendable to
 Alice pending. Supply stays ten and Alice's credit epoch advances to two.
 Clearing with epoch one rejects. Clearing with epoch two empties only Alice's
 memo List and preserves the epoch and other ledger state. Self-transfer and
-wrong-key clearing also reject. The focused native case passes in 0.30 seconds.
+wrong-key clearing also reject. The expanded focused native case passes in 0.46 seconds.
 
 The delegated-spend nonce preimage fits existing source operations:
 `persistentHashVector32([seed, domain, owner, spender, toBytes32(epochNative)])`.
@@ -69,9 +82,16 @@ encodings produce the same 160-byte preimage. This removes a compiler dependency
 for the remaining escrow work. [Native nested-map leaf deletion](native-map-remove.md) now supplies the
 remaining ledger primitive for exact refund/replacement behavior.
 
+The lifecycle then approves two for Bob and replaces the approval with three.
+Replacement first refunds the prior two, so Alice ends with one spendable, one
+pending and three escrowed. Bob keeps five pending and supply stays ten.
+Independent group arithmetic checks both encrypted escrow copies and the owner
+memo. Pending balances, credit counters and memo Lists stay unchanged. A valid
+rerandomized old owner ciphertext rejects when used as the refund candidate.
+
 Deployment starts from explicitly configured initialized state, zero supply and
-empty maps. Constructor/sealed metadata, the remaining four reference entrypoints (`allowance`, `approve`,
-`transferFrom` and `burnFrom`), escrow, nominal return layouts and composition
+empty maps. Constructor/sealed metadata, the remaining two reference entrypoints (`transferFrom` and `burnFrom`),
+delegated escrow spending, nominal return layouts and composition
 remain open. Mint is the ungated
 public-supply benchmark operation, not a production issuance policy. Native
 acceptance here is checker evidence. No new keys, proofs or deployment were
