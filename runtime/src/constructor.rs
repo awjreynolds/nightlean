@@ -92,7 +92,10 @@ fn scalar_zero(ty: &str) -> Result<Json> {
         ScalarType::JubjubScalar => json!({"kind":"jubjubScalar", "value":"0"}),
         ScalarType::JubjubPoint => json!({"kind":"jubjubPoint", "x":"0", "y":"1"}),
         #[cfg(feature = "zkir-321")]
-        ScalarType::Foreign(_) => bail!("foreign ledger storage is unsupported"),
+        ScalarType::Foreign(ty) => {
+            let value = crate::foreign::ForeignValue::from_bytes(ty, &vec![0; ty.byte_len()])?;
+            json!({"kind":"foreign", "type":ty.source_name(), "bytes":value.to_bytes()?})
+        }
     })
 }
 

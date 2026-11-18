@@ -135,7 +135,7 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
     match alignment {
         "field" => match value {
             #[cfg(feature = "zkir-321")]
-            Value::Foreign(_) => bail!("foreign values cannot use Native field alignment"),
+            Value::Foreign(value) => Ok(aligned_fields(&value.encode()?)),
             _ => Ok(field_value(value.field_encoding()?)),
         },
         "bit" => Ok(AlignedValue {
@@ -1071,10 +1071,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             schema,
             ..
         } => {
-            let parsed = checked_record_schema(schema)?;
             ensure!(
-                expressions.len() == parsed.counts().leaves,
-                "record expression count mismatch"
+                expressions.len() == aligned_schema_field_count(schema)?,
+                "aligned value expression count mismatch"
             );
             3 + 2 * expressions.len()
         }
@@ -1082,10 +1081,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             expressions,
             schema,
         } => {
-            let parsed = checked_record_schema(schema)?;
             ensure!(
-                expressions.len() == parsed.counts().leaves,
-                "record expression count mismatch"
+                expressions.len() == aligned_schema_field_count(schema)?,
+                "aligned value expression count mismatch"
             );
             2 + 2 * expressions.len()
         }
@@ -1107,6 +1105,50 @@ fn reject_unqualified_foreign_storage(ty: &ScalarType) -> Result<()> {
     );
     #[cfg(not(feature = "zkir-321"))]
     let _ = ty;
+    Ok(())
+}
+
+#[cfg(feature = "zkir-321")]
+fn foreign_storage_type_at_path(
+    plan: &Plan,
+    slot: u32,
+    depth: usize,
+) -> Result<foreign::ForeignType> {
+    let state = plan
+        .state
+        .get(slot as usize)
+        .ok_or_else(|| anyhow!("state slot out of range"))?;
+    let declared = if let Some(ty) = state.kind.get("cell").and_then(Json::as_str) {
+        ensure!(depth == 0, "foreign cell path schema mismatch");
+        ty
+    } else if let Some(types) = state.kind.get("map").and_then(Json::as_array) {
+        ensure!(
+            depth == 1 && types.len() == 2,
+            "foreign map path schema mismatch"
+        );
+        types[1]
+            .as_str()
+            .ok_or_else(|| anyhow!("invalid map value schema"))?
+    } else {
+        bail!("foreign ledger values require a scalar cell or map value")
+    };
+    let ScalarType::Foreign(ty) = ScalarType::parse(declared)? else {
+        bail!("foreign ledger read type differs from state schema")
+    };
+    Ok(ty)
+}
+
+#[cfg(feature = "zkir-321")]
+fn validate_foreign_storage_type(
+    plan: &Plan,
+    slot: u32,
+    depth: usize,
+    ty: foreign::ForeignType,
+) -> Result<()> {
+    ensure!(
+        foreign_storage_type_at_path(plan, slot, depth)? == ty,
+        "foreign ledger type differs from state schema"
+    );
     Ok(())
 }
 
@@ -1222,6 +1264,27 @@ fn checked_record_schema(json: &Json) -> Result<aggregates::Schema> {
     Ok(schema)
 }
 
+fn foreign_schema_token(schema: &Json) -> Option<&str> {
+    let Some(_name) = schema.as_str() else {
+        return None;
+    };
+    #[cfg(feature = "zkir-321")]
+    if foreign::ForeignType::parse_source_name(_name).is_ok() {
+        return Some(_name);
+    }
+    None
+}
+
+fn aligned_schema_field_count(schema: &Json) -> Result<usize> {
+    #[cfg(feature = "zkir-321")]
+    if let Some(_name) = foreign_schema_token(schema) {
+        return Ok(foreign::ForeignType::parse_source_name(_name)?
+            .native_type()
+            .encoded_len());
+    }
+    Ok(checked_record_schema(schema)?.counts().leaves)
+}
+
 fn aligned_fields(fields: &[Fr]) -> AlignedValue {
     let fields: Vec<_> = fields.iter().copied().map(field_value).collect();
     AlignedValue::concat(fields.iter())
@@ -1288,7 +1351,10 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
             bail!("Jubjub ledger reads require typed coordinate records")
         }
         #[cfg(feature = "zkir-321")]
-        ScalarType::Foreign(_) => bail!("foreign ledger reads are unsupported"),
+        ScalarType::Foreign(ty) => Value::Foreign(foreign::ForeignValue::from_bytes(
+            ty,
+            &vec![0; ty.byte_len()],
+        )?),
     })
 }
 #[derive(Clone, Deserialize)]
@@ -1505,9 +1571,7 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                 )),
                 "general byte map schemas require explicit native ledger support"
             );
-            for ty in types {
-                reject_unqualified_foreign_storage(&ScalarType::parse(ty.as_str().unwrap())?)?;
-            }
+            reject_unqualified_foreign_storage(&ScalarType::parse(types[0].as_str().unwrap())?)?;
             ensure!(
                 value.as_array().is_some_and(|a| a.is_empty()),
                 "initial map must be explicitly empty"
@@ -1608,19 +1672,27 @@ fn read_state_cell(
 fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<Value> {
     let mut fields = Vec::new();
     value.value_only_field_repr(&mut fields);
-    ensure!(fields.len() == 1, "expected scalar state cell");
     let decoded = match ScalarType::parse(ty)? {
-        ScalarType::Native => Ok(Value::Native(fields[0])),
-        ScalarType::Bool => Ok(Value::Bool(
-            bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
-        )),
-        ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
+        ScalarType::Native => {
+            ensure!(fields.len() == 1, "expected scalar state cell");
+            Ok(Value::Native(fields[0]))
+        }
+        ScalarType::Bool => {
+            ensure!(fields.len() == 1, "expected scalar state cell");
+            Ok(Value::Bool(
+                bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
+            ))
+        }
+        ScalarType::UInt(_) => {
+            ensure!(fields.len() == 1, "expected scalar state cell");
+            input_value(ty, &Json::String(field_decimal(fields[0])))
+        }
         ScalarType::Bytes32 | ScalarType::Bytes(_) => bail!("bytes ledger values are unsupported"),
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
             bail!("Jubjub ledger values require typed coordinate records")
         }
         #[cfg(feature = "zkir-321")]
-        ScalarType::Foreign(_) => bail!("foreign ledger values are unsupported"),
+        ScalarType::Foreign(ty) => Ok(Value::Foreign(foreign::ForeignValue::decode(ty, &fields)?)),
     }?;
     ensure!(
         *value == aligned(&decoded, alignment)?,
@@ -1989,12 +2061,46 @@ pub fn prepare(
                             read.guard.as_ref() == Some(guard),
                             "inactive record read guard mismatch"
                         );
-                        for name in record_component_names(read, expressions, schema)? {
-                            ensure!(
-                                !env.contains_key(name),
-                                "record component shadows an existing value"
-                            );
-                            env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
+                        if let Some(_name) = foreign_schema_token(schema) {
+                            #[cfg(feature = "zkir-321")]
+                            {
+                                let ty = foreign::ForeignType::parse_source_name(_name)?;
+                                ensure!(
+                                    read.ty == _name
+                                        && read.schema.is_none()
+                                        && read.components.is_empty()
+                                        && expressions.len() == ty.native_type().encoded_len(),
+                                    "inactive foreign read schema mismatch"
+                                );
+                                ensure!(
+                                    !env.contains_key(&read.name),
+                                    "foreign read shadows an existing value"
+                                );
+                                let value = inactive_read_value(&read.ty)?;
+                                let Value::Foreign(foreign) = &value else {
+                                    unreachable!()
+                                };
+                                let encoded = foreign.encode()?;
+                                env.insert(read.name.clone(), value);
+                                let projected = expressions
+                                    .iter()
+                                    .map(|expression| evaluate(expression, &env)?.field())
+                                    .collect::<Result<Vec<_>>>()?;
+                                ensure!(
+                                    projected == encoded,
+                                    "inactive foreign read projections mismatch"
+                                );
+                            }
+                            #[cfg(not(feature = "zkir-321"))]
+                            unreachable!()
+                        } else {
+                            for name in record_component_names(read, expressions, schema)? {
+                                ensure!(
+                                    !env.contains_key(name),
+                                    "record component shadows an existing value"
+                                );
+                                env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
+                            }
                         }
                         read_index += 1;
                     }
@@ -2131,17 +2237,48 @@ pub fn prepare(
                 expressions,
                 schema,
             } => {
-                let schema = checked_record_schema(schema)?;
-                let fields = expressions
-                    .iter()
-                    .map(|expression| evaluate(expression, &env)?.field())
-                    .collect::<Result<Vec<_>>>()?;
-                validate_record_fields(&schema, &fields)?;
-                Op::Push {
-                    storage: *storage,
-                    value: StateValue::Cell(Sp::new(aligned_fields(&fields)))
-                        .try_into_checked()
-                        .map_err(|_| anyhow!("invalid native record value"))?,
+                if let Some(_name) = foreign_schema_token(schema) {
+                    #[cfg(feature = "zkir-321")]
+                    {
+                        let ty = foreign::ForeignType::parse_source_name(_name)?;
+                        ensure!(
+                            expressions.len() == ty.native_type().encoded_len(),
+                            "foreign storage field count mismatch"
+                        );
+                        let fields = expressions
+                            .iter()
+                            .map(|expression| evaluate(expression, &env)?.field())
+                            .collect::<Result<Vec<_>>>()?;
+                        let value = foreign::ForeignValue::decode(ty, &fields)?;
+                        Op::Push {
+                            storage: *storage,
+                            value: StateValue::Cell(Sp::new(aligned(
+                                &Value::Foreign(value),
+                                "field",
+                            )?))
+                            .try_into_checked()
+                            .map_err(|_| anyhow!("invalid foreign storage value"))?,
+                        }
+                    }
+                    #[cfg(not(feature = "zkir-321"))]
+                    unreachable!()
+                } else {
+                    let schema = checked_record_schema(schema)?;
+                    let fields = expressions
+                        .iter()
+                        .map(|expression| evaluate(expression, &env)?.field())
+                        .collect::<Result<Vec<_>>>()?;
+                    ensure!(
+                        expressions.len() == schema.counts().leaves,
+                        "record expression count mismatch"
+                    );
+                    validate_record_fields(&schema, &fields)?;
+                    Op::Push {
+                        storage: *storage,
+                        value: StateValue::Cell(Sp::new(aligned_fields(&fields)))
+                            .try_into_checked()
+                            .map_err(|_| anyhow!("invalid native record value"))?,
+                    }
                 }
             }
             Instruction::Popeq {
@@ -2202,6 +2339,10 @@ pub fn prepare(
                                     "counter read path schema mismatch"
                                 );
                             }
+                            #[cfg(feature = "zkir-321")]
+                            if let ScalarType::Foreign(ty) = ScalarType::parse(&read.ty)? {
+                                validate_foreign_storage_type(plan, *slot, keys.len(), ty)?;
+                            }
                             read_state_cell(read_context, *slot, keys, &read.ty, alignment)?
                         };
                         env.insert(name.clone(), value);
@@ -2228,49 +2369,105 @@ pub fn prepare(
                     read.guard.as_ref() == instruction_guard,
                     "active record read guard mismatch"
                 );
-                let names = record_component_names(read, expressions, schema)?;
-                let (slot, keys) = previous_index
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("record read lacks a native index"))?;
-                ensure!(
-                    record_schema_at_path(plan, *slot, keys.len())? == schema,
-                    "record read differs from state schema"
-                );
-                if has_written {
-                    advance_native_state_prefix(
-                        &mut prefix_context,
-                        &program,
-                        &mut materialized_prefix,
-                        mutation_boundary,
-                        cost,
-                    )?;
-                }
-                let read_context = if has_written {
-                    &prefix_context
+                if let Some(_name) = foreign_schema_token(schema) {
+                    #[cfg(feature = "zkir-321")]
+                    {
+                        let ty = foreign::ForeignType::parse_source_name(_name)?;
+                        ensure!(
+                            read.ty == _name && read.schema.is_none() && read.components.is_empty(),
+                            "foreign read schema mismatch"
+                        );
+                        ensure!(
+                            expressions.len() == ty.native_type().encoded_len(),
+                            "foreign read field count mismatch"
+                        );
+                        let (slot, keys) = previous_index
+                            .as_ref()
+                            .ok_or_else(|| anyhow!("foreign read lacks a state index"))?;
+                        validate_foreign_storage_type(plan, *slot, keys.len(), ty)?;
+                        if has_written {
+                            advance_native_state_prefix(
+                                &mut prefix_context,
+                                &program,
+                                &mut materialized_prefix,
+                                mutation_boundary,
+                                cost,
+                            )?;
+                        }
+                        let read_context = if has_written {
+                            &prefix_context
+                        } else {
+                            &context
+                        };
+                        let value = read_state_aligned(read_context, *slot, keys)?;
+                        let Value::Foreign(decoded) = decode_state_cell(&value, &read.ty, "field")?
+                        else {
+                            unreachable!()
+                        };
+                        let fields = decoded.encode()?;
+                        ensure!(
+                            !env.contains_key(&read.name),
+                            "foreign read shadows an existing value"
+                        );
+                        env.insert(read.name.clone(), Value::Foreign(decoded));
+                        let projected = expressions
+                            .iter()
+                            .map(|expression| evaluate(expression, &env)?.field())
+                            .collect::<Result<Vec<_>>>()?;
+                        ensure!(projected == fields, "foreign read projections mismatch");
+                        read_index += 1;
+                        Op::Popeq {
+                            cached: false,
+                            result: value,
+                        }
+                    }
+                    #[cfg(not(feature = "zkir-321"))]
+                    unreachable!()
                 } else {
-                    &context
-                };
-                let value = read_state_aligned(read_context, *slot, keys)?;
-                let expected_alignment =
-                    aligned_fields(&vec![Fr::from(0u64); names.len()]).alignment;
-                ensure!(
-                    value.alignment == expected_alignment,
-                    "record cell alignment mismatch"
-                );
-                let mut fields = Vec::new();
-                value.value_only_field_repr(&mut fields);
-                validate_record_fields(&checked_record_schema(schema)?, &fields)?;
-                for (name, field) in names.into_iter().zip(fields) {
+                    let names = record_component_names(read, expressions, schema)?;
+                    let (slot, keys) = previous_index
+                        .as_ref()
+                        .ok_or_else(|| anyhow!("record read lacks a native index"))?;
                     ensure!(
-                        !env.contains_key(name),
-                        "record component shadows an existing value"
+                        record_schema_at_path(plan, *slot, keys.len())? == schema,
+                        "record read differs from state schema"
                     );
-                    env.insert(name.to_owned(), Value::Native(field));
-                }
-                read_index += 1;
-                Op::Popeq {
-                    cached: false,
-                    result: value,
+                    if has_written {
+                        advance_native_state_prefix(
+                            &mut prefix_context,
+                            &program,
+                            &mut materialized_prefix,
+                            mutation_boundary,
+                            cost,
+                        )?;
+                    }
+                    let read_context = if has_written {
+                        &prefix_context
+                    } else {
+                        &context
+                    };
+                    let value = read_state_aligned(read_context, *slot, keys)?;
+                    let expected_alignment =
+                        aligned_fields(&vec![Fr::from(0u64); names.len()]).alignment;
+                    ensure!(
+                        value.alignment == expected_alignment,
+                        "record cell alignment mismatch"
+                    );
+                    let mut fields = Vec::new();
+                    value.value_only_field_repr(&mut fields);
+                    validate_record_fields(&checked_record_schema(schema)?, &fields)?;
+                    for (name, field) in names.into_iter().zip(fields) {
+                        ensure!(
+                            !env.contains_key(name),
+                            "record component shadows an existing value"
+                        );
+                        env.insert(name.to_owned(), Value::Native(field));
+                    }
+                    read_index += 1;
+                    Op::Popeq {
+                        cached: false,
+                        result: value,
+                    }
                 }
             }
             Instruction::ListLength {

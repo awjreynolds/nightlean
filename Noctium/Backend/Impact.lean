@@ -179,13 +179,20 @@ structure Read where
   ty : Ty
   components : List (String × Ty) := []
   schema : Option Lean.Json := none
-  /-- Source guard for a conditionally bound read. Inactive reads use zero. -/
+  /-- Source guard for a conditionally bound read. Inactive reads use a canonical default. -/
   guard : Option (Expr .bool) := none
+
+private def foreignReadDefault : (kind : Foreign.Kind) → Expr (.foreign kind)
+  | .base curve => .foreignBase curve 0
+  | .scalar curve => .foreignScalar curve 0
+  | .point curve => .foreignIdentity curve
 
 def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   if !read.components.isEmpty then none else
   match read.ty, read.guard with
-  | .bytes _, _ | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ | _, none => none
+  | .bytes _, _ | .jubjubScalar, _ | .jubjubPoint, _ | _, none => none
+  | .foreign kind, some guard => some (.eq (.ref read.name)
+      (.select guard (.ref read.name) (foreignReadDefault kind)))
   | .native, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.native 0)))
   | .bool, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.bool false)))
   | .uint maximum, some guard => some (.eq (.ref read.name)
@@ -283,6 +290,23 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
   | .uint maximum => pure (.cast .native (.ref name : Expr (.uint maximum)))
   | .bytes _ => throw "Bytes32 is read through byte alignment"
   | .jubjubScalar | .jubjubPoint | .foreign _ => throw "opaque inputs use reserved Native projections"
+
+private def foreignNativeFields : (kind : Foreign.Kind) → Expr (.foreign kind) → List Scalar
+  | kind, value => (List.range kind.encodedFieldCount).map fun index =>
+      .foreignEncodedField value index
+
+private def storageWriteValue : (ty : Ty) → Expr ty → Except String Op
+  | .foreign kind, value =>
+    pure (.pushFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value) true)
+  | ty, value => do
+    pure (.push (.field (← nativeValue ty value)) true)
+
+private def storageReadValue (ty : Ty) (name : String) : Except String Op := do
+  match ty with
+  | .foreign kind =>
+    let value : Expr (.foreign kind) := .ref name
+    pure (.popeqFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value))
+  | _ => pure (.popeq (.field (← nativeRead ty name)))
 
 private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) :=
   keys.mapM fun key => match key with
@@ -581,9 +605,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   match effect with
   | .readCell name destination ty =>
     let slot ← stateSlot state name
-    let value ← nativeRead ty destination
+    let value ← storageReadValue ty destination
     pure { plan with
-      operations := plan.operations ++ [.dup, .index slot, .popeq (.field value)]
+      operations := plan.operations ++ [.dup, .index slot, value]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .require condition =>
     pure {plan with guards := plan.guards ++ [condition]}
@@ -596,26 +620,26 @@ def appendEffect (state : List StateDecl) (effect : Effect)
         .dup, .index slot, .push key, .member, .popeq (.bit false)]
       reads := plan.reads ++ [{name := readName, ty := .bool}]
       guards := plan.guards ++ [.eq (.ref readName : Expr .bool) (.bool false)] }
-  | .writeCell name _ value =>
+  | .writeCell name ty value =>
     let slot ← stateSlot state name
-    let value ← nativeValue _ value
+    let value ← storageWriteValue ty value
     pure {plan with operations := plan.operations ++ [
-      .push (.field (.native slot)), .push (.field value) true, .insert 1]}
-  | .writeMap name _ _ key value =>
+      .push (.field (.native slot)), value, .insert 1]}
+  | .writeMap name _ ty key value =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
-    let value ← nativeValue _ value
+    let value ← storageWriteValue ty value
     pure {plan with operations := plan.operations ++ [
       .index slot true, .push key,
-      .push (.field value) true, .insert 2]}
+      value, .insert 2]}
   | .readMap name destination _ ty key => do
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
-    let value ← nativeRead ty destination
+    let value ← storageReadValue ty destination
     pure { plan with
       operations := plan.operations ++ [
         .dup, .mapIndex slot key,
-        .popeq (.field value)]
+        value]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .readMember name destination _ _ key => do
     let slot ← stateSlot state name
@@ -973,9 +997,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   match effect with
   | .readCell name destination ty =>
     let slot ← stateSlot state name
-    let value ← nativeRead ty destination
+    let value ← storageReadValue ty destination
     plan := { plan with
-      operations := plan.operations ++ [.dup, .index slot, .popeq (.field value)]
+      operations := plan.operations ++ [.dup, .index slot, value]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .require condition =>
     plan := {plan with guards := plan.guards ++ [condition]}
@@ -988,26 +1012,26 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
         .dup, .index slot, .push key, .member, .popeq (.bit false)]
       reads := plan.reads ++ [{name, ty := .bool}]
       guards := plan.guards ++ [.eq (.ref name : Expr .bool) (.bool false)] }
-  | .writeCell name _ value =>
+  | .writeCell name ty value =>
     let slot ← stateSlot state name
-    let value ← nativeValue _ value
+    let value ← storageWriteValue ty value
     plan := {plan with operations := plan.operations ++ [
-      .push (.field (.native slot)), .push (.field value) true, .insert 1]}
-  | .writeMap name _ _ key value =>
+      .push (.field (.native slot)), value, .insert 1]}
+  | .writeMap name _ ty key value =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
-    let value ← nativeValue _ value
+    let value ← storageWriteValue ty value
     plan := {plan with operations := plan.operations ++ [
       .index slot true, .push key,
-      .push (.field value) true, .insert 2]}
+      value, .insert 2]}
   | .readMap name destination _ ty key => do
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
-    let value ← nativeRead ty destination
+    let value ← storageReadValue ty destination
     plan := { plan with
       operations := plan.operations ++ [
         .dup, .mapIndex slot key,
-        .popeq (.field value)]
+        value]
       reads := plan.reads ++ [{name := destination, ty}] }
   | .readMember name destination _ _ key => do
     let slot ← stateSlot state name

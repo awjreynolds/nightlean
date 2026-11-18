@@ -808,8 +808,6 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
     match decl.kind with
     | .cell (.bytes _) | .map _ (.bytes _) =>
       throw {span := decl.span, message := "Bytes32 state values are not supported"}
-    | .cell (.foreign _) | .map _ (.foreign _) =>
-      throw {span := decl.span, message := "foreign values are not supported in ledger cells or maps"}
     | .cell .jubjubScalar | .cell .jubjubPoint
     | .map _ .jubjubScalar | .map _ .jubjubPoint =>
       throw {span := decl.span, message := "Jubjub ledger state requires a qualified point/scalar schema"}
@@ -1029,10 +1027,6 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       match validateLedgerMapKeyType keyTy with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
-    match decl.kind with
-    | .cell (.foreign _) | .map _ (.foreign _) =>
-      throw {span := decl.span, message := "foreign values are not supported in ledger cells or maps"}
-    | _ => pure ()
     let types := match decl.kind with
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]

@@ -1118,8 +1118,12 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
       | some guard => pure (toJson (← lowerExpr guard))
     for (name, ty) in read.bindings do
       let output := "%input_" ++ name
-      emit "public_input" [("guard", activity), ("type", nativeType), ("output", toJson output)]
-      constrainType ty output
+      match ty with
+      | .foreign kind =>
+        emit "public_input" [("guard", activity), ("type", toJson kind.nativeName), ("output", toJson output)]
+      | _ =>
+        emit "public_input" [("guard", activity), ("type", nativeType), ("output", toJson output)]
+        constrainType ty output
     for condition in read.inactiveDefaultConstraints do
       emit "assert" [("cond", toJson (← lowerExpr condition))]
   for condition in plan.guards do

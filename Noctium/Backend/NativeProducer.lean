@@ -264,7 +264,6 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let valueType ← match required.ty with
       | .foreign kind => do
         ensure ((← stringField instruction "type") == kind.nativeName) "foreign input type differs from source"
-        ensure required.activityGuard.isNone "guarded foreign transcript inputs are not qualified"
         pure (NativeValueType.foreign kind)
       | _ => do
         nativeType (← instruction.getObjVal? "type")
