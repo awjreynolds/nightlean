@@ -60,6 +60,13 @@ checks the retained deployment, operation and state binding before starting the
 client with explicit host setup. Failed startup preserves the proved value.
 No synthetic witness plan or Node process is required.
 
+Rust hosts service submit and observe requests through
+`WitnessClientRequest::transaction()`. The immutable `BoundTransaction` goes
+directly to the existing `ChainAdapter` methods, retaining the driver's exact
+expected state and network policy. `WitnessClient::transaction()` exports the
+retained signed bytes for transport. `receipt_state()` returns state bytes only
+after the driver has verified the finalized receipt.
+
 The focused PublicSupply test uses authenticated add/subtract bundles with k9/k8
 parameters. It checks state transitions 0→5→3, parameter and foreign-state
 rejection, and client startup after one real addSupply proof. Its state-token

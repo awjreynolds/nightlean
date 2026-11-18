@@ -687,10 +687,16 @@ pub struct WitnessClientRequest {
     pub id: u64,
     pub metadata: Json,
     private_payload: Option<Zeroizing<Vec<u8>>>,
+    transaction: Option<client::BoundTransaction>,
 }
 impl WitnessClientRequest {
     pub fn private_payload(&self) -> Option<&[u8]> {
         self.private_payload.as_deref().map(Vec::as_slice)
+    }
+
+    /// Exact immutable transaction binding for submit and observe adapters.
+    pub fn transaction(&self) -> Option<&client::BoundTransaction> {
+        self.transaction.as_ref()
     }
 }
 
@@ -713,10 +719,16 @@ impl WitnessClient {
         } else {
             None
         };
+        let transaction = match &request.data {
+            native_client::RequestData::Submit(transaction)
+            | native_client::RequestData::Observe(transaction) => Some(transaction.clone()),
+            _ => None,
+        };
         Ok(Some(WitnessClientRequest {
             id: request.id,
             metadata,
             private_payload,
+            transaction,
         }))
     }
 
@@ -759,6 +771,16 @@ impl WitnessClient {
 
     pub fn detachable(&self) -> bool {
         self.driver.detachable()
+    }
+
+    /// Return the retained signed transaction for a native host transport.
+    pub fn transaction(&self) -> Result<Vec<u8>> {
+        self.driver.transaction().map_err(Error::Client)
+    }
+
+    /// Return the exact contract state from the verified finalized receipt.
+    pub fn receipt_state(&self) -> Result<Vec<u8>> {
+        self.driver.receipt_state().map_err(Error::Client)
     }
 
     /// Return the next opaque state token after this client verifies finality and commits its
