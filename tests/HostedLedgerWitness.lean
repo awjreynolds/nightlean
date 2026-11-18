@@ -41,7 +41,10 @@ private def cellSchema : List StateDecl := [{name := "balance", kind := .cell .n
 
 #guard match Helpers.compileHostedEntrypointForWithLimits {} hostedCellProgram "update" cellSchema with
   | .ok {entrypoint, calls := [call]} =>
-    call.effectCount == 2 && entrypoint.circuit.inputs.any (·.name == call.inputs.headD "")
+    (match entrypoint.effects.take call.effectCount, entrypoint.effects.drop call.effectCount with
+      | [.readCell "balance" _ .native], [.writeCell "balance" .native _] => _root_.Bool.true
+      | _, _ => _root_.Bool.false) &&
+      entrypoint.circuit.inputs.any (·.name == call.inputs.headD "")
   | _ => _root_.Bool.false
 
 #guard match Helpers.compileHostedEntrypointForWithLimits {} guardedCellProgram "update" cellSchema with
