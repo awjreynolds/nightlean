@@ -5,7 +5,7 @@ namespace Noctium.Backend.Native
 
 private def hashCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true}
 
 private def inputRequirement (input : Input) : InputRequirement :=
   {identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}

@@ -168,6 +168,10 @@ def instructionSupport (opcode : String) : Except String Support :=
     scalar .nativeUnary .preserveConstraintOrigins .constraint .canonicalNative .noGuard .none ["val"]
   | "less_than" => .supported <|
     scalar .nativeBinary .propagateAll .pure .boundedOperands .noGuard .none ["a", "b", "bits", "output"]
+  | "hash_to_curve" => .supported <|
+    let descriptor := scalar .nativeVector .propagateAll .pure .canonicalNative .noGuard .sourceHashTerm
+      ["inputs", "output"]
+    {descriptor with encoding := .jubjubAffinePoint}
   | "transient_hash" => .supported <|
     scalar .nativeVector .propagateAll .pure .canonicalNative .noGuard .none ["inputs", "output"]
   | "sha512" | "keccak256" => .supported <|

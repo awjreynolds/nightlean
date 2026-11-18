@@ -337,6 +337,8 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| jubjubY($point)) => s!"jubjubY({renderExpr point})"
   | `(nlexpr| jubjubFromCoordinates($x, $y)) =>
     s!"jubjubFromCoordinates({renderExpr x}, {renderExpr y})"
+  | `(nlexpr| hashToCurve([$values,*])) =>
+    s!"hashToCurve([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) =>
     s!"witness {function.getId}({String.intercalate ", " (args.getElems.toList.map renderExpr)})"
   | _ => "<unsupported-expression>"
@@ -374,6 +376,7 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| jubjubMul($point, $scalar)) | `(nlexpr| jubjubAdd($point, $scalar)) =>
     disclosedValues point ++ disclosedValues scalar
   | `(nlexpr| jubjubFromCoordinates($x, $y)) => disclosedValues x ++ disclosedValues y
+  | `(nlexpr| hashToCurve([$values,*])) => values.getElems.toList.flatMap disclosedValues
   | `(nlexpr| witness $_:ident($args:nlexpr,*)) => args.getElems.toList.flatMap disclosedValues
   | _ => []
 
@@ -411,6 +414,7 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| jubjubMul($point, $scalar)) | `(nlexpr| jubjubAdd($point, $scalar)) =>
     inlineAssertions point ++ inlineAssertions scalar
   | `(nlexpr| jubjubFromCoordinates($x, $y)) => inlineAssertions x ++ inlineAssertions y
+  | `(nlexpr| hashToCurve([$values,*])) => values.getElems.toList.flatMap inlineAssertions
   | `(nlexpr| witness $_:ident($args:nlexpr,*)) => args.getElems.toList.flatMap inlineAssertions
   | _ => []
 
@@ -653,6 +657,11 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
   | `(nlexpr| jubjubY($point)) => lowerCurve programName callPrefix env stx .y [point]
   | `(nlexpr| jubjubFromCoordinates($x, $y)) =>
     lowerCurve programName callPrefix env stx .fromCoordinates [x, y]
+  | `(nlexpr| hashToCurve([$values,*])) => do
+    let arguments := values.getElems.toList
+    if arguments.length > Types.defaultLimits.maxVectorLength then
+      throwErrorAt stx s!"hashToCurve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    lowerCurve programName callPrefix env stx (.hashToCurve arguments.length) arguments
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) => do
     let signature ← liftM (witnessSignature function)
     let signatureName := signature.name
@@ -704,6 +713,11 @@ where
 
   lowerCurve (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
       (operation : Noctium.Helpers.CurveOp) (arguments : List (TSyntax `nlexpr)) : ExprM Lowered := do
+    if let .hashToCurve arity := operation then
+      if arity > Types.defaultLimits.maxVectorLength then
+        throwErrorAt stx s!"hashToCurve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+      unless arity == arguments.length do
+        throwErrorAt stx "hashToCurve argument count mismatch"
     let (expected, result) := operation.signature
     unless arguments.length == expected.length do
       throwErrorAt stx s!"{operation.operationName} argument count mismatch"
@@ -792,6 +806,7 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .x => `(Noctium.Helpers.CurveOp.x)
       | .y => `(Noctium.Helpers.CurveOp.y)
       | .fromCoordinates => `(Noctium.Helpers.CurveOp.fromCoordinates)
+      | .hashToCurve arity => `(Noctium.Helpers.CurveOp.hashToCurve $(natTerm arity))
     let arguments ← arguments.mapM termTerm
     let arguments := arguments.toArray
     `(Noctium.Helpers.Term.curve $operation [$arguments,*])

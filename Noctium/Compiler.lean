@@ -75,6 +75,8 @@ private def expressionJson : Expr ty → Json
       ("point", expressionJson point), ("index", toJson index)]
   | .jubjubFromCoordinates x y => Json.mkObj [("tag", toJson ("jubjubFromCoordinates" : String)),
       ("x", expressionJson x), ("y", expressionJson y)]
+  | .hashToCurve values => Json.mkObj [("tag", toJson ("hashToCurve" : String)),
+      ("values", toJson (values.map expressionJson))]
   | .boolAnd left right => Json.mkObj [("tag", toJson ("boolAnd" : String)),
       ("left", expressionJson left), ("right", expressionJson right)]
   | .boolOr left right => Json.mkObj [("tag", toJson ("boolOr" : String)),
@@ -161,6 +163,8 @@ private def nativeExpressionJson : Expr ty → Json
       ("point", nativeExpressionJson point), ("index", toJson index)]
   | .jubjubFromCoordinates x y => Json.mkObj [("tag", toJson ("jubjubFromCoordinates" : String)),
       ("x", nativeExpressionJson x), ("y", nativeExpressionJson y)]
+  | .hashToCurve values => Json.mkObj [("tag", toJson ("hashToCurve" : String)),
+      ("values", toJson (values.map nativeExpressionJson))]
   | .boolAnd left right => Json.mkObj [("tag", toJson ("boolAnd" : String)),
       ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
   | .boolOr left right => Json.mkObj [("tag", toJson ("boolOr" : String)),

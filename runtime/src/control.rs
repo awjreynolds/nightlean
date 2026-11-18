@@ -161,6 +161,16 @@ fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crat
             name: index.to_string(),
         })
     };
+    if let Some(encoded_arity) = operation.strip_prefix("hashToCurve:") {
+        let arity = canonical_hash_to_curve_arity(encoded_arity)?;
+        return Ok((
+            vec![Native; arity],
+            JubjubPoint,
+            crate::Expr::HashToCurve {
+                values: (0..arity).map(|index| *argument(index)).collect(),
+            },
+        ));
+    }
     Ok(match operation {
         "jubjubScalarFromNative" => (
             vec![Native],
@@ -218,6 +228,23 @@ fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crat
         ),
         _ => bail!("unsupported control curve operation"),
     })
+}
+
+fn canonical_hash_to_curve_arity(text: &str) -> Result<usize> {
+    ensure!(
+        !text.is_empty()
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "noncanonical control hashToCurve arity"
+    );
+    let arity = text
+        .parse::<usize>()
+        .map_err(|_| anyhow!("control hashToCurve arity"))?;
+    ensure!(
+        arity <= crate::MAX_HASH_TO_CURVE_FIELDS,
+        "control hashToCurve field limit"
+    );
+    Ok(arity)
 }
 
 fn byte_scalar_type(length: usize) -> ScalarType {
@@ -5402,6 +5429,81 @@ mod completed_invocation_tests {
         assert!(super::bytes_operation("sha512:1025", 1).is_err());
         assert!(super::bytes_operation("keccak256:03", 1).is_err());
         assert!(super::bytes_operation("keccak256:0", 2).is_err());
+    }
+
+    #[test]
+    fn hash_to_curve_control_session_preserves_order_and_checks_arity() {
+        use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine, Fr};
+        use transient_crypto::hash::hash_to_curve;
+
+        fn native(value: u64) -> Json {
+            json!({"tag":"constant","value":value.to_string()})
+        }
+
+        fn hash(operation: &str, arguments: Vec<Json>) -> Json {
+            run_host_plan(host_plan(
+                "JubjubPoint",
+                json!({"tag":"curve","operation":operation,"arguments":arguments}),
+            ))
+        }
+
+        let empty = hash("hashToCurve:0", vec![]);
+        assert_eq!(empty["status"], "completed");
+        assert_eq!(
+            empty["result"],
+            crate::Value::JubjubPoint(hash_to_curve(&[] as &[Fr])).public_json()
+        );
+
+        let one = hash("hashToCurve:1", vec![native(3)]);
+        assert_eq!(one["status"], "completed");
+        assert_eq!(
+            one["result"],
+            crate::Value::JubjubPoint(hash_to_curve(&[Fr::from(3u64)][..])).public_json()
+        );
+
+        let left = 3u64;
+        let right = 5u64;
+        let fields = vec![native(left), native(right)];
+        let multiple = hash("hashToCurve:2", fields.clone());
+        assert_eq!(multiple["status"], "completed");
+        let point = hash_to_curve(&[Fr::from(left), Fr::from(right)][..]);
+        assert_eq!(
+            multiple["result"],
+            crate::Value::JubjubPoint(point).public_json()
+        );
+
+        let composed = run_host_plan(host_plan(
+            "JubjubPoint",
+            json!({
+                "tag":"curve",
+                "operation":"jubjubAdd",
+                "arguments":[
+                    {"tag":"curve","operation":"hashToCurve:2","arguments":fields},
+                    {"tag":"curve","operation":"jubjubMulGenerator","arguments":[
+                        {"tag":"curve","operation":"jubjubScalarFromNative","arguments":[native(right)]}
+                    ]}
+                ]
+            }),
+        ));
+        let expected = point + EmbeddedGroupAffine::generator() * EmbeddedFr::from(right);
+        assert_eq!(composed["status"], "completed");
+        assert_eq!(
+            composed["result"],
+            crate::Value::JubjubPoint(expected).public_json()
+        );
+
+        for (operation, arguments) in [
+            ("hashToCurve:01", vec![native(3)]),
+            ("hashToCurve:1025", vec![]),
+            ("hashToCurve:2", vec![native(3)]),
+            ("hashToCurve:1", vec![json!({"tag":"bool","value":true})]),
+        ] {
+            let plan = host_plan(
+                "JubjubPoint",
+                json!({"tag":"curve","operation":operation,"arguments":arguments}),
+            );
+            assert!(Plan::parse(&plan, None).is_err(), "accepted {operation}");
+        }
     }
 
     #[test]

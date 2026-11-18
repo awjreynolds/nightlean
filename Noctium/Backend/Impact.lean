@@ -9,11 +9,11 @@ namespace Noctium.Backend.Impact
 
 private def expressionCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true}
 
 private def ledgerCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, jubjub := true,
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true,
     stateCells := true, stateMaps := true}
 
 /-- Symbols in the ledger public-input sequence are source expressions, not
@@ -346,7 +346,7 @@ private def expressionNames : Expr ty → List String
   | .bytes32Literal _ | .bytesLiteral _ _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
-  | .persistentHashNativeVector values => values.flatMap expressionNames
+  | .hashToCurve values | .persistentHashNativeVector values => values.flatMap expressionNames
   | .toBytes32 value | .fromBytes32 value => expressionNames value
   | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => expressionNames value
   | .concatBytes left right => expressionNames left ++ expressionNames right
@@ -421,6 +421,7 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalizeUnder guard))
   | .persistentHashNative value => .persistentHashNative (totalizeUnder guard value)
   | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalizeUnder guard))
+  | .hashToCurve values => .hashToCurve (values.map (totalizeUnder guard))
   | .toBytes32 value => .toBytes32 (totalizeUnder guard value)
   | .reverseBytes32 value => .reverseBytes32 (totalizeUnder guard value)
   | .fromBytes32 (target := .jubjubPoint) value =>

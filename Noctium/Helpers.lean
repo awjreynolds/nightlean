@@ -71,6 +71,7 @@ inductive CurveOp where
   | x
   | y
   | fromCoordinates
+  | hashToCurve (arity : Nat)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def CurveOp.operationName : CurveOp → String
@@ -83,6 +84,7 @@ def CurveOp.operationName : CurveOp → String
   | .x => "jubjubX"
   | .y => "jubjubY"
   | .fromCoordinates => "jubjubFromCoordinates"
+  | .hashToCurve arity => s!"hashToCurve:{arity}"
 
 def CurveOp.signature : CurveOp → List Ty × Ty
   | .scalarFromNative => ([.native], .jubjubScalar)
@@ -93,6 +95,7 @@ def CurveOp.signature : CurveOp → List Ty × Ty
   | .neg => ([.jubjubPoint], .jubjubPoint)
   | .x | .y => ([.jubjubPoint], .native)
   | .fromCoordinates => ([.native, .native], .jubjubPoint)
+  | .hashToCurve arity => (List.replicate arity .native, .jubjubPoint)
 
 /-- Closed readable byte/hash operations. Vector and fixed-byte lengths are
 bounded at the typed source boundary, and point hashing follows FAB affine
@@ -305,8 +308,18 @@ structure Limits where
   maxExecutionSteps : Nat := 131072
   deriving Repr
 
+private def curveArgumentLimit (limits : Limits) : CurveOp → Nat
+  | .hashToCurve _ => Types.defaultLimits.maxVectorLength
+  | _ => limits.maxParameters
+
 private def resource (span : SourceSpan) (kind : String) : Except Diagnostic α :=
   fail span s!"helper resource limit exceeded: {kind}"
+
+private def validateCurveArity (span : SourceSpan) (operation : CurveOp) (arguments : List Term) :
+    Except Diagnostic Unit := do
+  if let .hashToCurve arity := operation then
+    if arity > Types.defaultLimits.maxVectorLength then resource span "hashToCurve field count"
+    unless arity == arguments.length do fail span "hashToCurve argument count mismatch"
 
 private def validateLimits (limits : Limits) : Except Diagnostic Unit := do
   let hard : Limits := {}
@@ -384,8 +397,9 @@ where
         | .call _ arguments | .witnessCall _ _ arguments => do
           if arguments.length > limits.maxParameters then resource span "call arguments"
           pure arguments
-        | .curve _ arguments => do
-          if arguments.length > limits.maxParameters then resource span "curve arguments"
+        | .curve operation arguments => do
+          validateCurveArity span operation arguments
+          if arguments.length > curveArgumentLimit limits operation then resource span "curve arguments"
           pure arguments
         | .bytes _ arguments => do
           if arguments.length > limits.maxParameters then resource span "byte operation arguments"
@@ -432,8 +446,9 @@ where
             | .call _ arguments | .witnessCall _ _ arguments => do
               if arguments.length > limits.maxParameters then resource span "call arguments"
               pure arguments
-            | .curve _ arguments => do
-              if arguments.length > limits.maxParameters then resource span "curve arguments"
+            | .curve operation arguments => do
+              validateCurveArity span operation arguments
+              if arguments.length > curveArgumentLimit limits operation then resource span "curve arguments"
               pure arguments
             | .bytes _ arguments => do
               if arguments.length > limits.maxParameters then resource span "byte operation arguments"
@@ -462,6 +477,10 @@ where
           | _ => []
         go fuel (children ++ arms ++ rest) sites
       | .term term =>
+        if let .curve operation arguments := term then
+          validateCurveArity {} operation arguments
+          if arguments.length > curveArgumentLimit ({} : Limits) operation then
+            resource {} "curve arguments"
         let (children, site) := match term with
           | .witnessCall site _ arguments => (arguments, some site)
           | .call _ arguments | .composite _ arguments => (arguments, none)
@@ -992,6 +1011,9 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
         fail span "helper hash arguments require Native"
       pure (combine (.scalar .native) [left, right])
     | .curve operation arguments => do
+      validateCurveArity span operation arguments
+      if arguments.length > curveArgumentLimit ({} : Limits) operation then
+        resource span "curve arguments"
       let (expected, result) := operation.signature
       unless arguments.length == expected.length do
         fail span s!"{operation.operationName} argument count mismatch"
@@ -1579,6 +1601,9 @@ mutual
         (← liftD (nativeExpr span left)) (← liftD (nativeExpr span right)))
       pure {result with constraints := left.constraints ++ right.constraints}
     | .curve operation arguments => do
+      liftD (validateCurveArity span operation arguments)
+      if arguments.length > curveArgumentLimit ({} : Limits) operation then
+        liftD (resource span "curve arguments")
       let (expectedTypes, _) := operation.signature
       unless arguments.length == expectedTypes.length do
         liftD (fail span s!"{operation.operationName} argument count mismatch")
@@ -1617,6 +1642,9 @@ mutual
           let x ← liftD (typedExpr span .native x)
           let y ← liftD (typedExpr span .native y)
           pure (scalarValue (.jubjubFromCoordinates x y))
+        | .hashToCurve _, values => do
+          let values ← values.mapM fun value => liftD (typedExpr span .native value)
+          pure (scalarValue (.hashToCurve values))
         | _, _ => liftD (fail span "invalid checked curve operation shape")
       pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .bytes32Literal bytes => pure (scalarValue (Expr.bytes32Literal bytes))
@@ -2021,8 +2049,20 @@ mutual
       let value : ScalarPolicy.Value := ⟨.native, result⟩
       liftM (liftError span value.validate)
       pure (some value)
-    -- shortcut: curve diagnostic traces need typed point values; extend the trace model before enabling them.
-    | .curve .. => liftM (fail span "Jubjub helper evaluation requires the native control runtime")
+    -- Curve terms still need the portable control runtime to produce a point,
+    -- but trace every ordered field argument before reporting that boundary.
+    | .curve operation arguments => do
+      liftM (validateCurveArity span operation arguments)
+      if arguments.length > curveArgumentLimit ({} : Limits) operation then
+        liftM (resource span "curve arguments")
+      let (expected, _) := operation.signature
+      unless arguments.length == expected.length do
+        liftM (fail span s!"{operation.operationName} argument count mismatch")
+      let values ← arguments.mapM (traceTerm program ctx scope env span)
+      for (value, expectedType) in values.zip expected do
+        unless traceType value == .scalar expectedType do
+          liftM (fail span s!"{operation.operationName} argument type mismatch")
+      liftM (fail span s!"{operation.operationName} helper evaluation requires the native control runtime")
     -- shortcut: byte traces need ordered byte values; extend the trace model before enabling them.
     | .bytes32Literal _ | .bytes .. | .bytesAt .. =>
       liftM (fail span "byte-string helper evaluation requires the qualified native control runtime")

@@ -1,0 +1,147 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "JubjubPoint",
+   "name": "emptyPoint",
+   "expression": {"tag": "reference", "name": "emptyPointValue"}},
+  {"visibility": "public",
+   "type": "JubjubPoint",
+   "name": "onePoint",
+   "expression": {"tag": "reference", "name": "onePointValue"}},
+  {"visibility": "public",
+   "type": "JubjubPoint",
+   "name": "domainPoint",
+   "expression": {"tag": "reference", "name": "domainPointValue"}},
+  {"visibility": "public",
+   "type": "JubjubPoint",
+   "name": "composedPoint",
+   "expression": {"tag": "reference", "name": "composedPointValue"}},
+  {"visibility": "public",
+   "type": "Bytes<32>",
+   "name": "encodedPoint",
+   "expression": {"tag": "reference", "name": "encodedPointValue"}},
+  {"visibility": "public",
+   "type": "JubjubScalar",
+   "name": "scalarResult",
+   "expression": {"tag": "reference", "name": "scalarValue"}}],
+ "reads": [],
+ "operations": [],
+ "nativeCircuitFile": "HashToCurve.inspect.zkir",
+ "guards": [],
+ "entrypoint": "inspect",
+ "contractName": "HashToCurve",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "JubjubPoint",
+    "name": "emptyPointValue",
+    "expression":
+    {"tag": "assertThen",
+     "condition": {"tag": "reference", "name": "enabled"},
+     "body": {"values": [], "tag": "hashToCurve"}}},
+   {"visibility": "public",
+    "type": "JubjubPoint",
+    "name": "onePointValue",
+    "expression":
+    {"values": [{"tag": "reference", "name": "left"}], "tag": "hashToCurve"}},
+   {"visibility": "public",
+    "type": "JubjubPoint",
+    "name": "domainPointValue",
+    "expression":
+    {"values":
+     [{"value": "17", "tag": "constant"},
+      {"tag": "reference", "name": "left"},
+      {"tag": "reference", "name": "right"}],
+     "tag": "hashToCurve"}},
+   {"visibility": "public",
+    "type": "JubjubPoint",
+    "name": "composedPointValue",
+    "expression":
+    {"tag": "jubjubAdd",
+     "right":
+     {"tag": "jubjubMulGenerator",
+      "scalar":
+      {"value": {"tag": "reference", "name": "right"},
+       "tag": "jubjubScalarFromNative"}},
+     "left":
+     {"values":
+      [{"value": "17", "tag": "constant"},
+       {"tag": "reference", "name": "left"},
+       {"tag": "reference", "name": "right"}],
+      "tag": "hashToCurve"}}},
+   {"visibility": "public",
+    "type": "Bytes<32>",
+    "name": "encodedPointValue",
+    "expression":
+    {"value":
+     {"tag": "jubjubAdd",
+      "right":
+      {"tag": "jubjubMulGenerator",
+       "scalar":
+       {"value": {"tag": "reference", "name": "right"},
+        "tag": "jubjubScalarFromNative"}},
+      "left":
+      {"values":
+       [{"value": "17", "tag": "constant"},
+        {"tag": "reference", "name": "left"},
+        {"tag": "reference", "name": "right"}],
+       "tag": "hashToCurve"}},
+     "tag": "toBytes32"}},
+   {"visibility": "public",
+    "type": "JubjubScalar",
+    "name": "scalarValue",
+    "expression":
+    {"value": {"tag": "reference", "name": "right"},
+     "tag": "jubjubScalarFromNative"}}],
+  "name": "hashCurveInputs",
+  "inputs":
+  [{"visibility": "private", "type": "Native", "name": "left"},
+   {"visibility": "private", "type": "Native", "name": "right"},
+   {"visibility": "private", "type": "Bool", "name": "enabled"}],
+  "file": "hashCurveInputs.zkir",
+  "constraints":
+  [{"tag": "eq",
+    "right":
+    {"tag": "assertThen",
+     "condition": {"tag": "reference", "name": "enabled"},
+     "body": {"values": [], "tag": "hashToCurve"}},
+    "left":
+    {"tag": "assertThen",
+     "condition": {"tag": "reference", "name": "enabled"},
+     "body": {"values": [], "tag": "hashToCurve"}}},
+   {"tag": "eq",
+    "right":
+    {"values": [{"tag": "reference", "name": "left"}], "tag": "hashToCurve"},
+    "left":
+    {"values": [{"tag": "reference", "name": "left"}], "tag": "hashToCurve"}},
+   {"tag": "eq",
+    "right":
+    {"values":
+     [{"value": "17", "tag": "constant"},
+      {"tag": "reference", "name": "left"},
+      {"tag": "reference", "name": "right"}],
+     "tag": "hashToCurve"},
+    "left":
+    {"values":
+     [{"value": "17", "tag": "constant"},
+      {"tag": "reference", "name": "left"},
+      {"tag": "reference", "name": "right"}],
+     "tag": "hashToCurve"}}]}}

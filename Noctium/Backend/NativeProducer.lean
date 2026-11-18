@@ -514,6 +514,12 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let term := Term.unary "jubjub_scalar_from_native" value.term
     let fact ← combine term (Jubjub.scalarOrder - 1) [value]
     defineResult state instruction {fact with valueType := .jubjubScalar}
+  | "hash_to_curve" => do
+    let values ← nativeArguments state instruction "inputs"
+    ensure (values.length ≤ Types.defaultLimits.maxVectorLength)
+      "hash_to_curve exceeds the source field-vector bound"
+    let fact ← combine (hashToCurveTerm (values.map (·.term))) (Field.modulus - 1) values
+    defineResult state instruction {fact with valueType := .jubjubPoint}
   | "ec_mul_generator" => do
     let scalar ← argument state instruction "scalar"
     ensure (scalar.valueType == .jubjubScalar) "ec_mul_generator requires a JubjubScalar"

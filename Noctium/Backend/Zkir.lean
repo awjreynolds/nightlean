@@ -50,7 +50,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
-  | .persistentHashNativeVector values => checkNativeConstants values
+  | .hashToCurve values | .persistentHashNativeVector values => checkNativeConstants values
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
   | .jubjubCoordinate value _ => checkConstants value
@@ -728,6 +728,14 @@ def lowerExpr : Expr ty → LowerM String
     lowerJubjubScalarFromNative (← lowerExpr value)
   | .jubjubScalarToNative value => do
     lowerJubjubScalarToNative (← lowerExpr value)
+  | .hashToCurve values => do
+    let operands ← lowerNativeVectorFields values
+    let key : ExpressionKey := ("hash_to_curve", operands, none)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "hash_to_curve" [("inputs", toJson operands), ("output", toJson output)]
+    modify fun state => {state with expressions := (key, output) :: state.expressions}
+    pure output
   | .jubjubMulGenerator scalar => do
     let scalar ← lowerExpr scalar
     let key : ExpressionKey := ("ec_mul_generator", [scalar], none)
@@ -888,7 +896,7 @@ still bind this public-input sequence to its accepted ledger call transcript. -/
 private def loweringCapabilities : Capabilities :=
   { poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
-    bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, jubjub := true }
+    bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, jubjub := true }
 
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c

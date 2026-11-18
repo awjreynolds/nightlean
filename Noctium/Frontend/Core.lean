@@ -138,6 +138,7 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
+scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
 scoped syntax "fromBytes32(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "byteAt(" nlexpr "," num ")" : nlexpr
@@ -367,6 +368,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
+  | `(nlexpr| hashToCurve([$values,*])) => Bool.true
   | `(nlexpr| toBytes32($value)) => hasPartialScalar value
   | `(nlexpr| byteAt($value, $_:num)) => hasPartialScalar value
   | `(nlexpr| degradeToNative($value)) => hasPartialScalar value
@@ -649,6 +651,13 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let x ← expected env x .native
     let y ← expected env y .native
     pure (.jubjubPoint, ← `(Noctium.Expr.jubjubFromCoordinates $x $y))
+  | `(nlexpr| hashToCurve([$values,*])) => do
+    let sourceValues := values.getElems.toList
+    unless sourceValues.length ≤ Types.defaultLimits.maxVectorLength do
+      throwErrorAt stx s!"hashToCurve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    let values ← sourceValues.mapM fun value => expected env value .native
+    let valueList ← nativeExprListTerm values
+    pure (.jubjubPoint, ← `(Noctium.Expr.hashToCurve $valueList))
   | _ => throwErrorAt stx "unsupported Noctium expression"
 where
   expected (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) : CommandElabM (TSyntax `term) := do
@@ -1756,6 +1765,7 @@ private def moduleCapabilities : Capabilities := {
   sha512 := Bool.true
   keccak256 := Bool.true
   bytes32Conversions := Bool.true
+  hashToCurve := Bool.true
   jubjub := Bool.true
   stateCells := Bool.true
   stateMaps := Bool.true}

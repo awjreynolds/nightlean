@@ -35,6 +35,7 @@ use transient_crypto::{
 
 pub const LEDGER_REVISION: &str = "a2b30128ca4b660b73a068e29b56b48ede8c9a74";
 pub const ZKIR_REVISION: &str = profile::REVISION;
+pub const MAX_HASH_TO_CURVE_FIELDS: usize = 1024;
 pub const MODULUS: &str =
     "52435875175126190479447740508185965837690552500527637822603658699938581184513";
 pub type Db = InMemoryDB;
@@ -282,6 +283,10 @@ pub enum Expr {
     PersistentHashNativeVector {
         values: Vec<Expr>,
     },
+    #[serde(rename = "hashToCurve")]
+    HashToCurve {
+        values: Vec<Expr>,
+    },
     #[serde(rename = "jubjubScalarFromNative")]
     JubjubScalarFromNative {
         value: Box<Expr>,
@@ -499,6 +504,17 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 .map(|value| Ok(field_value(evaluate(value, env)?.field()?)))
                 .collect::<Result<Vec<_>>>()?;
             persistent_hash(AlignedValue::concat(&parts))?
+        }
+        Expr::HashToCurve { values } => {
+            ensure!(
+                values.len() <= MAX_HASH_TO_CURVE_FIELDS,
+                "hash-to-curve field vector exceeds compiler limit"
+            );
+            let fields = values
+                .iter()
+                .map(|value| evaluate(value, env)?.field())
+                .collect::<Result<Vec<_>>>()?;
+            Value::JubjubPoint(transient_crypto::hash::hash_to_curve(fields.as_slice()))
         }
         Expr::JubjubScalarFromNative { value } => {
             Value::JubjubScalar(jubjub::reduce_scalar(evaluate(value, env)?.field()?)?)

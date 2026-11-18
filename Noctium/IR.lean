@@ -71,6 +71,8 @@ inductive Expr : Ty → Type where
   | jubjubNeg (point : Expr .jubjubPoint) : Expr .jubjubPoint
   | jubjubCoordinate (point : Expr .jubjubPoint) (index : Nat) : Expr .native
   | jubjubFromCoordinates (x y : Expr .native) : Expr .jubjubPoint
+  /-- Hash an ordered, bounded list of Native values to a Jubjub subgroup point. -/
+  | hashToCurve (values : List (Expr .native)) : Expr .jubjubPoint
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -369,6 +371,7 @@ structure Capabilities where
   sha512 : Bool := false
   keccak256 : Bool := false
   bytes32Conversions : Bool := false
+  hashToCurve : Bool := false
   jubjub : Bool := false
   stateCells : Bool := false
   stateMaps : Bool := false
@@ -378,14 +381,14 @@ structure Capabilities where
 def Capabilities.crypto : Capabilities := {
   typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
-  bytes32Conversions := true, jubjub := true
+  bytes32Conversions := true, hashToCurve := true, jubjub := true
 }
 
 /-- Source checking includes the currently implemented ledger state features. -/
 def Capabilities.source : Capabilities := {
   typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
-  bytes32Conversions := true, jubjub := true,
+  bytes32Conversions := true, hashToCurve := true, jubjub := true,
   stateCells := true, stateMaps := true
 }
 
@@ -521,6 +524,12 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
     x.validate caps env
     y.validate caps env
+  | .hashToCurve values => do
+    unless caps.hashToCurve do throw "target lacks qualified hash_to_curve support"
+    unless caps.jubjub do throw "target lacks qualified Jubjub support"
+    unless values.length ≤ Types.defaultLimits.maxVectorLength do
+      throw s!"hash_to_curve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    for value in values do value.validate caps env
   | .ref name => do
     ty.validate caps
     match env.lookup name with
@@ -705,8 +714,6 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     throw {span := c.span, message := "duplicate circuit output"}
   validateConstraints caps env c.span c.constraints
   for output in c.outputs do
-    if output.ty.isJubjub then
-      throw {span := output.span, message := "circuit outputs do not support Jubjub values"}
     match output.ty.validate caps with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()

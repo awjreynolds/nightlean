@@ -61,6 +61,9 @@ structure JubjubOracle where
     fun _ _ => .error "qualified Jubjub addition oracle is unavailable"
   neg : (Nat × Nat) → Except String (Nat × Nat) :=
     fun _ => .error "qualified Jubjub negation oracle is unavailable"
+  /-- Qualified native hash-to-curve oracle. -/
+  hashToCurve : List Nat → Except String (Nat × Nat) :=
+    fun _ => .error "qualified hash_to_curve oracle is unavailable"
 
 /-- Crypto oracles have fail-closed defaults. A backend must supply pinned hash
 and Jubjub operations before semantic evaluation can execute those expressions. -/
@@ -261,6 +264,16 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     | _ => throw "Jubjub coordinate index must be 0 or 1"
   | .jubjubFromCoordinates x y => do
     checkedJubjubPoint ctx (← ctx.jubjub.fromCoordinates (← x.eval ctx env) (← y.eval ctx env))
+  | .hashToCurve values => do
+    if values.length > Types.defaultLimits.maxVectorLength then
+      throw s!"hash_to_curve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    let mut reversedInputs := []
+    for value in values do
+      let field ← value.eval ctx env
+      if field >= ctx.modulus then throw "noncanonical hash_to_curve Native input"
+      reversedInputs := field :: reversedInputs
+    let inputs := reversedInputs.reverse
+    checkedJubjubPoint ctx (← ctx.jubjub.hashToCurve inputs)
   | .bytesAt (length := length) value index => do
     let values ← value.eval ctx env
     match values[index]? with
@@ -398,7 +411,7 @@ private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, typedBoolean := true, poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
     sha512 := true, keccak256 := true,
-    bytes32Conversions := true, jubjub := true}
+    bytes32Conversions := true, hashToCurve := true, jubjub := true}
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
   match c.validate (evaluationCapabilities ctx) with

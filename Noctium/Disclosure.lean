@@ -68,6 +68,10 @@ def origins (env : Environment) : Expr ty → Except String Origins
     pure (merge (← origins env left) (← origins env right))
   | .jubjubFromCoordinates x y => do
     pure (merge (← origins env x) (← origins env y))
+  | .hashToCurve values => do
+    let mut result : Origins := []
+    for value in values do result := merge result (← origins env value)
+    pure result
   | .boolAnd left right | .boolOr left right | .boolXor left right => do
     pure (merge (← origins env left) (← origins env right))
   | .ref name => match env.lookup name with

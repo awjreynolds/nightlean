@@ -107,6 +107,10 @@ def persistentHashNativeVectorTerm (values : List Term) : Term :=
   | [value] => persistentHashNativeTerm value
   | _ => .unary s!"persistent_hash_native_vector:{values.length}" (.hash values)
 
+/-- The native overload hashes the complete ordered Native preimage to Jubjub. -/
+def hashToCurveTerm (values : List Term) : Term :=
+  .unary "hash_to_curve_jubjub" (.hash values)
+
 /-- Distinct algorithms bind the fixed preimage length and ordered FAB chunks. -/
 def fixedByteHashTerm (algorithm : String) (length : Nat) (alignedChunks : List Term) : Term :=
   .unary s!"{algorithm}_bytes:{length}" (.hash alignedChunks)
@@ -371,6 +375,15 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let normalized ← normalize env value
     let term : Term := .unary "jubjub_scalar_to_native" normalized.term
     pure {term, bounds := normalized.bounds, assertions := normalized.assertions}
+  | .hashToCurve values => do
+    unless values.length ≤ Types.defaultLimits.maxVectorLength do
+      throw "hashToCurve exceeds the source field-vector bound"
+    let normalized ← values.mapM (normalize env)
+    pure {
+      term := hashToCurveTerm (normalized.map (·.term))
+      bounds := (normalized.map (·.bounds)).flatten
+      assertions := (normalized.map (·.assertions)).flatten
+    }
   | .jubjubMulGenerator scalar => do
     let normalized ← normalize env scalar
     let term : Term := .unary "ec_mul_generator_jubjub" normalized.term
