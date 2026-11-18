@@ -877,6 +877,7 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "reads",
             "returns",
             "returnViews",
+            "callInputs",
             "constructor",
             "state",
             "circuit",
@@ -889,6 +890,12 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         error(
             "plan_mismatch",
             "invalid composite call return schema or field mapping",
+        )
+    })?;
+    crate::validate_call_inputs_json(&plan, &circuit).map_err(|_| {
+        error(
+            "plan_mismatch",
+            "native call inputs do not match the selected circuit header",
         )
     })?;
     if let Some(target) = plan.get("target") {
@@ -997,6 +1004,11 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         matched[0].get("returnViews") == plan.get("returnViews"),
         "plan_mismatch",
         "composite call return views differ from compiler metadata",
+    )?;
+    require(
+        matched[0].get("callInputs") == plan.get("callInputs"),
+        "plan_mismatch",
+        "native call inputs differ from compiler metadata",
     )?;
     let return_count = match plan.get("returns") {
         None => 0,

@@ -48,10 +48,17 @@ fn assert_returns(execution: &Execution, balance: u64, count: u64, enabled: bool
         field_value(Fr::from(u8::from(enabled))),
     ];
     let (commitment, randomness) = execution.preimage.communications_commitment.unwrap();
+    let arguments = execution
+        .preimage
+        .inputs
+        .iter()
+        .copied()
+        .map(field_value)
+        .collect::<Vec<_>>();
     assert_eq!(
         commitment,
         onchain_runtime::communication_commitment(
-            AlignedValue::concat(std::iter::empty::<&AlignedValue>()),
+            AlignedValue::concat(&arguments),
             AlignedValue::concat(&fields),
             randomness
         )
@@ -80,7 +87,29 @@ fn native_getter_results_bind_post_effect_values_and_reject_forgery() {
         let execution =
             prepare(&advance, &inputs(amount, enabled), &state, params, address).unwrap();
         check(&execution, &advance_circuit).unwrap();
+        assert_eq!(execution.preimage.inputs, [Fr::from(amount)]);
+        assert!(execution.preimage.private_transcript.is_empty());
         assert_returns(&execution, balance, count, enabled);
+        if amount == 3 {
+            let mut forged = execution.preimage.clone();
+            forged.inputs[0] = Fr::from(amount + 1);
+            let changed_argument = [field_value(Fr::from(amount + 1))];
+            let output = [
+                field_value(Fr::from(balance)),
+                field_value(Fr::from(count)),
+                field_value(Fr::from(u8::from(enabled))),
+            ];
+            let (_, randomness) = forged.communications_commitment.unwrap();
+            forged.communications_commitment = Some((
+                onchain_runtime::communication_commitment(
+                    AlignedValue::concat(&changed_argument),
+                    AlignedValue::concat(&output),
+                    randomness,
+                ),
+                randomness,
+            ));
+            assert!(forged.check(&advance_circuit).is_err());
+        }
         state = execution.after.state;
     }
     let mut result = prepare(&getter, &inputs(0, false), &state, params, address).unwrap();

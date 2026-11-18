@@ -5,10 +5,7 @@ use crate::create_state;
 use crate::zkir::IrSource;
 use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare};
 use anyhow::{Context, Result, anyhow, ensure};
-use base_crypto::{
-    fab::{AlignedValue, Alignment, Value as FabValue},
-    time::Timestamp,
-};
+use base_crypto::time::Timestamp;
 use ledger::{
     construct::{ContractCallPrototype, PreTranscript, partition_transcripts},
     structure::{
@@ -391,14 +388,12 @@ fn build_for_deployment(
     // prepare's zero-randomness preimage is diagnostic only. Reuse only its
     // evaluated program and private fields, then repartition for this commitment.
     let evaluated = prepare(plan, &config.inputs, &initial.data, parameters, address)?;
-    let empty = AlignedValue {
-        value: FabValue(vec![]),
-        alignment: Alignment(vec![]),
-    };
+    let call_input = evaluated.call_input()?;
+    let call_output = evaluated.call_output()?;
     let randomness = nonzero_random(rng)?;
     let commitment = onchain_runtime::communication_commitment(
-        empty.clone(),
-        evaluated.call_output()?,
+        call_input.clone(),
+        call_output.clone(),
         randomness,
     );
     let context = QueryContext::new(initial.data.clone(), address);
@@ -453,8 +448,8 @@ fn build_for_deployment(
             .copied()
             .map(field_value)
             .collect(),
-        input: empty.clone(),
-        output: evaluated.call_output()?,
+        input: call_input,
+        output: call_output,
         communication_commitment_rand: randomness,
         key_location: KeyLocation(Cow::Owned(plan.entrypoint.clone())),
     };

@@ -5500,6 +5500,16 @@
         "before": "Mixed tuple/byte intermediate export was approximately47MiB Impact and332KiB ZKIR;5969 native bit checks.",
         "after": "At the tuple/byte checkpoint: Impact806375bytes, nativeZKIR35870bytes. The current nested-enum workload sizes are listed in artifactBytes. No repeated proving, keygen or deployment campaign."
       }
+    },
+    "nativeCallArguments": {
+      "checkedOn": "2026-11-18",
+      "source": "../../tests/NativeReturns.lean",
+      "native": "../../runtime/tests/native_returns.rs",
+      "documentation": "../development/committed-returns.md#native-call-arguments",
+      "scope": "Ordered callInputs selects existing private Native circuit inputs. The source-derived native header and independent producer agree exactly; selected fields become raw preimage inputs and ContractCallPrototype.input instead of private_input instructions/private transcript values. Assembly and preparation commit actual arguments with output fields.",
+      "checks": "Passed source admission rejects unknown/duplicate/public/non-Native selections. One native state sequence passes getters and argument-driven updates3/4, verifies exact raw input fields and empty private transcript, and rejects a changed argument even with a recomputed communication commitment.",
+      "newOpcodes": 0,
+      "limits": "Private Native arguments only,256maximum. Other types, raw-hosted witness integration, call claims and two-contract forest assembly remain open. No new keys/proofs/deployments or broad qualification."
     }
   }
 }

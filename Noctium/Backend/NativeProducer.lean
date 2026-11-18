@@ -761,19 +761,38 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   fields version ["major", "minor"]
   ensure ((← natField version "major") == 3 && (← natField version "minor") == 2)
     "unsupported native producer IR version"
-  ensure ((← arrayField program "inputs").isEmpty) "native root input declarations are unsupported"
+  let rawInputs ← arrayField program "inputs"
+  ensure (rawInputs.size == expected.rawInputs.length)
+    "native raw call input header count mismatch"
+  let rawNames := expected.rawInputs.map (·.identifier)
+  let instructionNames := expected.inputs.map (·.identifier)
+  ensure ((rawNames ++ instructionNames).eraseDups.length == rawNames.length + instructionNames.length)
+    "native raw and instruction input names collide"
+  let mut state : State := {}
+  for (rawInput, index) in rawInputs.toList.zipIdx do
+    let some required := expected.rawInputs[index]? | throw "unexpected native raw call input"
+    fields rawInput ["name", "type"]
+    ensure (required.visibility == .«private» && required.ty == .native)
+      "native raw call inputs must be private Native values"
+    let name ← stringField rawInput "name"
+    ensure (name == required.identifier) "native raw call input name/order mismatch"
+    nativeType (← rawInput.getObjVal? "type")
+    state ← define state name {
+      term := .input name
+      maximum := Field.modulus - 1
+    }
   let returns ← arrayField program "outputs"
   ensure (returns.size == expected.returns.length) "native output header count mismatch"
   for output in returns do nativeType output
   ensure ((← (← program.getObjVal? "do_communications_commitment").getBool?) ==
     (expected.mode == .ledgerCall)) "native communication commitment policy mismatch"
   let instructions ← arrayField program "instructions"
-  ensure (instructions.size ≤ maxInstructions && expected.inputs.length ≤ maxInputs &&
+  ensure (instructions.size ≤ maxInstructions &&
+    expected.rawInputs.length + expected.inputs.length ≤ maxInputs &&
     expected.returns.length ≤ 256 && expected.groups.length ≤ maxInstructions &&
     expected.assertions.length ≤ maxInstructions)
     "native producer resource limit exceeded"
   requireFinalOutput instructions.toList
-  let mut state : State := {}
   for (instruction, index) in instructions.toList.zipIdx do
     match validateInstruction expected state instruction with
     | .ok next => state := next

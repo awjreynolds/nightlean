@@ -17,7 +17,7 @@ noctium_contract NativeReturns where
     return countValue : UInt 64 := currentCount
     return enabledValue : Bool := enabled
   end
-  entry advance uses returnInput where
+  entry advance uses returnInput arguments [amount] where
     read balance as beforeBalance
     write balance := disclose(add(beforeBalance, amount))
     increment count by 1
@@ -45,3 +45,15 @@ private def nativeReturnsPrivateLeak : Noctium.Entrypoint :=
     nativeReturnsPrivateLeak with
   | .error _ => Bool.true
   | .ok _ => Bool.false
+
+private def callArgumentSchema (names : List String) (visibility : Noctium.Visibility := .private)
+    (ty : Noctium.Ty := .native) : Except Noctium.Diagnostic Unit :=
+  ({name := "arguments", circuit := {name := "arguments", inputs := [
+      {name := "value", ty, visibility}]}, callInputs := names} : Noctium.Entrypoint).validate
+    Noctium.Capabilities.crypto []
+
+#guard (callArgumentSchema ["value"]).isOk
+#guard !(callArgumentSchema ["missing"]).isOk
+#guard !(callArgumentSchema ["value", "value"]).isOk
+#guard !(callArgumentSchema ["value"] .public).isOk
+#guard !(callArgumentSchema ["value"] .private (.uint 7)).isOk

@@ -17,6 +17,9 @@ private def readInputRequirement (name : String) (ty : Ty) : InputRequirement :=
       canonicalJubjubScalar := true}
   | _ => {identifier := "%input_" ++ name, visibility := .«public», ty}
 
+private def rawCallInputRequirement (name : String) : InputRequirement :=
+  {identifier := "%input_" ++ name, visibility := .«private», ty := .native}
+
 private def inputAliases (inputs : List InputRequirement) : AliasEnvironment :=
   inputs.map fun input => (input.identifier.drop 7 |>.toString, .input input.identifier)
 
@@ -127,7 +130,9 @@ native ledger interpretation remain separately tested/proved obligations. -/
 def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Diagnostic Expected := do
   let plan ← Impact.lower state value
   let publicCount := Impact.publicInputReadCount value.circuit.inputs
-  let circuitInputs := value.circuit.inputs.flatMap Input.requirements
+  let rawInputs := value.callInputs.map rawCallInputRequirement
+  let circuitInputs := (value.circuit.inputs.filter fun input =>
+    !value.callInputs.contains input.name).flatMap Input.requirements
   let readInputs := (plan.reads.drop publicCount).flatMap fun read =>
       read.bindings.map fun (name, ty) => readInputRequirement name ty
   let mut inputs := circuitInputs ++ readInputs
@@ -205,6 +210,7 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   pure {
     mode := .ledgerCall
     inputs := inputs
+    rawInputs := rawInputs
     groups := groups
     groupGuards := guardResults.map (·.term)
     returns := returnResults.map (·.term)

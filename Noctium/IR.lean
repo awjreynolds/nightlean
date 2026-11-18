@@ -377,6 +377,9 @@ inductive Effect where
 structure Entrypoint where
   name : String
   circuit : Circuit
+  /-- Private Native circuit inputs promoted to the ledger call argument ABI.
+  Names retain their order in the call's aligned input value. -/
+  callInputs : List String := []
   effects : List Effect := []
   /-- Proof-bound public values returned with the entrypoint call. -/
   returns : List Output := []
@@ -854,6 +857,13 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
+  unless uniqueNames e.callInputs do
+    throw {span := e.span, message := "duplicate native call argument"}
+  for name in e.callInputs do
+    let some input := e.circuit.inputs.find? (·.name == name)
+      | throw {span := e.span, message := s!"unknown circuit call argument '{name}'"}
+    unless input.visibility == .private && input.ty == .native do
+      throw {span := input.span, message := s!"call argument '{name}' must be a private Native circuit input"}
   unless e.effectGuards.isEmpty || e.effectGuards.length == e.effects.length do
     throw {span := e.span, message := "effect guard metadata length mismatch"}
   -- Typing permits private operands. Mandatory disclosure analysis decides

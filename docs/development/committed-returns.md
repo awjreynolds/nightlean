@@ -40,6 +40,29 @@ The compiler emits those values as ZKIR outputs. The native call prototype's
 and communication randomness. The ledger stores that commitment. It does not
 need a separate clear return field.
 
+## Native call arguments
+
+An entrypoint selects committed arguments from its private Native inputs:
+
+```lean
+entry advance uses returnInput arguments [amount] where
+  read balance as beforeBalance
+  write balance := disclose(add(beforeBalance, amount))
+end
+```
+
+The ordered `callInputs` list becomes the native relation's input header and
+`ContractCallPrototype.input`. Selected values no longer appear in the private
+witness transcript. The communication commitment binds these arguments together
+with the returned fields. Source privacy still applies. Selecting an argument does not release its value.
+A private value or decision reaching a public state write or result still needs
+explicit `disclose`.
+
+The compiler and bundle reader require exact header names, types and order.
+Unknown, duplicate, public or non-Native selections reject. This first argument
+slice supports private Native fields, up to 256 arguments. Other argument types,
+hosted-witness integration and two-contract claim assembly remain open.
+
 Rust callers prepare the operation, run `check(&execution, &circuit)`, then read
 `execution.returns()` or `execution.returns_json()`. Primitive values retain their
 logical types, so JSON uses booleans for Bool and decimal strings for Native and UInt.
@@ -74,6 +97,10 @@ two updates, and getter again, with exact expected balances, counters and Bool
 results. It compares the output commitment and rejects a forged commitment,
 a forged return expression and a mismatched declared return type. The source
 fixture rejects a private return without disclosure.
+The update operation now uses `amount` as a native call argument. The case checks
+its raw preimage slot and absence from the private transcript. Changing that
+argument still rejects after recomputing its communication commitment, because
+the existing state transition and outputs no longer match.
 
 `tests/NativeOpaqueReturns.lean` and `runtime/tests/native_opaque_returns.rs`
 add one source/native example for Bytes32 and Jubjub results. Independent SHA-256

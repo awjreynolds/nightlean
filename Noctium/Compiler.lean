@@ -508,6 +508,8 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
       ("expression", nativeExpressionJson returned.value)]))]
   let returnViewFields := if ep.returnViews.isEmpty then [] else [
     ("returnViews", returnViewsJson ep.returnViews)]
+  let callInputFields := if ep.callInputs.isEmpty then [] else [
+    ("callInputs", toJson ep.callInputs)]
   let constructorFields := match ctor with
     | none => []
     | some value => [("constructor", constructorJson value)]
@@ -519,7 +521,7 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
-    ] ++ constructorFields ++ returnFields ++ returnViewFields ++ [
+    ] ++ constructorFields ++ callInputFields ++ returnFields ++ returnViewFields ++ [
     ("reads", toJson reads),
     ("guards", toJson (plan.guards.map nativeExpressionJson))])
 
@@ -668,6 +670,8 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
         ("nativeCircuitQualified", toJson Bool.false),
         ("effects", toJson (ep.effects.zipIdx.map fun (effect, index) =>
           guardedEffectJson (ep.effectGuards[index]?.getD none) effect))]
+      let callInputFields : List (String × Json) := if ep.callInputs.isEmpty then [] else [
+        ("callInputs", toJson ep.callInputs)]
       let returnFields : List (String × Json) := if ep.returns.isEmpty then [] else [
         ("returns", toJson (ep.returns.map fun returned => Json.mkObj [
           ("name", toJson returned.name), ("type", toJson (typeName returned.ty)),
@@ -675,7 +679,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
           ("expression", nativeExpressionJson returned.value)]))]
       let returnViewFields : List (String × Json) := if ep.returnViews.isEmpty then [] else [
         ("returnViews", returnViewsJson ep.returnViews)]
-      pure (Json.mkObj (baseFields ++ returnFields ++ returnViewFields))
+      pure (Json.mkObj (baseFields ++ callInputFields ++ returnFields ++ returnViewFields))
     let constructorFields := match contract.constructor with
       | none => []
       | some ctor => [("constructor", constructorJson ctor)]

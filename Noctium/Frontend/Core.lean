@@ -283,6 +283,7 @@ scoped syntax "return" ident ":" nltype ":=" nlexpr : nlreturn
 
 declare_syntax_cat nlentry
 scoped syntax "entry" ident "uses" ident "where" nlstatement* nlreturn* "end" : nlentry
+scoped syntax "entry" ident "uses" ident ident "[" ident,* "]" "where" nlstatement* nlreturn* "end" : nlentry
 scoped syntax "entry" ident "from" ident "entry" str "end" : nlentry
 scoped syntax (name := contractCommand) "noctium_contract" ident "where" nlstate* nlentry* "end" : command
 
@@ -1240,7 +1241,7 @@ private def chooseBranchLocalName (env : Bindings) (used : List String) (next : 
 
 private partial def syntaxIdentifiers : Syntax → List String
   | .ident _ _ name _ => [name.toString]
-  | .node _ _ arguments => arguments.toList.flatMap syntaxIdentifiers
+  | .node _ _ children => children.toList.flatMap syntaxIdentifiers
   | _ => []
 
 private def freshReadName (depth : Nat) (state : EntryEffects) (destination : TSyntax `ident) :
@@ -1889,6 +1890,29 @@ private def elaborateConstructor (source : TSyntax `nlstate)
     let mut entryNames : List Name := []
     for entryStx in entries do
       match entryStx with
+      | `(nlentry| entry $id:ident uses $circuit:ident $argumentKeyword:ident [$args,*] where $statements:nlstatement* $returns:nlreturn* end) =>
+        unless argumentKeyword.getId == `arguments do
+          throwErrorAt argumentKeyword "expected 'arguments' before the call input list"
+        if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
+        entryNames := id.getId :: entryNames
+        let registry := circuitRegistry.getState (← getEnv)
+        let fullName := (← getCurrNamespace) ++ circuit.getId
+        let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
+          | throwErrorAt circuit "entrypoint requires a registered Noctium circuit"
+        let env ← addReferences [] (info.inputs ++ info.outputs)
+        let env ← addLogicalReferences env info.logicalOutputs
+        let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw) ++
+          returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
+        let initial : EntryEffects := {env, usedLocalNames := reserved}
+        let lowered ← elaborateStatements schema none 0 statements initial
+        let lowered ← elaborateReturns returns lowered
+        let circuitTerm := mkIdent info.declName
+        let callInputTerms := args.getElems.map fun argument => stringTerm argument.getId.toString
+        let entryName := stringTerm id.getId.toString
+        let entrySpan ← spanTerm entryStx
+        entryTerms := entryTerms.push (← `(Noctium.Entrypoint.mk $entryName $circuitTerm
+          [$callInputTerms,*] [$lowered.terms,*] [$lowered.returns,*] [] $entrySpan
+          [$lowered.spans,*] [$lowered.guards,*]))
       | `(nlentry| entry $id:ident uses $circuit:ident where $statements:nlstatement* $returns:nlreturn* end) =>
         if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
         entryNames := id.getId :: entryNames

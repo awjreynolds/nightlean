@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
   <title id="title">Noctium | Prove contract behavior. Compile for Midnight.</title>
-  <desc id="desc">Noctium is a Lean 4 compiler and proof framework for Midnight. Authors specify and prove source properties in Lean. Its typed compiler emits ZKIR v3 circuits and Impact ledger plans directly. Tuples and vectors support checked structural widening while records and enums retain nominal identity. Checked composite entrypoint returns reconstruct into typed SDK results. The Rust host uses Midnight libraries. Current scope includes 39 of 47 registered native operations and scoped support across 15 native type families. A historical 16-entrypoint token recorded 17 accepted localnet calls. Full ZKIR v3, contract composition and web and mobile SDKs are goals. Proof audits cover selected contracts and recorded revisions.</desc>
+  <desc id="desc">Noctium is a Lean 4 compiler and proof framework for Midnight. Authors specify and prove source properties in Lean. Its typed compiler emits ZKIR v3 circuits and Impact ledger plans directly. Tuples and vectors support checked structural widening while records and enums retain nominal identity. Checked composite entrypoint returns reconstruct into typed SDK results. Private Native call arguments bind through the native ABI and communication commitment. The Rust host uses Midnight libraries. Current scope includes 39 of 47 registered native operations and scoped support across 15 native type families. A historical 16-entrypoint token recorded 17 accepted localnet calls. Full ZKIR v3, contract composition and web and mobile SDKs are goals. Proof audits cover selected contracts and recorded revisions.</desc>
   <defs>
     <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#101d30"/><stop offset="1" stop-color="#080f1b"/></linearGradient>
     <linearGradient id="foil" x1=".1" y1=".2" x2=".95" y2=".9"><stop stop-color="#9af5dd"/><stop offset=".52" stop-color="#79cbef"/><stop offset="1" stop-color="#b6acff"/></linearGradient>
@@ -53,7 +53,7 @@
       <path d="M364 477h42m-9-8 9 8-9 8m309-8h42m-9-8 9 8-9 8m347-8h42m-9-8 9 8-9 8"/>
     </g>
     <text x="77" y="581" fill="#95a9c3" font-size="16" font-family="Menlo, 'DejaVu Sans Mono', monospace" letter-spacing="1.3">LEAN FEATURES</text>
-    <text x="253" y="581" fill="#e1eaf5" font-size="19">Helpers · Modules/generics · Composite types/returns · Ranges/map/fold · Anonymous operators · Guarded control · Witnesses · Disclosure</text>
+    <text x="253" y="581" fill="#e1eaf5" font-size="19">Helpers · Modules/generics · Composite returns/Native args · Ranges/map/fold · Anonymous operators · Guarded control · Witnesses · Disclosure</text>
     <path d="M76 612h1448" stroke="#38495e"/>
     <g font-family="Menlo, 'DejaVu Sans Mono', monospace" font-size="16" letter-spacing="1.4">
       <text x="77" y="651" fill="#94ead7">NATIVE COVERAGE</text>

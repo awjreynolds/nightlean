@@ -1162,7 +1162,11 @@ theorem lowerCircuit_instructions (circuit : Circuit) (program : Json)
 
 def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
   for input in entry.circuit.inputs do
-    lowerByteInput input
+    if entry.callInputs.contains input.name then
+      modify fun state => {state with
+        aliases := (input.name, "%input_" ++ input.name) :: state.aliases}
+    else
+      lowerByteInput input
   for condition in entry.circuit.constraints do
     emit "assert" [("cond", toJson (← lowerExpr condition))]
   for output in entry.circuit.outputs do
@@ -1252,9 +1256,11 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagn
   let entry := Passes.pruneEntrypoint entry
   let plan ← Impact.lower state entry
   let (_, result) := (lowerEntrypointBody entry plan).run {}
+  let callInputs := entry.callInputs.map fun name => Json.mkObj [
+    ("name", toJson ("%input_" ++ name)), ("type", nativeType)]
   let program := Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
-    ("inputs", Json.arr #[]),
+    ("inputs", toJson callInputs),
     ("outputs", Json.arr ((entry.returns.flatMap fun output =>
       List.replicate output.nativeReturnFieldCount nativeType).toArray)),
     -- Ledger ContractCall.public_inputs always includes the commitment after

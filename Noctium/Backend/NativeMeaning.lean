@@ -686,6 +686,9 @@ checked typed program. Raw callers do not gain authorization by inventing it. -/
 structure Expected where
   mode : ProducerMode
   inputs : List InputRequirement
+  /-- Source-selected private Native values supplied through the relation's
+  raw ZKIR call-input header rather than `private_input` instructions. -/
+  rawInputs : List InputRequirement := []
   groups : List (List Term)
   /-- Exact source-derived Impact guard per group. Empty preserves all-active
   relations produced before activity guards were introduced. -/

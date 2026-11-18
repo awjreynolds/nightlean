@@ -92,4 +92,5 @@
   [{"visibility": "private", "type": "Native", "name": "amount"},
    {"visibility": "public", "type": "Bool", "name": "enabled"}],
   "file": "returnInput.zkir",
-  "constraints": []}}
+  "constraints": []},
+ "callInputs": ["amount"]}

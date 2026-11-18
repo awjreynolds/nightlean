@@ -919,6 +919,8 @@ pub struct Plan {
     pub operations: Vec<Instruction>,
     pub reads: Vec<Read>,
     #[serde(default)]
+    pub call_inputs: Vec<String>,
+    #[serde(default)]
     pub returns: Vec<Output>,
     #[serde(default)]
     pub return_views: Vec<ReturnView>,
@@ -1462,6 +1464,19 @@ fn aligned_fields(fields: &[Fr]) -> AlignedValue {
     AlignedValue::concat(fields.iter())
 }
 
+fn aligned_call_inputs(plan: &Plan, env: &Environment) -> Result<AlignedValue> {
+    let fields = plan
+        .call_inputs
+        .iter()
+        .map(|name| {
+            env.get(name)
+                .ok_or_else(|| anyhow!("native call input is missing"))?
+                .field()
+        })
+        .collect::<Result<Vec<_>>>()?;
+    Ok(aligned_fields(&fields))
+}
+
 fn validate_record_fields(schema: &aggregates::Schema, fields: &[Fr]) -> Result<()> {
     let json: Vec<_> = fields
         .iter()
@@ -1707,6 +1722,7 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
         names.len() == plan.circuit.inputs.len(),
         "duplicate input name"
     );
+    validate_call_input_names(&plan.circuit.inputs, &plan.call_inputs)?;
     let mut output_names = BTreeSet::new();
     for output in &plan.circuit.outputs {
         ensure!(
@@ -1733,6 +1749,94 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
         }),
     )?;
     Ok(())
+}
+
+fn validate_call_input_names(inputs: &[Input], call_inputs: &[String]) -> Result<()> {
+    ensure!(call_inputs.len() <= 256, "too many native call inputs");
+    let mut names = BTreeSet::new();
+    for name in call_inputs {
+        ensure!(
+            !name.is_empty() && names.insert(name.as_str()),
+            "invalid native call input list"
+        );
+        let input = inputs
+            .iter()
+            .find(|input| input.name == *name)
+            .ok_or_else(|| anyhow!("native call input is not declared by the circuit"))?;
+        ensure!(
+            input.visibility == "private" && input.ty == "Native",
+            "native call inputs must name private Native circuit inputs"
+        );
+    }
+    Ok(())
+}
+
+fn validate_call_input_header_json(call_inputs: &[String], circuit: &Json) -> Result<()> {
+    let inputs = match circuit.get("inputs") {
+        Some(Json::Array(inputs)) => inputs.as_slice(),
+        None if call_inputs.is_empty() => &[],
+        _ => bail!("invalid native circuit input header"),
+    };
+    ensure!(
+        inputs.len() == call_inputs.len(),
+        "native circuit input header mismatch"
+    );
+    for (header, name) in inputs.iter().zip(call_inputs) {
+        let object = header
+            .as_object()
+            .ok_or_else(|| anyhow!("invalid native circuit input header"))?;
+        ensure!(
+            object.len() == 2
+                && object.get("name") == Some(&Json::String(format!("%input_{name}")))
+                && object.get("type") == Some(&Json::String("Scalar<BLS12-381>".to_owned())),
+            "native circuit inputs do not match declared call inputs"
+        );
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_call_inputs_json(plan: &Json, circuit: &Json) -> Result<()> {
+    let call_inputs = match plan.get("callInputs") {
+        None => Vec::new(),
+        Some(Json::Array(inputs)) if inputs.len() <= 256 => inputs
+            .iter()
+            .map(|input| {
+                input
+                    .as_str()
+                    .map(str::to_owned)
+                    .ok_or_else(|| anyhow!("native call input name must be a string"))
+            })
+            .collect::<Result<Vec<_>>>()?,
+        _ => bail!("invalid native call input list"),
+    };
+    let inputs = plan
+        .get("circuit")
+        .and_then(|value| value.get("inputs"))
+        .and_then(Json::as_array)
+        .ok_or_else(|| anyhow!("invalid plan circuit inputs"))?
+        .iter()
+        .map(|input| {
+            Ok(Input {
+                name: input
+                    .get("name")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| anyhow!("invalid plan input name"))?
+                    .to_owned(),
+                ty: input
+                    .get("type")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| anyhow!("invalid plan input type"))?
+                    .to_owned(),
+                visibility: input
+                    .get("visibility")
+                    .and_then(Json::as_str)
+                    .ok_or_else(|| anyhow!("invalid plan input visibility"))?
+                    .to_owned(),
+            })
+        })
+        .collect::<Result<Vec<_>>>()?;
+    validate_call_input_names(&inputs, &call_inputs)?;
+    validate_call_input_header_json(&call_inputs, circuit)
 }
 
 fn validate_return_views_specs<'a>(
@@ -2335,6 +2439,8 @@ pub struct Execution {
     pub guaranteed: Option<Transcript<Db>>,
     pub fallible: Option<Transcript<Db>>,
     pub preimage: ProofPreimage,
+    call_input: AlignedValue,
+    call_input_names: Vec<String>,
     return_values: Vec<(String, Value)>,
     logical_return_views: Vec<(String, Json)>,
     grouped_return_fields: BTreeSet<String>,
@@ -2356,6 +2462,9 @@ impl Execution {
     }
     pub(crate) fn call_output(&self) -> Result<AlignedValue> {
         aligned_call_returns(&self.return_values)
+    }
+    pub(crate) fn call_input(&self) -> Result<AlignedValue> {
+        Ok(self.call_input.clone())
     }
 }
 
@@ -3731,11 +3840,9 @@ impl PreparationCursor {
         let logical_return_views = reconstruct_return_views(&plan.return_views, &return_values)?;
         let output = aligned_call_returns(&return_values)?;
         let randomness = Fr::from(0u64); // Diagnostic checker context. Final transactions need fresh randomness.
-        let empty = AlignedValue {
-            value: FabValue(vec![]),
-            alignment: Alignment(vec![]),
-        };
-        let comm = onchain_runtime::communication_commitment(empty, output, randomness);
+        let call_input = aligned_call_inputs(&plan, &env)?;
+        let comm =
+            onchain_runtime::communication_commitment(call_input.clone(), output, randomness);
         let partition = partition_transcripts(
             &[PreTranscript {
                 context: context.clone(),
@@ -3775,11 +3882,11 @@ impl PreparationCursor {
             }
         }
         let mut private_transcript = Vec::new();
-        for input in plan
-            .circuit
-            .inputs
-            .iter()
-            .filter(|i| i.visibility == "private")
+        let call_input_names: BTreeSet<_> = plan.call_inputs.iter().map(String::as_str).collect();
+        for input in
+            plan.circuit.inputs.iter().filter(|i| {
+                i.visibility == "private" && !call_input_names.contains(i.name.as_str())
+            })
         {
             match &env[&input.name] {
                 Value::Bytes(bytes) => {
@@ -3797,7 +3904,7 @@ impl PreparationCursor {
             }
         }
         let preimage = ProofPreimage {
-            inputs: vec![],
+            inputs: ValueReprAlignedValue(call_input.clone()).field_vec(),
             private_transcript,
             public_transcript_inputs,
             public_transcript_outputs,
@@ -3812,6 +3919,8 @@ impl PreparationCursor {
             guaranteed,
             fallible,
             preimage,
+            call_input,
+            call_input_names: plan.call_inputs,
             return_values,
             logical_return_views,
             grouped_return_fields,
@@ -3823,14 +3932,15 @@ pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usi
         .preimage
         .communications_commitment
         .ok_or_else(|| anyhow!("missing call output commitment"))?;
-    let empty = AlignedValue {
-        value: FabValue(vec![]),
-        alignment: Alignment(vec![]),
-    };
+    let circuit_json = serde_json::to_value(circuit)?;
+    validate_call_input_header_json(&execution.call_input_names, &circuit_json)?;
     ensure!(
-        onchain_runtime::communication_commitment(empty, execution.call_output()?, randomness)
-            == commitment,
-        "call returns differ from the committed output"
+        onchain_runtime::communication_commitment(
+            execution.call_input()?,
+            execution.call_output()?,
+            randomness
+        ) == commitment,
+        "call arguments or returns differ from the committed communication"
     );
     let active = execution
         .preimage
