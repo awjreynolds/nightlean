@@ -76,6 +76,28 @@ fn artifacts(entry: &str) -> (&'static str, &'static str, &'static [u8]) {
                 "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.burn.zkir"
             ),
         ),
+        "clearMemos" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.clearMemos.witness.control.json"
+            ),
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.clearMemos.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.clearMemos.zkir"
+            ),
+        ),
+        "_move" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken._move.witness.control.json"
+            ),
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken._move.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken._move.zkir"
+            ),
+        ),
         _ => panic!("unknown confidential-token entrypoint {entry}"),
     }
 }
@@ -490,11 +512,12 @@ fn run_entry(
     decrypt_balance: Option<Ciphertext>,
     attempt_number: u64,
     prior_state: &ChargedState<Db>,
-) -> (ChargedState<Db>, BTreeMap<String, Json>) {
+) -> Result<(ChargedState<Db>, BTreeMap<String, Json>), String> {
     let (control_text, native_text, circuit_bytes) = artifacts(entry);
     let control_plan: Json = serde_json::from_str(control_text).unwrap();
     let native_plan: Plan = serde_json::from_str(native_text).unwrap();
     let circuit = IrSource::load(circuit_bytes).unwrap();
+    let expected_caller = values.get("accountId").cloned();
     let source_inputs = source_inputs(&control_plan, values);
     let attempt_id = attempt(attempt_number);
     let binding: Json = serde_json::from_str(control_plan["binding"].as_str().unwrap()).unwrap();
@@ -551,7 +574,7 @@ fn run_entry(
         session
             .resume_typed(reply(request, &attempt_id, value))
             .unwrap();
-    }
+    };
     let expected_reads = if wallet.is_empty() {
         BTreeSet::new()
     } else {
@@ -560,7 +583,7 @@ fn run_entry(
     assert_eq!(reads, expected_reads, "{entry} wallet reads");
     let expected_callbacks: BTreeSet<String> = match entry {
         "mint" => ["OpenZeppelinPort.freshSeed".into()].into(),
-        "transfer" | "burn" => [
+        "transfer" | "_move" | "burn" => [
             "OpenZeppelinPort.freshSeed".into(),
             "OpenZeppelinPort.plaintextBalance".into(),
         ]
@@ -580,8 +603,14 @@ fn run_entry(
         coin_structure::contract::ContractAddress::default(),
     )
     .unwrap();
-    check(&execution, &circuit).unwrap();
-    (execution.after.state.clone(), native_inputs)
+    check(&execution, &circuit).map_err(|error| error.to_string())?;
+    if matches!(entry, "registerWithKey" | "sweep" | "transfer" | "_move" | "burn") {
+        assert_eq!(
+            execution.returns_json()["caller"],
+            expected_caller.expect("caller return needs accountId")
+        );
+    }
+    Ok((execution.after.state.clone(), native_inputs))
 }
 
 fn initial_state(plan: &Plan) -> ChargedState<Db> {
@@ -721,6 +750,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
             sequence,
             &state,
         )
+        .unwrap()
         .0;
         assert_record(
             &register_plan,
@@ -779,6 +809,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         3,
         &state,
     )
+    .unwrap()
     .0;
     assert_ciphertext(
         &mint_plan,
@@ -842,6 +873,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         4,
         &state,
     )
+    .unwrap()
     .0;
     let spendable = pending_after_mint;
     assert_ciphertext(&sweep_plan, &state, "balances", &alice, spendable);
@@ -893,7 +925,8 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         Some(spendable),
         5,
         &state,
-    );
+    )
+    .unwrap();
     assert_ciphertext(
         &transfer_plan,
         &after_transfer,
@@ -980,6 +1013,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         6,
         &state,
     )
+    .unwrap()
     .0;
     assert_ciphertext(&burn_plan, &state, "balances", &alice, balance_after_burn);
     assert_eq!(decrypt_small(balance_after_burn, alice_key_scalar, 64), 5);
@@ -1050,4 +1084,194 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         view("computeAccountId", Some(&alice_account_secret), &state)["accountId"],
         bytes(&alice)
     );
+
+    let (_, move_text, _) = artifacts("_move");
+    let move_plan: Plan = serde_json::from_str(move_text).unwrap();
+    let move_seed = [0x34u8; 32];
+    let alice_balance_before_move = map_record(&move_plan, &state, "balances", &alice);
+    let alice_pending_before_move = map_record(&move_plan, &state, "pending", &alice);
+    let alice_memos_before_move = memo_records(&move_plan, &state, &alice).1;
+    let alice_after_move = expected_debit(&move_seed, balance_after_burn, alice_key, 1);
+    let (alice_pending_after_move, move_memo) =
+        expected_credit(&move_seed, &alice, alice_key, 2, 1);
+    let mut move_values = BTreeMap::from([
+        ("accountId".into(), bytes(&alice)),
+        ("recipient".into(), bytes(&alice)),
+        ("value".into(), json!("1")),
+        ("recipientPk".into(), point_json(alice_key)),
+        ("epoch".into(), json!("2")),
+    ]);
+    for (name, value) in [
+        "balanceC1X",
+        "balanceC1Y",
+        "balanceC2X",
+        "balanceC2Y",
+    ]
+    .into_iter()
+    .zip(alice_balance_before_move)
+    .chain(
+        [
+            "pendingC1X",
+            "pendingC1Y",
+            "pendingC2X",
+            "pendingC2Y",
+        ]
+        .into_iter()
+        .zip(alice_pending_before_move),
+    ) {
+        move_values.insert(name.into(), json!(field_decimal(value)));
+    }
+    let (after_move, move_inputs) = run_entry(
+        "_move",
+        move_values,
+        &alice_account_secret,
+        &alice_encryption_secret,
+        Some(move_seed),
+        Some(balance_after_burn),
+        7,
+        &state,
+    )
+    .unwrap();
+    let self_transfer = prepare(
+        &transfer_plan,
+        &move_inputs,
+        &state,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .unwrap();
+    assert!(
+        check(&self_transfer, &transfer_circuit).is_err(),
+        "transfer entry accepted a self-recipient"
+    );
+    state = after_move;
+    assert_ciphertext(&move_plan, &state, "balances", &alice, alice_after_move);
+    assert_ciphertext(
+        &move_plan,
+        &state,
+        "pending",
+        &alice,
+        alice_pending_after_move,
+    );
+    assert_ciphertext(&move_plan, &state, "pending", &bob, recipient_after);
+    assert_eq!(decrypt_small(alice_after_move, alice_key_scalar, 64), 4);
+    assert_eq!(decrypt_small(alice_pending_after_move, alice_key_scalar, 64), 1);
+    assert_eq!(
+        decrypt_small(recipient_after, bob_key_scalar, 64),
+        5
+    );
+    let (alice_memo_count, alice_memos) = memo_records(&move_plan, &state, &alice);
+    assert_eq!(alice_memo_count, 2);
+    assert_eq!(
+        alice_memos[0],
+        [
+            move_memo.ephemeral.x().unwrap(),
+            move_memo.ephemeral.y().unwrap(),
+            move_memo.amount,
+        ]
+    );
+    assert_eq!(alice_memos[1], alice_memos_before_move[0]);
+    assert_eq!(
+        map_record(&move_plan, &state, "creditEpochs", &alice),
+        vec![Fr::from(2u64)]
+    );
+    assert_eq!(
+        map_record(&move_plan, &state, "creditEpochs", &bob),
+        vec![Fr::from(1u64)]
+    );
+
+    let (_, clear_text, _) = artifacts("clearMemos");
+    let clear_plan: Plan = serde_json::from_str(clear_text).unwrap();
+    let clear_values = |epoch: &str| {
+        BTreeMap::from([
+            ("accountId".into(), bytes(&alice)),
+            ("expectedEpoch".into(), json!(epoch)),
+        ])
+    };
+    let stale_clear = run_entry(
+        "clearMemos",
+        clear_values("1"),
+        &alice_account_secret,
+        &alice_encryption_secret,
+        None,
+        None,
+        8,
+        &state,
+    );
+    assert!(stale_clear.is_err(), "stale memo epoch passed the native relation");
+    let wrong_key_clear = run_entry(
+        "clearMemos",
+        clear_values("2"),
+        &alice_account_secret,
+        &bob_encryption_secret,
+        None,
+        None,
+        9,
+        &state,
+    );
+    assert!(
+        wrong_key_clear.is_err(),
+        "another account's encryption key cleared Alice's memos"
+    );
+    let bob_memos_before_clear = memo_records(&clear_plan, &state, &bob);
+    state = run_entry(
+        "clearMemos",
+        clear_values("2"),
+        &alice_account_secret,
+        &alice_encryption_secret,
+        None,
+        None,
+        10,
+        &state,
+    )
+    .unwrap()
+    .0;
+    assert_eq!(memo_records(&clear_plan, &state, &alice), (0, Vec::new()));
+    assert_eq!(memo_records(&clear_plan, &state, &bob), bob_memos_before_clear);
+    assert_record(
+        &clear_plan,
+        &state,
+        "encryptionKeys",
+        &alice,
+        &coordinates(alice_key),
+    );
+    assert_record(
+        &clear_plan,
+        &state,
+        "encryptionKeys",
+        &bob,
+        &coordinates(bob_key),
+    );
+    assert_ciphertext(&clear_plan, &state, "balances", &alice, alice_after_move);
+    assert_ciphertext(
+        &clear_plan,
+        &state,
+        "balances",
+        &bob,
+        Ciphertext {
+            c1: identity,
+            c2: identity,
+        },
+    );
+    assert_ciphertext(
+        &clear_plan,
+        &state,
+        "pending",
+        &alice,
+        alice_pending_after_move,
+    );
+    assert_ciphertext(&clear_plan, &state, "pending", &bob, recipient_after);
+    assert_eq!(
+        map_record(&clear_plan, &state, "creditEpochs", &alice),
+        vec![Fr::from(2u64)]
+    );
+    assert_eq!(
+        map_record(&clear_plan, &state, "creditEpochs", &bob),
+        vec![Fr::from(1u64)]
+    );
+    assert_eq!(
+        state_slot(&clear_plan, &state, "initialized"),
+        &StateValue::Cell(storage::arena::Sp::new(field_value(Fr::from(1u64))))
+    );
+    assert_eq!(view("totalSupply", None, &state)["supply"], "10");
 }

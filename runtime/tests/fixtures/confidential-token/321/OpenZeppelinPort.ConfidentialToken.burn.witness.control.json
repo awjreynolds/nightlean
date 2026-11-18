@@ -78,7 +78,7 @@
    [{"value":
      {"tag": "witnessCall",
       "span":
-      {"line": 195,
+      {"line": 194,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "site": "OpenZeppelinPort.debitBalance.read.0",
@@ -87,14 +87,14 @@
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "accountSecret"},
     {"value":
      {"tag": "witnessCall",
       "span":
-      {"line": 196,
+      {"line": 195,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "site": "OpenZeppelinPort.debitBalance.read.1",
@@ -103,14 +103,14 @@
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "encryptionSecret"},
     {"value":
      {"tag": "witnessCall",
       "span":
-      {"line": 203,
+      {"line": 202,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "site": "OpenZeppelinPort.debitBalance.call.s8.0",
@@ -119,14 +119,14 @@
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "seed"},
     {"value":
      {"tag": "witnessCall",
       "span":
-      {"line": 204,
+      {"line": 203,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "site": "OpenZeppelinPort.debitBalance.call.s9.0",
@@ -134,53 +134,53 @@
       "arguments":
       [{"tag": "curve",
         "span":
-        {"line": 204,
+        {"line": 203,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "jubjubFromCoordinates",
         "arguments":
         [{"tag": "reference",
           "span":
-          {"line": 204,
+          {"line": 203,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "name": "balanceC1X"},
          {"tag": "reference",
           "span":
-          {"line": 204,
+          {"line": 203,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "name": "balanceC1Y"}]},
        {"tag": "curve",
         "span":
-        {"line": 204,
+        {"line": 203,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "jubjubFromCoordinates",
         "arguments":
         [{"tag": "reference",
           "span":
-          {"line": 204,
+          {"line": 203,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "name": "balanceC2X"},
          {"tag": "reference",
           "span":
-          {"line": 204,
+          {"line": 203,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "name": "balanceC2Y"}]}]},
      "type": "UIntRange<340282366920938463463374607431768211456>",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "plaintext"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 207,
+      {"line": 206,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubFromCoordinates",
@@ -188,61 +188,61 @@
       [{"value": "0",
         "tag": "constant",
         "span":
-        {"line": 207,
+        {"line": 206,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3}},
        {"value": "1",
         "tag": "constant",
         "span":
-        {"line": 207,
+        {"line": 206,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3}}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "identity"},
     {"value":
      {"tag": "bytes",
       "span":
-      {"line": 208,
+      {"line": 207,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "persistentHash32",
       "arguments":
       [{"tag": "reference",
         "span":
-        {"line": 208,
+        {"line": 207,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "name": "accountSecret"}]},
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "derivedAccountId"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 209,
+      {"line": 208,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubScalarFromNative",
       "arguments":
       [{"tag": "bytes",
         "span":
-        {"line": 209,
+        {"line": 208,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "degradeToNative",
         "arguments":
         [{"tag": "bytes",
           "span":
-          {"line": 209,
+          {"line": 208,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "operation": "persistentHashVector32",
@@ -282,43 +282,70 @@
              0],
             "tag": "bytes32",
             "span":
-            {"line": 209,
+            {"line": 208,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3}},
            {"tag": "reference",
             "span":
-            {"line": 209,
+            {"line": 208,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3},
             "name": "encryptionSecret"}]}]}]},
      "type": "JubjubScalar",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "encryptionScalar"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 211,
+      {"line": 210,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubMulGenerator",
       "arguments":
       [{"tag": "reference",
         "span":
-        {"line": 211,
+        {"line": 210,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "name": "encryptionScalar"}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "ownerPk"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 211,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubFromCoordinates",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 211,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "balanceC1X"},
+       {"tag": "reference",
+        "span":
+        {"line": 211,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "balanceC1Y"}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 193,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "ownerC1"},
     {"value":
      {"tag": "curve",
       "span":
@@ -332,57 +359,30 @@
         {"line": 212,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
-        "name": "balanceC1X"},
-       {"tag": "reference",
-        "span":
-        {"line": 212,
-         "file": "examples/openzeppelin/ConfidentialToken.lean",
-         "column": 3},
-        "name": "balanceC1Y"}]},
-     "type": "JubjubPoint",
-     "tag": "bind",
-     "span":
-     {"line": 194,
-      "file": "examples/openzeppelin/ConfidentialToken.lean",
-      "column": 1},
-     "name": "ownerC1"},
-    {"value":
-     {"tag": "curve",
-      "span":
-      {"line": 213,
-       "file": "examples/openzeppelin/ConfidentialToken.lean",
-       "column": 3},
-      "operation": "jubjubFromCoordinates",
-      "arguments":
-      [{"tag": "reference",
-        "span":
-        {"line": 213,
-         "file": "examples/openzeppelin/ConfidentialToken.lean",
-         "column": 3},
         "name": "balanceC2X"},
        {"tag": "reference",
         "span":
-        {"line": 213,
+        {"line": 212,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "name": "balanceC2Y"}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "ownerC2"},
     {"value":
      {"tag": "binary",
       "span":
-      {"line": 214,
+      {"line": 213,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "right":
       {"tag": "reference",
        "span":
-       {"line": 214,
+       {"line": 213,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "name": "value"},
@@ -390,14 +390,14 @@
       "left":
       {"tag": "reference",
        "span":
-       {"line": 214,
+       {"line": 213,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "name": "plaintext"}},
      "type": "UIntRange<340282366920938463463374607431768211456>",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "remaining"},
@@ -405,62 +405,62 @@
      {"value":
       {"tag": "reference",
        "span":
-       {"line": 215,
+       {"line": 214,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "name": "value"},
       "type": "Native",
       "tag": "cast",
       "span":
-      {"line": 215,
+      {"line": 214,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3}},
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "valueField"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 216,
+      {"line": 215,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubMulGenerator",
       "arguments":
       [{"tag": "curve",
         "span":
-        {"line": 216,
+        {"line": 215,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "jubjubScalarFromNative",
         "arguments":
         [{"tag": "reference",
           "span":
-          {"line": 216,
+          {"line": 215,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "name": "valueField"}]}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "valuePoint"},
     {"value":
      {"tag": "bytes",
       "span":
-      {"line": 217,
+      {"line": 216,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "persistentHashVector32",
       "arguments":
       [{"tag": "reference",
         "span":
-        {"line": 217,
+        {"line": 216,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "name": "seed"},
@@ -499,44 +499,85 @@
          0],
         "tag": "bytes32",
         "span":
-        {"line": 217,
+        {"line": 216,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3}}]},
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "debitHash"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 219,
+      {"line": 218,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubScalarFromNative",
       "arguments":
       [{"tag": "bytes",
         "span":
-        {"line": 219,
+        {"line": 218,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "degradeToNative",
         "arguments":
         [{"tag": "reference",
           "span":
-          {"line": 219,
+          {"line": 218,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "name": "debitHash"}]}]},
      "type": "JubjubScalar",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "debitR"},
+    {"value":
+     {"tag": "curve",
+      "span":
+      {"line": 219,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "operation": "jubjubAdd",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 219,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerC1"},
+       {"tag": "curve",
+        "span":
+        {"line": 219,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "operation": "jubjubNeg",
+        "arguments":
+        [{"tag": "curve",
+          "span":
+          {"line": 219,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "operation": "jubjubMulGenerator",
+          "arguments":
+          [{"tag": "reference",
+            "span":
+            {"line": 219,
+             "file": "examples/openzeppelin/ConfidentialToken.lean",
+             "column": 3},
+            "name": "debitR"}]}]}]},
+     "type": "JubjubPoint",
+     "tag": "bind",
+     "span":
+     {"line": 193,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "nextC1"},
     {"value":
      {"tag": "curve",
       "span":
@@ -550,7 +591,7 @@
         {"line": 220,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
-        "name": "ownerC1"},
+        "name": "ownerC2"},
        {"tag": "curve",
         "span":
         {"line": 220,
@@ -563,139 +604,98 @@
           {"line": 220,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
-          "operation": "jubjubMulGenerator",
+          "operation": "jubjubAdd",
           "arguments":
           [{"tag": "reference",
             "span":
             {"line": 220,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3},
-            "name": "debitR"}]}]}]},
-     "type": "JubjubPoint",
-     "tag": "bind",
-     "span":
-     {"line": 194,
-      "file": "examples/openzeppelin/ConfidentialToken.lean",
-      "column": 1},
-     "name": "nextC1"},
-    {"value":
-     {"tag": "curve",
-      "span":
-      {"line": 221,
-       "file": "examples/openzeppelin/ConfidentialToken.lean",
-       "column": 3},
-      "operation": "jubjubAdd",
-      "arguments":
-      [{"tag": "reference",
-        "span":
-        {"line": 221,
-         "file": "examples/openzeppelin/ConfidentialToken.lean",
-         "column": 3},
-        "name": "ownerC2"},
-       {"tag": "curve",
-        "span":
-        {"line": 221,
-         "file": "examples/openzeppelin/ConfidentialToken.lean",
-         "column": 3},
-        "operation": "jubjubNeg",
-        "arguments":
-        [{"tag": "curve",
-          "span":
-          {"line": 221,
-           "file": "examples/openzeppelin/ConfidentialToken.lean",
-           "column": 3},
-          "operation": "jubjubAdd",
-          "arguments":
-          [{"tag": "reference",
-            "span":
-            {"line": 221,
-             "file": "examples/openzeppelin/ConfidentialToken.lean",
-             "column": 3},
             "name": "valuePoint"},
            {"tag": "curve",
             "span":
-            {"line": 221,
+            {"line": 220,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3},
             "operation": "jubjubMul",
             "arguments":
             [{"tag": "reference",
               "span":
-              {"line": 221,
+              {"line": 220,
                "file": "examples/openzeppelin/ConfidentialToken.lean",
                "column": 3},
               "name": "ownerPk"},
              {"tag": "reference",
               "span":
-              {"line": 221,
+              {"line": 220,
                "file": "examples/openzeppelin/ConfidentialToken.lean",
                "column": 3},
               "name": "debitR"}]}]}]}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "nextC2"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 223,
+      {"line": 222,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubAdd",
       "arguments":
       [{"tag": "reference",
         "span":
-        {"line": 223,
+        {"line": 222,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "name": "nextC2"},
        {"tag": "curve",
         "span":
-        {"line": 223,
+        {"line": 222,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "jubjubNeg",
         "arguments":
         [{"tag": "curve",
           "span":
-          {"line": 223,
+          {"line": 222,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "operation": "jubjubMul",
           "arguments":
           [{"tag": "reference",
             "span":
-            {"line": 223,
+            {"line": 222,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3},
             "name": "nextC1"},
            {"tag": "reference",
             "span":
-            {"line": 223,
+            {"line": 222,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3},
             "name": "encryptionScalar"}]}]}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "recovered"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 225,
+      {"line": 224,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubMulGenerator",
       "arguments":
       [{"tag": "curve",
         "span":
-        {"line": 225,
+        {"line": 224,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "jubjubScalarFromNative",
@@ -703,26 +703,51 @@
         [{"value":
           {"tag": "reference",
            "span":
-           {"line": 225,
+           {"line": 224,
             "file": "examples/openzeppelin/ConfidentialToken.lean",
             "column": 3},
            "name": "remaining"},
           "type": "Native",
           "tag": "cast",
           "span":
-          {"line": 225,
+          {"line": 224,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3}}]}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "remainingPoint"},
     {"tag": "assert",
      "span":
-     {"line": 194,
+     {"line": 193,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span":
+      {"line": 226,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3},
+      "right":
+      {"tag": "reference",
+       "span":
+       {"line": 226,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "derivedAccountId"},
+      "left":
+      {"tag": "reference",
+       "span":
+       {"line": 226,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "name": "accountId"}}},
+    {"tag": "assert",
+     "span":
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "condition":
@@ -732,22 +757,35 @@
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "right":
-      {"tag": "reference",
+      {"value": false,
+       "tag": "bool",
        "span":
        {"line": 227,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
-        "column": 3},
-       "name": "derivedAccountId"},
+        "column": 3}},
       "left":
-      {"tag": "reference",
+      {"tag": "eq",
        "span":
        {"line": 227,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
-       "name": "accountId"}}},
+       "right":
+       {"tag": "reference",
+        "span":
+        {"line": 227,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "identity"},
+       "left":
+       {"tag": "reference",
+        "span":
+        {"line": 227,
+         "file": "examples/openzeppelin/ConfidentialToken.lean",
+         "column": 3},
+        "name": "ownerPk"}}}},
     {"tag": "assert",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "condition":
@@ -770,22 +808,29 @@
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "right":
-       {"tag": "reference",
+       {"value": "0",
+        "tag": "constant",
         "span":
         {"line": 228,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
-         "column": 3},
-        "name": "identity"},
+         "column": 3}},
        "left":
-       {"tag": "reference",
+       {"tag": "curve",
         "span":
         {"line": 228,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
-        "name": "ownerPk"}}}},
+        "operation": "jubjubScalarToNative",
+        "arguments":
+        [{"tag": "reference",
+          "span":
+          {"line": 228,
+           "file": "examples/openzeppelin/ConfidentialToken.lean",
+           "column": 3},
+          "name": "debitR"}]}}}},
     {"tag": "assert",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "condition":
@@ -795,61 +840,16 @@
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "right":
-      {"value": false,
-       "tag": "bool",
-       "span":
-       {"line": 229,
-        "file": "examples/openzeppelin/ConfidentialToken.lean",
-        "column": 3}},
-      "left":
-      {"tag": "eq",
-       "span":
-       {"line": 229,
-        "file": "examples/openzeppelin/ConfidentialToken.lean",
-        "column": 3},
-       "right":
-       {"value": "0",
-        "tag": "constant",
-        "span":
-        {"line": 229,
-         "file": "examples/openzeppelin/ConfidentialToken.lean",
-         "column": 3}},
-       "left":
-       {"tag": "curve",
-        "span":
-        {"line": 229,
-         "file": "examples/openzeppelin/ConfidentialToken.lean",
-         "column": 3},
-        "operation": "jubjubScalarToNative",
-        "arguments":
-        [{"tag": "reference",
-          "span":
-          {"line": 229,
-           "file": "examples/openzeppelin/ConfidentialToken.lean",
-           "column": 3},
-          "name": "debitR"}]}}}},
-    {"tag": "assert",
-     "span":
-     {"line": 194,
-      "file": "examples/openzeppelin/ConfidentialToken.lean",
-      "column": 1},
-     "condition":
-     {"tag": "eq",
-      "span":
-      {"line": 230,
-       "file": "examples/openzeppelin/ConfidentialToken.lean",
-       "column": 3},
-      "right":
       {"tag": "curve",
        "span":
-       {"line": 230,
+       {"line": 229,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "operation": "jubjubMulGenerator",
        "arguments":
        [{"tag": "curve",
          "span":
-         {"line": 230,
+         {"line": 229,
           "file": "examples/openzeppelin/ConfidentialToken.lean",
           "column": 3},
          "operation": "jubjubScalarFromNative",
@@ -857,78 +857,78 @@
          [{"value":
            {"tag": "reference",
             "span":
-            {"line": 230,
+            {"line": 229,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3},
             "name": "plaintext"},
            "type": "Native",
            "tag": "cast",
            "span":
-           {"line": 230,
+           {"line": 229,
             "file": "examples/openzeppelin/ConfidentialToken.lean",
             "column": 3}}]}]},
       "left":
       {"tag": "curve",
        "span":
-       {"line": 230,
+       {"line": 229,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "operation": "jubjubAdd",
        "arguments":
        [{"tag": "reference",
          "span":
-         {"line": 230,
+         {"line": 229,
           "file": "examples/openzeppelin/ConfidentialToken.lean",
           "column": 3},
          "name": "ownerC2"},
         {"tag": "curve",
          "span":
-         {"line": 230,
+         {"line": 229,
           "file": "examples/openzeppelin/ConfidentialToken.lean",
           "column": 3},
          "operation": "jubjubNeg",
          "arguments":
          [{"tag": "curve",
            "span":
-           {"line": 230,
+           {"line": 229,
             "file": "examples/openzeppelin/ConfidentialToken.lean",
             "column": 3},
            "operation": "jubjubMul",
            "arguments":
            [{"tag": "reference",
              "span":
-             {"line": 230,
+             {"line": 229,
               "file": "examples/openzeppelin/ConfidentialToken.lean",
               "column": 3},
              "name": "ownerC1"},
             {"tag": "reference",
              "span":
-             {"line": 230,
+             {"line": 229,
               "file": "examples/openzeppelin/ConfidentialToken.lean",
               "column": 3},
              "name": "encryptionScalar"}]}]}]}}},
     {"tag": "assert",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "condition":
      {"tag": "eq",
       "span":
-      {"line": 233,
+      {"line": 232,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "right":
       {"tag": "reference",
        "span":
-       {"line": 233,
+       {"line": 232,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "name": "remainingPoint"},
       "left":
       {"tag": "reference",
        "span":
-       {"line": 233,
+       {"line": 232,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "name": "recovered"}}},
@@ -936,10 +936,37 @@
      {"value":
       {"tag": "curve",
        "span":
-       {"line": 234,
+       {"line": 233,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "operation": "jubjubX",
+       "arguments":
+       [{"tag": "reference",
+         "span":
+         {"line": 233,
+          "file": "examples/openzeppelin/ConfidentialToken.lean",
+          "column": 3},
+         "name": "ownerPk"}]},
+      "tag": "disclose",
+      "span":
+      {"line": 233,
+       "file": "examples/openzeppelin/ConfidentialToken.lean",
+       "column": 3}},
+     "type": "Native",
+     "tag": "bind",
+     "span":
+     {"line": 193,
+      "file": "examples/openzeppelin/ConfidentialToken.lean",
+      "column": 1},
+     "name": "__noctium_output_30_keyX"},
+    {"value":
+     {"value":
+      {"tag": "curve",
+       "span":
+       {"line": 234,
+        "file": "examples/openzeppelin/ConfidentialToken.lean",
+        "column": 3},
+       "operation": "jubjubY",
        "arguments":
        [{"tag": "reference",
          "span":
@@ -955,10 +982,10 @@
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
-     "name": "__noctium_output_30_keyX"},
+     "name": "__noctium_output_31_keyY"},
     {"value":
      {"value":
       {"tag": "curve",
@@ -966,14 +993,14 @@
        {"line": 235,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
-       "operation": "jubjubY",
+       "operation": "jubjubX",
        "arguments":
        [{"tag": "reference",
          "span":
          {"line": 235,
           "file": "examples/openzeppelin/ConfidentialToken.lean",
           "column": 3},
-         "name": "ownerPk"}]},
+         "name": "nextC1"}]},
       "tag": "disclose",
       "span":
       {"line": 235,
@@ -982,10 +1009,10 @@
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
-     "name": "__noctium_output_31_keyY"},
+     "name": "__noctium_output_32_nextC1X"},
     {"value":
      {"value":
       {"tag": "curve",
@@ -993,7 +1020,7 @@
        {"line": 236,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
-       "operation": "jubjubX",
+       "operation": "jubjubY",
        "arguments":
        [{"tag": "reference",
          "span":
@@ -1009,10 +1036,10 @@
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
-     "name": "__noctium_output_32_nextC1X"},
+     "name": "__noctium_output_33_nextC1Y"},
     {"value":
      {"value":
       {"tag": "curve",
@@ -1020,14 +1047,14 @@
        {"line": 237,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
-       "operation": "jubjubY",
+       "operation": "jubjubX",
        "arguments":
        [{"tag": "reference",
          "span":
          {"line": 237,
           "file": "examples/openzeppelin/ConfidentialToken.lean",
           "column": 3},
-         "name": "nextC1"}]},
+         "name": "nextC2"}]},
       "tag": "disclose",
       "span":
       {"line": 237,
@@ -1036,10 +1063,10 @@
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
-     "name": "__noctium_output_33_nextC1Y"},
+     "name": "__noctium_output_34_nextC2X"},
     {"value":
      {"value":
       {"tag": "curve",
@@ -1047,7 +1074,7 @@
        {"line": 238,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
-       "operation": "jubjubX",
+       "operation": "jubjubY",
        "arguments":
        [{"tag": "reference",
          "span":
@@ -1063,34 +1090,7 @@
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 194,
-      "file": "examples/openzeppelin/ConfidentialToken.lean",
-      "column": 1},
-     "name": "__noctium_output_34_nextC2X"},
-    {"value":
-     {"value":
-      {"tag": "curve",
-       "span":
-       {"line": 239,
-        "file": "examples/openzeppelin/ConfidentialToken.lean",
-        "column": 3},
-       "operation": "jubjubY",
-       "arguments":
-       [{"tag": "reference",
-         "span":
-         {"line": 239,
-          "file": "examples/openzeppelin/ConfidentialToken.lean",
-          "column": 3},
-         "name": "nextC2"}]},
-      "tag": "disclose",
-      "span":
-      {"line": 239,
-       "file": "examples/openzeppelin/ConfidentialToken.lean",
-       "column": 3}},
-     "type": "Native",
-     "tag": "bind",
-     "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "__noctium_output_35_nextC2Y"},
@@ -1098,49 +1098,49 @@
      {"type": "Aggregate:t0",
       "tag": "composite",
       "span":
-      {"line": 194,
+      {"line": 193,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 1},
       "leaves":
       [{"tag": "reference",
         "span":
-        {"line": 194,
+        {"line": 193,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_30_keyX"},
        {"tag": "reference",
         "span":
-        {"line": 194,
+        {"line": 193,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_31_keyY"},
        {"tag": "reference",
         "span":
-        {"line": 194,
+        {"line": 193,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_32_nextC1X"},
        {"tag": "reference",
         "span":
-        {"line": 194,
+        {"line": 193,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_33_nextC1Y"},
        {"tag": "reference",
         "span":
-        {"line": 194,
+        {"line": 193,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_34_nextC2X"},
        {"tag": "reference",
         "span":
-        {"line": 194,
+        {"line": 193,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_35_nextC2Y"}]},
      "tag": "return",
      "span":
-     {"line": 194,
+     {"line": 193,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1}}]}],
  "entry": "s0d0",

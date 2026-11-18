@@ -170,7 +170,6 @@ noctium_witness_circuit transferValue where
   prove eq(accountId, derivedAccountId)
   prove eq(eq(ownerPk, identity), false)
   prove eq(eq(recipientPk, identity), false)
-  prove eq(eq(accountId, recipient), false)
   prove eq(jubjubAdd(ownerC2,
     jubjubNeg(jubjubMul(ownerC1, encryptionScalar))),
     jubjubMulGenerator(jubjubScalarFromNative(cast(Native, plaintext))))
@@ -237,6 +236,20 @@ noctium_witness_circuit debitBalance where
   output nextC1Y : Native := disclose(jubjubY(nextC1))
   output nextC2X : Native := disclose(jubjubX(nextC2))
   output nextC2Y : Native := disclose(jubjubY(nextC2))
+end
+
+noctium_witness_circuit clearMemoInput where
+  read private Wallet.accountSecret as accountSecret
+  read private Wallet.encryptionSecret as encryptionSecret
+  public accountId : Bytes32
+  public expectedEpoch : UInt 64
+  let derivedAccountId : Bytes32 := persistentHash32(accountSecret)
+  let encryptionScalar : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([bytes32("ElGamal:secretToScalar"), encryptionSecret])))
+  let derivedPk : JubjubPoint := jubjubMulGenerator(encryptionScalar)
+  prove eq(accountId, derivedAccountId)
+  output keyX : Native := disclose(jubjubX(derivedPk))
+  output keyY : Native := disclose(jubjubY(derivedPk))
 end
 
 noctium_circuit accountView where
@@ -393,6 +406,53 @@ noctium_contract ConfidentialToken where
     return caller : Bytes32 := accountId
   end
 
+  entry _move uses transferValue where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    member encryptionKeys[disclose(accountId)] as senderRegistered
+    require eq(senderRegistered, true)
+    member encryptionKeys[disclose(recipient)] as recipientRegistered
+    require eq(recipientRegistered, true)
+    read encryptionKeys[disclose(accountId)] as senderKey
+    require eq(senderKey_x, result.ownerKeyX)
+    require eq(senderKey_y, result.ownerKeyY)
+    read encryptionKeys[disclose(recipient)] as recipientKey
+    require eq(recipientKey_x, jubjubX(recipientPk))
+    require eq(recipientKey_y, jubjubY(recipientPk))
+    read balances[disclose(accountId)] as oldBalance
+    require eq(oldBalance_c1x, balanceC1X)
+    require eq(oldBalance_c1y, balanceC1Y)
+    require eq(oldBalance_c2x, balanceC2X)
+    require eq(oldBalance_c2y, balanceC2Y)
+    read pending[disclose(recipient)] as oldPending
+    require eq(oldPending_c1x, pendingC1X)
+    require eq(oldPending_c1y, pendingC1Y)
+    require eq(oldPending_c2x, pendingC2X)
+    require eq(oldPending_c2y, pendingC2Y)
+    member memos[disclose(recipient)] as memoListPresent
+    if eq(memoListPresent, false) then {
+      reset memos[disclose(recipient)]
+    } else {
+    }
+    member creditEpochs[disclose(recipient)] as epochPresent
+    if eq(epochPresent, false) then {
+      reset creditEpochs[disclose(recipient)]
+    } else {
+    }
+    increment creditEpochs[disclose(recipient)] by 1
+    read creditEpochs[disclose(recipient)] as actualEpoch
+    require eq(actualEpoch, epoch)
+    write balances[disclose(accountId)] := fields(
+      result.nextOwnerC1X, result.nextOwnerC1Y,
+      result.nextOwnerC2X, result.nextOwnerC2Y)
+    write pending[disclose(recipient)] := fields(
+      result.nextRecipientC1X, result.nextRecipientC1Y,
+      result.nextRecipientC2X, result.nextRecipientC2Y)
+    pushFront memos[disclose(recipient)] := fields(
+      result.memoX, result.memoY, result.memoAmount)
+    return caller : Bytes32 := accountId
+  end
+
   entry burn uses debitBalance where
     read initialized as isInitialized
     require eq(isInitialized, true)
@@ -411,6 +471,21 @@ noctium_contract ConfidentialToken where
       result.nextC1X, result.nextC1Y, result.nextC2X, result.nextC2Y)
     write totalSupply := disclose(sub(oldSupply, value))
     return caller : Bytes32 := accountId
+  end
+
+  entry clearMemos uses clearMemoInput where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    member encryptionKeys[disclose(accountId)] as registered
+    require eq(registered, true)
+    read encryptionKeys[disclose(accountId)] as storedKey
+    require eq(storedKey_x, result.keyX)
+    require eq(storedKey_y, result.keyY)
+    member memos[disclose(accountId)] as memoListPresent
+    require eq(memoListPresent, true)
+    read creditEpochs[disclose(accountId)] as actualEpoch
+    require eq(actualEpoch, expectedEpoch)
+    reset memos[disclose(accountId)]
   end
 
   entry totalSupply uses noViewInputs where
