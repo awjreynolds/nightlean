@@ -1452,10 +1452,17 @@ fn native_member_result(
 }
 
 fn aligned_call_returns(values: &[(String, Value)]) -> Result<AlignedValue> {
-    let fields = values
-        .iter()
-        .map(|(_, value)| value.field_encoding())
-        .collect::<Result<Vec<_>>>()?;
+    let mut fields = Vec::new();
+    for (_, value) in values {
+        value.validate()?;
+        match value {
+            Value::Bytes(_) => aligned(value, "bytes32")?.value_only_field_repr(&mut fields),
+            Value::JubjubScalar(value) => fields.push(jubjub::scalar_native(*value)?),
+            Value::JubjubPoint(value) => fields.extend(jubjub::coordinates(*value)?),
+            _ => fields.push(value.field_encoding()?),
+        }
+    }
+    ensure!(fields.len() <= 256, "too many native call return fields");
     Ok(aligned_fields(&fields))
 }
 
@@ -2162,13 +2169,6 @@ pub fn prepare(
             "invalid call return declaration"
         );
         let ty = ScalarType::parse(&output.ty)?;
-        ensure!(
-            matches!(
-                ty,
-                ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_)
-            ),
-            "call returns currently require Native, Bool or UInt"
-        );
         let value = evaluate(&output.expression, &env)?;
         ensure!(value.scalar_type() == ty, "call return type mismatch");
         value.validate()?;

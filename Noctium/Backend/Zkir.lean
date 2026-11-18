@@ -765,7 +765,11 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
   -- Entrypoint returns are public outputs committed with the call statement.
   let mut returned := []
   for output in entry.returns do
-    returned := returned ++ [← lowerExpr output.value]
+    match output.nativeReturnFields with
+    | .error message => rejectLowering message
+    | .ok fields =>
+      for field in fields do
+        returned := returned ++ [← lowerExpr field]
   emit "output" [("vals", toJson returned)]
 
 /-- Compile a native ledger transcript relation. Public-input binding includes
@@ -778,7 +782,8 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagn
   let program := Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
     ("inputs", Json.arr #[]),
-    ("outputs", Json.arr (entry.returns.toArray.map fun _ => nativeType)),
+    ("outputs", Json.arr ((entry.returns.flatMap fun output =>
+      List.replicate output.nativeReturnFieldCount nativeType).toArray)),
     -- Ledger ContractCall.public_inputs always includes the commitment after
     -- binding input. Standalone relations above deliberately keep it disabled.
     ("do_communications_commitment", toJson true),

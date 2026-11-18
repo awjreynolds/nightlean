@@ -199,6 +199,13 @@ fn validate_circuit(value: &Json) -> Result<(), i32> {
                 | "constrain_eq"
                 | "constrain_bits"
                 | "less_than"
+                | "persistent_hash"
+                | "encode"
+                | "jubjub_scalar_from_native"
+                | "ec_mul_generator"
+                | "ec_mul"
+                | "from_coordinates"
+                | "into_coordinates"
         ) {
             return Err(INVALID_ARGUMENT);
         }
@@ -286,7 +293,16 @@ fn validate_begin(begin: Begin) -> Result<Session, i32> {
         .map_err(|_| INVALID_ARGUMENT)?;
     create_state(plan, &begin.state).map_err(|_| INVALID_ARGUMENT)?;
     validate_circuit(&begin.circuit)?;
-    if begin.circuit["outputs"].as_array().map(Vec::len) != Some(begin.plan.returns.len()) {
+    let return_fields = begin
+        .plan
+        .returns
+        .iter()
+        .try_fold(0usize, |count, returned| {
+            ScalarType::parse(&returned.ty)
+                .map(|ty| count + ty.call_return_fields())
+                .map_err(|_| INVALID_ARGUMENT)
+        })?;
+    if begin.circuit["outputs"].as_array().map(Vec::len) != Some(return_fields) {
         return Err(INVALID_ARGUMENT);
     }
     let circuit = serde_json::to_vec(&begin.circuit).map_err(|_| INVALID_ARGUMENT)?;

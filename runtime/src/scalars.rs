@@ -42,6 +42,12 @@ pub enum ScalarType {
     JubjubPoint,
 }
 impl ScalarType {
+    pub(crate) fn call_return_fields(&self) -> usize {
+        match self {
+            Self::Bytes32 | Self::JubjubPoint => 2,
+            _ => 1,
+        }
+    }
     pub fn parse(text: &str) -> Result<Self> {
         match text {
             "Native" => Ok(Self::Native),

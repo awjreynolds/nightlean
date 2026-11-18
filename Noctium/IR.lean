@@ -98,6 +98,25 @@ structure Output where
   span : SourceSpan := {}
   deriving Repr
 
+/-- Encode one logical entrypoint return as the Native fields committed by the
+call relation. Opaque return layouts reuse the same canonical projections as
+ledger alignment and the existing Jubjub input bridge. -/
+def Output.nativeReturnFields : Output → Except String (List (Expr .native))
+  | {ty := .native, value, ..} => pure [value]
+  | {ty := .bool, value, ..} => pure [.cast .native value]
+  | {ty := .uint _, value, ..} => pure [.cast .native value]
+  | {ty := .bytes 32, value, ..} => pure [.bytesField value 0, .bytesField value 1]
+  | {ty := .bytes _, ..} => throw "entrypoint returns support only Bytes32 byte strings"
+  | {ty := .jubjubScalar, value, ..} => pure [.jubjubScalarToNative value]
+  | {ty := .jubjubPoint, value, ..} => pure [
+      .jubjubCoordinate value 0, .jubjubCoordinate value 1]
+
+def Output.nativeReturnFieldCount (output : Output) : Nat :=
+  match output.ty with
+  | .bytes 32 | .jubjubPoint => 2
+  | .bytes _ => 0
+  | _ => 1
+
 /-- Recursive ledger value descriptions. Scalar leaves use the existing typed
 scalar surface. Maps retain their key type and recursively describe values. -/
 inductive LedgerValueType where
@@ -703,8 +722,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
   for output in e.returns do
     if (env.lookup output.name).isSome then
       throw {span := output.span, message := s!"entrypoint return '{output.name}' shadows a source binding"}
-    if output.ty.isBytes || output.ty.isJubjub then
-      throw {span := output.span, message := "entrypoint returns currently support only Native, Bool, and UInt values"}
+    if output.ty.isBytes && output.ty != .bytes 32 then
+      throw {span := output.span, message := "entrypoint returns support only Bytes32 byte strings"}
     match output.ty.validate caps with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()

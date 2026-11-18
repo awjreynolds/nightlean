@@ -146,8 +146,11 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   let guardConditions ← convert value.span (plan.guards.mapM (normalize aliases))
   let (groups, bounds, operationAssertions) ←
     collectOperations value.span aliases plan.operations outputBounds
-  let returnResults ← value.returns.mapM fun output =>
-    convert output.span (normalize aliases output.value)
+  let mut returnResults := []
+  for output in value.returns do
+    let fields ← convert output.span output.nativeReturnFields
+    for field in fields do
+      returnResults := returnResults ++ [← convert output.span (normalize aliases field)]
   let returnedBounds := returnResults.flatMap (·.bounds)
   let returnedAssertions := returnResults.flatMap (·.assertions)
   let activityGuards := if plan.activityGuards.isEmpty then

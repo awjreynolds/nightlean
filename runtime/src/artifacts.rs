@@ -977,7 +977,23 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
     )?;
     let return_count = match plan.get("returns") {
         None => 0,
-        Some(Value::Array(values)) if values.len() <= 256 => values.len(),
+        Some(Value::Array(values)) if values.len() <= 256 => {
+            let mut count = 0;
+            for value in values {
+                let ty = value["type"]
+                    .as_str()
+                    .ok_or_else(|| error("plan_mismatch", "invalid call return type"))?;
+                count += crate::ScalarType::parse(ty)
+                    .map_err(|_| error("plan_mismatch", "unsupported call return type"))?
+                    .call_return_fields();
+            }
+            require(
+                count <= 256,
+                "plan_mismatch",
+                "too many native call return fields",
+            )?;
+            count
+        }
         _ => return Err(error("plan_mismatch", "invalid call return schema")),
     };
     require(

@@ -1146,8 +1146,8 @@ private def elaborateReturns (statements : Array (TSyntax `nlreturn))
       labels := labelName :: labels
       let ty ← readTy returnTy
       match ty with
-      | .native | .bool | .uint _ => pure ()
-      | _ => throwErrorAt returnTy "entry returns support only Native, Bool, and UInt values"
+      | .native | .bool | .uint _ | .bytes 32 | .jubjubScalar | .jubjubPoint => pure ()
+      | _ => throwErrorAt returnTy "entry returns support only Native, Bool, UInt, Bytes32, JubjubScalar, and JubjubPoint values"
       let value ← checkedExpression state.env value ty
       let span ← spanTerm statement
       state := {state with returns := state.returns.push (← `({
