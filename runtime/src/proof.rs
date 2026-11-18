@@ -1,5 +1,5 @@
 //! Native proof service boundary. Public artifacts stay retained, private values have no Debug.
-//! This API proves a frozen single-call intent. It does not fund, sign, or submit transactions.
+//! This API proves frozen native call intents. It does not fund, sign, or submit transactions.
 use crate::{
     Db, Plan,
     artifacts::{ContractBundleSet, Role, VerifiedBundle},
@@ -34,6 +34,9 @@ use transient_crypto::{
 
 pub type ProvedNativeIntent = Intent<Signature, ProofMarker, PedersenRandomness, Db>;
 pub type PublicProvedNativeIntent = Intent<Signature, ProofMarker, Pedersen, Db>;
+mod composition;
+pub use composition::{CompositionMaterial, PreparedComposition};
+
 const MAX_RESPONSE: usize = 1_048_576;
 const MAX_PARAMETERS: usize = 134_217_728;
 const MAX_PRIVATE_CONFIG: usize = 1_048_576;
@@ -1852,24 +1855,14 @@ impl PreparedProof {
         response: &[u8],
         max_response_bytes: usize,
     ) -> Result<Proof> {
-        if max_response_bytes == 0
-            || max_response_bytes > MAX_RESPONSE
-            || response.is_empty()
-            || response.len() > max_response_bytes
-        {
-            return Err(Error::Limit);
-        }
         self.validate_parameters(params)?;
-        let versioned: ProofVersioned = decode(response).map_err(|_| Error::InvalidResponse)?;
-        // The pinned /prove transport version is independent of ledger V3 attachment.
-        let ProofVersioned::V2(proof) = versioned else {
-            return Err(Error::InvalidResponse);
-        };
-        self.material
-            .verifier
-            .verify(&params.verifier, &proof, self.statement.iter().copied())
-            .map_err(|_| Error::InvalidProof)?;
-        Ok(proof)
+        verify_service_response(
+            &self.material.verifier,
+            params,
+            &self.statement,
+            response,
+            max_response_bytes,
+        )
     }
     /// Race proof construction against a host timer/cancellation future. Dropping this future
     /// drops the provider future. CPU-only native proving requires a host worker for hard stop.
@@ -1884,29 +1877,15 @@ impl PreparedProof {
             return Err(Error::Limit);
         }
         self.validate_parameters(params)?;
-        let outcome = Rc::new(RefCell::new(None));
-        let provider = CheckedProvider {
-            prepared: self,
-            service,
-            params,
-            max_response_bytes,
-            outcome: outcome.clone(),
-        };
-        let work = self
-            .intent
-            .prove(
-                0,
-                provider,
-                &self.material.parameters.cost_model.runtime_cost_model,
-            )
-            .fuse();
-        let stop = stop.fuse();
-        pin_mut!(work, stop);
-        let result = select_biased! {
-            reason = stop => return Err(match reason { Abort::Cancelled => Error::Cancelled, Abort::Deadline => Error::Deadline }),
-            result = work => result,
-        };
-        let (_, intent) = result.map_err(|_| outcome.borrow().unwrap_or(Error::Attachment))?;
+        let preimage = self.preimage()?;
+        let calls = [SelectedProof {
+            key: &preimage.key_location,
+            material: &self.material,
+            statement: &self.statement,
+            activity: &self.activity,
+            parameters: params,
+        }];
+        let intent = prove_intent(&self.intent, &calls, service, max_response_bytes, stop).await?;
         let Some(ContractAction::Call(call)) = intent.actions.iter_deref().next() else {
             return Err(Error::Attachment);
         };
@@ -1924,16 +1903,7 @@ impl PreparedProof {
             .verifier
             .verify(&params.verifier, proof, self.statement.iter().copied())
             .map_err(|_| Error::InvalidProof)?;
-        let bytes = encode(&intent)?;
-        let decoded: ProvedNativeIntent = decode(&bytes).map_err(|_| Error::Attachment)?;
-        if encode(&decoded)? != bytes {
-            return Err(Error::Attachment);
-        }
-        Ok(ProvedIntent {
-            intent: decoded,
-            bytes,
-            contract_binding: self.contract_binding.clone(),
-        })
+        ProvedIntent::checked_encoding(intent, self.contract_binding.clone())
     }
 }
 
@@ -1945,6 +1915,22 @@ pub struct ProvedIntent {
     contract_binding: Option<ContractStateBinding>,
 }
 impl ProvedIntent {
+    fn checked_encoding(
+        intent: ProvedNativeIntent,
+        contract_binding: Option<ContractStateBinding>,
+    ) -> Result<Self> {
+        let bytes = encode(&intent)?;
+        let decoded: ProvedNativeIntent = decode(&bytes).map_err(|_| Error::Attachment)?;
+        if encode(&decoded)? != bytes {
+            return Err(Error::Attachment);
+        }
+        Ok(Self {
+            intent: decoded,
+            bytes,
+            contract_binding,
+        })
+    }
+
     pub fn native(&self) -> &ProvedNativeIntent {
         &self.intent
     }
@@ -2048,19 +2034,85 @@ impl<R: Rng + CryptoRng> ProofService for LocalProver<R> {
         request.prove_locally(rng).await
     }
 }
+fn verify_service_response(
+    verifier: &VerifierKey,
+    params: &TrustedParameters,
+    statement: &[Fr],
+    response: &[u8],
+    max_response_bytes: usize,
+) -> Result<Proof> {
+    if max_response_bytes == 0
+        || max_response_bytes > MAX_RESPONSE
+        || response.is_empty()
+        || response.len() > max_response_bytes
+    {
+        return Err(Error::Limit);
+    }
+    // The pinned /prove transport version is independent of ledger V3 attachment.
+    let ProofVersioned::V2(proof) = decode(response).map_err(|_| Error::InvalidResponse)? else {
+        return Err(Error::InvalidResponse);
+    };
+    verifier
+        .verify(&params.verifier, &proof, statement.iter().copied())
+        .map_err(|_| Error::InvalidProof)?;
+    Ok(proof)
+}
+
+struct SelectedProof<'a> {
+    key: &'a KeyLocation,
+    material: &'a Material,
+    statement: &'a [Fr],
+    activity: &'a [Option<usize>],
+    parameters: &'a TrustedParameters,
+}
+
+async fn prove_intent<S: ProofService>(
+    intent: &NativeIntent,
+    calls: &[SelectedProof<'_>],
+    service: &S,
+    max_response_bytes: usize,
+    stop: impl Future<Output = Abort>,
+) -> Result<ProvedNativeIntent> {
+    if max_response_bytes == 0 || max_response_bytes > MAX_RESPONSE {
+        return Err(Error::Limit);
+    }
+    let parameters = &calls
+        .first()
+        .ok_or(Error::InvalidIntent)?
+        .material
+        .parameters;
+    let outcome = Rc::new(RefCell::new(None));
+    let provider = CheckedProvider {
+        calls,
+        service,
+        max_response_bytes,
+        outcome: outcome.clone(),
+    };
+    let work = intent
+        .prove(0, provider, &parameters.cost_model.runtime_cost_model)
+        .fuse();
+    let stop = stop.fuse();
+    pin_mut!(work, stop);
+    let result = select_biased! {
+        reason = stop => return Err(match reason { Abort::Cancelled => Error::Cancelled, Abort::Deadline => Error::Deadline }),
+        result = work => result,
+    };
+    result
+        .map(|(_, intent)| intent)
+        .map_err(|_| outcome.borrow().unwrap_or(Error::Attachment))
+}
+
 struct CheckedProvider<'a, S> {
-    prepared: &'a PreparedProof,
+    calls: &'a [SelectedProof<'a>],
     service: &'a S,
-    params: &'a TrustedParameters,
     max_response_bytes: usize,
     outcome: Rc<RefCell<Option<Error>>>,
 }
 impl<S> Clone for CheckedProvider<'_, S> {
     fn clone(&self) -> Self {
         Self {
-            prepared: self.prepared,
+            calls: self.calls,
             service: self.service,
-            params: self.params,
             max_response_bytes: self.max_response_bytes,
             outcome: self.outcome.clone(),
         }
@@ -2068,24 +2120,26 @@ impl<S> Clone for CheckedProvider<'_, S> {
 }
 impl<S> Resolver for CheckedProvider<'_, S> {
     async fn resolve_key(&self, key: KeyLocation) -> io::Result<Option<ProvingKeyMaterial>> {
-        if key.0.as_ref() != self.prepared.material.entrypoint {
-            return Err(io::Error::other("noctium_proof_unknown_key"));
-        }
-        Ok(Some(self.prepared.material.native.clone()))
+        Ok(self
+            .calls
+            .iter()
+            .find(|call| *call.key == key)
+            .map(|call| call.material.native.clone()))
     }
 }
 impl<S: ProofService> ProvingProvider for CheckedProvider<'_, S> {
     async fn check(&self, preimage: &ProofPreimage) -> anyhow::Result<Vec<Option<usize>>> {
-        let result = preimage
-            .check(&self.prepared.material.circuit)
-            .map_err(|_| Error::InvalidIntent);
-        match result {
-            Ok(activity) if activity == self.prepared.activity => Ok(activity),
-            _ => {
-                *self.outcome.borrow_mut() = Some(Error::InvalidIntent);
-                Err(Error::InvalidIntent.into())
-            }
+        let result = self.selected(preimage).and_then(|selected| {
+            preimage
+                .check(&selected.material.circuit)
+                .ok()
+                .filter(|activity| *activity == selected.activity)
+                .ok_or(Error::InvalidIntent)
+        });
+        if let Err(error) = &result {
+            *self.outcome.borrow_mut() = Some(*error);
         }
+        result.map_err(Into::into)
     }
     async fn prove(self, preimage: &ProofPreimage, overwrite: Option<Fr>) -> anyhow::Result<Proof> {
         let result = self.checked_prove(preimage, overwrite).await;
@@ -2102,12 +2156,26 @@ impl<S: ProofService> ProvingProvider for CheckedProvider<'_, S> {
     }
 }
 impl<S: ProofService> CheckedProvider<'_, S> {
+    fn selected(&self, preimage: &ProofPreimage) -> Result<&SelectedProof<'_>> {
+        let commitment = preimage
+            .communications_commitment
+            .ok_or(Error::BindingMismatch)?
+            .0;
+        self.calls
+            .iter()
+            .find(|call| {
+                *call.key == preimage.key_location && call.statement.get(1) == Some(&commitment)
+            })
+            .ok_or(Error::BindingMismatch)
+    }
+
     async fn checked_prove(
         &self,
         preimage: &ProofPreimage,
         overwrite: Option<Fr>,
     ) -> Result<Proof> {
-        if overwrite != self.prepared.statement.first().copied() {
+        let selected = self.selected(preimage)?;
+        if overwrite != selected.statement.first().copied() {
             return Err(Error::BindingMismatch);
         }
         let mut preimage = preimage.clone();
@@ -2116,17 +2184,22 @@ impl<S: ProofService> CheckedProvider<'_, S> {
             .service
             .prove(ProofRequest {
                 preimage: &preimage,
-                material: &self.prepared.material.native,
-                prover: &self.prepared.material.prover,
-                parameters: self.params,
+                material: &selected.material.native,
+                prover: &selected.material.prover,
+                parameters: selected.parameters,
                 max_response_bytes: self.max_response_bytes,
-                expected_statement: &self.prepared.statement,
-                expected_activity: &self.prepared.activity,
+                expected_statement: selected.statement,
+                expected_activity: selected.activity,
             })
             .await
             .map_err(|_| Error::Service)?;
-        self.prepared
-            .verified_response(self.params, &response, self.max_response_bytes)
+        verify_service_response(
+            &selected.material.verifier,
+            selected.parameters,
+            selected.statement,
+            &response,
+            self.max_response_bytes,
+        )
     }
 }
 

@@ -247,3 +247,169 @@ fn native_intent_assembles_a_call_forest_and_rejects_unmatched_claims() {
     forged.initial_context.effects = caller_execution.after.effects.clone();
     assert!(assemble(&[forged, callee()]).is_err());
 }
+
+#[test]
+#[ignore = "requires independently pinned caller/callee bundles and their native SRS files"]
+fn composed_intent_attaches_both_proofs_against_installed_keys() {
+    use base_crypto::time::Timestamp;
+    use futures::{executor::block_on, future::pending};
+    use ledger::{
+        structure::{
+            ContractDeploy, LedgerParameters, LedgerState, StandardTransaction, Transaction,
+        },
+        verify::WellFormedStrictness,
+    };
+    use noctium_runtime::{
+        Db,
+        artifacts::{Role, verify},
+        proof::{CompositionMaterial, Error, PreparedComposition, TrustedParameters},
+    };
+    use onchain_runtime::state::{ContractOperation, ContractState};
+    use rand::{SeedableRng, rngs::StdRng};
+    use std::{env, fs, path::PathBuf};
+    use transient_crypto::proofs::{VerifierKey, Zkir};
+
+    let root = PathBuf::from(env::var_os("NOCTIUM_COMPOSITION_BUNDLES").unwrap());
+    let caller_bundle = verify(
+        &root.join("caller-bundle"),
+        Some(&env::var("NOCTIUM_COMPOSITION_CALLER_SHA256").unwrap()),
+    )
+    .unwrap();
+    let callee_bundle = verify(
+        &root.join("callee-bundle"),
+        Some(&env::var("NOCTIUM_COMPOSITION_CALLEE_SHA256").unwrap()),
+    )
+    .unwrap();
+    let srs = PathBuf::from(env::var_os("NOCTIUM_COMPOSITION_SRS").unwrap());
+    let parameters = |circuit: &IrSource, pin: &str| {
+        TrustedParameters::from_bytes(
+            &fs::read(srs.join(format!("bls_midnight_2p{}", circuit.k()))).unwrap(),
+            circuit.k(),
+            &env::var(pin).unwrap(),
+        )
+        .unwrap()
+    };
+
+    let deploy = |bundle: &noctium_runtime::artifacts::VerifiedBundle, name: &str, state| {
+        let plan = serde_json::from_slice::<Plan>(bundle.file(Role::Plan).unwrap()).unwrap();
+        let circuit = IrSource::load(bundle.file(Role::Circuit).unwrap()).unwrap();
+        let verifier = serialize::tagged_deserialize::<VerifierKey>(
+            &mut bundle.file(Role::VerifierKey).unwrap(),
+        )
+        .unwrap();
+        let entry = EntryPointBuf(name.as_bytes().to_vec());
+        let mut contract = ContractState::<Db>::default();
+        contract.data = create_state(&plan, &state).unwrap();
+        contract.operations = contract
+            .operations
+            .insert(entry.clone(), ContractOperation::new(Some(verifier), None));
+        let deploy = ContractDeploy::new(&mut OsRng, contract);
+        (plan, circuit, entry, deploy)
+    };
+    let (caller_plan, caller_circuit, caller_entry, caller) = deploy(
+        &caller_bundle,
+        "claim",
+        BTreeMap::from([("marker".into(), json!("9"))]),
+    );
+    let (callee_plan, callee_circuit, callee_entry, callee) = deploy(
+        &callee_bundle,
+        "advance",
+        BTreeMap::from([
+            ("balance".into(), json!("10")),
+            ("count".into(), json!("0")),
+        ]),
+    );
+    let caller_srs = parameters(&caller_circuit, "NOCTIUM_COMPOSITION_CALLER_SRS_SHA256");
+    let callee_srs = parameters(&callee_circuit, "NOCTIUM_COMPOSITION_CALLEE_SRS_SHA256");
+    let ledger_parameters = serialize::tagged_deserialize::<LedgerParameters>(
+        &mut caller_bundle.file(Role::LedgerParameters).unwrap(),
+    )
+    .unwrap();
+    let mut ledger = LedgerState::<Db>::new("local");
+    ledger.parameters = storage::arena::Sp::new(ledger_parameters);
+    ledger.contract = ledger
+        .contract
+        .insert(caller.address(), caller.initial_state.clone())
+        .insert(callee.address(), callee.initial_state.clone());
+    let before = 1_800_000_000;
+    let callee_execution = prepare(
+        &callee_plan,
+        &callee_inputs(),
+        &callee.initial_state.data,
+        &ledger.parameters,
+        callee.address(),
+    )
+    .unwrap();
+    let caller_execution = prepare(
+        &caller_plan,
+        &caller_inputs(callee.address().0, callee_entry.ep_hash(), true),
+        &caller.initial_state.data,
+        &ledger.parameters,
+        caller.address(),
+    )
+    .unwrap();
+    let intent = assemble_checked_calls(
+        &[
+            checked_call(
+                &caller_execution,
+                &caller_circuit,
+                caller.initial_state.data.clone(),
+                caller.address(),
+                caller_entry,
+                Fr::from(53u64),
+            ),
+            checked_call(
+                &callee_execution,
+                &callee_circuit,
+                callee.initial_state.data.clone(),
+                callee.address(),
+                callee_entry.clone(),
+                Fr::from(101u64),
+            ),
+        ],
+        &ledger.parameters,
+        before + 30,
+        &mut OsRng,
+    )
+    .unwrap();
+    let selection = [
+        CompositionMaterial {
+            bundle: &caller_bundle,
+            parameters: &caller_srs,
+        },
+        CompositionMaterial {
+            bundle: &callee_bundle,
+            parameters: &callee_srs,
+        },
+    ];
+    let mut wrong_ledger = ledger.clone();
+    let mut wrong_callee = callee.initial_state.clone();
+    let wrong_verifier = serialize::tagged_deserialize::<VerifierKey>(
+        &mut caller_bundle.file(Role::VerifierKey).unwrap(),
+    )
+    .unwrap();
+    wrong_callee.operations = wrong_callee.operations.insert(
+        callee_entry,
+        ContractOperation::new(Some(wrong_verifier), None),
+    );
+    wrong_ledger.contract = wrong_ledger.contract.insert(callee.address(), wrong_callee);
+    assert_eq!(
+        PreparedComposition::from_intent(intent.clone(), &wrong_ledger, &selection).err(),
+        Some(Error::BindingMismatch)
+    );
+
+    let prepared = PreparedComposition::from_intent(intent, &ledger, &selection).unwrap();
+    let proved = block_on(prepared.prove_locally(OsRng, pending())).unwrap();
+    let tx = Transaction::Standard(StandardTransaction {
+        network_id: ledger.network_id.clone(),
+        binding_randomness: proved.native().binding_commitment,
+        intents: [(1, proved.native().clone())].into_iter().collect(),
+        guaranteed_coins: None,
+        fallible_coins: Default::default(),
+    });
+    let mut strictness = WellFormedStrictness::default();
+    strictness.enforce_balancing = false;
+    tx.seal(StdRng::from_entropy())
+        .well_formed(&ledger, strictness, Timestamp::from_secs(before))
+        .unwrap();
+}
