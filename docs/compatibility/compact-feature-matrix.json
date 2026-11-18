@@ -730,6 +730,30 @@
         ],
         "limits": "Preparation API only. Source witness Session and ledger helper execution are not yet interleaved. No new keys/proofs/deployments, C ABI/mobile/WASM binding or preservation theorem. Existing source state/provider combination remains gated.",
         "fullEquivalence": "unverified"
+      },
+      "structuredLedgerWitnessUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "4b3b37e018ed5f8406caa3a91bcbf3428d9925a5",
+        "scope": "Paired Lean host/native programs now interleave structured scalar cell/map effects with typed providers and private staging. Authenticated internal callbacks read from one native preparation cursor. The focused Native-cell case observes3, supplies7, writes/reads/returns10 and stages7; inactive, wrong-provider, forged host-read and redirected read metadata cases pass.",
+        "evidence": [
+          "tests/StructuredLedgerWitness.lean",
+          "runtime/src/witness_execution/ledger_tests.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker evidence for one Native cell. Broader scalar types, aggregate/nested state bodies, finite loops, portable bindings, full guarded proof/ledger qualification and semantic preservation remain open. No new keys/proofs/deployment.",
+        "fullEquivalence": "unverified"
+      },
+      "typedLedgerScalarUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fe73696b64e3d1170aab3e31a17f3ae97b799d6a",
+        "scope": "Structured cell/map values support existing byte, Jubjub and foreign scalar families, with typed native callbacks and exact read projection/input type validation. Combined source/native case updates five typed cells and a Bytes33 map value through providers, with inactive preservation and essential type/metadata rejects.",
+        "evidence": [
+          "tests/StructuredTypedCells.lean",
+          "runtime/src/witness_execution/typed_ledger_tests.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker evidence with one foreign field sample. Aggregate/nested helper state, finite iteration, portable bindings, full guarded proof/ledger qualification and preservation remain open. No new keys/proofs/deployment.",
+        "fullEquivalence": "unverified"
       }
     },
     {
@@ -1070,6 +1094,30 @@
           "docs/development/native-preparation-cursor.md"
         ],
         "limits": "Preparation API only. Source witness Session and ledger helper execution are not yet interleaved. No new keys/proofs/deployments, C ABI/mobile/WASM binding or preservation theorem. Existing source state/provider combination remains gated.",
+        "fullEquivalence": "unverified"
+      },
+      "structuredLedgerWitnessUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "4b3b37e018ed5f8406caa3a91bcbf3428d9925a5",
+        "scope": "Paired Lean host/native programs now interleave structured scalar cell/map effects with typed providers and private staging. Authenticated internal callbacks read from one native preparation cursor. The focused Native-cell case observes3, supplies7, writes/reads/returns10 and stages7; inactive, wrong-provider, forged host-read and redirected read metadata cases pass.",
+        "evidence": [
+          "tests/StructuredLedgerWitness.lean",
+          "runtime/src/witness_execution/ledger_tests.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker evidence for one Native cell. Broader scalar types, aggregate/nested state bodies, finite loops, portable bindings, full guarded proof/ledger qualification and semantic preservation remain open. No new keys/proofs/deployment.",
+        "fullEquivalence": "unverified"
+      },
+      "typedLedgerScalarUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "fe73696b64e3d1170aab3e31a17f3ae97b799d6a",
+        "scope": "Structured cell/map values support existing byte, Jubjub and foreign scalar families, with typed native callbacks and exact read projection/input type validation. Combined source/native case updates five typed cells and a Bytes33 map value through providers, with inactive preservation and essential type/metadata rejects.",
+        "evidence": [
+          "tests/StructuredTypedCells.lean",
+          "runtime/src/witness_execution/typed_ledger_tests.rs",
+          "docs/development/structured-cells.md"
+        ],
+        "limits": "Native checker evidence with one foreign field sample. Aggregate/nested helper state, finite iteration, portable bindings, full guarded proof/ledger qualification and preservation remain open. No new keys/proofs/deployment.",
         "fullEquivalence": "unverified"
       }
     },

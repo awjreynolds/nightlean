@@ -36,7 +36,7 @@ Assertions and partial computations retain guarded evaluation. Active invalid ca
 
 ## Current boundary
 
-This route supports Native, Bool and bounded UInt cell/map values. Key types follow the existing ledger validation. The native map case exercises Bytes32 keys and Native values. The helper resource policy bounds the owning schema to 256 declarations, and results are scalar or Unit.
+This route supports the existing scalar value types: Native, Bool, bounded UInt, fixed bytes, Jubjub scalar/point and the registered foreign field/curve families. Key types follow the existing ledger validation. The native map cases exercise Bytes32 keys with Native and Bytes33 values. The helper resource policy bounds the owning schema to 256 declarations, and results are scalar or Unit.
 
 Typed providers and private staging now share the same structured body with ordered state effects. Aggregate values, nested ledger trees and complete proof/ledger qualification remain under [structured native control](https://github.com/awjreynolds/noctium/issues/43). Existing contract effect blocks retain broader state operations. Ordinary `Helpers.compile` and portable host-control plans reject ledger statements. `stage` retains its private journal meaning.
 
@@ -57,7 +57,7 @@ The [native map case](../../runtime/tests/structured_maps.rs) consumes the sourc
 
 The false calls skip branch-local UInt narrowing despite amount 8 exceeding the declared maximum 7. The active invalid input and altered private guard reject. Source checks reject an undisclosed private map key and a wrong key type.
 
-Only the circuit and ledger plan consumed by each current test are retained as fixtures. No new keys, proofs, deployments or K benchmark accompany this source extension. Native checker and local state assertions are integration evidence, not complete language equivalence or generic compiler preservation.
+State-only cases retain their consumed circuit and ledger plan. Witness cases also retain their binding and control plan. No new keys, proofs, deployments or K benchmark accompany this source extension. Native checker and local state assertions are integration evidence, not complete language equivalence or generic compiler preservation.
 
 The optional historical `Noctium.Witness.Semantics` model still has unmatched older Boolean, byte and curve families. Cell/map statements are explicitly outside its bounded replay model. Its repair and broader preservation qualification remain under [semantic preservation](https://github.com/awjreynolds/noctium/issues/21).
 
@@ -73,6 +73,18 @@ The cursor keeps one native execution prefix, so a later read observes earlier w
 
 The focused Rust case covers balance 3, provider result 7, updated balance/return 10 and staged private value 7. The inactive branch skips the external provider, returns 0 and preserves balance 3. A wrong provider result fails before private staging. The case also rejects an externally forged internal read response and a callback redirected to another native read. Both completed paths pass the pinned 3.2.1 checker.
 
-This source integration currently uses scalar cell/map values and scalar or Unit results. The native runtime case covers one Native cell. Map/provider combinations, aggregate state bodies, portable bindings and general source-preservation proofs need separate evidence. No new opcode, key, proof or deployment accompanies this slice.
+This source integration uses scalar cell/map values and scalar or Unit results. Native and typed byte/curve cases have scoped runtime evidence below. Aggregate state bodies, portable bindings and general source-preservation proofs need separate evidence. No new opcode, key, proof or deployment accompanies this slice.
 
 State-dependent witness implementation revision: `4b3b37e018ed5f8406caa3a91bcbf3428d9925a5`. Four focused runtime cases pass in 0.02 seconds. Two existing guarded-witness cases pass in 0.01 seconds. The compiler and source export pass.
+
+## Typed byte and curve state
+
+The [typed source contract](../../tests/StructuredTypedCells.lean) uses Unit helpers to read cells, call typed providers and explicitly disclose their results into writes. Its cells hold Bytes33, Bytes0, JubjubScalar, JubjubPoint and Secp256k1Base. A Bytes32-keyed map holds Bytes33. One disclosed private guard controls all calls.
+
+A provider receives the logical value, including a complete byte array or point. The compiler and runtime bind physical read fields to that value. Byte reads carry exact chunk projections, point reads carry ordered coordinates, and foreign relation inputs retain their exact native type. Empty byte reads have no physical fields but still execute their source callback and ordered ledger effects.
+
+The focused [Rust case](../../runtime/src/witness_execution/typed_ledger_tests.rs) checks all six provider arguments, returns changed valid values and compares the complete native successor state with the expected typed cells/map. The inactive branch preserves state without callbacks. Invalid byte length rejects before a corrected response resumes the pending provider. Reordered point projections and a foreign input relabelled as a BLS scalar reject during artifact validation.
+
+The source type gate covers registered scalar families. This combined native case samples one foreign field family. Other foreign overloads, nested/aggregate helper state, exotic map keys, portable bindings and general preservation remain separate obligations. No new opcode, key, proof or deployment accompanies this extension.
+
+Typed state implementation revision: `fe73696b64e3d1170aab3e31a17f3ae97b799d6a`. The compiler, source export, byte semantics and eight combined/previous runtime cases pass. The native cases finish in 0.04 seconds.

@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "4292fa13c494a8d27c40fd27f8f78b727ada3e1a",
+    "sourceCommit": "fe73696b64e3d1170aab3e31a17f3ae97b799d6a",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 39,
     "registeredOpcodes": [
@@ -5414,6 +5414,23 @@
         "bindingReject": "changing byte62 of a committed Bytes63 result rejects"
       },
       "limits": "Native checker evidence, no new keys/proofs/deployment, cross-profile rerun, K benchmark or general preservation theorem. Copy and seven deprecated instruction names remain unexposed. Upstream marks this packing instruction as a temporary bridge; the typed Lean byte representation does not depend on its continued presence in future pins."
+    },
+    "typedLedgerWitnesses": {
+      "checkedOn": "2026-11-18",
+      "sourceCommit": "fe73696b64e3d1170aab3e31a17f3ae97b799d6a",
+      "source": "../../tests/StructuredTypedCells.lean",
+      "native": "../../runtime/src/witness_execution/typed_ledger_tests.rs",
+      "documentation": "../development/structured-cells.md#typed-byte-and-curve-state",
+      "newOpcodes": 0,
+      "scope": "Structured helper cell/map values now use existing scalar type validation, including Bytes0..1024, JubjubScalar/JubjubPoint and registered foreign kinds. Byte equality lowers through checked chunks, with strict empty operand evaluation. Native callbacks preserve logical values while authenticating byte/point projections and exact native foreign input types.",
+      "checks": {
+        "compilerBuild": "passed",
+        "sourceAndByteSemantics": "passed",
+        "selected321Export": "passed",
+        "nativeCombinedAndPreviousCases": "passed,8 cases in0.04seconds",
+        "typedNativeCases": "active changes to Bytes33/Bytes0/JubjubScalar/JubjubPoint/Secp256k1Base cells and Bytes32->Bytes33 map, inactive preservation, wrong byte length with corrected retry, point projection order and foreign input type rejection"
+      },
+      "limits": "No new keys/proofs/deployments, cross-profile rerun, portable binding or general preservation theorem. One foreign field is sampled by this combined case. Aggregate/nested state helper bodies and exotic keys remain open."
     }
   }
 }
