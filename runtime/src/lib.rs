@@ -473,6 +473,23 @@ pub enum Expr {
     },
 }
 pub type Environment = BTreeMap<String, Value>;
+
+#[derive(Debug)]
+struct UnboundReference(String);
+
+impl std::fmt::Display for UnboundReference {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "unbound reference '{}'", self.0)
+    }
+}
+
+impl std::error::Error for UnboundReference {}
+
+fn unbound_reference(error: &anyhow::Error) -> Option<&str> {
+    error
+        .downcast_ref::<UnboundReference>()
+        .map(|error| error.0.as_str())
+}
 fn persistent_hash(value: AlignedValue) -> Result<Value> {
     let mut fields = Vec::new();
     value.value_only_field_repr(&mut fields);
@@ -601,7 +618,7 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         Expr::Reference { name } => env
             .get(name)
             .cloned()
-            .ok_or_else(|| anyhow!("unbound reference '{name}'"))?,
+            .ok_or_else(|| anyhow::Error::new(UnboundReference(name.clone())))?,
         Expr::ByteAt { value, index } => {
             let Value::Bytes(bytes) = evaluate(value, env)? else {
                 bail!("byte projection requires bytes")
@@ -1663,37 +1680,82 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
         }
     }
 }
-pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Environment> {
+fn validate_environment_schema(plan: &Plan) -> Result<()> {
     ensure!(plan.schema_version == 1, "unsupported plan schema");
     ensure!(
         profile::validate_plan(plan.target.as_deref(), plan.target_profile.as_ref()),
         "plan target differs from linked native profile"
     );
     ensure!(!plan.entrypoint.is_empty(), "missing entrypoint");
-    let names: BTreeSet<_> = plan.circuit.inputs.iter().map(|i| &i.name).collect();
+    let names: BTreeSet<_> = plan
+        .circuit
+        .inputs
+        .iter()
+        .map(|input| input.name.as_str())
+        .collect();
     ensure!(
         names.len() == plan.circuit.inputs.len(),
         "duplicate input name"
     );
+    let mut output_names = BTreeSet::new();
+    for output in &plan.circuit.outputs {
+        ensure!(
+            output.visibility == "public",
+            "unsupported output visibility"
+        );
+        ensure!(
+            !output.name.is_empty()
+                && !names.contains(output.name.as_str())
+                && output_names.insert(output.name.as_str()),
+            "output shadows an existing name"
+        );
+        ScalarType::parse(&output.ty)?;
+    }
+    ensure!(plan.returns.len() <= 256, "too many call returns");
+    Ok(())
+}
+
+fn parse_input_environment(
+    plan: &Plan,
+    inputs: &BTreeMap<String, Json>,
+    allow_missing_private: bool,
+) -> Result<Environment> {
+    validate_environment_schema(plan)?;
+    let names: BTreeSet<_> = plan
+        .circuit
+        .inputs
+        .iter()
+        .map(|input| input.name.as_str())
+        .collect();
     ensure!(
-        inputs.len() == names.len() && inputs.keys().all(|n| names.contains(n)),
+        inputs.keys().all(|name| names.contains(name.as_str())),
         "input schema mismatch (missing or unknown input)"
     );
     let mut env = BTreeMap::new();
-    for i in &plan.circuit.inputs {
+    for input in &plan.circuit.inputs {
         ensure!(
-            matches!(i.visibility.as_str(), "public" | "private"),
+            matches!(input.visibility.as_str(), "public" | "private"),
             "unsupported input visibility"
         );
-        env.insert(
-            i.name.clone(),
-            input_value(&i.ty, &inputs[&i.name])
-                .with_context(|| format!("invalid input '{}'", i.name))?,
-        );
+        ScalarType::parse(&input.ty)?;
+        if let Some(value) = inputs.get(&input.name) {
+            env.insert(
+                input.name.clone(),
+                input_value(&input.ty, value)
+                    .with_context(|| format!("invalid input '{}'", input.name))?,
+            );
+        } else {
+            ensure!(
+                allow_missing_private && input.visibility == "private",
+                "input schema mismatch (missing or unknown input)"
+            );
+        }
     }
+    Ok(env)
+}
+
+fn evaluate_circuit_outputs(plan: &Plan, env: &mut Environment) -> Result<()> {
     for o in &plan.circuit.outputs {
-        ensure!(o.visibility == "public", "unsupported output visibility");
-        ensure!(!env.contains_key(&o.name), "output shadows existing name");
         let v = evaluate(&o.expression, &env)?;
         ensure!(
             v.scalar_type() == ScalarType::parse(&o.ty)?,
@@ -1701,6 +1763,12 @@ pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Envir
         );
         env.insert(o.name.clone(), v);
     }
+    Ok(())
+}
+
+pub fn environment(plan: &Plan, inputs: &BTreeMap<String, Json>) -> Result<Environment> {
+    let mut env = parse_input_environment(plan, inputs, false)?;
+    evaluate_circuit_outputs(plan, &mut env)?;
     Ok(env)
 }
 pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<ChargedState<Db>> {
@@ -2151,6 +2219,446 @@ impl Execution {
         aligned_call_returns(&self.return_values)
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct PreparationRead {
+    pub name: String,
+    pub active: bool,
+    /// Only bindings declared by this read and currently produced by native preparation.
+    pub values: BTreeMap<String, Value>,
+}
+
+#[derive(Clone, Debug)]
+pub enum PreparationStep {
+    PendingInputs(Vec<Input>),
+    Operation {
+        index: usize,
+        read: Option<PreparationRead>,
+    },
+    Complete,
+}
+
+/// Incremental owner of the same native preparation state used by `prepare`.
+///
+/// A cursor freezes its plan, parameters, address, and starting state. Missing private inputs
+/// pause the next operation before its native state preparation starts.
+pub struct PreparationCursor {
+    plan: Plan,
+    env: Environment,
+    supplied_inputs: BTreeSet<String>,
+    deferred_outputs: BTreeMap<String, Vec<Input>>,
+    context: QueryContext<Db>,
+    params: LedgerParameters,
+    prefix_context: QueryContext<Db>,
+    materialized_prefix: usize,
+    mutation_boundary: usize,
+    program: Program,
+    read_index: usize,
+    previous_index: Option<(u32, Vec<AlignedValue>)>,
+    member_result_pending: bool,
+    has_written: bool,
+    activity_schedule: Vec<Option<usize>>,
+    next_operation: usize,
+    poisoned: bool,
+    completed: bool,
+}
+
+fn refresh_circuit_outputs(
+    plan: &Plan,
+    env: &mut Environment,
+) -> Result<BTreeMap<String, Vec<Input>>> {
+    let mut deferred = BTreeMap::new();
+    for output in &plan.circuit.outputs {
+        if env.contains_key(&output.name) {
+            continue;
+        }
+        match evaluate(&output.expression, env) {
+            Ok(value) => {
+                ensure!(
+                    value.scalar_type() == ScalarType::parse(&output.ty)?,
+                    "output type mismatch"
+                );
+                env.insert(output.name.clone(), value);
+            }
+            Err(error) => {
+                let Some(missing) = unbound_reference(&error) else {
+                    return Err(error);
+                };
+                if let Some(input) = plan
+                    .circuit
+                    .inputs
+                    .iter()
+                    .find(|input| input.name == missing)
+                {
+                    ensure!(
+                        input.visibility == "private" && !env.contains_key(missing),
+                        "{}",
+                        error
+                    );
+                    deferred.insert(output.name.clone(), vec![input.clone()]);
+                } else if let Some(dependencies) = deferred.get(missing) {
+                    deferred.insert(output.name.clone(), dependencies.clone());
+                } else {
+                    return Err(error);
+                }
+            }
+        }
+    }
+    Ok(deferred)
+}
+
+fn required_missing_input(
+    error: anyhow::Error,
+    plan: &Plan,
+    env: &Environment,
+    deferred_outputs: &BTreeMap<String, Vec<Input>>,
+) -> Result<Input> {
+    let Some(name) = unbound_reference(&error) else {
+        return Err(error);
+    };
+    if let Some(input) = plan.circuit.inputs.iter().find(|input| input.name == name) {
+        ensure!(
+            input.visibility == "private" && !env.contains_key(name),
+            "{}",
+            error
+        );
+        return Ok(input.clone());
+    }
+    if let Some(dependencies) = deferred_outputs.get(name) {
+        return dependencies
+            .first()
+            .cloned()
+            .ok_or_else(|| anyhow!("deferred output has no missing private input"));
+    }
+    Err(error)
+}
+
+fn probe_expression(
+    expression: &Expr,
+    plan: &Plan,
+    env: &Environment,
+    deferred_outputs: &BTreeMap<String, Vec<Input>>,
+) -> Result<Option<Input>> {
+    match evaluate(expression, env) {
+        Ok(_) => Ok(None),
+        Err(error) => required_missing_input(error, plan, env, deferred_outputs).map(Some),
+    }
+}
+
+fn probe_expressions<'a>(
+    expressions: impl IntoIterator<Item = &'a Expr>,
+    plan: &Plan,
+    env: &Environment,
+    deferred_outputs: &BTreeMap<String, Vec<Input>>,
+) -> Result<Option<Input>> {
+    for expression in expressions {
+        if let Some(input) = probe_expression(expression, plan, env, deferred_outputs)? {
+            return Ok(Some(input));
+        }
+    }
+    Ok(None)
+}
+
+fn probe_paths<'a>(
+    keys: impl IntoIterator<Item = &'a PathPart>,
+    plan: &Plan,
+    env: &Environment,
+    deferred_outputs: &BTreeMap<String, Vec<Input>>,
+) -> Result<Option<Input>> {
+    probe_expressions(
+        keys.into_iter().map(|part| &part.expression),
+        plan,
+        env,
+        deferred_outputs,
+    )
+}
+
+fn probe_instruction(
+    instruction: &Instruction,
+    plan: &Plan,
+    env: &Environment,
+    deferred_outputs: &BTreeMap<String, Vec<Input>>,
+) -> Result<Option<Input>> {
+    match instruction {
+        Instruction::Guarded { .. } => bail!("nested guarded native operation is unsupported"),
+        Instruction::Index { key, .. } => key
+            .as_ref()
+            .map(|key| probe_expression(key, plan, env, deferred_outputs))
+            .transpose()
+            .map(Option::flatten),
+        Instruction::IndexPath { keys, .. }
+        | Instruction::ListPopFront { keys, .. }
+        | Instruction::MapRemove { keys, .. }
+        | Instruction::ListReset { keys, .. } => probe_paths(keys, plan, env, deferred_outputs),
+        Instruction::ListLength { keys, .. } | Instruction::ListHead { keys, .. } => {
+            probe_paths(keys, plan, env, deferred_outputs)
+        }
+        Instruction::ListPushFront {
+            keys, expressions, ..
+        } => {
+            if let Some(input) = probe_paths(keys, plan, env, deferred_outputs)? {
+                Ok(Some(input))
+            } else {
+                probe_expressions(expressions, plan, env, deferred_outputs)
+            }
+        }
+        Instruction::Push { expression, .. } => {
+            probe_expression(expression, plan, env, deferred_outputs)
+        }
+        Instruction::PushFields { expressions, .. } => {
+            probe_expressions(expressions, plan, env, deferred_outputs)
+        }
+        // Read expressions bind values produced by the state read itself.
+        Instruction::Popeq { .. }
+        | Instruction::PopeqFields { .. }
+        | Instruction::Dup
+        | Instruction::New
+        | Instruction::Member
+        | Instruction::Insert { .. }
+        | Instruction::AddImmediate { .. }
+        | Instruction::SubImmediate { .. } => Ok(None),
+    }
+}
+
+fn read_event(
+    read: &Read,
+    active: bool,
+    env: &Environment,
+    produced: Vec<String>,
+) -> PreparationRead {
+    let declared: BTreeSet<_> = std::iter::once(read.name.as_str())
+        .chain(
+            read.components
+                .iter()
+                .map(|component| component.name.as_str()),
+        )
+        .chain(
+            read.projections
+                .iter()
+                .flatten()
+                .map(|projection| projection.name.as_str()),
+        )
+        .collect();
+    let values = produced
+        .into_iter()
+        .filter(|name| declared.contains(name.as_str()))
+        .filter_map(|name| env.get(&name).cloned().map(|value| (name, value)))
+        .collect();
+    PreparationRead {
+        name: read.name.clone(),
+        active,
+        values,
+    }
+}
+
+fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
+    ensure!(
+        matches!(
+            operation,
+            Instruction::Dup
+                | Instruction::Index {
+                    push_path: false,
+                    ..
+                }
+                | Instruction::Push { storage: false, .. }
+                | Instruction::Popeq { .. }
+                | Instruction::Member
+                | Instruction::Index {
+                    push_path: true,
+                    ..
+                }
+                | Instruction::Push { .. }
+                | Instruction::Insert { .. }
+                | Instruction::IndexPath { .. }
+                | Instruction::New
+                | Instruction::PushFields { .. }
+                | Instruction::PopeqFields { .. }
+                | Instruction::AddImmediate { .. }
+                | Instruction::SubImmediate { .. }
+                | Instruction::ListLength { .. }
+                | Instruction::ListHead { .. }
+                | Instruction::ListPushFront { .. }
+                | Instruction::ListPopFront { .. }
+                | Instruction::ListReset { .. }
+                | Instruction::MapRemove { .. }
+        ),
+        "guarded native operation has an unsupported shape"
+    );
+    Ok(())
+}
+
+impl PreparationCursor {
+    pub fn new(
+        plan: &Plan,
+        inputs: &BTreeMap<String, Json>,
+        state: &ChargedState<Db>,
+        params: &LedgerParameters,
+        address: ContractAddress,
+    ) -> Result<Self> {
+        let env = parse_input_environment(plan, inputs, true)?;
+        let supplied_inputs = inputs.keys().cloned().collect();
+        let context = QueryContext::new(state.clone(), address);
+        let prefix_context = context.clone();
+        let mut cursor = Self {
+            plan: plan.clone(),
+            deferred_outputs: BTreeMap::new(),
+            env,
+            supplied_inputs,
+            context,
+            params: params.clone(),
+            prefix_context,
+            materialized_prefix: 0,
+            mutation_boundary: 0,
+            program: Vec::new(),
+            read_index: 0,
+            previous_index: None,
+            member_result_pending: false,
+            has_written: false,
+            activity_schedule: Vec::with_capacity(plan.operations.len()),
+            next_operation: 0,
+            poisoned: false,
+            completed: false,
+        };
+        cursor.deferred_outputs = refresh_circuit_outputs(&cursor.plan, &mut cursor.env)?;
+        Ok(cursor)
+    }
+
+    pub fn supply_inputs(&mut self, inputs: &BTreeMap<String, Json>) -> Result<()> {
+        ensure!(!self.poisoned, "preparation cursor is poisoned");
+        ensure!(!self.completed, "preparation cursor is complete");
+        let mut additions = Vec::with_capacity(inputs.len());
+        for (name, json) in inputs {
+            let input = self
+                .plan
+                .circuit
+                .inputs
+                .iter()
+                .find(|input| input.name == *name)
+                .ok_or_else(|| anyhow!("input schema mismatch (missing or unknown input)"))?;
+            ensure!(
+                !self.supplied_inputs.contains(name) && !self.env.contains_key(name),
+                "input '{}' was already supplied",
+                name
+            );
+            ensure!(
+                input.visibility == "private",
+                "public inputs are required initially"
+            );
+            additions.push((
+                name.clone(),
+                input_value(&input.ty, json)
+                    .with_context(|| format!("invalid input '{}'", input.name))?,
+            ));
+        }
+
+        let mut next_env = self.env.clone();
+        let mut next_supplied = self.supplied_inputs.clone();
+        for (name, value) in additions {
+            next_env.insert(name.clone(), value);
+            next_supplied.insert(name);
+        }
+        let next_deferred = refresh_circuit_outputs(&self.plan, &mut next_env)?;
+        self.env = next_env;
+        self.supplied_inputs = next_supplied;
+        self.deferred_outputs = next_deferred;
+        Ok(())
+    }
+
+    pub fn step(&mut self) -> Result<PreparationStep> {
+        ensure!(!self.poisoned, "preparation cursor is poisoned");
+        if self.completed {
+            return Ok(PreparationStep::Complete);
+        }
+        let result = self.step_inner();
+        if result.is_err() {
+            self.poisoned = true;
+        }
+        result
+    }
+
+    fn step_inner(&mut self) -> Result<PreparationStep> {
+        if self.next_operation == self.plan.operations.len() {
+            let missing = self
+                .plan
+                .circuit
+                .inputs
+                .iter()
+                .filter(|input| !self.supplied_inputs.contains(&input.name))
+                .cloned()
+                .collect::<Vec<_>>();
+            if !missing.is_empty() {
+                return Ok(PreparationStep::PendingInputs(missing));
+            }
+            ensure!(
+                self.deferred_outputs.is_empty(),
+                "circuit outputs are incomplete"
+            );
+            validate_return_environment(&self.plan, &self.env)?;
+            ensure!(
+                self.read_index == self.plan.reads.len(),
+                "read schema mismatch"
+            );
+            ensure!(
+                self.activity_schedule
+                    .iter()
+                    .filter(|entry| entry.is_none())
+                    .count()
+                    == self.program.len(),
+                "native activity schedule does not match emitted operations"
+            );
+            self.completed = true;
+            return Ok(PreparationStep::Complete);
+        }
+
+        // Complete-input callers need no speculative operand evaluation.
+        if self.supplied_inputs.len() == self.plan.circuit.inputs.len() {
+            return self.execute_next();
+        }
+
+        let instruction = &self.plan.operations[self.next_operation];
+        let operation = if let Instruction::Guarded { guard, operation } = instruction {
+            validate_guarded_shape(operation)?;
+            if let Some(input) =
+                probe_expression(guard, &self.plan, &self.env, &self.deferred_outputs)?
+            {
+                return Ok(PreparationStep::PendingInputs(vec![input]));
+            }
+            if !evaluate(guard, &self.env)?.boolean()? {
+                None
+            } else {
+                Some(operation.as_ref())
+            }
+        } else {
+            Some(instruction)
+        };
+        if let Some(operation) = operation {
+            if let Some(input) =
+                probe_instruction(operation, &self.plan, &self.env, &self.deferred_outputs)?
+            {
+                return Ok(PreparationStep::PendingInputs(vec![input]));
+            }
+        }
+        self.execute_next()
+    }
+}
+
+fn validate_return_environment(plan: &Plan, env: &Environment) -> Result<()> {
+    let mut names = BTreeSet::new();
+    for output in &plan.returns {
+        ensure!(
+            output.visibility == "public"
+                && !output.name.is_empty()
+                && names.insert(output.name.as_str()),
+            "invalid call return declaration"
+        );
+        let ty = ScalarType::parse(&output.ty)?;
+        let value = evaluate(&output.expression, env)?;
+        ensure!(value.scalar_type() == ty, "call return type mismatch");
+        value.validate()?;
+    }
+    Ok(())
+}
+
 pub fn prepare(
     plan: &Plan,
     inputs: &BTreeMap<String, Json>,
@@ -2158,19 +2666,53 @@ pub fn prepare(
     params: &LedgerParameters,
     address: ContractAddress,
 ) -> Result<Execution> {
-    let mut env = environment(plan, inputs)?;
-    let context = QueryContext::new(state.clone(), address);
-    let cost = &params.cost_model.runtime_cost_model;
-    let mut prefix_context = context.clone();
-    let mut materialized_prefix = 0usize;
-    let mut mutation_boundary = 0usize;
-    let mut program: Program = Vec::new();
-    let mut read_index = 0usize;
-    let mut previous_index: Option<(u32, Vec<AlignedValue>)> = None;
-    let mut member_result_pending = false;
-    let mut has_written = false;
-    let mut activity_schedule = Vec::with_capacity(plan.operations.len());
-    for i in &plan.operations {
+    let mut cursor = PreparationCursor::new(plan, inputs, state, params, address)?;
+    loop {
+        match cursor.step()? {
+            PreparationStep::PendingInputs(missing) => bail!(
+                "complete preparation is missing circuit inputs: {}",
+                missing
+                    .iter()
+                    .map(|input| input.name.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ),
+            PreparationStep::Operation { .. } => {}
+            PreparationStep::Complete => break,
+        }
+    }
+    cursor.finish()
+}
+
+impl PreparationCursor {
+    fn execute_next(&mut self) -> Result<PreparationStep> {
+        let PreparationCursor {
+            plan,
+            env,
+            context,
+            params,
+            prefix_context,
+            materialized_prefix: stored_materialized_prefix,
+            mutation_boundary: stored_mutation_boundary,
+            program,
+            read_index: stored_read_index,
+            previous_index: stored_previous_index,
+            member_result_pending: stored_member_result_pending,
+            has_written: stored_has_written,
+            activity_schedule,
+            next_operation: stored_next_operation,
+            ..
+        } = self;
+        let index = *stored_next_operation;
+        let i = &plan.operations[index];
+        let cost = &params.cost_model.runtime_cost_model;
+        let mut materialized_prefix = *stored_materialized_prefix;
+        let mut mutation_boundary = *stored_mutation_boundary;
+        let mut read_index = *stored_read_index;
+        let mut previous_index = stored_previous_index.take();
+        let mut member_result_pending = *stored_member_result_pending;
+        let mut has_written = *stored_has_written;
+        let mut event = None;
         let operation_start = program.len();
         let mut instruction_guard = None;
         let instruction = match i {
@@ -2254,6 +2796,7 @@ pub fn prepare(
                         }
                         read_index += 1;
                         env.insert(read.name.clone(), inactive_read_value(&read.ty)?);
+                        event = Some(read_event(read, false, env, vec![read.name.clone()]));
                     }
                     if let Instruction::PopeqFields {
                         expressions,
@@ -2292,14 +2835,19 @@ pub fn prepare(
                                 projected == encoded,
                                 "inactive typed read projections mismatch"
                             );
+                            event = Some(read_event(read, false, env, vec![read.name.clone()]));
                         } else {
-                            for name in record_component_names(read, expressions, schema)? {
+                            let names = record_component_names(read, expressions, schema)?;
+                            let mut produced = Vec::with_capacity(names.len());
+                            for name in names.iter().copied() {
                                 ensure!(
                                     !env.contains_key(name),
                                     "record component shadows an existing value"
                                 );
                                 env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
+                                produced.push(name.to_owned());
                             }
+                            event = Some(read_event(read, false, env, produced));
                         }
                         read_index += 1;
                     }
@@ -2323,6 +2871,7 @@ pub fn prepare(
                                 "List length shadows an existing value"
                             );
                             env.insert(read.name.clone(), inactive_read_value(&read.ty)?);
+                            event = Some(read_event(read, false, env, vec![read.name.clone()]));
                             read_index += 1;
                         }
                         Instruction::ListHead {
@@ -2338,18 +2887,29 @@ pub fn prepare(
                                 read.guard.as_ref() == Some(guard),
                                 "inactive List head guard mismatch"
                             );
-                            for name in record_component_names(read, expressions, schema)? {
+                            let names = record_component_names(read, expressions, schema)?;
+                            let mut produced = Vec::with_capacity(names.len());
+                            for name in names.iter().copied() {
                                 ensure!(
                                     !env.contains_key(name),
                                     "List head component shadows an existing value"
                                 );
                                 env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
+                                produced.push(name.to_owned());
                             }
+                            event = Some(read_event(read, false, env, produced));
                             read_index += 1;
                         }
                         _ => {}
                     }
-                    continue;
+                    *stored_next_operation += 1;
+                    *stored_read_index = read_index;
+                    *stored_materialized_prefix = materialized_prefix;
+                    *stored_mutation_boundary = mutation_boundary;
+                    *stored_member_result_pending = member_result_pending;
+                    *stored_has_written = has_written;
+                    *stored_previous_index = previous_index;
+                    return Ok(PreparationStep::Operation { index, read: event });
                 }
                 instruction_guard = Some(guard);
                 operation.as_ref()
@@ -2367,7 +2927,7 @@ pub fn prepare(
             )
         {
             advance_native_state_prefix(
-                &mut prefix_context,
+                prefix_context,
                 &program,
                 &mut materialized_prefix,
                 mutation_boundary,
@@ -2493,6 +3053,7 @@ pub fn prepare(
                     },
                     _ => None,
                 };
+                let mut produced = Vec::new();
                 if let Some(name) = read_reference {
                     if !env.contains_key(name) {
                         let member_read = member_result_pending
@@ -2501,7 +3062,7 @@ pub fn prepare(
                             && name == &read.name;
                         if has_written {
                             advance_native_state_prefix(
-                                &mut prefix_context,
+                                prefix_context,
                                 &program,
                                 &mut materialized_prefix,
                                 mutation_boundary,
@@ -2540,12 +3101,15 @@ pub fn prepare(
                             read_state_cell(read_context, *slot, keys, &read.ty, alignment)?
                         };
                         env.insert(name.clone(), value);
+                        produced.push(name.clone());
                     }
                 }
                 let value = evaluate(expression, &env)?;
                 if !env.contains_key(&read.name) {
                     env.insert(read.name.clone(), value.clone());
+                    produced.push(read.name.clone());
                 }
+                event = Some(read_event(read, true, env, produced));
                 Op::Popeq {
                     cached: false,
                     result: aligned(&value, alignment)?,
@@ -2579,7 +3143,7 @@ pub fn prepare(
                     validate_scalar_storage_type(plan, *slot, keys.len(), &ty)?;
                     if has_written {
                         advance_native_state_prefix(
-                            &mut prefix_context,
+                            prefix_context,
                             &program,
                             &mut materialized_prefix,
                             mutation_boundary,
@@ -2599,11 +3163,13 @@ pub fn prepare(
                         "typed read shadows an existing value"
                     );
                     env.insert(read.name.clone(), decoded);
+                    let produced = vec![read.name.clone()];
                     let projected = expressions
                         .iter()
                         .map(|expression| evaluate(expression, &env)?.field())
                         .collect::<Result<Vec<_>>>()?;
                     ensure!(projected == fields, "typed read projections mismatch");
+                    event = Some(read_event(read, true, env, produced));
                     read_index += 1;
                     Op::Popeq {
                         cached: false,
@@ -2620,7 +3186,7 @@ pub fn prepare(
                     );
                     if has_written {
                         advance_native_state_prefix(
-                            &mut prefix_context,
+                            prefix_context,
                             &program,
                             &mut materialized_prefix,
                             mutation_boundary,
@@ -2642,13 +3208,16 @@ pub fn prepare(
                     let mut fields = Vec::new();
                     value.value_only_field_repr(&mut fields);
                     validate_record_fields(&checked_record_schema(schema)?, &fields)?;
+                    let mut produced = Vec::with_capacity(names.len());
                     for (name, field) in names.into_iter().zip(fields) {
                         ensure!(
                             !env.contains_key(name),
                             "record component shadows an existing value"
                         );
                         env.insert(name.to_owned(), Value::Native(field));
+                        produced.push(name.to_owned());
                     }
+                    event = Some(read_event(read, true, env, produced));
                     read_index += 1;
                     Op::Popeq {
                         cached: false,
@@ -2697,6 +3266,7 @@ pub fn prepare(
                         maximum: u64::MAX.into(),
                     },
                 );
+                event = Some(read_event(read, true, env, vec![read.name.clone()]));
                 read_index += 1;
                 program.extend([Op::Dup { n: 0 }, index, list_index(2)]);
                 Op::Popeq {
@@ -2737,13 +3307,16 @@ pub fn prepare(
                 let head = head.ok_or_else(|| anyhow!("head of empty List"))?;
                 let mut fields = Vec::new();
                 head.value_only_field_repr(&mut fields);
+                let mut produced = Vec::with_capacity(names.len());
                 for (name, value) in names.into_iter().zip(fields) {
                     ensure!(
                         !env.contains_key(name),
                         "List head component shadows an existing value"
                     );
                     env.insert(name.to_owned(), Value::Native(value));
+                    produced.push(name.to_owned());
                 }
+                event = Some(read_event(read, true, env, produced));
                 read_index += 1;
                 program.extend([Op::Dup { n: 0 }, index, list_index(0)]);
                 Op::Popeq {
@@ -2892,7 +3465,7 @@ pub fn prepare(
                 );
                 if has_written {
                     advance_native_state_prefix(
-                        &mut prefix_context,
+                        prefix_context,
                         &program,
                         &mut materialized_prefix,
                         mutation_boundary,
@@ -2940,117 +3513,145 @@ pub fn prepare(
         ) {
             mutation_boundary = program.len();
         }
+        *stored_next_operation += 1;
+        *stored_read_index = read_index;
+        *stored_materialized_prefix = materialized_prefix;
+        *stored_mutation_boundary = mutation_boundary;
+        *stored_member_result_pending = member_result_pending;
+        *stored_has_written = has_written;
+        *stored_previous_index = previous_index;
+        Ok(PreparationStep::Operation { index, read: event })
     }
-    ensure!(
-        activity_schedule
-            .iter()
-            .filter(|entry| entry.is_none())
-            .count()
-            == program.len(),
-        "native activity schedule does not match emitted operations"
-    );
-    ensure!(read_index == plan.reads.len(), "read schema mismatch");
-    let queried = context.query(&program, None, cost).map_err(|_| {
-        anyhow!("native state transcript rejected (spent nullifier or state mismatch)")
-    })?;
-    constructor::check_sealed_state(plan, state, &queried.context.state)?;
-    ensure!(plan.returns.len() <= 256, "too many call returns");
-    let mut return_values = Vec::with_capacity(plan.returns.len());
-    let mut return_names = BTreeSet::new();
-    for output in &plan.returns {
+
+    pub fn finish(self) -> Result<Execution> {
+        ensure!(!self.poisoned, "preparation cursor is poisoned");
+        ensure!(self.completed, "preparation cursor is not complete");
+        let PreparationCursor {
+            plan,
+            env,
+            context,
+            params,
+            program,
+            activity_schedule,
+            read_index,
+            ..
+        } = self;
+        let cost = &params.cost_model.runtime_cost_model;
         ensure!(
-            output.visibility == "public"
-                && !output.name.is_empty()
-                && return_names.insert(output.name.as_str()),
-            "invalid call return declaration"
+            activity_schedule
+                .iter()
+                .filter(|entry| entry.is_none())
+                .count()
+                == program.len(),
+            "native activity schedule does not match emitted operations"
         );
-        let ty = ScalarType::parse(&output.ty)?;
-        let value = evaluate(&output.expression, &env)?;
-        ensure!(value.scalar_type() == ty, "call return type mismatch");
-        value.validate()?;
-        return_values.push((output.name.clone(), value));
-    }
-    let output = aligned_call_returns(&return_values)?;
-    let randomness = Fr::from(0u64); // Diagnostic checker context. Final transactions need fresh randomness.
-    let empty = AlignedValue {
-        value: FabValue(vec![]),
-        alignment: Alignment(vec![]),
-    };
-    let comm = onchain_runtime::communication_commitment(empty, output, randomness);
-    let partition = partition_transcripts(
-        &[PreTranscript {
-            context: context.clone(),
-            program: program.clone(),
-            comm_comm: Some(comm),
-        }],
-        params,
-    )
-    .map_err(|_| anyhow!("native transcript partitioning failed"))?;
-    let (guaranteed, fallible) = partition
-        .into_iter()
-        .next()
-        .ok_or_else(|| anyhow!("missing transcript partition"))?;
-    let mut after = context;
-    if let Some(t) = &guaranteed {
-        after = after
-            .run_transcript(t, cost)
-            .map_err(|_| anyhow!("guaranteed transcript failed"))?
-            .context;
-    }
-    if let Some(t) = &fallible {
-        after = after
-            .run_transcript(t, cost)
-            .map_err(|_| anyhow!("fallible transcript failed"))?
-            .context;
-    }
-    let mut public_transcript_inputs = Vec::new();
-    let mut public_transcript_outputs = Vec::new();
-    for op in guaranteed
-        .iter()
-        .chain(fallible.iter())
-        .flat_map(|t| t.program.iter_deref())
-    {
-        op.field_repr(&mut public_transcript_inputs);
-        if let Op::Popeq { result, .. } = op {
-            result.value_only_field_repr(&mut public_transcript_outputs);
+        ensure!(read_index == plan.reads.len(), "read schema mismatch");
+        let queried = context.query(&program, None, cost).map_err(|_| {
+            anyhow!("native state transcript rejected (spent nullifier or state mismatch)")
+        })?;
+        constructor::check_sealed_state(&plan, &context.state, &queried.context.state)?;
+        ensure!(plan.returns.len() <= 256, "too many call returns");
+        let mut return_values = Vec::with_capacity(plan.returns.len());
+        let mut return_names = BTreeSet::new();
+        for output in &plan.returns {
+            ensure!(
+                output.visibility == "public"
+                    && !output.name.is_empty()
+                    && return_names.insert(output.name.as_str()),
+                "invalid call return declaration"
+            );
+            let ty = ScalarType::parse(&output.ty)?;
+            let value = evaluate(&output.expression, &env)?;
+            ensure!(value.scalar_type() == ty, "call return type mismatch");
+            value.validate()?;
+            return_values.push((output.name.clone(), value));
         }
-    }
-    let mut private_transcript = Vec::new();
-    for input in plan
-        .circuit
-        .inputs
-        .iter()
-        .filter(|i| i.visibility == "private")
-    {
-        match &env[&input.name] {
-            Value::Bytes(bytes) => {
-                private_transcript.extend(bytes.iter().map(|byte| Fr::from(*byte as u64)))
+        let output = aligned_call_returns(&return_values)?;
+        let randomness = Fr::from(0u64); // Diagnostic checker context. Final transactions need fresh randomness.
+        let empty = AlignedValue {
+            value: FabValue(vec![]),
+            alignment: Alignment(vec![]),
+        };
+        let comm = onchain_runtime::communication_commitment(empty, output, randomness);
+        let partition = partition_transcripts(
+            &[PreTranscript {
+                context: context.clone(),
+                program: program.clone(),
+                comm_comm: Some(comm),
+            }],
+            &params,
+        )
+        .map_err(|_| anyhow!("native transcript partitioning failed"))?;
+        let (guaranteed, fallible) = partition
+            .into_iter()
+            .next()
+            .ok_or_else(|| anyhow!("missing transcript partition"))?;
+        let mut after = context;
+        if let Some(t) = &guaranteed {
+            after = after
+                .run_transcript(t, cost)
+                .map_err(|_| anyhow!("guaranteed transcript failed"))?
+                .context;
+        }
+        if let Some(t) = &fallible {
+            after = after
+                .run_transcript(t, cost)
+                .map_err(|_| anyhow!("fallible transcript failed"))?
+                .context;
+        }
+        let mut public_transcript_inputs = Vec::new();
+        let mut public_transcript_outputs = Vec::new();
+        for op in guaranteed
+            .iter()
+            .chain(fallible.iter())
+            .flat_map(|t| t.program.iter_deref())
+        {
+            op.field_repr(&mut public_transcript_inputs);
+            if let Op::Popeq { result, .. } = op {
+                result.value_only_field_repr(&mut public_transcript_outputs);
             }
-            Value::JubjubScalar(value) => private_transcript.push(jubjub::scalar_native(*value)?),
-            Value::JubjubPoint(value) => private_transcript.extend(jubjub::coordinates(*value)?),
-            #[cfg(feature = "zkir-321")]
-            Value::Foreign(value) => private_transcript.extend(value.encode()?),
-            value => aligned(value, "field")?.value_only_field_repr(&mut private_transcript),
         }
+        let mut private_transcript = Vec::new();
+        for input in plan
+            .circuit
+            .inputs
+            .iter()
+            .filter(|i| i.visibility == "private")
+        {
+            match &env[&input.name] {
+                Value::Bytes(bytes) => {
+                    private_transcript.extend(bytes.iter().map(|byte| Fr::from(*byte as u64)))
+                }
+                Value::JubjubScalar(value) => {
+                    private_transcript.push(jubjub::scalar_native(*value)?)
+                }
+                Value::JubjubPoint(value) => {
+                    private_transcript.extend(jubjub::coordinates(*value)?)
+                }
+                #[cfg(feature = "zkir-321")]
+                Value::Foreign(value) => private_transcript.extend(value.encode()?),
+                value => aligned(value, "field")?.value_only_field_repr(&mut private_transcript),
+            }
+        }
+        let preimage = ProofPreimage {
+            inputs: vec![],
+            private_transcript,
+            public_transcript_inputs,
+            public_transcript_outputs,
+            binding_input: Fr::from(0u64),
+            communications_commitment: Some((comm, randomness)),
+            key_location: KeyLocation(Cow::Owned(plan.entrypoint.clone())),
+        };
+        Ok(Execution {
+            program,
+            activity_schedule,
+            after,
+            guaranteed,
+            fallible,
+            preimage,
+            return_values,
+        })
     }
-    let preimage = ProofPreimage {
-        inputs: vec![],
-        private_transcript,
-        public_transcript_inputs,
-        public_transcript_outputs,
-        binding_input: Fr::from(0u64),
-        communications_commitment: Some((comm, randomness)),
-        key_location: KeyLocation(Cow::Owned(plan.entrypoint.clone())),
-    };
-    Ok(Execution {
-        program,
-        activity_schedule,
-        after,
-        guaranteed,
-        fallible,
-        preimage,
-        return_values,
-    })
 }
 pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usize>>> {
     let (commitment, randomness) = execution
