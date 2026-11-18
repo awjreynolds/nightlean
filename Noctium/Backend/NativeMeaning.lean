@@ -664,6 +664,15 @@ def Input.requirements (input : Input) : List InputRequirement :=
       {identifier, visibility := input.visibility, ty := .native}
   | _ => [{identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}]
 
+def Input.callArgumentRequirements (input : Input) : List InputRequirement :=
+  match input.ty with
+  | .bytes length =>
+    let identifiers := input.callArgumentIdentifiers
+    identifiers.zipIdx |>.map fun (identifier, index) =>
+      let chunkLength := min 31 (length - ((identifiers.length - 1 - index) * 31))
+      {identifier, visibility := input.visibility, ty := .uint (2 ^ (8 * chunkLength) - 1)}
+  | _ => Input.requirements input
+
 def Input.sourceTerm (input : Input) : Term :=
   match input.ty with
   | .bytes 32 =>
@@ -677,6 +686,11 @@ def Input.sourceTerm (input : Input) : Term :=
       (.input input.nativeIdentifiers[0]!) (.input input.nativeIdentifiers[1]!)
   | _ => .input ("%input_" ++ input.name)
 
+def Input.callArgumentTerm (input : Input) : Term :=
+  match input.ty with
+  | .bytes length => bytesFromChunksTerm length (input.callArgumentIdentifiers.reverse.map Term.input)
+  | _ => Input.sourceTerm input
+
 inductive ProducerMode where
   | relation | ledgerCall
   deriving Repr, BEq, DecidableEq
@@ -686,7 +700,7 @@ checked typed program. Raw callers do not gain authorization by inventing it. -/
 structure Expected where
   mode : ProducerMode
   inputs : List InputRequirement
-  /-- Source-selected private Native values supplied through the relation's
+  /-- Source-selected private values supplied through the relation's
   raw ZKIR call-input header rather than `private_input` instructions. -/
   rawInputs : List InputRequirement := []
   groups : List (List Term)

@@ -42,7 +42,7 @@ need a separate clear return field.
 
 ## Native call arguments
 
-An entrypoint selects committed arguments from its private Native inputs:
+An entrypoint selects committed arguments from its private inputs:
 
 ```lean
 entry advance uses returnInput arguments [amount] where
@@ -54,14 +54,25 @@ end
 The ordered `callInputs` list becomes the native relation's input header and
 `ContractCallPrototype.input`. Selected values no longer appear in the private
 witness transcript. The communication commitment binds these arguments together
-with the returned fields. Source privacy still applies. Selecting an argument does not release its value.
-A private value or decision reaching a public state write or result still needs
-explicit `disclose`.
+with the returned fields. Selecting an argument preserves its privacy. A
+private value or decision reaching a public state write or result still
+requires explicit `disclose`.
+
+Direct entrypoints accept Native, Bool, bounded UInt, fixed Bytes, Jubjub
+scalars and points, and the supported foreign-curve values. Inputs use the
+same field order as the return table above. Bytes use FAB chunks from high to
+low, and Bytes0 contributes no fields. Foreign values keep their exact native
+type in the input header. UInt and Bool ranges, byte chunk bounds and the
+Jubjub canonicality checks still run in the circuit.
 
 The compiler and bundle reader require exact header names, types and order.
-Unknown, duplicate, public or non-Native selections reject. This first argument
-slice supports private Native fields, up to 256 arguments. Other argument types,
-hosted-witness integration and two-contract claim assembly remain open.
+Unknown, duplicate or public selections reject. Limits are 256 logical
+arguments and 256 physical fields after encoding. Composite arguments and
+hosted-witness authoring for committed arguments remain open.
+The [typed argument example](../../tests/TypedCallArguments.lean) exercises mixed
+input types, an independent private witness and the field order through the
+native checker. A reordered header or an out-of-range byte chunk rejects even
+with a recomputed commitment.
 
 Rust callers prepare the operation, run `check(&execution, &circuit)`, then read
 `execution.returns()` or `execution.returns_json()`. Primitive values retain their
@@ -117,5 +128,5 @@ Source guards reject removal of the field's disclosure. Codec checks reject
 noncanonical Bool/UInt leaves and retain empty values.
 
 This is scoped native-checker evidence. No new keys, proofs or deployments were
-generated. Readable composite return syntax, generated language bindings and the
-cross-contract claim protocol remain separate work.
+generated. Readable composite return syntax and generated language bindings remain separate
+work. See the [native call protocol](native-call-claims.md) for composition evidence.

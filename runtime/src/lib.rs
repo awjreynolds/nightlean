@@ -1486,16 +1486,15 @@ fn aligned_fields(fields: &[Fr]) -> AlignedValue {
 }
 
 fn aligned_call_inputs(plan: &Plan, env: &Environment) -> Result<AlignedValue> {
-    let fields = plan
+    let values = plan
         .call_inputs
         .iter()
         .map(|name| {
             env.get(name)
-                .ok_or_else(|| anyhow!("native call input is missing"))?
-                .field()
+                .ok_or_else(|| anyhow!("native call input is missing"))
         })
         .collect::<Result<Vec<_>>>()?;
-    Ok(aligned_fields(&fields))
+    aligned_call_values(values.into_iter())
 }
 
 fn validate_record_fields(schema: &aggregates::Schema, fields: &[Fr]) -> Result<()> {
@@ -1743,7 +1742,7 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
         names.len() == plan.circuit.inputs.len(),
         "duplicate input name"
     );
-    validate_call_input_names(&plan.circuit.inputs, &plan.call_inputs)?;
+    call_input_header(&plan.circuit.inputs, &plan.call_inputs)?;
     let mut output_names = BTreeSet::new();
     for output in &plan.circuit.outputs {
         ensure!(
@@ -1772,9 +1771,12 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
     Ok(())
 }
 
-fn validate_call_input_names(inputs: &[Input], call_inputs: &[String]) -> Result<()> {
+fn call_input_header(inputs: &[Input], call_inputs: &[String]) -> Result<Vec<(String, Json)>> {
     ensure!(call_inputs.len() <= 256, "too many native call inputs");
+    let native = Json::String("Scalar<BLS12-381>".into());
     let mut names = BTreeSet::new();
+    let mut header = Vec::new();
+    let mut field_count = 0;
     for name in call_inputs {
         ensure!(
             !name.is_empty() && names.insert(name.as_str()),
@@ -1785,31 +1787,64 @@ fn validate_call_input_names(inputs: &[Input], call_inputs: &[String]) -> Result
             .find(|input| input.name == *name)
             .ok_or_else(|| anyhow!("native call input is not declared by the circuit"))?;
         ensure!(
-            input.visibility == "private" && input.ty == "Native",
-            "native call inputs must name private Native circuit inputs"
+            input.visibility == "private",
+            "native call inputs must name private circuit inputs"
         );
+        let ty = ScalarType::parse(&input.ty)?;
+        field_count += ty.call_return_fields();
+        ensure!(field_count <= 256, "too many native call argument fields");
+        if let Some(length) = ty.bytes_length() {
+            for index in 0..length.div_ceil(31) {
+                header.push((format!("%input_{name}_call_chunk_{index}"), native.clone()));
+            }
+        } else {
+            match ty {
+                ScalarType::JubjubPoint => {
+                    for axis in ["x", "y"] {
+                        header.push((format!("%input_{name}_{axis}"), native.clone()));
+                    }
+                }
+                #[cfg(feature = "zkir-321")]
+                ScalarType::Foreign(ty) => {
+                    header.push((
+                        format!("%input_{name}"),
+                        serde_json::to_value(ty.native_type())?,
+                    ));
+                }
+                _ => header.push((format!("%input_{name}"), native.clone())),
+            }
+        }
     }
-    Ok(())
+    ensure!(
+        header
+            .iter()
+            .map(|(name, _)| name)
+            .collect::<BTreeSet<_>>()
+            .len()
+            == header.len(),
+        "native call argument projections collide"
+    );
+    Ok(header)
 }
 
-fn validate_call_input_header_json(call_inputs: &[String], circuit: &Json) -> Result<()> {
+fn validate_call_input_header_json(expected: &[(String, Json)], circuit: &Json) -> Result<()> {
     let inputs = match circuit.get("inputs") {
         Some(Json::Array(inputs)) => inputs.as_slice(),
-        None if call_inputs.is_empty() => &[],
+        None if expected.is_empty() => &[],
         _ => bail!("invalid native circuit input header"),
     };
     ensure!(
-        inputs.len() == call_inputs.len(),
+        inputs.len() == expected.len(),
         "native circuit input header mismatch"
     );
-    for (header, name) in inputs.iter().zip(call_inputs) {
+    for (header, (name, ty)) in inputs.iter().zip(expected) {
         let object = header
             .as_object()
             .ok_or_else(|| anyhow!("invalid native circuit input header"))?;
         ensure!(
             object.len() == 2
-                && object.get("name") == Some(&Json::String(format!("%input_{name}")))
-                && object.get("type") == Some(&Json::String("Scalar<BLS12-381>".to_owned())),
+                && object.get("name").and_then(Json::as_str) == Some(name.as_str())
+                && object.get("type") == Some(ty),
             "native circuit inputs do not match declared call inputs"
         );
     }
@@ -1856,8 +1891,7 @@ pub(crate) fn validate_call_inputs_json(plan: &Json, circuit: &Json) -> Result<(
             })
         })
         .collect::<Result<Vec<_>>>()?;
-    validate_call_input_names(&inputs, &call_inputs)?;
-    validate_call_input_header_json(&call_inputs, circuit)
+    validate_call_input_header_json(&call_input_header(&inputs, &call_inputs)?, circuit)
 }
 
 fn validate_return_views_specs<'a>(
@@ -2408,8 +2442,12 @@ fn native_member_result(
 }
 
 fn aligned_call_returns(values: &[(String, Value)]) -> Result<AlignedValue> {
+    aligned_call_values(values.iter().map(|(_, value)| value))
+}
+
+fn aligned_call_values<'a>(values: impl Iterator<Item = &'a Value>) -> Result<AlignedValue> {
     let mut fields = Vec::new();
-    for (_, value) in values {
+    for value in values {
         value.validate()?;
         match value {
             Value::Bytes(_) => aligned_bytes(value)?.value_only_field_repr(&mut fields),
@@ -2420,7 +2458,7 @@ fn aligned_call_returns(values: &[(String, Value)]) -> Result<AlignedValue> {
             _ => fields.push(value.field_encoding()?),
         }
     }
-    ensure!(fields.len() <= 256, "too many native call return fields");
+    ensure!(fields.len() <= 256, "too many native call payload fields");
     Ok(aligned_fields(&fields))
 }
 
@@ -2461,7 +2499,7 @@ pub struct Execution {
     pub fallible: Option<Transcript<Db>>,
     pub preimage: ProofPreimage,
     call_input: AlignedValue,
-    call_input_names: Vec<String>,
+    call_input_header: Vec<(String, Json)>,
     return_values: Vec<(String, Value)>,
     logical_return_views: Vec<(String, Json)>,
     grouped_return_fields: BTreeSet<String>,
@@ -3972,7 +4010,7 @@ impl PreparationCursor {
             fallible,
             preimage,
             call_input,
-            call_input_names: plan.call_inputs,
+            call_input_header: call_input_header(&plan.circuit.inputs, &plan.call_inputs)?,
             return_values,
             logical_return_views,
             grouped_return_fields,
@@ -3985,7 +4023,7 @@ pub fn check(execution: &Execution, circuit: &IrSource) -> Result<Vec<Option<usi
         .communications_commitment
         .ok_or_else(|| anyhow!("missing call output commitment"))?;
     let circuit_json = serde_json::to_value(circuit)?;
-    validate_call_input_header_json(&execution.call_input_names, &circuit_json)?;
+    validate_call_input_header_json(&execution.call_input_header, &circuit_json)?;
     ensure!(
         onchain_runtime::communication_commitment(
             execution.call_input()?,

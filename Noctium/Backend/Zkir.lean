@@ -692,42 +692,47 @@ private def alignedBytes32Fields (values : List String) : LowerM (String × Stri
     rejectLowering "Bytes32 source has wrong aligned encoding"
     pure ("0x00", "0x00")
 
-private def lowerByteInput (input : Input) : LowerM Unit := do
+private def lowerByteInput (input : Input) (raw : Bool := false) : LowerM Unit := do
+  let op := if input.visibility == .«public» then "public_input" else "private_input"
+  let read (identifier : String) (ty : Json := nativeType) :=
+    unless raw do emit op [("guard", Json.null), ("type", ty), ("output", toJson identifier)]
+  if raw then
+    if let .bytes _ := input.ty then
+      let requirements := Native.Input.callArgumentRequirements input
+      for spec in requirements do
+        constrainType spec.ty spec.identifier
+      modify fun state => {state with byteAliases := (input.name,
+        {values := (requirements.map (·.identifier)).reverse, packed := true}) :: state.byteAliases}
+      return
   match input.ty with
   | .foreign kind => do
     let output := "%input_" ++ input.name
-    emit (if input.visibility == .«public» then "public_input" else "private_input")
-      [("guard", Json.null), ("type", toJson kind.nativeName), ("output", toJson output)]
+    read output (toJson kind.nativeName)
     modify fun state => {state with aliases := (input.name, output) :: state.aliases}
   | .bytes 32 =>
     let identifiers := input.nativeIdentifiers
     if input.visibility == .«public» then do
       let (low31, highByte) ← bytes32Chunks [identifiers[1]!, identifiers[0]!]
-      emit "public_input" [
-        ("guard", Json.null), ("type", toJson nativeType), ("output", toJson identifiers[0]!)]
+      read identifiers[0]!
       constrainUnsigned 255 highByte
-      emit "public_input" [
-        ("guard", Json.null), ("type", toJson nativeType), ("output", toJson identifiers[1]!)]
+      read identifiers[1]!
       constrainUnsigned (2 ^ 248 - 1) low31
       modify fun state => {state with byteAliases :=
         (input.name, {values := [low31, highByte], packed := true}) :: state.byteAliases}
     else do
       for output in identifiers do
-        emit "private_input" [
-          ("guard", Json.null), ("type", toJson nativeType), ("output", toJson output)]
+        read output
         constrainUnsigned 255 output
       modify fun state => {state with byteAliases := (input.name, {values := identifiers}) :: state.byteAliases}
   | .bytes _ =>
     let identifiers := input.nativeIdentifiers
     for output in identifiers do
-      emit (if input.visibility == .«public» then "public_input" else "private_input")
-        [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+      read output
       constrainUnsigned 255 output
     modify fun state => {state with byteAliases := (input.name, {values := identifiers}) :: state.byteAliases}
   | .jubjubScalar => do
     let native := input.nativeIdentifiers.head!
-    emit (if input.visibility == .«public» then "public_input" else "private_input")
-      [("guard", Json.null), ("type", nativeType), ("output", toJson native)]
+    read native
     let scalar ← lowerJubjubScalarFromNative native
     let encoded ← lowerJubjubScalarToNative scalar
     emit "constrain_eq" [("a", toJson native), ("b", toJson encoded)]
@@ -736,14 +741,12 @@ private def lowerByteInput (input : Input) : LowerM Unit := do
     let x := input.nativeIdentifiers[0]!
     let y := input.nativeIdentifiers[1]!
     for identifier in [x, y] do
-      emit (if input.visibility == .«public» then "public_input" else "private_input")
-        [("guard", Json.null), ("type", nativeType), ("output", toJson identifier)]
+      read identifier
     let point ← lowerPointFromCoordinates x y
     modify fun state => {state with aliases := (input.name, point) :: state.aliases}
   | _ =>
     let output := input.nativeIdentifiers.head!
-    emit (if input.visibility == .«public» then "public_input" else "private_input")
-      [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
+    read output
     constrainType input.ty output
 
 mutual
@@ -1166,11 +1169,7 @@ theorem lowerCircuit_instructions (circuit : Circuit) (program : Json)
 
 def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit := do
   for input in entry.circuit.inputs do
-    if entry.callInputs.contains input.name then
-      modify fun state => {state with
-        aliases := (input.name, "%input_" ++ input.name) :: state.aliases}
-    else
-      lowerByteInput input
+    lowerByteInput input (entry.callInputs.contains input.name)
   for condition in entry.circuit.constraints do
     emit "assert" [("cond", toJson (← lowerExpr condition))]
   for output in entry.circuit.outputs do
@@ -1260,8 +1259,9 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagn
   let entry := Passes.pruneEntrypoint entry
   let plan ← Impact.lower state entry
   let (_, result) := (lowerEntrypointBody entry plan).run {}
-  let callInputs := entry.callInputs.map fun name => Json.mkObj [
-    ("name", toJson ("%input_" ++ name)), ("type", nativeType)]
+  let callInputs := (entry.callArguments.flatMap Native.Input.callArgumentRequirements).map fun input =>
+    let ty := match input.ty with | .foreign kind => toJson kind.nativeName | _ => nativeType
+    Json.mkObj [("name", toJson input.identifier), ("type", ty)]
   let program := Json.mkObj [
     ("version", Json.mkObj [("major", toJson (3 : Nat)), ("minor", toJson (2 : Nat))]),
     ("inputs", toJson callInputs),

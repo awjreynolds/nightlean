@@ -4785,6 +4785,7 @@
     "sourceCommit": "fe73696b64e3d1170aab3e31a17f3ae97b799d6a",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 40,
+    "nonDeprecatedOpcodeCount": 40,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -5514,13 +5515,13 @@
     },
     "nativeCallArguments": {
       "checkedOn": "2026-11-18",
-      "source": "../../tests/NativeReturns.lean",
-      "native": "../../runtime/tests/native_returns.rs",
+      "source": "../../tests/TypedCallArguments.lean",
+      "native": "../../runtime/tests/typed_call_arguments.rs",
       "documentation": "../development/committed-returns.md#native-call-arguments",
-      "scope": "Ordered callInputs selects existing private Native circuit inputs. The source-derived native header and independent producer agree exactly; selected fields become raw preimage inputs and ContractCallPrototype.input instead of private_input instructions/private transcript values. Assembly and preparation commit actual arguments with output fields.",
-      "checks": "Passed source admission rejects unknown/duplicate/public/non-Native selections. One native state sequence passes getters and argument-driven updates3/4, verifies exact raw input fields and empty private transcript, and rejects a changed argument even with a recomputed communication commitment.",
+      "scope": "Direct callInputs selects ordered private Native, Bool, bounded UInt, fixed Bytes, Jubjub and supported foreign values. Bytes bind FAB chunks from high to low and Bytes0 contributes no fields. Foreign values retain their native header type. Raw inputs replace the selected private transcript witness slots and bind to the communication commitment with the output fields.",
+      "checks": "The mixed source/native case verifies raw field order, state and returns, leaves one independent private witness in the transcript, and rejects a reordered header or an out-of-range byte chunk with a recomputed commitment. Source checks reject unauthorized disclosure and expanded field overflow. Native-only argument and checked two-call assembly regressions pass.",
       "newOpcodes": 0,
-      "limits": "Private Native arguments only,256maximum. Other types, raw-hosted witness integration, call claims and two-contract forest assembly remain open. No new keys/proofs/deployments or broad qualification."
+      "limits": "256 logical arguments and 256 physical fields. Direct scalar and byte arguments only. Composite and hosted args and typed call declarations remain open. Selected checker evidence without fresh key, proof or deployment qualification."
     },
     "nativeCallClaims": {
       "checkedOn": "2026-11-18",

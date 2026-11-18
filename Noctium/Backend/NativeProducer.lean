@@ -269,7 +269,7 @@ private def equalityPairMatches (left right : Term) (pair : Term × Term) : Bool
   (left == pair.1 && right == pair.2) || (left == pair.2 && right == pair.1)
 
 private def canonicalScalarInputMatches (expected : Expected) (left right : Term) : List String :=
-  expected.inputs.filterMap fun input =>
+  (expected.rawInputs ++ expected.inputs).filterMap fun input =>
     if !input.canonicalJubjubScalar then none else
     let raw := Term.input input.identifier
     let reduced := Term.unary "jubjub_scalar_from_native" raw
@@ -779,14 +779,23 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   for (rawInput, index) in rawInputs.toList.zipIdx do
     let some required := expected.rawInputs[index]? | throw "unexpected native raw call input"
     fields rawInput ["name", "type"]
-    ensure (required.visibility == .«private» && required.ty == .native)
-      "native raw call inputs must be private Native values"
+    ensure (required.visibility == .«private» && !required.ty.isBytes)
+      "native raw call inputs require private scalar projections"
     let name ← stringField rawInput "name"
     ensure (name == required.identifier) "native raw call input name/order mismatch"
-    nativeType (← rawInput.getObjVal? "type")
+    let valueType ← match required.ty with
+      | .foreign kind => do
+        ensure ((← stringField rawInput "type") == kind.nativeName) "native raw call input type mismatch"
+        pure (.foreign kind : NativeValueType)
+      | _ => do
+        nativeType (← rawInput.getObjVal? "type")
+        pure .native
+    let foreignValid := isForeignType valueType
     state ← define state name {
       term := .input name
-      maximum := Field.modulus - 1
+      valueType
+      foreignValid
+      maximum := if foreignValid then 0 else Field.modulus - 1
     }
   let returns ← arrayField program "outputs"
   ensure (returns.size == expected.returns.length) "native output header count mismatch"
@@ -801,7 +810,7 @@ def validate (expected : Expected) (program : Json) : Except String Unit := do
   ensure (state.inputCount == expected.inputs.length) "missing native transcript input"
   ensure (state.groupCount == expected.groups.length) "missing native transcript activity group"
   ensure (state.assertionCount == expected.assertions.length) "missing or reordered typed source assertion"
-  for input in expected.inputs do
+  for input in expected.rawInputs ++ expected.inputs do
     ensure (!input.ty.isBytes) "Bytes32 must be expanded into UInt8 native inputs"
     match input.ty with
     | .foreign kind => do

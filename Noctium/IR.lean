@@ -138,6 +138,13 @@ def Input.nativeIdentifiers (input : Input) : List String :=
   | .foreign _ => ["%input_" ++ input.name]
   | _ => ["%input_" ++ input.name]
 
+/-- Committed byte arguments use FAB high-to-low chunks, as returns do. -/
+def Input.callArgumentIdentifiers (input : Input) : List String :=
+  match input.ty with
+  | .bytes length => (List.range ((length + 30) / 31)).map fun index =>
+      s!"%input_{input.name}_call_chunk_{index}"
+  | _ => input.nativeIdentifiers
+
 /-- Reserved Native projections used by the public transcript prologue.
 These names never replace the typed source alias. -/
 def Input.publicProjectionIdentifiers (input : Input) : List String :=
@@ -173,12 +180,14 @@ def Output.nativeReturnFields : Output → Except String (List (Expr .native))
     pure ((List.range kind.encodedFieldCount).map fun index =>
       .foreignEncodedField value index)
 
-def Output.nativeReturnFieldCount (output : Output) : Nat :=
-  match output.ty with
+def Ty.nativeCallFieldCount (ty : Ty) : Nat :=
+  match ty with
   | .bytes length => (length + 30) / 31
   | .jubjubPoint => 2
   | .foreign kind => kind.encodedFieldCount
   | _ => 1
+
+def Output.nativeReturnFieldCount (output : Output) : Nat := output.ty.nativeCallFieldCount
 
 def maxEntrypointReturnFields : Nat := 256
 
@@ -396,6 +405,10 @@ structure Entrypoint where
   legacy behavior. -/
   effectGuards : List (Option (Expr .bool)) := []
   deriving Repr
+
+/-- Selected in the explicit call order, independently of transcript declaration order. -/
+def Entrypoint.callArguments (entry : Entrypoint) : List Input :=
+  entry.callInputs.filterMap fun name => entry.circuit.inputs.find? (·.name == name)
 
 def Entrypoint.effectGuardAt (entry : Entrypoint) (index : Nat) : Option (Expr .bool) :=
   (entry.effectGuards[index]?).getD none
@@ -839,6 +852,22 @@ private def requireState (decls : List StateDecl) (name : String) (kind : StateK
     .error "OpaqueString constructor metadata cannot be read or written by entrypoints"
   | some decl => if decl.kind == kind then pure () else .error s!"state type mismatch for '{name}'"
 
+private def validateCallArguments (inputs : List Input) (names : List String)
+    (span : SourceSpan) : Except Diagnostic Unit := do
+  unless uniqueNames names do
+    throw {span := span, message := "duplicate native call argument"}
+  if names.length > 256 then
+    throw {span := span, message := "too many native call arguments"}
+  let mut fieldCount := 0
+  for name in names do
+    let some input := inputs.find? (·.name == name)
+      | throw {span := span, message := s!"unknown circuit call argument '{name}'"}
+    unless input.visibility == .private do
+      throw {span := input.span, message := s!"call argument '{name}' must be a private circuit input"}
+    fieldCount := fieldCount + input.ty.nativeCallFieldCount
+  if fieldCount > 256 then
+    throw {span := span, message := "too many native call argument fields"}
+
 /-- Validate state names, typed reads, guards and writes in execution order. -/
 def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entrypoint) : Except Diagnostic Unit := do
   for decl in decls do
@@ -862,13 +891,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
-  unless uniqueNames e.callInputs do
-    throw {span := e.span, message := "duplicate native call argument"}
-  for name in e.callInputs do
-    let some input := e.circuit.inputs.find? (·.name == name)
-      | throw {span := e.span, message := s!"unknown circuit call argument '{name}'"}
-    unless input.visibility == .private && input.ty == .native do
-      throw {span := input.span, message := s!"call argument '{name}' must be a private Native circuit input"}
+  validateCallArguments e.circuit.inputs e.callInputs e.span
   unless e.effectGuards.isEmpty || e.effectGuards.length == e.effects.length do
     throw {span := e.span, message := "effect guard metadata length mismatch"}
   -- Typing permits private operands. Mandatory disclosure analysis decides

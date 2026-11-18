@@ -56,4 +56,4 @@ private def callArgumentSchema (names : List String) (visibility : Noctium.Visib
 #guard !(callArgumentSchema ["missing"]).isOk
 #guard !(callArgumentSchema ["value", "value"]).isOk
 #guard !(callArgumentSchema ["value"] .public).isOk
-#guard !(callArgumentSchema ["value"] .private (.uint 7)).isOk
+#guard (callArgumentSchema ["value"] .private (.uint 7)).isOk

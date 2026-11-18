@@ -22,8 +22,7 @@ branches, preserves the copied results and rejects an altered equality
 operand. The producer tests reject use before definition, redefinition and
 an attempt to treat a copy of an unconstrained input as range checked.
 
-This brings the scoped producer registry to 40 of 47 names, covering every
-non-deprecated instruction name on the pinned profile. The seven deprecated
-names remain unexposed. The result covers direct source authoring and native
+This completes scoped registration of all 40 non-deprecated instruction names
+on the pinned profile. The inventory also lists seven deprecated upstream names. The result covers direct source authoring and native
 checking. Readable helper authoring, exhaustive type qualification and fresh
 proof generation for this fixture remain open.

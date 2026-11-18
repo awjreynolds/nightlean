@@ -90,7 +90,7 @@ pub fn assemble_checked_calls(
             "native execution differs from the supplied initial context"
         );
         crate::validate_call_input_header_json(
-            &execution.call_input_names,
+            &execution.call_input_header,
             &serde_json::to_value(call.circuit)?,
         )?;
 

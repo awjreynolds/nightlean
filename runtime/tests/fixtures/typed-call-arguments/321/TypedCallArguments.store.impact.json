@@ -1,0 +1,135 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "stored", "kind": {"cell": "UIntRange<256>"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "UIntRange<256>",
+   "name": "tail",
+   "expression":
+   {"value": {"tag": "reference", "name": "payload"},
+    "tag": "byteAt",
+    "index": 32}},
+  {"visibility": "public",
+   "type": "UIntRange<256>",
+   "name": "result",
+   "expression": {"tag": "reference", "name": "score"}},
+  {"visibility": "public",
+   "type": "Bool",
+   "name": "approved",
+   "expression": {"tag": "reference", "name": "flag"}}],
+ "reads": [],
+ "operations":
+ [{"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "flag"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxx"}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value":
+      {"value": {"value": true, "tag": "bool"},
+       "tag": "let",
+       "name": "_noctium_activity_guard_xxxxx",
+       "body":
+       {"yes": {"tag": "reference", "name": "flag"},
+        "tag": "select",
+        "no": {"value": false, "tag": "bool"},
+        "condition":
+        {"tag": "reference", "name": "_noctium_activity_guard_xxxxx"}}},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "body": {"tag": "reference", "name": "score"}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "flag"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxx"}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"value": true, "tag": "bool"},
+    "tag": "let",
+    "name": "_noctium_activity_guard_xxxxx",
+    "body":
+    {"yes": {"tag": "reference", "name": "flag"},
+     "tag": "select",
+     "no": {"value": false, "tag": "bool"},
+     "condition":
+     {"tag": "reference", "name": "_noctium_activity_guard_xxxxx"}}}}],
+ "nativeCircuitFile": "TypedCallArguments.store.zkir",
+ "guards": [],
+ "entrypoint": "store",
+ "contractName": "TypedCallArguments",
+ "circuit":
+ {"outputs": [],
+  "name": "typedCallInput",
+  "inputs":
+  [{"visibility": "private", "type": "UIntRange<256>", "name": "score"},
+   {"visibility": "private", "type": "Native", "name": "aux"},
+   {"visibility": "private", "type": "Bytes<33>", "name": "payload"},
+   {"visibility": "private", "type": "Bool", "name": "flag"},
+   {"visibility": "private", "type": "JubjubPoint", "name": "point"},
+   {"visibility": "private", "type": "JubjubScalar", "name": "scalar"},
+   {"visibility": "private", "type": "Secp256k1Base", "name": "field"},
+   {"visibility": "private", "type": "Bytes<0>", "name": "empty"}],
+  "file": "typedCallInput.zkir",
+  "constraints":
+  [{"tag": "eq",
+    "right": {"value": "7", "tag": "constant"},
+    "left": {"tag": "reference", "name": "aux"}},
+   {"tag": "eq",
+    "right": {"value": "0", "tag": "constant"},
+    "left":
+    {"tag": "jubjubCoordinate",
+     "point": {"tag": "reference", "name": "point"},
+     "index": 0}},
+   {"tag": "eq",
+    "right": {"value": "1", "tag": "constant"},
+    "left":
+    {"value": {"tag": "reference", "name": "scalar"},
+     "tag": "jubjubScalarToNative"}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256k1Base", "tag": "foreignConstant", "encoding": ["8", "0"]},
+    "left": {"tag": "reference", "name": "field"}}]},
+ "callInputs":
+ ["flag", "payload", "score", "point", "scalar", "field", "empty"]}

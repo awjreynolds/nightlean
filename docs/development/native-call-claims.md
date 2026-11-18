@@ -62,8 +62,9 @@ Source guards reject private addresses, hashes, commitments and control without
 release.
 
 The result is a private, unbalanced intent. Applications supply the initial
-contexts. Wider arguments, typed source call declarations and helper or
-hosted-witness statement authoring remain open. The reference state interpreter
+contexts. [Committed scalar and fixed byte arguments](committed-returns.md#native-call-arguments)
+use the native input ABI. Composite arguments, typed source call declarations
+and helper or hosted-witness statement authoring remain open. The reference state interpreter
 rejects active call claims.
 
 ## Prove a composed intent
