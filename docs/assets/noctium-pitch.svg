@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
   <title id="title">Noctium | Prove contract behavior. Compile for Midnight.</title>
-  <desc id="desc">Noctium is a Lean 4 compiler and proof framework for Midnight. Authors specify and prove source properties in Lean. Its typed compiler emits ZKIR v3 circuits and Impact ledger plans directly. Tuples and vectors support checked structural widening while records and enums retain nominal identity. Checked composite entrypoint returns reconstruct into typed SDK results. Private Native call arguments bind through the native ABI and communication commitment. Native call claims assemble into checked intents with verified proofs. Funded composition on localnet remains a goal. The Rust host uses Midnight libraries. Current scope includes 39 of 47 registered native operations and scoped support across 15 native type families. A historical 16-entrypoint token recorded 17 accepted localnet calls. Full ZKIR v3, contract composition and web and mobile SDKs are goals. Proof audits cover selected contracts and recorded revisions.</desc>
+  <desc id="desc">Noctium is a Lean 4 compiler and proof framework for Midnight. Authors specify and prove source properties in Lean. Its typed compiler emits ZKIR v3 circuits and Impact ledger plans directly. Tuples and vectors support checked structural widening while records and enums retain nominal identity. Checked composite entrypoint returns reconstruct into typed SDK results. Private Native call arguments bind through the native ABI and communication commitment. Native call claims assemble into checked intents with verified proofs. A funded two-contract call finalized on localnet with both states verified. The Rust host uses Midnight libraries. Current scope includes 39 of 47 registered native operations and scoped support across 15 native type families. A historical 16-entrypoint token recorded 17 accepted localnet calls. Full ZKIR v3, contract composition and web and mobile SDKs are goals. Proof audits cover selected contracts and recorded revisions.</desc>
   <defs>
     <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#101d30"/><stop offset="1" stop-color="#080f1b"/></linearGradient>
     <linearGradient id="foil" x1=".1" y1=".2" x2=".95" y2=".9"><stop stop-color="#9af5dd"/><stop offset=".52" stop-color="#79cbef"/><stop offset="1" stop-color="#b6acff"/></linearGradient>
@@ -47,7 +47,7 @@
       <text x="102" y="475">Lean source</text><text x="448" y="475">Typed compiler</text><text x="800" y="475">ZKIR v3 + Impact</text><text x="1190" y="475">Midnight</text>
     </g>
     <g fill="#bccad9" font-size="19">
-      <text x="102" y="510">Contracts and proofs</text><text x="448" y="510">Direct lowering in Lean</text><text x="800" y="510">Circuits, state and call claims</text><text x="1190" y="510">Native Rust + C/C++ SDKs</text>
+      <text x="102" y="510">Contracts and proofs</text><text x="448" y="510">Direct lowering in Lean</text><text x="800" y="510">Circuits, state, composed calls</text><text x="1190" y="510">Native Rust + C/C++ SDKs</text>
     </g>
     <g stroke="#8ae5d4" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M364 477h42m-9-8 9 8-9 8m309-8h42m-9-8 9 8-9 8m347-8h42m-9-8 9 8-9 8"/>

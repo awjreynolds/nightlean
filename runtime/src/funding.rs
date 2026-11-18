@@ -8,7 +8,8 @@ use coin_structure::coin::TokenType;
 use ledger::{
     dust::{DUST_EXPECTED_FILES, DustActions, DustLocalState, DustOutput, DustSecretKey},
     structure::{
-        Intent, LedgerParameters, ProofMarker, Signature, StandardTransaction, Transaction,
+        ContractAction, Intent, LedgerParameters, ProofMarker, Signature, StandardTransaction,
+        Transaction,
     },
 };
 use rand::rngs::StdRng;
@@ -24,6 +25,16 @@ pub type UnsealedTransaction = Transaction<Signature, ProofMarker, PedersenRando
 pub type SealedTransaction = Transaction<Signature, ProofMarker, PureGeneratorPedersen, Db>;
 pub const CONTRACT_SEGMENT: u16 = 1;
 pub const FUNDING_SEGMENT: u16 = 2;
+
+pub(crate) fn admissible_actions(intent: &ProvedNativeIntent) -> bool {
+    let count = intent.actions.len();
+    count == 1
+        || (count > 1
+            && intent
+                .actions
+                .iter_deref()
+                .all(|action| matches!(action, ContractAction::Call(_))))
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -145,7 +156,7 @@ impl DustFunding {
         if material.k != srs.k() {
             return Err(Error::Parameters);
         }
-        if contract.actions.len() != 1
+        if !admissible_actions(contract)
             || contract.guaranteed_unshielded_offer.is_some()
             || contract.fallible_unshielded_offer.is_some()
             || contract.dust_actions.is_some()

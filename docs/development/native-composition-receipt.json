@@ -1,0 +1,47 @@
+{
+  "blockHash": "b865b1dc61ba4e0ef45c2793e9fe7bbdb6015c0cdb1a55441d51da10fac8bcc0",
+  "callee": {
+    "address": "bfc0133449fbe8005e3bf2c5c3923368255a8d1e8018d4ce8f5740d70bfe2407",
+    "balance": "13",
+    "bundleManifestSha256": "e92d62f433af11cb3a10f86394bdddc1d8fdc1e2f642a1cfceebb5ba94a56b7e",
+    "count": "1",
+    "k": 8,
+    "operation": "advance",
+    "rows": 144,
+    "stateSha256": "66befdc8e47b93f2bf6d6293313656b201496b035a447472bfe2643a40715acb"
+  },
+  "caller": {
+    "address": "cd08a613249b61bfaa5cd31f356e75c2f27cd47b89a0f63c7c36a3f76b1a00d6",
+    "bundleManifestSha256": "e65e1bb16974c16c1201ae06a1315944e7828da9c950ff476d414686169156d9",
+    "k": 9,
+    "operation": "claim",
+    "rows": 300,
+    "stateSha256": "27034d26d14d0f0423473a416a6bb41bf730c51c8a04cf27fdfb2ec6b3ff96c5"
+  },
+  "deployments": [
+    {
+      "address": "cd08a613249b61bfaa5cd31f356e75c2f27cd47b89a0f63c7c36a3f76b1a00d6",
+      "blockHash": "8e487031fbaa90409acea84378f5d1896da81eab8452540a9c650a46cbe88326",
+      "height": 27621,
+      "transactionId": "deddbb041ea3a90f544163f92aa801e851f25abe0aaf54200bf79e2027eff823"
+    },
+    {
+      "address": "bfc0133449fbe8005e3bf2c5c3923368255a8d1e8018d4ce8f5740d70bfe2407",
+      "blockHash": "edd7ca4dad82edaedb4c561a0e5fd00b7e6b3463bf8d41211af46848ef982433",
+      "height": 27624,
+      "transactionId": "cd55091be78a0cb9632cb4d92699075d2c36c75e169e0190afd2e6c3ba90afaa"
+    }
+  ],
+  "extrinsicHash": "b72513c476f8b3a443a8340ffc311c6863c9154c922b0161a66b30626f92c3f2",
+  "extrinsicIndex": 4,
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "height": 27627,
+  "intentId": "68ea7db49f16429dfd400d0e7ca738382b58704687849f95e8cff5640d51df4c",
+  "ledgerParametersBlockHash": "9a298af0b78bf227fd2ad5a12390abf837fc06ac7b40db708de7de1d6ac47365",
+  "ledgerParametersSha256": "06e72341672dbb652ba485ef68b74837d411be87ae4b0f6e67051601a50c67d8",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "sourceRevision": "9a0adb73bb84f4851807c4c619bdf618ba490f37",
+  "specVersion": 2001100,
+  "transactionId": "3b5d474b5607b18ef07390df938bcd8c23177ae6637860b70bb6b73a1b6589fb",
+  "transactionVersion": 4
+}

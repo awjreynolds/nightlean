@@ -2,7 +2,7 @@
 //! Node finality reports and durable storage are explicit host trust boundaries.
 use crate::{
     Db,
-    funding::{CONTRACT_SEGMENT, SealedTransaction, UnsealedTransaction},
+    funding::{CONTRACT_SEGMENT, SealedTransaction, UnsealedTransaction, admissible_actions},
     host,
     lifecycle::{Event, Lifecycle, Phase},
     proof::ProvedNativeIntent,
@@ -19,6 +19,7 @@ use onchain_runtime::context::BlockContext;
 use serde::{Deserialize, Serialize};
 use serialize::{Serializable, Tagged, tagged_deserialize, tagged_serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use transient_crypto::commitment::Pedersen;
 use zeroize::{Zeroize, Zeroizing};
 
@@ -178,6 +179,9 @@ pub struct FinalizedReceipt {
     pub contract_address: String,
     pub event: ContractEvent,
     pub contract_state: Vec<u8>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    /// Canonical states at the inclusion block, keyed by other called addresses.
+    pub secondary_states: BTreeMap<String, Vec<u8>>,
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Submission {
@@ -248,6 +252,10 @@ struct BoundData {
     contract_address: String,
     event: ContractEvent,
     expected_state: Vec<u8>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    call_counts: BTreeMap<String, usize>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    secondary_states: BTreeMap<String, Vec<u8>>,
     after_height: u64,
 }
 /// Exact signed native bytes and expected execution state. No mutation or private key access.
@@ -267,7 +275,7 @@ impl BoundTransaction {
         let snapshot = chain.snapshot().await.map_err(|_| Error::Network)?;
         snapshot.validate(&policy)?;
         require(
-            contract.actions.len() == 1
+            admissible_actions(contract)
                 && contract.dust_actions.is_none()
                 && contract.guaranteed_unshielded_offer.is_none()
                 && contract.fallible_unshielded_offer.is_none(),
@@ -387,6 +395,31 @@ impl BoundTransaction {
                 .get(&address)
                 .ok_or(Error::InvalidTransaction)?,
         )?;
+        let mut call_counts = BTreeMap::new();
+        let mut secondary_states = BTreeMap::new();
+        let mut state_bytes = expected_state.len();
+        if contract.actions.len() > 1 {
+            for call in contract.calls() {
+                let encoded = hex::encode(call.address.0.0);
+                let count = call_counts.entry(encoded.clone()).or_insert(0);
+                *count += 1;
+                if *count == 1 && call.address != address {
+                    let state = predicted
+                        .contract
+                        .get(&call.address)
+                        .ok_or(Error::InvalidTransaction)?;
+                    let bytes = encode(&*state)?;
+                    state_bytes = state_bytes
+                        .checked_add(bytes.len())
+                        .ok_or(Error::InvalidTransaction)?;
+                    require(
+                        bytes.len() <= MAX_STATE && state_bytes <= MAX_TRANSACTION,
+                        Error::InvalidTransaction,
+                    )?;
+                    secondary_states.insert(encoded, bytes);
+                }
+            }
+        }
         let transaction = encode(&approved)?;
         require(
             transaction.len() <= MAX_TRANSACTION && expected_state.len() <= MAX_STATE,
@@ -413,6 +446,8 @@ impl BoundTransaction {
                 contract_address: hex::encode(address.0.0),
                 event,
                 expected_state,
+                call_counts,
+                secondary_states,
                 after_height: snapshot.height,
             },
         })
@@ -441,6 +476,18 @@ impl BoundTransaction {
     pub fn expected_state(&self) -> &[u8] {
         &self.data.expected_state
     }
+    /// Predicted canonical states for the other called addresses.
+    pub fn secondary_states(&self) -> &BTreeMap<String, Vec<u8>> {
+        &self.data.secondary_states
+    }
+    /// Exact address multiplicities for the receipt's contract event kind.
+    pub fn contract_event_counts(&self) -> BTreeMap<String, usize> {
+        match self.event() {
+            ContractEvent::Maintain => BTreeMap::new(),
+            _ if self.data.call_counts.is_empty() => [(self.contract_address().into(), 1)].into(),
+            _ => self.data.call_counts.clone(),
+        }
+    }
     pub fn check_receipt(&self, receipt: &FinalizedReceipt) -> Result<()> {
         self.data.policy.check(&receipt.chain)?;
         require(
@@ -455,7 +502,8 @@ impl BoundTransaction {
                 && receipt.intent_id == self.data.intent_id
                 && receipt.contract_address == self.data.contract_address
                 && receipt.event == self.data.event
-                && receipt.contract_state == self.data.expected_state,
+                && receipt.contract_state == self.data.expected_state
+                && receipt.secondary_states == self.data.secondary_states,
             Error::Receipt,
         )
     }
@@ -553,6 +601,8 @@ impl PublicTransactionReference {
                 contract_address: hex::encode(address.0.0),
                 event,
                 expected_state: expected_state.to_vec(),
+                call_counts: BTreeMap::new(),
+                secondary_states: BTreeMap::new(),
                 after_height,
             },
         })
@@ -695,6 +745,7 @@ impl SubmissionAttempt {
         attempt_id: &str,
         runtime: &mut host::Runtime,
     ) -> Result<Self> {
+        require(bound.data.call_counts.is_empty(), Error::InvalidTransaction)?;
         runtime
             .notify(host::Notice {
                 abi_version: 1,
@@ -760,6 +811,8 @@ impl SubmissionAttempt {
             record.version == 1
                 && record.bound.transaction.len() <= MAX_TRANSACTION
                 && record.bound.expected_state.len() <= MAX_STATE
+                && record.bound.call_counts.is_empty()
+                && record.bound.secondary_states.is_empty()
                 && record.journal.len() <= host::MAX_PRIVATE_BYTES,
             Error::Persistence,
         )?;
@@ -789,7 +842,8 @@ impl SubmissionAttempt {
         };
         let contract = stx.intents.get(&CONTRACT_SEGMENT).ok_or(Error::Identity)?;
         require(
-            stx.network_id == record.bound.policy.network_id
+            contract.actions.len() == 1
+                && stx.network_id == record.bound.policy.network_id
                 && hex::encode(
                     contract
                         .erase_proofs()
@@ -1304,6 +1358,8 @@ pub(crate) mod tests {
                 contract_address: address,
                 event: ContractEvent::Deploy,
                 expected_state: vec![1, 2, 3],
+                call_counts: BTreeMap::new(),
+                secondary_states: BTreeMap::new(),
                 after_height: 20,
             },
         }
@@ -1359,6 +1415,7 @@ pub(crate) mod tests {
             contract_address: tx.contract_address().into(),
             event: tx.event(),
             contract_state: tx.expected_state().to_vec(),
+            secondary_states: tx.secondary_states().clone(),
         }
     }
     impl ChainAdapter for FakeChain {
@@ -1514,6 +1571,19 @@ pub(crate) mod tests {
         let mut wrong = good;
         wrong.finalized_height = 20;
         assert_eq!(tx.check_receipt(&wrong), Err(Error::StaleReceipt));
+
+        let mut multi = tx;
+        multi.data.event = ContractEvent::Call;
+        let callee = "e".repeat(64);
+        multi.data.call_counts = [(multi.contract_address().into(), 1), (callee.clone(), 1)].into();
+        multi
+            .data
+            .secondary_states
+            .insert(callee.clone(), vec![4, 5]);
+        let mut composed = receipt(&multi);
+        multi.check_receipt(&composed).unwrap();
+        composed.secondary_states.remove(&callee);
+        assert_eq!(multi.check_receipt(&composed), Err(Error::Receipt));
     }
     #[test]
     fn uncertain_restart_retries_exact_bytes_and_deduplicates_private_cas() {

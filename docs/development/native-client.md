@@ -14,7 +14,9 @@ The host-neutral modules are `proof`, `funding` and `client`. The `localnet` fea
 6. Validate canonical finalized ancestry, the exact submitted extrinsic, its event phase and index, matching native transaction hash, exactly one `TxApplied`, the expected contract event and address, and the full native contract state at the inclusion block. Public receipt IDs alone do not authorize acceptance.
 7. After acceptance, compare and exchange private writes against the journal's original private revision. Store the complete CAS identity and deduplication receipt atomically with private writes. Durably persist the validated terminal receipt before acknowledging the host runtime.
 
-The development claim has no NIGHT offers or unshielded source accounts. Its signing adapter approves the complete transaction and creates native binding seals. The DUST spend proof authorizes fees using the host-held DUST key. This qualification does not cover a general unshielded-account signing wallet, shielded wallet, registration flow or arbitrary multi-contract transaction.
+Use the [composed call flow](native-call-claims.md#fund-and-observe-on-localnet) for a Rust intent with multiple proved calls. The same funding and sealing path verifies the full intent, and the node adapter checks every call event and exact state in one finalized block. A composed Rust host manages its own retries. The private journal and C/C++ client admit single-action intents.
+
+The development claim has no NIGHT offers or unshielded source accounts. Its signing adapter approves the complete transaction and creates native binding seals. The DUST spend proof authorizes fees using the host-held DUST key. This qualification does not cover a general unshielded-account signing wallet, shielded wallet or registration flow.
 
 The legacy native DUST system precompile uses the pinned ledger's `midnight-zkir` 2.2.0 dependency. That system dependency is separate from the selected Lean contract target and does not change the exclusive 3.2.0/3.2.1 contract features. Both DUST and contract proofs are real native proofs.
 

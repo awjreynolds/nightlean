@@ -72,8 +72,9 @@ rejects active call claims.
 Pass a host-authenticated ledger snapshot and a `CompositionMaterial` for
 each call in intent order. Each selection contains its authenticated public
 bundle and trusted proof parameters. The SDK compares the bundle's ledger
-parameters with the snapshot and its verifier key with the operation installed
-at the call's address and entrypoint. These checks precede proof requests.
+parameters with the snapshot, allowing the fee prices to change per block.
+The bundle's verifier key must match the operation installed at the call's
+address and entrypoint. These checks precede proof requests.
 
 `prove_locally` uses host-provided entropy. `prove` accepts a host-authorized
 proof service. Each proof binds its own call statement and the shared intent
@@ -83,8 +84,7 @@ and verifies the attached statements again before returning a proved intent.
 The focused case generated keys from fresh Lean exports and attached k=9 and
 k=8 proofs to one intent. A snapshot with the caller's key installed for the
 callee rejected before proving. The sealed transaction passed the pinned
-ledger's in-process verification with fee balancing disabled. Funding,
-submission and finalized state on a running localnet remain open.
+ledger's in-process verification with fee balancing disabled.
 
 To reproduce, compile [the caller](../../tests/NativeCallClaims.lean) and
 [the callee](../../tests/NativeReturns.lean) with the ZKIR 3.2.1 target.
@@ -101,4 +101,37 @@ k9 and k8 digests as `NOCTIUM_COMPOSITION_CALLER_SRS_SHA256` and
 ```sh
 cargo test --manifest-path runtime/Cargo.toml --locked \
   --no-default-features --features zkir-321 --test native_composition -- --include-ignored
+```
+
+## Fund and observe on localnet
+
+Pass `ProvedIntent::native()` to `client::BoundTransaction::prepare`.
+The native DUST adapter funds the call intent in its own fee segment. The
+client verifies the sealed transaction and predicts each affected contract
+state from the finalized snapshot. `Node::finalized_receipt` checks the exact
+extrinsic, one `TxApplied`, the expected call-event count for each address,
+and each predicted state at the inclusion block. The receipt exposes the
+first call's state and a map of the other finalized contract states.
+
+The [funded qualification receipt](native-composition-receipt.json) records
+both deployments and the composed transaction finalized at block 27627.
+The caller's state matched its deployment bytes and the callee's balance
+moved from 10 to 13 with count 1. The same extrinsic contained both call
+events and one successful ledger outcome. Rust funded, proved, sealed,
+submitted and observed the transaction.
+
+The native Rust host controls submission and retries for composed calls.
+The single-contract private journal and C/C++ client flow still cover one
+operation at a time.
+
+For the funded check, use the two bundles above with ledger parameters
+captured from the selected localnet. Use the public development genesis and
+a local SRS cache with the pinned DUST artifacts. Set
+`NOCTIUM_COMPOSITION_NODE` to the development node's loopback HTTP RPC
+endpoint, then run:
+
+```sh
+cargo test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321,localnet --test native_composition \
+  composed_intent_finalizes_both_contract_states_on_localnet -- --ignored --nocapture
 ```

@@ -24,7 +24,7 @@ use scale_info::{PortableRegistry, TypeDef, TypeDefPrimitive};
 use scale_value::{Composite, Value as ScaleValue, ValueDef};
 use serde_json::{Value as Json, json};
 use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize};
-use std::{cell::RefCell, io::Read, time::Duration};
+use std::{cell::RefCell, collections::BTreeMap, io::Read, time::Duration};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Error {
@@ -582,7 +582,7 @@ impl Node {
         &self,
         reference: &crate::client::PublicTransactionReference,
     ) -> Result<Option<crate::client::FinalizedReceipt>> {
-        self.receipt(&reference.bound_view())
+        self.finalized_receipt(&reference.bound_view())
     }
     pub fn finalized_contract_state(&self, address: &str) -> Result<FinalizedContractState> {
         check(
@@ -1008,7 +1008,8 @@ impl Node {
             block: replay.block.clone(),
         })
     }
-    fn receipt(
+    /// Observe a bound transaction at one canonical finalized block.
+    pub fn finalized_receipt(
         &self,
         transaction: &crate::client::BoundTransaction,
     ) -> Result<Option<crate::client::FinalizedReceipt>> {
@@ -1111,7 +1112,7 @@ impl Node {
                     return Err(Error::Metadata);
                 };
                 let mut applied = 0;
-                let mut contract = 0;
+                let mut contract = transaction.contract_event_counts();
                 for row in rows.values() {
                     let (phase_name, phase_fields) =
                         variant(field(row, "phase").ok_or(Error::Metadata)?)?;
@@ -1151,33 +1152,36 @@ impl Node {
                                 return Err(Error::Replay);
                             }
                         };
-                        check(
-                            name == expected_event
-                                && hex::encode(address.0.0) == transaction.contract_address(),
-                            Error::Response,
-                        )?;
-                        contract += 1;
+                        check(name == expected_event, Error::Response)?;
+                        let count = contract
+                            .get_mut(&hex::encode(address.0.0))
+                            .filter(|count| **count > 0)
+                            .ok_or(Error::Response)?;
+                        *count -= 1;
                     }
                 }
-                let expected_contract_events = match transaction.event() {
-                    crate::client::ContractEvent::Deploy | crate::client::ContractEvent::Call => 1,
-                    crate::client::ContractEvent::Maintain => 0,
-                };
                 check(
-                    applied == 1 && contract == expected_contract_events,
+                    applied == 1 && contract.values().all(|&count| count == 0),
                     Error::Replay,
                 )?;
-                let state_bytes = hex_bytes(&self.rpc.call(
-                    "midnight_contractState",
-                    json!([
-                        transaction.contract_address(),
-                        format!("0x{}", hashes[offset])
-                    ]),
-                )?)?;
-                let state: onchain_runtime::state::ContractState<Db> = native_decode(&state_bytes)?;
-                let mut canonical = Vec::new();
-                serialize::tagged_serialize(&state, &mut canonical).map_err(|_| Error::State)?;
-                check(canonical == state_bytes, Error::State)?;
+                let read_state = |address: &str| {
+                    let bytes = hex_bytes(&self.rpc.call(
+                        "midnight_contractState",
+                        json!([address, format!("0x{}", hashes[offset])]),
+                    )?)?;
+                    let state: onchain_runtime::state::ContractState<Db> = native_decode(&bytes)?;
+                    let mut canonical = Vec::new();
+                    serialize::tagged_serialize(&state, &mut canonical)
+                        .map_err(|_| Error::State)?;
+                    check(canonical == bytes, Error::State)?;
+                    Ok::<_, Error>(bytes)
+                };
+                let canonical = read_state(transaction.contract_address())?;
+                let secondary_states = transaction
+                    .secondary_states()
+                    .keys()
+                    .map(|address| Ok((address.clone(), read_state(address)?)))
+                    .collect::<Result<BTreeMap<_, _>>>()?;
                 use blake2::Digest;
                 let extrinsic_hash = hex::encode(
                     blake2::Blake2b::<blake2::digest::consts::U32>::digest(&expected),
@@ -1197,6 +1201,7 @@ impl Node {
                     contract_address: transaction.contract_address().into(),
                     event: transaction.event(),
                     contract_state: canonical,
+                    secondary_states,
                 };
                 transaction
                     .check_receipt(&receipt)
@@ -1272,7 +1277,7 @@ impl crate::client::ChainAdapter for Node {
             let code = error["code"].as_i64();
             let finalized = matches!(code, Some(1010..=1016))
                 && self
-                    .receipt(transaction)
+                    .finalized_receipt(transaction)
                     .is_ok_and(|receipt| receipt.is_some());
             return Ok(pool_submission(code, finalized));
         }
@@ -1290,7 +1295,7 @@ impl crate::client::ChainAdapter for Node {
         &self,
         transaction: &crate::client::BoundTransaction,
     ) -> std::result::Result<crate::client::Observation, crate::client::HostFailure> {
-        self.receipt(transaction)
+        self.finalized_receipt(transaction)
             .map(|receipt| {
                 receipt
                     .map(crate::client::Observation::Finalized)

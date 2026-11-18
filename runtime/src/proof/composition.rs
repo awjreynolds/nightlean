@@ -60,7 +60,10 @@ impl<'a> PreparedComposition<'a> {
             };
             let material = Material::retained(selection.bundle)?;
             let parameters = selection.parameters;
-            if parameters.k() != material.circuit.k() || material.parameters != *snapshot.parameters
+            let mut retained_parameters = material.parameters.clone();
+            // Fee prices change per block. Funding uses the live snapshot's prices.
+            retained_parameters.fee_prices = snapshot.parameters.fee_prices.clone();
+            if parameters.k() != material.circuit.k() || retained_parameters != *snapshot.parameters
             {
                 return Err(Error::InvalidParameters);
             }
