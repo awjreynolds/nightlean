@@ -29,7 +29,7 @@ Private origins propagate from every operand. Publishing the derived hash requir
 
 The pinned Compact Schnorr message is `Vector<N, Field>`. Its challenge preimage is exactly `[announcement.x, announcement.y, publicKey.x, publicKey.y] ++ messageFields`. Source struct/vector flattening preserves that order and emits no extra operands. [Pinned standard library](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/standard-library.compact#L360), [datatype flattening](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/circuit-passes/flatten-datatypes.ss#L80), [ZKIR lowering](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/reduce-to-zkir.ss#L255).
 
-This raw field API does not implement a general typed serializer. Generic Bytes/record host-hash equivalence remains separate. Signature helpers are tracked in [issue 82](https://github.com/awjreynolds/noctium/issues/82).
+This raw field API does not implement a general typed serializer. Generic Bytes/record host-hash equivalence remains separate. The [typed signature helpers](signatures.md) build on this preimage contract, tracked in [issue 82](https://github.com/awjreynolds/noctium/issues/82).
 
 ## Evidence
 
@@ -39,4 +39,4 @@ The 67-job compiler/Claim build, source fixture, producer inventory/bounds/type 
 
 The entrypoint has 15 instructions, six private inputs and six output fields. Four hash operations have arities 3, 0, 1 and 5. Equivalent legacy/vector expressions and repeated longer vectors share their computations. These are structural counts, not proving-time measurements.
 
-No new keys, proofs, deployments or K/proving-time benchmarks qualify this slice. Full signature helpers and compiler preservation remain separate work.
+No new keys, proofs, deployments or K/proving-time benchmarks qualify this slice. Signature helpers have separate scoped evidence. Full signature assurance and compiler preservation remain separate work.

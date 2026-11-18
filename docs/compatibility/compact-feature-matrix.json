@@ -3973,7 +3973,7 @@
       "id": "C-STDLIB-JUBJUBSCHNORRVERIFY",
       "layer": "standard-library",
       "surface": "jubjubSchnorrVerify",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "related-subset",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -3988,13 +3988,25 @@
         "ABI"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-18",
+        "scope": "Typed Source helper hashes exactly [R.x,R.y,key.x,key.y] followed by Native message fields, at most 1020 message fields. Challenge/response reduce to JubjubScalar. Identity keys abort and identity announcements are allowed.",
+        "evidence": [
+          "Noctium/Crypto/Signatures.lean",
+          "tests/SignatureChecks.lean",
+          "runtime/tests/signature_helpers.rs",
+          "docs/development/signatures.md"
+        ],
+        "limits": "Focused Source/native checker and shared Rust prepare route only. No new keys, proofs, deployments, general signature correctness proof or whole-compiler preservation. Full equivalence remains unverified.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-STDLIB-SECP256K1ECDSAVERIFY",
       "layer": "standard-library",
       "surface": "secp256k1EcdsaVerify",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "related-subset",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4009,13 +4021,25 @@
         "ABI"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-18",
+        "scope": "Typed Source helper consumes a big-endian Bytes32 digest and canonical Secp256k1Scalar r/s. Both high/low s are accepted. Identity keys and zero r/s abort. Explicit r=0 rejection is stricter than pinned Compact. Message binding remains the caller obligation.",
+        "evidence": [
+          "Noctium/Crypto/Signatures.lean",
+          "tests/SignatureChecks.lean",
+          "runtime/tests/signature_helpers.rs",
+          "docs/development/signatures.md"
+        ],
+        "limits": "Focused Source/native checker and shared Rust prepare route only. No new keys, proofs, deployments, general signature correctness proof or whole-compiler preservation. Full equivalence remains unverified.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-STDLIB-SECP256K1ETHEREUMADDRESS",
       "layer": "standard-library",
       "surface": "secp256k1EthereumAddress",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "related-subset",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4030,13 +4054,25 @@
         "ABI"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-18",
+        "scope": "Typed Source helper takes Keccak256 over 32-byte big-endian x||y, returning the final 20 bytes. Identity keys abort. Native fixture includes the private-key-1 generator/address pair.",
+        "evidence": [
+          "Noctium/Crypto/Signatures.lean",
+          "tests/SignatureChecks.lean",
+          "runtime/tests/signature_helpers.rs",
+          "docs/development/signatures.md"
+        ],
+        "limits": "Focused Source/native checker and shared Rust prepare route only. No new keys, proofs, deployments, general signature correctness proof or whole-compiler preservation. Full equivalence remains unverified.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-STDLIB-SECP256R1ECDSAVERIFY",
       "layer": "standard-library",
       "surface": "secp256r1EcdsaVerify",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "related-subset",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4051,13 +4087,25 @@
         "ABI"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-18",
+        "scope": "Typed Source helper consumes a big-endian Bytes32 digest and canonical Secp256r1Scalar r/s. Both high/low s are accepted. Identity keys and zero r/s abort. Explicit r=0 rejection is stricter than pinned Compact. Message binding remains the caller obligation.",
+        "evidence": [
+          "Noctium/Crypto/Signatures.lean",
+          "tests/SignatureChecks.lean",
+          "runtime/tests/signature_helpers.rs",
+          "docs/development/signatures.md"
+        ],
+        "limits": "Focused Source/native checker and shared Rust prepare route only. No new keys, proofs, deployments, general signature correctness proof or whole-compiler preservation. Full equivalence remains unverified.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-STDLIB-ED25519VERIFY",
       "layer": "standard-library",
       "surface": "ed25519Verify",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "related-subset",
       "notes": "Inventory by exported name, not full semantic coverage.",
       "source": [
         "stdlib",
@@ -4072,7 +4120,19 @@
         "ABI"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-18",
+        "scope": "Typed Source helper checks SHA512(encode(R)||encode(key)||message), with canonical prime-subgroup points and scalar S, using zero through 960 message bytes. Identity keys abort. RFC8032 empty-message vector and changed-message rejection are scoped native cases.",
+        "evidence": [
+          "Noctium/Crypto/Signatures.lean",
+          "tests/SignatureChecks.lean",
+          "runtime/tests/signature_helpers.rs",
+          "docs/development/signatures.md"
+        ],
+        "limits": "Focused Source/native checker and shared Rust prepare route only. No new keys, proofs, deployments, general signature correctness proof or whole-compiler preservation. Full equivalence remains unverified.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-STDLIB-MERKLETREEPATHROOT",

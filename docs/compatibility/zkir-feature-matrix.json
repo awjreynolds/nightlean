@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "b82cca0b05939c5a8f559eab680582a630fccebf",
+    "sourceCommit": "4d0886b6424b384a2c25185b40a2969a842ad033",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -5290,7 +5290,46 @@
         ]
       },
       "schnorrReference": "Pinned Compact 7fa3a117 standard-library.compact lines 360-381 defines msg Vector<N,Field>. flatten-datatypes.ss lines 80-135/221-232 and reduce-to-zkir.ss lines 255-257 yield [annX,annY,pkX,pkY]++messageFields without extra operands. Raw field API does not establish generic typed Bytes/record host-hash equivalence.",
-      "limits": "No new keys, proofs, deployments, K/proving-time benchmark or mobile/WASM qualification. Signature helpers #82 and full compiler preservation remain separate work."
+      "limits": "No new keys, proofs, deployments, K/proving-time benchmark or mobile/WASM qualification. Signature helpers now have separate scoped evidence under signatureHelpers. Full compiler preservation remains open."
+    },
+    "signatureHelpers": {
+      "checkedOn": "2026-11-18",
+      "implementation": "../../Noctium/Crypto/Signatures.lean",
+      "source": "../../tests/SignatureChecks.lean",
+      "native": "../../runtime/tests/signature_helpers.rs",
+      "documentation": "../development/signatures.md",
+      "helpers": [
+        "secp256k1EcdsaVerify",
+        "secp256r1EcdsaVerify",
+        "jubjubSchnorrVerify",
+        "ed25519Verify",
+        "secp256k1EthereumAddress"
+      ],
+      "lowering": "Typed Expr expansion into existing native instructions, with no new signature opcode or Compact/Node dependency. Existing disclosure and partial-operation rules apply.",
+      "bounds": {
+        "ecdsaDigestBytes": 32,
+        "schnorrMessageFieldsMaximum": 1020,
+        "ed25519MessageBytesMaximum": 960
+      },
+      "referenceCases": [
+        "RustCrypto secp256k1 prehash fixture",
+        "P-256 FIPS186-4 CAVP prehash fixture",
+        "RFC8032 Ed25519 empty message",
+        "Native Jubjub group/hash construction",
+        "Ethereum generator key address"
+      ],
+      "limits": "No new keys, proofs, deployments, K/proving benchmark or mobile/WASM qualification. Zero-r ECDSA abort is explicitly stricter than pinned Compact. General cryptographic and compiler assurance remain open.",
+      "sourceCommit": "4d0886b6424b384a2c25185b40a2969a842ad033",
+      "checks": {
+        "compilerClaimBuild": "passed, 69 jobs",
+        "sourceGuards": "passed",
+        "guideSnippet": "passed",
+        "retainedArtifactReexport": "byte-identical",
+        "nativeCase": "passed, one case in 0.05 seconds",
+        "instructionCount": 420,
+        "privateTranscriptFields": 105,
+        "outputBindings": 6
+      }
     }
   }
 }
