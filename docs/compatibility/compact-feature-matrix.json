@@ -760,8 +760,8 @@
       "id": "C-LANG-LOOP",
       "layer": "language",
       "surface": "Statically bounded for loops",
-      "noctiumStatus": "missing",
-      "notes": "Range endpoints constant or nat parameters, or fixed-size vectors/tuples/bytes. Return within loop rejected.",
+      "noctiumStatus": "subset",
+      "notes": "Finite Helpers.Statement.forRange with literal half-open Native bounds, at most 1024 iterations and preflight nested expansion budget. Body types checked even when empty. Loop returns rejected. Compile-time Nat parameters require prior specialization. Readable loop grammar and fixed-container iteration remain open. See tests/FiniteRangeWitness.lean and docs/development/structured-cells.md#finite-range-loops.",
       "source": [
         "reference"
       ],
@@ -769,7 +769,9 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "SEM"
+      ],
       "equivalence": "unverified"
     },
     {

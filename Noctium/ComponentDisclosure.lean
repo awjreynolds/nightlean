@@ -382,6 +382,8 @@ private partial def analyzeBody (fuel : Nat) (program : Program) (prepared : Pre
     discard (analyzeTerm fuel program prepared declaration.id.scope env span key)
     discard (analyzeTerm fuel program prepared declaration.id.scope env span value)
     analyzeBody fuel program prepared declaration env rest
+  | .forRange .. :: _ =>
+    throw {span, message := "unexpanded finite loop reached component disclosure analysis"}
 end
 
 private def outputName (program : Program) (entry : Export) : String := Id.run do
@@ -417,6 +419,7 @@ private def checkOutput (sink : String) (sinkSpan : SourceSpan) (value : Value) 
 
 /-- Analyze an exported source entry from its declaration, inputs and helper bodies. -/
 def analyzeEntry (program : Program) (entryName : String) : Except Diagnostic (Export × Value) := do
+  let program ← Helpers.prepareProgramWithLimits {} program
   let prepared ← Helpers.prepareWithLimits {} program
   let some entry := program.exports.find? (·.name == entryName)
     | throw {span := {}, message := "unknown helper entrypoint"}

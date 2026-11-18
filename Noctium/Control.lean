@@ -235,6 +235,8 @@ mutual
       liftD (fail target.span "portable control capability unavailable: ledger writes")
     | .writeMap .. :: _ =>
       liftD (fail target.span "portable control capability unavailable: ledger writes")
+    | .forRange .. :: _ =>
+      liftD (fail target.span "unexpanded finite loop reached portable control analysis")
     | .branch condition yes no :: rest =>
       let condition ← expression checked target.id.scope env target.span condition
       let guarded := merge control condition.origins
@@ -283,6 +285,7 @@ private def checkPreparedDisclosure (limits : Helpers.Limits) (checked : Helpers
     if value.ty != .unit then Disclosure.checkSink {description := "public control-plan return", span := entry.span} value.origins value.control
 
 def checkDisclosureWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String) : Except Diagnostic Unit := do
+  let program ← Helpers.prepareProgramWithLimits limits program
   let checked ← Helpers.prepareWithLimits limits program
   checkPreparedDisclosure limits checked entryName
 
@@ -494,6 +497,7 @@ mutual
         | .writeCell .. => emitLift (fail target.span "portable control capability unavailable: ledger writes")
         | .writeMap .. =>
           emitLift (fail target.span "portable control capability unavailable: ledger writes")
+        | .forRange .. => emitLift (fail target.span "unexpanded finite loop reached portable control emission")
       result := result ++ [item]
     pure result
 end
@@ -503,6 +507,7 @@ copy callee subtrees. Native guarded lowering remains gated until CF-02. -/
 private def compileScalarWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
     (maxPlanBytes : Nat := 1048576) : Except Diagnostic Json := do
   if maxPlanBytes > 1048576 then fail {} "control byte limit exceeds hard policy"
+  let program ← Helpers.prepareProgramWithLimits limits program
   let checked ← Helpers.prepareWithLimits limits program
   checkPreparedDisclosure limits checked entryName
   let summaries := checked.summaries
@@ -546,6 +551,7 @@ Native circuit binding is supplied only by Witness.compile after actual lowering
 def compileTypedWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
     (maxPlanBytes : Nat := 1048576) : Except Diagnostic Json := do
   if maxPlanBytes > 1048576 then fail {} "control byte limit exceeds hard policy"
+  let program ← Helpers.prepareProgramWithLimits limits program
   let checked ← Helpers.prepareWithLimits limits program
   ComponentDisclosure.checkProgram program entryName
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown control entrypoint"

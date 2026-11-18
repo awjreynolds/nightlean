@@ -5431,6 +5431,27 @@
         "typedNativeCases": "active changes to Bytes33/Bytes0/JubjubScalar/JubjubPoint/Secp256k1Base cells and Bytes32->Bytes33 map, inactive preservation, wrong byte length with corrected retry, point projection order and foreign input type rejection"
       },
       "limits": "No new keys/proofs/deployments, cross-profile rerun, portable binding or general preservation theorem. One foreign field is sampled by this combined case. Aggregate/nested state helper bodies and exotic keys remain open."
+    },
+    "finiteRangeLoops": {
+      "checkedOn": "2026-11-18",
+      "source": "../../tests/FiniteRangeWitness.lean",
+      "native": "../../runtime/src/witness_execution/range_ledger_tests.rs",
+      "documentation": "../development/structured-cells.md#finite-range-loops",
+      "newOpcodes": 0,
+      "scope": "Structured Helpers.Statement.forRange lowers literal half-open Native ranges to scoped iterations, capped at 1024 and a pre-allocation saturating nested expansion budget. Empty bodies are typechecked, escaping returns reject, cloned witness sites are fresh. Raw loops fail closed in downstream consumers. Constant-Boolean branches lower only the selected continuation and expire iteration-local closure bindings before later effects.",
+      "checks": {
+        "compilerBuild": "passed,74 jobs",
+        "source": "FiniteRangeWitness, GuardedWitness and Helpers checks passed; includes empty range, index scope, endpoint/order/count/return/type/nested expansion rejects and eight empty iterations within128 lowering steps",
+        "selected321Export": "passed",
+        "native": "one case passed in0.03seconds, active/inactive paths, ordered provider inputs and current-state reads, final total6 or0 and private staging3 or empty, both native checker paths",
+        "artifactBytes": {
+          "impactBefore": 1954016,
+          "impactAfter": 226696,
+          "zkirBefore": 42783,
+          "zkirAfter": 13710
+        }
+      },
+      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable loop grammar, generic loop syntax, anonymous functions and container map/fold remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85."
     }
   }
 }

@@ -1169,6 +1169,7 @@ private def statementTerm : Statement → CommandElabM (TSyntax `term)
     throwError "readable witness source does not support ledger map reads"
   | .writeMap .. => throwError "readable witness source does not support ledger map writes"
   | .branch .. => throwError "readable witness source does not support branch statements yet"
+  | .forRange .. => throwError "readable witness source does not support unexpanded finite loops"
 
 private def inputTerm (name : String) (ty : Ty) (visibility : Noctium.Visibility)
     (span : SourceSpan) : CommandElabM (TSyntax `term) := do

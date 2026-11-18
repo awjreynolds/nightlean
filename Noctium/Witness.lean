@@ -16,6 +16,8 @@ def eraseStages : List Statement → List Statement
   | .stage _ _ _ value :: rest => .evaluate value :: eraseStages rest
   | .branch condition yes no :: rest =>
     .branch condition (eraseStages yes) (eraseStages no) :: eraseStages rest
+  | .forRange index start stop body :: rest =>
+    .forRange index start stop (eraseStages body) :: eraseStages rest
   | statement :: rest => statement :: eraseStages rest
 termination_by body => sizeOf body
 
@@ -125,6 +127,7 @@ private def bindHosted (program : Program) (entry : Export) (entryName : String)
 from executed calls to actual fresh private inputs. Host-only control is separate. -/
 def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
     (circuitName : String := "") (outputName : String := "") : Except Diagnostic Compiled := do
+  let program ← Helpers.prepareProgramWithLimits limits program
   let plan ← Control.compileTypedWithLimits limits program entryName
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown witness entrypoint"
   let lowered ← Helpers.compileHostedWitnessWithLimits limits (eraseProgram program) entryName

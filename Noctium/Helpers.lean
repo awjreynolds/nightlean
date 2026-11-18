@@ -269,6 +269,9 @@ inductive Statement where
   | assert (condition : Term)
   | «return» (value : Option Term := none)
   | branch (condition : Term) (yes no : List Statement)
+  /-- A half-open source range. Preparation lowers each iteration to a
+  constant-true branch with a fresh Native index binding. -/
+  | forRange (index : String) (start stop : Nat) (body : List Statement)
   | stage (capability key : String) (ty : Ty) (value : Term)
   | readCell (state destination : String) (ty : Ty)
   | writeCell (state : String) (ty : Ty) (value : Term)
@@ -349,6 +352,8 @@ private def curveArgumentLimit (limits : Limits) : CurveOp → Nat
 private def resource (span : SourceSpan) (kind : String) : Except Diagnostic α :=
   fail span s!"helper resource limit exceeded: {kind}"
 
+private def maxForRangeEndpoint : Nat := 2 ^ 248 - 1
+
 private def validateCurveArity (span : SourceSpan) (operation : CurveOp) (arguments : List Term) :
     Except Diagnostic Unit := do
   if let .hashToCurve arity := operation then
@@ -374,6 +379,17 @@ private def validateLimits (limits : Limits) : Except Diagnostic Unit := do
 
 private def textMetadata (text : String) : Except Diagnostic Unit := do
   if text.utf8ByteSize > 1024 then resource {} "metadata text"
+
+private def validateForRange (span : SourceSpan) (index : String) (start stop : Nat) :
+    Except Diagnostic Nat := do
+  textMetadata index
+  if start > maxForRangeEndpoint || stop > maxForRangeEndpoint then
+    resource span "finite range endpoint"
+  if start > stop then fail span "finite range start exceeds its stop"
+  let count := stop - start
+  if count > Types.defaultLimits.maxVectorLength then
+    resource span "finite range length"
+  pure count
 
 def validWitnessIdentifier (name : String) : Bool :=
   !name.isEmpty && name.utf8ByteSize ≤ 128 && name.toList.all (fun c =>
@@ -401,6 +417,7 @@ private def termMetadata : Term → Except Diagnostic Unit
 
 private def statementMetadata : Statement → Except Diagnostic Unit
   | .bind name _ _ => textMetadata name
+  | .forRange index _ _ _ => textMetadata index
   | .stage capability key _ _ => do textMetadata capability; textMetadata key
   | .readCell state destination _ => do textMetadata state; textMetadata destination
   | .writeCell state _ _ => textMetadata state
@@ -417,6 +434,7 @@ private def statementTerms : Statement → List Term
   | .writeMap _ _ _ key value => [key, value]
   | .branch condition _ _ => [condition]
   | .return value => value.toList
+  | .forRange .. => []
 
 private def checkLedgerSchema (span : SourceSpan) (ledger : List StateDecl) : Except Diagnostic Unit := do
   unless uniqueNames (ledger.map (·.name)) do fail span "duplicate helper ledger declaration"
@@ -487,6 +505,10 @@ where
             | .branch _ yes no => do
               if yes.length + no.length > fuel then resource span "source nodes"
               pure ((yes ++ no).map SourceNode.statement)
+            | .forRange index start stop body => do
+              discard (validateForRange span index start stop)
+              if body.length > fuel then resource span "source nodes"
+              pure (body.map SourceNode.statement)
             | _ => pure []
           pure (terms ++ arms, statements + 1)
         | .term value => do
@@ -531,6 +553,7 @@ where
         let children := (statementTerms statement).map SourceNode.term
         let arms := match statement with
           | .branch _ yes no => (yes ++ no).map SourceNode.statement
+          | .forRange _ _ _ body => body.map SourceNode.statement
           | _ => []
         go fuel (children ++ arms ++ rest) sites
       | .term term =>
@@ -716,6 +739,178 @@ private def sourcePreflight (limits : Limits) (program : Program) :
       nodes := 3 * (nodes + declaration.parameters.length + 2)
       depth := 3 * (statements + depth + declaration.parameters.length + 2)}) :: sizes
   pure sizes
+
+private partial def bodyHasForRange : List Statement → Bool
+  | [] => false
+  | .forRange _ _ _ _ :: _ => true
+  | .branch _ yes no :: rest =>
+    bodyHasForRange yes || bodyHasForRange no || bodyHasForRange rest
+  | _ :: rest => bodyHasForRange rest
+
+private def traversalTermChildren : Term → List Term
+  | .binary _ left right | .boolAnd left right | .boolOr left right | .boolXor left right
+  | .eq left right | .poseidon2 _ left right | .andThen left right | .orElse left right => [left, right]
+  | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
+  | .project value _ | .bytesAt value _ => [value]
+  | .select condition yes no | .ite condition yes no => [condition, yes, no]
+  | .witnessCall _ _ arguments | .call _ arguments | .composite _ arguments
+  | .curve _ arguments | .bytes _ arguments => arguments
+  | .index value index => [value, index]
+  | _ => []
+
+private def saturatedMultiply (limit left right : Nat) : Nat :=
+  min (limit + 1) (left * right)
+
+private def saturatedSourceAdd (limit left right : Nat) : Nat :=
+  min (limit + 1) (left + right)
+
+/-- Count the compiler-owned expansion without constructing any copies. Every
+generated iteration costs four source nodes for its branch, condition, index
+binding and index value, plus the expanded body. -/
+private def expandedSourceNodeCount (limits : Limits) (program : Program) :
+    Except Diagnostic Nat :=
+  go limits.maxSourceNodes 0
+    (program.declarations.flatMap fun declaration =>
+      declaration.body.map fun statement => (SourceNode.statement statement, 1))
+where
+  go : Nat → Nat → List (SourceNode × Nat) → Except Diagnostic Nat
+    | _, count, [] => pure count
+    | 0, _, _ :: _ => resource {} "expanded source traversal"
+    | fuel + 1, count, (node, multiplier) :: rest => do
+      let cap := limits.maxSourceNodes
+      match node with
+      | .statement statement =>
+        match statement with
+        | .forRange index start stop body => do
+          let iterations ← validateForRange {} index start stop
+          let copies := saturatedMultiply cap multiplier iterations
+          let count := saturatedSourceAdd cap count (saturatedMultiply cap copies 4)
+          let children := body.map fun child => (SourceNode.statement child, copies)
+          go fuel count (children ++ rest)
+        | _ =>
+          let count := saturatedSourceAdd cap count multiplier
+          let terms := (statementTerms statement).map fun term => (SourceNode.term term, multiplier)
+          let arms := match statement with
+            | .branch _ yes no => (yes ++ no).map fun child => (SourceNode.statement child, multiplier)
+            | _ => []
+          go fuel count (terms ++ arms ++ rest)
+      | .term term =>
+        let count := saturatedSourceAdd cap count multiplier
+        let children := (traversalTermChildren term).map fun child => (SourceNode.term child, multiplier)
+        go fuel count (children ++ rest)
+
+private structure ExpansionState where
+  reservedSites : List String
+  nextSite : Nat := 0
+
+private abbrev ExpansionM := StateM ExpansionState
+
+private def freshLoopWitnessSite : ExpansionM String := do
+  let mut selected : Option String := none
+  while selected.isNone do
+    let state ← get
+    let candidate := "noctium.loop.call." ++ toString state.nextSite
+    set {state with nextSite := state.nextSite + 1}
+    if validWitnessIdentifier candidate && !state.reservedSites.contains candidate then
+      modify fun current => {current with reservedSites := candidate :: current.reservedSites}
+      selected := some candidate
+  pure (selected.getD "noctium.loop.call.0")
+
+private partial def freshenTermWitnessSites (term : Term) : ExpansionM Term := do
+  match term with
+  | .binary operation left right =>
+    return .binary operation (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .boolAnd left right => return .boolAnd (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .boolOr left right => return .boolOr (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .boolXor left right => return .boolXor (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .eq left right => return .eq (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .cast target value => return .cast target (← freshenTermWitnessSites value)
+  | .disclose span value => return .disclose span (← freshenTermWitnessSites value)
+  | .select condition yes no =>
+    return .select (← freshenTermWitnessSites condition) (← freshenTermWitnessSites yes)
+      (← freshenTermWitnessSites no)
+  | .ite condition yes no =>
+    return .ite (← freshenTermWitnessSites condition) (← freshenTermWitnessSites yes)
+      (← freshenTermWitnessSites no)
+  | .andThen left right => return .andThen (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .orElse left right => return .orElse (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .witnessCall _site name arguments => do
+    let site ← freshLoopWitnessSite
+    return .witnessCall site name (← arguments.mapM freshenTermWitnessSites)
+  | .poseidon2 domain left right =>
+    return .poseidon2 domain (← freshenTermWitnessSites left) (← freshenTermWitnessSites right)
+  | .curve operation arguments => return .curve operation (← arguments.mapM freshenTermWitnessSites)
+  | .bytes operation arguments => return .bytes operation (← arguments.mapM freshenTermWitnessSites)
+  | .bytesAt value index => return .bytesAt (← freshenTermWitnessSites value) index
+  | .call name arguments => return .call name (← arguments.mapM freshenTermWitnessSites)
+  | .composite type leaves => return .composite type (← leaves.mapM freshenTermWitnessSites)
+  | .project value projection => return .project (← freshenTermWitnessSites value) projection
+  | .index value index => return .index (← freshenTermWitnessSites value) (← freshenTermWitnessSites index)
+  | .effect kind label result => return .effect kind label (← freshenTermWitnessSites result)
+  | .at span value => return .at span (← freshenTermWitnessSites value)
+  | value => pure value
+
+mutual
+private partial def freshenStatementWitnessSites (statement : Statement) : ExpansionM Statement := do
+  match statement with
+  | .bind name type value => return .bind name type (← freshenTermWitnessSites value)
+  | .evaluate value => return .evaluate (← freshenTermWitnessSites value)
+  | .assert condition => return .assert (← freshenTermWitnessSites condition)
+  | .return value => return .return (← value.mapM freshenTermWitnessSites)
+  | .branch condition yes no =>
+    return .branch (← freshenTermWitnessSites condition)
+      (← freshenStatementsWitnessSites yes) (← freshenStatementsWitnessSites no)
+  | .forRange index start stop body =>
+    return .forRange index start stop (← freshenStatementsWitnessSites body)
+  | .stage capability key type value =>
+    return .stage capability key type (← freshenTermWitnessSites value)
+  | .readCell .. => pure statement
+  | .readMap state destination keyType valueType key =>
+    return .readMap state destination keyType valueType (← freshenTermWitnessSites key)
+  | .readMember state destination keyType valueType key =>
+    return .readMember state destination keyType valueType (← freshenTermWitnessSites key)
+  | .writeCell state type value => return .writeCell state type (← freshenTermWitnessSites value)
+  | .writeMap state keyType valueType key value =>
+    return .writeMap state keyType valueType (← freshenTermWitnessSites key)
+      (← freshenTermWitnessSites value)
+
+private partial def freshenStatementsWitnessSites (body : List Statement) : ExpansionM (List Statement) :=
+  body.mapM freshenStatementWitnessSites
+end
+
+mutual
+private partial def expandRangeStatement (statement : Statement) : ExpansionM (List Statement) := do
+  match statement with
+  | .branch condition yes no =>
+    return [.branch condition (← expandRangeBody yes) (← expandRangeBody no)]
+  | .forRange index start stop body => do
+    let mut expanded := []
+    for offset in List.range (stop - start) do
+      let body ← expandRangeBody body
+      let body ← freshenStatementsWitnessSites body
+      let indexValue := Statement.bind index (.scalar .native) (.native (start + offset))
+      expanded := expanded ++ [.branch (.bool true) (indexValue :: body) []]
+    return expanded
+  | statement => return [statement]
+
+private partial def expandRangeBody (body : List Statement) : ExpansionM (List Statement) := do
+  let mut expanded := []
+  for statement in body do
+    expanded := expanded ++ (← expandRangeStatement statement)
+  pure expanded
+end
+
+private partial def rejectLoopReturns (span : SourceSpan) (fuel : Nat)
+    (body : List Statement) : Except Diagnostic Unit := go fuel body
+where
+  go : Nat → List Statement → Except Diagnostic Unit
+    | _, [] => pure ()
+    | 0, _ :: _ => resource span "finite range return scan"
+    | fuel + 1, statement :: rest => match statement with
+      | .return _ => fail span "return cannot escape a finite range body"
+      | .branch _ yes no => go fuel (yes ++ no ++ rest)
+      | .forRange _ _ _ nested => go fuel (nested ++ rest)
+      | _ => go fuel rest
 
 /-- Change declaration bodies while preserving program metadata and declaration
 identity. This bridge lets source transformations reuse the checked resolver. -/
@@ -1160,19 +1355,6 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       pure (combine result.ty [result] [kind])
     | .at span value => inferTerm fuel program scope env span value
 
-def inferWithLimits (limits : Limits) (program : Program) (scope : Nat) (env : Environment)
-    (span : SourceSpan) (value : Term) : Except Diagnostic TermInfo := do
-  discard (sourcePreflight limits program)
-  spanMetadata span
-  discard (scanTerms limits span limits.maxSourceNodes [value])
-  if env.length > limits.maxSourceNodes then resource span "type environment"
-  for (name, _) in env do textMetadata name
-  inferTerm limits.maxSourceDepth program scope env span value
-
-def infer (program : Program) (scope : Nat) (env : Environment) (span : SourceSpan)
-    (value : Term) : Except Diagnostic TermInfo :=
-  inferWithLimits {} program scope env span value
-
 structure Summary where
   id : DeclarationId
   calls : List DeclarationId
@@ -1259,6 +1441,12 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
           let no ← checkBody limits program declaration fuel env no []
           result := {result with returned := result.returned || (yes.returned && no.returned)}
           pure {ty := .unit, calls := condition.calls ++ yes.calls ++ no.calls, effects := (condition.effects ++ yes.effects ++ no.effects).eraseDups, guarded := true}
+        | .forRange index start stop loopBody => do
+          discard (validateForRange span index start stop)
+          rejectLoopReturns span limits.maxSourceNodes loopBody
+          let bodyInfo ← checkBody limits program declaration fuel
+            ((index, .scalar .native) :: env) loopBody [index]
+          pure {ty := .unit, calls := bodyInfo.calls, effects := bodyInfo.effects, guarded := bodyInfo.guarded}
         | .stage _ _ ty value => do
           liftError span (ty.validate Capabilities.crypto)
           let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
@@ -1313,10 +1501,49 @@ private def checkDeclarationUnchecked (limits : Limits) (program : Program) (dec
   unless info.returned || declaration.result == .unit do fail span "helper fall-through returns unit, incompatible with declared result"
   pure {id := declaration.id, calls := info.calls, direct := info.effects, guarded := info.guarded}
 
+/-- Validate and lower finite ranges into ordinary checked helper syntax.
+Expansion happens only after the weighted source budget and original body
+typing checks pass. -/
+def prepareProgramWithLimits (limits : Limits) (program : Program) :
+    Except Diagnostic Program := do
+  discard (sourcePreflight limits program)
+  let expandedNodes ← expandedSourceNodeCount limits program
+  if expandedNodes > limits.maxSourceNodes then resource {} "expanded source nodes"
+  if program.declarations.any (fun declaration => bodyHasForRange declaration.body) then
+    for declaration in program.declarations do
+      if bodyHasForRange declaration.body then
+        discard (checkDeclarationUnchecked limits program declaration)
+    let originalSites ← program.declarations.mapM fun declaration =>
+      witnessSites declaration.body limits.maxSourceNodes
+    let initial : ExpansionState := {reservedSites := originalSites.flatten}
+    let expandDeclarations : ExpansionM (List Declaration) := do
+      program.declarations.mapM fun (declaration : Declaration) => do
+        let body ← expandRangeBody declaration.body
+        pure {declaration with body}
+    let (declarations, _) := expandDeclarations.run initial
+    let prepared := {program with declarations}
+    discard (sourcePreflight limits prepared)
+    pure prepared
+  else pure program
+
+def inferWithLimits (limits : Limits) (program : Program) (scope : Nat) (env : Environment)
+    (span : SourceSpan) (value : Term) : Except Diagnostic TermInfo := do
+  let program ← prepareProgramWithLimits limits program
+  spanMetadata span
+  discard (scanTerms limits span limits.maxSourceNodes [value])
+  if env.length > limits.maxSourceNodes then resource span "type environment"
+  for (name, _) in env do textMetadata name
+  inferTerm limits.maxSourceDepth program scope env span value
+
+def infer (program : Program) (scope : Nat) (env : Environment) (span : SourceSpan)
+    (value : Term) : Except Diagnostic TermInfo :=
+  inferWithLimits {} program scope env span value
+
 def checkDeclarationWithLimits (limits : Limits) (program : Program) (declaration : Declaration) :
     Except Diagnostic Summary := do
-  discard (sourcePreflight limits program)
+  let program ← prepareProgramWithLimits limits program
   discard (sourcePreflight limits {program with declarations := [declaration]})
+  let declaration := (program.declarations.find? (·.id == declaration.id)).getD declaration
   checkDeclarationUnchecked limits program declaration
 
 def checkDeclaration (program : Program) (declaration : Declaration) : Except Diagnostic Summary :=
@@ -1370,6 +1597,7 @@ where
 /-- Unreachable recursion is pruned before cycle/purity analysis. Every declared
 signature and statement is still statically checked. -/
 def analyzeWithLimits (limits : Limits) (program : Program) : Except Diagnostic (List Summary) := do
+  let program ← prepareProgramWithLimits limits program
   let sizes ← sourcePreflight limits program
   unless uniqueNames (program.scopes.map (toString ∘ Scope.id)) do fail {} "duplicate helper scope identity"
   unless (program.declarations.map (·.id)).eraseDups.length == program.declarations.length do
@@ -1440,6 +1668,7 @@ structure Prepared where
   resolve : Nat → String → List ResultType → SourceSpan → Except Diagnostic Declaration
 
 def prepareWithLimits (limits : Limits) (program : Program) : Except Diagnostic Prepared := do
+  let program ← prepareProgramWithLimits limits program
   let summaries ← analyzeWithLimits limits program
   pure {
     program, summaries
@@ -2246,6 +2475,24 @@ mutual
             pure {body with
               scalar := ⟨body.scalar.ty, .assertE conditionExpr body.scalar.value⟩
               constraints := condition.constraints ++ body.constraints}
+      | .branch (.bool conditionValue) yes no => do
+        let entryState ← get
+        let resume : LowerEnv → LowerM Lowered := fun _ => do
+          let branchState ← get
+          modify fun state => {state with
+            guard := entryState.guard, guardActive := entryState.guardActive,
+            localBindings := entryState.localBindings}
+          let body ← lowerBodyWith program declaration env rest continuation
+          let finalState ← get
+          modify fun _state => {finalState with localBindings := branchState.localBindings}
+          pure body
+        let selected ← lowerBodyWith program declaration env
+          (if conditionValue then yes else no) resume
+        let finalState ← get
+        modify fun _state => {finalState with
+          guard := entryState.guard, guardActive := entryState.guardActive,
+          localBindings := entryState.localBindings}
+        pure selected
       | .branch condition yes no => do
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
         if (← get).ledgerMode then appendLedgerConstraints declaration.span condition.constraints
@@ -2311,6 +2558,7 @@ mutual
         let value ← liftD (typedExpr declaration.span valueTy value)
         appendLedgerEffect declaration.span (.writeMap stateName keyTy valueTy key value)
         lowerBodyWith program declaration env rest continuation
+      | .forRange .. => liftD (fail declaration.span "unprepared finite range reached helper lowering")
       | .stage .. => liftD (fail declaration.span "native helper capability unavailable: private state")
       | .return _ => liftD (fail declaration.span "invalid helper statement sequence")
 end
@@ -2319,6 +2567,7 @@ end
 No caller-supplied summary or disclosure exemption is accepted. -/
 private def compileHostedMode (limits : Limits) (program : Program) (entryName : String)
     (allowGuardedWitnesses : Bool) : Except Diagnostic HostedCircuit := do
+  let program ← prepareProgramWithLimits limits program
   let summaries ← analyzeWithLimits limits program
   for summary in summaries do
     if summary.guarded && summary.effects.contains .witness && !allowGuardedWitnesses then
@@ -2418,6 +2667,7 @@ structure HostedEntrypoint where
 
 private def compileEntrypointForState (allowWitnesses : Bool) (limits : Limits) (program : Program)
     (entryName : String) (ledger : List StateDecl) : Except Diagnostic HostedEntrypoint := do
+  let program ← prepareProgramWithLimits limits program
   let summaries ← analyzeWithLimits limits program
   for summary in summaries do
     for effect in summary.effects do
@@ -2703,6 +2953,8 @@ mutual
       let condition ← traceTerm program ctx declaration.id.scope env declaration.span condition >>= traceScalar declaration.span
       let result ← traceBlock program ctx declaration env (if condition.number == 0 then no else yes)
       if result.1 then pure result else traceBlock program ctx declaration env rest
+    | .forRange .. :: _ =>
+      liftM (fail declaration.span "unprepared finite range reached helper trace")
     | .readCell .. :: _ =>
       liftM (fail declaration.span "ledger reads require the native contract runtime")
     | .writeCell .. :: _ =>
@@ -2718,6 +2970,7 @@ end
 from native capability support. No witness callback or external side effect runs. -/
 def traceWithLimits (limits : Limits) (program : Program) (ctx : EvalContext) (entryName : String)
     (inputs : List ScalarPolicy.Value) : Except Diagnostic (TraceValue × List String) := do
+  let program ← prepareProgramWithLimits limits program
   discard (analyzeWithLimits limits program)
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown helper trace entrypoint"
   let declaration ← lookup program entry.target entry.span

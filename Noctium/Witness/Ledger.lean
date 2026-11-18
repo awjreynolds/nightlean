@@ -117,6 +117,7 @@ private def transformStatement (statement : Statement) : BuildM (List Statement 
     let notify := Statement.evaluate (callTerm site name [.ref keyName, .ref valueName])
     pure ([bindKey, bindValue, notify],
       [bindKey, bindValue, .writeMap state keyTy valueTy (.ref keyName) (.ref valueName), notify])
+  | .forRange .. => throw {span := {}, message := "unexpanded finite loop reached ledger witness transformation"}
   | other => pure ([other], [other])
 
 private def transformBody : List Statement → BuildM (List Statement × List Statement)
@@ -147,6 +148,7 @@ decreasing_by all_goals simp_wf <;> omega
 /-- Replace ledger statements with typed host calls while retaining the native
 state effects and an equality check tying every disclosed read to ledger state. -/
 def transform (program : Program) : Except Diagnostic Transformed := do
+  let program ← Helpers.prepareProgramWithLimits {} program
   discard (Helpers.analyze program)
   let source := reprStr program
   let initial : BuildState := {

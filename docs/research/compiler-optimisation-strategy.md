@@ -1,6 +1,8 @@
 # Compiler optimisation strategy
 
-Start with one phase profile of the token compile. Then select the requested artifacts before lowering and remove repeated work within one compilation. The circuit work has a separate first candidate in repeated range checks on the same immutable operand. Each change has a measurable outcome and a small rejection case below.
+Status: deferred under [issue 85](https://github.com/awjreynolds/noctium/issues/85). Capability implementation takes priority. Fix avoidable expansion introduced by a feature alongside that feature. Use the sequence below when a real workload warrants broader optimisation, rather than as a prerequisite to shipping the POC. No new profiling campaign has started.
+
+When needed, start with one phase profile of the affected compile. Then select the requested artifacts before lowering and remove measured repeated work within one compilation. Repeated range checks on the same immutable operand are a separate circuit candidate. Each change needs a measurable outcome and a small rejection case below.
 
 This review uses compiler revision `508b85c`. Revision `c0195e1` changed the pitch graphic and caption. The concurrent finite-range loop changes are outside the baseline. The compiler, typed IR, optimisation passes and lowering belong in Lean. Rust runs the native Midnight libraries. The supported surface covers 39 of 47 registered operations and scoped support across 15 native type families. [Project scope](../compatibility/GOAL.md) · [Runtime pins](../../runtime/Cargo.toml)
 

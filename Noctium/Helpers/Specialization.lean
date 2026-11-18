@@ -1136,6 +1136,7 @@ private partial def collectWitnessStatements : List Helpers.Statement → Array 
         let result := collectWitnessTerms condition result
         let result := collectWitnessStatements yes result
         collectWitnessStatements no result
+      | .forRange _ _ _ body => collectWitnessStatements body result
       | .readCell .. => result
       | .writeCell _ _ value => collectWitnessTerms value result
       | .readMap _ _ _ _ key | .readMember _ _ _ _ key =>

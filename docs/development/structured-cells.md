@@ -88,3 +88,28 @@ The focused [Rust case](../../runtime/src/witness_execution/typed_ledger_tests.r
 The source type gate covers registered scalar families. This combined native case samples one foreign field family. Other foreign overloads, nested/aggregate helper state, exotic map keys, portable bindings and general preservation remain separate obligations. No new opcode, key, proof or deployment accompanies this extension.
 
 Typed state implementation revision: `fe73696b64e3d1170aab3e31a17f3ae97b799d6a`. The compiler, source export, byte semantics and eight combined/previous runtime cases pass. The native cases finish in 0.04 seconds.
+
+
+## Finite range loops
+
+Structured programs accept a half-open compile-time range:
+
+```lean
+.forRange "index" 1 4 [
+  .readCell "total" "before" .native,
+  .bind "delta" (.scalar .native)
+    (.witnessCall "range-step" "step" [.ref "index", .ref "before"]),
+  .writeCell "total" .native
+    (.disclose {} (.binary .add (.ref "before") (.ref "delta"))),
+  .stage "private" "loop/last" .native (.ref "delta")]
+```
+
+The Native index is local to each iteration. Bounds must be ordered constants no greater than `2^248 - 1`. Each range has at most 1,024 iterations. A saturating nested expansion budget rejects oversized bodies before cloning. Empty ranges still typecheck their bodies. Returns inside a loop body reject, including unreachable returns. A called helper retains its own return scope.
+
+Circuit loops expand statically. Each cloned witness call receives a distinct site identity. Constant scope branches lower only their selected path, avoiding repeated copies of the remaining iterations. Later effects exclude expired iteration-local bindings. Dynamic branch lowering retains its existing guarded continuation behavior.
+
+The three-iteration fixture initially occupied 1,954,016 bytes for its Impact plan and 42,783 bytes for ZKIR. Selecting constant branches once and excluding expired iteration bindings reduces these to 226,696 and 13,710 bytes respectively. This measures artifact size, without a new timing, K or proof benchmark.
+
+The [source example](../../tests/FiniteRangeWitness.lean) performs three ordered read/provider/write/stage iterations. Its [native case](../../runtime/src/witness_execution/range_ledger_tests.rs) checks provider inputs `(1,0)`, `(2,1)`, `(3,3)`, final public total 6 and staged private value 3. An inactive outer branch makes no provider calls, stages no writes and preserves total 0. Both completed paths pass the selected native checker.
+
+This is a structured Helpers API, without new surface loop grammar or native opcodes. Anonymous functions, container iteration, map/fold and general loop preservation remain open under [issue 48](https://github.com/awjreynolds/noctium/issues/48). No new keys, proofs, deployments or cross-profile campaign accompany this slice.
