@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "4d0886b6424b384a2c25185b40a2969a842ad033",
+    "sourceCommit": "0577238d1ada957ba5cdff5f2b84b1e8d2447f6f",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -5330,6 +5330,29 @@
         "privateTranscriptFields": 105,
         "outputBindings": 6
       }
+    },
+    "nativeHelperBranches": {
+      "checkedOn": "2026-11-18",
+      "sourceCommit": "0577238d1ada957ba5cdff5f2b84b1e8d2447f6f",
+      "implementation": "../../Noctium/Helpers.lean",
+      "sharedGuardTransformation": "../../Noctium/GuardedExpression.lean",
+      "source": "../../tests/NativeHelperBranches.lean",
+      "native": "../../runtime/tests/native_helper_branches.rs",
+      "documentation": "../development/native-helper-branches.md",
+      "newOpcodes": 0,
+      "scope": "Witness-free branch statements and lazy expressions, scoped bindings, early returns, unit/scalar/aggregate results and retained empty-aggregate sequencing. Helper results compose with existing guarded contract effects.",
+      "checks": {
+        "compilerClaimBuild": "passed, 71 jobs",
+        "sourceAndExistingHelpersControlComponentDisclosure": "passed",
+        "nativeCase": "passed, one case in 0.01 seconds",
+        "existingStraightLineHelperRelations": "three retained native relations byte-identical before/after",
+        "existingGuardedPartialContract": "native relation and plan byte-identical",
+        "nativeInstructionCount": 16,
+        "publicNativeInputs": 1,
+        "privateBoolInputs": 1,
+        "returnBindings": 1
+      },
+      "limits": "No new keys/proofs/deployments or K benchmark. Guarded witness scheduling and structured helper state/effect integration remain open under #43. Host-control plans retain nativeGuardQualified:false. Pure condition work repeats across separate host output/constraint expressions; native sharing follows existing CSE. Full compiler preservation remains open."
     }
   }
 }

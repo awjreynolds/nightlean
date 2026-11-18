@@ -596,7 +596,21 @@
         "Noctium/Semantics.lean",
         "scripts/zkir/native-runtime.mjs"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "nativeBranchUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0577238d1ada957ba5cdff5f2b84b1e8d2447f6f",
+        "scope": "Witness-free helper statement branches, lazy ite/andThen/orElse and unit/scalar/aggregate results lower through shared native guard totalization. Branch scopes and early returns are preserved; zero-leaf aggregate results retain failing unit-call sequencing. The focused Source/native case connects helper results to guarded contract cell updates.",
+        "evidence": [
+          "Noctium/GuardedExpression.lean",
+          "Noctium/Helpers.lean",
+          "tests/NativeHelperBranches.lean",
+          "runtime/tests/native_helper_branches.rs",
+          "docs/development/native-helper-branches.md"
+        ],
+        "limits": "Guarded witness scheduling and ledger/private-state/event/call statements inside helper bodies remain gated. Host-control plans remain nativeGuardQualified:false. Pure host condition computations repeat across distinct output/constraint expressions. No new keys/proofs/deployments or general preservation qualification.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-CONTROL",
@@ -612,7 +626,21 @@
         "ZK"
       ],
       "observedEvidence": [],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "nativeBranchUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0577238d1ada957ba5cdff5f2b84b1e8d2447f6f",
+        "scope": "Witness-free helper statement branches, lazy ite/andThen/orElse and unit/scalar/aggregate results lower through shared native guard totalization. Branch scopes and early returns are preserved; zero-leaf aggregate results retain failing unit-call sequencing. The focused Source/native case connects helper results to guarded contract cell updates.",
+        "evidence": [
+          "Noctium/GuardedExpression.lean",
+          "Noctium/Helpers.lean",
+          "tests/NativeHelperBranches.lean",
+          "runtime/tests/native_helper_branches.rs",
+          "docs/development/native-helper-branches.md"
+        ],
+        "limits": "Guarded witness scheduling and ledger/private-state/event/call statements inside helper bodies remain gated. Host-control plans remain nativeGuardQualified:false. Pure host condition computations repeat across distinct output/constraint expressions. No new keys/proofs/deployments or general preservation qualification.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-LANG-LOOP",
@@ -672,6 +700,20 @@
           "docs/development/named-helpers.md",
           "tests/helpers/qualification-evidence.json"
         ],
+        "fullEquivalence": "unverified"
+      },
+      "nativeBranchUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "0577238d1ada957ba5cdff5f2b84b1e8d2447f6f",
+        "scope": "Witness-free helper statement branches, lazy ite/andThen/orElse and unit/scalar/aggregate results lower through shared native guard totalization. Branch scopes and early returns are preserved; zero-leaf aggregate results retain failing unit-call sequencing. The focused Source/native case connects helper results to guarded contract cell updates.",
+        "evidence": [
+          "Noctium/GuardedExpression.lean",
+          "Noctium/Helpers.lean",
+          "tests/NativeHelperBranches.lean",
+          "runtime/tests/native_helper_branches.rs",
+          "docs/development/native-helper-branches.md"
+        ],
+        "limits": "Guarded witness scheduling and ledger/private-state/event/call statements inside helper bodies remain gated. Host-control plans remain nativeGuardQualified:false. Pure host condition computations repeat across distinct output/constraint expressions. No new keys/proofs/deployments or general preservation qualification.",
         "fullEquivalence": "unverified"
       }
     },

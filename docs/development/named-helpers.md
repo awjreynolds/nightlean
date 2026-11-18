@@ -94,9 +94,11 @@ clears only the wrapped value's origins. Assertion arguments are checked for
 valid origins, but assertion success/failure is outside DF-00's current
 successful-execution disclosure claim. Helpers add no disclosure exemption.
 
-This package supports scalar parameters/results and unit. Composite execution,
-component-level disclosure, branch execution, anonymous operators and generics
-belong to their separate feature tickets.
+The original package supports scalar parameters/results and unit. Later slices
+add checked composites, component disclosure and generics. [Native helper
+branches](native-helper-branches.md) now cover witness-free structured control,
+including unit and aggregate results. Anonymous operators and general
+structured witness/state effects remain in their feature tickets.
 
 ## Compiler resource policy
 

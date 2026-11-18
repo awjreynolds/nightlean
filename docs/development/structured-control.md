@@ -5,8 +5,10 @@ operators to the typed helper source model. Portable host execution uses the
 Rust continuation machine and a separate C ABI. Node is unnecessary for source
 compilation, callback execution and the C++ adapter.
 
-Native proof and ledger lowering of general structured guards stays unavailable
-until CF-02. The old eager scalar `select` keeps its existing semantics. Host
+The [native helper route](native-helper-branches.md) now lowers witness-free
+branches and lazy expressions, with results usable by guarded contract effects.
+General structured witness/state effects and their complete proof/ledger path
+remain under CF-02. The old eager scalar `select` keeps its existing semantics. Host
 execution establishes no theorem about native guarded proof soundness.
 
 ## Bounded native write guards

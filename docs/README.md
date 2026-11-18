@@ -61,6 +61,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Scalar byte decoding](development/scalar-from-bytes.md), direct Native/Jubjub reduction of bounded byte strings with empty-input checks.
 - [Ordered transient hashing](development/transient-hash.md), raw field-vector hashing, empty inputs and the exact pinned Schnorr preimage boundary.
 - [Typed signature helpers](development/signatures.md), ECDSA, Schnorr, Ed25519 and Ethereum addresses with explicit disclosure and protocol boundaries.
+- [Native helper branches](development/native-helper-branches.md), witness-free lazy control, scoped bindings and guarded cell updates through shared native lowering.
 - [Jubjub ledger storage](development/jubjub-storage.md), checked scalar/point values across cells, maps and nested leaves.
 - [Nested foreign ledger state](development/foreign-trees.md), typed scalar leaves, parent creation, guarded defaults and preserved sibling entries.
 - [Curve25519 types](development/curve25519.md), prime-order Edwards points, distinct scalar encoding, typed operations and point storage.
