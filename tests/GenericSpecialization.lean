@@ -78,6 +78,89 @@ private def runtimeArgumentProgram : GProgram := {
 #guard messageContains (specialize kindProgram "entry") "kind mismatch"
 #guard messageContains (specialize runtimeArgumentProgram "entry") "runtime generic argument"
 
+private def genericRangeProgram : GProgram := {
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "range"
+    parameters := [⟨"N", .natural⟩]
+    result := .unit
+    body := [
+      .forRange "index" (.literal 1) (.parameter "N") [.evaluate (.ref "index")],
+      .return none]
+  }]
+  exports := [
+    genericExport "short" ⟨0, 0⟩ [.natural (.literal 3)],
+    genericExport "long" ⟨0, 0⟩ [.natural (.literal 6)]
+  ]
+}
+
+private def hasGenericRange (program : Helpers.Program) (exportName : String) (stop : Nat) : Bool :=
+  match program.exports.find? (·.name == exportName) with
+  | some entry => match program.declarations.find? (·.id == entry.target) with
+    | some declaration => match declaration.body with
+      | [.forRange "index" 1 actualStop _, .return none] => actualStop == stop
+      | _ => false
+    | none => false
+  | none => false
+
+-- Generic Nat endpoints specialize into the existing bounded Helpers loop form.
+#guard match specialize genericRangeProgram "short" with
+  | .ok result => hasGenericRange result.program "short" 3 &&
+      (Helpers.compile result.program result.exportName).isOk
+  | .error _ => false
+
+#guard messageContains
+  (specialize {genericRangeProgram with exports :=
+    [genericExport "reverse" ⟨0, 0⟩ [.natural (.literal 0)]]} "reverse")
+  "finite range start exceeds its stop"
+
+-- Different Nat specializations in one batch retain distinct endpoint values.
+#guard match specializeBatch genericRangeProgram ["long", "short"] with
+  | .ok result => hasGenericRange result.program "short" 3 &&
+      hasGenericRange result.program "long" 6
+  | .error _ => false
+
+private def missingRangeNaturalProgram : GProgram := {
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "range"
+    result := .unit
+    body := [.forRange "index" (.literal 0) (.parameter "N") [], .return none]
+  }]
+  exports := [genericExport "entry" ⟨0, 0⟩ []]
+}
+
+#guard messageContains (specialize missingRangeNaturalProgram "entry")
+  "runtime generic argument 'N'"
+
+private def excessiveRangeProgram : GProgram := {
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "range"
+    parameters := [⟨"N", .natural⟩]
+    result := .unit
+    body := [.forRange "index" (.literal 0) (.parameter "N") [], .return none]
+  }]
+  exports := [genericExport "entry" ⟨0, 0⟩ [.natural (.literal 1025)]]
+}
+
+#guard messageContains (specialize excessiveRangeProgram "entry") "finite range length"
+
+private def genericRangeIndexEscapeProgram : GProgram := {
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "range"
+    result := .native
+    body := [
+      .forRange "index" (.literal 0) (.literal 1) [],
+      .return (some (.ref "index"))]
+  }]
+  exports := [genericExport "entry" ⟨0, 0⟩ []]
+}
+
+#guard messageContains (specialize genericRangeIndexEscapeProgram "entry")
+  "unknown helper value 'index'"
+
 -- GEN-MONOMORPHIC-ENTRY: exports lower to concrete Helpers signatures.
 #guard match specialize (identityProgram (.uint (.literal 255))) "entry" with
   | .ok result => result.program.declarations.any fun declaration =>

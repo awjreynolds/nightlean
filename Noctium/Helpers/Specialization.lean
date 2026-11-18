@@ -99,6 +99,7 @@ inductive Statement where
   | assert (condition : Term)
   | «return» (value : Option Term := none)
   | branch (condition : Term) (yes no : List Statement)
+  | forRange (index : String) (start stop : Natural) (body : List Statement)
   | stage (capability key : String) (type : GenericType) (value : Term)
   deriving Repr, Inhabited
 
@@ -536,6 +537,7 @@ private def sourceNodeMetadata (span : SourceSpan) : SourceNode → Except Diagn
     | _ => pure ()
   | .statement statement => match statement with
     | .bind name _ _ => textLimit span name
+    | .forRange index _ _ _ => textLimit span index
     | .stage capability key _ _ => do
       textLimit span capability
       textLimit span key
@@ -590,6 +592,9 @@ private def sourceChildren (limits : Limits) (span : SourceSpan) :
       if yes.length + no.length > limits.maxSourceNodes then resource span "source nodes"
       let arms := (yes.map SourceNode.statement) ++ (no.map SourceNode.statement)
       pure (SourceNode.term condition :: arms)
+    | .forRange _ start stop body => do
+      if body.length + 2 > limits.maxSourceNodes then resource span "source nodes"
+      pure ([SourceNode.natural start, SourceNode.natural stop] ++ body.map SourceNode.statement)
     | .stage _ _ type value => pure [.typeExpr type, .term value]
 
 private def scanNodes (limits : Limits) (span : SourceSpan) (available : Nat)
@@ -822,6 +827,12 @@ mutual
         let yes ← convertBody limits declaration types naturals values yes
         let no ← convertBody limits declaration types naturals values no
         result := result.push (.branch condition yes no)
+      | .forRange index start stop body => do
+        let start ← evalNatural limits declaration.span naturals start
+        let stop ← evalNatural limits declaration.span naturals stop
+        let body ← convertBody limits declaration types naturals
+          ((index, .scalar .native) :: values) body
+        result := result.push (.forRange index start stop body)
       | .stage capability key type value => do
         let concrete ← normalizeType limits declaration.span types naturals type
         let .scalar ty := concrete | liftM (fail declaration.span "generic private stage requires a scalar type")

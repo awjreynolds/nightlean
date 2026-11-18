@@ -761,7 +761,7 @@
       "layer": "language",
       "surface": "Statically bounded for loops",
       "noctiumStatus": "subset",
-      "notes": "Finite Helpers.Statement.forRange with literal half-open Native bounds, at most 1024 iterations and preflight nested expansion budget. Body types checked even when empty. Loop returns rejected. Compile-time Nat parameters require prior specialization. Readable loop grammar and fixed-container iteration remain open. See tests/FiniteRangeWitness.lean and docs/development/structured-cells.md#finite-range-loops.",
+      "notes": "Finite Helpers.Statement.forRange with literal half-open Native bounds, at most 1024 iterations and preflight nested expansion budget. Body types checked even when empty. Loop returns rejected. Generic ranges accept compile-time Nat expressions and use the same bounds and normalization after specialization. Readable loop grammar and fixed-container iteration remain open. See tests/FiniteRangeWitness.lean and docs/development/structured-cells.md#finite-range-loops.",
       "source": [
         "reference"
       ],

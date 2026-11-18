@@ -5438,7 +5438,7 @@
       "native": "../../runtime/src/witness_execution/range_ledger_tests.rs",
       "documentation": "../development/structured-cells.md#finite-range-loops",
       "newOpcodes": 0,
-      "scope": "Structured Helpers.Statement.forRange lowers literal half-open Native ranges to scoped iterations, capped at 1024 and a pre-allocation saturating nested expansion budget. Empty bodies are typechecked, escaping returns reject, cloned witness sites are fresh. Raw loops fail closed in downstream consumers. Constant-Boolean branches lower only the selected continuation and expire iteration-local closure bindings before later effects.",
+      "scope": "Structured Helpers.Statement.forRange lowers literal half-open Native ranges to scoped iterations, capped at 1024 and a pre-allocation saturating nested expansion budget. Empty bodies are typechecked, escaping returns reject, cloned witness sites are fresh. Raw loops fail closed in downstream consumers. Constant-Boolean branches lower only the selected continuation and expire iteration-local closure bindings before later effects. Generic range endpoints accept compile-time Natural expressions and preserve the same index scope and preparation path after specialization.",
       "checks": {
         "compilerBuild": "passed,74 jobs",
         "source": "FiniteRangeWitness, GuardedWitness and Helpers checks passed; includes empty range, index scope, endpoint/order/count/return/type/nested expansion rejects and eight empty iterations within128 lowering steps",
@@ -5449,9 +5449,11 @@
           "impactAfter": 226696,
           "zkirBefore": 42783,
           "zkirAfter": 13710
-        }
+        },
+        "genericRangeSpecialization": "passed, compile-time Nat substitution, distinct endpoint instances, actual specialized circuit compilation, reversed/oversized/missing-N/index-escape rejection"
       },
-      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable loop grammar, generic loop syntax, anonymous functions and container map/fold remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85."
+      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable loop grammar, anonymous functions and container map/fold remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85.",
+      "genericSource": "../../tests/GenericSpecialization.lean"
     }
   }
 }

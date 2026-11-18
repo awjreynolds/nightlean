@@ -46,7 +46,19 @@ retained composite declarations and layout nodes, work, argument count, depth
 and natural values. Active recursive or growing specializations fail with a
 Noctium cycle diagnostic. These are Noctium implementation caps,
 not Compact language limits. [Module visibility](https://github.com/awjreynolds/noctium/issues/47)
-and [finite iteration](https://github.com/awjreynolds/noctium/issues/48) remain separate work.
+and the remaining [iteration operators](https://github.com/awjreynolds/noctium/issues/48) have separate evidence.
+
+## Generic finite ranges
+
+`Specialization.Statement.forRange` takes compile-time `Natural` expressions for both bounds. A declaration with Nat parameter `N` writes a range as:
+
+```lean
+.forRange "index" (.literal 0) (.parameter "N") body
+```
+
+Specialization resolves bounds before the ordinary Helpers range preparation. The Native index belongs to the loop body. Each concrete instance receives the existing 1,024-iteration limit and pre-allocation nested expansion check. Missing Nat parameters, reversed bounds, oversized ranges and an index referenced outside its body reject. Distinct normalized Nat arguments retain distinct declaration identities.
+
+The focused checks in `tests/GenericSpecialization.lean` cover this conversion and its rejection paths. The native range execution evidence is shared with [finite ranges](structured-cells.md#finite-range-loops). The historical qualification below predates this extension. General generic-loop preservation, anonymous operators and map/fold remain open.
 
 ## Published qualification
 
