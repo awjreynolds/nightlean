@@ -9,7 +9,7 @@ open scoped Noctium
 namespace OpenZeppelinPort
 
 noctium_witness freshSeed() : Bytes32
-noctium_witness plaintextBalance(c1 : JubjubPoint, c2 : JubjubPoint) : UInt 128
+noctium_witness plaintextBalance(c1 : JubjubPoint, c2 : JubjubPoint) : UInt 248
 
 noctium_private_state Wallet where
   cell accountSecret : Bytes32
@@ -124,7 +124,7 @@ noctium_witness_circuit transferValue where
   public pendingC2Y : Native
   public epoch : UInt 64
   let seed : Bytes32 := witness freshSeed()
-  let plaintext : UInt 128 := witness plaintextBalance(
+  let plaintext : UInt 248 := witness plaintextBalance(
     jubjubFromCoordinates(balanceC1X, balanceC1Y),
     jubjubFromCoordinates(balanceC2X, balanceC2Y))
   let identity : JubjubPoint := jubjubFromCoordinates(0, 1)
@@ -137,7 +137,7 @@ noctium_witness_circuit transferValue where
   let recipientC1 : JubjubPoint := jubjubFromCoordinates(pendingC1X, pendingC1Y)
   let recipientC2 : JubjubPoint := jubjubFromCoordinates(pendingC2X, pendingC2Y)
   let valueField : Native := cast(Native, value)
-  let remaining : UInt 128 := sub(plaintext, value)
+  let remaining : UInt 248 := sub(plaintext, cast(UInt 248, value))
   let valuePoint : JubjubPoint := jubjubMulGenerator(jubjubScalarFromNative(valueField))
   let debitHash : Bytes32 := persistentHashVector32([
     seed, bytes32("debit_balance")])
@@ -200,7 +200,7 @@ noctium_witness_circuit debitBalance where
   public balanceC2X : Native
   public balanceC2Y : Native
   let seed : Bytes32 := witness freshSeed()
-  let plaintext : UInt 128 := witness plaintextBalance(
+  let plaintext : UInt 248 := witness plaintextBalance(
     jubjubFromCoordinates(balanceC1X, balanceC1Y),
     jubjubFromCoordinates(balanceC2X, balanceC2Y))
   let identity : JubjubPoint := jubjubFromCoordinates(0, 1)
@@ -210,7 +210,7 @@ noctium_witness_circuit debitBalance where
   let ownerPk : JubjubPoint := jubjubMulGenerator(encryptionScalar)
   let ownerC1 : JubjubPoint := jubjubFromCoordinates(balanceC1X, balanceC1Y)
   let ownerC2 : JubjubPoint := jubjubFromCoordinates(balanceC2X, balanceC2Y)
-  let remaining : UInt 128 := sub(plaintext, value)
+  let remaining : UInt 248 := sub(plaintext, cast(UInt 248, value))
   let valueField : Native := cast(Native, value)
   let valuePoint : JubjubPoint := jubjubMulGenerator(jubjubScalarFromNative(valueField))
   let debitHash : Bytes32 := persistentHashVector32([
@@ -236,6 +236,91 @@ noctium_witness_circuit debitBalance where
   output nextC1Y : Native := disclose(jubjubY(nextC1))
   output nextC2X : Native := disclose(jubjubX(nextC2))
   output nextC2Y : Native := disclose(jubjubY(nextC2))
+end
+
+noctium_witness_circuit approveEscrow where
+  read private Wallet.accountSecret as accountSecret
+  read private Wallet.encryptionSecret as encryptionSecret
+  public accountId : Bytes32
+  public spender : Bytes32
+  private value : UInt 128
+  public spenderPk : JubjubPoint
+  public balanceC1 : JubjubPoint
+  public balanceC2 : JubjubPoint
+  public previousOwnerC1 : JubjubPoint
+  public previousOwnerC2 : JubjubPoint
+  let identity : JubjubPoint := jubjubFromCoordinates(0, 1)
+  let derivedAccountId : Bytes32 := persistentHash32(accountSecret)
+  let encryptionScalar : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([bytes32("ElGamal:secretToScalar"), encryptionSecret])))
+  let ownerPk : JubjubPoint := jubjubMulGenerator(encryptionScalar)
+  let refundedC1 : JubjubPoint := jubjubAdd(balanceC1, previousOwnerC1)
+  let refundedC2 : JubjubPoint := jubjubAdd(balanceC2, previousOwnerC2)
+  let plaintext : UInt 248 := witness plaintextBalance(refundedC1, refundedC2)
+  let remaining : UInt 248 := sub(plaintext, cast(UInt 248, value))
+  let valueField : Native := cast(Native, value)
+  let valuePoint : JubjubPoint := jubjubMulGenerator(jubjubScalarFromNative(valueField))
+  let seed : Bytes32 := witness freshSeed()
+  let debitR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([seed, bytes32("approve_debit")])))
+  let spenderR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([seed, bytes32("approve_spender_ct")])))
+  let ownerR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([seed, bytes32("approve_owner_ct")])))
+  let ownerMemoR : JubjubScalar := jubjubScalarFromNative(degradeToNative(
+    persistentHashVector32([seed, bytes32("approve_owner_memo")])))
+  prove eq(eq(jubjubScalarToNative(debitR), 0), false)
+  prove eq(eq(jubjubScalarToNative(spenderR), 0), false)
+  prove eq(eq(jubjubScalarToNative(ownerR), 0), false)
+  prove eq(eq(jubjubScalarToNative(ownerMemoR), 0), false)
+  let newBalanceC1 : JubjubPoint := jubjubAdd(
+    refundedC1, jubjubNeg(jubjubMulGenerator(debitR)))
+  let newBalanceC2 : JubjubPoint := jubjubAdd(refundedC2,
+    jubjubNeg(jubjubAdd(valuePoint, jubjubMul(ownerPk, debitR))))
+  let recovered : JubjubPoint := jubjubAdd(newBalanceC2,
+    jubjubNeg(jubjubMul(newBalanceC1, encryptionScalar)))
+  let remainingPoint : JubjubPoint := jubjubMulGenerator(
+    jubjubScalarFromNative(cast(Native, remaining)))
+  let spenderC1 : JubjubPoint := jubjubMulGenerator(spenderR)
+  let spenderC2 : JubjubPoint := jubjubAdd(
+    valuePoint, jubjubMul(spenderPk, spenderR))
+  let ownerC1 : JubjubPoint := jubjubMulGenerator(ownerR)
+  let ownerC2 : JubjubPoint := jubjubAdd(valuePoint, jubjubMul(ownerPk, ownerR))
+  let ownerMemoEphemeral : JubjubPoint := jubjubMulGenerator(ownerMemoR)
+  let ownerMemoShared : JubjubPoint := jubjubMul(ownerPk, ownerMemoR)
+  let ownerMemoDigest : Bytes32 := persistentHashPoint(ownerMemoShared)
+  let ownerMemoMask : Native := degradeToNative(persistentHashVector32([
+    ownerMemoDigest, bytes32("OZ_CFT_escrow_owner_v1")]))
+  let ownerMemoCiphertext : Native := add(valueField, ownerMemoMask)
+  prove eq(accountId, derivedAccountId)
+  prove eq(eq(ownerPk, identity), false)
+  prove eq(eq(spenderPk, identity), false)
+  prove eq(jubjubAdd(refundedC2,
+    jubjubNeg(jubjubMul(refundedC1, encryptionScalar))),
+    jubjubMulGenerator(jubjubScalarFromNative(cast(Native, plaintext))))
+  prove eq(recovered, remainingPoint)
+  output ownerKeyX : Native := disclose(jubjubX(ownerPk))
+  output ownerKeyY : Native := disclose(jubjubY(ownerPk))
+  output nextBalanceC1X : Native := disclose(jubjubX(newBalanceC1))
+  output nextBalanceC1Y : Native := disclose(jubjubY(newBalanceC1))
+  output nextBalanceC2X : Native := disclose(jubjubX(newBalanceC2))
+  output nextBalanceC2Y : Native := disclose(jubjubY(newBalanceC2))
+  output spenderCtC1X : Native := disclose(jubjubX(spenderC1))
+  output spenderCtC1Y : Native := disclose(jubjubY(spenderC1))
+  output spenderCtC2X : Native := disclose(jubjubX(spenderC2))
+  output spenderCtC2Y : Native := disclose(jubjubY(spenderC2))
+  output ownerCtC1X : Native := disclose(jubjubX(ownerC1))
+  output ownerCtC1Y : Native := disclose(jubjubY(ownerC1))
+  output ownerCtC2X : Native := disclose(jubjubX(ownerC2))
+  output ownerCtC2Y : Native := disclose(jubjubY(ownerC2))
+  output ownerMemoEphemeralX : Native := disclose(jubjubX(ownerMemoEphemeral))
+  output ownerMemoEphemeralY : Native := disclose(jubjubY(ownerMemoEphemeral))
+  output ownerMemoAmount : Native := disclose(ownerMemoCiphertext)
+end
+
+noctium_circuit allowanceView where
+  public owner : Bytes32
+  public spender : Bytes32
 end
 
 noctium_witness_circuit clearMemoInput where
@@ -288,6 +373,19 @@ noctium_contract ConfidentialToken where
   tree creditEpochs : Bytes32 => Counter
   cell initialized : Bool
   cell totalSupply : UInt 128
+  tree escrow : Bytes32 => Bytes32 => struct EscrowEntry {
+    spenderCtC1X : Native
+    spenderCtC1Y : Native
+    spenderCtC2X : Native
+    spenderCtC2Y : Native
+    ownerCtC1X : Native
+    ownerCtC1Y : Native
+    ownerCtC2X : Native
+    ownerCtC2Y : Native
+    ownerMemoEphemeralX : Native
+    ownerMemoEphemeralY : Native
+    ownerMemoAmount : Native
+  }
 
   entry registerWithKey uses registerAccount where
     read initialized as isInitialized
@@ -526,6 +624,78 @@ noctium_contract ConfidentialToken where
 
   entry computeAccountId uses accountSecretInput where
     return accountId : Bytes32 := disclose(persistentHash32(secret))
+  end
+
+  -- Reapproval first refunds the previous owner ciphertext into the spendable
+  -- balance.  The old escrow record is then replaced with the new allowance.
+  entry approve uses approveEscrow where
+    read initialized as isInitialized
+    require eq(isInitialized, true)
+    require eq(eq(spender, bytes32("")), false)
+    require eq(eq(spender, accountId), false)
+    member encryptionKeys[disclose(accountId)] as ownerRegistered
+    require eq(ownerRegistered, true)
+    member encryptionKeys[disclose(spender)] as spenderRegistered
+    require eq(spenderRegistered, true)
+    read encryptionKeys[disclose(accountId)] as storedOwnerKey
+    require eq(storedOwnerKey_x, result.ownerKeyX)
+    require eq(storedOwnerKey_y, result.ownerKeyY)
+    read encryptionKeys[disclose(spender)] as storedSpenderKey
+    require eq(storedSpenderKey_x, jubjubX(spenderPk))
+    require eq(storedSpenderKey_y, jubjubY(spenderPk))
+    read balances[disclose(accountId)] as oldBalance
+    require eq(oldBalance_c1x, jubjubX(balanceC1))
+    require eq(oldBalance_c1y, jubjubY(balanceC1))
+    require eq(oldBalance_c2x, jubjubX(balanceC2))
+    require eq(oldBalance_c2y, jubjubY(balanceC2))
+    member escrow[disclose(accountId)] as ownerEscrowPresent
+    if eq(ownerEscrowPresent, false) then {
+      insert escrow[disclose(accountId)] := emptyMap
+    } else {
+    }
+    member escrow[disclose(accountId)][disclose(spender)] as storedAllowancePresent
+    when eq(storedAllowancePresent, true)
+      read escrow[disclose(accountId)][disclose(spender)] as previousEscrow
+    require eq(jubjubX(previousOwnerC1), select(storedAllowancePresent, previousEscrow_ownerCtC1X, 0))
+    require eq(jubjubY(previousOwnerC1), select(storedAllowancePresent, previousEscrow_ownerCtC1Y, 1))
+    require eq(jubjubX(previousOwnerC2), select(storedAllowancePresent, previousEscrow_ownerCtC2X, 0))
+    require eq(jubjubY(previousOwnerC2), select(storedAllowancePresent, previousEscrow_ownerCtC2Y, 1))
+    remove escrow[disclose(accountId)][disclose(spender)]
+    write balances[disclose(accountId)] := fields(
+      result.nextBalanceC1X, result.nextBalanceC1Y,
+      result.nextBalanceC2X, result.nextBalanceC2Y)
+    insert escrow[disclose(accountId)][disclose(spender)] := fields(
+      result.spenderCtC1X, result.spenderCtC1Y,
+      result.spenderCtC2X, result.spenderCtC2Y,
+      result.ownerCtC1X, result.ownerCtC1Y,
+      result.ownerCtC2X, result.ownerCtC2Y,
+      result.ownerMemoEphemeralX, result.ownerMemoEphemeralY,
+      result.ownerMemoAmount)
+    return caller : Bytes32 := accountId
+  end
+
+  entry allowance uses allowanceView where
+    member escrow[disclose(owner)] as ownerPresent
+    when eq(ownerPresent, true) member escrow[disclose(owner)][disclose(spender)] as allowancePresent
+    when eq(allowancePresent, true)
+      read escrow[disclose(owner)][disclose(spender)] as currentAllowance
+    return spenderC1 : JubjubPoint := jubjubFromCoordinates(
+      select(allowancePresent, currentAllowance_spenderCtC1X, 0),
+      select(allowancePresent, currentAllowance_spenderCtC1Y, 1))
+    return spenderC2 : JubjubPoint := jubjubFromCoordinates(
+      select(allowancePresent, currentAllowance_spenderCtC2X, 0),
+      select(allowancePresent, currentAllowance_spenderCtC2Y, 1))
+    return ownerC1 : JubjubPoint := jubjubFromCoordinates(
+      select(allowancePresent, currentAllowance_ownerCtC1X, 0),
+      select(allowancePresent, currentAllowance_ownerCtC1Y, 1))
+    return ownerC2 : JubjubPoint := jubjubFromCoordinates(
+      select(allowancePresent, currentAllowance_ownerCtC2X, 0),
+      select(allowancePresent, currentAllowance_ownerCtC2Y, 1))
+    return ownerMemoEphemeral : JubjubPoint := jubjubFromCoordinates(
+      select(allowancePresent, currentAllowance_ownerMemoEphemeralX, 0),
+      select(allowancePresent, currentAllowance_ownerMemoEphemeralY, 1))
+    return ownerMemoAmount : Native := select(
+      allowancePresent, currentAllowance_ownerMemoAmount, 0)
   end
 end
 

@@ -52,11 +52,11 @@ pub struct Registry {
 
 impl Type {
     pub fn parse(token: &str, registry: &Registry) -> Result<Self> {
-        ensure!(token.len() <= 64, "witness type token exceeds limit");
         if token == "Unit" {
             return Ok(Self::Unit);
         }
         if let Some(name) = token.strip_prefix("Aggregate:") {
+            ensure!(token.len() <= 64, "witness type token exceeds limit");
             ensure!(
                 registry.schemas.contains_key(token),
                 "unknown aggregate type token"

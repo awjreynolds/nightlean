@@ -103,7 +103,46 @@
    "kind": {"tree": {"map": ["Bytes<32>", {"counter": true}]}}},
   {"name": "initialized", "kind": {"cell": "Bool"}},
   {"name": "totalSupply",
-   "kind": {"cell": "UIntRange<340282366920938463463374607431768211456>"}}],
+   "kind": {"cell": "UIntRange<340282366920938463463374607431768211456>"}},
+  {"name": "escrow",
+   "kind":
+   {"tree":
+    {"map":
+     ["Bytes<32>",
+      {"map":
+       ["Bytes<32>",
+        {"composite":
+         {"typeFingerprint":
+          "NoctiumCompositeTypeV1;r46:OpenZeppelinPort.ConfidentialToken.EscrowEntryNoctiumCompositeLayoutV1;1;R46:OpenZeppelinPort.ConfidentialToken.EscrowEntry11;f12:spenderCtC1XsNf12:spenderCtC1YsNf12:spenderCtC2XsNf12:spenderCtC2YsNf10:ownerCtC1XsNf10:ownerCtC1YsNf10:ownerCtC2XsNf10:ownerCtC2YsNf19:ownerMemoEphemeralXsNf19:ownerMemoEphemeralYsNf15:ownerMemoAmountsN0;",
+          "schemaVersion": 1,
+          "layout":
+          {"kind": "struct",
+           "id": "OpenZeppelinPort.ConfidentialToken.EscrowEntry",
+           "fields":
+           [{"name": "spenderCtC1X",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "spenderCtC1Y",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "spenderCtC2X",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "spenderCtC2Y",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "ownerCtC1X",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "ownerCtC1Y",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "ownerCtC2X",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "ownerCtC2Y",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "ownerMemoEphemeralX",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "ownerMemoEphemeralY",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}},
+            {"name": "ownerMemoAmount",
+             "layout": {"leaf": {"kind": "native"}, "kind": "scalar"}}]},
+          "counts":
+          {"leaves": 11, "layoutNodes": 12, "expandedNodes": 12}}}]}]}}}],
  "schemaVersion": 1,
  "returns":
  [{"visibility": "public",
@@ -1112,8 +1151,13 @@
                     "body":
                     {"value":
                      {"tag": "usub",
-                      "right": {"tag": "reference", "name": "$helper1"},
-                      "maximum": "340282366920938463463374607431768211455",
+                      "right":
+                      {"value": {"tag": "reference", "name": "$helper1"},
+                       "type":
+                       "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                       "tag": "cast"},
+                      "maximum":
+                      "452312848583266388373324160190187140051835877600158453279131187530910662655",
                       "left": {"tag": "reference", "name": "$helper15"}},
                      "tag": "let",
                      "name": "$helper22",
@@ -1429,8 +1473,13 @@
                     "body":
                     {"value":
                      {"tag": "usub",
-                      "right": {"tag": "reference", "name": "$helper1"},
-                      "maximum": "340282366920938463463374607431768211455",
+                      "right":
+                      {"value": {"tag": "reference", "name": "$helper1"},
+                       "type":
+                       "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                       "tag": "cast"},
+                      "maximum":
+                      "452312848583266388373324160190187140051835877600158453279131187530910662655",
                       "left": {"tag": "reference", "name": "$helper15"}},
                      "tag": "let",
                      "name": "$helper22",
@@ -1746,8 +1795,13 @@
                     "body":
                     {"value":
                      {"tag": "usub",
-                      "right": {"tag": "reference", "name": "$helper1"},
-                      "maximum": "340282366920938463463374607431768211455",
+                      "right":
+                      {"value": {"tag": "reference", "name": "$helper1"},
+                       "type":
+                       "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                       "tag": "cast"},
+                      "maximum":
+                      "452312848583266388373324160190187140051835877600158453279131187530910662655",
                       "left": {"tag": "reference", "name": "$helper15"}},
                      "tag": "let",
                      "name": "$helper22",
@@ -2063,8 +2117,13 @@
                     "body":
                     {"value":
                      {"tag": "usub",
-                      "right": {"tag": "reference", "name": "$helper1"},
-                      "maximum": "340282366920938463463374607431768211455",
+                      "right":
+                      {"value": {"tag": "reference", "name": "$helper1"},
+                       "type":
+                       "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                       "tag": "cast"},
+                      "maximum":
+                      "452312848583266388373324160190187140051835877600158453279131187530910662655",
                       "left": {"tag": "reference", "name": "$helper15"}},
                      "tag": "let",
                      "name": "$helper22",
@@ -2380,8 +2439,13 @@
                     "body":
                     {"value":
                      {"tag": "usub",
-                      "right": {"tag": "reference", "name": "$helper1"},
-                      "maximum": "340282366920938463463374607431768211455",
+                      "right":
+                      {"value": {"tag": "reference", "name": "$helper1"},
+                       "type":
+                       "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                       "tag": "cast"},
+                      "maximum":
+                      "452312848583266388373324160190187140051835877600158453279131187530910662655",
                       "left": {"tag": "reference", "name": "$helper15"}},
                      "tag": "let",
                      "name": "$helper22",
@@ -2697,8 +2761,13 @@
                     "body":
                     {"value":
                      {"tag": "usub",
-                      "right": {"tag": "reference", "name": "$helper1"},
-                      "maximum": "340282366920938463463374607431768211455",
+                      "right":
+                      {"value": {"tag": "reference", "name": "$helper1"},
+                       "type":
+                       "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                       "tag": "cast"},
+                      "maximum":
+                      "452312848583266388373324160190187140051835877600158453279131187530910662655",
                       "left": {"tag": "reference", "name": "$helper15"}},
                      "tag": "let",
                      "name": "$helper22",
@@ -2889,7 +2958,8 @@
    {"visibility": "private", "type": "Bytes<32>", "name": "$helper8"},
    {"visibility": "private", "type": "Bytes<32>", "name": "$helper10"},
    {"visibility": "private",
-    "type": "UIntRange<340282366920938463463374607431768211456>",
+    "type":
+    "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
     "name": "$helper14"}],
   "file": "OpenZeppelinPort.debitBalance.zkir",
   "constraints":
@@ -3028,8 +3098,13 @@
                    "body":
                    {"value":
                     {"tag": "usub",
-                     "right": {"tag": "reference", "name": "$helper1"},
-                     "maximum": "340282366920938463463374607431768211455",
+                     "right":
+                     {"value": {"tag": "reference", "name": "$helper1"},
+                      "type":
+                      "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                      "tag": "cast"},
+                     "maximum":
+                     "452312848583266388373324160190187140051835877600158453279131187530910662655",
                      "left": {"tag": "reference", "name": "$helper15"}},
                     "tag": "let",
                     "name": "$helper22",
@@ -3319,8 +3394,13 @@
                    "body":
                    {"value":
                     {"tag": "usub",
-                     "right": {"tag": "reference", "name": "$helper1"},
-                     "maximum": "340282366920938463463374607431768211455",
+                     "right":
+                     {"value": {"tag": "reference", "name": "$helper1"},
+                      "type":
+                      "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                      "tag": "cast"},
+                     "maximum":
+                     "452312848583266388373324160190187140051835877600158453279131187530910662655",
                      "left": {"tag": "reference", "name": "$helper15"}},
                     "tag": "let",
                     "name": "$helper22",
@@ -3594,8 +3674,13 @@
                    "body":
                    {"value":
                     {"tag": "usub",
-                     "right": {"tag": "reference", "name": "$helper1"},
-                     "maximum": "340282366920938463463374607431768211455",
+                     "right":
+                     {"value": {"tag": "reference", "name": "$helper1"},
+                      "type":
+                      "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                      "tag": "cast"},
+                     "maximum":
+                     "452312848583266388373324160190187140051835877600158453279131187530910662655",
                      "left": {"tag": "reference", "name": "$helper15"}},
                     "tag": "let",
                     "name": "$helper22",
@@ -3869,8 +3954,13 @@
                    "body":
                    {"value":
                     {"tag": "usub",
-                     "right": {"tag": "reference", "name": "$helper1"},
-                     "maximum": "340282366920938463463374607431768211455",
+                     "right":
+                     {"value": {"tag": "reference", "name": "$helper1"},
+                      "type":
+                      "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                      "tag": "cast"},
+                     "maximum":
+                     "452312848583266388373324160190187140051835877600158453279131187530910662655",
                      "left": {"tag": "reference", "name": "$helper15"}},
                     "tag": "let",
                     "name": "$helper22",
@@ -4158,8 +4248,13 @@
                    "body":
                    {"value":
                     {"tag": "usub",
-                     "right": {"tag": "reference", "name": "$helper1"},
-                     "maximum": "340282366920938463463374607431768211455",
+                     "right":
+                     {"value": {"tag": "reference", "name": "$helper1"},
+                      "type":
+                      "UIntRange<452312848583266388373324160190187140051835877600158453279131187530910662656>",
+                      "tag": "cast"},
+                     "maximum":
+                     "452312848583266388373324160190187140051835877600158453279131187530910662655",
                      "left": {"tag": "reference", "name": "$helper15"}},
                     "tag": "let",
                     "name": "$helper22",

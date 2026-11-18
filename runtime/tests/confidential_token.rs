@@ -2,16 +2,17 @@
 
 use base_crypto::fab::AlignedValue;
 use noctium_runtime::{
-    Db, Plan, check,
+    check,
     control::{InvocationTarget, Session, TypedResponse},
     create_state, field_decimal, field_value,
     host::{self, Capability, Context, Limits, Operation, Provider},
     prepare,
     witness::{Parameter, WitnessSignature},
     zkir::IrSource,
+    Db, Plan,
 };
 use onchain_runtime::state::{ChargedState, StateValue};
-use serde_json::{Value as Json, json};
+use serde_json::{json, Value as Json};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 use transient_crypto::{
@@ -98,6 +99,17 @@ fn artifacts(entry: &str) -> (&'static str, &'static str, &'static [u8]) {
                 "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken._move.zkir"
             ),
         ),
+        "approve" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.approve.witness.control.json"
+            ),
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.approve.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.approve.zkir"
+            ),
+        ),
         _ => panic!("unknown confidential-token entrypoint {entry}"),
     }
 }
@@ -142,6 +154,14 @@ fn view_artifacts(entry: &str) -> (&'static str, &'static [u8]) {
             ),
             include_bytes!(
                 "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.computeAccountId.zkir"
+            ),
+        ),
+        "allowance" => (
+            include_str!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.allowance.impact.json"
+            ),
+            include_bytes!(
+                "fixtures/confidential-token/321/OpenZeppelinPort.ConfidentialToken.allowance.zkir"
             ),
         ),
         _ => panic!("unknown confidential-token view {entry}"),
@@ -255,6 +275,14 @@ fn point_json(point: EmbeddedGroupAffine) -> Json {
         "kind":"jubjubPoint",
         "x":field_decimal(point.x().unwrap()),
         "y":field_decimal(point.y().unwrap())
+    })
+}
+
+fn point_json_from_coordinates(coordinates: [Fr; 2]) -> Json {
+    json!({
+        "kind":"jubjubPoint",
+        "x":field_decimal(coordinates[0]),
+        "y":field_decimal(coordinates[1])
     })
 }
 
@@ -390,14 +418,55 @@ fn expected_debit(
     owner_key: EmbeddedGroupAffine,
     amount: u64,
 ) -> Ciphertext {
+    expected_debit_with_domain(seed, owner, owner_key, amount, "debit_balance")
+}
+
+fn expected_debit_with_domain(
+    seed: &[u8; 32],
+    owner: Ciphertext,
+    owner_key: EmbeddedGroupAffine,
+    amount: u64,
+    domain: &str,
+) -> Ciphertext {
     let generator = EmbeddedGroupAffine::generator();
-    let randomizer = scalar(&[seed, &tag("debit_balance")]);
+    let randomizer = scalar(&[seed, &tag(domain)]);
     let negative_randomizer = EmbeddedFr::from(0u64) - randomizer;
     let negative_one = EmbeddedFr::from(0u64) - EmbeddedFr::from(1u64);
     let value_point = generator * EmbeddedFr::from(amount);
     Ciphertext {
         c1: owner.c1 + generator * negative_randomizer,
         c2: owner.c2 + (value_point + owner_key * randomizer) * negative_one,
+    }
+}
+
+fn expected_encryption(
+    seed: &[u8; 32],
+    domain: &str,
+    recipient_key: EmbeddedGroupAffine,
+    amount: u64,
+) -> Ciphertext {
+    let generator = EmbeddedGroupAffine::generator();
+    let randomizer = scalar(&[seed, &tag(domain)]);
+    Ciphertext {
+        c1: generator * randomizer,
+        c2: generator * EmbeddedFr::from(amount) + recipient_key * randomizer,
+    }
+}
+
+fn expected_owner_memo(seed: &[u8; 32], owner_key: EmbeddedGroupAffine, amount: u64) -> Memo {
+    let randomizer = scalar(&[seed, &tag("approve_owner_memo")]);
+    let generator = EmbeddedGroupAffine::generator();
+    let ephemeral = generator * randomizer;
+    let shared = owner_key * randomizer;
+    let shared_digest = hash(&[
+        &shared.x().unwrap().as_le_bytes(),
+        &shared.y().unwrap().as_le_bytes(),
+    ]);
+    let mask_digest = hash(&[&shared_digest, &tag("OZ_CFT_escrow_owner_v1")]);
+    let mask = Fr::from_le_bytes(&mask_digest[..31]).unwrap();
+    Memo {
+        ephemeral,
+        amount: Fr::from(amount) + mask,
     }
 }
 
@@ -436,6 +505,28 @@ fn map_record(plan: &Plan, state: &ChargedState<Db>, name: &str, key: &[u8; 32])
     fields
 }
 
+fn escrow_record(
+    plan: &Plan,
+    state: &ChargedState<Db>,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+) -> Vec<Fr> {
+    let StateValue::Map(owners) = state_slot(plan, state, "escrow") else {
+        panic!("expected escrow owner map")
+    };
+    let owner: AlignedValue = (*owner).into();
+    let StateValue::Map(spenders) = &*owners.get(&owner).expect("escrow owner map entry") else {
+        panic!("expected escrow spender map")
+    };
+    let spender: AlignedValue = (*spender).into();
+    let StateValue::Cell(record) = &*spenders.get(&spender).expect("escrow spender entry") else {
+        panic!("expected escrow record cell")
+    };
+    let mut fields = Vec::new();
+    record.value_only_field_repr(&mut fields);
+    fields
+}
+
 fn assert_ciphertext(
     plan: &Plan,
     state: &ChargedState<Db>,
@@ -450,6 +541,24 @@ fn assert_ciphertext(
         fields,
         "{map} ciphertext"
     );
+}
+
+fn assert_escrow(
+    plan: &Plan,
+    state: &ChargedState<Db>,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    spender_ciphertext: Ciphertext,
+    owner_ciphertext: Ciphertext,
+    owner_memo: Memo,
+) {
+    let mut expected = coordinates(spender_ciphertext.c1).to_vec();
+    expected.extend(coordinates(spender_ciphertext.c2));
+    expected.extend(coordinates(owner_ciphertext.c1));
+    expected.extend(coordinates(owner_ciphertext.c2));
+    expected.extend(coordinates(owner_memo.ephemeral));
+    expected.push(owner_memo.amount);
+    assert_eq!(escrow_record(plan, state, owner, spender), expected);
 }
 
 fn assert_record(
@@ -573,7 +682,7 @@ fn run_entry(
         };
         session
             .resume_typed(reply(request, &attempt_id, value))
-            .unwrap();
+            .unwrap_or_else(|error| panic!("{entry} response {:?}: {error}", request["name"]));
     }
     let expected_reads = if wallet.is_empty() {
         BTreeSet::new()
@@ -583,7 +692,7 @@ fn run_entry(
     assert_eq!(reads, expected_reads, "{entry} wallet reads");
     let expected_callbacks: BTreeSet<String> = match entry {
         "mint" => ["OpenZeppelinPort.freshSeed".into()].into(),
-        "transfer" | "_move" | "burn" => [
+        "transfer" | "_move" | "burn" | "approve" => [
             "OpenZeppelinPort.freshSeed".into(),
             "OpenZeppelinPort.plaintextBalance".into(),
         ]
@@ -606,7 +715,7 @@ fn run_entry(
     check(&execution, &circuit).map_err(|error| error.to_string())?;
     if matches!(
         entry,
-        "registerWithKey" | "sweep" | "transfer" | "_move" | "burn"
+        "registerWithKey" | "sweep" | "transfer" | "_move" | "burn" | "approve"
     ) {
         assert_eq!(
             execution.returns_json()["caller"],
@@ -623,6 +732,7 @@ fn initial_state(plan: &Plan) -> ChargedState<Db> {
             ("encryptionKeys".into(), json!([])),
             ("balances".into(), json!([])),
             ("pending".into(), json!([])),
+            ("escrow".into(), json!([])),
             ("memos".into(), json!([])),
             ("creditEpochs".into(), json!([])),
             ("initialized".into(), json!(true)),
@@ -630,6 +740,49 @@ fn initial_state(plan: &Plan) -> ChargedState<Db> {
         ]),
     )
     .unwrap()
+}
+
+fn approve_inputs(
+    plan: &Plan,
+    state: &ChargedState<Db>,
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    spender_key: EmbeddedGroupAffine,
+    amount: u64,
+    previous_present: bool,
+) -> BTreeMap<String, Json> {
+    let mut inputs = BTreeMap::from([
+        ("accountId".into(), bytes(owner)),
+        ("spender".into(), bytes(spender)),
+        ("value".into(), json!(amount.to_string())),
+        ("spenderPk".into(), point_json(spender_key)),
+    ]);
+    let balance = map_record(plan, state, "balances", owner);
+    inputs.insert(
+        "balanceC1".into(),
+        point_json_from_coordinates([balance[0], balance[1]]),
+    );
+    inputs.insert(
+        "balanceC2".into(),
+        point_json_from_coordinates([balance[2], balance[3]]),
+    );
+    let previous_owner = if previous_present {
+        let previous = escrow_record(plan, state, owner, spender);
+        [[previous[4], previous[5]], [previous[6], previous[7]]]
+    } else {
+        let identity = EmbeddedGroupAffine::generator() * EmbeddedFr::from(0u64);
+        let point = coordinates(identity);
+        [point, point]
+    };
+    inputs.insert(
+        "previousOwnerC1".into(),
+        point_json_from_coordinates(previous_owner[0]),
+    );
+    inputs.insert(
+        "previousOwnerC2".into(),
+        point_json_from_coordinates(previous_owner[1]),
+    );
+    inputs
 }
 
 fn view(
@@ -661,6 +814,43 @@ fn view(
     .unwrap();
     check(&execution, &circuit).unwrap();
     execution.returns_json()
+}
+
+fn allowance_view(
+    owner: &[u8; 32],
+    spender: &[u8; 32],
+    state: &ChargedState<Db>,
+) -> BTreeMap<String, Json> {
+    let (plan_text, circuit_bytes) = view_artifacts("allowance");
+    let plan: Plan = serde_json::from_str(plan_text).unwrap();
+    let circuit = IrSource::load(circuit_bytes).unwrap();
+    let inputs = BTreeMap::from([
+        ("owner".into(), bytes(owner)),
+        ("spender".into(), bytes(spender)),
+    ]);
+    let execution = prepare(
+        &plan,
+        &inputs,
+        state,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .unwrap();
+    check(&execution, &circuit).unwrap();
+    execution.returns_json()
+}
+
+fn assert_empty_allowance(allowance: &BTreeMap<String, Json>, identity: EmbeddedGroupAffine) {
+    for name in [
+        "spenderC1",
+        "spenderC2",
+        "ownerC1",
+        "ownerC2",
+        "ownerMemoEphemeral",
+    ] {
+        assert_eq!(allowance[name], point_json(identity), "{name} default");
+    }
+    assert_eq!(allowance["ownerMemoAmount"], "0");
 }
 
 fn assert_rejects_candidate_mismatch(
@@ -699,6 +889,35 @@ fn assert_rejects_candidate_mismatch(
     assert!(
         check(&execution, circuit).is_err(),
         "candidate ciphertext mismatch passed native relation"
+    );
+}
+
+fn assert_rejects_previous_owner_mismatch(
+    plan: &Plan,
+    circuit: &IrSource,
+    inputs: &BTreeMap<String, Json>,
+    state: &ChargedState<Db>,
+    actual: Ciphertext,
+    owner_key: EmbeddedGroupAffine,
+) {
+    let mut changed = inputs.clone();
+    let alternate = Ciphertext {
+        c1: actual.c1 + EmbeddedGroupAffine::generator(),
+        c2: actual.c2 + owner_key,
+    };
+    changed.insert("previousOwnerC1".into(), point_json(alternate.c1));
+    changed.insert("previousOwnerC2".into(), point_json(alternate.c2));
+    let execution = prepare(
+        plan,
+        &changed,
+        state,
+        &ledger::structure::INITIAL_PARAMETERS,
+        coin_structure::contract::ContractAddress::default(),
+    )
+    .expect("valid alternate owner ciphertext should prepare before ledger binding is checked");
+    assert!(
+        check(&execution, circuit).is_err(),
+        "forged previous owner ciphertext passed native relation"
     );
 }
 
@@ -1274,4 +1493,157 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         &StateValue::Cell(storage::arena::Sp::new(field_value(Fr::from(1u64))))
     );
     assert_eq!(view("totalSupply", None, &state)["supply"], "10");
+
+    let (_, approve_text, approve_bytes) = artifacts("approve");
+    let approve_plan: Plan = serde_json::from_str(approve_text).unwrap();
+    let approve_circuit = IrSource::load(approve_bytes).unwrap();
+    let alice_memos_before_approve = memo_records(&approve_plan, &state, &alice);
+    let bob_memos_before_approve = memo_records(&approve_plan, &state, &bob);
+    assert_empty_allowance(&allowance_view(&missing, &bob, &state), identity);
+
+    let approve_seed = [0x35u8; 32];
+    let first_spender_ct = expected_encryption(&approve_seed, "approve_spender_ct", bob_key, 2);
+    let first_owner_ct = expected_encryption(&approve_seed, "approve_owner_ct", alice_key, 2);
+    let first_owner_memo = expected_owner_memo(&approve_seed, alice_key, 2);
+    let first_balance = expected_debit_with_domain(
+        &approve_seed,
+        alice_after_move,
+        alice_key,
+        2,
+        "approve_debit",
+    );
+    state = run_entry(
+        "approve",
+        approve_inputs(&approve_plan, &state, &alice, &bob, bob_key, 2, false),
+        &alice_account_secret,
+        &alice_encryption_secret,
+        Some(approve_seed),
+        Some(alice_after_move),
+        11,
+        &state,
+    )
+    .unwrap()
+    .0;
+    assert_ciphertext(&approve_plan, &state, "balances", &alice, first_balance);
+    assert_escrow(
+        &approve_plan,
+        &state,
+        &alice,
+        &bob,
+        first_spender_ct,
+        first_owner_ct,
+        first_owner_memo,
+    );
+    assert_eq!(decrypt_small(first_balance, alice_key_scalar, 64), 2);
+    assert_eq!(decrypt_small(first_spender_ct, bob_key_scalar, 64), 2);
+    assert_eq!(decrypt_small(first_owner_ct, alice_key_scalar, 64), 2);
+    let first_allowance = allowance_view(&alice, &bob, &state);
+    assert_eq!(
+        first_allowance["spenderC1"],
+        point_json(first_spender_ct.c1)
+    );
+    assert_eq!(
+        first_allowance["spenderC2"],
+        point_json(first_spender_ct.c2)
+    );
+    assert_eq!(first_allowance["ownerC1"], point_json(first_owner_ct.c1));
+    assert_eq!(first_allowance["ownerC2"], point_json(first_owner_ct.c2));
+    assert_eq!(
+        first_allowance["ownerMemoEphemeral"],
+        point_json(first_owner_memo.ephemeral)
+    );
+    assert_eq!(
+        first_allowance["ownerMemoAmount"],
+        field_decimal(first_owner_memo.amount)
+    );
+    assert_empty_allowance(&allowance_view(&alice, &missing, &state), identity);
+
+    let refunded_balance = Ciphertext {
+        c1: first_balance.c1 + first_owner_ct.c1,
+        c2: first_balance.c2 + first_owner_ct.c2,
+    };
+    assert_eq!(decrypt_small(refunded_balance, alice_key_scalar, 64), 4);
+    let reapprove_seed = [0x36u8; 32];
+    let second_spender_ct = expected_encryption(&reapprove_seed, "approve_spender_ct", bob_key, 3);
+    let second_owner_ct = expected_encryption(&reapprove_seed, "approve_owner_ct", alice_key, 3);
+    let second_owner_memo = expected_owner_memo(&reapprove_seed, alice_key, 3);
+    let second_balance = expected_debit_with_domain(
+        &reapprove_seed,
+        refunded_balance,
+        alice_key,
+        3,
+        "approve_debit",
+    );
+    let state_before_reapprove = state.clone();
+    let (after_reapprove, reapprove_inputs) = run_entry(
+        "approve",
+        approve_inputs(&approve_plan, &state, &alice, &bob, bob_key, 3, true),
+        &alice_account_secret,
+        &alice_encryption_secret,
+        Some(reapprove_seed),
+        Some(refunded_balance),
+        12,
+        &state,
+    )
+    .unwrap();
+    assert_rejects_previous_owner_mismatch(
+        &approve_plan,
+        &approve_circuit,
+        &reapprove_inputs,
+        &state_before_reapprove,
+        first_owner_ct,
+        alice_key,
+    );
+    state = after_reapprove;
+    assert_ciphertext(&approve_plan, &state, "balances", &alice, second_balance);
+    assert_escrow(
+        &approve_plan,
+        &state,
+        &alice,
+        &bob,
+        second_spender_ct,
+        second_owner_ct,
+        second_owner_memo,
+    );
+    assert_eq!(decrypt_small(second_balance, alice_key_scalar, 64), 1);
+    assert_eq!(decrypt_small(second_spender_ct, bob_key_scalar, 64), 3);
+    assert_eq!(decrypt_small(second_owner_ct, alice_key_scalar, 64), 3);
+    let replacement = allowance_view(&alice, &bob, &state);
+    assert_eq!(replacement["spenderC1"], point_json(second_spender_ct.c1));
+    assert_eq!(replacement["spenderC2"], point_json(second_spender_ct.c2));
+    assert_eq!(replacement["ownerC1"], point_json(second_owner_ct.c1));
+    assert_eq!(replacement["ownerC2"], point_json(second_owner_ct.c2));
+    assert_eq!(
+        replacement["ownerMemoEphemeral"],
+        point_json(second_owner_memo.ephemeral)
+    );
+    assert_eq!(
+        replacement["ownerMemoAmount"],
+        field_decimal(second_owner_memo.amount)
+    );
+    assert_eq!(view("totalSupply", None, &state)["supply"], "10");
+    assert_ciphertext(
+        &approve_plan,
+        &state,
+        "pending",
+        &alice,
+        alice_pending_after_move,
+    );
+    assert_ciphertext(&approve_plan, &state, "pending", &bob, recipient_after);
+    assert_eq!(
+        memo_records(&approve_plan, &state, &alice),
+        alice_memos_before_approve
+    );
+    assert_eq!(
+        memo_records(&approve_plan, &state, &bob),
+        bob_memos_before_approve
+    );
+    assert_eq!(
+        map_record(&approve_plan, &state, "creditEpochs", &alice),
+        vec![Fr::from(2u64)]
+    );
+    assert_eq!(
+        map_record(&approve_plan, &state, "creditEpochs", &bob),
+        vec![Fr::from(1u64)]
+    );
 }

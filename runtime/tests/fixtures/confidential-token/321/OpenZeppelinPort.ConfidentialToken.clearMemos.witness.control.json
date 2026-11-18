@@ -47,7 +47,7 @@
    [{"value":
      {"tag": "witnessCall",
       "span":
-      {"line": 242,
+      {"line": 327,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "site": "OpenZeppelinPort.clearMemoInput.read.0",
@@ -56,14 +56,14 @@
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "accountSecret"},
     {"value":
      {"tag": "witnessCall",
       "span":
-      {"line": 243,
+      {"line": 328,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "site": "OpenZeppelinPort.clearMemoInput.read.1",
@@ -72,49 +72,49 @@
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "encryptionSecret"},
     {"value":
      {"tag": "bytes",
       "span":
-      {"line": 246,
+      {"line": 331,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "persistentHash32",
       "arguments":
       [{"tag": "reference",
         "span":
-        {"line": 246,
+        {"line": 331,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "name": "accountSecret"}]},
      "type": "Bytes<32>",
      "tag": "bind",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "derivedAccountId"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 247,
+      {"line": 332,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubScalarFromNative",
       "arguments":
       [{"tag": "bytes",
         "span":
-        {"line": 247,
+        {"line": 332,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "operation": "degradeToNative",
         "arguments":
         [{"tag": "bytes",
           "span":
-          {"line": 247,
+          {"line": 332,
            "file": "examples/openzeppelin/ConfidentialToken.lean",
            "column": 3},
           "operation": "persistentHashVector32",
@@ -154,65 +154,65 @@
              0],
             "tag": "bytes32",
             "span":
-            {"line": 247,
+            {"line": 332,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3}},
            {"tag": "reference",
             "span":
-            {"line": 247,
+            {"line": 332,
              "file": "examples/openzeppelin/ConfidentialToken.lean",
              "column": 3},
             "name": "encryptionSecret"}]}]}]},
      "type": "JubjubScalar",
      "tag": "bind",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "encryptionScalar"},
     {"value":
      {"tag": "curve",
       "span":
-      {"line": 249,
+      {"line": 334,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "operation": "jubjubMulGenerator",
       "arguments":
       [{"tag": "reference",
         "span":
-        {"line": 249,
+        {"line": 334,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 3},
         "name": "encryptionScalar"}]},
      "type": "JubjubPoint",
      "tag": "bind",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "derivedPk"},
     {"tag": "assert",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "condition":
      {"tag": "eq",
       "span":
-      {"line": 250,
+      {"line": 335,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3},
       "right":
       {"tag": "reference",
        "span":
-       {"line": 250,
+       {"line": 335,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "name": "derivedAccountId"},
       "left":
       {"tag": "reference",
        "span":
-       {"line": 250,
+       {"line": 335,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "name": "accountId"}}},
@@ -220,26 +220,26 @@
      {"value":
       {"tag": "curve",
        "span":
-       {"line": 251,
+       {"line": 336,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "operation": "jubjubX",
        "arguments":
        [{"tag": "reference",
          "span":
-         {"line": 251,
+         {"line": 336,
           "file": "examples/openzeppelin/ConfidentialToken.lean",
           "column": 3},
          "name": "derivedPk"}]},
       "tag": "disclose",
       "span":
-      {"line": 251,
+      {"line": 336,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3}},
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "__noctium_output_8_keyX"},
@@ -247,26 +247,26 @@
      {"value":
       {"tag": "curve",
        "span":
-       {"line": 252,
+       {"line": 337,
         "file": "examples/openzeppelin/ConfidentialToken.lean",
         "column": 3},
        "operation": "jubjubY",
        "arguments":
        [{"tag": "reference",
          "span":
-         {"line": 252,
+         {"line": 337,
           "file": "examples/openzeppelin/ConfidentialToken.lean",
           "column": 3},
          "name": "derivedPk"}]},
       "tag": "disclose",
       "span":
-      {"line": 252,
+      {"line": 337,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 3}},
      "type": "Native",
      "tag": "bind",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1},
      "name": "__noctium_output_9_keyY"},
@@ -274,25 +274,25 @@
      {"type": "Aggregate:t0",
       "tag": "composite",
       "span":
-      {"line": 241,
+      {"line": 326,
        "file": "examples/openzeppelin/ConfidentialToken.lean",
        "column": 1},
       "leaves":
       [{"tag": "reference",
         "span":
-        {"line": 241,
+        {"line": 326,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_8_keyX"},
        {"tag": "reference",
         "span":
-        {"line": 241,
+        {"line": 326,
          "file": "examples/openzeppelin/ConfidentialToken.lean",
          "column": 1},
         "name": "__noctium_output_9_keyY"}]},
      "tag": "return",
      "span":
-     {"line": 241,
+     {"line": 326,
       "file": "examples/openzeppelin/ConfidentialToken.lean",
       "column": 1}}]}],
  "entry": "s0d0",
