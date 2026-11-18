@@ -1867,35 +1867,84 @@ private def recordLocal (name : String) (value : Scalar) : LowerM Unit := do
   modify fun state => {state with localBindings := {
     name, value, creationGuard := state.guard} :: state.localBindings}
 
-private def closeGuard (guard : Expr .bool) (bindings : List LocalBinding) : Expr .bool :=
-  bindings.foldl (fun body binding =>
-    match binding.value with
-    | ⟨_, value⟩ => .letE binding.name
-        (GuardedExpression.totalize binding.creationGuard value) body) guard
+private partial def expressionUsesName (name : String) : Expr ty → Bool
+  | .native _ | .bool _ | .uint _ _ | .bytesLiteral _ _ | .bytes32Literal _
+  | .foreignBase _ _ | .foreignScalar _ _ => false
+  | .bytesField value _ | .bytesAt value _ | .reverseBytes value | .sliceBytes value _ _
+  | .sha512 value | .keccak256 value | .persistentHash32 value | .reverseBytes32 value
+  | .persistentHashNative value | .toBytes32 value | .fromBytes32 value | .fromBytes value
+  | .jubjubScalarFromNative value | .jubjubScalarToNative value | .jubjubMulGenerator value
+  | .jubjubNeg value | .jubjubCoordinate value _ | .foreignEncodedField value _
+  | .foreignUnary _ value | .foreignToBytes value | .foreignFromBytes _ value
+  | .inv value | .cast _ value | .disclose _ value => expressionUsesName name value
+  | .persistentHashVector32 values | .hashToCurve values
+  | .persistentHashNativeVector values | .transientHash values => values.any (expressionUsesName name)
+  | .concatBytes left right | .foreignBinary _ left right | .jubjubMul left right
+  | .jubjubAdd left right | .add left right | .mul left right | .sub left right
+  | .uadd left right | .usub left right | .umul left right | .eq left right
+  | .poseidon2 _ left right => expressionUsesName name left || expressionUsesName name right
+  | .jubjubFromCoordinates left right => expressionUsesName name left || expressionUsesName name right
+  | .boolAnd left right | .boolOr left right | .boolXor left right =>
+    expressionUsesName name left || expressionUsesName name right
+  | .select condition yes no =>
+    expressionUsesName name condition || expressionUsesName name yes || expressionUsesName name no
+  | .letE localName value body => localName == name || expressionUsesName name value ||
+      expressionUsesName name body
+  | .assertE condition body => expressionUsesName name condition || expressionUsesName name body
+  | .ref candidate => candidate == name
+  | _ => true
 
-private def closeExpression (bindings : List LocalBinding) (value : Expr ty) : Expr ty :=
+private partial def expressionIsTotal (env : TypeEnv) : Expr ty → Bool
+  | .native _ | .bool _ | .uint _ _ => true
+  | .ref name => env.lookup name == some ty
+  | .add left right | .mul left right | .sub left right
+  | .boolAnd left right | .boolOr left right | .boolXor left right
+  | .eq left right => expressionIsTotal env left && expressionIsTotal env right
+  | .select condition yes no => expressionIsTotal env condition &&
+      expressionIsTotal env yes && expressionIsTotal env no
+  | .letE (source := source) name value body => expressionIsTotal env value &&
+      expressionIsTotal ((name, source) :: env) body
+  | .disclose _ value => expressionIsTotal env value
+  | .cast .native (source := source) value =>
+    match source with
+    | .native | .bool | .uint _ => expressionIsTotal env value
+    | _ => false
+  | _ => false
+
+private def closeBindings (types : TypeEnv) (bindings : List LocalBinding)
+    (value : Expr ty) : Expr ty :=
   bindings.foldl (fun body binding =>
     match binding.value with
-    | ⟨_, source⟩ => Expr.letE binding.name
+    | ⟨_, source⟩ =>
+      let unused := !expressionUsesName binding.name body
+      if unused && expressionIsTotal types source &&
+          expressionIsTotal types binding.creationGuard then body
+      else Expr.letE binding.name
         (GuardedExpression.totalize binding.creationGuard source) body) value
 
-private def closeLedgerEffect (bindings : List LocalBinding) : Effect → Effect
-  | .require condition => .require (closeExpression bindings condition)
-  | .writeCell state ty value => .writeCell state ty (closeExpression bindings value)
+private def closeGuard (types : TypeEnv) (guard : Expr .bool)
+    (bindings : List LocalBinding) : Expr .bool := closeBindings types bindings guard
+
+private def closeExpression (types : TypeEnv) (bindings : List LocalBinding)
+    (value : Expr ty) : Expr ty := closeBindings types bindings value
+
+private def closeLedgerEffect (types : TypeEnv) (bindings : List LocalBinding) : Effect → Effect
+  | .require condition => .require (closeExpression types bindings condition)
+  | .writeCell state ty value => .writeCell state ty (closeExpression types bindings value)
   | .readMap state destination keyTy valueTy key =>
-      .readMap state destination keyTy valueTy (closeExpression bindings key)
+      .readMap state destination keyTy valueTy (closeExpression types bindings key)
   | .readMember state destination keyTy valueTy key =>
-      .readMember state destination keyTy valueTy (closeExpression bindings key)
+      .readMember state destination keyTy valueTy (closeExpression types bindings key)
   | .writeMap state keyTy valueTy key value =>
-      .writeMap state keyTy valueTy (closeExpression bindings key) (closeExpression bindings value)
+      .writeMap state keyTy valueTy (closeExpression types bindings key) (closeExpression types bindings value)
   | effect => effect
 
 private def appendLedgerEffect (span : SourceSpan) (effect : Effect) : LowerM Unit := do
   let state ← get
   let guard := if state.guardActive then
-    some (closeGuard state.guard state.localBindings) else none
+    some (closeGuard state.types state.guard state.localBindings) else none
   modify fun state => {state with
-    ledgerEffects := state.ledgerEffects ++ [closeLedgerEffect state.localBindings effect]
+    ledgerEffects := state.ledgerEffects ++ [closeLedgerEffect state.types state.localBindings effect]
     ledgerGuards := state.ledgerGuards ++ [guard]
     ledgerSpans := state.ledgerSpans ++ [span]}
 
@@ -2111,7 +2160,7 @@ mutual
     | .witnessCall site name arguments => do
       let signature ← liftD (witnessSignature program name span)
       let entryState ← get
-      let callGuard := closeGuard entryState.guard entryState.localBindings
+      let callGuard := closeGuard entryState.types entryState.guard entryState.localBindings
       let arguments ← arguments.mapM (lowerTerm program scope env span)
       let mut bindings := []
       let mut constraints := arguments.flatMap (·.constraints)
@@ -2307,7 +2356,7 @@ mutual
       let values ← leaves.mapM (lowerTerm program scope env span)
       let expected := sourceLeafTypes compiled.checked.value
       unless values.length == expected.length do liftD (fail span "aggregate source leaf count mismatch")
-      let nativeLeaves ← values.mapM fun value => liftD (nativeExpr span value)
+      let nativeLeaves ← values.mapM fun value => liftD (nativeOfScalar span value.scalar)
       let state ← get
       let checked ← liftD ((Types.checkNativeExpression compiled state.types nativeLeaves).mapError
         fun message => {span, message})
@@ -2382,11 +2431,17 @@ mutual
       let parameterType := declaration.parameterType parameter
       let actual ← liftD (coerce span actual parameterType)
       let mut references : List Scalar := []
-      for component in components actual do
-        let name ← freshTyped component.ty
-        recordLocal name component
-        bindings := bindings ++ [(name, component)]
-        references := references ++ [⟨component.ty, .ref name⟩]
+      let actualComponents := components actual
+      if actualComponents.isEmpty then
+        let name ← freshTyped actual.scalar.ty
+        recordLocal name actual.scalar
+        bindings := bindings ++ [(name, actual.scalar)]
+      else
+        for component in actualComponents do
+          let name ← freshTyped component.ty
+          recordLocal name component
+          bindings := bindings ++ [(name, component)]
+          references := references ++ [⟨component.ty, .ref name⟩]
       let reference := match parameterType with
         | .composite type => aggregateValue type references
         | .scalar _ => {actual with scalar := references.headD actual.scalar}
@@ -2435,6 +2490,10 @@ mutual
           recordLocal localName component
           bindings := bindings ++ [(localName, component)]
           references := references ++ [⟨component.ty, .ref localName⟩]
+        if bindings.isEmpty then
+          let localName ← freshTyped value.scalar.ty
+          recordLocal localName value.scalar
+          bindings := [(localName, value.scalar)]
         let reference : Lowered := match ty with
           | .unit => unitValue
           | .scalar _ => {value with scalar := references.headD value.scalar}
@@ -2450,14 +2509,13 @@ mutual
         for component in components value do
           let name ← freshTyped component.ty
           bindings := bindings ++ [(name, component)]
+        if bindings.isEmpty then
+          let name ← freshTyped value.scalar.ty
+          bindings := [(name, value.scalar)]
         let body ← lowerBodyWith program declaration env rest continuation
         let body := {body with constraints := if (← get).ledgerMode then [] else value.constraints ++ body.constraints}
-        if bindings.isEmpty && value.ty == .unit then
-          let name ← freshTyped .bool
-          pure (sequence name value body)
-        else
-          pure (bindings.foldr (fun (name, component) body =>
-            sequence name {ty := .scalar component.ty, scalar := component} body) body)
+        pure (bindings.foldr (fun (name, component) body =>
+          sequence name {ty := .scalar component.ty, scalar := component} body) body)
       | .assert condition =>
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
         if (← get).ledgerMode then appendLedgerConstraints declaration.span condition.constraints

@@ -384,6 +384,63 @@ private def checkedComposite (program : Program) (span : SourceSpan)
   | .error diagnostic => failAt (if diagnostic.span.file.isEmpty then span else diagnostic.span)
       diagnostic.message
 
+private def mapElementType : ResultType → Types.CompositeType
+  | .unit => .unit
+  | .scalar (.bytes length) => .bytes length
+  | .scalar ty => .scalar ty
+  | .composite type => type
+
+private partial def layoutHasEnum : Types.Layout → Bool
+  | .enumeration .. => true
+  | .tuple items => items.any layoutHasEnum
+  | .structure _ fields => fields.any fun (_, field) => layoutHasEnum field
+  | .vector _ element => layoutHasEnum element
+  | .unit | .scalar _ | .bytes _ _ => false
+
+private partial def layoutProjectionDepth : Types.Layout → Nat
+  | .unit | .scalar _ | .enumeration .. => 0
+  | .tuple items =>
+    if items.all (fun item => item.leafCount == 0) then 0
+    else 1 + (items.map layoutProjectionDepth).foldl max 0
+  | .structure _ fields =>
+    if fields.all (fun (_, field) => field.leafCount == 0) then 0
+    else 1 + (fields.map (layoutProjectionDepth ∘ Prod.snd)).foldl max 0
+  | .vector length element =>
+    if length == 0 || element.leafCount == 0 then 0 else 1 + layoutProjectionDepth element
+  | .bytes length _ => if length == 0 then 0 else 1
+
+private partial def flattenLayoutTerms (span : SourceSpan) : Types.Layout → Term →
+    Except Diagnostic (List Term)
+  | .unit, _ => pure []
+  | .scalar _, value => pure [value]
+  | .tuple items, value => do
+    let parts ← (List.range items.length).mapM fun index => do
+      let some item := items[index]? | failAt span "checked tuple layout index mismatch"
+      if item.leafCount == 0 then pure []
+      else flattenLayoutTerms span item (.project value (.tupleIndex index))
+    pure parts.flatten
+  | .structure _ fields, value => do
+    let parts ← fields.mapM fun (name, field) => do
+      if field.leafCount == 0 then pure []
+      else flattenLayoutTerms span field (.project value (.field name))
+    pure parts.flatten
+  | .vector length element, value => do
+    let parts ← if element.leafCount == 0 then pure [] else
+      (List.range length).mapM fun index =>
+        flattenLayoutTerms span element (.project value (.vectorIndex index))
+    pure parts.flatten
+  | .bytes length _, value =>
+    (List.range length).mapM fun index => pure (.project value (.byteIndex index))
+  | .enumeration .., _ => failAt span "map results containing enum layouts are unsupported"
+
+private def flattenMapResult (span : SourceSpan) (result : ResultType)
+    (layout : Types.Layout) (value : Term) : Except Diagnostic (List Term) := do
+  match result, layout with
+  | .scalar (.bytes length), .bytes layoutLength _ => do
+    unless length == layoutLength do failAt span "checked byte result layout mismatch"
+    (List.range length).mapM fun index => pure (.bytesAt value index)
+  | _, layout => flattenLayoutTerms span layout value
+
 private def vectorElement (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (sequence : Term) :
     Except Diagnostic (Nat × Types.CompositeType) := do
@@ -455,13 +512,29 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
     failAt span "map sequence lengths must match"
   let actualTypes := typedSequences.map fun (_, element) => resultTypeOfComposite element
   let compiled ← materializeOperator limits program scope env span operator actualTypes
-  let .scalar resultTy := compiled.result
-    | failAt span "map currently supports scalar operator results only"
+  if let .composite (.scalar _) := compiled.result then
+    failAt span "map cannot flatten a composite scalar wrapper"
+  let outputElementType := mapElementType compiled.result
+  let compiledResultType ← checkedComposite compiled.program span outputElementType
+  if layoutHasEnum compiledResultType.checked.value then
+    failAt span "map results containing enum layouts are unsupported"
+  let vectorType := Types.CompositeType.vector length outputElementType
+  discard (checkedComposite compiled.program span vectorType)
   if compiled.captures.length + actualTypes.length > limits.maxParameters then
     failAt span "helper resource limit exceeded: map operator arguments"
   if sequences.length + compiled.captures.length > limits.maxParameters then
     failAt span "helper resource limit exceeded: map wrapper arguments"
-  let estimatedNodes := length * (2 + compiled.captures.length + 2 * sequences.length) + length + 2
+  let resultLeaves := compiledResultType.checked.expandedLeaves
+  unless resultLeaves ≤ compiledResultType.checked.expandedNodes do
+    failAt span "checked map result leaf count exceeds its expansion bound"
+  let projectionDepth := layoutProjectionDepth compiledResultType.checked.value
+  unless projectionDepth ≤ compiledResultType.checked.layoutNodes do
+    failAt span "checked map result projection depth exceeds its layout bound"
+  let projectedTerms := length * resultLeaves * (projectionDepth + 1)
+  let projectionWork := length *
+    (compiledResultType.checked.expandedNodes - resultLeaves)
+  let estimatedNodes := length * (2 + compiled.captures.length + 2 * sequences.length) +
+    projectedTerms + projectionWork + 2
   checkGeneratedSourceBudget limits span estimatedNodes
   let used := appendMany [programNames compiled.program env, sequences.flatMap termNames,
     operatorNames operator, compiled.captures.map Prod.fst]
@@ -478,11 +551,12 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
       Term.project (.ref name) (.vectorIndex index)
     Term.call compiled.name (compiled.captures.map (fun capture => Term.ref capture.1) ++ elements)
   let bindings := resultNames.zip operationCalls |>.map fun (name, value) =>
-    Statement.bind name (.scalar resultTy) value
-  let vectorType := Types.CompositeType.vector length (.scalar resultTy)
-  discard (checkedComposite compiled.program span vectorType)
+    Statement.bind name compiled.result value
+  let leaves ← (List.range length).mapM fun index =>
+    flattenMapResult span compiled.result compiledResultType.checked.value (.ref resultNames[index]!)
+  let leaves := leaves.flatten
   let wrapperBody := bindings ++ [
-    .return (some (.composite vectorType (resultNames.map Term.ref)))]
+    .return (some (.composite vectorType leaves))]
   let (compiledProgram, wrapperName) ← makeWrapper limits compiled.program scope span
     (appendMany [used, sequenceNames, resultNames]) wrapperParameters
     (.composite vectorType) wrapperBody

@@ -779,7 +779,7 @@
       "layer": "language",
       "surface": "map, fold and anonymous circuits",
       "noctiumStatus": "subset",
-      "notes": "Staged Lean Iteration.applyWithLimits/mapWithLimits/foldWithLimits construct checked ordinary Helpers programs. Named helpers and anonymous statement bodies support inferred signatures and typed lexical captures. Fixed vector map requires equal lengths and checked scalar results. Fold evaluates initial before sequence and requires exact accumulator/result types. Unit parameters/captures, composite map results, other sequence forms and readable operator grammar remain open. See docs/development/iteration.md and tests/IterationWitness.lean.",
+      "notes": "Staged Lean Iteration.applyWithLimits/mapWithLimits/foldWithLimits construct checked ordinary Helpers programs. Named helpers and anonymous statement bodies support inferred signatures and typed lexical captures. Fixed vector map requires equal lengths and checked scalar, Unit, record, tuple, nested-vector and byte results. Fold evaluates initial before sequence and requires exact accumulator/result types. Unit parameters/captures, enum results, other sequence forms and readable operator grammar remain open. See docs/development/iteration.md and tests/IterationWitness.lean.",
       "source": [
         "reference"
       ],

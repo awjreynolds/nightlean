@@ -148,3 +148,129 @@ private def emptyVectorProgram : Program := {
     (.native 1) (.ref "left")
     (.anonymous [{name := "acc"}, {name := "value"}] none [.return (some (.bool true))]))
   "accumulator"
+
+private def mapResultType : Types.CompositeType := .structure "Iteration.Item"
+
+private def mapResultComposites : Types.CompositeEnv := {
+  structures := [{id := "Iteration.Item", fields := [
+    {name := "amount", type := .scalar .native},
+    {name := "metadata", type := .vector 2 (.scalar .native)}]}]
+}
+
+private def mapResultProgram : Program :=
+  {vectorProgram 2 with composites := mapResultComposites}
+
+private def recordMap : Operator := .anonymous [{name := "value"}] none [
+  .return (some (.composite mapResultType [.ref "value", .ref "value", .ref "value"]))]
+
+-- Map preserves nested record layout through the real Helpers compiler.
+#guard match Iteration.mapWithLimits {} mapResultProgram 0 (vectorEnv 2) {}
+    [.ref "left"] recordMap with
+  | .ok (program, term) =>
+    compilesMain program (.composite (.vector 2 mapResultType)) term
+  | .error _ => false
+
+private def booleanMap : Operator := .anonymous [{name := "value"}] none [
+  .return (some (.eq (.ref "value") (.native 0)))]
+
+-- Scalar Bool results map through the checked composite layout.
+#guard match Iteration.mapWithLimits {} (vectorProgram 2) 0 (vectorEnv 2) {}
+    [.ref "left"] booleanMap with
+  | .ok (program, term) =>
+    compilesMain program (.composite (.vector 2 (.scalar .bool))) term
+  | .error _ => false
+
+private def iterationContext : EvalContext := {
+  modulus := Field.modulus, poseidon2 := fun _ _ _ => .error "hash unavailable"}
+
+private def unitMapProgram : Program := {
+  declarations := [
+    {id := ⟨0, 0⟩, name := "main", result := .unit, body := [.return none]},
+    {id := ⟨0, 1⟩, name := "failUnit", result := .unit,
+      body := [.assert (.bool false), .return none]}]
+  exports := [{name := "main", target := ⟨0, 0⟩}]
+}
+
+private def failingUnitMap (length : Nat) : Except String EvalEnv := do
+  let sequenceType := nativeVector length
+  let sequence := .composite sequenceType (List.replicate length (.native 1))
+  let operator := .anonymous [{name := "value"}] none [
+    .evaluate (.call "failUnit" []), .return none]
+  let (program, term) ← (Iteration.mapWithLimits {} unitMapProgram 0 [] {}
+    [sequence] operator).mapError (·.message)
+  let circuit ← (Helpers.compile
+    (installMainReturn program (.composite (.vector length .unit)) term) "main").mapError (·.message)
+  circuit.run iterationContext []
+
+-- A Unit result keeps the callback's assertion. Empty maps still typecheck the
+-- callback without running it.
+#guard match failingUnitMap 1 with | .error _ => true | _ => false
+#guard match failingUnitMap 0 with | .ok _ => true | _ => false
+
+private def failEmptyProgram : Program := {
+  declarations := [
+    {id := ⟨0, 0⟩, name := "main", result := .unit, body := [.return none]},
+    {id := ⟨0, 1⟩, name := "failEmpty", result := .composite (nativeVector 0),
+      body := [.evaluate (.cast (.uint 7) (.native 8)),
+        .return (some (.composite (nativeVector 0) []))]}]
+  exports := [{name := "main", target := ⟨0, 0⟩}]
+}
+
+private def emptyMapSequenceCircuit : Except Diagnostic Circuit := do
+  let (program, term) ← Iteration.mapWithLimits {} failEmptyProgram 0 [] {}
+    [.call "failEmpty" []]
+    (.anonymous [{name := "value"}] none [.return (some (.ref "value"))])
+  Helpers.compile (installMainReturn program (.composite (nativeVector 0)) term) "main"
+
+private def emptyMapEvaluatesSequence : Except String EvalEnv :=
+  match emptyMapSequenceCircuit with
+  | .ok circuit => circuit.run iterationContext []
+  | .error diagnostic => .error diagnostic.message
+
+-- The sequence expression runs once even when the resulting vector is empty.
+#guard emptyMapSequenceCircuit.isOk
+#guard match emptyMapEvaluatesSequence with
+  | .error "scalar conversion exceeds unsigned bound" => true
+  | _ => false
+
+private def unusedNarrowingGuardProgram : Program := {
+  ledger := [{name := "total", kind := .cell .native}]
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "update"
+    parameters := [⟨"enabled", .bool⟩, ⟨"amount", .native⟩]
+    result := .unit
+    body := [
+      .branch (.ref "enabled") [
+        .bind "unused" (.scalar (.uint 7)) (.cast (.uint 7) (.ref "amount")),
+        .writeCell "total" .native (.native 1)] [],
+      .return none]
+  }]
+  exports := [{name := "update", target := ⟨0, 0⟩, inputs := [
+    {name := "enabled", ty := .bool, visibility := .public},
+    {name := "amount", ty := .native, visibility := .public}]}]
+}
+
+private def unusedNarrowingGuard (enabled : Bool) : Except String Bool := do
+  let entry ← (Helpers.compileEntrypointFor unusedNarrowingGuardProgram "update"
+    unusedNarrowingGuardProgram.ledger).mapError (·.message)
+  let some index := entry.effects.findIdx? (fun effect =>
+    match effect with
+    | .writeCell .. => true
+    | _ => false)
+    | throw "missing public write effect"
+  let some (some guard) := entry.effectGuards[index]?
+    | throw "missing ledger effect guard"
+  guard.eval iterationContext [
+    ("enabled", .bool enabled), ("amount", .native 8)]
+
+-- A discarded narrowing cast stays in the active public-write guard. Its
+-- totalized form skips the cast when the branch is inactive.
+#guard (Helpers.compileEntrypointFor unusedNarrowingGuardProgram "update"
+  unusedNarrowingGuardProgram.ledger).isOk
+#guard match unusedNarrowingGuard true with
+  | .error "scalar conversion exceeds unsigned bound" => true
+  | _ => false
+#guard match unusedNarrowingGuard false with
+  | .ok Bool.false => true
+  | _ => false

@@ -5463,21 +5463,27 @@
       "implementation": "../../Noctium/Helpers/Iteration.lean",
       "documentation": "../development/iteration.md",
       "newOpcodes": 0,
-      "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vector expressions once and returns a checked scalar vector. Fold evaluates initial before sequence, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution.",
+      "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vector expressions once and returns a vector of checked scalar, Unit, record, tuple, nested-vector or byte results. Fold evaluates initial before sequence, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution.",
       "checks": {
-        "compilerBuild": "passed,76 jobs",
+        "compilerBuild": "passed,76 jobs after aggregate and closure changes",
         "operatorSource": "passed, captured/inferred and named apply, both lexical hiding rejects, map/fold compilation, empty vector map, unequal lengths, missing capture and accumulator mismatch",
         "sourceExport": "passed, selected3.2.1 with private source definitions and mandatory source disclosure rejection",
-        "native": "one case passed in0.08seconds covering active/inactive/altered reply; seed then one vector load then mapped provider args3/4/5 and replies6/8/10; final total24 or0 with matching private staging; both completed paths pass native checker",
-        "existingWitnessSource": "passed after source name resolution change"
+        "native": "one case passed in0.10seconds after aggregate/closure changes, active/inactive/altered reply; seed then one vector load then mapped provider args3/4/5; mapped nominal records include nested Vector2 metadata; fold reads amount fields, final total24 or0 and matching private staging; both completed paths pass native checker",
+        "existingWitnessSource": "passed after source name resolution change",
+        "aggregateSource": "passed, nested nominal record and Bool map compilation, Unit map callback active failure/zero-iteration success, empty-vector sequence compile success plus checked-cast failure, closed public-write guard active narrowing-cast failure and inactive skip"
       },
       "artifactBytes": {
-        "impact": 1812690,
-        "zkir": 11479,
-        "binding": 35948,
-        "control": 56573
+        "impact": 3309220,
+        "zkir": 15583,
+        "binding": 20151,
+        "control": 43171
       },
-      "limits": "Staged source API only. Unit parameters/captures, composite map results and other sequence forms remain open in issue48. Existing aggregate scalar-layout restrictions apply. No new keys/proofs/deployments, cross-profile campaign, K/timing benchmark, portable-runner comparison or general operator-preservation proof. Syntax closure sharing and broader optimisation remain deferred under issue85."
+      "limits": "Staged source API only. Unit parameters/captures, enum results and other sequence forms remain open in issue48. Existing aggregate scalar-layout restrictions apply. No new keys/proofs/deployments, cross-profile campaign, K/timing benchmark, portable-runner comparison or general operator-preservation proof. Broader syntax sharing and optimisation remain deferred under issue85. This local closure pass has focused source/native evidence, without a general preservation theorem.",
+      "closurePruning": {
+        "impactBeforeBytes": 25167866,
+        "impactAfterBytes": 3309220,
+        "scope": "Only unreferenced bindings whose value and creation guard pass a conservative totality check in the checked typed environment are omitted. All partial and unknown constructors remain, without hoisting or changing retained evaluation order. Native add/mul/sub use the pinned nonzero field. Reference validation/input requirements remain in the existing source and native admission paths."
+      }
     }
   }
 }

@@ -5,7 +5,11 @@ open Noctium Noctium.Helpers
 
 private def iterationSource : Except Diagnostic Program := do
   let vector := Types.CompositeType.vector 3 (.scalar .native)
+  let item := Types.CompositeType.structure "Iteration.Item"
   let base : Program := {
+    composites := {structures := [{id := "Iteration.Item", fields := [
+      {name := "amount", type := .scalar .native},
+      {name := "metadata", type := .vector 2 (.scalar .native)}]}]}
     ledger := [{name := "total", kind := .cell .native}]
     witnesses := [
       {name := "seed", operation := "noctium.iteration-seed.v1", capability := "seed",
@@ -29,11 +33,12 @@ private def iterationSource : Except Diagnostic Program := do
     [.witnessCall "input-values" "values" []]
     (.anonymous [{name := "value"}] none [
       .bind "shifted" (.scalar .native) (.binary .add (.ref "value") (.ref "offset")),
-      .return (some (.witnessCall "double-value" "double" [.ref "shifted"]))])
+      .bind "doubled" (.scalar .native) (.witnessCall "double-value" "double" [.ref "shifted"]),
+      .return (some (.composite item [.ref "doubled", .ref "shifted", .ref "value"]))])
   let (foldedProgram, folded) ← Iteration.foldWithLimits {} mappedProgram 0 env {}
     (.witnessCall "initial-seed" "seed" []) mapped
     (.anonymous [{name := "acc"}, {name := "value"}] none [
-      .return (some (.binary .add (.ref "acc") (.ref "value")))])
+      .return (some (.binary .add (.ref "acc") (.project (.ref "value") (.field "amount"))))])
   pure {foldedProgram with declarations := foldedProgram.declarations.map fun declaration =>
     if declaration.id == ⟨0, 0⟩ then {declaration with body := [
       .branch (.disclose {} (.ref "enabled")) [
