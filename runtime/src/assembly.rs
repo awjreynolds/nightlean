@@ -5,14 +5,12 @@ use crate::create_state;
 use crate::zkir::IrSource;
 use crate::{Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare};
 use anyhow::{Context, Result, anyhow, ensure};
-use base_crypto::hash::HashOutput;
 use base_crypto::time::Timestamp;
-use coin_structure::contract::ContractAddress;
 use ledger::{
     construct::{ContractCallPrototype, PreTranscript, partition_transcripts},
     structure::{
         ContractAction, ContractDeploy, Intent, LedgerParameters, ProofPreimageMarker,
-        ProofPreimageVersioned, Signature,
+        ProofPreimageVersioned, Signature, StandardTransaction,
     },
 };
 use onchain_runtime::{
@@ -50,159 +48,184 @@ pub struct CheckedNativeCall<'a> {
     pub communication_commitment_rand: Fr,
 }
 
-/// Native output of the bounded caller-to-callee partition check.
-pub struct CheckedTwoCallPartition {
-    pub caller_preimage: ProofPreimage,
-    pub callee_preimage: ProofPreimage,
-    pub caller_commitment: Fr,
-    pub callee_commitment: Fr,
-    /// Caller pair first, callee pair second.
-    pub transcripts: [(Option<Transcript<Db>>, Option<Transcript<Db>>); 2],
-}
-
-fn check_native_call(
-    call: &CheckedNativeCall<'_>,
+/// Build one private, unbalanced intent from prepared calls in ledger execution
+/// order. The host supplies the call contexts. The ledger verifies their actual
+/// state, operation keys and effects when the proved transaction is submitted.
+pub fn assemble_checked_calls(
+    calls: &[CheckedNativeCall<'_>],
     parameters: &LedgerParameters,
-) -> Result<(ProofPreimage, Fr)> {
-    ensure!(
-        call.initial_context
-            .effects
-            .claimed_contract_calls
-            .is_empty(),
-        "two-call partition requires a fresh call-claim context"
-    );
-    ensure!(
-        call.communication_commitment_rand != Fr::from(0u64),
-        "native call commitment randomness must be nonzero"
-    );
-    let key_name =
-        std::str::from_utf8(&call.entry_point).context("native entrypoint name is not UTF-8")?;
-    ensure!(
-        call.execution.preimage.key_location.0 == key_name,
-        "native entrypoint differs from the checked relation"
-    );
-    let replay = call
-        .initial_context
-        .query(
-            &call.execution.program,
-            None,
-            &parameters.cost_model.runtime_cost_model,
-        )
-        .map_err(|_| anyhow!("native execution does not replay from the supplied context"))?;
-    ensure!(
-        replay.context.address == call.execution.after.address
-            && replay.context.state == call.execution.after.state
-            && replay.context.effects == call.execution.after.effects,
-        "native execution differs from the supplied initial context"
-    );
-    let mut preimage = call.execution.preimage.clone();
-    let communication_commitment = onchain_runtime::communication_commitment(
-        call.execution.call_input()?,
-        call.execution.call_output()?,
-        call.communication_commitment_rand,
-    );
-    preimage.communications_commitment =
-        Some((communication_commitment, call.communication_commitment_rand));
-    let active = preimage
-        .check(call.circuit)
-        .map_err(|_| anyhow!("native call preimage failed the official circuit checker"))?;
-    ensure!(
-        active == call.execution.activity_schedule
-            && active.iter().filter(|skip| skip.is_none()).count() == call.execution.program.len(),
-        "native call activity metadata differs from its checked relation"
-    );
-    Ok((preimage, communication_commitment))
-}
+    ttl: u64,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<NativeIntent> {
+    ensure!(!calls.is_empty(), "expected at least one native call");
+    ensure!(ttl > 0, "TTL must be explicit Unix seconds");
 
-fn claimed_calls(context: &QueryContext<Db>) -> Vec<(u64, ContractAddress, HashOutput, Fr)> {
-    context
-        .effects
-        .claimed_contract_calls
-        .iter()
-        .map(|claim| (*claim).deref().into_inner())
-        .collect()
-}
+    let mut prototypes = Vec::with_capacity(calls.len());
+    let mut pre_transcripts = Vec::with_capacity(calls.len());
+    let mut commitments = BTreeMap::new();
+    let cost = &parameters.cost_model.runtime_cost_model;
+    for (i, call) in calls.iter().enumerate() {
+        let context = &call.initial_context;
+        let execution = call.execution;
+        ensure!(
+            context.effects == Default::default(),
+            "native intent requires a fresh effects context for each call"
+        );
+        ensure!(
+            call.communication_commitment_rand != Fr::from(0u64),
+            "native call commitment randomness must be nonzero"
+        );
+        let name = std::str::from_utf8(&call.entry_point)?;
+        ensure!(
+            execution.preimage.key_location.0 == name,
+            "native entrypoint differs from the checked relation"
+        );
+        let replay = context
+            .query(&execution.program, None, cost)
+            .map_err(|_| anyhow!("native execution does not replay from the supplied context"))?;
+        ensure!(
+            replay.context.address == execution.after.address
+                && replay.context.state == execution.after.state
+                && replay.context.effects == execution.after.effects,
+            "native execution differs from the supplied initial context"
+        );
+        crate::validate_call_input_header_json(
+            &execution.call_input_names,
+            &serde_json::to_value(call.circuit)?,
+        )?;
 
-fn partition_claims(
-    partition: &(Option<Transcript<Db>>, Option<Transcript<Db>>),
-) -> Vec<(u64, ContractAddress, HashOutput, Fr)> {
-    partition
-        .0
-        .iter()
-        .chain(partition.1.iter())
-        .flat_map(|transcript| {
-            transcript
-                .effects
-                .claimed_contract_calls
+        let input = execution.call_input()?;
+        let output = execution.call_output()?;
+        let commitment = onchain_runtime::communication_commitment(
+            input.clone(),
+            output.clone(),
+            call.communication_commitment_rand,
+        );
+        ensure!(
+            commitments.insert(commitment, i).is_none(),
+            "native intent requires unique communication commitments"
+        );
+        pre_transcripts.push(PreTranscript {
+            context: context.clone(),
+            program: execution.program.clone(),
+            comm_comm: Some(commitment),
+        });
+        prototypes.push(ContractCallPrototype {
+            address: context.address,
+            entry_point: call.entry_point.clone(),
+            // ProofPreimage construction only needs the relation and call data.
+            op: ContractOperation::new(None, None),
+            guaranteed_public_transcript: None,
+            fallible_public_transcript: None,
+            private_transcript_outputs: execution
+                .preimage
+                .private_transcript
                 .iter()
-                .map(|claim| (*claim).deref().into_inner())
-        })
-        .collect()
+                .copied()
+                .map(field_value)
+                .collect(),
+            input,
+            output,
+            communication_commitment_rand: call.communication_commitment_rand,
+            key_location: KeyLocation(Cow::Owned(format!(
+                "{}:{name}",
+                hex::encode(context.address.0.0)
+            ))),
+        });
+    }
+
+    let partitions = partition_transcripts(&pre_transcripts, parameters)
+        .map_err(|_| anyhow!("official native call forest partition failed"))?;
+    ensure!(
+        partitions.len() == calls.len(),
+        "invalid native partition count"
+    );
+    let mut claimed = BTreeSet::new();
+    let mut intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl));
+    for (i, (mut prototype, (mut guaranteed, fallible))) in
+        prototypes.into_iter().zip(partitions).enumerate()
+    {
+        if guaranteed.is_none() && fallible.is_none() {
+            guaranteed = Some(empty_transcript(&calls[i].initial_context, cost)?);
+        }
+        for claim in guaranteed
+            .iter()
+            .chain(fallible.iter())
+            .flat_map(|transcript| transcript.effects.claimed_contract_calls.iter())
+        {
+            let (_, address, entry_hash, commitment) = (*claim).deref().into_inner();
+            let callee = commitments
+                .get(&commitment)
+                .copied()
+                .filter(|&callee| {
+                    callee > i
+                        && calls[callee].initial_context.address == address
+                        && calls[callee].entry_point.ep_hash() == entry_hash
+                })
+                .context("contract claim has no matching later call in this intent")?;
+            ensure!(claimed.insert(callee), "contract call has multiple claims");
+        }
+        prototype.guaranteed_public_transcript = guaranteed;
+        prototype.fallible_public_transcript = fallible;
+        intent = intent.add_call::<ProofPreimage>(prototype);
+    }
+
+    ensure!(
+        intent.actions.len() == calls.len(),
+        "invalid native intent call count"
+    );
+    for (i, (call, native)) in calls.iter().zip(intent.calls()).enumerate() {
+        let ProofPreimageVersioned::V2(preimage) = &native.proof else {
+            return Err(anyhow!("unsupported preimage version"));
+        };
+        let commitment = pre_transcripts[i].comm_comm.unwrap();
+        let mut expected = call.execution.preimage.clone();
+        expected.key_location = preimage.key_location.clone();
+        expected.communications_commitment = Some((commitment, call.communication_commitment_rand));
+        ensure!(
+            native.address == call.initial_context.address
+                && native.entry_point == call.entry_point
+                && native.communication_commitment == commitment
+                && **preimage == expected,
+            "ledger constructor changed the checked call or its preimage"
+        );
+        let active = preimage
+            .check(call.circuit)
+            .map_err(|_| anyhow!("native call preimage failed the official circuit checker"))?;
+        ensure!(
+            active == call.execution.activity_schedule
+                && active.iter().filter(|skip| skip.is_none()).count()
+                    == call.execution.program.len(),
+            "native call activity metadata differs from its checked relation"
+        );
+    }
+    // Sequencing rules are defined on transactions, but also apply to one intent.
+    StandardTransaction::new(
+        "",
+        [(1, intent.clone())].into_iter().collect(),
+        None,
+        Default::default(),
+    )
+    .sequencing_check()
+    .map_err(|_| anyhow!("official native call sequencing rejected"))?;
+    Ok(intent)
 }
 
-/// Validate and partition one checked source caller with one checked source callee.
-/// This helper prepares native transcripts only. It does not construct keys, proofs, or intents.
-pub fn partition_checked_two_call(
-    caller: CheckedNativeCall<'_>,
-    callee: CheckedNativeCall<'_>,
-    parameters: &LedgerParameters,
-) -> Result<CheckedTwoCallPartition> {
-    let (caller_preimage, caller_commitment) = check_native_call(&caller, parameters)?;
-    let (callee_preimage, callee_commitment) = check_native_call(&callee, parameters)?;
-    ensure!(
-        caller_commitment != callee_commitment,
-        "two-call partition requires unique communication commitments"
-    );
-
-    let expected_claim = (
-        0,
-        callee.initial_context.address,
-        callee.entry_point.ep_hash(),
-        callee_commitment,
-    );
-    ensure!(
-        claimed_calls(&caller.execution.after).as_slice() == std::slice::from_ref(&expected_claim),
-        "caller must claim the callee at sequence zero with the exact call identity"
-    );
-    ensure!(
-        claimed_calls(&callee.execution.after).is_empty(),
-        "two-call partition does not accept callee claims"
-    );
-
-    let calls = [
-        PreTranscript {
-            context: caller.initial_context.clone(),
-            program: caller.execution.program.clone(),
-            comm_comm: Some(caller_commitment),
-        },
-        PreTranscript {
-            context: callee.initial_context.clone(),
-            program: callee.execution.program.clone(),
-            comm_comm: Some(callee_commitment),
-        },
-    ];
-    let partitions = partition_transcripts(&calls, parameters)
-        .map_err(|_| anyhow!("official native two-call partition failed"))?;
-    ensure!(
-        partitions.len() == 2,
-        "official partition returned an invalid call count"
-    );
-    ensure!(
-        partition_claims(&partitions[0]).as_slice() == std::slice::from_ref(&expected_claim)
-            && partition_claims(&partitions[1]).is_empty(),
-        "official partition changed the checked contract call identity"
-    );
-    let transcripts: [(Option<Transcript<Db>>, Option<Transcript<Db>>); 2] = partitions
-        .try_into()
-        .map_err(|_| anyhow!("official partition returned an invalid call count"))?;
-    Ok(CheckedTwoCallPartition {
-        caller_preimage,
-        callee_preimage,
-        caller_commitment,
-        callee_commitment,
-        transcripts,
+fn empty_transcript(
+    context: &QueryContext<Db>,
+    cost: &onchain_runtime::cost_model::CostModel,
+) -> Result<Transcript<Db>> {
+    let query = context
+        .query::<ResultModeVerify>(&[], None, cost)
+        .map_err(|_| anyhow!("empty native transcript query rejected"))?;
+    Ok(Transcript {
+        gas: query.gas_cost,
+        effects: query.context.effects,
+        program: Vec::<onchain_runtime::ops::Op<ResultModeVerify, Db>>::new().into(),
+        version: Some(storage::arena::Sp::new(Transcript::<Db>::VERSION)),
     })
 }
+
 /// Explicit input bytes. Keys must come from a trusted, pinned key-generation step.
 /// The assembler checks native encodings and k, not cryptographic key/IR correspondence.
 pub struct Inputs<'a> {
@@ -574,7 +597,7 @@ fn build_for_deployment(
     .map_err(|_| anyhow!("native transaction partition failed"))?;
     ensure!(partitions.len() == 1, "expected one call partition");
     let (mut guaranteed, fallible) = partitions.pop().unwrap();
-    let mut after = context.clone();
+    let mut after = context;
     let cost = &parameters.cost_model.runtime_cost_model;
     if evaluated.program.is_empty() {
         ensure!(
@@ -582,16 +605,7 @@ fn build_for_deployment(
             "empty source program unexpectedly produced a native transcript"
         );
         // Ledger sequencing requires a transcript, including pure and all-inactive calls.
-        let empty_query = context
-            .query::<ResultModeVerify>(&[], None, cost)
-            .map_err(|_| anyhow!("empty native transcript query rejected"))?;
-        after = empty_query.context.clone();
-        guaranteed = Some(Transcript {
-            gas: empty_query.gas_cost,
-            effects: empty_query.context.effects,
-            program: Vec::<onchain_runtime::ops::Op<ResultModeVerify, Db>>::new().into(),
-            version: Some(storage::arena::Sp::new(Transcript::<Db>::VERSION)),
-        });
+        guaranteed = Some(empty_transcript(&after, cost)?);
     }
     for transcript in guaranteed.iter().chain(fallible.iter()) {
         after = after

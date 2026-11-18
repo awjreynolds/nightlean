@@ -35,24 +35,35 @@ alignment metadata or a type schema, so callers must also select and validate th
 callee's interface. Passing a field reference alone does not establish this
 payload binding.
 
-## Checked two-call partition
+## Assemble a native call forest
 
-The Rust assembly helper checks a caller and leaf callee against their native
-circuits, replays both programs from the supplied initial contexts, installs
-nonzero communication randomness and checks the resulting preimages. It requires
-fresh initial claim sets, one caller claim with sequence zero, the exact callee address, entrypoint hash and
-commitment, and no callee claims. Commitments must be distinct. It then uses the
-official transcript partitioner. The initial contexts are supplied by the
-application. This check does not authenticate them against a network.
+The Rust SDK takes prepared calls in ledger execution order through
+`assembly::assemble_checked_calls`. Each call has a circuit, an initial
+`QueryContext`, an entrypoint and a fresh private communication opening. The
+helper replays each program from its supplied context and checks the resulting
+state and effects. It uses Midnight's partitioner to split guaranteed and
+fallible operations across the forest.
 
-The focused source/native case consumes `NativeCallClaims.claim` and the existing
-`NativeReturns.advance` artifacts. It checks active and inactive claims, typed
-input/output commitment matching, exact effects, rejected target mismatch and rejection of a preloaded claim masquerading as an inactive call.
+Every recorded claim must match a later call's address, entrypoint hash and
+communication commitment. Commitments must be distinct, and each callee has
+at most one incoming claim. The ledger's sequencing check enforces sibling
+order and transcript causality. The intent carries both transcript sections
+and the private proof preimages. The helper checks each reconstructed preimage
+and activity schedule against its circuit. Key locations use
+`<hex-address>:<entrypoint>` so equally named operations at different
+addresses have separate resolver entries.
+
+The focused case assembles `NativeCallClaims.claim`, its claimed
+`NativeReturns.advance` callee and an independent call to another address
+in one intent. It checks the ordered calls and the committed Native argument.
+Missing, reversed and wrong targets, duplicate commitments and preloaded
+effects reject. When the claim guard is false, the caller assembles by itself.
 Source guards reject private addresses, hashes, commitments and control without
 release.
 
-This is a checked native partition, not a finalized two-contract deployment.
-Intent assembly with retained verifier keys, proof generation and local ledger
-acceptance remain open. General call graphs, wider argument types and helper or
-hosted-witness statement authoring need further implementation. The reference
-state interpreter rejects active call claims rather than simulating a remote call.
+The result is a private, unbalanced intent. Applications supply the initial
+contexts. Resolving deployed verifier keys, attaching verified proofs and
+submitting a balanced transaction on localnet remain separate work. Wider
+arguments, typed source call declarations and helper or hosted-witness
+statement authoring remain open. The reference state interpreter rejects
+active call claims.

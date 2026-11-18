@@ -2,10 +2,10 @@
 
 use base_crypto::hash::HashOutput;
 use coin_structure::contract::ContractAddress;
-use ledger::structure::INITIAL_PARAMETERS;
+use ledger::structure::{INITIAL_PARAMETERS, ProofPreimageVersioned};
 use noctium_runtime::{
     Plan,
-    assembly::{CheckedNativeCall, partition_checked_two_call},
+    assembly::{CheckedNativeCall, assemble_checked_calls},
     check, create_state, prepare,
     zkir::IrSource,
 };
@@ -13,6 +13,7 @@ use onchain_runtime::{
     context::QueryContext,
     state::{ChargedState, EntryPointBuf},
 };
+use rand::rngs::OsRng;
 use serde_json::{Value as Json, json};
 use std::collections::BTreeMap;
 use transient_crypto::curve::Fr;
@@ -90,7 +91,7 @@ fn checked_call<'a>(
 }
 
 #[test]
-fn native_claim_partitions_one_checked_callee_and_skips_inactive_claims() {
+fn native_intent_assembles_a_call_forest_and_rejects_unmatched_claims() {
     let (caller_plan, caller_circuit) = caller_fixture();
     let (callee_plan, callee_circuit) = callee_fixture();
     let caller_address = ContractAddress(HashOutput([7; 32]));
@@ -141,15 +142,7 @@ fn native_claim_partitions_one_checked_callee_and_skips_inactive_claims() {
         caller_execution.returns_json(),
         BTreeMap::from([("didClaim".into(), json!(true))])
     );
-    let checked = partition_checked_two_call(
-        checked_call(
-            &caller_execution,
-            &caller_circuit,
-            caller_state.clone(),
-            caller_address,
-            EntryPointBuf::from(b"claim".to_vec()),
-            Fr::from(53u64),
-        ),
+    let callee = || {
         checked_call(
             &callee_execution,
             &callee_circuit,
@@ -157,13 +150,59 @@ fn native_claim_partitions_one_checked_callee_and_skips_inactive_claims() {
             callee_address,
             callee_entry.clone(),
             Fr::from(101u64),
-        ),
+        )
+    };
+    let caller = |execution| {
+        checked_call(
+            execution,
+            &caller_circuit,
+            caller_state.clone(),
+            caller_address,
+            EntryPointBuf::from(b"claim".to_vec()),
+            Fr::from(53u64),
+        )
+    };
+    let assemble = |calls: &[CheckedNativeCall<'_>]| {
+        assemble_checked_calls(calls, &INITIAL_PARAMETERS, 1_800_000_000, &mut OsRng)
+    };
+    let independent_address = ContractAddress(HashOutput([12; 32]));
+    let independent_execution = prepare(
+        &callee_plan,
+        &callee_inputs(),
+        &callee_state,
         &INITIAL_PARAMETERS,
+        independent_address,
     )
     .unwrap();
-    assert_eq!(checked.callee_preimage.inputs, [Fr::from(3u64)]);
-    assert_eq!(checked.transcripts.len(), 2);
-    assert_ne!(checked.caller_commitment, checked.callee_commitment);
+    let independent = || {
+        checked_call(
+            &independent_execution,
+            &callee_circuit,
+            callee_state.clone(),
+            independent_address,
+            callee_entry.clone(),
+            Fr::from(102u64),
+        )
+    };
+    let intent = assemble(&[caller(&caller_execution), callee(), independent()]).unwrap();
+    let assembled: Vec<_> = intent.calls().collect();
+    assert_eq!(
+        assembled.iter().map(|c| c.address).collect::<Vec<_>>(),
+        [caller_address, callee_address, independent_address]
+    );
+    let ProofPreimageVersioned::V2(preimage) = &assembled[1].proof else {
+        panic!("expected a V2 preimage");
+    };
+    assert_eq!(preimage.inputs, [Fr::from(3u64)]);
+    assert_eq!(
+        preimage.key_location.0,
+        format!("{}:advance", hex::encode(callee_address.0.0))
+    );
+    assert!(assembled[0].calls(assembled[1]));
+    assert!(!assembled[0].calls(assembled[2]));
+    assert!(assemble(&[callee(), caller(&caller_execution)]).is_err());
+    assert!(assemble(&[caller(&caller_execution)]).is_err());
+    assert!(assemble(&[callee(), callee()]).is_err());
 
     let wrong_tuple = prepare(
         &caller_plan,
@@ -173,37 +212,19 @@ fn native_claim_partitions_one_checked_callee_and_skips_inactive_claims() {
         caller_address,
     )
     .unwrap();
-    assert!(
-        partition_checked_two_call(
-            checked_call(
-                &wrong_tuple,
-                &caller_circuit,
-                caller_state.clone(),
-                caller_address,
-                EntryPointBuf::from(b"claim".to_vec()),
-                Fr::from(53u64),
-            ),
-            checked_call(
-                &callee_execution,
-                &callee_circuit,
-                callee_state.clone(),
-                callee_address,
-                callee_entry.clone(),
-                Fr::from(101u64),
-            ),
-            &INITIAL_PARAMETERS,
-        )
-        .is_err()
-    );
+    assert!(assemble(&[caller(&wrong_tuple), callee()]).is_err());
 
-    let inactive = prepare(
-        &caller_plan,
-        &caller_inputs(callee_address.0, entry_hash, false),
-        &caller_state,
-        &INITIAL_PARAMETERS,
-        caller_address,
-    )
-    .unwrap();
+    let prepare_inactive = || {
+        prepare(
+            &caller_plan,
+            &caller_inputs(callee_address.0, entry_hash, false),
+            &caller_state,
+            &INITIAL_PARAMETERS,
+            caller_address,
+        )
+        .unwrap()
+    };
+    let inactive = prepare_inactive();
     check(&inactive, &caller_circuit).unwrap();
     assert!(inactive.after.effects.claimed_contract_calls.is_empty());
     assert_eq!(
@@ -218,29 +239,11 @@ fn native_claim_partitions_one_checked_callee_and_skips_inactive_claims() {
             .collect::<Vec<_>>(),
         [1, 4, 1, 1, 11, 2, 2, 1, 1]
     );
-    let mut forged_inactive = inactive;
+    assert!(assemble(&[caller(&inactive)]).is_ok());
+
+    let mut forged_inactive = prepare_inactive();
     forged_inactive.after.effects = caller_execution.after.effects.clone();
-    let mut stale_context = QueryContext::new(caller_state, caller_address);
-    stale_context.effects = caller_execution.after.effects.clone();
-    assert!(
-        partition_checked_two_call(
-            CheckedNativeCall {
-                execution: &forged_inactive,
-                circuit: &caller_circuit,
-                initial_context: stale_context,
-                entry_point: EntryPointBuf::from(b"claim".to_vec()),
-                communication_commitment_rand: Fr::from(53u64),
-            },
-            checked_call(
-                &callee_execution,
-                &callee_circuit,
-                callee_state,
-                callee_address,
-                callee_entry,
-                Fr::from(101u64),
-            ),
-            &INITIAL_PARAMETERS,
-        )
-        .is_err()
-    );
+    let mut forged = caller(&forged_inactive);
+    forged.initial_context.effects = caller_execution.after.effects.clone();
+    assert!(assemble(&[forged, callee()]).is_err());
 }
