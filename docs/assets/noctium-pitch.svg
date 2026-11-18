@@ -47,7 +47,7 @@
       <text x="102" y="475">Lean source</text><text x="448" y="475">Typed compiler</text><text x="800" y="475">ZKIR v3 + Impact</text><text x="1190" y="475">Midnight</text>
     </g>
     <g fill="#bccad9" font-size="19">
-      <text x="102" y="510">Contracts and proofs</text><text x="448" y="510">Direct lowering in Lean</text><text x="800" y="510">Circuits and ledger plans</text><text x="1190" y="510">Rust host, Midnight libraries</text>
+      <text x="102" y="510">Contracts and proofs</text><text x="448" y="510">Direct lowering in Lean</text><text x="800" y="510">Circuits and ledger plans</text><text x="1190" y="510">Native Rust + C/C++ SDKs</text>
     </g>
     <g stroke="#8ae5d4" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
       <path d="M364 477h42m-9-8 9 8-9 8m309-8h42m-9-8 9 8-9 8m347-8h42m-9-8 9 8-9 8"/>

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/noctium-pitch.png" alt="Noctium research preview. Lean 4 contracts and checked specifications compile directly to native Midnight artifacts. Scoped support covers 39 of 47 native operations and 15 native type families. Typed helpers, modules, generics, composite values, guarded control and witnesses are implemented. Full native coverage, contract composition and web/mobile SDKs remain goals." width="100%">
+  <img src="docs/assets/noctium-pitch.png" alt="Noctium research preview. Lean 4 contracts and checked specifications compile directly to native Midnight artifacts. Scoped support covers 39 of 47 native operations and 15 native type families. Native Rust and C/C++ SDKs, typed helpers, modules, generics, composite values, guarded control and witnesses are implemented. Full native coverage, contract composition and web/mobile SDKs remain goals." width="100%">
 </p>
 
 <p align="center">
