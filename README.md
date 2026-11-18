@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="docs/assets/noctium-social.png" alt="Noctium research preview. Prove contract behavior in Lean and compile for Midnight. Published evidence covers the private claim's correctness, scoped privacy and exact artifacts. Native state examples include guarded effects, nested maps, records and Bytes32 SHA-256 account hashes. The historical selected claim has deployed verifier binding. Generic scalar lowering has soundness and source-completeness proofs. Frontend, broader circuit and ledger preservation remain open." width="100%">
+  <img src="docs/assets/noctium-pitch.png" alt="Noctium research preview. Lean 4 contracts and checked specifications compile directly to native Midnight artifacts. Scoped support covers 39 of 47 native operations and 15 native type families. Typed helpers, modules, generics, composite values, guarded control and witnesses are implemented. Full native coverage, contract composition and web/mobile SDKs remain goals." width="100%">
 </p>
 
 <p align="center">
   <a href="#try-the-compiler">Quick start</a> ·
   <a href="docs/README.md">Documentation</a> ·
-  <a href="docs/assets/noctium-capabilities.png">Capability goals</a> ·
+  <a href="docs/assets/noctium-pitch.png">Project pitch</a> ·
   <a href="docs/designs/architecture.md">Architecture &amp; assurance</a> ·
   <a href="https://github.com/awjreynolds/noctium/issues/1">Roadmap</a>
 </p>
@@ -123,7 +123,7 @@ Typed Jubjub operations support a [derived-key, ElGamal and ECDH memo example](t
 
 [Guarded typed witnesses](docs/development/guarded-witnesses.md) bind conditional provider calls to native slots, skip inactive callbacks and enforce canonical inactive defaults. Shared continuations, unit and empty results retain exact call records. Straight-line bindings keep their existing format.
 
-[Typed curve callbacks](tests/CurveWitness.lean) also pass Jubjub scalars and points through the Rust witness runtime into native constraints without Node. An [ElGamal witness contract](tests/CurveHelpers.lean) checks key ownership and decryption, then releases four computed ciphertext coordinates. A [private wallet example](tests/HashWitness.lean) now derives account IDs, encryption keys and ECDH memos from Bytes32 secrets and a private seed callback. [Typed getter results](docs/development/committed-returns.md), including Bytes32 and Jubjub values, now bind post-effect values to Midnight’s output commitment. Mixed ledger values, remaining cryptography, other return layouts and broader composition remain open. Explore the [full capability goals graphic](docs/assets/noctium-capabilities.png).
+[Typed curve callbacks](tests/CurveWitness.lean) also pass Jubjub scalars and points through the Rust witness runtime into native constraints without Node. An [ElGamal witness contract](tests/CurveHelpers.lean) checks key ownership and decryption, then releases four computed ciphertext coordinates. A [private wallet example](tests/HashWitness.lean) now derives account IDs, encryption keys and ECDH memos from Bytes32 secrets and a private seed callback. [Typed getter results](docs/development/committed-returns.md), including Bytes32 and Jubjub values, now bind post-effect values to Midnight’s output commitment. Mixed ledger values, remaining cryptography, other return layouts and broader composition remain open. Explore the [project pitch](docs/assets/noctium-pitch.png).
 
 A [confidential-token milestone](docs/development/confidential-token.md) now combines registration, pending mint, authenticated sweep, transfer, burn, self-moves, epoch-checked memo clearing, encrypted escrow approval/replacement, delegated transfer/burn and checked views in one source module. Its Rust host completed 17 finalized localnet calls across all sixteen reference circuit entrypoints, using native proofs, source witness callbacks and committed private journals. The final checks cover two wallets, encrypted balances, supply, escrow, memos and counters. [Public receipts](tests/confidential-token-localnet-evidence.json) record the run. The [same-machine compilation benchmark](docs/development/oz-compile-performance.md) reports Noctium at 61.811 seconds and Compact at 0.255 seconds for comparable token workloads, excluding keys and proofs. ABI and artifact differences are documented.
 

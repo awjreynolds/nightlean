@@ -83,4 +83,4 @@ The [Verity comparison](research/verity-lessons.md) records lessons for compiler
 
 ## Project visual
 
-The [1200 × 630 share card](assets/noctium-social.png) and [editable SVG](assets/noctium-social.svg) summarize the project goals. The [1600 × 1160 capability map](assets/noctium-capabilities.png) and [editable SVG](assets/noctium-capabilities.svg) show the full target feature set, including full pinned ZKIR v3 support and native, web and mobile SDKs. Both graphics label goals, published subset evidence and unfinished assurance separately. Assets use the repository's [MIT license](../LICENSE).
+The [1600 × 900 project pitch](assets/noctium-pitch.png) and [editable SVG](assets/noctium-pitch.svg) give one shareable view of Noctium. The graphic separates scoped implementation counts and Lean features from full-coverage, composition and web/mobile SDK goals. Assets use the repository's [MIT license](../LICENSE).

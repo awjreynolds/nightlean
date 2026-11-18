@@ -4,7 +4,7 @@ Noctium combines contract authoring, specifications and correctness proofs in Le
 
 Lean proofs and runtime ZK proofs have different jobs. The former establish properties of contract behavior. The latter establish satisfaction of a circuit and its bound statement for an invocation. Compilation preservation and artifact certificates connect source properties to native artifacts for the qualified private claim.
 
-![Noctium source, compiler, artifacts and native execution, with published claim-specific evidence and open assurance links.](../assets/noctium-social.png)
+![Noctium source, compiler, artifacts and native execution, with published claim-specific evidence and open assurance links.](../assets/noctium-pitch.png)
 
 ## Four boundaries
 
