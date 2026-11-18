@@ -1911,7 +1911,7 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         let namespaceName := (← getCurrNamespace) ++ source.getId
         let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
         let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
-        let value ← match Helpers.compileEntrypointFor program exportName.getString concreteSchema with
+        let value ← match Witness.compileStateEntrypoint program exportName.getString concreteSchema with
           | .ok value => pure value
           | .error diagnostic => failDisclosure diagnostic *> throwError "structured ledger compilation failed"
         let localCircuitName := name.getId ++ id.getId ++ `circuit
@@ -1920,7 +1920,7 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         let circuitName := stringTerm fullCircuitName.toString
         let sourceTerm := mkIdent sourceName
         elabCommand (← `(def $circuitId : Noctium.Circuit :=
-          match Noctium.Helpers.compileEntrypointFor $sourceTerm $exportName [$stateTerms,*] with
+          match Noctium.Witness.compileStateEntrypoint $sourceTerm $exportName [$stateTerms,*] with
           | .ok compiledEntry => {compiledEntry.circuit with name := $circuitName}
           | .error _ => {name := $circuitName}))
         unsafe checkGeneratedCircuit fullCircuitName
@@ -1932,7 +1932,7 @@ private def elaborateConstructor (source : TSyntax `nlstate)
           stateProgram? := some (sourceName, exportName.getString)}
         let circuitTerm := mkIdent fullCircuitName
         entryTerms := entryTerms.push (← `(
-          match Noctium.Helpers.compileEntrypointFor $sourceTerm $exportName [$stateTerms,*] with
+          match Noctium.Witness.compileStateEntrypoint $sourceTerm $exportName [$stateTerms,*] with
           | .ok compiledEntry => {compiledEntry with name := $(stringTerm id.getId.toString), circuit := $circuitTerm}
           | .error _ => {name := $(stringTerm id.getId.toString), circuit := $circuitTerm}))
       | _ => throwErrorAt entryStx "unsupported Noctium entrypoint"

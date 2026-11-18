@@ -834,6 +834,22 @@ impl ContractOperationTarget {
         Ok(target)
     }
 
+    pub(crate) fn preparation_cursor(
+        &self,
+        state: &CurrentStateContext,
+        inputs: &BTreeMap<String, Json>,
+    ) -> Result<crate::PreparationCursor> {
+        if !self.context_matches(state) {
+            return Err(Error::BindingMismatch);
+        }
+        preparation_cursor(
+            self.bundle()?,
+            &state.state.data,
+            self.contract_address(),
+            inputs,
+        )
+    }
+
     pub(crate) fn context_matches(&self, state: &CurrentStateContext) -> bool {
         // Bootstrap advances the replay counter; readiness depends on the locked authority policy.
         state.contract_set_identity == self.inner.bundles.identity()
@@ -1123,6 +1139,27 @@ impl WitnessTarget {
         &self.entrypoint
     }
 
+    pub(crate) fn preparation_cursor(
+        &self,
+        bundle: &VerifiedBundle,
+        inputs: &BTreeMap<String, Json>,
+    ) -> Result<crate::PreparationCursor> {
+        if bundle.authenticated_manifest_sha256() != Some(self.manifest.as_str()) {
+            return Err(Error::BindingMismatch);
+        }
+        let Some(ContractAction::Deploy(deployment)) =
+            self.deployment.intent.actions.iter_deref().next()
+        else {
+            return Err(Error::InvalidIntent);
+        };
+        preparation_cursor(
+            bundle,
+            &deployment.initial_state.data,
+            self.contract_address(),
+            inputs,
+        )
+    }
+
     pub(crate) fn k(&self) -> u8 {
         self.k
     }
@@ -1148,6 +1185,33 @@ impl WitnessTarget {
             self.contract_address(),
         )
     }
+}
+
+fn preparation_cursor(
+    bundle: &VerifiedBundle,
+    state: &onchain_runtime::state::ChargedState<Db>,
+    address: &str,
+    inputs: &BTreeMap<String, Json>,
+) -> Result<crate::PreparationCursor> {
+    let plan: Plan = serde_json::from_slice(
+        bundle
+            .file(Role::Plan)
+            .map_err(|_| Error::InvalidArtifacts)?,
+    )
+    .map_err(|_| Error::InvalidArtifacts)?;
+    let parameters: LedgerParameters = decode(
+        bundle
+            .file(Role::LedgerParameters)
+            .map_err(|_| Error::InvalidArtifacts)?,
+    )?;
+    let address = coin_structure::contract::ContractAddress(base_crypto::hash::HashOutput(
+        hex::decode(address)
+            .map_err(|_| Error::BindingMismatch)?
+            .try_into()
+            .map_err(|_| Error::BindingMismatch)?,
+    ));
+    crate::PreparationCursor::new(&plan, inputs, state, &parameters, address)
+        .map_err(|_| Error::InvalidPrivateInput)
 }
 
 /// Fixed diagnostics deliberately discard upstream value-bearing causes.

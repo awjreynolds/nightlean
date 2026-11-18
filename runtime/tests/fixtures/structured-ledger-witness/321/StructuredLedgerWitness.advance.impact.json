@@ -1,0 +1,2888 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "balance", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Native",
+   "name": "result",
+   "expression":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"yes":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body": {"value": true, "tag": "bool"}},
+           "tag": "let",
+           "name": "$helper41",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper17"},
+             "tag": "let",
+             "name": "$helper39",
+             "body": {"tag": "reference", "name": "$helper31"}}}}}}},
+       "tag": "select",
+       "no": {"value": "0", "tag": "constant"},
+       "condition": {"tag": "reference", "name": "$helper4"}}}}}}],
+ "reads":
+ [{"type": "Native", "name": "expected"},
+  {"type": "Native",
+   "name": "$helper5",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}}},
+  {"type": "Native",
+   "name": "$helper27",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}}}}}}}}}}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "expected"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "expected"},
+   "alignment": "field"},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}}},
+  {"operation": {"slot": 0, "pushPath": false, "op": "index"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}}},
+  {"operation":
+   {"op": "popeq",
+    "expression": {"tag": "reference", "name": "$helper5"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"tag": "boolAnd",
+           "right": {"tag": "reference", "name": "$helper4"},
+           "left": {"value": true, "tag": "bool"}}}}}}}}}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "$helper0",
+      "body":
+      {"value": {"tag": "reference", "name": "expected"},
+       "tag": "let",
+       "name": "$helper1",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper0"},
+        "tag": "let",
+        "name": "$helper4",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper6"},
+         "tag": "let",
+         "name": "$helper9",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper9"},
+            "tag": "let",
+            "name": "$helper14",
+            "body": {"tag": "reference", "name": "$helper15"}},
+           "tag": "let",
+           "name": "$helper17",
+           "body":
+           {"value":
+            {"tag": "add",
+             "right": {"tag": "reference", "name": "$helper17"},
+             "left": {"tag": "reference", "name": "$helper9"}},
+            "tag": "let",
+            "name": "$helper22",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}},
+     "tag": "let",
+     "name": "_noctium_activity_guard_xxxxxxxxxx",
+     "body":
+     {"value": {"tag": "reference", "name": "enabled"},
+      "tag": "let",
+      "name": "$helper0",
+      "body":
+      {"value": {"tag": "reference", "name": "expected"},
+       "tag": "let",
+       "name": "$helper1",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper0"},
+        "tag": "let",
+        "name": "$helper4",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper6"},
+         "tag": "let",
+         "name": "$helper9",
+         "body":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body":
+          {"value":
+           {"value": {"tag": "reference", "name": "$helper9"},
+            "tag": "let",
+            "name": "$helper14",
+            "body": {"tag": "reference", "name": "$helper15"}},
+           "tag": "let",
+           "name": "$helper17",
+           "body":
+           {"value":
+            {"tag": "add",
+             "right": {"tag": "reference", "name": "$helper17"},
+             "left": {"tag": "reference", "name": "$helper9"}},
+            "tag": "let",
+            "name": "$helper22",
+            "body": {"tag": "reference", "name": "$helper22"}}}}}}}}},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"tag": "boolAnd",
+           "right": {"tag": "reference", "name": "$helper4"},
+           "left": {"value": true, "tag": "bool"}}}}}}}}}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"tag": "boolAnd",
+           "right": {"tag": "reference", "name": "$helper4"},
+           "left": {"value": true, "tag": "bool"}}}}}}}}}},
+  {"operation": {"op": "dup"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+  {"operation": {"slot": 0, "pushPath": false, "op": "index"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+  {"operation":
+   {"op": "popeq",
+    "expression": {"tag": "reference", "name": "$helper27"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}}}}}}}}}}],
+ "nativeCircuitFile": "StructuredLedgerWitness.advance.zkir",
+ "guards":
+ [{"value": {"tag": "reference", "name": "enabled"},
+   "tag": "let",
+   "name": "$helper0",
+   "body":
+   {"value": {"tag": "reference", "name": "expected"},
+    "tag": "let",
+    "name": "$helper1",
+    "body":
+    {"value": {"tag": "reference", "name": "$helper0"},
+     "tag": "let",
+     "name": "$helper2",
+     "body": {"value": true, "tag": "bool"}}}},
+  {"value": {"tag": "reference", "name": "enabled"},
+   "tag": "let",
+   "name": "$helper0",
+   "body":
+   {"value": {"tag": "reference", "name": "expected"},
+    "tag": "let",
+    "name": "$helper1",
+    "body":
+    {"value": {"tag": "reference", "name": "$helper0"},
+     "tag": "let",
+     "name": "$helper3",
+     "body": {"value": true, "tag": "bool"}}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper7",
+        "body": {"value": true, "tag": "bool"}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right": {"tag": "reference", "name": "$helper4"},
+       "left": {"value": true, "tag": "bool"}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper8",
+        "body": {"value": true, "tag": "bool"}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper10",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper5"},
+         "tag": "let",
+         "name": "$helper11",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value":
+         {"tag": "eq",
+          "right": {"tag": "reference", "name": "$helper5"},
+          "left": {"tag": "reference", "name": "$helper9"}},
+         "tag": "let",
+         "name": "$helper12",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"tag": "eq",
+         "right": {"tag": "reference", "name": "$helper5"},
+         "left": {"tag": "reference", "name": "$helper9"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper13",
+         "body": {"value": true, "tag": "bool"}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"tag": "boolAnd",
+         "right": {"tag": "reference", "name": "$helper4"},
+         "left": {"value": true, "tag": "bool"}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper16",
+          "body": {"value": true, "tag": "bool"}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper18",
+           "body": {"value": true, "tag": "bool"}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper17"},
+           "tag": "let",
+           "name": "$helper19",
+           "body": {"value": true, "tag": "bool"}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper20",
+           "body": {"value": true, "tag": "bool"}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper4"},
+          "left": {"value": true, "tag": "bool"}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper21",
+           "body": {"value": true, "tag": "bool"}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"tag": "boolAnd",
+           "right": {"tag": "reference", "name": "$helper4"},
+           "left": {"value": true, "tag": "bool"}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper23",
+            "body": {"value": true, "tag": "bool"}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"tag": "boolAnd",
+           "right": {"tag": "reference", "name": "$helper4"},
+           "left": {"value": true, "tag": "bool"}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper24",
+            "body": {"value": true, "tag": "bool"}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value":
+             {"value": {"tag": "reference", "name": "$helper22"},
+              "tag": "let",
+              "name": "$helper25",
+              "body": {"value": true, "tag": "bool"}},
+             "tag": "let",
+             "name": "$helper26",
+             "body": {"value": true, "tag": "bool"}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper29",
+             "body": {"value": true, "tag": "bool"}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"tag": "boolAnd",
+            "right": {"tag": "reference", "name": "$helper4"},
+            "left": {"value": true, "tag": "bool"}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper30",
+             "body": {"value": true, "tag": "bool"}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper31"},
+              "tag": "let",
+              "name": "$helper32",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper27"},
+              "tag": "let",
+              "name": "$helper33",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value":
+              {"tag": "eq",
+               "right": {"tag": "reference", "name": "$helper27"},
+               "left": {"tag": "reference", "name": "$helper31"}},
+              "tag": "let",
+              "name": "$helper34",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"tag": "eq",
+              "right": {"tag": "reference", "name": "$helper27"},
+              "left": {"tag": "reference", "name": "$helper31"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper31"},
+              "tag": "let",
+              "name": "$helper35",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper1"},
+              "tag": "let",
+              "name": "$helper36",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value":
+              {"tag": "eq",
+               "right": {"tag": "reference", "name": "$helper1"},
+               "left": {"tag": "reference", "name": "$helper31"}},
+              "tag": "let",
+              "name": "$helper37",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"tag": "eq",
+              "right": {"tag": "reference", "name": "$helper1"},
+              "left": {"tag": "reference", "name": "$helper31"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper17"},
+              "tag": "let",
+              "name": "$helper38",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper6"},
+       "tag": "let",
+       "name": "$helper9",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper9"},
+        "tag": "let",
+        "name": "$helper14",
+        "body":
+        {"value":
+         {"value": {"tag": "reference", "name": "$helper9"},
+          "tag": "let",
+          "name": "$helper14",
+          "body": {"tag": "reference", "name": "$helper15"}},
+         "tag": "let",
+         "name": "$helper17",
+         "body":
+         {"value":
+          {"tag": "add",
+           "right": {"tag": "reference", "name": "$helper17"},
+           "left": {"tag": "reference", "name": "$helper9"}},
+          "tag": "let",
+          "name": "$helper22",
+          "body":
+          {"value": {"tag": "reference", "name": "$helper22"},
+           "tag": "let",
+           "name": "$helper25",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper28"},
+            "tag": "let",
+            "name": "$helper31",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"value": {"tag": "reference", "name": "$helper28"},
+             "tag": "let",
+             "name": "$helper31",
+             "body":
+             {"value": {"tag": "reference", "name": "$helper31"},
+              "tag": "let",
+              "name": "$helper40",
+              "body": {"value": true, "tag": "bool"}}}}}}}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}},
+  {"value":
+   {"value": {"tag": "reference", "name": "enabled"},
+    "tag": "let",
+    "name": "$helper0",
+    "body":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper1",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper0"},
+      "tag": "let",
+      "name": "$helper4",
+      "body":
+      {"tag": "boolAnd",
+       "right":
+       {"tag": "eq",
+        "right": {"value": false, "tag": "bool"},
+        "left": {"tag": "reference", "name": "$helper4"}},
+       "left": {"value": true, "tag": "bool"}}}}},
+   "tag": "let",
+   "name": "_noctium_activity_guard_xxxxxxxxxx",
+   "body":
+   {"yes":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"value": "0", "tag": "constant"},
+        "tag": "let",
+        "name": "$helper42",
+        "body": {"value": true, "tag": "bool"}}}}},
+    "tag": "select",
+    "no": {"value": true, "tag": "bool"},
+    "condition":
+    {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxx"}}}],
+ "entrypoint": "advance",
+ "contractName": "StructuredLedgerWitness",
+ "circuit":
+ {"outputs": [],
+  "name": "StructuredLedgerWitness.advance.circuit",
+  "inputs":
+  [{"visibility": "private", "type": "Bool", "name": "enabled"},
+   {"visibility": "public", "type": "Native", "name": "expected"},
+   {"visibility": "private", "type": "Native", "name": "$helper6"},
+   {"visibility": "private", "type": "Native", "name": "$helper15"},
+   {"visibility": "private", "type": "Native", "name": "$helper28"}],
+  "file": "StructuredLedgerWitness.advance.circuit.zkir",
+  "constraints":
+  [{"yes": {"value": true, "tag": "bool"},
+    "tag": "select",
+    "no":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left": {"tag": "reference", "name": "$helper6"}},
+    "condition":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper4"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   {"yes": {"value": true, "tag": "bool"},
+    "tag": "select",
+    "no":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left": {"tag": "reference", "name": "$helper15"}},
+    "condition":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"tag": "boolAnd",
+         "right": {"tag": "reference", "name": "$helper4"},
+         "left": {"value": true, "tag": "bool"}}}}}}},
+   {"yes": {"value": true, "tag": "bool"},
+    "tag": "select",
+    "no":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left": {"tag": "reference", "name": "$helper28"}},
+    "condition":
+    {"value": {"tag": "reference", "name": "enabled"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "expected"},
+      "tag": "let",
+      "name": "$helper1",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper0"},
+       "tag": "let",
+       "name": "$helper4",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "tag": "let",
+        "name": "$helper9",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper9"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"value":
+          {"value": {"tag": "reference", "name": "$helper9"},
+           "tag": "let",
+           "name": "$helper14",
+           "body": {"tag": "reference", "name": "$helper15"}},
+          "tag": "let",
+          "name": "$helper17",
+          "body":
+          {"value":
+           {"tag": "add",
+            "right": {"tag": "reference", "name": "$helper17"},
+            "left": {"tag": "reference", "name": "$helper9"}},
+           "tag": "let",
+           "name": "$helper22",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper22"},
+            "tag": "let",
+            "name": "$helper25",
+            "body":
+            {"tag": "boolAnd",
+             "right": {"tag": "reference", "name": "$helper4"},
+             "left": {"value": true, "tag": "bool"}}}}}}}}}}}]}}

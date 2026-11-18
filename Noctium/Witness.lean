@@ -1,4 +1,5 @@
 import Noctium.Control
+import Noctium.Witness.Ledger
 import Noctium.Backend.Zkir
 import Noctium.NativeExpression
 
@@ -94,6 +95,32 @@ private def boundedNativePlan (plan binding : Json) : Except Diagnostic Json := 
   if plan.compress.utf8ByteSize > 1048576 then fail {} "bound witness plan exceeds byte limit"
   pure plan
 
+private def bindHosted (program : Program) (entry : Export) (entryName : String)
+    (plan : Json) (circuit : Circuit) (calls : List Helpers.WitnessCallBinding)
+    (native : Json) (bindingOutputs : List Output) (forceGuards : Bool := false) :
+    Except Diagnostic Compiled := do
+  let guardedCalls := forceGuards || calls.any (·.guarded)
+  let mut callRows := []
+  for call in calls do
+    let fields := [("ordinal", toJson (toString call.ordinal)), ("site", toJson call.site),
+      ("name", toJson call.name), ("path", toJson (call.path.map idName)),
+      ("resultType", toJson (← resultToken program plan entry.span call.result)),
+      ("inputs", toJson call.inputs)]
+    let fields := if guardedCalls then fields ++
+      [("guard", Noctium.NativeExpression.toJson call.guard)] else fields
+    callRows := callRows ++ [Json.mkObj fields]
+  let binding := Json.mkObj [("schemaVersion", toJson ((if guardedCalls then 2 else 1) : Nat)),
+    ("kind", toJson ("typed-witness-bindings" : String)), ("circuitName", toJson circuit.name),
+    ("sourceExport", toJson entryName), ("target", Json.mkObj [("kind", toJson ("standalone" : String))]),
+    ("types", toJson (← arrayField plan "types")), ("signatures", toJson (← arrayField plan "witnesses")),
+    ("inputBindings", ← inputBindings program plan entry),
+    ("circuitInputs", toJson (circuit.inputs.map fun input => Json.mkObj [("name", toJson input.name),
+      ("type", toJson (scalarName input.ty)), ("visibility", toJson (if input.visibility == .public then "public" else "private"))])),
+    ("circuitOutputs", toJson (bindingOutputs.map fun output => Json.mkObj [("name", toJson output.name),
+      ("type", toJson (scalarName output.ty))])),
+    ("calls", toJson callRows), ("nativeRelation", native)]
+  pure {circuit, binding, calls, plan := ← boundedNativePlan plan binding}
+
 /-- The native workflow requires declared providers and an exact ordered map
 from executed calls to actual fresh private inputs. Host-only control is separate. -/
 def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
@@ -112,27 +139,7 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
       fail entry.span "witness output name collides with an input"
     circuit := {circuit with outputs := [{output with name := outputName}]}
   let native ← Backend.Zkir.lowerCircuit circuit
-  let guardedCalls := lowered.calls.any (·.guarded)
-  let mut calls := []
-  for call in lowered.calls do
-    let fields := [("ordinal", toJson (toString call.ordinal)), ("site", toJson call.site),
-      ("name", toJson call.name), ("path", toJson (call.path.map idName)),
-      ("resultType", toJson (← resultToken program plan entry.span call.result)),
-      ("inputs", toJson call.inputs)]
-    let fields := if guardedCalls then fields ++
-      [("guard", Noctium.NativeExpression.toJson call.guard)] else fields
-    calls := calls ++ [Json.mkObj fields]
-  let binding := Json.mkObj [("schemaVersion", toJson ((if guardedCalls then 2 else 1) : Nat)),
-    ("kind", toJson ("typed-witness-bindings" : String)), ("circuitName", toJson circuit.name),
-    ("sourceExport", toJson entryName), ("target", Json.mkObj [("kind", toJson ("standalone" : String))]),
-    ("types", toJson (← arrayField plan "types")), ("signatures", toJson (← arrayField plan "witnesses")),
-    ("inputBindings", ← inputBindings program plan entry),
-    ("circuitInputs", toJson (circuit.inputs.map fun input => Json.mkObj [("name", toJson input.name),
-      ("type", toJson (scalarName input.ty)), ("visibility", toJson (if input.visibility == .public then "public" else "private"))])),
-    ("circuitOutputs", toJson (circuit.outputs.map fun output => Json.mkObj [("name", toJson output.name),
-      ("type", toJson (scalarName output.ty))])),
-    ("calls", toJson calls), ("nativeRelation", native)]
-  pure {circuit, binding, calls := lowered.calls, plan := ← boundedNativePlan plan binding}
+  bindHosted program entry entryName plan circuit lowered.calls native circuit.outputs
 
 def compile (program : Program) (entryName : String) (circuitName : String := "")
     (outputName : String := "") : Except Diagnostic Compiled :=
@@ -155,5 +162,78 @@ def bindEntrypoint (compiled : Compiled) (relation : Json) (contractName entrypo
     ("contractName", toJson contractName), ("entrypoint", toJson entrypoint),
     ("nativeCircuitFile", toJson nativeCircuitFile), ("targetProfile", toJson targetProfile)])
   pure {compiled with binding, plan := ← boundedNativePlan compiled.plan binding}
+
+structure CompiledEntrypoint where
+  entrypoint : Entrypoint
+  witness : Compiled
+
+/-- Host execution is needed for provider calls and invocation-local private stages. -/
+def needsLedgerHost (program : Program) : Except Diagnostic Bool := do
+  let summaries ← Helpers.analyzeWithLimits {} program
+  pure (summaries.any fun summary => summary.effects.any fun effect =>
+    effect == .witness || effect == .privateState)
+
+/-- Compile one source body into the typed host scheduler and its native ledger relation. -/
+def compileLedger (program : Program) (entryName : String) (ledger : List StateDecl)
+    (circuitName : String := "") : Except Diagnostic CompiledEntrypoint := do
+  let transformed ← Ledger.transform program
+  let plan ← Control.compileTypedWithLimits {} transformed.host entryName
+  let some entry := transformed.host.exports.find? (·.name == entryName)
+    | fail {} "unknown ledger witness entrypoint"
+  let lowered ← Helpers.compileHostedEntrypointForWithLimits {} (eraseProgram transformed.native) entryName ledger
+  let compiledEntry := if circuitName.isEmpty then lowered.entrypoint else
+    {lowered.entrypoint with circuit := {lowered.entrypoint.circuit with name := circuitName}}
+  let native ← Backend.Zkir.lowerEntrypoint ledger compiledEntry
+  let (impact, boundaries) ← Backend.Impact.lowerWithEffectBoundaries ledger compiledEntry
+  let mut rows := []
+  for call in lowered.calls do
+    if let some descriptor := transformed.calls.find? (·.site == call.site) then
+      let preceding := compiledEntry.effects.take call.effectCount
+      let some (effect, index) := (preceding.zipIdx.reverse.find? fun (effect, _) =>
+        match effect with | .require _ => false | _ => true)
+        | fail entry.span "ledger callback has no preceding state effect"
+      let read ← match effect with
+        | .readCell state destination ty => do
+          unless descriptor.kind == "readCell" && descriptor.state == state && descriptor.valueTy == ty do
+            fail entry.span "ledger callback cell read mismatch"
+          pure (some destination)
+        | .readMap state destination keyTy valueTy _ => do
+          unless descriptor.kind == "readMap" && descriptor.state == state &&
+              descriptor.keyTy == some keyTy && descriptor.valueTy == valueTy do
+            fail entry.span "ledger callback map read mismatch"
+          pure (some destination)
+        | .readMember state destination keyTy valueTy _ => do
+          unless descriptor.kind == "readMember" && descriptor.state == state &&
+              descriptor.keyTy == some keyTy && descriptor.valueTy == valueTy do
+            fail entry.span "ledger callback membership read mismatch"
+          pure (some destination)
+        | .writeCell state ty _ => do
+          unless descriptor.kind == "writeCell" && descriptor.state == state && descriptor.valueTy == ty do
+            fail entry.span "ledger callback cell write mismatch"
+          pure none
+        | .writeMap state keyTy valueTy _ _ => do
+          unless descriptor.kind == "writeMap" && descriptor.state == state &&
+              descriptor.keyTy == some keyTy && descriptor.valueTy == valueTy do
+            fail entry.span "ledger callback map write mismatch"
+          pure none
+        | _ => fail entry.span "ledger callback must follow a typed cell or map effect"
+      let some operationEnd := boundaries[index]?
+        | fail entry.span "ledger callback operation boundary is absent"
+      unless operationEnd > 0 && operationEnd ≤ impact.operations.length do
+        fail entry.span "ledger callback operation boundary is invalid"
+      rows := rows ++ [Json.mkObj [("ordinal", toJson (toString call.ordinal)),
+        ("operationEnd", toJson operationEnd), ("read", toJson read)]]
+  let compiled ← bindHosted transformed.host entry entryName plan compiledEntry.circuit lowered.calls native
+    compiledEntry.returns true
+  let binding ← setField compiled.binding "ledgerCalls" (toJson rows)
+  let compiled := {compiled with binding, plan := ← boundedNativePlan compiled.plan binding}
+  pure {entrypoint := compiledEntry, witness := compiled}
+
+/-- Existing state-only bodies retain their native-only path. -/
+def compileStateEntrypoint (program : Program) (entryName : String) (ledger : List StateDecl) :
+    Except Diagnostic Entrypoint := do
+  if ← needsLedgerHost program then
+    return (← compileLedger program entryName ledger).entrypoint
+  Helpers.compileEntrypointFor program entryName ledger
 
 end Noctium.Witness

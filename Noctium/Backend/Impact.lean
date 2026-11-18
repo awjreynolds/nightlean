@@ -822,15 +822,25 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
   | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
 
 /-- Lower ordered effects while keeping optional activity guards aligned with
-each emitted opcode group. -/
-def appendEffectsGuarded (state : List StateDecl) (effects : List Effect)
-    (guards : List (Option (Expr .bool))) (initial : Plan) : Except String Plan := do
+each emitted opcode group, and record the exclusive operation end after each
+source effect. -/
+def appendEffectsGuardedWithBoundaries (state : List StateDecl) (effects : List Effect)
+    (guards : List (Option (Expr .bool))) (initial : Plan) :
+    Except String (Plan × List Nat) := do
   unless guards.isEmpty || guards.length == effects.length do
     throw "effect guard metadata length mismatch"
   let mut plan := initial
+  let mut boundaries := []
   for (effect, index) in effects.zipIdx do
     plan ← appendEffectWithActivity state effect (guards[index]?.getD none) plan
-  pure plan
+    boundaries := plan.operations.length :: boundaries
+  pure (plan, boundaries.reverse)
+
+/-- Lower ordered effects while keeping optional activity guards aligned with
+each emitted opcode group. -/
+def appendEffectsGuarded (state : List StateDecl) (effects : List Effect)
+    (guards : List (Option (Expr .bool))) (initial : Plan) : Except String Plan :=
+  (appendEffectsGuardedWithBoundaries state effects guards initial).map Prod.fst
 
 private def publicInputStep (input : Input) (plan : Plan) : Except String Plan := do
   if input.visibility != .«public» then return plan
@@ -1157,14 +1167,13 @@ def finishPlan (entry : Entrypoint) (result : Except String Plan) : Except Diagn
     | .error message => throw {span := entry.span, message}
   | .error message => throw {span := entry.span, message}
 
-/-- Lower a typed entrypoint to a symbolic native VM program. The state layout
-is a root array with one slot per declaration. Cells, including booleans, use
-Native field alignment. Membership results use the VM's byte-aligned boolean.
-The plan is not deployable until its fields are bound by the relation producer. -/
-def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan := do
+/-- Lower a typed entrypoint and return the exclusive operation end after each
+source effect. Public-input operations precede the first boundary. -/
+def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
+    Except Diagnostic (Plan × List Nat) := do
   entry.validate ledgerCapabilities state
   Disclosure.entrypoint entry
-  let result : Except String Plan := do
+  let result : Except String (Plan × List Nat) := do
     let mut plan : Plan := {}
     let sourceNames := entry.circuit.inputs.map (·.name) ++ entry.circuit.outputs.map (·.name) ++
       entry.effects.flatMap (fun effect => match effect with
@@ -1179,9 +1188,16 @@ def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan
       throw "source names beginning '_noctium_' are reserved by the native transcript producer"
     -- Public parameters must appear among Popeq reads consumed by public_input.
     plan ← publicInputPlan entry.circuit.inputs plan
-    plan ← appendEffectsGuarded state entry.effects entry.effectGuards plan
-    pure plan
-  finishPlan entry result
+    appendEffectsGuardedWithBoundaries state entry.effects entry.effectGuards plan
+  let (plan, boundaries) ← result.mapError fun message => {span := entry.span, message}
+  pure ((← finishPlan entry (.ok plan)), boundaries)
+
+/-- Lower a typed entrypoint to a symbolic native VM program. The state layout
+is a root array with one slot per declaration. Cells, including booleans, use
+Native field alignment. Membership results use the VM's byte-aligned boolean.
+The plan is not deployable until its fields are bound by the relation producer. -/
+def lower (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Plan :=
+  (lowerWithEffectBoundaries state entry).map Prod.fst
 
 private def natBytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
 where

@@ -433,7 +433,7 @@ private unsafe def registeredContracts (moduleOutputs : Array (Name × ModuleBui
           | none => pure compiledEntry
           | some (sourceName, exportName) => do
             let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
-            let fresh ← match Helpers.compileEntrypointFor program exportName contract.state with
+            let fresh ← match Witness.compileStateEntrypoint program exportName contract.state with
               | .ok value => pure value
               | .error d => failDiagnostic d
             pure {fresh with name := compiledEntry.name, circuit := {fresh.circuit with name := compiledEntry.circuit.name}}
@@ -609,13 +609,27 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
       | .error d => failDiagnostic d
       | .ok json =>
         lowered := lowered.push (nativeCircuitFile name ep, json.pretty)
-        if let some info := witnesses.find? (·.circuitName.toString == ep.circuit.name) then
-          let program ← match moduleWitnessProgramFor moduleOutputs info with
-            | some fresh => pure fresh
-            | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
-          let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName with
-            | .ok value => pure value
+        let compiledWitness? ← if let some info := witnesses.find? (·.circuitName.toString == ep.circuit.name) then do
+            let program ← match moduleWitnessProgramFor moduleOutputs info with
+              | some fresh => pure fresh
+              | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
+            match Witness.compile program info.exportName info.circuitName.toString info.outputName with
+            | .ok value => pure (some value)
             | .error diagnostic => failDiagnostic diagnostic
+          else if let some info := circuitRegistry.getState (← getEnv) |>.find?
+              (fun info => info.declName.toString == ep.circuit.name && info.stateProgram?.isSome) then do
+            let some (sourceName, exportName) := info.stateProgram? | throwError "missing ledger witness source"
+            let program ← unsafe evalConstCheck Helpers.Program ``Helpers.Program sourceName
+            let needsHost ← match Witness.needsLedgerHost program with
+              | .ok value => pure value
+              | .error diagnostic => failDiagnostic diagnostic
+            if needsHost then
+              match Witness.compileLedger program exportName contract.state ep.circuit.name with
+              | .ok value => pure (some value.witness)
+              | .error diagnostic => failDiagnostic diagnostic
+            else pure none
+          else pure none
+        if let some compiled := compiledWitness? then
           let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name
               (nativeCircuitFile name ep) profile.name
               ((plan.reads.drop (Backend.Impact.publicInputReadCount ep.circuit.inputs)).flatMap (·.bindings)) with

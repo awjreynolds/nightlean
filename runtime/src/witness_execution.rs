@@ -21,7 +21,7 @@ use futures::Future;
 use rand::{CryptoRng, Rng};
 use serde_json::Value as Json;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fmt,
     ops::Deref,
     sync::atomic::{AtomicU64, Ordering},
@@ -106,12 +106,83 @@ impl Drop for SecretInputs {
     }
 }
 
+// The native cursor owns the only ledger execution prefix. Source callbacks never supply state reads.
+struct LedgerPreparation {
+    cursor: crate::PreparationCursor,
+    supplied: BTreeSet<String>,
+    operation_end: usize,
+}
+impl LedgerPreparation {
+    fn new(cursor: crate::PreparationCursor, inputs: &BTreeMap<String, Json>) -> Self {
+        Self {
+            cursor,
+            supplied: inputs.keys().cloned().collect(),
+            operation_end: 0,
+        }
+    }
+    fn resume(&mut self, session: &mut control::Session) -> anyhow::Result<()> {
+        let call = session
+            .pending_ledger_call()?
+            .ok_or_else(|| anyhow::anyhow!("missing internal ledger callback"))?;
+        let mut inputs = session.partial_native_inputs()?;
+        let mut additions = SecretInputs(std::mem::take(&mut inputs.values));
+        additions.0.retain(|name, _| !self.supplied.contains(name));
+        if !additions.0.is_empty() {
+            self.cursor.supply_inputs(&additions.0)?;
+        }
+        self.supplied.extend(additions.0.keys().cloned());
+        anyhow::ensure!(
+            call.operation_end > self.operation_end,
+            "ledger callback operation order mismatch"
+        );
+        let mut observed = None;
+        while self.operation_end < call.operation_end {
+            match self.cursor.step()? {
+                crate::PreparationStep::Operation { index, read } => {
+                    anyhow::ensure!(
+                        index == self.operation_end,
+                        "native preparation operation order mismatch"
+                    );
+                    self.operation_end = index + 1;
+                    if self.operation_end == call.operation_end {
+                        observed = read;
+                    }
+                }
+                crate::PreparationStep::PendingInputs(_) => {
+                    anyhow::bail!("ledger callback depends on an unavailable witness")
+                }
+                crate::PreparationStep::Complete => {
+                    anyhow::bail!("ledger callback exceeds native preparation")
+                }
+            }
+        }
+        let value = match &call.read {
+            Some(name) => {
+                let read =
+                    observed.ok_or_else(|| anyhow::anyhow!("ledger callback read is absent"))?;
+                anyhow::ensure!(
+                    read.active && read.name == *name,
+                    "ledger callback read mismatch"
+                );
+                read.values
+                    .get(name)
+                    .ok_or_else(|| anyhow::anyhow!("ledger callback value is absent"))?
+                    .public_json()
+            }
+            None => serde_json::json!({"kind":"unit"}),
+        };
+        session.resume_ledger(value)?;
+        Ok(())
+    }
+}
+
 /// A running host-neutral source witness invocation bound to one authenticated bundle target.
 pub struct WitnessExecution {
     target: Option<proof::WitnessTarget>,
     contract_target: Option<ContractOperationTarget>,
     current_state: Option<CurrentStateContext>,
     session: Option<control::Session>,
+    ledger: Option<LedgerPreparation>,
     context_id: u64,
     ttl: u64,
     proof_parameters_sha256: String,
@@ -169,13 +240,24 @@ impl WitnessExecution {
         let plan_bytes = bundle
             .file(Role::WitnessControl)
             .map_err(|_| Error::InvalidArtifacts)?;
-        let session = control::Session::from_authenticated_native_target(
+        let mut session = control::Session::from_authenticated_native_target(
             plan_bytes,
             std::mem::take(&mut source_inputs.0),
             host_context,
             authenticated,
         )
         .map_err(|_| Error::InvalidSource)?;
+        let ledger = if session.has_ledger_calls() {
+            let inputs = session
+                .partial_native_inputs()
+                .map_err(|_| Error::InvalidSource)?;
+            let cursor = target
+                .preparation_cursor(bundle, &inputs.values)
+                .map_err(Error::Proof)?;
+            Some(LedgerPreparation::new(cursor, &inputs.values))
+        } else {
+            None
+        };
         Ok(Self {
             contract_address: target.contract_address().to_owned(),
             entrypoint: target.entrypoint().to_owned(),
@@ -183,6 +265,7 @@ impl WitnessExecution {
             contract_target: None,
             current_state: None,
             session: Some(session),
+            ledger,
             context_id,
             ttl,
             proof_parameters_sha256: parameters.sha256().to_owned(),
@@ -215,13 +298,24 @@ impl WitnessExecution {
         let plan_bytes = bundle
             .file(Role::WitnessControl)
             .map_err(|_| Error::InvalidArtifacts)?;
-        let session = control::Session::from_authenticated_native_target(
+        let mut session = control::Session::from_authenticated_native_target(
             plan_bytes,
             std::mem::take(&mut source_inputs.0),
             host_context,
             authenticated,
         )
         .map_err(|_| Error::InvalidSource)?;
+        let ledger = if session.has_ledger_calls() {
+            let inputs = session
+                .partial_native_inputs()
+                .map_err(|_| Error::InvalidSource)?;
+            let cursor = target
+                .preparation_cursor(current_state_ref, &inputs.values)
+                .map_err(Error::Proof)?;
+            Some(LedgerPreparation::new(cursor, &inputs.values))
+        } else {
+            None
+        };
         let current_state = current_state.take().ok_or(Error::State)?;
         let ttl = target.ttl();
         let contract_address = target.contract_address().to_owned();
@@ -231,6 +325,7 @@ impl WitnessExecution {
             contract_target: Some(target.clone()),
             current_state: Some(current_state),
             session: Some(session),
+            ledger,
             context_id,
             ttl,
             proof_parameters_sha256: parameters.sha256().to_owned(),
@@ -249,10 +344,29 @@ impl WitnessExecution {
 
     pub fn advance(&mut self) -> Result<PrivateJson> {
         let session = self.session.as_mut().ok_or(Error::State)?;
-        session
-            .advance_accounted()
-            .map(PrivateJson::from_accounted)
-            .map_err(|_| Error::InvalidSource)
+        loop {
+            let result = session
+                .advance_accounted()
+                .map(PrivateJson::from_accounted)
+                .map_err(|_| Error::InvalidSource)?;
+            if session
+                .pending_ledger_call()
+                .map_err(|_| Error::InvalidSource)?
+                .is_none()
+            {
+                return Ok(result);
+            }
+            let resumed = self
+                .ledger
+                .as_mut()
+                .ok_or(Error::InvalidSource)?
+                .resume(session);
+            if resumed.is_err() {
+                let _ = session.cancel();
+                self.ledger = None;
+                return Err(Error::InvalidSource);
+            }
+        }
     }
 
     pub fn private_request(&mut self) -> Result<PrivateJson> {
@@ -300,6 +414,7 @@ impl WitnessExecution {
             .cancel()
             .map_err(|_| Error::InvalidSource)?;
         self.session = None;
+        self.ledger = None;
         self.target = None;
         Ok(result)
     }
@@ -369,6 +484,7 @@ impl WitnessExecution {
             .map_err(|_| Error::InvalidSource)?;
         let runtime = completed.runtime;
         self.session = None;
+        self.ledger = None;
         self.target = None;
         Ok(WitnessProof {
             prepared: Some(prepared),
@@ -432,6 +548,7 @@ impl WitnessExecution {
         self.session = None;
         self.contract_target = None;
         self.current_state = None;
+        self.ledger = None;
         Ok(WitnessProof {
             prepared: Some(prepared),
             deployment: None,
@@ -1111,3 +1228,6 @@ mod tests {
         drop(proof);
     }
 }
+
+#[cfg(all(test, feature = "zkir-321"))]
+mod ledger_tests;

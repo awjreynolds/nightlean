@@ -1587,6 +1587,7 @@ structure WitnessCallBinding where
   path : List DeclarationId
   result : ResultType
   inputs : List String
+  effectCount : Nat := 0
   guard : Expr .bool := .bool true
   guarded : Bool := false
   deriving Repr
@@ -1889,6 +1890,8 @@ mutual
       pure (scalarValue (ty := ty) (Expr.ref inputName))
     | .witnessCall site name arguments => do
       let signature ← liftD (witnessSignature program name span)
+      let entryState ← get
+      let callGuard := closeGuard entryState.guard entryState.localBindings
       let arguments ← arguments.mapM (lowerTerm program scope env span)
       let mut bindings := []
       let mut constraints := arguments.flatMap (·.constraints)
@@ -1915,7 +1918,6 @@ mutual
           privateOrigins := state.privateOrigins ++ [(inputName,
             if signature.operation == "private_state.read.v1" then .privateState else .provider)]}
       let state ← get
-      let callGuard := closeGuard state.guard state.localBindings
       if state.guardActive then
         for (inputName, type) in inputs.zip leafTypes do
           let some zero := GuardedExpression.zeroValue type
@@ -1935,7 +1937,8 @@ mutual
           pure (aggregateValue type leaves)
       modify fun state => {state with witnessCalls := state.witnessCalls ++ [{
         ordinal := state.witnessCalls.length, site, name, path := state.callPath,
-        result := signature.result, inputs, guard := callGuard, guarded := state.guardActive}]}
+        result := signature.result, inputs, effectCount := state.ledgerEffects.length,
+        guard := callGuard, guarded := state.guardActive}]}
       pure (bindings.foldr (fun (binding, component) body =>
         sequence binding {ty := .scalar component.ty, scalar := component} body)
           {value with constraints})
@@ -2416,13 +2419,19 @@ def compileWithLimits (limits : Limits) (program : Program) (entryName : String)
 def compile (program : Program) (entryName : String) : Except Diagnostic Circuit :=
   compileWithLimits {} program entryName
 
-private def compileEntrypointForState (limits : Limits) (program : Program)
-    (entryName : String) (ledger : List StateDecl) : Except Diagnostic Entrypoint := do
+structure HostedEntrypoint where
+  entrypoint : Entrypoint
+  calls : List WitnessCallBinding
+  deriving Repr
+
+private def compileEntrypointForState (allowWitnesses : Bool) (limits : Limits) (program : Program)
+    (entryName : String) (ledger : List StateDecl) : Except Diagnostic HostedEntrypoint := do
   let summaries ← analyzeWithLimits limits program
   for summary in summaries do
     for effect in summary.effects do
       unless effect == .assertion || effect == .fallibleCast ||
-          effect == .ledgerRead || effect == .ledgerWrite do
+          effect == .ledgerRead || effect == .ledgerWrite ||
+          (allowWitnesses && effect == .witness) do
         let declaration ← lookup program summary.id {}
         fail declaration.span s!"native ledger helper capability unavailable: {repr effect}"
   let some exported := program.exports.find? (·.name == entryName)
@@ -2464,12 +2473,13 @@ private def compileEntrypointForState (limits : Limits) (program : Program)
     fail exported.span "helper entrypoint input signature mismatch"
   let initial : LowerState := {
     reserved := inputs.map (·.name), types := inputTypes, ledgerMode := true,
+    allowGuardedWitnesses := allowWitnesses,
     remaining := limits.maxExecutionSteps}
   let action : LowerM Lowered := do
     appendLedgerConstraints exported.span inputConstraints
     lowerCall program declaration values exported.span
   let (body, lowering) ← action.run initial
-  unless lowering.witnessInputs.isEmpty && lowering.witnessCalls.isEmpty do
+  unless allowWitnesses || (lowering.witnessInputs.isEmpty && lowering.witnessCalls.isEmpty) do
     fail exported.span "native ledger helper witness scheduling is unavailable"
   let readNames := lowering.ledgerEffects.filterMap fun
     | .readCell _ destination _ => some destination
@@ -2485,7 +2495,8 @@ private def compileEntrypointForState (limits : Limits) (program : Program)
       pure [{name := outputName, ty, value, span := exported.span}]
     | .composite _ => pure []
   let circuit : Circuit := {
-    name := exported.name, inputs, outputs := [], constraints := [], span := exported.span,
+    name := exported.name, inputs := inputs ++ lowering.witnessInputs, outputs := [],
+    constraints := if allowWitnesses then lowering.witnessConstraints else [], span := exported.span,
     privateOrigins := lowering.privateOrigins}
   let result : Entrypoint := {
     name := exported.name, circuit, effects := lowering.ledgerEffects, returns,
@@ -2498,19 +2509,18 @@ private def compileEntrypointForState (limits : Limits) (program : Program)
   match Disclosure.entrypoint result with
   | .error diagnostic => .error diagnostic
   | .ok _ => pure ()
-  pure result
+  pure {entrypoint := result, calls := lowering.witnessCalls}
 
 def compileEntrypointWithLimits (limits : Limits) (program : Program) (entryName : String) :
     Except Diagnostic Entrypoint :=
-  compileEntrypointForState limits program entryName program.ledger
+  (compileEntrypointForState false limits program entryName program.ledger).map (·.entrypoint)
 
 def compileEntrypoint (program : Program) (entryName : String) : Except Diagnostic Entrypoint :=
   compileEntrypointWithLimits {} program entryName
 
-/-- Bind source cell declarations to the owning contract's authoritative state
-schema before compiling source reads and writes. -/
-def compileEntrypointFor (program : Program) (entryName : String) (ledger : List StateDecl) :
-    Except Diagnostic Entrypoint := do
+private def compileBoundEntrypointForWithLimits (allowWitnesses : Bool) (limits : Limits)
+    (program : Program) (entryName : String) (ledger : List StateDecl) :
+    Except Diagnostic HostedEntrypoint := do
   checkLedgerSchema {} ledger
   for declared in program.ledger do
     let some actual := ledger.find? (·.name == declared.name)
@@ -2518,7 +2528,23 @@ def compileEntrypointFor (program : Program) (entryName : String) (ledger : List
     unless actual.kind == declared.kind && actual.sealed == declared.sealed do
       fail declared.span s!"source ledger state '{declared.name}' does not match its contract declaration"
   let program := {program with ledger}
-  compileEntrypointForState {} program entryName ledger
+  compileEntrypointForState allowWitnesses limits program entryName ledger
+
+/-- Compile source ledger effects with their ordered typed provider calls. -/
+def compileHostedEntrypointForWithLimits (limits : Limits) (program : Program)
+    (entryName : String) (ledger : List StateDecl) : Except Diagnostic HostedEntrypoint :=
+  compileBoundEntrypointForWithLimits true limits program entryName ledger
+
+/-- Compile source cell declarations against the owning contract's schema. -/
+def compileEntrypointForWithLimits (limits : Limits) (program : Program)
+    (entryName : String) (ledger : List StateDecl) : Except Diagnostic Entrypoint :=
+  (compileBoundEntrypointForWithLimits false limits program entryName ledger).map (·.entrypoint)
+
+/-- Bind source cell declarations to the owning contract's authoritative state
+schema before compiling source reads and writes. -/
+def compileEntrypointFor (program : Program) (entryName : String) (ledger : List StateDecl) :
+    Except Diagnostic Entrypoint :=
+  compileEntrypointForWithLimits {} program entryName ledger
 
 private abbrev TraceValue := Option ScalarPolicy.Value
 private abbrev TraceEnv := List (String × TraceValue)

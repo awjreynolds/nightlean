@@ -63,6 +63,10 @@ jobs:
           lake env lean tests/StructuredCells.lean
           lake env lean tests/StructuredMaps.lean
           lake env lean tests/NativePreparationCursor.lean
+          lake env lean tests/ImpactEffectBoundaries.lean
+          lake env lean tests/HostedLedgerWitness.lean
+          lake env lean tests/LedgerWitnessTransform.lean
+          lake env lean tests/StructuredLedgerWitness.lean
           lake env lean tests/Helpers.lean
           lake env lean tests/Control.lean
           lake env lean --run tests/NativeProducer.lean

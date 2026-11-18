@@ -817,10 +817,17 @@ struct Plan {
     binding: Option<Json>,
     native_relation: Option<Json>,
     bound_calls: Vec<Json>,
+    ledger_calls: BTreeMap<usize, LedgerCall>,
     native_input_types: BTreeMap<String, String>,
     entry: String,
     name: String,
     max_steps: usize,
+}
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct LedgerCall {
+    pub ordinal: usize,
+    pub operation_end: usize,
+    pub read: Option<String>,
 }
 struct Parser<'a> {
     signatures: &'a BTreeMap<String, Signature>,
@@ -2347,6 +2354,7 @@ fn validate_native_binding(
     registry: &witness::Registry,
 ) -> Result<Vec<Json>> {
     let has_ledger_inputs = binding.get("ledgerInputs").is_some();
+    let has_ledger_calls = binding.get("ledgerCalls").is_some();
     let binding_version = native_binding_version(binding)?;
     ensure!(
         binding_version == 1 || binding_version == 2,
@@ -2368,6 +2376,9 @@ fn validate_native_binding(
     ];
     if has_ledger_inputs {
         fields.push("ledgerInputs");
+    }
+    if has_ledger_calls {
+        fields.push("ledgerCalls");
     }
     shape(binding, &fields, false)?;
     ensure!(
@@ -2727,6 +2738,216 @@ fn validate_native_binding(
     Ok(calls.to_vec())
 }
 
+fn validate_native_ledger_calls(
+    binding: &Json,
+    target_kind: &str,
+    signatures: &BTreeMap<String, witness::WitnessSignature>,
+    calls: &[Json],
+    registry: &witness::Registry,
+) -> Result<BTreeMap<usize, LedgerCall>> {
+    let Some(rows) = binding.get("ledgerCalls") else {
+        ensure!(
+            calls.iter().all(|call| {
+                text(call, "name")
+                    .ok()
+                    .and_then(|name| signatures.get(name))
+                    .is_none_or(|signature| signature.capability != "noctium.ledger")
+            }),
+            "native ledger witness call has no ledger binding"
+        );
+        return Ok(BTreeMap::new());
+    };
+    ensure!(
+        native_binding_version(binding)? == 2 && target_kind == "entrypoint",
+        "native ledger calls require a bound entrypoint"
+    );
+    let rows = rows
+        .as_array()
+        .ok_or_else(|| anyhow!("invalid native ledger call list"))?;
+    ensure!(rows.len() <= MAX_WITNESSES, "native ledger call limit");
+    let mut result = BTreeMap::new();
+    let mut previous_ordinal = None;
+    let mut previous_end = 0usize;
+    for row in rows {
+        shape(row, &["ordinal", "operationEnd", "read"], false)?;
+        let ordinal = canonical_index(text(row, "ordinal")?)?;
+        let operation_end = field(row, "operationEnd")?
+            .as_u64()
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| anyhow!("invalid native ledger operation boundary"))?;
+        let read = match field(row, "read")? {
+            Json::Null => None,
+            Json::String(value) => Some(name(value)?),
+            _ => bail!("invalid native ledger read name"),
+        };
+        ensure!(
+            previous_ordinal.is_none_or(|previous| previous < ordinal)
+                && operation_end > previous_end
+                && ordinal < calls.len()
+                && operation_end > 0,
+            "native ledger call order or boundary mismatch"
+        );
+        previous_ordinal = Some(ordinal);
+        previous_end = operation_end;
+        let call = &calls[ordinal];
+        let signature = signatures
+            .get(text(call, "name")?)
+            .ok_or_else(|| anyhow!("unknown native ledger witness signature"))?;
+        ensure!(
+            signature.capability == "noctium.ledger" && signature.private_key.is_none(),
+            "invalid native ledger witness authority"
+        );
+        let output_slots = list(call, "inputs")?;
+        match (signature.operation.as_str(), read.as_ref()) {
+            ("noctium.ledger.read.v1", Some(_)) => {
+                let ty = parse_type(&signature.result_type, registry)?;
+                ensure!(
+                    matches!(
+                        ty,
+                        Type::Scalar(ScalarType::Native | ScalarType::Bool | ScalarType::UInt(_))
+                    ) && output_slots.len() == 1
+                        && signature.parameters.len() <= 1,
+                    "invalid native ledger read binding"
+                );
+            }
+            ("noctium.ledger.write.v1", None) => ensure!(
+                signature.result_type == "Unit"
+                    && output_slots.is_empty()
+                    && (1..=2).contains(&signature.parameters.len()),
+                "invalid native ledger write binding"
+            ),
+            _ => bail!("native ledger call kind does not match its binding"),
+        }
+        ensure!(
+            result
+                .insert(
+                    ordinal,
+                    LedgerCall {
+                        ordinal,
+                        operation_end,
+                        read,
+                    },
+                )
+                .is_none(),
+            "duplicate native ledger call ordinal"
+        );
+    }
+    for (ordinal, call) in calls.iter().enumerate() {
+        let signature = signatures
+            .get(text(call, "name")?)
+            .ok_or_else(|| anyhow!("unknown native witness signature"))?;
+        ensure!(
+            (signature.capability == "noctium.ledger") == result.contains_key(&ordinal),
+            "native ledger call binding is incomplete"
+        );
+    }
+    Ok(result)
+}
+
+fn expression_references(value: &Json, expected: &str) -> bool {
+    match value {
+        Json::Array(values) => values
+            .iter()
+            .any(|value| expression_references(value, expected)),
+        Json::Object(values) => {
+            (values.get("tag").and_then(Json::as_str) == Some("reference")
+                && values.get("name").and_then(Json::as_str) == Some(expected))
+                || values
+                    .values()
+                    .any(|value| expression_references(value, expected))
+        }
+        _ => false,
+    }
+}
+
+fn unwrap_guarded_operation(mut operation: &Json) -> &Json {
+    while operation.get("op").and_then(Json::as_str) == Some("guarded") {
+        let Some(inner) = operation.get("operation") else {
+            break;
+        };
+        operation = inner;
+    }
+    operation
+}
+
+fn validate_native_ledger_boundaries(binding: &Json, impact_plan: &Json) -> Result<()> {
+    let Some(rows) = binding.get("ledgerCalls") else {
+        return Ok(());
+    };
+    let operations = list(impact_plan, "operations")?;
+    let reads = list(impact_plan, "reads")?;
+    let ledger_inputs = match binding.get("ledgerInputs") {
+        Some(value) => value
+            .as_array()
+            .map(Vec::as_slice)
+            .ok_or_else(|| anyhow!("invalid native ledger input list"))?,
+        None => &[],
+    };
+    for row in rows
+        .as_array()
+        .ok_or_else(|| anyhow!("invalid native ledger call list"))?
+    {
+        let end = field(row, "operationEnd")?
+            .as_u64()
+            .and_then(|value| usize::try_from(value).ok())
+            .ok_or_else(|| anyhow!("invalid native ledger operation boundary"))?;
+        ensure!(
+            end <= operations.len(),
+            "native ledger operation boundary exceeds plan"
+        );
+        let operation = unwrap_guarded_operation(
+            operations
+                .get(end - 1)
+                .ok_or_else(|| anyhow!("native ledger operation boundary is empty"))?,
+        );
+        match field(row, "read")? {
+            Json::String(read) => {
+                ensure!(
+                    operation.get("op").and_then(Json::as_str) == Some("popeq")
+                        && operation
+                            .get("expression")
+                            .is_some_and(|expression| expression_references(expression, read)),
+                    "native ledger read boundary does not pop its bound read"
+                );
+                let read_descriptor = reads
+                    .iter()
+                    .find(|descriptor| {
+                        descriptor.get("name").and_then(Json::as_str) == Some(read.as_str())
+                    })
+                    .ok_or_else(|| anyhow!("native ledger read is absent from selected plan"))?;
+                let ordinal = canonical_index(text(row, "ordinal")?)?;
+                let call = list(binding, "calls")?
+                    .get(ordinal)
+                    .ok_or_else(|| anyhow!("native ledger call ordinal is unknown"))?;
+                let signature_name = text(call, "name")?;
+                let signature = list(binding, "signatures")?
+                    .iter()
+                    .find(|signature| {
+                        signature.get("name").and_then(Json::as_str) == Some(signature_name)
+                    })
+                    .ok_or_else(|| anyhow!("native ledger signature is absent"))?;
+                ensure!(
+                    read_descriptor.get("components").is_none()
+                        && read_descriptor.get("projections").is_none()
+                        && read_descriptor.get("type") == signature.get("resultType")
+                        && ledger_inputs.iter().any(|input| {
+                            input.get("name") == Some(&Json::String(read.clone()))
+                                && input.get("type") == read_descriptor.get("type")
+                                && input.get("visibility").and_then(Json::as_str) == Some("public")
+                        }),
+                    "native ledger read is not a scalar ledger input"
+                );
+            }
+            Json::Null => ensure!(
+                operation.get("op").and_then(Json::as_str) == Some("insert"),
+                "native ledger write boundary does not end at a write"
+            ),
+            _ => bail!("invalid native ledger read name"),
+        }
+    }
+    Ok(())
+}
+
 impl Plan {
     fn parse(v: &Json, expected_binding_sha256: Option<&str>) -> Result<Self> {
         raw_preflight(v)?;
@@ -2980,15 +3201,15 @@ impl Plan {
         } else {
             None
         };
-        let (binding, native_relation, bound_calls, native_input_types) =
+        let (binding, native_relation, bound_calls, ledger_calls, native_input_types) =
             match (schema_version, mode.as_deref()) {
-                (1, None) => (None, None, vec![], BTreeMap::new()),
+                (1, None) => (None, None, vec![], BTreeMap::new(), BTreeMap::new()),
                 (2, Some("host")) => {
                     ensure!(
                         field(v, "binding")?.is_null() && expected_binding_sha256.is_none(),
                         "host control plan must not carry native bindings"
                     );
-                    (None, None, vec![], BTreeMap::new())
+                    (None, None, vec![], BTreeMap::new(), BTreeMap::new())
                 }
                 (2, Some("native")) => {
                     let raw_binding = field(v, "binding")?
@@ -3023,6 +3244,14 @@ impl Plan {
                         &functions,
                         &registry,
                     )?;
+                    let target_kind = text(field(&parsed, "target")?, "kind")?;
+                    let ledger_calls = validate_native_ledger_calls(
+                        &parsed,
+                        target_kind,
+                        &typed_witnesses,
+                        &bound_calls,
+                        &registry,
+                    )?;
                     let native_input_types = list(&parsed, "circuitInputs")?
                         .iter()
                         .map(|input| {
@@ -3037,6 +3266,7 @@ impl Plan {
                         Some(parsed),
                         Some(native_relation),
                         bound_calls,
+                        ledger_calls,
                         native_input_types,
                     )
                 }
@@ -3053,6 +3283,7 @@ impl Plan {
             binding,
             native_relation,
             bound_calls,
+            ledger_calls,
             native_input_types,
             entry,
             name: name(text(v, "name")?)?,
@@ -3365,6 +3596,7 @@ pub(crate) fn validate_witness_artifacts(
         actual_ledger_inputs == expected_ledger_descriptors.as_slice(),
         "selected Impact plan ledger input mismatch"
     );
+    validate_native_ledger_boundaries(binding, impact_plan)?;
     if let Some(expected_abi) = public_bytes32_abi {
         ensure!(
             public_bytes32_relation_abi(binding, relation)? == Some(expected_abi),
@@ -4320,7 +4552,29 @@ impl Session {
                 plan.entry.clone(),
             )?
         } else {
-            let private_inputs = plan.signatures.keys().cloned().collect::<Vec<_>>();
+            let ledger_witnesses = plan
+                .ledger_calls
+                .keys()
+                .map(|ordinal| {
+                    plan.bound_calls
+                        .get(*ordinal)
+                        .and_then(|call| call.get("name"))
+                        .and_then(Json::as_str)
+                        .map(str::to_owned)
+                        .ok_or_else(|| anyhow!("missing bound native ledger witness"))
+                })
+                .collect::<Result<BTreeSet<_>>>()?;
+            let private_inputs = plan
+                .signatures
+                .keys()
+                .filter(|name| !ledger_witnesses.contains(*name))
+                .cloned()
+                .collect::<Vec<_>>();
+            let mut context = context;
+            // Ledger witness slots come from the authenticated native cursor, never a host provider.
+            context
+                .providers
+                .retain(|provider| !ledger_witnesses.contains(&provider.input));
             host::Runtime::new_typed(
                 context,
                 &private_inputs,
@@ -4482,6 +4736,38 @@ impl Session {
         }
         Ok(())
     }
+    pub(crate) fn has_ledger_calls(&self) -> bool {
+        !self.plan.ledger_calls.is_empty()
+    }
+    pub(crate) fn pending_ledger_call(&self) -> Result<Option<LedgerCall>> {
+        if !matches!(self.phase, Phase::Waiting) {
+            return Ok(None);
+        }
+        let pending = self
+            .pending
+            .as_ref()
+            .ok_or_else(|| anyhow!("invalid control pending state"))?;
+        let Some(invocation) = pending.typed.as_ref() else {
+            return Ok(None);
+        };
+        let Some(call) = self.plan.ledger_calls.get(&invocation.ordinal) else {
+            return Ok(None);
+        };
+        ensure!(
+            self.native_target_context_id.is_some()
+                && pending.name == invocation.name
+                && self
+                    .plan
+                    .bound_calls
+                    .get(invocation.ordinal)
+                    .is_some_and(|bound| {
+                        text(bound, "name").ok() == Some(invocation.name.as_str())
+                            && text(bound, "site").ok() == Some(invocation.site.as_str())
+                    }),
+            "native ledger callback lacks its authenticated source binding"
+        );
+        Ok(Some(call.clone()))
+    }
     pub(crate) fn peek_completed_invocation(
         &self,
         context_id: u64,
@@ -4606,6 +4892,28 @@ impl Session {
         self.native_guard_reservations.push(reservation);
         self.native_guard_values = Some(circuit_values);
         Ok(())
+    }
+    pub(crate) fn partial_native_inputs(&mut self) -> Result<CompletedInputMap> {
+        ensure!(
+            self.native_target_context_id.is_some()
+                && self.has_ledger_calls()
+                && self.guarded_native_binding()
+                && !matches!(self.phase, Phase::Failed | Phase::Cancelled),
+            "partial native inputs require an authenticated ledger witness invocation"
+        );
+        self.ensure_native_guard_values()?;
+        let values = self
+            .native_guard_values
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing partial native input prefix"))?;
+        let reservation = AggregateReservation::new(
+            &self.aggregate_budget,
+            json_map_materialization_charge(&values)?,
+        )?;
+        Ok(CompletedInputMap {
+            values: values.clone(),
+            reservation,
+        })
     }
     fn native_call_values(
         &self,
@@ -5121,6 +5429,10 @@ impl Session {
             matches!(self.phase, Phase::Waiting),
             "invalid control lifecycle state"
         );
+        ensure!(
+            self.pending_ledger_call()?.is_none(),
+            "native ledger callback cannot be resumed by a host provider"
+        );
         let (pending_id, invocation, expected_attempt) = {
             let pending = self
                 .pending
@@ -5140,6 +5452,7 @@ impl Session {
             .plan
             .signatures
             .get(&invocation.name)
+            .cloned()
             .ok_or_else(|| anyhow!("unknown pending typed witness"))?;
         let request_id = canonical_u64(&response.request_id)?;
         ensure!(
@@ -5172,75 +5485,124 @@ impl Session {
                     .value
                     .as_ref()
                     .ok_or_else(|| anyhow!("missing typed provider value"))?;
-                let result = tracked_from_json(
-                    &self.plan.registry,
-                    &signature.result_type,
-                    raw,
-                    true,
-                    &self.aggregate_budget,
-                )?;
-                if self.plan.mode.as_deref() == Some("native") {
-                    let bound = self
-                        .plan
-                        .bound_calls
-                        .get(invocation.ordinal)
-                        .ok_or_else(|| anyhow!("missing native witness call binding"))?;
-                    let leaf_values = self
-                        .plan
-                        .registry
-                        .flatten_leaves(&signature.result_type, raw)?;
-                    ensure!(
-                        list(bound, "inputs")?.len() == leaf_values.len(),
-                        "native witness response shape mismatch"
-                    );
-                }
-                let record_value = match parse_type(&signature.result_type, &self.plan.registry)? {
-                    Type::Aggregate(_) => WitnessValue::Aggregate(AggregatePayload::from_borrowed(
-                        raw,
-                        &self.aggregate_budget,
-                    )?),
-                    Type::Unit | Type::Scalar(_) => WitnessValue::PublicScalarOrUnit(raw.clone()),
-                };
-                let native_guard_additions = if self.guarded_native_binding() {
-                    Some(self.prepare_native_guard_additions(invocation.ordinal, Some(raw))?)
-                } else {
-                    None
-                };
-                let completed = self
-                    .host
-                    .as_mut()
-                    .ok_or_else(|| anyhow!("invalid control host state"))?
-                    .finish_typed_input(
-                        &invocation.name,
-                        pending_id,
-                        Some(&response.attempt_id),
-                        Some(&response.operation),
-                        Some(&response.capability),
-                        Some(&response.schema),
-                        raw,
-                        &self.plan.registry,
-                    )?;
-                let mut completed = completed;
-                ensure!(
-                    completed == *raw,
-                    "typed host returned a different canonical witness value"
-                );
-                wipe_json(&mut completed);
-                self.witness_records.push(WitnessRecord {
-                    invocation: invocation.clone(),
-                    result_type: signature.result_type.clone(),
-                    value: record_value,
-                });
-                if let Some((additions, reservation)) = native_guard_additions {
-                    self.commit_native_guard_additions(additions, reservation);
-                }
-                self.values.push(result);
-                self.pending = None;
-                self.phase = Phase::Ready;
-                Ok(json!({"abiVersion":2,"status":"ready"}))
+                self.resume_typed_value(invocation, pending_id, raw, Some(&response))
             }
             _ => bail!("invalid typed control host outcome"),
         }
+    }
+    pub(crate) fn resume_ledger(&mut self, value: Json) -> Result<Json> {
+        let call = self
+            .pending_ledger_call()?
+            .ok_or_else(|| anyhow!("no authenticated native ledger callback is pending"))?;
+        let pending = self
+            .pending
+            .as_ref()
+            .ok_or_else(|| anyhow!("invalid control pending state"))?;
+        let invocation = pending
+            .typed
+            .as_ref()
+            .ok_or_else(|| anyhow!("invalid native ledger callback state"))?
+            .clone();
+        ensure!(
+            call.ordinal == invocation.ordinal,
+            "native ledger callback order mismatch"
+        );
+        let pending_id = pending.id;
+        let mut value = value;
+        let result = self.resume_typed_value(invocation, pending_id, &value, None);
+        wipe_json(&mut value);
+        result
+    }
+    fn resume_typed_value(
+        &mut self,
+        invocation: TypedInvocation,
+        pending_id: u64,
+        raw: &Json,
+        host_response: Option<&TypedResponse>,
+    ) -> Result<Json> {
+        if host_response.is_none() {
+            let ledger_call = self
+                .pending_ledger_call()?
+                .ok_or_else(|| anyhow!("native ledger callback binding mismatch"))?;
+            ensure!(
+                ledger_call.ordinal == invocation.ordinal,
+                "native ledger callback order mismatch"
+            );
+        }
+        let signature = self
+            .plan
+            .signatures
+            .get(&invocation.name)
+            .cloned()
+            .ok_or_else(|| anyhow!("unknown pending typed witness"))?;
+        let result = tracked_from_json(
+            &self.plan.registry,
+            &signature.result_type,
+            raw,
+            true,
+            &self.aggregate_budget,
+        )?;
+        if self.plan.mode.as_deref() == Some("native") {
+            let bound = self
+                .plan
+                .bound_calls
+                .get(invocation.ordinal)
+                .ok_or_else(|| anyhow!("missing native witness call binding"))?;
+            let leaf_values = self
+                .plan
+                .registry
+                .flatten_leaves(&signature.result_type, raw)?;
+            ensure!(
+                list(bound, "inputs")?.len() == leaf_values.len(),
+                "native witness response shape mismatch"
+            );
+        }
+        let record_value = match parse_type(&signature.result_type, &self.plan.registry)? {
+            Type::Aggregate(_) => WitnessValue::Aggregate(AggregatePayload::from_borrowed(
+                raw,
+                &self.aggregate_budget,
+            )?),
+            Type::Unit | Type::Scalar(_) => WitnessValue::PublicScalarOrUnit(raw.clone()),
+        };
+        let native_guard_additions = if self.guarded_native_binding() {
+            Some(self.prepare_native_guard_additions(invocation.ordinal, Some(raw))?)
+        } else {
+            None
+        };
+        if let Some(response) = host_response {
+            let completed = self
+                .host
+                .as_mut()
+                .ok_or_else(|| anyhow!("invalid control host state"))?
+                .finish_typed_input(
+                    &invocation.name,
+                    pending_id,
+                    Some(&response.attempt_id),
+                    Some(&response.operation),
+                    Some(&response.capability),
+                    Some(&response.schema),
+                    raw,
+                    &self.plan.registry,
+                )?;
+            let mut completed = completed;
+            ensure!(
+                completed == *raw,
+                "typed host returned a different canonical witness value"
+            );
+            wipe_json(&mut completed);
+        }
+        self.witness_records.push(WitnessRecord {
+            invocation,
+            result_type: signature.result_type,
+            value: record_value,
+        });
+        if let Some((additions, reservation)) = native_guard_additions {
+            self.commit_native_guard_additions(additions, reservation);
+        }
+        self.values.push(result);
+        self.pending = None;
+        self.phase = Phase::Ready;
+        Ok(json!({"abiVersion":2,"status":"ready"}))
     }
     /// Compatibility API for callers that own the returned snapshot outside the session budget.
     /// Use `advance_accounted` for bounded source-execution and C ABI paths.
@@ -5251,6 +5613,12 @@ impl Session {
     pub fn advance_accounted(&mut self) -> Result<AccountedJson> {
         match &self.phase {
             Phase::Waiting => {
+                if self.pending_ledger_call()?.is_some() {
+                    return Ok(AccountedJson::new(
+                        json!({"abiVersion":1,"status":"need_ledger"}),
+                        Vec::new(),
+                    ));
+                }
                 return Ok(AccountedJson::new(
                     json!({"abiVersion":1,"status":"need_host","request":self.pending.as_ref().ok_or_else(||anyhow!("invalid control pending state"))?.request}),
                     Vec::new(),
@@ -5724,20 +6092,27 @@ impl Session {
                         })
                         .map_err(|_| anyhow!("control request id exhausted"))?;
                     let mut arguments_value = Json::Object(arguments_json);
-                    let request_result = self
-                        .host
-                        .as_mut()
-                        .ok_or_else(|| anyhow!("invalid control host state"))?
-                        .begin_typed_input(
-                            &name,
-                            request_id,
-                            signature,
-                            &arguments_value,
-                            &self.plan.registry,
+                    let request = if self.plan.ledger_calls.contains_key(&ordinal) {
+                        ensure!(
+                            self.native_target_context_id.is_some(),
+                            "native ledger callback requires an authenticated contract target"
                         );
+                        Json::Null
+                    } else {
+                        let request_result = self
+                            .host
+                            .as_mut()
+                            .ok_or_else(|| anyhow!("invalid control host state"))?
+                            .begin_typed_input(
+                                &name,
+                                request_id,
+                                signature,
+                                &arguments_value,
+                                &self.plan.registry,
+                            );
+                        request_result?.ok_or_else(|| anyhow!("typed witness requires provider"))?
+                    };
                     wipe_json(&mut arguments_value);
-                    let request = request_result?
-                        .ok_or_else(|| anyhow!("typed witness requires provider"))?;
                     self.bound_call_cursor += 1;
                     self.pending = Some(Pending {
                         id: request_id,
