@@ -83,6 +83,7 @@ structure Fact where
   valueType : NativeValueType := .native
   /-- Native typed decoding or a checked codec established this foreign value. -/
   foreignValid : Bool := false
+  foreignNonidentity : Bool := false
   nodes : Nat := 1
   depth : Nat := 1
   assertedLessThan : Option (String × Nat) := none
@@ -93,6 +94,7 @@ structure State where
   inputCount : Nat := 0
   groupCount : Nat := 0
   assertionCount : Nat := 0
+  establishedAssertions : List Term := []
   canonicalScalarInputs : List String := []
   requiredCoordinateEqualities : List (Term × Term) := []
   establishedCoordinateEqualities : List (Term × Term) := []
@@ -123,6 +125,11 @@ private def requireForeignValid (fact : Fact) : Except String Unit :=
 private def isForeignType : NativeValueType → Bool
   | .foreign _ => true
   | _ => false
+
+private def foreignResult (kind : Foreign.Kind) (term : Term) (children : List Fact) : Except String Fact := do
+  children.forM requireForeignValid
+  let fact ← combine term 0 children
+  pure {fact with valueType := .foreign kind, foreignValid := true}
 
 private def nativeOperand (state : State) (text : String) : Except String Fact := do
   let fact ← operand state text
@@ -285,22 +292,35 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       maximum := if foreignValid then 0 else Field.modulus - 1
     }
     pure {state with inputCount := state.inputCount + 1}
-  | "mul" =>
-    let left ← nativeArgument state instruction "a"
-    let right ← nativeArgument state instruction "b"
-    let bound := left.maximum * right.maximum
-    let maximum := if bound < Field.modulus then bound else Field.modulus - 1
-    defineResult state instruction (← combine (.binary opcode left.term right.term) maximum [left, right])
+  | "mul" => do
+    let left ← argument state instruction "a"
+    let right ← argument state instruction "b"
+    if let .foreign kind := left.valueType then do
+      ensure (right.valueType == left.valueType && kind.modulus?.isSome)
+        "foreign multiplication requires matching prime fields"
+      defineResult state instruction (← foreignResult kind (foreignBinaryTerm "mul" kind left.term right.term) [left, right])
+    else do
+      requireNative left
+      requireNative right
+      let bound := left.maximum * right.maximum
+      let maximum := if bound < Field.modulus then bound else Field.modulus - 1
+      defineResult state instruction (← combine (.binary opcode left.term right.term) maximum [left, right])
   | "inv" => do
     let value ← operand state (← stringField instruction "a")
-    let (termOpcode, maximum) ← match value.valueType with
-      | .native => pure ("inverse_native", Field.modulus - 1)
-      | .jubjubScalar => pure ("inverse_jubjub_scalar", Jubjub.scalarOrder - 1)
-      | _ => throw "inv supports only Native and JubjubScalar operands"
-    ensure (value.maximum ≤ maximum) "inv operand range precondition is not established"
-    ensure (value.maximum > 0) "inv cannot invert an operand known to be zero"
-    let fact ← combine (.unary termOpcode value.term) maximum [value]
-    defineResult state instruction {fact with valueType := value.valueType}
+    if let .foreign kind := value.valueType then do
+      ensure kind.modulus?.isSome "foreign inverse requires a prime field"
+      ensure (state.establishedAssertions.contains (foreignNonzeroTerm kind value.term))
+        "foreign inverse lacks its explicit nonzero assertion"
+      defineResult state instruction (← foreignResult kind (foreignUnaryTerm "inv" kind value.term) [value])
+    else do
+      let (termOpcode, maximum) ← match value.valueType with
+        | .native => pure ("inverse_native", Field.modulus - 1)
+        | .jubjubScalar => pure ("inverse_jubjub_scalar", Jubjub.scalarOrder - 1)
+        | _ => throw "inv supports only qualified prime-field operands"
+      ensure (value.maximum ≤ maximum) "inv operand range precondition is not established"
+      ensure (value.maximum > 0) "inv cannot invert an operand known to be zero"
+      let fact ← combine (.unary termOpcode value.term) maximum [value]
+      defineResult state instruction {fact with valueType := value.valueType}
   | "add" | "test_eq" => do
     let left ← argument state instruction "a"
     let right ← argument state instruction "b"
@@ -312,6 +332,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       ensure ((byteLength? left.valueType).isNone) "typed byte equality is unsupported by this source surface"
       let fact ← combine (.binary "test_eq" left.term right.term) 1 [left, right]
       defineResult state instruction fact
+    else if let .foreign kind := left.valueType then do
+      defineResult state instruction (← foreignResult kind (foreignBinaryTerm "add" kind left.term right.term) [left, right])
     else if left.valueType == .jubjubPoint then do
       let fact ← combine (.binary "add_jubjub_point" left.term right.term)
         (Field.modulus - 1) [left, right]
@@ -328,6 +350,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       requireNative value
       requireBoolean value
       defineResult state instruction (← combine (.unary "not" value.term) 1 [value])
+    else if let .foreign kind := value.valueType then do
+      defineResult state instruction (← foreignResult kind (foreignUnaryTerm "neg" kind value.term) [value])
     else if value.valueType == .jubjubPoint then do
       let fact ← combine (.unary "neg_jubjub_point" value.term) (Field.modulus - 1) [value]
       defineResult state instruction {fact with valueType := .jubjubPoint}
@@ -407,8 +431,10 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
         establishedCoordinateEqualities :=
           (state.establishedCoordinateEqualities ++ coordinatePairs).eraseDups}
     else
-      ensure (left.valueType == .jubjubScalar || left.valueType == .jubjubPoint)
-        "constrain_eq supports only Native and qualified Jubjub values"
+      ensure (left.valueType == .jubjubScalar || left.valueType == .jubjubPoint || isForeignType left.valueType)
+        "constrain_eq supports only qualified typed values"
+      requireForeignValid left
+      requireForeignValid right
       pure state
   | "less_than" =>
     let leftText ← stringField instruction "a"
@@ -427,6 +453,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     requireBoolean value
     let state := if expected.assertions[state.assertionCount]? == some value.term then
       {state with assertionCount := state.assertionCount + 1} else state
+    let state := {state with establishedAssertions := (value.term :: state.establishedAssertions).eraseDups}
     if let some (identifier, exclusive) := value.assertedLessThan then
       ensure (exclusive > 0) "asserted less_than has an impossible zero bound"
       refine state identifier (exclusive - 1)
@@ -520,9 +547,14 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     else throw "encode accepts only qualified typed bytes, Bool, Byte or JubjubScalar values"
   | "to_bytes" => do
     let input ← argument state instruction "input"
-    let term ← toBytes32Term input.valueType input.term
-    let fact ← combine term 0 [input]
-    defineResult state instruction {fact with valueType := .bytes32}
+    if let .foreign kind := input.valueType then do
+      requireForeignValid input
+      let fact ← combine (foreignUnaryTerm "to_bytes" kind input.term) 0 [input]
+      defineResult state instruction {fact with valueType := byteValueType kind.byteLength}
+    else do
+      let term ← toBytes32Term input.valueType input.term
+      let fact ← combine term 0 [input]
+      defineResult state instruction {fact with valueType := .bytes32}
   | "reverse" => do
     let bytes ← argument state instruction "bytes"
     let some length := byteLength? bytes.valueType | throw "reverse requires typed bytes"
@@ -560,11 +592,19 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     defineResult state instruction {fact with valueType := byteValueType length}
   | "from_bytes" => do
     let bytes ← argument state instruction "bytes"
-    ensure (bytes.valueType == .bytes32) "from_bytes requires a typed Bytes32 operand"
     let typeName ← stringField instruction "type"
-    let (valueType, term, maximum) ← fromBytes32Term typeName bytes.term
-    let fact ← combine term maximum [bytes]
-    defineResult state instruction {fact with valueType}
+    if let some kind := Foreign.kinds.find? (·.nativeName == typeName) then do
+      let some length := byteLength? bytes.valueType | throw "foreign from_bytes requires typed bytes"
+      ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
+        "foreign from_bytes length is unsupported"
+      if let .point _ := kind then ensure (length == 33) "Secp point decoding requires Bytes33"
+      let fact ← combine (foreignFromBytesTerm kind length bytes.term) 0 [bytes]
+      defineResult state instruction {fact with valueType := .foreign kind, foreignValid := true}
+    else do
+      ensure (bytes.valueType == .bytes32) "from_bytes requires a typed Bytes32 operand"
+      let (valueType, term, maximum) ← fromBytes32Term typeName bytes.term
+      let fact ← combine term maximum [bytes]
+      defineResult state instruction {fact with valueType}
   | "jubjub_scalar_from_native" => do
     let value ← nativeArgument state instruction "native"
     let term := Term.unary "jubjub_scalar_from_native" value.term
@@ -578,42 +618,60 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     defineResult state instruction {fact with valueType := .jubjubPoint}
   | "ec_mul_generator" => do
     let scalar ← argument state instruction "scalar"
-    ensure (scalar.valueType == .jubjubScalar) "ec_mul_generator requires a JubjubScalar"
-    let term := Term.unary "ec_mul_generator_jubjub" scalar.term
-    let fact ← combine term (Field.modulus - 1) [scalar]
-    defineResult state instruction {fact with valueType := .jubjubPoint}
+    if let .foreign (.scalar curve) := scalar.valueType then do
+      defineResult state instruction (← foreignResult (.point curve)
+        (foreignUnaryTerm "mulGenerator" (.scalar curve) scalar.term) [scalar])
+    else do
+      ensure (scalar.valueType == .jubjubScalar) "ec_mul_generator requires a qualified curve scalar"
+      let fact ← combine (.unary "ec_mul_generator_jubjub" scalar.term) (Field.modulus - 1) [scalar]
+      defineResult state instruction {fact with valueType := .jubjubPoint}
   | "ec_mul" => do
     let point ← argument state instruction "a"
     let scalar ← argument state instruction "scalar"
-    ensure (point.valueType == .jubjubPoint && scalar.valueType == .jubjubScalar)
-      "ec_mul requires a JubjubPoint and JubjubScalar"
-    let term := Term.binary "ec_mul_jubjub" point.term scalar.term
-    let fact ← combine term (Field.modulus - 1) [point, scalar]
-    defineResult state instruction {fact with valueType := .jubjubPoint}
+    if let .foreign (.point curve) := point.valueType then do
+      ensure (scalar.valueType == .foreign (.scalar curve)) "foreign ec_mul scalar family mismatch"
+      defineResult state instruction (← foreignResult (.point curve)
+        (foreignBinaryTerm "ecMul" (.point curve) point.term scalar.term) [point, scalar])
+    else do
+      ensure (point.valueType == .jubjubPoint && scalar.valueType == .jubjubScalar)
+        "ec_mul requires a matching point and scalar"
+      let fact ← combine (.binary "ec_mul_jubjub" point.term scalar.term) (Field.modulus - 1) [point, scalar]
+      defineResult state instruction {fact with valueType := .jubjubPoint}
   | "from_coordinates" => do
-    let inputs ← arrayField instruction "inputs"
-    ensure (inputs.size == 2) "Jubjub from_coordinates requires two Native inputs"
-    let x ← nativeOperand state (← inputs[0]!.getStr?)
-    let y ← nativeOperand state (← inputs[1]!.getStr?)
-    let pointTerm := Term.binary "from_coordinates_jubjub" x.term y.term
-    let fact ← combine pointTerm (Field.modulus - 1) [x, y]
-    let state ← defineResult state instruction {fact with valueType := .jubjubPoint}
-    let required := [
-      (x.term, Term.unary "jubjub_x" pointTerm),
-      (y.term, Term.unary "jubjub_y" pointTerm)]
-    pure {state with requiredCoordinateEqualities :=
-      (state.requiredCoordinateEqualities ++ required).eraseDups}
+    let inputs ← arguments state instruction "inputs"
+    let [x, y] := inputs | throw "from_coordinates requires exactly two inputs"
+    if let .foreign (.base curve) := x.valueType then do
+      ensure (y.valueType == x.valueType) "foreign coordinate field family mismatch"
+      let fact ← foreignResult (.point curve)
+        (foreignBinaryTerm "fromCoordinates" (.base curve) x.term y.term) [x, y]
+      defineResult state instruction {fact with foreignNonidentity := true}
+    else do
+      requireNative x
+      requireNative y
+      let pointTerm := Term.binary "from_coordinates_jubjub" x.term y.term
+      let fact ← combine pointTerm (Field.modulus - 1) [x, y]
+      let state ← defineResult state instruction {fact with valueType := .jubjubPoint}
+      let required := [(x.term, Term.unary "jubjub_x" pointTerm), (y.term, Term.unary "jubjub_y" pointTerm)]
+      pure {state with requiredCoordinateEqualities := (state.requiredCoordinateEqualities ++ required).eraseDups}
   | "into_coordinates" => do
     let point ← argument state instruction "point"
-    ensure (point.valueType == .jubjubPoint) "into_coordinates requires a JubjubPoint"
     let outputs ← arrayField instruction "outputs"
-    ensure (outputs.size == 2) "Jubjub into_coordinates requires exactly two outputs"
+    ensure (outputs.size == 2) "into_coordinates requires exactly two outputs"
     let xName ← outputs[0]!.getStr?
     let yName ← outputs[1]!.getStr?
-    let x ← combine (Term.unary "jubjub_x" point.term) (Field.modulus - 1) [point]
-    let state ← define state xName x
-    let y ← combine (Term.unary "jubjub_y" point.term) (Field.modulus - 1) [point]
-    define state yName y
+    if let .foreign (.point curve) := point.valueType then do
+      ensure (point.foreignNonidentity || state.establishedAssertions.contains (foreignNonzeroTerm (.point curve) point.term))
+        "foreign coordinate extraction lacks its nonidentity assertion"
+      let x ← foreignResult (.base curve) (foreignUnaryTerm "x" (.point curve) point.term) [point]
+      let state ← define state xName x
+      let y ← foreignResult (.base curve) (foreignUnaryTerm "y" (.point curve) point.term) [point]
+      define state yName y
+    else do
+      ensure (point.valueType == .jubjubPoint) "into_coordinates requires a qualified point"
+      let x ← combine (.unary "jubjub_x" point.term) (Field.modulus - 1) [point]
+      let state ← define state xName x
+      let y ← combine (.unary "jubjub_y" point.term) (Field.modulus - 1) [point]
+      define state yName y
   | "transient_hash" =>
     let values ← nativeArguments state instruction "inputs"
     ensure (!values.isEmpty) "empty native transient hash is unsupported by this producer"

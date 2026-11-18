@@ -12,6 +12,12 @@ inductive Kind where
   | point (curve : Curve)
   deriving Repr, BEq, DecidableEq, Inhabited
 
+/-- The two field roles supported by each foreign curve. -/
+inductive FieldKind where
+  | base (curve : Curve)
+  | scalar (curve : Curve)
+  deriving Repr, BEq, DecidableEq, Inhabited
+
 /-- Logical points do not expose their five native wire fields. -/
 inductive Point where
   | identity
@@ -28,6 +34,79 @@ instance (kind : Kind) : BEq kind.Denote := by
 instance (kind : Kind) : DecidableEq kind.Denote := by
   cases kind <;> simp only [Kind.Denote] <;> infer_instance
 
+abbrev FieldKind.curve : FieldKind → Curve
+  | .base curve | .scalar curve => curve
+
+abbrev FieldKind.kind : FieldKind → Kind
+  | .base curve => .base curve
+  | .scalar curve => .scalar curve
+
+def Kind.fieldKind? : Kind → Option FieldKind
+  | .base curve => some (.base curve)
+  | .scalar curve => some (.scalar curve)
+  | .point _ => none
+
+/-- One-input curve operation, indexed by its exact input and output kinds. -/
+inductive UnaryOp where
+  | neg (kind : Kind)
+  | inv (kind : FieldKind)
+  | mulGenerator (curve : Curve)
+  | x (curve : Curve)
+  | y (curve : Curve)
+  deriving Repr, BEq, DecidableEq, Inhabited
+
+abbrev UnaryOp.inputKind : UnaryOp → Kind
+  | .neg kind => kind
+  | .inv kind => kind.kind
+  | .mulGenerator curve => .scalar curve
+  | .x curve | .y curve => .point curve
+
+abbrev UnaryOp.outputKind : UnaryOp → Kind
+  | .neg kind => kind
+  | .inv kind => kind.kind
+  | .mulGenerator curve => .point curve
+  | .x curve | .y curve => .base curve
+
+def UnaryOp.name : UnaryOp → String
+  | .neg _ => "neg"
+  | .inv _ => "inv"
+  | .mulGenerator _ => "mulGenerator"
+  | .x _ => "x"
+  | .y _ => "y"
+
+/-- Two-input curve operation, indexed by exact operand and result kinds. -/
+inductive BinaryOp where
+  | add (kind : Kind)
+  | sub (kind : Kind)
+  | mul (kind : FieldKind)
+  | ecMul (curve : Curve)
+  | fromCoordinates (curve : Curve)
+  deriving Repr, BEq, DecidableEq, Inhabited
+
+abbrev BinaryOp.leftKind : BinaryOp → Kind
+  | .add kind | .sub kind => kind
+  | .mul kind => kind.kind
+  | .ecMul curve => .point curve
+  | .fromCoordinates curve => .base curve
+
+abbrev BinaryOp.rightKind : BinaryOp → Kind
+  | .add kind | .sub kind => kind
+  | .mul kind => kind.kind
+  | .ecMul curve => .scalar curve
+  | .fromCoordinates curve => .base curve
+
+abbrev BinaryOp.outputKind : BinaryOp → Kind
+  | .add kind | .sub kind => kind
+  | .mul kind => kind.kind
+  | .ecMul curve | .fromCoordinates curve => .point curve
+
+def BinaryOp.name : BinaryOp → String
+  | .add _ => "add"
+  | .sub _ => "sub"
+  | .mul _ => "mul"
+  | .ecMul _ => "ecMul"
+  | .fromCoordinates _ => "fromCoordinates"
+
 def Curve.name : Curve → String
   | .secp256k1 => "Secp256k1"
   | .secp256r1 => "Secp256r1"
@@ -40,6 +119,10 @@ def Curve.baseModulus : Curve → Nat
 def Curve.scalarModulus : Curve → Nat
   | .secp256k1 => 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
   | .secp256r1 => 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+
+def FieldKind.modulus : FieldKind → Nat
+  | .base curve => curve.baseModulus
+  | .scalar curve => curve.scalarModulus
 
 def Curve.coefficientA : Curve → Nat
   | .secp256k1 => 0

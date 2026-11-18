@@ -1,0 +1,987 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"name": "inverseMarker", "kind": {"cell": "UIntRange<256>"}},
+  {"name": "identityXMarker", "kind": {"cell": "UIntRange<256>"}},
+  {"name": "coordinatesMarker", "kind": {"cell": "UIntRange<256>"}},
+  {"name": "decodeMarker", "kind": {"cell": "UIntRange<256>"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Secp256k1Base",
+   "name": "kBaseResult",
+   "expression": {"tag": "reference", "name": "kBaseValue"}},
+  {"visibility": "public",
+   "type": "Secp256k1Scalar",
+   "name": "kScalarResult",
+   "expression": {"tag": "reference", "name": "kScalarValue"}},
+  {"visibility": "public",
+   "type": "Secp256k1Point",
+   "name": "kPointResult",
+   "expression": {"tag": "reference", "name": "kPointValue"}},
+  {"visibility": "public",
+   "type": "Bytes<33>",
+   "name": "kPointBytes",
+   "expression": {"tag": "reference", "name": "kPointBytesValue"}},
+  {"visibility": "public",
+   "type": "Secp256r1Base",
+   "name": "rBaseResult",
+   "expression": {"tag": "reference", "name": "rBaseValue"}},
+  {"visibility": "public",
+   "type": "Secp256r1Scalar",
+   "name": "rScalarResult",
+   "expression": {"tag": "reference", "name": "rScalarValue"}},
+  {"visibility": "public",
+   "type": "Secp256r1Point",
+   "name": "rPointResult",
+   "expression": {"tag": "reference", "name": "rPointValue"}},
+  {"visibility": "public",
+   "type": "Bytes<33>",
+   "name": "rPointBytes",
+   "expression": {"tag": "reference", "name": "rPointBytesValue"}},
+  {"visibility": "public",
+   "type": "Secp256k1Base",
+   "name": "rawKBase",
+   "expression": {"tag": "reference", "name": "rawKBaseValue"}},
+  {"visibility": "public",
+   "type": "Secp256r1Scalar",
+   "name": "rawRScalar",
+   "expression": {"tag": "reference", "name": "rawRScalarValue"}},
+  {"visibility": "public",
+   "type": "Secp256k1Base",
+   "name": "emptyKBase",
+   "expression": {"tag": "reference", "name": "emptyKBaseValue"}}],
+ "reads": [],
+ "operations":
+ [{"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "0", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardInv"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "guardInv"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxxx",
+      "body":
+      {"value":
+       {"value":
+        {"value":
+         {"yes":
+          {"type": "Secp256k1Base",
+           "tag": "foreignConstant",
+           "encoding":
+           ["6277101735386680763835789423207666416102355444459739544622",
+            "18446744073709551615"]},
+          "tag": "select",
+          "no":
+          {"type": "Secp256k1Base",
+           "tag": "foreignConstant",
+           "encoding": ["0", "0"]},
+          "condition":
+          {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxx"}},
+         "tag": "foreignUnary",
+         "operation": "inv"},
+        "tag": "foreignToBytes"},
+       "tag": "byteAt",
+       "index": 0}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardInv"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardInv"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "1", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardIdentityX"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "guardIdentityX"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxxx",
+      "body":
+      {"value":
+       {"value":
+        {"value":
+         {"yes":
+          {"type": "Secp256k1Point",
+           "tag": "foreignConstant",
+           "encoding":
+           ["6277101735386680763835789423207666416102355444459739544622",
+            "18446744073709551615",
+            "6277101735386680763835789423207666416102355444459739544622",
+            "18446744073709551615",
+            "1"]},
+          "tag": "select",
+          "no":
+          {"value":
+           {"type": "Secp256k1Scalar",
+            "tag": "foreignConstant",
+            "encoding": ["0", "0"]},
+           "tag": "foreignUnary",
+           "operation": "mulGenerator"},
+          "condition":
+          {"tag": "reference",
+           "name": "_noctium_activity_guard_xxxxxxxxxxxxxxx"}},
+         "tag": "foreignUnary",
+         "operation": "x"},
+        "tag": "foreignToBytes"},
+       "tag": "byteAt",
+       "index": 0}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardIdentityX"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardIdentityX"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "2", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardCoordinates"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "guardCoordinates"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxx",
+      "body":
+      {"value":
+       {"value":
+        {"tag": "foreignBinary",
+         "right":
+         {"yes":
+          {"type": "Secp256k1Base",
+           "tag": "foreignConstant",
+           "encoding":
+           ["6277101735386680763835789423207666416102355444459739544622",
+            "18446744073709551615"]},
+          "tag": "select",
+          "no":
+          {"value":
+           {"value":
+            {"type": "Secp256k1Scalar",
+             "tag": "foreignConstant",
+             "encoding": ["0", "0"]},
+            "tag": "foreignUnary",
+            "operation": "mulGenerator"},
+           "tag": "foreignUnary",
+           "operation": "y"},
+          "condition":
+          {"tag": "reference",
+           "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxx"}},
+         "operation": "fromCoordinates",
+         "left":
+         {"yes":
+          {"type": "Secp256k1Base",
+           "tag": "foreignConstant",
+           "encoding":
+           ["6277101735386680763835789423207666416102355444459739544622",
+            "18446744073709551615"]},
+          "tag": "select",
+          "no":
+          {"value":
+           {"value":
+            {"type": "Secp256k1Scalar",
+             "tag": "foreignConstant",
+             "encoding": ["0", "0"]},
+            "tag": "foreignUnary",
+            "operation": "mulGenerator"},
+           "tag": "foreignUnary",
+           "operation": "x"},
+          "condition":
+          {"tag": "reference",
+           "name": "_noctium_activity_guard_xxxxxxxxxxxxxxxxx"}}},
+        "tag": "foreignToBytes"},
+       "tag": "byteAt",
+       "index": 0}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardCoordinates"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardCoordinates"}},
+  {"operation":
+   {"storage": false,
+    "op": "push",
+    "expression": {"value": "3", "tag": "constant"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardDecode"}},
+  {"operation":
+   {"storage": true,
+    "op": "push",
+    "expression":
+    {"value":
+     {"value": {"tag": "reference", "name": "guardDecode"},
+      "tag": "let",
+      "name": "_noctium_activity_guard_xxxxxxxxxxxx",
+      "body":
+      {"value":
+       {"value":
+        {"value":
+         {"yes":
+          {"values":
+           [105,
+            110,
+            118,
+            97,
+            108,
+            105,
+            100,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0],
+           "tag": "bytesLiteral",
+           "length": 33},
+          "tag": "select",
+          "no":
+          {"values":
+           [0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0],
+           "tag": "bytesLiteral",
+           "length": 33},
+          "condition":
+          {"tag": "reference", "name": "_noctium_activity_guard_xxxxxxxxxxxx"}},
+         "type": "Secp256k1Point",
+         "tag": "foreignFromBytes",
+         "length": 33},
+        "tag": "foreignToBytes"},
+       "tag": "byteAt",
+       "index": 0}},
+     "type": "Native",
+     "tag": "cast"},
+    "alignment": "field"},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardDecode"}},
+  {"operation": {"op": "insert", "n": 1},
+   "op": "guarded",
+   "guard": {"tag": "reference", "name": "guardDecode"}}],
+ "nativeCircuitFile": "ForeignOperations.inspect.zkir",
+ "guards": [],
+ "entrypoint": "inspect",
+ "contractName": "ForeignOperations",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Secp256k1Base",
+    "name": "kBaseValue",
+    "expression":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kBase"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Base",
+       "tag": "foreignConstant",
+       "encoding": ["1", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kBase"}}}},
+   {"visibility": "public",
+    "type": "Secp256k1Scalar",
+    "name": "kScalarValue",
+    "expression":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kScalar"}}}},
+   {"visibility": "public",
+    "type": "Secp256k1Point",
+    "name": "kPointValue",
+    "expression":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "add",
+     "left":
+     {"tag": "foreignBinary",
+      "right": {"tag": "reference", "name": "kScalar"},
+      "operation": "ecMul",
+      "left": {"tag": "reference", "name": "kPoint"}}}},
+   {"visibility": "public",
+    "type": "Bytes<33>",
+    "name": "kPointBytesValue",
+    "expression":
+    {"value":
+     {"tag": "foreignBinary",
+      "right":
+      {"value": {"tag": "reference", "name": "kScalar"},
+       "tag": "foreignUnary",
+       "operation": "mulGenerator"},
+      "operation": "add",
+      "left":
+      {"tag": "foreignBinary",
+       "right": {"tag": "reference", "name": "kScalar"},
+       "operation": "ecMul",
+       "left": {"tag": "reference", "name": "kPoint"}}},
+     "tag": "foreignToBytes"}},
+   {"visibility": "public",
+    "type": "Secp256r1Base",
+    "name": "rBaseValue",
+    "expression":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rBase"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Base",
+       "tag": "foreignConstant",
+       "encoding": ["1", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rBase"}}}},
+   {"visibility": "public",
+    "type": "Secp256r1Scalar",
+    "name": "rScalarValue",
+    "expression":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rScalar"}}}},
+   {"visibility": "public",
+    "type": "Secp256r1Point",
+    "name": "rPointValue",
+    "expression":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "add",
+     "left":
+     {"tag": "foreignBinary",
+      "right": {"tag": "reference", "name": "rScalar"},
+      "operation": "ecMul",
+      "left": {"tag": "reference", "name": "rPoint"}}}},
+   {"visibility": "public",
+    "type": "Bytes<33>",
+    "name": "rPointBytesValue",
+    "expression":
+    {"value":
+     {"tag": "foreignBinary",
+      "right":
+      {"value": {"tag": "reference", "name": "rScalar"},
+       "tag": "foreignUnary",
+       "operation": "mulGenerator"},
+      "operation": "add",
+      "left":
+      {"tag": "foreignBinary",
+       "right": {"tag": "reference", "name": "rScalar"},
+       "operation": "ecMul",
+       "left": {"tag": "reference", "name": "rPoint"}}},
+     "tag": "foreignToBytes"}},
+   {"visibility": "public",
+    "type": "Secp256k1Base",
+    "name": "rawKBaseValue",
+    "expression":
+    {"value": {"tag": "reference", "name": "raw"},
+     "type": "Secp256k1Base",
+     "tag": "foreignFromBytes",
+     "length": 64}},
+   {"visibility": "public",
+    "type": "Secp256r1Scalar",
+    "name": "rawRScalarValue",
+    "expression":
+    {"value": {"tag": "reference", "name": "raw"},
+     "type": "Secp256r1Scalar",
+     "tag": "foreignFromBytes",
+     "length": 64}},
+   {"visibility": "public",
+    "type": "Secp256k1Base",
+    "name": "emptyKBaseValue",
+    "expression":
+    {"value":
+     {"tag": "assertThen",
+      "condition": {"tag": "reference", "name": "enabled"},
+      "body": {"values": [], "tag": "bytesLiteral", "length": 0}},
+     "type": "Secp256k1Base",
+     "tag": "foreignFromBytes",
+     "length": 0}}],
+  "name": "foreignOperations",
+  "inputs":
+  [{"visibility": "private", "type": "Secp256k1Base", "name": "kBase"},
+   {"visibility": "private", "type": "Secp256k1Scalar", "name": "kScalar"},
+   {"visibility": "private", "type": "Secp256k1Point", "name": "kPoint"},
+   {"visibility": "private", "type": "Secp256r1Base", "name": "rBase"},
+   {"visibility": "private", "type": "Secp256r1Scalar", "name": "rScalar"},
+   {"visibility": "private", "type": "Secp256r1Point", "name": "rPoint"},
+   {"visibility": "private", "type": "Bytes<64>", "name": "raw"},
+   {"visibility": "private", "type": "Bool", "name": "enabled"},
+   {"visibility": "private", "type": "Bool", "name": "guardInv"},
+   {"visibility": "private", "type": "Bool", "name": "guardIdentityX"},
+   {"visibility": "private", "type": "Bool", "name": "guardCoordinates"},
+   {"visibility": "private", "type": "Bool", "name": "guardDecode"}],
+  "file": "foreignOperations.zkir",
+  "constraints":
+  [{"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kBase"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Base",
+       "tag": "foreignConstant",
+       "encoding": ["1", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kBase"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kBase"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Base",
+       "tag": "foreignConstant",
+       "encoding": ["1", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kBase"}}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kScalar"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kScalar"}}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "add",
+     "left":
+     {"tag": "foreignBinary",
+      "right": {"tag": "reference", "name": "kScalar"},
+      "operation": "ecMul",
+      "left": {"tag": "reference", "name": "kPoint"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "add",
+     "left":
+     {"tag": "foreignBinary",
+      "right": {"tag": "reference", "name": "kScalar"},
+      "operation": "ecMul",
+      "left": {"tag": "reference", "name": "kPoint"}}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rBase"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Base",
+       "tag": "foreignConstant",
+       "encoding": ["1", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rBase"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rBase"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Base",
+       "tag": "foreignConstant",
+       "encoding": ["1", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rBase"}}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rScalar"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rScalar"}}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "add",
+     "left":
+     {"tag": "foreignBinary",
+      "right": {"tag": "reference", "name": "rScalar"},
+      "operation": "ecMul",
+      "left": {"tag": "reference", "name": "rPoint"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "add",
+     "left":
+     {"tag": "foreignBinary",
+      "right": {"tag": "reference", "name": "rScalar"},
+      "operation": "ecMul",
+      "left": {"tag": "reference", "name": "rPoint"}}}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256k1Base",
+     "tag": "foreignConstant",
+     "encoding":
+     ["6277101735386680763835789423207666416102355444459739544622",
+      "18446744073709551615"]},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kBase"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "add",
+     "left": {"tag": "reference", "name": "kBase"}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "kBase"},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"type": "Secp256k1Base",
+      "tag": "foreignConstant",
+      "encoding": ["0", "0"]},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Base",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kBase"}}}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256k1Scalar",
+     "tag": "foreignConstant",
+     "encoding": ["0", "0"]},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left": {"tag": "reference", "name": "kScalar"}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kScalar"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256k1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kScalar"}}}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256k1Point",
+     "tag": "foreignConstant",
+     "encoding":
+     ["6277101735386680763835789423207666416102355444459739544622",
+      "18446744073709551615",
+      "6277101735386680763835789423207666416102355444459739544622",
+      "18446744073709551615",
+      "1"]},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kPoint"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "add",
+     "left": {"tag": "reference", "name": "kPoint"}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "kPoint"},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"value": {"tag": "reference", "name": "kScalar"},
+       "tag": "foreignUnary",
+       "operation": "mulGenerator"},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "kPoint"}}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "kPoint"},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "kPoint"},
+      "tag": "foreignUnary",
+      "operation": "y"},
+     "operation": "fromCoordinates",
+     "left":
+     {"value": {"tag": "reference", "name": "kPoint"},
+      "tag": "foreignUnary",
+      "operation": "x"}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "kPoint"},
+    "left":
+    {"value":
+     {"value": {"tag": "reference", "name": "kPoint"}, "tag": "foreignToBytes"},
+     "type": "Secp256k1Point",
+     "tag": "foreignFromBytes",
+     "length": 33}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "kBase"},
+    "left":
+    {"value":
+     {"value": {"tag": "reference", "name": "kBase"}, "tag": "foreignToBytes"},
+     "type": "Secp256k1Base",
+     "tag": "foreignFromBytes",
+     "length": 32}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256r1Base",
+     "tag": "foreignConstant",
+     "encoding": ["79228162514264337593543950334", "18446744069414584321"]},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rBase"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "add",
+     "left": {"tag": "reference", "name": "rBase"}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "rBase"},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"type": "Secp256r1Base",
+      "tag": "foreignConstant",
+      "encoding": ["0", "0"]},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Base",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rBase"}}}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256r1Scalar",
+     "tag": "foreignConstant",
+     "encoding": ["0", "0"]},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "inv"},
+     "operation": "mul",
+     "left": {"tag": "reference", "name": "rScalar"}}},
+   {"tag": "eq",
+    "right":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rScalar"}}},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"type": "Secp256r1Scalar",
+       "tag": "foreignConstant",
+       "encoding": ["0", "0"]},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rScalar"}}}},
+   {"tag": "eq",
+    "right":
+    {"type": "Secp256r1Point",
+     "tag": "foreignConstant",
+     "encoding":
+     ["79228162514264337593543950334",
+      "18446744069414584321",
+      "79228162514264337593543950334",
+      "18446744069414584321",
+      "1"]},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rPoint"},
+      "tag": "foreignUnary",
+      "operation": "neg"},
+     "operation": "add",
+     "left": {"tag": "reference", "name": "rPoint"}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "rPoint"},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rScalar"},
+      "tag": "foreignUnary",
+      "operation": "mulGenerator"},
+     "operation": "sub",
+     "left":
+     {"tag": "foreignBinary",
+      "right":
+      {"value": {"tag": "reference", "name": "rScalar"},
+       "tag": "foreignUnary",
+       "operation": "mulGenerator"},
+      "operation": "add",
+      "left": {"tag": "reference", "name": "rPoint"}}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "rPoint"},
+    "left":
+    {"tag": "foreignBinary",
+     "right":
+     {"value": {"tag": "reference", "name": "rPoint"},
+      "tag": "foreignUnary",
+      "operation": "y"},
+     "operation": "fromCoordinates",
+     "left":
+     {"value": {"tag": "reference", "name": "rPoint"},
+      "tag": "foreignUnary",
+      "operation": "x"}}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "rPoint"},
+    "left":
+    {"value":
+     {"value": {"tag": "reference", "name": "rPoint"}, "tag": "foreignToBytes"},
+     "type": "Secp256r1Point",
+     "tag": "foreignFromBytes",
+     "length": 33}},
+   {"tag": "eq",
+    "right": {"tag": "reference", "name": "rBase"},
+    "left":
+    {"value":
+     {"value": {"tag": "reference", "name": "rBase"}, "tag": "foreignToBytes"},
+     "type": "Secp256r1Base",
+     "tag": "foreignFromBytes",
+     "length": 32}}]}}

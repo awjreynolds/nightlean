@@ -364,6 +364,21 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| secp256r1Identity()) => "secp256r1Identity()"
   | `(nlexpr| hashToCurve([$values,*])) =>
     s!"hashToCurve([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
+  | `(nlexpr| foreignAdd($left, $right)) => s!"foreignAdd({renderExpr left}, {renderExpr right})"
+  | `(nlexpr| foreignSub($left, $right)) => s!"foreignSub({renderExpr left}, {renderExpr right})"
+  | `(nlexpr| foreignMul($left, $right)) => s!"foreignMul({renderExpr left}, {renderExpr right})"
+  | `(nlexpr| foreignNeg($value)) => s!"foreignNeg({renderExpr value})"
+  | `(nlexpr| foreignInv($value)) => s!"foreignInv({renderExpr value})"
+  | `(nlexpr| curveMul($point, $scalar)) =>
+    s!"curveMul({renderExpr point}, {renderExpr scalar})"
+  | `(nlexpr| curveMulGenerator($scalar)) => s!"curveMulGenerator({renderExpr scalar})"
+  | `(nlexpr| curveX($point)) => s!"curveX({renderExpr point})"
+  | `(nlexpr| curveY($point)) => s!"curveY({renderExpr point})"
+  | `(nlexpr| curveFromCoordinates($x, $y)) =>
+    s!"curveFromCoordinates({renderExpr x}, {renderExpr y})"
+  | `(nlexpr| foreignToBytes($value)) => s!"foreignToBytes({renderExpr value})"
+  | `(nlexpr| foreignFromBytes($type:nltype, $value)) =>
+    s!"foreignFromBytes({renderType type}, {renderExpr value})"
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) =>
     s!"witness {function.getId}({String.intercalate ", " (args.getElems.toList.map renderExpr)})"
   | _ => "<unsupported-expression>"
@@ -402,6 +417,14 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
     disclosedValues point ++ disclosedValues scalar
   | `(nlexpr| jubjubFromCoordinates($x, $y)) => disclosedValues x ++ disclosedValues y
   | `(nlexpr| hashToCurve([$values,*])) => values.getElems.toList.flatMap disclosedValues
+  | `(nlexpr| foreignNeg($value)) | `(nlexpr| foreignInv($value))
+  | `(nlexpr| curveMulGenerator($value)) | `(nlexpr| curveX($value))
+  | `(nlexpr| curveY($value)) | `(nlexpr| foreignToBytes($value)) => disclosedValues value
+  | `(nlexpr| foreignAdd($left, $right)) | `(nlexpr| foreignSub($left, $right))
+  | `(nlexpr| foreignMul($left, $right)) | `(nlexpr| curveMul($left, $right))
+  | `(nlexpr| curveFromCoordinates($left, $right)) =>
+    disclosedValues left ++ disclosedValues right
+  | `(nlexpr| foreignFromBytes($_:nltype, $value)) => disclosedValues value
   | `(nlexpr| witness $_:ident($args:nlexpr,*)) => args.getElems.toList.flatMap disclosedValues
   | _ => []
 
@@ -440,6 +463,14 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
     inlineAssertions point ++ inlineAssertions scalar
   | `(nlexpr| jubjubFromCoordinates($x, $y)) => inlineAssertions x ++ inlineAssertions y
   | `(nlexpr| hashToCurve([$values,*])) => values.getElems.toList.flatMap inlineAssertions
+  | `(nlexpr| foreignNeg($value)) | `(nlexpr| foreignInv($value))
+  | `(nlexpr| curveMulGenerator($value)) | `(nlexpr| curveX($value))
+  | `(nlexpr| curveY($value)) | `(nlexpr| foreignToBytes($value)) => inlineAssertions value
+  | `(nlexpr| foreignAdd($left, $right)) | `(nlexpr| foreignSub($left, $right))
+  | `(nlexpr| foreignMul($left, $right)) | `(nlexpr| curveMul($left, $right))
+  | `(nlexpr| curveFromCoordinates($left, $right)) =>
+    inlineAssertions left ++ inlineAssertions right
+  | `(nlexpr| foreignFromBytes($_:nltype, $value)) => inlineAssertions value
   | `(nlexpr| witness $_:ident($args:nlexpr,*)) => args.getElems.toList.flatMap inlineAssertions
   | _ => []
 
@@ -711,6 +742,49 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     if arguments.length > Types.defaultLimits.maxVectorLength then
       throwErrorAt stx s!"hashToCurve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
     lowerCurve programName callPrefix env stx (.hashToCurve arguments.length) arguments
+  | `(nlexpr| foreignNeg($value)) => lowerForeignUnary programName callPrefix env stx "neg" value
+  | `(nlexpr| foreignInv($value)) => lowerForeignUnary programName callPrefix env stx "inv" value
+  | `(nlexpr| curveMulGenerator($value)) =>
+    lowerForeignUnary programName callPrefix env stx "mulGenerator" value
+  | `(nlexpr| curveX($value)) => lowerForeignUnary programName callPrefix env stx "x" value
+  | `(nlexpr| curveY($value)) => lowerForeignUnary programName callPrefix env stx "y" value
+  | `(nlexpr| foreignAdd($left, $right)) =>
+    lowerForeignBinary programName callPrefix env stx "add" left right
+  | `(nlexpr| foreignSub($left, $right)) =>
+    lowerForeignBinary programName callPrefix env stx "sub" left right
+  | `(nlexpr| foreignMul($left, $right)) =>
+    lowerForeignBinary programName callPrefix env stx "mul" left right
+  | `(nlexpr| curveMul($point, $scalar)) =>
+    lowerForeignBinary programName callPrefix env stx "ecMul" point scalar
+  | `(nlexpr| curveFromCoordinates($x, $y)) =>
+    lowerForeignBinary programName callPrefix env stx "fromCoordinates" x y
+  | `(nlexpr| foreignToBytes($value)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.foreign kind) := value.type
+      | throwErrorAt stx "foreignToBytes requires a Secp value"
+    let operation := Noctium.Helpers.BytesOp.foreignToBytes kind
+    let (expected, result) ← match operation.signature 1 with
+      | .ok signature => pure signature
+      | .error message => throwErrorAt stx message
+    unless expected == [.foreign kind] do throwErrorAt stx "foreignToBytes argument type mismatch"
+    pure (mergeLowered (.scalar result) (.bytes operation [value.term]) [value])
+  | `(nlexpr| foreignFromBytes($target:nltype, $value)) => do
+    let target ← readScalarTy target
+    let .foreign kind := target
+      | throwErrorAt stx "foreignFromBytes requires a Secp target type"
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type
+      | throwErrorAt stx "foreignFromBytes requires a fixed byte string"
+    let operation := Noctium.Helpers.BytesOp.foreignFromBytes kind length
+    let (expected, result) ← match operation.signature 1 with
+      | .ok signature => pure signature
+      | .error message => throwErrorAt stx message
+    unless expected == [.bytes length] && result == target do
+      throwErrorAt stx "foreignFromBytes argument type mismatch"
+    let lowered := mergeLowered (.scalar result) (.bytes operation [value.term]) [value]
+    pure {lowered with generatedValidity :=
+      (lowered.generatedValidity ++
+        if kind.byteLength == 33 then ["canonical Secp point decoding"] else []).eraseDups}
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) => do
     let signature ← liftM (witnessSignature function)
     let signatureName := signature.name
@@ -780,6 +854,81 @@ where
       generatedValidity := (values.flatMap (·.generatedValidity) ++
         if operation == .fromCoordinates then ["Jubjub point coordinate validation"] else []).eraseDups }
 
+  lowerForeignUnary (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
+      (operationName : String) (valueStx : TSyntax `nlexpr) : ExprM Lowered := do
+    let value ← lowerExpr programName callPrefix env valueStx
+    let .scalar (.foreign kind) := value.type
+      | throwErrorAt stx s!"{operationName} requires a Secp value"
+    let operation ← match operationName with
+      | "neg" => pure (Foreign.UnaryOp.neg kind)
+      | "inv" =>
+        match kind.fieldKind? with
+        | some field => pure (Foreign.UnaryOp.inv field)
+        | none => throwErrorAt stx "foreignInv does not accept points"
+      | "mulGenerator" =>
+        if let .scalar curve := kind then pure (Foreign.UnaryOp.mulGenerator curve)
+        else throwErrorAt stx "curveMulGenerator requires a Secp scalar"
+      | "x" =>
+        if let .point curve := kind then pure (Foreign.UnaryOp.x curve)
+        else throwErrorAt stx "curveX requires a Secp point"
+      | "y" =>
+        if let .point curve := kind then pure (Foreign.UnaryOp.y curve)
+        else throwErrorAt stx "curveY requires a Secp point"
+      | _ => throwErrorAt stx "unsupported foreign unary operation"
+    finishForeignCurve stx (.foreignUnary operation) [value]
+
+  lowerForeignBinary (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
+      (operationName : String) (leftStx rightStx : TSyntax `nlexpr) : ExprM Lowered := do
+    let left ← lowerExpr programName callPrefix env leftStx
+    let right ← lowerExpr programName callPrefix env rightStx
+    let .scalar (.foreign leftKind) := left.type
+      | throwErrorAt stx s!"{operationName} requires Secp values"
+    let .scalar (.foreign rightKind) := right.type
+      | throwErrorAt stx s!"{operationName} requires Secp values"
+    let operation ← match operationName with
+      | "add" =>
+        unless leftKind == rightKind do throwErrorAt stx "foreignAdd requires matching Secp types"
+        pure (Foreign.BinaryOp.add leftKind)
+      | "sub" =>
+        unless leftKind == rightKind do throwErrorAt stx "foreignSub requires matching Secp types"
+        pure (Foreign.BinaryOp.sub leftKind)
+      | "mul" =>
+        unless leftKind == rightKind do throwErrorAt stx "foreignMul requires matching Secp types"
+        match leftKind.fieldKind? with
+        | some field => pure (Foreign.BinaryOp.mul field)
+        | none => throwErrorAt stx "foreignMul does not multiply points"
+      | "ecMul" =>
+        match leftKind, rightKind with
+        | .point curve, .scalar otherCurve =>
+          unless curve == otherCurve do throwErrorAt stx "curveMul requires a matching curve scalar"
+          pure (Foreign.BinaryOp.ecMul curve)
+        | _, _ => throwErrorAt stx "curveMul requires a Secp point and matching scalar"
+      | "fromCoordinates" =>
+        match leftKind, rightKind with
+        | .base curve, .base otherCurve =>
+          unless curve == otherCurve do throwErrorAt stx "curveFromCoordinates requires a matching curve family"
+          pure (Foreign.BinaryOp.fromCoordinates curve)
+        | _, _ => throwErrorAt stx "curveFromCoordinates requires two matching base values"
+      | _ => throwErrorAt stx "unsupported foreign binary operation"
+    finishForeignCurve stx (.foreignBinary operation) [left, right]
+
+  finishForeignCurve (stx : Syntax) (operation : Noctium.Helpers.CurveOp)
+      (values : List Lowered) : ExprM Lowered := do
+    let (expected, result) := operation.signature
+    unless values.length == expected.length do
+      throwErrorAt stx s!"{operation.operationName} argument count mismatch"
+    for (value, expectedType) in values.zip expected do
+      unless value.type == .scalar expectedType do
+        throwErrorAt stx s!"{operation.operationName} argument type mismatch"
+    let validity := match operation with
+      | .foreignUnary (.inv _) => ["foreign inverse nonzero check"]
+      | .foreignUnary (.x _) | .foreignUnary (.y _) => ["foreign point coordinate validity"]
+      | .foreignBinary (.fromCoordinates _) => ["foreign point membership validation"]
+      | _ => []
+    let term := Noctium.Helpers.Term.curve operation (values.map (·.term))
+    pure {mergeLowered (.scalar result) term values with
+      generatedValidity := (values.flatMap (·.generatedValidity) ++ validity).eraseDups}
+
   lowerArithmetic (programName callPrefix : String) (env : SurfaceEnv) (stx : Syntax)
       (op : ScalarPolicy.Binary) (leftStx rightStx : TSyntax `nlexpr) : ExprM Lowered := do
     let left ← lowerExpr programName callPrefix env leftStx
@@ -810,6 +959,63 @@ where
       witnessNames := (left.witnessNames ++ right.witnessNames).eraseDups,
       generatedValidity := (left.generatedValidity ++ right.generatedValidity ++ underflow).eraseDups
     }
+
+private def authoringForeignCurveTerm : Foreign.Curve → CommandElabM (TSyntax `term)
+  | .secp256k1 => `(Noctium.Foreign.Curve.secp256k1)
+  | .secp256r1 => `(Noctium.Foreign.Curve.secp256r1)
+
+private def authoringForeignKindTerm : Foreign.Kind → CommandElabM (TSyntax `term)
+  | .base curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.Kind.base $curve)
+  | .scalar curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.Kind.scalar $curve)
+  | .point curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.Kind.point $curve)
+
+private def authoringForeignFieldKindTerm : Foreign.FieldKind → CommandElabM (TSyntax `term)
+  | .base curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.FieldKind.base $curve)
+  | .scalar curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.FieldKind.scalar $curve)
+
+private def authoringForeignUnaryTerm : Foreign.UnaryOp → CommandElabM (TSyntax `term)
+  | .neg kind => do
+    let kind ← authoringForeignKindTerm kind
+    `(Noctium.Foreign.UnaryOp.neg $kind)
+  | .inv kind => do
+    let kind ← authoringForeignFieldKindTerm kind
+    `(Noctium.Foreign.UnaryOp.inv $kind)
+  | .mulGenerator curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.UnaryOp.mulGenerator $curve)
+  | .x curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.UnaryOp.x $curve)
+  | .y curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.UnaryOp.y $curve)
+
+private def authoringForeignBinaryTerm : Foreign.BinaryOp → CommandElabM (TSyntax `term)
+  | .add kind => do
+    let kind ← authoringForeignKindTerm kind
+    `(Noctium.Foreign.BinaryOp.add $kind)
+  | .sub kind => do
+    let kind ← authoringForeignKindTerm kind
+    `(Noctium.Foreign.BinaryOp.sub $kind)
+  | .mul kind => do
+    let kind ← authoringForeignFieldKindTerm kind
+    `(Noctium.Foreign.BinaryOp.mul $kind)
+  | .ecMul curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.BinaryOp.ecMul $curve)
+  | .fromCoordinates curve => do
+    let curve ← authoringForeignCurveTerm curve
+    `(Noctium.Foreign.BinaryOp.fromCoordinates $curve)
 
 private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `term)
   | .unit => `(Noctium.Helpers.Term.unit)
@@ -866,6 +1072,12 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .y => `(Noctium.Helpers.CurveOp.y)
       | .fromCoordinates => `(Noctium.Helpers.CurveOp.fromCoordinates)
       | .hashToCurve arity => `(Noctium.Helpers.CurveOp.hashToCurve $(natTerm arity))
+      | .foreignUnary foreignOperation => do
+        let operation ← authoringForeignUnaryTerm foreignOperation
+        `(Noctium.Helpers.CurveOp.foreignUnary $operation)
+      | .foreignBinary foreignOperation => do
+        let operation ← authoringForeignBinaryTerm foreignOperation
+        `(Noctium.Helpers.CurveOp.foreignBinary $operation)
     let arguments ← arguments.mapM termTerm
     let arguments := arguments.toArray
     `(Noctium.Helpers.Term.curve $operation [$arguments,*])
@@ -884,6 +1096,12 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
         `(Noctium.Helpers.BytesOp.sliceBytes $(natTerm length) $(natTerm start) $(natTerm stop))
       | .concatBytes leftLength rightLength =>
         `(Noctium.Helpers.BytesOp.concatBytes $(natTerm leftLength) $(natTerm rightLength))
+      | .foreignToBytes kind => do
+        let kind ← authoringForeignKindTerm kind
+        `(Noctium.Helpers.BytesOp.foreignToBytes $kind)
+      | .foreignFromBytes kind length => do
+        let kind ← authoringForeignKindTerm kind
+        `(Noctium.Helpers.BytesOp.foreignFromBytes $kind $(natTerm length))
       | .degradeToNative => `(Noctium.Helpers.BytesOp.degradeToNative)
       | .toBytes32 source => `(Noctium.Helpers.BytesOp.toBytes32 $(← tyTerm source))
       | .bytesLiteral length values => do

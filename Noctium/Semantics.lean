@@ -78,6 +78,21 @@ structure JubjubOracle where
   hashToCurve : List Nat → Except String (Nat × Nat) :=
     fun _ => .error "qualified hash_to_curve oracle is unavailable"
 
+/-- Point operations and compressed SEC1 byte conversion fail closed until a
+qualified implementation supplies the pinned curve backend. Field arithmetic
+and field byte conversion use the checked Nat definitions below. -/
+structure ForeignOracle where
+  pointAdd : Foreign.Curve → Foreign.Point → Foreign.Point → Except String Foreign.Point :=
+    fun _ _ _ => .error "qualified foreign point-addition oracle is unavailable"
+  pointMul : Foreign.Curve → Foreign.Point → Nat → Except String Foreign.Point :=
+    fun _ _ _ => .error "qualified foreign point-multiplication oracle is unavailable"
+  mulGenerator : Foreign.Curve → Nat → Except String Foreign.Point :=
+    fun _ _ => .error "qualified foreign generator-multiplication oracle is unavailable"
+  pointToBytes : Foreign.Curve → Foreign.Point → Except String (List Nat) :=
+    fun _ _ => .error "qualified foreign point-serialization oracle is unavailable"
+  pointFromBytes : Foreign.Curve → List Nat → Except String Foreign.Point :=
+    fun _ _ => .error "qualified foreign point-decoding oracle is unavailable"
+
 /-- Crypto oracles have fail-closed defaults. A backend must supply pinned hash
 and Jubjub operations before semantic evaluation can execute those expressions. -/
 structure EvalContext where
@@ -94,6 +109,7 @@ structure EvalContext where
   keccak256 : List Nat → Except String (List Nat) :=
     fun _ => .error "qualified Keccak-256 oracle is unavailable"
   jubjub : JubjubOracle := {}
+  foreign : ForeignOracle := {}
   /-- Pinned native serialization of validated Jubjub affine points. -/
   jubjubToBytes32 : (Nat × Nat) → Except String (List Nat) :=
     fun _ => .error "qualified Jubjub byte-serialization oracle is unavailable"
@@ -201,6 +217,129 @@ private def checkedPrimeFieldInverse (value modulus : Nat) : Except String Nat :
     throw "prime-field inverse failed its multiplication postcondition"
   pure inverse
 
+private def integerBytesLE (value length : Nat) : List Nat :=
+  (List.range length).map fun index => (value / 256 ^ index) % 256
+
+private def checkedForeignPoint (curve : Foreign.Curve) (point : Foreign.Point) :
+    Except String Foreign.Point := do
+  unless Foreign.pointValid curve point do throw "foreign point is not canonical or on curve"
+  pure point
+
+private def checkedForeignBytes (length : Nat) (bytes : List Nat) :
+    Except String (List Nat) := do
+  unless bytes.length == length && bytes.all (· ≤ 255) do
+    throw "foreign byte oracle returned a malformed encoding"
+  pure bytes
+
+private def checkForeignByteInput (length : Nat) (bytes : List Nat) : Except String Unit := do
+  if length > maxBytesLength then
+    throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+  unless bytes.length == length && bytes.all (· ≤ 255) do
+    throw "foreign byte input is not a canonical fixed byte string"
+private def checkedForeignToBytes : (ctx : EvalContext) → (kind : Foreign.Kind) →
+    kind.Denote → Except String (List Nat)
+  | _, .base curve, value => do
+    unless value < curve.baseModulus do throw "foreign base value is noncanonical"
+    pure (integerBytesLE value 32)
+  | _, .scalar curve, value => do
+    unless value < curve.scalarModulus do throw "foreign scalar value is noncanonical"
+    pure (integerBytesLE value 32)
+  | ctx, .point curve, point => do
+    let point ← checkedForeignPoint curve point
+    let bytes ← ctx.foreign.pointToBytes curve point
+    checkedForeignBytes 33 bytes
+
+private def checkedForeignFromBytes : (ctx : EvalContext) → (kind : Foreign.Kind) →
+    (length : Nat) → (bytes : List Nat) → Except String kind.Denote
+  | _, .base curve, length, bytes => do
+    checkForeignByteInput length bytes
+    pure (bytes32IntegerLE bytes % curve.baseModulus)
+  | _, .scalar curve, length, bytes => do
+    checkForeignByteInput length bytes
+    pure (bytes32IntegerLE bytes % curve.scalarModulus)
+  | ctx, .point curve, length, bytes => do
+    checkForeignByteInput length bytes
+    unless length == 33 do throw "foreign point decoding requires exactly 33 bytes"
+    let point ← ctx.foreign.pointFromBytes curve bytes
+    let point ← checkedForeignPoint curve point
+    let encoded ← ctx.foreign.pointToBytes curve point
+    let encoded ← checkedForeignBytes 33 encoded
+    unless encoded == bytes do throw "foreign point byte encoding is not canonical"
+    pure point
+
+private def checkedForeignUnary : (ctx : EvalContext) → (operation : Foreign.UnaryOp) →
+    operation.inputKind.Denote → Except String operation.outputKind.Denote
+  | _, .neg (.base curve), value => do
+    unless value < curve.baseModulus do throw "foreign base negation input is noncanonical"
+    pure ((curve.baseModulus - value) % curve.baseModulus)
+  | _, .neg (.scalar curve), value => do
+    unless value < curve.scalarModulus do throw "foreign scalar negation input is noncanonical"
+    pure ((curve.scalarModulus - value) % curve.scalarModulus)
+  | _, .neg (.point curve), point => do
+    let point ← checkedForeignPoint curve point
+    match point with
+    | .identity => pure .identity
+    | .affine x y => checkedForeignPoint curve (.affine x ((curve.baseModulus - y) % curve.baseModulus))
+  | _, .inv (.base curve), value => do
+    unless value < curve.baseModulus do throw "foreign inverse input is noncanonical"
+    checkedPrimeFieldInverse value curve.baseModulus
+  | _, .inv (.scalar curve), value => do
+    unless value < curve.scalarModulus do throw "foreign inverse input is noncanonical"
+    checkedPrimeFieldInverse value curve.scalarModulus
+  | ctx, .mulGenerator curve, scalar => do
+    unless scalar < curve.scalarModulus do throw "foreign generator scalar is noncanonical"
+    checkedForeignPoint curve (← ctx.foreign.mulGenerator curve scalar)
+  | _, .x curve, point => do
+    let point ← checkedForeignPoint curve point
+    match point with
+    | .identity => throw "foreign identity has no affine x coordinate"
+    | .affine x _ => pure x
+  | _, .y curve, point => do
+    let point ← checkedForeignPoint curve point
+    match point with
+    | .identity => throw "foreign identity has no affine y coordinate"
+    | .affine _ y => pure y
+
+private def checkedForeignBinary : (ctx : EvalContext) → (operation : Foreign.BinaryOp) →
+    operation.leftKind.Denote → operation.rightKind.Denote →
+    Except String operation.outputKind.Denote
+  | _, .add (.base curve), left, right => do
+    unless left < curve.baseModulus && right < curve.baseModulus do throw "foreign base addition input is noncanonical"
+    pure ((left + right) % curve.baseModulus)
+  | _, .add (.scalar curve), left, right => do
+    unless left < curve.scalarModulus && right < curve.scalarModulus do throw "foreign scalar addition input is noncanonical"
+    pure ((left + right) % curve.scalarModulus)
+  | ctx, .add (.point curve), left, right => do
+    let left ← checkedForeignPoint curve left
+    let right ← checkedForeignPoint curve right
+    checkedForeignPoint curve (← ctx.foreign.pointAdd curve left right)
+  | _, .sub (.base curve), left, right => do
+    unless left < curve.baseModulus && right < curve.baseModulus do throw "foreign base subtraction input is noncanonical"
+    pure ((curve.baseModulus + left - right) % curve.baseModulus)
+  | _, .sub (.scalar curve), left, right => do
+    unless left < curve.scalarModulus && right < curve.scalarModulus do throw "foreign scalar subtraction input is noncanonical"
+    pure ((curve.scalarModulus + left - right) % curve.scalarModulus)
+  | ctx, .sub (.point curve), left, right => do
+    let left ← checkedForeignPoint curve left
+    let right ← checkedForeignPoint curve right
+    let negative ← match right with
+      | .identity => pure .identity
+      | .affine x y => checkedForeignPoint curve (.affine x ((curve.baseModulus - y) % curve.baseModulus))
+    checkedForeignPoint curve (← ctx.foreign.pointAdd curve left negative)
+  | _, .mul (.base curve), left, right => do
+    unless left < curve.baseModulus && right < curve.baseModulus do throw "foreign base multiplication input is noncanonical"
+    pure ((left * right) % curve.baseModulus)
+  | _, .mul (.scalar curve), left, right => do
+    unless left < curve.scalarModulus && right < curve.scalarModulus do throw "foreign scalar multiplication input is noncanonical"
+    pure ((left * right) % curve.scalarModulus)
+  | ctx, .ecMul curve, point, scalar => do
+    let point ← checkedForeignPoint curve point
+    unless scalar < curve.scalarModulus do throw "foreign point-multiplication scalar is noncanonical"
+    checkedForeignPoint curve (← ctx.foreign.pointMul curve point scalar)
+  | _, .fromCoordinates curve, x, y => do
+    unless x < curve.baseModulus && y < curve.baseModulus do throw "foreign coordinates are noncanonical"
+    checkedForeignPoint curve (.affine x y)
+
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/
 def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty.Denote
@@ -303,6 +442,17 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     | some field =>
       if field < ctx.modulus then pure field else throw "foreign Encode field is noncanonical"
     | none => throw "foreign encoded-field index is out of range"
+  | .foreignUnary operation value => do
+    checkedForeignUnary ctx operation (← value.eval ctx env)
+  | .foreignBinary operation left right => do
+    let left ← left.eval ctx env
+    let right ← right.eval ctx env
+    checkedForeignBinary ctx operation left right
+  | .foreignToBytes (kind := kind) value => do
+    checkedForeignToBytes ctx kind (← value.eval ctx env)
+  | .foreignFromBytes (kind := kind) (length := length) value => do
+    let bytes ← value.eval ctx env
+    checkedForeignFromBytes ctx kind length bytes
   | .bytesAt (length := length) value index => do
     let values ← value.eval ctx env
     match values[index]? with
@@ -441,7 +591,8 @@ private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, typedBoolean := true, poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
     sha512 := true, keccak256 := true,
-    bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true}
+    bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true,
+    foreignArithmetic := true, foreignByteConversions := true}
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do
   match c.validate (evaluationCapabilities ctx) with

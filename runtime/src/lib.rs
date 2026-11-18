@@ -45,7 +45,10 @@ pub type Program = Vec<Op<ResultModeVerify, Db>>;
 pub enum Value {
     Native(Fr),
     Bool(bool),
-    UInt { number: BigUint, maximum: BigUint },
+    UInt {
+        number: BigUint,
+        maximum: BigUint,
+    },
     Bytes(Vec<u8>),
     JubjubScalar(EmbeddedFr),
     JubjubPoint(EmbeddedGroupAffine),
@@ -180,6 +183,32 @@ pub enum Expr {
         #[serde(rename = "type")]
         ty: String,
         encoding: Vec<String>,
+    },
+    #[cfg(feature = "zkir-321")]
+    #[serde(rename = "foreignUnary")]
+    ForeignUnary {
+        operation: String,
+        value: Box<Expr>,
+    },
+    #[cfg(feature = "zkir-321")]
+    #[serde(rename = "foreignBinary")]
+    ForeignBinary {
+        operation: String,
+        left: Box<Expr>,
+        right: Box<Expr>,
+    },
+    #[cfg(feature = "zkir-321")]
+    #[serde(rename = "foreignToBytes")]
+    ForeignToBytes {
+        value: Box<Expr>,
+    },
+    #[cfg(feature = "zkir-321")]
+    #[serde(rename = "foreignFromBytes")]
+    ForeignFromBytes {
+        #[serde(rename = "type")]
+        ty: String,
+        length: usize,
+        value: Box<Expr>,
     },
     Bool {
         value: bool,
@@ -468,6 +497,52 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 .map(|field| canonical_field(field))
                 .collect::<Result<Vec<_>>>()?;
             Value::Foreign(foreign::ForeignValue::decode(ty, &encoded)?)
+        }
+        #[cfg(feature = "zkir-321")]
+        Expr::ForeignUnary { operation, value } => {
+            let Value::Foreign(value) = evaluate(value, env)? else {
+                bail!("foreign unary operation requires a foreign value")
+            };
+            Value::Foreign(value.unary(foreign::ForeignUnaryOp::parse(operation)?)?)
+        }
+        #[cfg(feature = "zkir-321")]
+        Expr::ForeignBinary {
+            operation,
+            left,
+            right,
+        } => {
+            let Value::Foreign(left) = evaluate(left, env)? else {
+                bail!("foreign binary operation requires foreign operands")
+            };
+            let Value::Foreign(right) = evaluate(right, env)? else {
+                bail!("foreign binary operation requires foreign operands")
+            };
+            Value::Foreign(left.binary(foreign::ForeignBinaryOp::parse(operation)?, &right)?)
+        }
+        #[cfg(feature = "zkir-321")]
+        Expr::ForeignToBytes { value } => {
+            let Value::Foreign(value) = evaluate(value, env)? else {
+                bail!("foreign ToBytes requires a foreign value")
+            };
+            Value::Bytes(value.to_bytes()?)
+        }
+        #[cfg(feature = "zkir-321")]
+        Expr::ForeignFromBytes { ty, length, value } => {
+            ensure!(
+                *length <= scalars::MAX_BYTES_LENGTH,
+                "byte length exceeds compiler limit"
+            );
+            let ScalarType::Foreign(ty) = ScalarType::parse(ty)? else {
+                bail!("foreign FromBytes requires a foreign source type")
+            };
+            let Value::Bytes(bytes) = evaluate(value, env)? else {
+                bail!("foreign FromBytes requires bytes")
+            };
+            ensure!(
+                bytes.len() == *length,
+                "foreign byte operand length mismatch"
+            );
+            Value::Foreign(foreign::ForeignValue::from_bytes_reducing(ty, &bytes)?)
         }
         Expr::Bool { value } => Value::Bool(*value),
         Expr::Reference { name } => env
@@ -1336,7 +1411,10 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
                 .get("bytes")
                 .and_then(Json::as_array)
                 .ok_or_else(|| anyhow!("expected foreign byte array"))?;
-            ensure!(values.len() == ty.byte_len(), "foreign byte length mismatch");
+            ensure!(
+                values.len() == ty.byte_len(),
+                "foreign byte length mismatch"
+            );
             let bytes = values
                 .iter()
                 .map(|value| {

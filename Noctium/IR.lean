@@ -80,6 +80,15 @@ inductive Expr : Ty → Type where
   /-- One canonical native Encode projection from a typed foreign value. -/
   | foreignEncodedField {kind : Foreign.Kind} (value : Expr (.foreign kind))
       (index : Nat) : Expr .native
+  | foreignUnary (operation : Foreign.UnaryOp)
+      (value : Expr (.foreign operation.inputKind)) : Expr (.foreign operation.outputKind)
+  | foreignBinary (operation : Foreign.BinaryOp)
+      (left : Expr (.foreign operation.leftKind))
+      (right : Expr (.foreign operation.rightKind)) : Expr (.foreign operation.outputKind)
+  | foreignToBytes {kind : Foreign.Kind} (value : Expr (.foreign kind)) :
+      Expr (.bytes kind.byteLength)
+  | foreignFromBytes (kind : Foreign.Kind) {length : Nat}
+      (value : Expr (.bytes length)) : Expr (.foreign kind)
   | ref (name : String) : Expr ty
   | add (a b : Expr .native) : Expr .native
   | mul (a b : Expr .native) : Expr .native
@@ -387,6 +396,8 @@ structure Capabilities where
   hashToCurve : Bool := false
   jubjub : Bool := false
   foreignValues : Bool := false
+  foreignArithmetic : Bool := false
+  foreignByteConversions : Bool := false
   stateCells : Bool := false
   stateMaps : Bool := false
   deriving Repr
@@ -395,7 +406,8 @@ structure Capabilities where
 def Capabilities.crypto : Capabilities := {
   typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
-  bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true
+  bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true,
+  foreignArithmetic := true, foreignByteConversions := true
 }
 
 /-- Source checking includes the currently implemented ledger state features. -/
@@ -403,6 +415,7 @@ def Capabilities.source : Capabilities := {
   typedBoolean := true, poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, sha512 := true, keccak256 := true,
   bytes32Conversions := true, hashToCurve := true, jubjub := true, foreignValues := true,
+  foreignArithmetic := true, foreignByteConversions := true,
   stateCells := true, stateMaps := true
 }
 
@@ -558,6 +571,29 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
     value.validate caps env
     unless index < kind.encodedFieldCount do throw "foreign encoded-field index is out of range"
+  | .foreignUnary operation value => do
+    unless caps.foreignArithmetic do throw "target lacks foreign-curve arithmetic support"
+    (Ty.foreign operation.inputKind).validate caps
+    (Ty.foreign operation.outputKind).validate caps
+    value.validate caps env
+  | .foreignBinary operation left right => do
+    unless caps.foreignArithmetic do throw "target lacks foreign-curve arithmetic support"
+    (Ty.foreign operation.leftKind).validate caps
+    (Ty.foreign operation.rightKind).validate caps
+    (Ty.foreign operation.outputKind).validate caps
+    left.validate caps env
+    right.validate caps env
+  | .foreignToBytes value => do
+    unless caps.foreignByteConversions do throw "target lacks foreign-curve byte conversion support"
+    value.validate caps env
+  | .foreignFromBytes (kind := kind) (length := length) value => do
+    unless caps.foreignByteConversions do throw "target lacks foreign-curve byte conversion support"
+    (Ty.foreign kind).validate caps
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    if kind.byteLength == 33 then
+      unless length == 33 do throw "foreign point decoding requires 33 bytes"
+    value.validate caps env
   | .ref name => do
     ty.validate caps
     match env.lookup name with

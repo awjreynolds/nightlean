@@ -119,6 +119,23 @@ def foreignEncodedFieldMaximum (kind : Foreign.Kind) (index : Nat) : Nat :=
   if kind.encodedFieldCount == 5 && index == 4 then 1
   else if index % 2 == 0 then Foreign.lowRadix - 1 else Foreign.highRadix - 1
 
+def foreignUnaryTerm (opcode : String) (kind : Foreign.Kind) (value : Term) : Term :=
+  .unary s!"foreign_{opcode}:{kind.nativeName}" value
+
+def foreignBinaryTerm (opcode : String) (kind : Foreign.Kind) (left right : Term) : Term :=
+  .binary s!"foreign_{opcode}:{kind.nativeName}" left right
+
+def foreignZeroTerm (kind : Foreign.Kind) : Term :=
+  foreignConstantTerm kind (match kind with
+    | .point curve => Foreign.identityEncoding curve
+    | _ => (Foreign.encodeField kind 0).toOption.getD [])
+
+def foreignNonzeroTerm (kind : Foreign.Kind) (value : Term) : Term :=
+  .unary "not" (.binary "test_eq" value (foreignZeroTerm kind))
+
+def foreignFromBytesTerm (kind : Foreign.Kind) (length : Nat) (value : Term) : Term :=
+  .unary s!"foreign_from_bytes:{kind.nativeName}:{length}" value
+
 /-- The native overload hashes the complete ordered Native preimage to Jubjub. -/
 def hashToCurveTerm (values : List Term) : Term :=
   .unary "hash_to_curve_jubjub" (.hash values)
@@ -146,6 +163,7 @@ private def opaqueBytes32Value : Term → Bool
       || opcode.startsWith "bytes_from_chunks:" || opcode.startsWith "reverse_bytes:"
       || opcode.startsWith "slice_bytes:"
       || opcode.startsWith "sha512_bytes:" || opcode.startsWith "keccak256_bytes:"
+      || opcode.startsWith "foreign_to_bytes:"
   | .binary opcode _ _ => opcode.startsWith "concat_bytes:"
   | _ => false
 
@@ -235,6 +253,36 @@ private def normalizeBoolGate (opcode : String) (left right : Normalized) : Norm
   {term, bounds := left.bounds ++ right.bounds ++ [(term, 1)],
     assertions := left.assertions ++ right.assertions}
 
+private def normalizeForeignUnary (op : Foreign.UnaryOp) (value : Normalized) : Normalized :=
+  let code := match op with
+    | .neg _ => "neg" | .inv _ => "inv" | .mulGenerator _ => "mulGenerator"
+    | .x _ => "x" | .y _ => "y"
+  let partialAssertions := match op with
+    | .inv _ | .x _ | .y _ => [foreignNonzeroTerm op.inputKind value.term]
+    | _ => []
+  {value with
+    term := foreignUnaryTerm code op.inputKind value.term
+    assertions := value.assertions ++ partialAssertions
+  }
+
+private def normalizeForeignBinary (op : Foreign.BinaryOp) (left right : Normalized) : Normalized :=
+  let term := match op with
+    | .add kind => foreignBinaryTerm "add" kind left.term right.term
+    | .sub kind => foreignBinaryTerm "add" kind left.term (foreignUnaryTerm "neg" kind right.term)
+    | .mul field => foreignBinaryTerm "mul" field.kind left.term right.term
+    | .ecMul curve => foreignBinaryTerm "ecMul" (.point curve) left.term right.term
+    | .fromCoordinates curve => foreignBinaryTerm "fromCoordinates" (.base curve) left.term right.term
+  let partialAssertions := match op with
+    | .fromCoordinates curve => [
+        .binary "test_eq" left.term (foreignUnaryTerm "x" (.point curve) term),
+        .binary "test_eq" right.term (foreignUnaryTerm "y" (.point curve) term)]
+    | _ => []
+  {
+    term
+    bounds := left.bounds ++ right.bounds
+    assertions := left.assertions ++ right.assertions ++ partialAssertions
+  }
+
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
   {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
 
@@ -264,6 +312,33 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .native value => pure {term := .constant value}
   | .bool value => pure (requireSourceType .bool (.constant (if value then 1 else 0)) [])
   | .uint maximum value => pure (requireSourceType (.uint maximum) (.constant value) [])
+  | .foreignUnary op value => do
+    pure (normalizeForeignUnary op (← normalize env value))
+  | .foreignBinary op left right => do
+    let left ← normalize env left
+    let right ← normalize env right
+    pure (normalizeForeignBinary op left right)
+  | .foreignToBytes (kind := kind) value => do
+    let normalized ← normalize env value
+    pure {normalized with term := foreignUnaryTerm "to_bytes" kind normalized.term}
+  | .foreignFromBytes (length := length) kind value => do
+    let normalized ← normalize env value
+    unless length ≤ Types.defaultLimits.maxVectorLength do throw "foreign byte input exceeds source bound"
+    if let .point _ := kind then
+      unless length == 33 do throw "Secp point decoding requires Bytes33"
+    let chunks ← bytesChunksTerm length normalized.term
+    if length == 0 then return {normalized with term := foreignZeroTerm kind}
+    let term := foreignFromBytesTerm kind length (bytesFromChunksTerm length chunks)
+    let roundtrip := foreignUnaryTerm "to_bytes" kind term
+    let partialAssertions := match kind with
+      | .point _ => (chunks.zipIdx).map fun (chunk, index) =>
+          Term.binary "test_eq" chunk (encodedBytesChunkTerm 33 roundtrip index)
+      | _ => []
+    pure {
+      term
+      bounds := normalized.bounds
+      assertions := normalized.assertions ++ partialAssertions
+    }
   | .foreignBase curve value => do
     pure {term := foreignConstantTerm (.base curve) (← Foreign.encodeField (.base curve) value)}
   | .foreignScalar curve value => do

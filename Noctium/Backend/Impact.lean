@@ -9,11 +9,11 @@ namespace Noctium.Backend.Impact
 
 private def expressionCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, foreignArithmetic := true, foreignByteConversions := true, jubjub := true}
 
 private def ledgerCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, jubjub := true,
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, foreignArithmetic := true, foreignByteConversions := true, jubjub := true,
     stateCells := true, stateMaps := true}
 
 /-- Symbols in the ledger public-input sequence are source expressions, not
@@ -342,7 +342,9 @@ private def resolveListState (state : List StateDecl) (name : String)
 
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignIdentity _ => []
-  | .foreignEncodedField value _ => expressionNames value
+  | .foreignEncodedField value _ | .foreignUnary _ value | .foreignToBytes value
+  | .foreignFromBytes _ value => expressionNames value
+  | .foreignBinary _ left right => expressionNames left ++ expressionNames right
   | .bytesField value _ | .bytesAt value _ => expressionNames value
   | .sha512 value | .keccak256 value | .persistentHash32 value => expressionNames value
   | .bytes32Literal _ | .bytesLiteral _ _ => []
@@ -403,6 +405,39 @@ private def castMayFail (target source : Ty) : Bool :=
   | .uint maximum, .bool => maximum < 1
   | _, _ => false
 
+private def foreignFieldOne : (field : Foreign.FieldKind) → Expr (.foreign field.kind)
+  | .base curve => .foreignBase curve 1
+  | .scalar curve => .foreignScalar curve 1
+
+private def safeForeignPoint (curve : Foreign.Curve) : Expr (.foreign (.point curve)) :=
+  .foreignUnary (.mulGenerator curve) (.foreignScalar curve 1)
+
+/-- Guard insertion is nonrecursive. The traversal below recurses only on
+original expression children, before these safe operands are introduced. -/
+private def guardForeignUnary (guard : Expr .bool) : (op : Foreign.UnaryOp) →
+    Expr (.foreign op.inputKind) → Expr (.foreign op.outputKind)
+  | .inv field, value =>
+    .foreignUnary (.inv field) (.select guard value (foreignFieldOne field))
+  | .x curve, value =>
+    .foreignUnary (.x curve) (.select guard value (safeForeignPoint curve))
+  | .y curve, value =>
+    .foreignUnary (.y curve) (.select guard value (safeForeignPoint curve))
+  | op, value => .foreignUnary op value
+
+private def guardForeignBinary (guard : Expr .bool) : (op : Foreign.BinaryOp) →
+    Expr (.foreign op.leftKind) → Expr (.foreign op.rightKind) → Expr (.foreign op.outputKind)
+  | .fromCoordinates curve, left, right =>
+    .foreignBinary (.fromCoordinates curve)
+      (.select guard left (.foreignUnary (.x curve) (safeForeignPoint curve)))
+      (.select guard right (.foreignUnary (.y curve) (safeForeignPoint curve)))
+  | op, left, right => .foreignBinary op left right
+
+private def guardForeignFromBytes (guard : Expr .bool) : (kind : Foreign.Kind) →
+    {length : Nat} → Expr (.bytes length) → Expr (.foreign kind)
+  | .point curve, 33, value =>
+    .foreignFromBytes (.point curve) (.select guard value (.bytesLiteral 33 (List.replicate 33 0)))
+  | kind, _, value => .foreignFromBytes kind value
+
 /-- Replace every partial scalar operation with a safe inactive computation.
 The native source guard is a collision-free outer let binding, so nested source
 lets cannot capture its references. Eager selects still evaluate both arms. -/
@@ -411,6 +446,11 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .foreignScalar curve value => .foreignScalar curve value
   | .foreignIdentity curve => .foreignIdentity curve
   | .foreignEncodedField value index => .foreignEncodedField (totalizeUnder guard value) index
+  | .foreignUnary op value => guardForeignUnary guard op (totalizeUnder guard value)
+  | .foreignBinary op left right =>
+    guardForeignBinary guard op (totalizeUnder guard left) (totalizeUnder guard right)
+  | .foreignToBytes value => .foreignToBytes (totalizeUnder guard value)
+  | .foreignFromBytes kind value => guardForeignFromBytes guard kind (totalizeUnder guard value)
   | .native value => .native value
   | .bool value => .bool value
   | .boolAnd left right => .boolAnd (totalizeUnder guard left) (totalizeUnder guard right)

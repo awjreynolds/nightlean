@@ -72,6 +72,8 @@ inductive CurveOp where
   | y
   | fromCoordinates
   | hashToCurve (arity : Nat)
+  | foreignUnary (operation : Foreign.UnaryOp)
+  | foreignBinary (operation : Foreign.BinaryOp)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def CurveOp.operationName : CurveOp → String
@@ -85,6 +87,10 @@ def CurveOp.operationName : CurveOp → String
   | .y => "jubjubY"
   | .fromCoordinates => "jubjubFromCoordinates"
   | .hashToCurve arity => s!"hashToCurve:{arity}"
+  | .foreignUnary operation =>
+    s!"foreignUnary:{operation.name}:{operation.inputKind.sourceName}"
+  | .foreignBinary operation =>
+    s!"foreignBinary:{operation.name}:{operation.leftKind.sourceName}:{operation.rightKind.sourceName}"
 
 def CurveOp.signature : CurveOp → List Ty × Ty
   | .scalarFromNative => ([.native], .jubjubScalar)
@@ -96,6 +102,10 @@ def CurveOp.signature : CurveOp → List Ty × Ty
   | .x | .y => ([.jubjubPoint], .native)
   | .fromCoordinates => ([.native, .native], .jubjubPoint)
   | .hashToCurve arity => (List.replicate arity .native, .jubjubPoint)
+  | .foreignUnary operation =>
+    ([.foreign operation.inputKind], .foreign operation.outputKind)
+  | .foreignBinary operation =>
+    ([.foreign operation.leftKind, .foreign operation.rightKind], .foreign operation.outputKind)
 
 /-- Closed readable byte/hash operations. Vector and fixed-byte lengths are
 bounded at the typed source boundary, and point hashing follows FAB affine
@@ -113,6 +123,8 @@ inductive BytesOp where
   | reverseBytes (length : Nat)
   | sliceBytes (length start stop : Nat)
   | concatBytes (leftLength rightLength : Nat)
+  | foreignToBytes (kind : Foreign.Kind)
+  | foreignFromBytes (kind : Foreign.Kind) (length : Nat)
   | degradeToNative
   | toBytes32 (source : Ty)
   deriving Repr, BEq, DecidableEq, Inhabited
@@ -130,6 +142,8 @@ def BytesOp.operationName : BytesOp → String
   | .reverseBytes length => s!"reverseBytes:{length}"
   | .sliceBytes length start stop => s!"sliceBytes:{length}:{start}:{stop}"
   | .concatBytes leftLength rightLength => s!"concatBytes:{leftLength}:{rightLength}"
+  | .foreignToBytes kind => s!"foreignToBytes:{kind.sourceName}"
+  | .foreignFromBytes kind length => s!"foreignFromBytes:{kind.sourceName}:{length}"
   | .degradeToNative => "degradeToNative"
   | .toBytes32 .native => "nativeToBytes32"
   | .toBytes32 .jubjubScalar => "jubjubScalarToBytes32"
@@ -188,6 +202,16 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
         leftLength + rightLength ≤ Types.defaultLimits.maxVectorLength do
       throw "concatBytes result exceeds the source byte limit"
     pure ([.bytes leftLength, .bytes rightLength], .bytes (leftLength + rightLength))
+  | .foreignToBytes kind => do
+    unless argumentCount == 1 do throw "foreignToBytes requires one foreign value"
+    pure ([.foreign kind], .bytes kind.byteLength)
+  | .foreignFromBytes kind length => do
+    unless argumentCount == 1 do throw "foreignFromBytes requires one byte-string argument"
+    unless length ≤ Types.defaultLimits.maxVectorLength do
+      throw "foreignFromBytes input length exceeds the source limit"
+    if kind.byteLength == 33 then
+      unless length == 33 do throw "foreign point decoding requires 33 bytes"
+    pure ([.bytes length], .foreign kind)
   | .degradeToNative =>
     unless argumentCount == 1 do throw "degradeToNative requires one Bytes32 argument"
     pure ([.bytes 32], .native)
@@ -1037,7 +1061,10 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
         unless actualType == expectedType do
           fail span s!"{operation.operationName} argument type mismatch"
       pure (combine (.scalar result) values
-        (if operation == .fromCoordinates then [.fallibleCast] else []))
+        (match operation with
+          | .fromCoordinates | .foreignUnary (.inv _) | .foreignUnary (.x _) |
+            .foreignUnary (.y _) | .foreignBinary (.fromCoordinates _) => [.fallibleCast]
+          | _ => []))
     | .bytes32Literal bytes => do
       unless bytes.length == 32 && bytes.all (· ≤ 255) do
         fail span "Bytes32 literal must contain exactly 32 byte values"
@@ -1053,7 +1080,10 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       for (value, expectedType) in values.zip expected do
         unless value.ty == .scalar expectedType do
           fail span s!"{operation.operationName} argument type mismatch"
-      pure (combine (.scalar result) values)
+      pure (combine (.scalar result) values
+        (match operation with
+          | .foreignFromBytes (.point _) _ => [.fallibleCast]
+          | _ => []))
     | .bytesAt value index => do
       let value ← inferTerm fuel program scope env span value
       let .scalar (.bytes length) := value.ty
@@ -1664,6 +1694,13 @@ mutual
         | .hashToCurve _, values => do
           let values ← values.mapM fun value => liftD (typedExpr span .native value)
           pure (scalarValue (.hashToCurve values))
+        | .foreignUnary foreignOp, [value] => do
+          let value ← liftD (typedExpr span (.foreign foreignOp.inputKind) value)
+          pure (scalarValue (Expr.foreignUnary foreignOp value))
+        | .foreignBinary foreignOp, [left, right] => do
+          let left ← liftD (typedExpr span (.foreign foreignOp.leftKind) left)
+          let right ← liftD (typedExpr span (.foreign foreignOp.rightKind) right)
+          pure (scalarValue (Expr.foreignBinary foreignOp left right))
         | _, _ => liftD (fail span "invalid checked curve operation shape")
       pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .bytes32Literal bytes => pure (scalarValue (Expr.bytes32Literal bytes))
@@ -1730,6 +1767,12 @@ mutual
         | .toBytes32 source, [value] => do
           let value ← liftD (typedExpr span source value)
           pure (scalarValue (Expr.toBytes32 value))
+        | .foreignToBytes kind, [value] => do
+          let value ← liftD (typedExpr span (.foreign kind) value)
+          pure (scalarValue (Expr.foreignToBytes value))
+        | .foreignFromBytes kind length, [value] => do
+          let value ← liftD (typedExpr span (.bytes length) value)
+          pure (scalarValue (Expr.foreignFromBytes kind value))
         | .degradeToNative, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.bytesField value 1))

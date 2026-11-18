@@ -38,7 +38,9 @@ private def checkConstants : Expr ty → Except String Unit
   | .bool _ | .ref _ | .foreignIdentity _ => pure ()
   | .foreignBase curve value => discard (Foreign.encodeField (.base curve) value)
   | .foreignScalar curve value => discard (Foreign.encodeField (.scalar curve) value)
-  | .foreignEncodedField value _ => checkConstants value
+  | .foreignEncodedField value _ | .foreignUnary _ value | .foreignToBytes value
+  | .foreignFromBytes _ value => checkConstants value
+  | .foreignBinary _ left right => do checkConstants left; checkConstants right
   | .uint maximum value =>
     if maximum ≤ ScalarPolicy.maxUint && value ≤ maximum then pure ()
     else throw "noncanonical unsigned constant"
@@ -237,6 +239,62 @@ private def encodeForeign (kind : Foreign.Kind) (value : String) : LowerM (List 
   emit "encode" [("input", toJson value), ("outputs", toJson outputs)]
   modify fun state => {state with expressions := keys.zip outputs ++ state.expressions}
   pure outputs
+
+private def assertEqual (left right : String) : LowerM Unit := do
+  let equal ← binary "test_eq" left right
+  emit "assert" [("cond", toJson equal)]
+
+private def assertForeignNonzero (kind : Foreign.Kind) (value : String) : LowerM Unit := do
+  let zero ← lowerForeignConstant kind (match kind with
+    | .point curve => .ok (Foreign.identityEncoding curve)
+    | _ => Foreign.encodeField kind 0)
+  let equal ← binary "test_eq" value zero
+  let nonzero ← unary "not" equal
+  emit "assert" [("cond", toJson nonzero)]
+
+private def lowerForeignUnary (op : Foreign.UnaryOp) (value : String) : LowerM String := do
+  match op with
+  | .neg _ => unary "neg" value
+  | .inv field => do
+    assertForeignNonzero field.kind value
+    unary "inv" value
+  | .x curve | .y curve => do
+    assertForeignNonzero (.point curve) value
+    let (x, y) ← lowerPointCoordinates value
+    pure (match op with | .x _ => x | _ => y)
+  | .mulGenerator curve => do
+    let key : ExpressionKey := ("ec_mul_generator:" ++ curve.name, [value], none)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "ec_mul_generator" [("scalar", toJson value), ("output", toJson output)]
+    modify fun state => {state with expressions := (key, output) :: state.expressions}
+    pure output
+
+private def lowerForeignBinary (op : Foreign.BinaryOp) (left right : String) : LowerM String := do
+  match op with
+  | .add _ => binary "add" left right
+  | .sub _ => binary "add" left (← unary "neg" right)
+  | .mul _ => binary "mul" left right
+  | .ecMul curve => do
+    let key : ExpressionKey := ("ec_mul:" ++ curve.name, [left, right], none)
+    if let some existing := (← get).expressions.lookup key then return existing
+    let output ← fresh
+    emit "ec_mul" [("a", toJson left), ("scalar", toJson right), ("output", toJson output)]
+    modify fun state => {state with expressions := (key, output) :: state.expressions}
+    pure output
+  | .fromCoordinates curve => do
+    let key : ExpressionKey := ("from_coordinates:" ++ curve.name, [left, right], none)
+    let output ← match (← get).expressions.lookup key with
+      | some existing => pure existing
+      | none => do
+        let output ← fresh
+        emit "from_coordinates" [("inputs", toJson [left, right]), ("output", toJson output)]
+        modify fun state => {state with expressions := (key, output) :: state.expressions}
+        pure output
+    let (x, y) ← lowerPointCoordinates output
+    assertEqual left x
+    assertEqual right y
+    pure output
 
 private def lowerTypedBoolConstant (value : Bool) : LowerM String := do
   let encoded := if value then "0x01" else "0x00"
@@ -466,6 +524,34 @@ private def lowerFixedByteHash (algorithm : String) (length outputLength : Nat)
       pure output
   encodeFixedBytes outputLength output
 
+private def lowerForeignToBytes (kind : Foreign.Kind) (value : String) : LowerM ByteOperands := do
+  let key : ExpressionKey := ("foreign_to_bytes:" ++ kind.nativeName, [value], none)
+  let output ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "to_bytes" [("input", toJson value), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  encodeFixedBytes kind.byteLength output
+
+private def lowerForeignFromBytes (kind : Foreign.Kind) (length : Nat) (value : ByteOperands) : LowerM String := do
+  let chunks ← byteChunks length value
+  if length == 0 then return ← lowerForeignConstant kind (Foreign.encodeField kind 0)
+  let bytes ← lowerFixedBytesFromChunks length chunks
+  let key : ExpressionKey := ("foreign_from_bytes:" ++ kind.nativeName, [bytes], some length)
+  let output ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "from_bytes" [("bytes", toJson bytes), ("type", toJson kind.nativeName), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  if let .point _ := kind then
+    let roundtrip ← lowerForeignToBytes kind output
+    for (original, encoded) in chunks.zip roundtrip.values do assertEqual original encoded
+  pure output
+
 private def lowerFixedReverse (length : Nat) (value : ByteOperands) : LowerM ByteOperands := do
   if length == 0 then return {values := []}
   let input ← lowerFixedBytesFromChunks length (← byteChunks length value)
@@ -653,6 +739,8 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
       let result ← lowerPersistentHash ("native-field-vector:" ++ toString values.length)
         (nativeFieldVectorAlignment values.length) operands
       pure {values := result, packed := true}
+  | .foreignToBytes (kind := kind) value => do
+    lowerForeignToBytes kind (← lowerExpr value)
   | .toBytes32 value => do
     let input ← lowerExpr value
     let (low, high) ← lowerToBytes32 input
@@ -717,6 +805,14 @@ def lowerExpr : Expr ty → LowerM String
   | .native n => pure (fieldImmediate n)
   | .uint _ n => pure (fieldImmediate n)
   | .bool b => pure (if b then "0x01" else "0x00")
+  | .foreignUnary op value => do
+    lowerForeignUnary op (← lowerExpr value)
+  | .foreignBinary op left right => do
+    let left ← lowerExpr left
+    let right ← lowerExpr right
+    lowerForeignBinary op left right
+  | .foreignFromBytes (length := length) kind value => do
+    lowerForeignFromBytes kind length (← lowerBytes value)
   | .foreignBase curve value => lowerForeignConstant (.base curve) (Foreign.encodeField (.base curve) value)
   | .foreignScalar curve value => lowerForeignConstant (.scalar curve) (Foreign.encodeField (.scalar curve) value)
   | .foreignIdentity curve => lowerForeignConstant (.point curve) (.ok (Foreign.identityEncoding curve))
@@ -898,7 +994,7 @@ def lowerExpr : Expr ty → LowerM String
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
-  | .sha512 _ | .keccak256 _
+  | .foreignToBytes _ | .sha512 _ | .keccak256 _
   | .bytesLiteral _ _ | .reverseBytes _ | .sliceBytes _ _ _ | .concatBytes _ _
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
   | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ | .reverseBytes32 _ => do
@@ -944,7 +1040,7 @@ still bind this public-input sequence to its accepted ledger call transcript. -/
 private def loweringCapabilities : Capabilities :=
   { poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
-    bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, jubjub := true }
+    bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, foreignArithmetic := true, foreignByteConversions := true, jubjub := true }
 
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c

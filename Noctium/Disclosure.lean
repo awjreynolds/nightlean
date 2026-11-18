@@ -74,6 +74,10 @@ def origins (env : Environment) : Expr ty → Except String Origins
     pure result
   | .foreignBase _ _ | .foreignScalar _ _ | .foreignIdentity _ => pure []
   | .foreignEncodedField value _ => origins env value
+  | .foreignUnary _ value | .foreignToBytes value => origins env value
+  | .foreignBinary _ left right => do
+    pure (merge (← origins env left) (← origins env right))
+  | .foreignFromBytes _ value => origins env value
   | .boolAnd left right | .boolOr left right | .boolXor left right => do
     pure (merge (← origins env left) (← origins env right))
   | .ref name => match env.lookup name with

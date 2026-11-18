@@ -72,6 +72,8 @@ inductive Term where
   | boolOr (left right : Term)
   | boolXor (left right : Term)
   | foreignConstant (kind : Foreign.Kind) (encoding : List Nat)
+  | curve (operation : Helpers.CurveOp) (arguments : List Term)
+  | bytes (operation : Helpers.BytesOp) (arguments : List Term)
   | eq (left right : Term)
   | cast (target : GenericType) (value : Term)
   | disclose (span : SourceSpan) (value : Term)
@@ -568,6 +570,8 @@ private def sourceChildren (limits : Limits) (span : SourceSpan) :
     | .witness _ target => pure [.typeExpr target]
     | .disclose _ value | .project value _ | .effect _ _ value | .at _ value =>
       pure [.term value]
+    | .curve _ arguments | .bytes _ arguments =>
+      boundedChildren span limits.maxSourceNodes (arguments.map SourceNode.term)
     | .select condition yes no | .ite condition yes no => pure [.term condition, .term yes, .term no]
     | .call _ arguments values => do
       if arguments.length > limits.maxTypeArguments || values.length > limits.maxTypeArguments then
@@ -850,6 +854,10 @@ mutual
       .boolXor <$> convertTerm limits declaration types naturals values left <*>
         convertTerm limits declaration types naturals values right
     | .foreignConstant kind encoding => pure (.foreignConstant kind encoding)
+    | .curve operation arguments =>
+      .curve operation <$> arguments.mapM (convertTerm limits declaration types naturals values)
+    | .bytes operation arguments =>
+      .bytes operation <$> arguments.mapM (convertTerm limits declaration types naturals values)
     | .eq left right =>
       .eq <$> convertTerm limits declaration types naturals values left <*>
         convertTerm limits declaration types naturals values right

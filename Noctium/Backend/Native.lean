@@ -10,12 +10,12 @@ inductive OperandRule where
   | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
   | bytes32Conversion | bytes32Reverse | fixedBytes | fixedByteHash | boolConstant | typedBoolVector
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
-  | qualifiedConstant | foreignTransport
+  | qualifiedConstant | foreignTransport | qualifiedArithmetic | qualifiedCoordinates | qualifiedByteConversion
   deriving Repr, BEq, DecidableEq
 
 inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
-  | bytes32ByteExtraction | nativeLimbs | foreignEncoding
+  | bytes32ByteExtraction | nativeLimbs | foreignEncoding | qualifiedTypedValues
   | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
   | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks | bytes32Reversal | fixedBytes
   deriving Repr, BEq, DecidableEq
@@ -139,7 +139,7 @@ def instructionSupport (opcode : String) : Except String Support :=
   if !instructionNames.contains opcode then .error s!"unknown native instruction '{opcode}'"
   else .ok <| match opcode with
   | "add" | "mul" => .supported <|
-    scalar .nativeBinary .propagateAll .pure .canonicalNative .noGuard .none ["a", "b", "output"]
+    scalar .qualifiedArithmetic .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "b", "output"]
   | "test_eq" => .supported <|
     scalar .nativeBinary .propagateAll .pure .matchingNativeSignature .noGuard .none ["a", "b", "output"]
   | "neg" => .supported <|
@@ -147,7 +147,7 @@ def instructionSupport (opcode : String) : Except String Support :=
   | "inv" => .supported <|
     let descriptor := scalar .primeFieldInverse .propagateAll .pure .nonzeroField .noGuard
       .typedInverseResult ["a", "output"]
-    {descriptor with encoding := .nativeOrJubjubScalar}
+    {descriptor with encoding := .qualifiedTypedValues}
   | "not" => .supported <|
     scalar .nativeUnary .propagateAll .pure .nativeBoolean .noGuard .none ["a", "output"]
   | "assert" => .supported <|
@@ -172,7 +172,7 @@ def instructionSupport (opcode : String) : Except String Support :=
   | "hash_to_curve" => .supported <|
     let descriptor := scalar .nativeVector .propagateAll .pure .canonicalNative .noGuard .sourceHashTerm
       ["inputs", "output"]
-    {descriptor with encoding := .jubjubAffinePoint}
+    {descriptor with encoding := .qualifiedTypedValues}
   | "transient_hash" => .supported <|
     scalar .nativeVector .propagateAll .pure .canonicalNative .noGuard .none ["inputs", "output"]
   | "sha512" | "keccak256" => .supported <|
@@ -192,7 +192,7 @@ def instructionSupport (opcode : String) : Except String Support :=
       .noGuard .fixedBytes ["bytes", "index", "output"]
     {descriptor with encoding := .fixedBytes}
   | "to_bytes" => .supported <|
-    let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
+    let descriptor := scalar .qualifiedByteConversion .propagateAll .pure .matchingNativeSignature
       .noGuard .typedBytes32Conversion ["input", "output"]
     {descriptor with encoding := .bytes32NativeSerialization}
   | "reverse" => .supported <|
@@ -200,7 +200,7 @@ def instructionSupport (opcode : String) : Except String Support :=
       .noGuard .fixedBytes ["bytes", "output"]
     {descriptor with encoding := .fixedBytes}
   | "from_bytes" => .supported <|
-    let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
+    let descriptor := scalar .qualifiedByteConversion .propagateAll .pure .matchingNativeSignature
       .noGuard .typedBytes32Conversion ["bytes", "type", "output"]
     {descriptor with encoding := .bytes32NativeDecoding}
   | "bytes_from_natives" => .supported <|
@@ -220,21 +220,21 @@ def instructionSupport (opcode : String) : Except String Support :=
       .noGuard .canonicalScalarInput ["native", "output"]
     {descriptor with encoding := .jubjubSubgroupScalar}
   | "ec_mul" => .supported <|
-    let descriptor := scalar .jubjubPointArithmetic .propagateAll .pure .validJubjubPoint
+    let descriptor := scalar .qualifiedArithmetic .propagateAll .pure .matchingNativeSignature
       .noGuard .sourceHashTerm ["a", "scalar", "output"]
-    {descriptor with encoding := .jubjubAffinePoint}
+    {descriptor with encoding := .qualifiedTypedValues}
   | "ec_mul_generator" => .supported <|
-    let descriptor := scalar .jubjubPointArithmetic .propagateAll .pure .reducedJubjubScalar
+    let descriptor := scalar .qualifiedArithmetic .propagateAll .pure .matchingNativeSignature
       .noGuard .sourceHashTerm ["scalar", "output"]
-    {descriptor with encoding := .jubjubAffinePoint}
+    {descriptor with encoding := .qualifiedTypedValues}
   | "from_coordinates" => .supported <|
-    let descriptor := scalar .jubjubCoordinates .propagateAll .pure .exactJubjubCoordinates
+    let descriptor := scalar .qualifiedCoordinates .propagateAll .pure .matchingNativeSignature
       .noGuard .exactCoordinateRoundtrip ["inputs", "output"]
-    {descriptor with encoding := .jubjubAffinePoint}
+    {descriptor with encoding := .qualifiedTypedValues}
   | "into_coordinates" => .supported <|
-    let descriptor := scalar .jubjubCoordinates .propagateAll .pure .validJubjubPoint
+    let descriptor := scalar .qualifiedCoordinates .propagateAll .pure .matchingNativeSignature
       .noGuard .sourceHashTerm ["point", "outputs"]
-    {descriptor with encoding := .jubjubAffinePoint}
+    {descriptor with encoding := .qualifiedTypedValues}
   | "public_input" => .supported <|
     scalar .nativeInput .declaredInputOrigin .transcriptInput .matchingNativeSignature .sourceBoundPublicRead
       .expectedInputSchema ["guard", "type", "output"]
@@ -257,7 +257,7 @@ def valueTypeSupport (name : String) : Except String Support :=
     .ok (.supported (scalar .jubjubScalarBridge .propagateAll .pure .reducedJubjubScalar
       .noGuard .canonicalScalarInput []))
   else if name == "JubjubPoint" then
-    .ok (.supported (scalar .jubjubPointArithmetic .propagateAll .pure .validJubjubPoint
+    .ok (.supported (scalar .qualifiedArithmetic .propagateAll .pure .matchingNativeSignature
       .noGuard .exactCoordinateRoundtrip []))
   else if Foreign.kinds.any (·.sourceName == name) then
     let descriptor := scalar .foreignTransport .propagateAll .pure .canonicalForeignValue

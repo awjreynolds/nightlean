@@ -161,6 +161,15 @@ fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crat
             name: index.to_string(),
         })
     };
+    #[cfg(feature = "zkir-321")]
+    if operation.starts_with("foreignUnary:") || operation.starts_with("foreignBinary:") {
+        let count = if operation.starts_with("foreignUnary:") {
+            1
+        } else {
+            2
+        };
+        return foreign_curve_operation(operation, count);
+    }
     if let Some(encoded_arity) = operation.strip_prefix("hashToCurve:") {
         let arity = canonical_hash_to_curve_arity(encoded_arity)?;
         return Ok((
@@ -230,6 +239,72 @@ fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crat
     })
 }
 
+#[cfg(feature = "zkir-321")]
+fn foreign_curve_operation(
+    operation: &str,
+    count: usize,
+) -> Result<(Vec<ScalarType>, ScalarType, crate::Expr)> {
+    use crate::foreign::{ForeignBinaryOp, ForeignType, ForeignUnaryOp};
+    let argument = |index: usize| {
+        Box::new(crate::Expr::Reference {
+            name: index.to_string(),
+        })
+    };
+    if let Some(encoded) = operation.strip_prefix("foreignUnary:") {
+        let fields = encoded.split(':').collect::<Vec<_>>();
+        ensure!(
+            fields.len() == 2 && count == 1,
+            "foreign unary operation encoding"
+        );
+        let op = ForeignUnaryOp::parse(fields[0])?;
+        let input = ForeignType::parse_source_name(fields[1])?;
+        ensure!(
+            operation == format!("foreignUnary:{}:{}", fields[0], input.source_name()),
+            "noncanonical foreign unary operation"
+        );
+        let output = input.unary_result(op)?;
+        return Ok((
+            vec![ScalarType::Foreign(input)],
+            ScalarType::Foreign(output),
+            crate::Expr::ForeignUnary {
+                operation: fields[0].to_owned(),
+                value: argument(0),
+            },
+        ));
+    }
+    if let Some(encoded) = operation.strip_prefix("foreignBinary:") {
+        let fields = encoded.split(':').collect::<Vec<_>>();
+        ensure!(
+            fields.len() == 3 && count == 2,
+            "foreign binary operation encoding"
+        );
+        let op = ForeignBinaryOp::parse(fields[0])?;
+        let left = ForeignType::parse_source_name(fields[1])?;
+        let right = ForeignType::parse_source_name(fields[2])?;
+        ensure!(
+            operation
+                == format!(
+                    "foreignBinary:{}:{}:{}",
+                    fields[0],
+                    left.source_name(),
+                    right.source_name()
+                ),
+            "noncanonical foreign binary operation"
+        );
+        let output = left.binary_result(op, right)?;
+        return Ok((
+            vec![ScalarType::Foreign(left), ScalarType::Foreign(right)],
+            ScalarType::Foreign(output),
+            crate::Expr::ForeignBinary {
+                operation: fields[0].to_owned(),
+                left: argument(0),
+                right: argument(1),
+            },
+        ));
+    }
+    bail!("unsupported control foreign curve operation")
+}
+
 fn canonical_hash_to_curve_arity(text: &str) -> Result<usize> {
     ensure!(
         !text.is_empty()
@@ -282,6 +357,48 @@ fn bytes_operation(
             name: index.to_string(),
         })
     };
+    #[cfg(feature = "zkir-321")]
+    if let Some(encoded_type) = operation.strip_prefix("foreignToBytes:") {
+        use crate::foreign::ForeignType;
+        ensure!(count == 1, "foreignToBytes argument count");
+        let ty = ForeignType::parse_source_name(encoded_type)?;
+        ensure!(
+            operation == format!("foreignToBytes:{}", ty.source_name()),
+            "noncanonical foreignToBytes operation"
+        );
+        return Ok((
+            vec![ScalarType::Foreign(ty)],
+            byte_scalar_type(ty.byte_len()),
+            crate::Expr::ForeignToBytes { value: argument(0) },
+        ));
+    }
+    #[cfg(feature = "zkir-321")]
+    if let Some(encoded) = operation.strip_prefix("foreignFromBytes:") {
+        use crate::foreign::ForeignType;
+        let fields = encoded.split(':').collect::<Vec<_>>();
+        ensure!(
+            fields.len() == 2 && count == 1,
+            "foreignFromBytes operation encoding"
+        );
+        let ty = ForeignType::parse_source_name(fields[0])?;
+        let length = canonical_byte_length(fields[1])?;
+        ensure!(
+            operation == format!("foreignFromBytes:{}:{length}", ty.source_name()),
+            "noncanonical foreignFromBytes operation"
+        );
+        if ty.byte_len() == 33 {
+            ensure!(length == 33, "foreign point decoding requires 33 bytes");
+        }
+        return Ok((
+            vec![byte_scalar_type(length)],
+            ScalarType::Foreign(ty),
+            crate::Expr::ForeignFromBytes {
+                ty: ty.source_name().to_owned(),
+                length,
+                value: argument(0),
+            },
+        ));
+    }
     if let Some(encoded) = operation.strip_prefix("__byteAt:") {
         let (length, index) = match encoded.split_once(':') {
             Some((length, index)) => (
@@ -678,10 +795,9 @@ impl Parser<'_> {
                 let encoding = encoding
                     .iter()
                     .map(|field| {
-                        field
-                            .as_str()
-                            .map(str::to_owned)
-                            .ok_or_else(|| anyhow!("foreign encoding fields must be decimal strings"))
+                        field.as_str().map(str::to_owned).ok_or_else(|| {
+                            anyhow!("foreign encoding fields must be decimal strings")
+                        })
                     })
                     .collect::<Result<Vec<_>>>()?;
                 let value = crate::evaluate(
@@ -719,6 +835,138 @@ impl Parser<'_> {
                 (
                     Type::Scalar(ScalarType::Native),
                     ExprKind::ForeignEncodedField(value, index),
+                )
+            }
+            #[cfg(feature = "zkir-321")]
+            "foreignUnary" => {
+                ensure!(
+                    self.schema_version == 2,
+                    "foreign operations require v2 plan"
+                );
+                shape(v, &["tag", "operation", "value"], true)?;
+                let operation_name = text(v, "operation")?;
+                let operation = crate::foreign::ForeignUnaryOp::parse(operation_name)?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                let Type::Scalar(ScalarType::Foreign(input_type)) = &value.ty else {
+                    bail!("foreign unary operation requires a foreign value")
+                };
+                let input_type = *input_type;
+                let output_type = input_type.unary_result(operation)?;
+                let canonical = format!(
+                    "foreignUnary:{}:{}",
+                    operation_name,
+                    input_type.source_name()
+                );
+                let (parameters, result, _) = curve_operation(&canonical)?;
+                ensure!(
+                    parameters == [ScalarType::Foreign(input_type)]
+                        && result == ScalarType::Foreign(output_type),
+                    "foreign unary result type mismatch"
+                );
+                (
+                    Type::Scalar(result),
+                    ExprKind::Curve(canonical, vec![value]),
+                )
+            }
+            #[cfg(feature = "zkir-321")]
+            "foreignBinary" => {
+                ensure!(
+                    self.schema_version == 2,
+                    "foreign operations require v2 plan"
+                );
+                shape(v, &["tag", "operation", "left", "right"], true)?;
+                let operation_name = text(v, "operation")?;
+                let operation = crate::foreign::ForeignBinaryOp::parse(operation_name)?;
+                let left = self.expr(field(v, "left")?, env, depth + 1)?;
+                let right = self.expr(field(v, "right")?, env, depth + 1)?;
+                let Type::Scalar(ScalarType::Foreign(left_type)) = &left.ty else {
+                    bail!("foreign binary operation requires foreign operands")
+                };
+                let Type::Scalar(ScalarType::Foreign(right_type)) = &right.ty else {
+                    bail!("foreign binary operation requires foreign operands")
+                };
+                let left_type = *left_type;
+                let right_type = *right_type;
+                let output_type = left_type.binary_result(operation, right_type)?;
+                let canonical = format!(
+                    "foreignBinary:{}:{}:{}",
+                    operation_name,
+                    left_type.source_name(),
+                    right_type.source_name()
+                );
+                let (parameters, result, _) = curve_operation(&canonical)?;
+                ensure!(
+                    parameters
+                        == [
+                            ScalarType::Foreign(left_type),
+                            ScalarType::Foreign(right_type)
+                        ]
+                        && result == ScalarType::Foreign(output_type),
+                    "foreign binary result type mismatch"
+                );
+                (
+                    Type::Scalar(result),
+                    ExprKind::Curve(canonical, vec![left, right]),
+                )
+            }
+            #[cfg(feature = "zkir-321")]
+            "foreignToBytes" => {
+                ensure!(
+                    self.schema_version == 2,
+                    "foreign byte conversions require v2 plan"
+                );
+                shape(v, &["tag", "value"], true)?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                let Type::Scalar(ScalarType::Foreign(foreign_type)) = &value.ty else {
+                    bail!("foreignToBytes requires a foreign value")
+                };
+                let foreign_type = *foreign_type;
+                let canonical = format!("foreignToBytes:{}", foreign_type.source_name());
+                let (parameters, result, _) = bytes_operation(&canonical, 1)?;
+                ensure!(
+                    parameters == [ScalarType::Foreign(foreign_type)]
+                        && result == byte_scalar_type(foreign_type.byte_len()),
+                    "foreignToBytes result type mismatch"
+                );
+                (
+                    Type::Scalar(result),
+                    ExprKind::Bytes(canonical, vec![value]),
+                )
+            }
+            #[cfg(feature = "zkir-321")]
+            "foreignFromBytes" => {
+                ensure!(
+                    self.schema_version == 2,
+                    "foreign byte conversions require v2 plan"
+                );
+                shape(v, &["tag", "type", "length", "value"], true)?;
+                let token = text(v, "type")?;
+                let ScalarType::Foreign(foreign_type) = ScalarType::parse(token)? else {
+                    bail!("foreignFromBytes requires a foreign target type")
+                };
+                let length = field(v, "length")?
+                    .as_u64()
+                    .and_then(|length| usize::try_from(length).ok())
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("foreignFromBytes byte length"))?;
+                if foreign_type.byte_len() == 33 {
+                    ensure!(length == 33, "foreign point decoding requires 33 bytes");
+                }
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                ensure!(
+                    value.ty == Type::Scalar(byte_scalar_type(length)),
+                    "foreignFromBytes operand length mismatch"
+                );
+                let canonical = format!("foreignFromBytes:{}:{length}", foreign_type.source_name());
+                let (parameters, result, _) = bytes_operation(&canonical, 1)?;
+                ensure!(
+                    parameters == [byte_scalar_type(length)]
+                        && result == ScalarType::Foreign(foreign_type),
+                    "foreignFromBytes result type mismatch"
+                );
+                (
+                    Type::Scalar(result),
+                    ExprKind::Bytes(canonical, vec![value]),
                 )
             }
             "bool" => {
@@ -4547,7 +4795,8 @@ impl Session {
                     .get(index)
                     .copied()
                     .ok_or_else(|| anyhow!("foreign encoded field index out of range"))?;
-                self.values.push(Tracked::scalar(Value::Native(field), taint));
+                self.values
+                    .push(Tracked::scalar(Value::Native(field), taint));
             }
             Task::Bytes(operation, count) => {
                 ensure!(self.values.len() >= count, "control byte argument stack");
@@ -5617,7 +5866,10 @@ mod completed_invocation_tests {
         let zero = ForeignValue::from_bytes(foreign_type, &[0; 32]).unwrap();
         let one = ForeignValue::from_bytes(
             foreign_type,
-            &[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            &[
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0,
+            ],
         )
         .unwrap();
         let encoded = |value: &ForeignValue| {
@@ -5660,12 +5912,17 @@ mod completed_invocation_tests {
 
         let parsed = Plan::parse(&plan, None).unwrap();
         let context = source_context(&parsed, &"d".repeat(64));
-        let inputs = BTreeMap::from([("candidate".to_owned(),
-            crate::Value::Foreign(zero).public_json())]);
+        let inputs = BTreeMap::from([(
+            "candidate".to_owned(),
+            crate::Value::Foreign(zero).public_json(),
+        )]);
         let mut session = Session::from_json(plan, inputs, context).unwrap();
         let completed = session.advance().unwrap();
         assert_eq!(completed["status"], "completed");
-        assert_eq!(completed["result"], crate::Value::Foreign(one.clone()).public_json());
+        assert_eq!(
+            completed["result"],
+            crate::Value::Foreign(one.clone()).public_json()
+        );
 
         let projected = run_host_plan(host_plan(
             "Native",
@@ -5682,6 +5939,172 @@ mod completed_invocation_tests {
         ] {
             assert!(Plan::parse(&host_plan(foreign_type.source_name(), malformed), None).is_err());
         }
+    }
+
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    fn foreign_curve_and_byte_operations_execute_through_control_session() {
+        use crate::foreign::{ForeignFamily, ForeignRole, ForeignType, ForeignValue};
+
+        let base_type = ForeignType::new(ForeignFamily::Secp256k1, ForeignRole::Base);
+        let point_type = ForeignType::new(ForeignFamily::Secp256k1, ForeignRole::Point);
+        let other_family = ForeignType::new(ForeignFamily::Secp256r1, ForeignRole::Base);
+        let base = |value: u8| ForeignValue::from_bytes_reducing(base_type, &[value]).unwrap();
+        let literal = |value: &ForeignValue| {
+            json!({
+                "tag":"foreignConstant",
+                "type":value.foreign_type().source_name(),
+                "encoding":value.encode().unwrap().iter().map(|field| crate::field_decimal(*field)).collect::<Vec<_>>()
+            })
+        };
+        let three = base(3);
+        let five = base(5);
+        let eight = base(8);
+
+        // The direct expression tags carry their own types. The nested byte
+        // decoder accepts a short little-endian input and the outer encoder
+        // returns the typed canonical result.
+        let direct = json!({
+            "tag":"foreignToBytes",
+            "value":{
+                "tag":"foreignBinary",
+                "operation":"add",
+                "left":literal(&three),
+                "right":{
+                    "tag":"foreignFromBytes",
+                    "type":base_type.source_name(),
+                    "length":1,
+                    "value":{"tag":"bytesLiteral","length":1,"values":[5]}
+                }
+            }
+        });
+        let completed = run_host_plan(host_plan("Bytes<32>", direct));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            json!({"kind":"bytes","values":eight.to_bytes().unwrap()})
+        );
+
+        // The helper operation-name route must share the same checked SDK
+        // evaluator as the direct source expression tags.
+        let helper_route = json!({
+            "tag":"bytes",
+            "operation":format!("foreignToBytes:{}", base_type.source_name()),
+            "arguments":[{
+                "tag":"curve",
+                "operation":format!(
+                    "foreignBinary:add:{}:{}",
+                    base_type.source_name(),
+                    base_type.source_name()
+                ),
+                "arguments":[literal(&three), literal(&five)]
+            }]
+        });
+        let completed = run_host_plan(host_plan("Bytes<32>", helper_route));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            json!({"kind":"bytes","values":eight.to_bytes().unwrap()})
+        );
+
+        let identity = ForeignValue::from_bytes_reducing(point_type, &[0; 33]).unwrap();
+        let identity_bytes = json!({
+            "tag":"bytes",
+            "operation":format!("foreignToBytes:{}", point_type.source_name()),
+            "arguments":[literal(&identity)]
+        });
+        let point_roundtrip = json!({
+            "tag":"foreignFromBytes",
+            "type":point_type.source_name(),
+            "length":33,
+            "value":identity_bytes
+        });
+        let completed = run_host_plan(host_plan(point_type.source_name(), point_roundtrip));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            crate::Value::Foreign(identity).public_json()
+        );
+
+        let scalar_type = ForeignType::new(ForeignFamily::Secp256k1, ForeignRole::Scalar);
+        let one_scalar = ForeignValue::from_bytes_reducing(scalar_type, &[1]).unwrap();
+        let generator = ForeignValue::from_bytes(
+            point_type,
+            &hex::decode("0279be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798")
+                .unwrap(),
+        )
+        .unwrap();
+        let generated_point = json!({
+            "tag":"curve",
+            "operation":format!("foreignUnary:mulGenerator:{}", scalar_type.source_name()),
+            "arguments":[literal(&one_scalar)]
+        });
+        let completed = run_host_plan(host_plan(point_type.source_name(), generated_point));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            crate::Value::Foreign(generator.clone()).public_json()
+        );
+        let extracted_x = json!({
+            "tag":"foreignUnary",
+            "operation":"x",
+            "value":literal(&generator)
+        });
+        let completed = run_host_plan(host_plan(base_type.source_name(), extracted_x));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            crate::Value::Foreign(generator.unary(crate::foreign::ForeignUnaryOp::X).unwrap())
+                .public_json()
+        );
+
+        let empty_decode = json!({
+            "tag":"foreignFromBytes",
+            "type":base_type.source_name(),
+            "length":0,
+            "value":{"tag":"bytesLiteral","length":0,"values":[]}
+        });
+        let completed = run_host_plan(host_plan(base_type.source_name(), empty_decode));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            crate::Value::Foreign(base(0)).public_json()
+        );
+
+        let zero_inverse = json!({
+            "tag":"foreignUnary",
+            "operation":"inv",
+            "value":literal(&base(0))
+        });
+        assert_eq!(
+            run_host_plan(host_plan(base_type.source_name(), zero_inverse))["status"],
+            "failed"
+        );
+
+        let mismatched_curve = json!({
+            "tag":"foreignBinary",
+            "operation":"add",
+            "left":literal(&three),
+            "right":literal(&ForeignValue::from_bytes_reducing(other_family, &[5]).unwrap())
+        });
+        assert!(Plan::parse(&host_plan(base_type.source_name(), mismatched_curve), None).is_err());
+        let wrong_point_length = json!({
+            "tag":"foreignFromBytes",
+            "type":point_type.source_name(),
+            "length":32,
+            "value":{"tag":"bytesLiteral","length":32,"values":vec![0;32]}
+        });
+        assert!(
+            Plan::parse(
+                &host_plan(point_type.source_name(), wrong_point_length),
+                None
+            )
+            .is_err()
+        );
+        assert!(
+            super::curve_operation(&format!("foreignUnary:inv:{}", point_type.source_name()))
+                .is_err()
+        );
     }
 
     #[test]
