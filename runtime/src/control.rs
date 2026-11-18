@@ -386,8 +386,12 @@ fn bytes_operation(
             operation == format!("foreignFromBytes:{}:{length}", ty.source_name()),
             "noncanonical foreignFromBytes operation"
         );
-        if ty.byte_len() == 33 {
-            ensure!(length == 33, "foreign point decoding requires 33 bytes");
+        if ty.role() == crate::foreign::ForeignRole::Point {
+            ensure!(
+                length == ty.byte_len(),
+                "foreign point decoding requires exactly {} bytes",
+                ty.byte_len()
+            );
         }
         return Ok((
             vec![byte_scalar_type(length)],
@@ -949,8 +953,12 @@ impl Parser<'_> {
                     .and_then(|length| usize::try_from(length).ok())
                     .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
                     .ok_or_else(|| anyhow!("foreignFromBytes byte length"))?;
-                if foreign_type.byte_len() == 33 {
-                    ensure!(length == 33, "foreign point decoding requires 33 bytes");
+                if foreign_type.role() == crate::foreign::ForeignRole::Point {
+                    ensure!(
+                        length == foreign_type.byte_len(),
+                        "foreign point decoding requires exactly {} bytes",
+                        foreign_type.byte_len()
+                    );
                 }
                 let value = self.expr(field(v, "value")?, env, depth + 1)?;
                 ensure!(
@@ -6105,6 +6113,156 @@ mod completed_invocation_tests {
             super::curve_operation(&format!("foreignUnary:inv:{}", point_type.source_name()))
                 .is_err()
         );
+    }
+
+    #[cfg(feature = "zkir-321")]
+    #[test]
+    fn curve25519_field_point_and_byte_operations_execute_through_control_session() {
+        use crate::foreign::{ForeignFamily, ForeignRole, ForeignType, ForeignValue};
+
+        let base_type = ForeignType::new(ForeignFamily::Curve25519, ForeignRole::Base);
+        let scalar_type = ForeignType::new(ForeignFamily::Curve25519, ForeignRole::Scalar);
+        let point_type = ForeignType::new(ForeignFamily::Curve25519, ForeignRole::Point);
+        let base = |value: u8| ForeignValue::from_bytes_reducing(base_type, &[value]).unwrap();
+        let scalar = |value: u8| ForeignValue::from_bytes_reducing(scalar_type, &[value]).unwrap();
+        let literal = |value: &ForeignValue| {
+            json!({
+                "tag":"foreignConstant",
+                "type":value.foreign_type().source_name(),
+                "encoding":value.encode().unwrap().iter().map(|field| crate::field_decimal(*field)).collect::<Vec<_>>()
+            })
+        };
+
+        let base_sum = json!({
+            "tag":"bytes",
+            "operation":format!("foreignToBytes:{}", base_type.source_name()),
+            "arguments":[{
+                "tag":"curve",
+                "operation":format!("foreignBinary:add:{}:{}", base_type.source_name(), base_type.source_name()),
+                "arguments":[literal(&base(3)), literal(&base(5))]
+            }]
+        });
+        let completed = run_host_plan(host_plan("Bytes<32>", base_sum));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            json!({"kind":"bytes","values":base(8).to_bytes().unwrap()})
+        );
+
+        let scalar_product = json!({
+            "tag":"bytes",
+            "operation":format!("foreignToBytes:{}", scalar_type.source_name()),
+            "arguments":[{
+                "tag":"curve",
+                "operation":format!("foreignBinary:mul:{}:{}", scalar_type.source_name(), scalar_type.source_name()),
+                "arguments":[literal(&scalar(2)), literal(&scalar(3))]
+            }]
+        });
+        let completed = run_host_plan(host_plan("Bytes<32>", scalar_product));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            json!({"kind":"bytes","values":scalar(6).to_bytes().unwrap()})
+        );
+
+        let identity_coordinates = json!({
+            "tag":"curve",
+            "operation":format!("foreignBinary:fromCoordinates:{}:{}", base_type.source_name(), base_type.source_name()),
+            "arguments":[literal(&base(0)), literal(&base(1))]
+        });
+        let coordinates = ["x", "y"].map(|coordinate| json!({
+            "tag":"bytes",
+            "operation":format!("foreignToBytes:{}", base_type.source_name()),
+            "arguments":[{
+                "tag":"curve",
+                "operation":format!("foreignUnary:{}:{}", coordinate, point_type.source_name()),
+                "arguments":[identity_coordinates.clone()]
+            }]
+        }));
+        let identity_coordinate_bytes = json!({
+            "tag":"bytes",
+            "operation":"concatBytes:32:32",
+            "arguments":coordinates
+        });
+        let mut identity_coordinates_bytes = base(0).to_bytes().unwrap();
+        identity_coordinates_bytes.extend(base(1).to_bytes().unwrap());
+        let completed = run_host_plan(host_plan("Bytes<64>", identity_coordinate_bytes));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            json!({"kind":"bytes","values":identity_coordinates_bytes})
+        );
+
+        let identity_roundtrip = json!({
+            "tag":"bytes",
+            "operation":format!("foreignFromBytes:{}:32", point_type.source_name()),
+            "arguments":[{
+                "tag":"bytes",
+                "operation":format!("foreignToBytes:{}", point_type.source_name()),
+                "arguments":[identity_coordinates]
+            }]
+        });
+        let completed = run_host_plan(host_plan(point_type.source_name(), identity_roundtrip));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            crate::Value::Foreign(ForeignValue::zero(point_type).unwrap()).public_json()
+        );
+
+        let generator_mul = json!({
+            "tag":"bytes",
+            "operation":format!("foreignToBytes:{}", point_type.source_name()),
+            "arguments":[{
+                "tag":"curve",
+                "operation":format!("foreignUnary:mulGenerator:{}", scalar_type.source_name()),
+                "arguments":[literal(&scalar(1))]
+            }]
+        });
+        let completed = run_host_plan(host_plan("Bytes<32>", generator_mul));
+        let mut generator_bytes = [0x66; 32];
+        generator_bytes[0] = 0x58;
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(
+            completed["result"],
+            json!({"kind":"bytes","values":generator_bytes})
+        );
+
+        let invalid_subgroup_bytes = {
+            let mut bytes = vec![0xff; 32];
+            bytes[0] = 0xec;
+            bytes[31] = 0x7f;
+            bytes
+        };
+        let invalid_subgroup = json!({
+            "tag":"bytes",
+            "operation":format!("foreignFromBytes:{}:32", point_type.source_name()),
+            "arguments":[{"tag":"bytesLiteral","length":32,"values":invalid_subgroup_bytes}]
+        });
+        assert_eq!(
+            run_host_plan(host_plan(point_type.source_name(), invalid_subgroup))["status"],
+            "failed"
+        );
+
+        let wrong_point_length = host_plan(
+            point_type.source_name(),
+            json!({
+                "tag":"foreignFromBytes",
+                "type":point_type.source_name(),
+                "length":31,
+                "value":{"tag":"bytesLiteral","length":31,"values":vec![0;31]}
+            }),
+        );
+        assert!(Plan::parse(&wrong_point_length, None).is_err());
+
+        let wrong_helper_point_length = host_plan(
+            point_type.source_name(),
+            json!({
+                "tag":"bytes",
+                "operation":format!("foreignFromBytes:{}:31", point_type.source_name()),
+                "arguments":[{"tag":"bytesLiteral","length":31,"values":vec![0;31]}]
+            }),
+        );
+        assert!(Plan::parse(&wrong_helper_point_length, None).is_err());
     }
 
     #[test]

@@ -186,6 +186,9 @@ private def readScalarTy (stx : TSyntax `nltype) : CommandElabM Ty := do
   | `(nltype| Secp256r1Base) => pure (.foreign (.base .secp256r1))
   | `(nltype| Secp256r1Scalar) => pure (.foreign (.scalar .secp256r1))
   | `(nltype| Secp256r1Point) => pure (.foreign (.point .secp256r1))
+  | `(nltype| Curve25519Base) => pure (.foreign (.base .curve25519))
+  | `(nltype| Curve25519Scalar) => pure (.foreign (.scalar .curve25519))
+  | `(nltype| Curve25519Point) => pure (.foreign (.point .curve25519))
   | _ => throwErrorAt stx "unsupported readable witness scalar type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
@@ -201,6 +204,9 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .foreign (.base .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256r1))
   | .foreign (.scalar .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256r1))
   | .foreign (.point .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256r1))
+  | .foreign (.base .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.curve25519))
+  | .foreign (.scalar .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.curve25519))
+  | .foreign (.point .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.curve25519))
 
 private def resultTypeTerm : ResultType → CommandElabM (TSyntax `term)
   | .unit => `(Noctium.Helpers.ResultType.unit)
@@ -297,6 +303,9 @@ private partial def renderType : TSyntax `nltype → String
   | `(nltype| Secp256r1Base) => "Secp256r1Base"
   | `(nltype| Secp256r1Scalar) => "Secp256r1Scalar"
   | `(nltype| Secp256r1Point) => "Secp256r1Point"
+  | `(nltype| Curve25519Base) => "Curve25519Base"
+  | `(nltype| Curve25519Scalar) => "Curve25519Scalar"
+  | `(nltype| Curve25519Point) => "Curve25519Point"
   | _ => "?"
 
 private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
@@ -362,6 +371,9 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| secp256r1Base($value:num)) => s!"secp256r1Base({value.getNat})"
   | `(nlexpr| secp256r1Scalar($value:num)) => s!"secp256r1Scalar({value.getNat})"
   | `(nlexpr| secp256r1Identity()) => "secp256r1Identity()"
+  | `(nlexpr| curve25519Base($value:num)) => s!"curve25519Base({value.getNat})"
+  | `(nlexpr| curve25519Scalar($value:num)) => s!"curve25519Scalar({value.getNat})"
+  | `(nlexpr| curve25519Identity()) => "curve25519Identity()"
   | `(nlexpr| hashToCurve([$values,*])) =>
     s!"hashToCurve([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| foreignAdd($left, $right)) => s!"foreignAdd({renderExpr left}, {renderExpr right})"
@@ -628,6 +640,15 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
       type := .scalar (.foreign (.point .secp256r1))
       term := .foreignConstant (.point .secp256r1) (Foreign.identityEncoding .secp256r1)
     }
+  | `(nlexpr| curve25519Base($value:num)) =>
+    lowerForeignFieldConstant stx (.base .curve25519) value.getNat
+  | `(nlexpr| curve25519Scalar($value:num)) =>
+    lowerForeignFieldConstant stx (.scalar .curve25519) value.getNat
+  | `(nlexpr| curve25519Identity()) =>
+    pure {
+      type := .scalar (.foreign (.point .curve25519))
+      term := .foreignConstant (.point .curve25519) (Foreign.identityEncoding .curve25519)
+    }
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -761,7 +782,7 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
   | `(nlexpr| foreignToBytes($value)) => do
     let value ← lowerExpr programName callPrefix env value
     let .scalar (.foreign kind) := value.type
-      | throwErrorAt stx "foreignToBytes requires a Secp value"
+      | throwErrorAt stx "foreignToBytes requires a foreign value"
     let operation := Noctium.Helpers.BytesOp.foreignToBytes kind
     let (expected, result) ← match operation.signature 1 with
       | .ok signature => pure signature
@@ -771,7 +792,7 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
   | `(nlexpr| foreignFromBytes($target:nltype, $value)) => do
     let target ← readScalarTy target
     let .foreign kind := target
-      | throwErrorAt stx "foreignFromBytes requires a Secp target type"
+      | throwErrorAt stx "foreignFromBytes requires a foreign target type"
     let value ← lowerExpr programName callPrefix env value
     let .scalar (.bytes length) := value.type
       | throwErrorAt stx "foreignFromBytes requires a fixed byte string"
@@ -784,7 +805,7 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let lowered := mergeLowered (.scalar result) (.bytes operation [value.term]) [value]
     pure {lowered with generatedValidity :=
       (lowered.generatedValidity ++
-        if kind.byteLength == 33 then ["canonical Secp point decoding"] else []).eraseDups}
+        if let .point _ := kind then ["canonical foreign point decoding"] else []).eraseDups}
   | `(nlexpr| witness $function:ident($args:nlexpr,*)) => do
     let signature ← liftM (witnessSignature function)
     let signatureName := signature.name
@@ -858,7 +879,7 @@ where
       (operationName : String) (valueStx : TSyntax `nlexpr) : ExprM Lowered := do
     let value ← lowerExpr programName callPrefix env valueStx
     let .scalar (.foreign kind) := value.type
-      | throwErrorAt stx s!"{operationName} requires a Secp value"
+      | throwErrorAt stx s!"{operationName} requires a foreign value"
     let operation ← match operationName with
       | "neg" => pure (Foreign.UnaryOp.neg kind)
       | "inv" =>
@@ -867,13 +888,13 @@ where
         | none => throwErrorAt stx "foreignInv does not accept points"
       | "mulGenerator" =>
         if let .scalar curve := kind then pure (Foreign.UnaryOp.mulGenerator curve)
-        else throwErrorAt stx "curveMulGenerator requires a Secp scalar"
+        else throwErrorAt stx "curveMulGenerator requires a foreign scalar"
       | "x" =>
         if let .point curve := kind then pure (Foreign.UnaryOp.x curve)
-        else throwErrorAt stx "curveX requires a Secp point"
+        else throwErrorAt stx "curveX requires a foreign point"
       | "y" =>
         if let .point curve := kind then pure (Foreign.UnaryOp.y curve)
-        else throwErrorAt stx "curveY requires a Secp point"
+        else throwErrorAt stx "curveY requires a foreign point"
       | _ => throwErrorAt stx "unsupported foreign unary operation"
     finishForeignCurve stx (.foreignUnary operation) [value]
 
@@ -882,18 +903,18 @@ where
     let left ← lowerExpr programName callPrefix env leftStx
     let right ← lowerExpr programName callPrefix env rightStx
     let .scalar (.foreign leftKind) := left.type
-      | throwErrorAt stx s!"{operationName} requires Secp values"
+      | throwErrorAt stx s!"{operationName} requires foreign values"
     let .scalar (.foreign rightKind) := right.type
-      | throwErrorAt stx s!"{operationName} requires Secp values"
+      | throwErrorAt stx s!"{operationName} requires foreign values"
     let operation ← match operationName with
       | "add" =>
-        unless leftKind == rightKind do throwErrorAt stx "foreignAdd requires matching Secp types"
+        unless leftKind == rightKind do throwErrorAt stx "foreignAdd requires matching foreign types"
         pure (Foreign.BinaryOp.add leftKind)
       | "sub" =>
-        unless leftKind == rightKind do throwErrorAt stx "foreignSub requires matching Secp types"
+        unless leftKind == rightKind do throwErrorAt stx "foreignSub requires matching foreign types"
         pure (Foreign.BinaryOp.sub leftKind)
       | "mul" =>
-        unless leftKind == rightKind do throwErrorAt stx "foreignMul requires matching Secp types"
+        unless leftKind == rightKind do throwErrorAt stx "foreignMul requires matching foreign types"
         match leftKind.fieldKind? with
         | some field => pure (Foreign.BinaryOp.mul field)
         | none => throwErrorAt stx "foreignMul does not multiply points"
@@ -902,13 +923,13 @@ where
         | .point curve, .scalar otherCurve =>
           unless curve == otherCurve do throwErrorAt stx "curveMul requires a matching curve scalar"
           pure (Foreign.BinaryOp.ecMul curve)
-        | _, _ => throwErrorAt stx "curveMul requires a Secp point and matching scalar"
+        | _, _ => throwErrorAt stx "curveMul requires a foreign point and matching scalar"
       | "fromCoordinates" =>
         match leftKind, rightKind with
         | .base curve, .base otherCurve =>
           unless curve == otherCurve do throwErrorAt stx "curveFromCoordinates requires a matching curve family"
           pure (Foreign.BinaryOp.fromCoordinates curve)
-        | _, _ => throwErrorAt stx "curveFromCoordinates requires two matching base values"
+        | _, _ => throwErrorAt stx "curveFromCoordinates requires two matching foreign base values"
       | _ => throwErrorAt stx "unsupported foreign binary operation"
     finishForeignCurve stx (.foreignBinary operation) [left, right]
 
@@ -963,6 +984,7 @@ where
 private def authoringForeignCurveTerm : Foreign.Curve → CommandElabM (TSyntax `term)
   | .secp256k1 => `(Noctium.Foreign.Curve.secp256k1)
   | .secp256r1 => `(Noctium.Foreign.Curve.secp256r1)
+  | .curve25519 => `(Noctium.Foreign.Curve.curve25519)
 
 private def authoringForeignKindTerm : Foreign.Kind → CommandElabM (TSyntax `term)
   | .base curve => do
@@ -1045,6 +1067,9 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .base .secp256r1 => `(Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256r1)
       | .scalar .secp256r1 => `(Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256r1)
       | .point .secp256r1 => `(Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256r1)
+      | .base .curve25519 => `(Noctium.Foreign.Kind.base Noctium.Foreign.Curve.curve25519)
+      | .scalar .curve25519 => `(Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.curve25519)
+      | .point .curve25519 => `(Noctium.Foreign.Kind.point Noctium.Foreign.Curve.curve25519)
     let encoding := encoding.map natTerm |>.toArray
     `(Noctium.Helpers.Term.foreignConstant $kind [$encoding,*])
   | .eq left right => do `(Noctium.Helpers.Term.eq $(← termTerm left) $(← termTerm right))

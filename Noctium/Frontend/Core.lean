@@ -109,6 +109,9 @@ scoped syntax "Secp256k1Point" : nltype
 scoped syntax "Secp256r1Base" : nltype
 scoped syntax "Secp256r1Scalar" : nltype
 scoped syntax "Secp256r1Point" : nltype
+scoped syntax "Curve25519Base" : nltype
+scoped syntax "Curve25519Scalar" : nltype
+scoped syntax "Curve25519Point" : nltype
 
 declare_syntax_cat nlexpr
 scoped syntax ident : nlexpr
@@ -164,6 +167,9 @@ scoped syntax "secp256k1Identity()" : nlexpr
 scoped syntax "secp256r1Base(" num ")" : nlexpr
 scoped syntax "secp256r1Scalar(" num ")" : nlexpr
 scoped syntax "secp256r1Identity()" : nlexpr
+scoped syntax "curve25519Base(" num ")" : nlexpr
+scoped syntax "curve25519Scalar(" num ")" : nlexpr
+scoped syntax "curve25519Identity()" : nlexpr
 scoped syntax "foreignAdd(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "foreignSub(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "foreignMul(" nlexpr "," nlexpr ")" : nlexpr
@@ -298,6 +304,9 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
   | `(nltype| Secp256r1Base) => pure (.foreign (.base .secp256r1))
   | `(nltype| Secp256r1Scalar) => pure (.foreign (.scalar .secp256r1))
   | `(nltype| Secp256r1Point) => pure (.foreign (.point .secp256r1))
+  | `(nltype| Curve25519Base) => pure (.foreign (.base .curve25519))
+  | `(nltype| Curve25519Scalar) => pure (.foreign (.scalar .curve25519))
+  | `(nltype| Curve25519Point) => pure (.foreign (.point .curve25519))
   | _ => throwErrorAt stx "unsupported Noctium type"
 
 private def tyTerm : Ty → CommandElabM (TSyntax `term)
@@ -313,10 +322,14 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .foreign (.base .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256r1))
   | .foreign (.scalar .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.secp256r1))
   | .foreign (.point .secp256r1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.secp256r1))
+  | .foreign (.base .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.curve25519))
+  | .foreign (.scalar .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.curve25519))
+  | .foreign (.point .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.curve25519))
 
 private def foreignCurveTerm : Foreign.Curve → CommandElabM (TSyntax `term)
   | .secp256k1 => `(Noctium.Foreign.Curve.secp256k1)
   | .secp256r1 => `(Noctium.Foreign.Curve.secp256r1)
+  | .curve25519 => `(Noctium.Foreign.Curve.curve25519)
 
 private def foreignKindTerm : Foreign.Kind → CommandElabM (TSyntax `term)
   | .base curve => do
@@ -777,6 +790,16 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     pure (.foreign (.scalar .secp256r1), ← `(Noctium.Expr.foreignScalar Noctium.Foreign.Curve.secp256r1 $value))
   | `(nlexpr| secp256r1Identity()) =>
     pure (.foreign (.point .secp256r1), ← `(Noctium.Expr.foreignIdentity Noctium.Foreign.Curve.secp256r1))
+  | `(nlexpr| curve25519Base($value:num)) => do
+    unless value.getNat < Foreign.Curve.baseModulus .curve25519 do
+      throwErrorAt value "Curve25519Base literal is not canonical"
+    pure (.foreign (.base .curve25519), ← `(Noctium.Expr.foreignBase Noctium.Foreign.Curve.curve25519 $value))
+  | `(nlexpr| curve25519Scalar($value:num)) => do
+    unless value.getNat < Foreign.Curve.scalarModulus .curve25519 do
+      throwErrorAt value "Curve25519Scalar literal is not canonical"
+    pure (.foreign (.scalar .curve25519), ← `(Noctium.Expr.foreignScalar Noctium.Foreign.Curve.curve25519 $value))
+  | `(nlexpr| curve25519Identity()) =>
+    pure (.foreign (.point .curve25519), ← `(Noctium.Expr.foreignIdentity Noctium.Foreign.Curve.curve25519))
   | `(nlexpr| foreignAdd($left, $right)) => do
     let (leftTy, left) ← expression env left
     let (rightTy, right) ← expression env right
@@ -861,7 +884,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| foreignFromBytes($target:nltype, $value)) => do
     let target ← readTy target
     let .foreign kind := target
-      | throwErrorAt stx "foreignFromBytes target must be a Secp foreign type"
+      | throwErrorAt stx "foreignFromBytes target must be a foreign curve type"
     let (valueTy, value) ← expression env value
     let byteLength ← match valueTy with
       | .bytes byteLength => pure byteLength
@@ -869,7 +892,8 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     if byteLength > maxBytesLength then
       throwErrorAt stx s!"byte string length exceeds the maximum of {maxBytesLength}"
     if let .point _ := kind then
-      unless byteLength == 33 do throwErrorAt stx "foreign point decoding requires Bytes 33"
+      unless byteLength == kind.byteLength do
+        throwErrorAt stx s!"foreign point decoding requires Bytes {kind.byteLength}"
     let kindTerm ← foreignKindTerm kind
     pure (target, ← `(Noctium.Expr.foreignFromBytes $kindTerm $value))
   | `(nlexpr| hashToCurve([$values,*])) => do

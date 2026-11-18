@@ -596,7 +596,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       let some length := byteLength? bytes.valueType | throw "foreign from_bytes requires typed bytes"
       ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
         "foreign from_bytes length is unsupported"
-      if let .point _ := kind then ensure (length == 33) "Secp point decoding requires Bytes33"
+      if let .point _ := kind then
+        ensure (length == kind.byteLength) "foreign point decoding requires the curve's exact byte length"
       let fact ← combine (foreignFromBytesTerm kind length bytes.term) 0 [bytes]
       defineResult state instruction {fact with valueType := .foreign kind, foreignValid := true}
     else do
@@ -643,7 +644,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       ensure (y.valueType == x.valueType) "foreign coordinate field family mismatch"
       let fact ← foreignResult (.point curve)
         (foreignBinaryTerm "fromCoordinates" (.base curve) x.term y.term) [x, y]
-      defineResult state instruction {fact with foreignNonidentity := true}
+      defineResult state instruction {
+        fact with foreignNonidentity := coordinateExtractionRequiresNonidentity curve}
     else do
       requireNative x
       requireNative y
@@ -659,8 +661,9 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let xName ← outputs[0]!.getStr?
     let yName ← outputs[1]!.getStr?
     if let .foreign (.point curve) := point.valueType then do
-      ensure (point.foreignNonidentity || state.establishedAssertions.contains (foreignNonzeroTerm (.point curve) point.term))
-        "foreign coordinate extraction lacks its nonidentity assertion"
+      if coordinateExtractionRequiresNonidentity curve then
+        ensure (point.foreignNonidentity || state.establishedAssertions.contains (foreignNonzeroTerm (.point curve) point.term))
+          "foreign coordinate extraction lacks its nonidentity assertion"
       let x ← foreignResult (.base curve) (foreignUnaryTerm "x" (.point curve) point.term) [point]
       let state ← define state xName x
       let y ← foreignResult (.base curve) (foreignUnaryTerm "y" (.point curve) point.term) [point]

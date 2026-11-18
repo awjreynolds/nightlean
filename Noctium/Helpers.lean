@@ -209,8 +209,9 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
     unless argumentCount == 1 do throw "foreignFromBytes requires one byte-string argument"
     unless length ≤ Types.defaultLimits.maxVectorLength do
       throw "foreignFromBytes input length exceeds the source limit"
-    if kind.byteLength == 33 then
-      unless length == 33 do throw "foreign point decoding requires 33 bytes"
+    if let .point _ := kind then
+      unless length == kind.byteLength do
+        throw s!"foreign point decoding requires exactly {kind.byteLength} bytes"
     pure ([.bytes length], .foreign kind)
   | .degradeToNative =>
     unless argumentCount == 1 do throw "degradeToNative requires one Bytes32 argument"

@@ -1351,10 +1351,7 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
             bail!("Jubjub ledger reads require typed coordinate records")
         }
         #[cfg(feature = "zkir-321")]
-        ScalarType::Foreign(ty) => Value::Foreign(foreign::ForeignValue::from_bytes(
-            ty,
-            &vec![0; ty.byte_len()],
-        )?),
+        ScalarType::Foreign(ty) => Value::Foreign(foreign::ForeignValue::zero(ty)?),
     })
 }
 #[derive(Clone, Deserialize)]

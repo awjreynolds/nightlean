@@ -259,7 +259,8 @@ private def lowerForeignUnary (op : Foreign.UnaryOp) (value : String) : LowerM S
     assertForeignNonzero field.kind value
     unary "inv" value
   | .x curve | .y curve => do
-    assertForeignNonzero (.point curve) value
+    if Noctium.Backend.Native.coordinateExtractionRequiresNonidentity curve then
+      assertForeignNonzero (.point curve) value
     let (x, y) ← lowerPointCoordinates value
     pure (match op with | .x _ => x | _ => y)
   | .mulGenerator curve => do
@@ -536,6 +537,9 @@ private def lowerForeignToBytes (kind : Foreign.Kind) (value : String) : LowerM 
   encodeFixedBytes kind.byteLength output
 
 private def lowerForeignFromBytes (kind : Foreign.Kind) (length : Nat) (value : ByteOperands) : LowerM String := do
+  if let .point _ := kind then
+    unless length == kind.byteLength do
+      rejectLowering "foreign point decoding requires the curve's exact byte length"
   let chunks ← byteChunks length value
   if length == 0 then return ← lowerForeignConstant kind (Foreign.encodeField kind 0)
   let bytes ← lowerFixedBytesFromChunks length chunks

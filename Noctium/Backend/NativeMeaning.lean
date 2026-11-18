@@ -114,10 +114,14 @@ def foreignConstantTerm (kind : Foreign.Kind) (encoding : List Nat) : Term :=
 def foreignEncodedFieldTerm (kind : Foreign.Kind) (value : Term) (index : Nat) : Term :=
   .unary s!"foreign_encode:{kind.nativeName}:{index}" value
 
-/-- Encode packs (x-1 mod p) as low192/high64, followed by the point identity flag. -/
+/-- Encode uses the kind's low radix; Secp points append an identity flag. -/
 def foreignEncodedFieldMaximum (kind : Foreign.Kind) (index : Nat) : Nat :=
   if kind.encodedFieldCount == 5 && index == 4 then 1
-  else if index % 2 == 0 then Foreign.lowRadix - 1 else Foreign.highRadix - 1
+  else if index % 2 == 0 then kind.lowRadix - 1 else Foreign.highRadix - 1
+
+def coordinateExtractionRequiresNonidentity : Foreign.Curve → Bool
+  | .secp256k1 | .secp256r1 => true
+  | .curve25519 => false
 
 def foreignUnaryTerm (opcode : String) (kind : Foreign.Kind) (value : Term) : Term :=
   .unary s!"foreign_{opcode}:{kind.nativeName}" value
@@ -258,7 +262,11 @@ private def normalizeForeignUnary (op : Foreign.UnaryOp) (value : Normalized) : 
     | .neg _ => "neg" | .inv _ => "inv" | .mulGenerator _ => "mulGenerator"
     | .x _ => "x" | .y _ => "y"
   let partialAssertions := match op with
-    | .inv _ | .x _ | .y _ => [foreignNonzeroTerm op.inputKind value.term]
+    | .inv _ => [foreignNonzeroTerm op.inputKind value.term]
+    | .x curve | .y curve =>
+      if coordinateExtractionRequiresNonidentity curve then
+        [foreignNonzeroTerm op.inputKind value.term]
+      else []
     | _ => []
   {value with
     term := foreignUnaryTerm code op.inputKind value.term
@@ -325,14 +333,14 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let normalized ← normalize env value
     unless length ≤ Types.defaultLimits.maxVectorLength do throw "foreign byte input exceeds source bound"
     if let .point _ := kind then
-      unless length == 33 do throw "Secp point decoding requires Bytes33"
+      unless length == kind.byteLength do throw "foreign point decoding requires the curve's exact byte length"
     let chunks ← bytesChunksTerm length normalized.term
     if length == 0 then return {normalized with term := foreignZeroTerm kind}
     let term := foreignFromBytesTerm kind length (bytesFromChunksTerm length chunks)
     let roundtrip := foreignUnaryTerm "to_bytes" kind term
     let partialAssertions := match kind with
       | .point _ => (chunks.zipIdx).map fun (chunk, index) =>
-          Term.binary "test_eq" chunk (encodedBytesChunkTerm 33 roundtrip index)
+          Term.binary "test_eq" chunk (encodedBytesChunkTerm kind.byteLength roundtrip index)
       | _ => []
     pure {
       term

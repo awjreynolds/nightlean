@@ -3,7 +3,7 @@ import Noctium.Field
 namespace Noctium.Foreign
 
 inductive Curve where
-  | secp256k1 | secp256r1
+  | secp256k1 | secp256r1 | curve25519
   deriving Repr, BEq, DecidableEq, Inhabited
 
 inductive Kind where
@@ -110,27 +110,25 @@ def BinaryOp.name : BinaryOp → String
 def Curve.name : Curve → String
   | .secp256k1 => "Secp256k1"
   | .secp256r1 => "Secp256r1"
+  | .curve25519 => "Curve25519"
 
-/-- Moduli from the pinned midnight-curves 0.3.1 k256/p256 field types. -/
+private def curve25519P : Nat := 2 ^ 255 - 19
+private def curve25519L : Nat := 2 ^ 252 + 27742317777372353535851937790883648493
+
+/-- Moduli matching the pinned midnight-curves 0.3.1 foreign field types. -/
 def Curve.baseModulus : Curve → Nat
   | .secp256k1 => 0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
   | .secp256r1 => 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffff
+  | .curve25519 => curve25519P
 
 def Curve.scalarModulus : Curve → Nat
   | .secp256k1 => 0xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
   | .secp256r1 => 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551
+  | .curve25519 => curve25519L
 
 def FieldKind.modulus : FieldKind → Nat
   | .base curve => curve.baseModulus
   | .scalar curve => curve.scalarModulus
-
-def Curve.coefficientA : Curve → Nat
-  | .secp256k1 => 0
-  | .secp256r1 => Curve.baseModulus .secp256r1 - 3
-
-def Curve.coefficientB : Curve → Nat
-  | .secp256k1 => 7
-  | .secp256r1 => 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b
 
 def Kind.curve : Kind → Curve
   | .base curve | .scalar curve | .point curve => curve
@@ -147,10 +145,12 @@ def Kind.sourceName : Kind → String
 
 def Kind.encodedFieldCount : Kind → Nat
   | .base _ | .scalar _ => 2
+  | .point .curve25519 => 4
   | .point _ => 5
 
 def Kind.byteLength : Kind → Nat
   | .base _ | .scalar _ => 32
+  | .point .curve25519 => 32
   | .point _ => 33
 
 def Kind.modulus? : Kind → Option Nat
@@ -160,52 +160,110 @@ def Kind.modulus? : Kind → Option Nat
 
 def kinds : List Kind := [
   .point .secp256k1, .base .secp256k1, .scalar .secp256k1,
-  .point .secp256r1, .base .secp256r1, .scalar .secp256r1]
+  .point .secp256r1, .base .secp256r1, .scalar .secp256r1,
+  .point .curve25519, .base .curve25519, .scalar .curve25519]
 
 def lowRadix : Nat := 2 ^ 192
 def highRadix : Nat := 2 ^ 64
+
+/-- The scalar AssignedField packs four 51-bit limbs into its low native field. -/
+def Kind.lowRadix : Kind → Nat
+  | .scalar .curve25519 => 2 ^ 204
+  | _ => Noctium.Foreign.lowRadix
 
 /-- Canonical native Encode uses x-1 modulo the selected foreign field. -/
 def encodeField (kind : Kind) (value : Nat) : Except String (List Nat) := do
   let some modulus := kind.modulus? | throw "foreign point requires a point encoding"
   unless value < modulus do throw "foreign field value is not canonical"
+  let radix := kind.lowRadix
   let shifted := (value + modulus - 1) % modulus
-  pure [shifted % lowRadix, shifted / lowRadix]
+  pure [shifted % radix, shifted / radix]
 
 /-- Exact inverse of canonical field encoding, with both limb and range checks. -/
 def decodeField (kind : Kind) (encoding : List Nat) : Except String Nat := do
   let some modulus := kind.modulus? | throw "foreign point requires a point decoding"
   let [low, high] := encoding | throw "foreign field encoding requires two limbs"
-  unless low < lowRadix && high < highRadix do throw "foreign field limb is out of range"
-  let shifted := low + lowRadix * high
+  let radix := kind.lowRadix
+  unless low < radix && high < highRadix do throw "foreign field limb is out of range"
+  let shifted := low + radix * high
   unless shifted < modulus do throw "foreign field encoding is not canonical"
   pure ((shifted + 1) % modulus)
 
-/-- Secp identity uses two canonical encodings of base-field zero and flag one. -/
+/-- Encode the universal identity as Secp's flagged zero or Edwards `(0,1)`. -/
 def identityEncoding (curve : Curve) : List Nat :=
-  let shifted := curve.baseModulus - 1
-  let low := shifted % lowRadix
-  let high := shifted / lowRadix
-  [low, high, low, high, 1]
+  let zeroShifted := curve.baseModulus - 1
+  let zero := [zeroShifted % lowRadix, zeroShifted / lowRadix]
+  if curve == .curve25519 then zero ++ [0, 0]
+  else zero ++ zero ++ [1]
 
-/-- Canonical curve membership for the two pinned cofactor-one Secp curves. -/
+/-- Normalize the Edwards coordinate identity to the universal logical point. -/
+def normalizePoint (curve : Curve) (x y : Nat) : Point :=
+  if curve == .curve25519 && x == 0 && y == 1 then .identity else .affine x y
+
+private def curve25519D : Nat :=
+  37095705934669439343138083508754565189542113879843219016388785533085940283555
+
+private structure EdwardsPoint where
+  x : Nat
+  y : Nat
+  z : Nat
+  t : Nat
+
+private def edwardsIdentity : EdwardsPoint := ⟨0, 1, 1, 0⟩
+
+private def edwardsAdd (p₁ p₂ : EdwardsPoint) : EdwardsPoint := Id.run do
+  let p := curve25519P
+  let a := (((p₁.y + p - p₁.x) % p) * ((p₂.y + p - p₂.x) % p)) % p
+  let b := (((p₁.y + p₁.x) % p) * ((p₂.y + p₂.x) % p)) % p
+  let c := (((2 * curve25519D % p) * p₁.t % p) * p₂.t) % p
+  let d := ((2 * p₁.z % p) * p₂.z) % p
+  let e := (b + p - a) % p
+  let f := (d + p - c) % p
+  let g := (d + c) % p
+  let h := (b + a) % p
+  return ⟨e * f % p, g * h % p, f * g % p, e * h % p⟩
+
+private def secpPointValid (curve : Curve) (x y : Nat) : Bool :=
+  let p := curve.baseModulus
+  let lhs := y * y % p
+  match curve with
+  | .secp256k1 => lhs == (x * x % p * x + 7) % p
+  | .secp256r1 => lhs == (x * x % p * x + (p - 3) * x +
+      0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b) % p
+  | .curve25519 => false
+
+private def curve25519PrimeSubgroup (x y : Nat) : Bool := Id.run do
+  let point : EdwardsPoint := ⟨x, y, 1, x * y % curve25519P⟩
+  let mut multiple := point
+  let mut result := edwardsIdentity
+  let mut scalar := curve25519L
+  for _ in [0:253] do
+    if scalar % 2 == 1 then result := edwardsAdd result multiple
+    multiple := edwardsAdd multiple multiple
+    scalar := scalar / 2
+  return result.z != 0 && result.x == 0 && result.y == result.z
+
+/-- Canonical curve membership for the supported Secp and Edwards curves. -/
 def pointValid (curve : Curve) : Point → Bool
   | .identity => true
   | .affine x y => Id.run do
     let p := curve.baseModulus
     if x >= p || y >= p then return false
-    let lhs := y * y % p
-    let rhs := (x * x % p * x + curve.coefficientA * x + curve.coefficientB) % p
-    return lhs == rhs
+    if curve == .curve25519 then
+      if x == 0 && y == 1 then return false
+      let xSq := x * x % p
+      let ySq := y * y % p
+      let lhs := (ySq + p - xSq) % p
+      let rhs := (1 + curve25519D * xSq % p * ySq) % p
+      return lhs == rhs && curve25519PrimeSubgroup x y
+    return secpPointValid curve x y
 
 def Kind.canonical : (kind : Kind) → kind.Denote → Bool
   | .base curve, value => value < curve.baseModulus
   | .scalar curve, value => value < curve.scalarModulus
   | .point curve, value => pointValid curve value
 
-/-- Canonical native Encode for the logical point representation. Affine
-coordinates use the base field's two limbs, followed by a zero identity flag.
-The distinguished identity uses zero encodings and flag one. -/
+/-- Encode a canonical point in the selected curve's native field layout. -/
 def encodePoint (curve : Curve) (point : Point) : Except String (List Nat) := do
   unless pointValid curve point do throw "foreign point is not canonical or on curve"
   match point with
@@ -213,11 +271,19 @@ def encodePoint (curve : Curve) (point : Point) : Except String (List Nat) := do
   | .affine x y => do
     let xFields ← encodeField (.base curve) x
     let yFields ← encodeField (.base curve) y
-    pure (xFields ++ yFields ++ [0])
+    if curve == .curve25519 then pure (xFields ++ yFields)
+    else pure (xFields ++ yFields ++ [0])
 
-/-- Decode the five field representation, requiring exact flags, canonical
-field limbs, and a valid affine point. -/
+/-- Decode canonical Secp flags or Curve25519 coordinates, then validate. -/
 def decodePoint (curve : Curve) (encoding : List Nat) : Except String Point := do
+  if curve == .curve25519 then
+    let [xLow, xHigh, yLow, yHigh] := encoding
+      | throw "foreign Curve25519 point encoding requires four fields"
+    let x ← decodeField (.base curve) [xLow, xHigh]
+    let y ← decodeField (.base curve) [yLow, yHigh]
+    let point := normalizePoint curve x y
+    unless pointValid curve point do throw "Curve25519 point is not in the prime subgroup"
+    return point
   let [xLow, xHigh, yLow, yHigh, flag] := encoding
     | throw "foreign point encoding requires five fields"
   unless flag ≤ 1 do throw "foreign point identity flag must be zero or one"

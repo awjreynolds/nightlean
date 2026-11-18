@@ -442,6 +442,8 @@ private def guardForeignUnary (guard : Expr .bool) : (op : Foreign.UnaryOp) →
     Expr (.foreign op.inputKind) → Expr (.foreign op.outputKind)
   | .inv field, value =>
     .foreignUnary (.inv field) (.select guard value (foreignFieldOne field))
+  | .x .curve25519, value => .foreignUnary (.x .curve25519) value
+  | .y .curve25519, value => .foreignUnary (.y .curve25519) value
   | .x curve, value =>
     .foreignUnary (.x curve) (.select guard value (safeForeignPoint curve))
   | .y curve, value =>
@@ -458,8 +460,13 @@ private def guardForeignBinary (guard : Expr .bool) : (op : Foreign.BinaryOp) �
 
 private def guardForeignFromBytes (guard : Expr .bool) : (kind : Foreign.Kind) →
     {length : Nat} → Expr (.bytes length) → Expr (.foreign kind)
-  | .point curve, 33, value =>
-    .foreignFromBytes (.point curve) (.select guard value (.bytesLiteral 33 (List.replicate 33 0)))
+  | .point .secp256k1, 33, value =>
+    .foreignFromBytes (.point .secp256k1) (.select guard value (.bytesLiteral 33 (List.replicate 33 0)))
+  | .point .secp256r1, 33, value =>
+    .foreignFromBytes (.point .secp256r1) (.select guard value (.bytesLiteral 33 (List.replicate 33 0)))
+  | .point .curve25519, 32, value =>
+    .foreignFromBytes (.point .curve25519)
+      (.select guard value (.bytesLiteral 32 (1 :: List.replicate 31 0)))
   | kind, _, value => .foreignFromBytes kind value
 
 /-- Replace every partial scalar operation with a safe inactive computation.

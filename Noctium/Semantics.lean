@@ -247,7 +247,7 @@ private def checkedForeignToBytes : (ctx : EvalContext) → (kind : Foreign.Kind
   | ctx, .point curve, point => do
     let point ← checkedForeignPoint curve point
     let bytes ← ctx.foreign.pointToBytes curve point
-    checkedForeignBytes 33 bytes
+    checkedForeignBytes (Foreign.Kind.point curve).byteLength bytes
 
 private def checkedForeignFromBytes : (ctx : EvalContext) → (kind : Foreign.Kind) →
     (length : Nat) → (bytes : List Nat) → Except String kind.Denote
@@ -259,11 +259,15 @@ private def checkedForeignFromBytes : (ctx : EvalContext) → (kind : Foreign.Ki
     pure (bytes32IntegerLE bytes % curve.scalarModulus)
   | ctx, .point curve, length, bytes => do
     checkForeignByteInput length bytes
-    unless length == 33 do throw "foreign point decoding requires exactly 33 bytes"
+    unless length == (Foreign.Kind.point curve).byteLength do
+      throw s!"foreign point decoding requires exactly {(Foreign.Kind.point curve).byteLength} bytes"
     let point ← ctx.foreign.pointFromBytes curve bytes
+    let point := match point with
+      | .affine x y => Foreign.normalizePoint curve x y
+      | .identity => .identity
     let point ← checkedForeignPoint curve point
     let encoded ← ctx.foreign.pointToBytes curve point
-    let encoded ← checkedForeignBytes 33 encoded
+    let encoded ← checkedForeignBytes (Foreign.Kind.point curve).byteLength encoded
     unless encoded == bytes do throw "foreign point byte encoding is not canonical"
     pure point
 
@@ -279,7 +283,11 @@ private def checkedForeignUnary : (ctx : EvalContext) → (operation : Foreign.U
     let point ← checkedForeignPoint curve point
     match point with
     | .identity => pure .identity
-    | .affine x y => checkedForeignPoint curve (.affine x ((curve.baseModulus - y) % curve.baseModulus))
+    | .affine x y =>
+      if curve == .curve25519 then
+        checkedForeignPoint curve (Foreign.normalizePoint curve ((curve.baseModulus - x) % curve.baseModulus) y)
+      else
+        checkedForeignPoint curve (.affine x ((curve.baseModulus - y) % curve.baseModulus))
   | _, .inv (.base curve), value => do
     unless value < curve.baseModulus do throw "foreign inverse input is noncanonical"
     checkedPrimeFieldInverse value curve.baseModulus
@@ -292,12 +300,12 @@ private def checkedForeignUnary : (ctx : EvalContext) → (operation : Foreign.U
   | _, .x curve, point => do
     let point ← checkedForeignPoint curve point
     match point with
-    | .identity => throw "foreign identity has no affine x coordinate"
+    | .identity => if curve == .curve25519 then pure 0 else throw "foreign identity has no affine x coordinate"
     | .affine x _ => pure x
   | _, .y curve, point => do
     let point ← checkedForeignPoint curve point
     match point with
-    | .identity => throw "foreign identity has no affine y coordinate"
+    | .identity => if curve == .curve25519 then pure 1 else throw "foreign identity has no affine y coordinate"
     | .affine _ y => pure y
 
 private def checkedForeignBinary : (ctx : EvalContext) → (operation : Foreign.BinaryOp) →
@@ -324,7 +332,11 @@ private def checkedForeignBinary : (ctx : EvalContext) → (operation : Foreign.
     let right ← checkedForeignPoint curve right
     let negative ← match right with
       | .identity => pure .identity
-      | .affine x y => checkedForeignPoint curve (.affine x ((curve.baseModulus - y) % curve.baseModulus))
+      | .affine x y =>
+        if curve == .curve25519 then
+          checkedForeignPoint curve (Foreign.normalizePoint curve ((curve.baseModulus - x) % curve.baseModulus) y)
+        else
+          checkedForeignPoint curve (.affine x ((curve.baseModulus - y) % curve.baseModulus))
     checkedForeignPoint curve (← ctx.foreign.pointAdd curve left negative)
   | _, .mul (.base curve), left, right => do
     unless left < curve.baseModulus && right < curve.baseModulus do throw "foreign base multiplication input is noncanonical"
@@ -338,7 +350,7 @@ private def checkedForeignBinary : (ctx : EvalContext) → (operation : Foreign.
     checkedForeignPoint curve (← ctx.foreign.pointMul curve point scalar)
   | _, .fromCoordinates curve, x, y => do
     unless x < curve.baseModulus && y < curve.baseModulus do throw "foreign coordinates are noncanonical"
-    checkedForeignPoint curve (.affine x y)
+    checkedForeignPoint curve (Foreign.normalizePoint curve x y)
 
 /-- Evaluation is total and returns errors for absent/mistyped witnesses or
 noncanonical field data, rather than silently inventing witness values. -/

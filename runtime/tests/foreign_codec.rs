@@ -185,11 +185,7 @@ fn canonical_native_codec_covers_all_six_foreign_types() {
         assert_eq!(values, expected, "fixture values for {name}");
     }
 
-    for family in [ForeignFamily::Secp256k1, ForeignFamily::Secp256r1] {
-        let name = match family {
-            ForeignFamily::Secp256k1 => "Point<Secp256k1>",
-            ForeignFamily::Secp256r1 => "Point<Secp256r1>",
-        };
+    for name in ["Point<Secp256k1>", "Point<Secp256r1>"] {
         let fixture_identity = fixture
             .identities
             .iter()

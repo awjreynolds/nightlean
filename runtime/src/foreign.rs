@@ -1,4 +1,4 @@
-//! Checked native codecs for the supported Secp256k1 and Secp256r1 values.
+//! Checked native codecs for the supported foreign curve values.
 
 use crate::zkir::{
     ir_instructions::{
@@ -28,12 +28,21 @@ const SECP256R1_GENERATOR: &[u8; 33] = &[
     0xf2, 0x77, 0x03, 0x7d, 0x81, 0x2d, 0xeb, 0x33, 0xa0, 0xf4, 0xa1, 0x39, 0x45, 0xd8, 0x98, 0xc2,
     0x96,
 ];
+const CURVE25519_GENERATOR: &[u8; 32] = &[
+    0x58, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+    0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66, 0x66,
+];
+const CURVE25519_IDENTITY: &[u8; 32] = &[
+    0x01, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,
+];
 
 /// A supported foreign curve family.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ForeignFamily {
     Secp256k1,
     Secp256r1,
+    Curve25519,
 }
 
 /// A role within a foreign curve family.
@@ -116,6 +125,9 @@ impl ForeignType {
             "Secp256r1Base" => Ok(Self::new(ForeignFamily::Secp256r1, ForeignRole::Base)),
             "Secp256r1Scalar" => Ok(Self::new(ForeignFamily::Secp256r1, ForeignRole::Scalar)),
             "Secp256r1Point" => Ok(Self::new(ForeignFamily::Secp256r1, ForeignRole::Point)),
+            "Curve25519Base" => Ok(Self::new(ForeignFamily::Curve25519, ForeignRole::Base)),
+            "Curve25519Scalar" => Ok(Self::new(ForeignFamily::Curve25519, ForeignRole::Scalar)),
+            "Curve25519Point" => Ok(Self::new(ForeignFamily::Curve25519, ForeignRole::Point)),
             _ => bail!("unsupported foreign type"),
         }
     }
@@ -128,13 +140,17 @@ impl ForeignType {
             (ForeignFamily::Secp256r1, ForeignRole::Base) => "Secp256r1Base",
             (ForeignFamily::Secp256r1, ForeignRole::Scalar) => "Secp256r1Scalar",
             (ForeignFamily::Secp256r1, ForeignRole::Point) => "Secp256r1Point",
+            (ForeignFamily::Curve25519, ForeignRole::Base) => "Curve25519Base",
+            (ForeignFamily::Curve25519, ForeignRole::Scalar) => "Curve25519Scalar",
+            (ForeignFamily::Curve25519, ForeignRole::Point) => "Curve25519Point",
         }
     }
 
     pub const fn byte_len(self) -> usize {
-        match self.role {
-            ForeignRole::Point => 33,
-            ForeignRole::Base | ForeignRole::Scalar => 32,
+        match (self.family, self.role) {
+            (ForeignFamily::Curve25519, ForeignRole::Point)
+            | (_, ForeignRole::Base | ForeignRole::Scalar) => 32,
+            (_, ForeignRole::Point) => 33,
         }
     }
 
@@ -205,6 +221,9 @@ impl ForeignType {
             (ForeignFamily::Secp256r1, ForeignRole::Base) => IrType::Secp256r1Base,
             (ForeignFamily::Secp256r1, ForeignRole::Scalar) => IrType::Secp256r1Scalar,
             (ForeignFamily::Secp256r1, ForeignRole::Point) => IrType::Secp256r1Point,
+            (ForeignFamily::Curve25519, ForeignRole::Base) => IrType::Curve25519Base,
+            (ForeignFamily::Curve25519, ForeignRole::Scalar) => IrType::Curve25519Scalar,
+            (ForeignFamily::Curve25519, ForeignRole::Point) => IrType::Curve25519Point,
         }
     }
 }
@@ -217,6 +236,14 @@ pub struct ForeignValue {
 }
 
 impl ForeignValue {
+    /// Construct the field zero or group identity for this foreign type.
+    pub fn zero(ty: ForeignType) -> Result<Self> {
+        if ty.family == ForeignFamily::Curve25519 && ty.role == ForeignRole::Point {
+            return Self::from_bytes(ty, CURVE25519_IDENTITY);
+        }
+        Self::from_bytes(ty, &vec![0; ty.byte_len()])
+    }
+
     /// Decode the exact canonical native-field encoding for `ty`.
     pub fn decode(ty: ForeignType, encoded: &[Fr]) -> Result<Self> {
         let native_type = ty.native_type();
@@ -298,6 +325,7 @@ impl ForeignValue {
                 let bytes = match self.ty.family {
                     ForeignFamily::Secp256k1 => SECP256K1_GENERATOR.as_slice(),
                     ForeignFamily::Secp256r1 => SECP256R1_GENERATOR.as_slice(),
+                    ForeignFamily::Curve25519 => CURVE25519_GENERATOR.as_slice(),
                 };
                 let generator = from_bytes_offcircuit(&generator_type.native_type(), bytes)?;
                 ec_mul_offcircuit(&generator, &self.value)?
@@ -379,6 +407,18 @@ fn value_matches_type(value: &IrValue, ty: ForeignType) -> bool {
             ForeignFamily::Secp256r1,
             ForeignRole::Point,
             IrValue::Secp256r1Point(_)
+        ) | (
+            ForeignFamily::Curve25519,
+            ForeignRole::Base,
+            IrValue::Curve25519Base(_)
+        ) | (
+            ForeignFamily::Curve25519,
+            ForeignRole::Scalar,
+            IrValue::Curve25519Scalar(_)
+        ) | (
+            ForeignFamily::Curve25519,
+            ForeignRole::Point,
+            IrValue::Curve25519Point(_)
         )
     )
 }
