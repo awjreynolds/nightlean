@@ -4727,13 +4727,23 @@
         "../../tests/BooleanGates.lean",
         "../../runtime/tests/native_boolean_gates.rs"
       ]
+    },
+    {
+      "issue": 25,
+      "commit": "38b2b35",
+      "scope": "Native hash-to-curve over ordered Native fields, including empty input, point composition/encoding and canonical typed Jubjub circuit outputs. Focused source/native/Rust Session checks passed. No new keys/proofs/deployment or whole-language preservation claim.",
+      "refs": [
+        "../development/hash-to-curve.md",
+        "../../tests/HashToCurve.lean",
+        "../../runtime/tests/hash_to_curve.rs"
+      ]
     }
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "c59d0748cd1af9532d2c64ca5fc4a14ccf0e83e7",
+    "sourceCommit": "38b2b35e532a63f8af508026f1a4df60f074ebc9",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded fixed-byte values, persistent hashing, typed Boolean gates and typed Jubjub paths. This is not complete overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 37,
+    "registeredOpcodeCount": 38,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4771,12 +4781,12 @@
       "load_constant",
       "and",
       "or",
-      "xor"
+      "xor",
+      "hash_to_curve"
     ],
     "notExposedOpcodeCount": 14,
     "notExposedOpcodes": [
       "copy",
-      "hash_to_curve",
       "into_bytes32",
       "from_bytes32",
       "reverse_bytes",
@@ -5027,6 +5037,18 @@
       "limits": "No new keys, proofs or deployment. Full typed Boolean overloads, other constant codecs and compiler-wide preservation remain open. The separate formal witness semantics has pre-existing byte/curve gaps and needs reconciliation with all new primitives under issue 21.",
       "implementationCommit": "c59d0748cd1af9532d2c64ca5fc4a14ccf0e83e7",
       "nativeCheckerRuntimeSeconds": 0.03
+    },
+    "hashToCurveEvidence": {
+      "source": "tests/HashToCurve.lean",
+      "native": "runtime/tests/hash_to_curve.rs",
+      "guide": "../development/hash-to-curve.md",
+      "scope": "Complete pinned hash_to_curve instruction signature within source vector bounds: 0..1024 ordered Native fields -> JubjubPoint. No byte/FAB overload or curve selector exists in this instruction. No application domain field is added implicitly.",
+      "integration": "Typed results reuse point arithmetic, coordinate and Bytes32 encoding paths. Operand assertions and private origins are preserved. Native producer admits only Native operands and exact inputs/output fields. Rust uses the existing pinned transient_crypto hash API.",
+      "focusedChecks": "Empty, one-field and domain-prefixed inputs; two input pairs; point addition/generator composition; compressed encoding; changed input order/domain/private transcript; retained private assertion around empty hash; malformed source/oracle/producer inputs; one real Rust Session case.",
+      "limits": "No new keys, proofs or deployment. Lean reference hashing/point validation requires qualified oracles, and the helper diagnostic trace cannot return curve values. Formal witness semantics and compiler-wide preservation remain open under issue 21. Other native type and curve families remain unqualified.",
+      "implementationCommit": "38b2b35e532a63f8af508026f1a4df60f074ebc9",
+      "nativeCheckerRuntimeSeconds": 0.04,
+      "typedCircuitOutputs": "Removed the obsolete blanket circuit-output rejection after reusing existing canonical projections. The same focused source/native case checks four typed point outputs, one typed scalar output and compressed point bytes through contract results."
     }
   }
 }
