@@ -61,6 +61,7 @@ jobs:
           lake env lean tests/ForeignOperations.lean
           lake env lean tests/ForeignStorage.lean
           lake env lean tests/ForeignTree.lean
+          lake env lean tests/JubjubStorage.lean
           lake env lean tests/Curve25519.lean
           lake env lean --run tests/Curve25519Encoding.lean > /tmp/noctium-curve25519-encoding.json
           cmp /tmp/noctium-curve25519-encoding.json runtime/tests/fixtures/curve25519/321/encoding.json

@@ -10,6 +10,13 @@ private def hashCapabilities : Capabilities :=
 private def inputRequirement (input : Input) : InputRequirement :=
   {identifier := "%input_" ++ input.name, visibility := input.visibility, ty := input.ty}
 
+private def readInputRequirement (name : String) (ty : Ty) : InputRequirement :=
+  match ty with
+  | .jubjubScalar =>
+    {identifier := "%input_" ++ name, visibility := .«public», ty := .native,
+      canonicalJubjubScalar := true}
+  | _ => {identifier := "%input_" ++ name, visibility := .«public», ty}
+
 private def inputAliases (inputs : List InputRequirement) : AliasEnvironment :=
   inputs.map fun input => (input.identifier.drop 7 |>.toString, .input input.identifier)
 
@@ -121,8 +128,7 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   let publicCount := Impact.publicInputReadCount value.circuit.inputs
   let circuitInputs := value.circuit.inputs.flatMap Input.requirements
   let readInputs := (plan.reads.drop publicCount).flatMap fun read =>
-      read.bindings.map fun (name, ty) =>
-        ({identifier := "%input_" ++ name, visibility := .«public», ty} : InputRequirement)
+      read.bindings.map fun (name, ty) => readInputRequirement name ty
   let mut inputs := circuitInputs ++ readInputs
   let mut aliases := sourceInputAliases value.circuit.inputs ++ inputAliases readInputs
   let mut outputBounds := []
@@ -132,6 +138,22 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     aliases := (output.name, result.term) :: aliases
     outputBounds := outputBounds ++ result.bounds
     outputAssertions := outputAssertions ++ result.assertions
+  for read in plan.reads.drop publicCount do
+    let guard ← read.guard.mapM fun guard =>
+      convert value.span (normalize aliases guard)
+    match read.ty with
+    | .jubjubScalar =>
+      let raw := Term.input ("%input_" ++ read.name)
+      aliases := (read.name, .unary "jubjub_scalar_from_native" raw) :: aliases
+    | .jubjubPoint =>
+      let xName := read.bindings[0]!.1
+      let yName := read.bindings[1]!.1
+      let x := Term.input ("%input_" ++ xName)
+      let y := Term.input ("%input_" ++ yName)
+      let x := guard.map (fun value => Term.select value.term x (.constant 0)) |>.getD x
+      let y := guard.map (fun value => Term.select value.term y (.constant 1)) |>.getD y
+      aliases := (read.name, .binary "from_coordinates_jubjub" x y) :: aliases
+    | _ => pure ()
   let mut readAssertions := []
   let mut readBounds := []
   let mut readInputIndex := circuitInputs.length

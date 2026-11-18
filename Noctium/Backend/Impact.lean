@@ -187,10 +187,17 @@ private def foreignReadDefault : (kind : Foreign.Kind) → Expr (.foreign kind)
   | .scalar curve => .foreignScalar curve 0
   | .point curve => .foreignIdentity curve
 
+def Read.jubjubPointCoordinateName (name : String) (index : Nat) : String :=
+  s!"_noctium_jubjub_read_{name}_{index}"
+
 def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   if !read.components.isEmpty then none else
   match read.ty, read.guard with
-  | .bytes _, _ | .jubjubScalar, _ | .jubjubPoint, _ | _, none => none
+  | .bytes _, _ | _, none => none
+  | .jubjubScalar, some guard => some (.eq
+      (.jubjubScalarToNative (.ref read.name))
+      (.select guard (.jubjubScalarToNative (.ref read.name)) (.native 0)))
+  | .jubjubPoint, some _ => none
   | .foreign kind, some guard => some (.eq (.ref read.name)
       (.select guard (.ref read.name) (foreignReadDefault kind)))
   | .native, some guard => some (.eq (.ref read.name) (.select guard (.ref read.name) (.native 0)))
@@ -199,10 +206,24 @@ def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
       (.select guard (.ref read.name) (.uint maximum 0)))
 
 def Read.bindings (read : Read) : List (String × Ty) :=
-  if read.components.isEmpty then [(read.name, read.ty)] else read.components
+  if !read.components.isEmpty then read.components else
+  if read.ty == .jubjubPoint then
+    [(Read.jubjubPointCoordinateName read.name 0, .native),
+      (Read.jubjubPointCoordinateName read.name 1, .native)]
+  else [(read.name, read.ty)]
 
 def Read.inactiveDefaultConstraints (read : Read) : List (Expr .bool) :=
-  if read.components.isEmpty then read.inactiveDefaultConstraint.toList else
+  if read.components.isEmpty then
+    if read.ty == .jubjubPoint then
+      match read.guard with
+      | none => []
+      | some guard =>
+        let point : Expr .jubjubPoint := .ref read.name
+        [.eq (.jubjubCoordinate point 0)
+            (.select guard (.jubjubCoordinate point 0) (.native 0)),
+          .eq (.jubjubCoordinate point 1)
+            (.select guard (.jubjubCoordinate point 1) (.native 1))]
+    else read.inactiveDefaultConstraint.toList else
   match read.guard with
   | none => []
   | some guard => read.components.filterMap fun (name, type) =>
@@ -251,7 +272,8 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
   let publicCount := publicInputReadCount entry.circuit.inputs
   let env := entry.circuit.inputs.map (fun input => (input.name, input.ty)) ++
     entry.circuit.outputs.map (fun output => (output.name, output.ty)) ++
-    (plan.reads.drop publicCount).flatMap Read.bindings
+    (plan.reads.drop publicCount).flatMap fun read =>
+      (if read.ty == .jubjubPoint then [(read.name, read.ty)] else []) ++ read.bindings
   for field in plan.fields do field.validate expressionCapabilities env
   for guard in plan.guards do guard.validate expressionCapabilities env
   unless plan.activityGuards.isEmpty || plan.activityGuards.length == plan.operations.length do
@@ -298,6 +320,11 @@ private def foreignNativeFields : (kind : Foreign.Kind) → Expr (.foreign kind)
 private def storageWriteValue : (ty : Ty) → Expr ty → Except String Op
   | .foreign kind, value =>
     pure (.pushFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value) true)
+  | .jubjubScalar, value =>
+    pure (.pushFields (Lean.Json.str "JubjubScalar") [.jubjubScalarToNative value] true)
+  | .jubjubPoint, value =>
+    pure (.pushFields (Lean.Json.str "JubjubPoint")
+      [.jubjubCoordinate value 0, .jubjubCoordinate value 1] true)
   | ty, value => do
     pure (.push (.field (← nativeValue ty value)) true)
 
@@ -306,6 +333,13 @@ private def storageReadValue (ty : Ty) (name : String) : Except String Op := do
   | .foreign kind =>
     let value : Expr (.foreign kind) := .ref name
     pure (.popeqFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value))
+  | .jubjubScalar =>
+    let value : Expr .jubjubScalar := .ref name
+    pure (.popeqFields (Lean.Json.str "JubjubScalar") [.jubjubScalarToNative value])
+  | .jubjubPoint =>
+    let value : Expr .jubjubPoint := .ref name
+    pure (.popeqFields (Lean.Json.str "JubjubPoint")
+      [.jubjubCoordinate value 0, .jubjubCoordinate value 1])
   | _ => pure (.popeq (.field (← nativeRead ty name)))
 
 private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) :=
@@ -750,7 +784,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
     let value ← match ty with
-      | .foreign _ => storageWriteValue ty value
+      | .foreign _ | .jubjubScalar | .jubjubPoint => storageWriteValue ty value
       | _ => pure (.push (← nativeAligned ty value) true)
     let operations ← pathWriteOps slot keys (some value)
     pure {plan with operations := plan.operations ++ operations}
@@ -1135,7 +1169,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
     let value ← match ty with
-      | .foreign _ => storageWriteValue ty value
+      | .foreign _ | .jubjubScalar | .jubjubPoint => storageWriteValue ty value
       | _ => pure (.push (← nativeAligned ty value) true)
     let operations ← pathWriteOps slot keys (some value)
     plan := {plan with operations := plan.operations ++ operations}

@@ -1118,16 +1118,42 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
   let publicCount := Impact.publicInputReadCount entry.circuit.inputs
   for read in plan.reads.drop publicCount do
     let activity ← match read.guard with
-      | none => pure Json.null
-      | some guard => pure (toJson (← lowerExpr guard))
+      | none => pure none
+      | some guard => pure (some (← lowerExpr guard))
+    let activityJson := (activity.map toJson).getD Json.null
     for (name, ty) in read.bindings do
       let output := "%input_" ++ name
       match ty with
+      | .jubjubScalar => do
+        emit "public_input" [
+          ("guard", activityJson),
+          ("type", nativeType), ("output", toJson output)]
+        let scalar ← lowerJubjubScalarFromNative output
+        let encoded ← lowerJubjubScalarToNative scalar
+        emit "constrain_eq" [("a", toJson output), ("b", toJson encoded)]
+        modify fun state => {state with aliases := (read.name, scalar) :: state.aliases}
       | .foreign kind =>
-        emit "public_input" [("guard", activity), ("type", toJson kind.nativeName), ("output", toJson output)]
+        emit "public_input" [
+          ("guard", activityJson),
+          ("type", toJson kind.nativeName), ("output", toJson output)]
       | _ =>
-        emit "public_input" [("guard", activity), ("type", nativeType), ("output", toJson output)]
+        emit "public_input" [
+          ("guard", activityJson),
+          ("type", nativeType), ("output", toJson output)]
         constrainType ty output
+    if read.ty == .jubjubPoint then do
+      let xName := read.bindings[0]!.1
+      let yName := read.bindings[1]!.1
+      let x := "%input_" ++ xName
+      let y := "%input_" ++ yName
+      let x ← match read.guard with
+        | none => pure x
+        | some guard => lowerExpr (.select guard (.ref xName : Expr .native) (.native 0))
+      let y ← match read.guard with
+        | none => pure y
+        | some guard => lowerExpr (.select guard (.ref yName : Expr .native) (.native 1))
+      let point ← lowerPointFromCoordinates x y
+      modify fun state => {state with aliases := (read.name, point) :: state.aliases}
     for condition in read.inactiveDefaultConstraints do
       emit "assert" [("cond", toJson (← lowerExpr condition))]
   for condition in plan.guards do
