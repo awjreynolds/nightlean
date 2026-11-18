@@ -7,6 +7,7 @@ Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/
 Install [elan](https://github.com/leanprover/elan#installation), Git and Python 3. The repository pins Lean 4.35.0. From the repository root:
 
 ```sh
+python3 scripts/check-branding.py
 lake build
 bash scripts/check-lean.sh
 ```
