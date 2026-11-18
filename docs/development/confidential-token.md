@@ -38,6 +38,7 @@ components, with identity/zero defaults for an absent owner or spender.
 | creditEpochs | Account ID to a native u64 Counter |
 | escrow | Owner and spender IDs to two ciphertexts and an owner memo |
 | escrowSpendEpochs | Owner and spender IDs to a permanent u64 Counter |
+| name, symbol, decimals | Sealed constructor metadata |
 | initialized | Public initialization precondition |
 | totalSupply | Public UInt128 supply |
 
@@ -74,7 +75,7 @@ sequence checks all five views, then self-moves one from Alice spendable to
 Alice pending. Supply stays ten and Alice's credit epoch advances to two.
 Clearing with epoch one rejects. Clearing with epoch two empties only Alice's
 memo List and preserves the epoch and other ledger state. Self-transfer and
-wrong-key clearing also reject. The expanded focused native case passes in 0.55 seconds.
+wrong-key clearing also reject. The expanded focused native case passes in 0.56 seconds.
 
 The delegated-spend nonce preimage fits existing source operations:
 `persistentHashVector32([seed, domain, owner, spender, toBytes32(epochNative)])`.
@@ -99,10 +100,16 @@ two. Alice keeps one spendable and one pending, public supply ends at nine.
 The delegated transfer consumes distinct spend/credit seed replies. Overspending
 rejects with checked unsigned subtraction before native execution.
 
-Deployment starts from explicitly configured initialized state, zero supply and
-empty maps. Constructor/sealed metadata, nominal return layouts and composition remain open. All sixteen reference
-circuit entrypoints are present; this does not establish constructor or full
-ABI parity. The completed-contract localnet demonstration is still pending. Mint is the ungated
-public-supply benchmark operation, not a production issuance policy. Native
-acceptance here is checker evidence. No new keys, proofs or deployment were
-created for this source milestone.
+The [source constructor](constructors.md) takes public name, symbol and UInt8
+decimals. It initializes sealed metadata and sets the initialization flag.
+Maps and counters start empty and supply starts at zero. The lifecycle uses
+`construct_state`, then checks Noctium Token/NOC/6 metadata again at the end.
+Opaque strings use native Compress alignment with their exact UTF-8 bytes.
+
+All sixteen reference circuit entrypoints and the constructor metadata path
+are present. Nominal result layouts and composition remain open, as does the
+completed-contract localnet demonstration. Constructor execution is off chain,
+without a constructor proof on the ledger. Mint is the ungated public-supply
+benchmark operation, not a production issuance policy. Native acceptance here
+is checker evidence. No new keys, proofs or deployment were created for this
+source milestone.

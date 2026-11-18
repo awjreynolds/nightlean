@@ -204,7 +204,8 @@ registration, pending credit, sweep, transfer, burn, self-moves, epoch-checked m
 clearing, encrypted escrow approval/replacement, delegated transfer/burn and views through native source-witness
 execution. It preserves the pending/spendable split and checks a valid forged
 candidate against actual ledger state. This covers all sixteen reference circuit entrypoints,
-with an explicit initialized-genesis premise and no new deployment.
+with source-constructor initialization and sealed metadata. Nominal ABI and
+the completed-contract localnet demonstration remain open. No new deployment.
 
 ## Minimum checks
 
