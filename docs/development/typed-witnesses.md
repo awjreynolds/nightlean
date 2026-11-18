@@ -196,3 +196,7 @@ The failure theorem uses a one-shot model of accepted execution. Its source-only
 Native checker, prover, C++ and ledger tests complement those source facts. They do not establish general Helpers lowering correctness, a verified Rust implementation or circuit-proved private storage. Full compiler assurance, native guarded execution and web/mobile packaging remain separate delivery goals.
 
 [`runtime/tests/witness_checker.rs`](../../runtime/tests/witness_checker.rs) changes private witness leaves after host preparation, then invokes the upstream checker on the emitted CALL relation. The tests cover dishonest scalar replies, nominal result fields and noncanonical Boolean and bounded integer encodings. This separates native constraint rejection from provider validation and host assertions.
+
+## Guarded native binding update
+
+[Binding schema2](guarded-witnesses.md) adds closed call guards, conditional provider execution and canonical skipped native slots. Straight-line schema1 bindings retain their existing format. The scoped native case does not extend the earlier source semantic theorems to schema2. General guarded ledger/helper effects and complete compiler preservation remain separate work.

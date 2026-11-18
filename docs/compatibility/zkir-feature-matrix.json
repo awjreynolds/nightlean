@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "0577238d1ada957ba5cdff5f2b84b1e8d2447f6f",
+    "sourceCommit": "121c415917551cc15f05a8c8dd6ee2a8a90a74a0",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -5353,6 +5353,29 @@
         "returnBindings": 1
       },
       "limits": "No new keys/proofs/deployments or K benchmark. Guarded witness scheduling and structured helper state/effect integration remain open under #43. Host-control plans retain nativeGuardQualified:false. Pure condition work repeats across separate host output/constraint expressions; native sharing follows existing CSE. Full compiler preservation remains open."
+    },
+    "guardedTypedWitnesses": {
+      "checkedOn": "2026-11-18",
+      "sourceCommit": "121c415917551cc15f05a8c8dd6ee2a8a90a74a0",
+      "source": "../../tests/GuardedWitness.lean",
+      "native": "../../runtime/tests/guarded_witness.rs",
+      "documentation": "../development/guarded-witnesses.md",
+      "bindingSchema": 2,
+      "legacyBindingSchema": 1,
+      "newOpcodes": 0,
+      "scope": "Closed per-call guards, sparse active static ordinals, canonical inactive inputs enforced by native constraints, skipped callbacks and exact completed maps. Predicate, branch, unit/empty and continuation calls retain source order.",
+      "checks": {
+        "compilerClaimBuild": "passed,73jobs",
+        "sourceExport": "passed",
+        "nativeEndToEndAndEssentialRejects": "passed,2cases in0.01seconds",
+        "legacyRuntimeUnitEmptyCase": "passed",
+        "legacyRetainedArtifacts": "20byte-identical files",
+        "instructions": 48,
+        "staticCalls": 7,
+        "privateWitnessFields": 5,
+        "bindingBytes": 9060
+      },
+      "limits": "No new keys/proofs/deployments or proving performance measurement. Scoped native case covers scalar slots. General structured helper ledger effects, whole guarded proof/ledger qualification and schema2 semantic-preservation proof remain open. Host-only plans stay separately gated."
     }
   }
 }

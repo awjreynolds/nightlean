@@ -640,6 +640,21 @@
         ],
         "limits": "Guarded witness scheduling and ledger/private-state/event/call statements inside helper bodies remain gated. Host-control plans remain nativeGuardQualified:false. Pure host condition computations repeat across distinct output/constraint expressions. No new keys/proofs/deployments or general preservation qualification.",
         "fullEquivalence": "unverified"
+      },
+      "guardedWitnessUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "121c415917551cc15f05a8c8dd6ee2a8a90a74a0",
+        "scope": "Typed guarded witness calls use binding schema2 with closed activity predicates, sparse static ordinals, skipped callbacks and native-enforced canonical inactive slots. Focused actual Session/native case covers a witness predicate, both branches, cloned continuation, unit/empty results and private staging.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Witness.lean",
+          "runtime/src/control.rs",
+          "tests/GuardedWitness.lean",
+          "runtime/tests/guarded_witness.rs",
+          "docs/development/guarded-witnesses.md"
+        ],
+        "limits": "Native case uses scalar witness slots. Other defaults reuse existing typed codec/default paths. Legacy schema1 remains compatible. No new keys/proofs/deployments, complete guarded state/helper effect integration or general witness lowering preservation. Existing witness semantic model does not qualify schema2.",
+        "fullEquivalence": "unverified"
       }
     },
     {
@@ -875,7 +890,22 @@
         "Noctium/Frontend.lean",
         "docs/development/native-localnet.md"
       ],
-      "equivalence": "unverified"
+      "equivalence": "unverified",
+      "guardedWitnessUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "121c415917551cc15f05a8c8dd6ee2a8a90a74a0",
+        "scope": "Typed guarded witness calls use binding schema2 with closed activity predicates, sparse static ordinals, skipped callbacks and native-enforced canonical inactive slots. Focused actual Session/native case covers a witness predicate, both branches, cloned continuation, unit/empty results and private staging.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Witness.lean",
+          "runtime/src/control.rs",
+          "tests/GuardedWitness.lean",
+          "runtime/tests/guarded_witness.rs",
+          "docs/development/guarded-witnesses.md"
+        ],
+        "limits": "Native case uses scalar witness slots. Other defaults reuse existing typed codec/default paths. Legacy schema1 remains compatible. No new keys/proofs/deployments, complete guarded state/helper effect integration or general witness lowering preservation. Existing witness semantic model does not qualify schema2.",
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-PRIVATE-WITNESS",
@@ -906,6 +936,21 @@
           "docs/development/typed-witness-qualification.md",
           "tests/witness62-public/qualification-evidence.json"
         ],
+        "fullEquivalence": "unverified"
+      },
+      "guardedWitnessUpdate": {
+        "checkedOn": "2026-11-18",
+        "commit": "121c415917551cc15f05a8c8dd6ee2a8a90a74a0",
+        "scope": "Typed guarded witness calls use binding schema2 with closed activity predicates, sparse static ordinals, skipped callbacks and native-enforced canonical inactive slots. Focused actual Session/native case covers a witness predicate, both branches, cloned continuation, unit/empty results and private staging.",
+        "evidence": [
+          "Noctium/Helpers.lean",
+          "Noctium/Witness.lean",
+          "runtime/src/control.rs",
+          "tests/GuardedWitness.lean",
+          "runtime/tests/guarded_witness.rs",
+          "docs/development/guarded-witnesses.md"
+        ],
+        "limits": "Native case uses scalar witness slots. Other defaults reuse existing typed codec/default paths. Legacy schema1 remains compatible. No new keys/proofs/deployments, complete guarded state/helper effect integration or general witness lowering preservation. Existing witness semantic model does not qualify schema2.",
         "fullEquivalence": "unverified"
       }
     },

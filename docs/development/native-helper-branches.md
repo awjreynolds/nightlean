@@ -25,7 +25,7 @@ The helper's private Bool condition also needs explicit disclosure before contro
 
 This path compiles witness-free structured helper control into native circuit expressions, then connects those results to the established contract effect API. It does not add ledger-effect statements inside `Helpers.Program` bodies. It does not reinterpret private host `stage` operations as public ledger writes.
 
-Guarded witness scheduling remains gated until native witness-slot bindings and inactive defaults are qualified. External private-state, ledger, event and call effects retain their existing capability checks. Host-control plans emitted by `noctium_control` keep `nativeGuardQualified: false`; selecting that authoring route does not implicitly produce a native contract.
+Ordinary helper compilation retains its guarded-witness gate. The separate [typed witness route](guarded-witnesses.md) now binds conditional providers and canonical skipped slots through `Witness.compile`. External ledger, event and call effects retain their existing capability checks. Host-control plans emitted by `noctium_control` keep `nativeGuardQualified: false`; selecting that authoring route does not implicitly produce a native contract.
 
 The circuit model has no shared temporary across separate outputs and constraints. Pure condition computations therefore repeat in host evaluation across those expressions. Native instruction sharing follows the existing compiler cache. Effectful condition evaluation is outside this slice.
 
