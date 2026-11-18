@@ -1,0 +1,444 @@
+{
+  "schemaVersion": 1,
+  "checkedOn": "2026-11-18",
+  "scope": "One completed sixteen-entrypoint confidential-token scenario on isolated localnet, including real native contract and DUST proofs. Not complete compiler, overload, privacy or production qualification.",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "network": {
+    "networkId": "undeployed",
+    "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+    "specVersion": 2001100,
+    "transactionVersion": 4
+  },
+  "compiler": {
+    "implementation": "Lean4",
+    "sourceRevision": "ca520fcf3c119229b0018c156b18ad185afcde9e",
+    "toolchain": "leanprover/lean4:v4.35.0"
+  },
+  "hostRevision": "6e19ce7a440ec01d9a8a4e369a5ee09479808564",
+  "hostSourceSha256": {
+    "runtime/examples/confidential_token_localnet.rs": "7ea6a6873302d04e561e95e212d4e56ed93f307ba05f0d41c46e5d62ca764cf4",
+    "runtime/examples/confidential_token_localnet/token.rs": "cfacc3b4fb988149373b6a98f612aa74940b462c48d4c0dff84dc8cb6019adb3"
+  },
+  "contractSource": "examples/openzeppelin/ConfidentialToken.lean",
+  "contractSourceSha256": "f841e14b4112b7a07a042b5d16347d2edc47d54f8f742900b8cdc33e542520ef",
+  "bundleManifestSha256": {
+    "_move": "558f6fd361f66135d9681b80b32937dbf082365932ddaab47bdd7fb6274fb35f",
+    "allowance": "a2b7a1a551ea45328365fe9fa70021b3f361c196af8044bd4a776d2939b448aa",
+    "approve": "54d27f76af02c6f505ac051a086227f984255603b7dd8d49d2f3e2247a80e1a4",
+    "balanceOf": "079fc04a27ea285ae2cc56fa0e07a3a144c66af70d51e57fe6eb3b5337cf205b",
+    "burn": "866031e958b6fb4bda2c28c6999bb8cd99650229d29f7eac098e69e60d4ef140",
+    "burnFrom": "1178297f035f26e668245e655d7186c54b7e2bb11475153e3f77693a9302739b",
+    "clearMemos": "b4df8f7d673fd29c81ee13350e6f97182f31f443d692adb08e4ff488137a746d",
+    "computeAccountId": "111f83ac9e9025afe47338e93c0a24967e4fc7070eb14103d1666d67e2e45ec0",
+    "isRegistered": "06766a61abe880406dbedb8f575c3314970d7273ade0ff13687ca7f2f6f2a873",
+    "mint": "23026351a17f1ca59aed126dadea2d883d7a5789d6980c94c55d9d8132a19b52",
+    "pendingOf": "0668b9539cb2ea85c187786efc04b5a99b7bf585100d662cd7a6210e1dd2bf73",
+    "registerWithKey": "c1ba6ecef0c7c00aa717382dac75e81ddb09f8313d2dbf6e852c56cc5417ccbd",
+    "sweep": "2342cff0a633589a12bfc08b826755bc1a17d0a49541b5ff0a8cdabeaf893ad1",
+    "totalSupply": "0d2e6268be03691f4f3a907e6f413a3ab91d9113f26118761520b11f4ea51756",
+    "transfer": "b782bf52e68d38f6512e8be4e2987e30d1cbb589dca3fbfae79ca1b6bab24ae8",
+    "transferFrom": "de05081f69ca719e0d3b8b09325c6a8a53f4eeb8ccdf2f545ba26e632c5741e1"
+  },
+  "ledgerParametersSha256": "3998de345e2d862ed586825386cf58ee78d8cad9990ac3b68e5c3f49900e9f7e",
+  "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+  "installation": {
+    "initialOperationCount": 8,
+    "finalOperationCount": 16,
+    "maintenanceLocked": true,
+    "receipts": [
+      {
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "6f316e0d1bc6e9c6e195918b2bb78721a18ceb8c639a2264cc38d05fcdefdd7c",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 17659,
+          "contractStateSha256": "fc18dd839466e81a278bf21bb4ed0c4051ae9d1edf51f2334a4a69e9d5f42a54",
+          "event": "Deploy",
+          "extrinsicHash": "dba78309630dd2ca1fe8df3095035813d9a43e22f3bd5f08bfb58360b99b0e39",
+          "extrinsicIndex": 4,
+          "finalizedHash": "6f316e0d1bc6e9c6e195918b2bb78721a18ceb8c639a2264cc38d05fcdefdd7c",
+          "finalizedHeight": "23336",
+          "height": "23336",
+          "intentId": "60ffd6e8aeb0e8f7151560d1af273e0ed9b6953888b82599988fac1f68f88830",
+          "transactionId": "d642aaa0ffd0ef5535264909acd11fba73f9afab23c677f6ac50dafc77b0cb0f"
+        },
+        "stage": "finalized"
+      },
+      {
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "b8fa116c2df3fa2eb0d3ced9b2ee3d0b3020478ef955683e0a2e1fe893163179",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 33919,
+          "contractStateSha256": "a8183ee5ad89efa60961163e89328bd6e2dcecd873b6a6fabcfeeb028316f77d",
+          "event": "Maintain",
+          "extrinsicHash": "9603d654b083e6b56010a5335b2d66f0e0031f710728b029c93b78f6bc1e2b7c",
+          "extrinsicIndex": 4,
+          "finalizedHash": "b8fa116c2df3fa2eb0d3ced9b2ee3d0b3020478ef955683e0a2e1fe893163179",
+          "finalizedHeight": "23339",
+          "height": "23339",
+          "intentId": "1d103cd379c1bbd3e4e882ca3e1a8e6943482e12bf5b69a7fda625e5609fc1bc",
+          "transactionId": "08b32cedf9cae85673892dba92aa14864cacd2c33f54c73e25c2b6ae95bb46d0"
+        },
+        "stage": "finalized"
+      }
+    ]
+  },
+  "scriptedScenario": {
+    "processExitCode": 0,
+    "acceptedCalls": [
+      {
+        "entrypoint": "totalSupply",
+        "circuitK": 7,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "5db3c76229959b72d9a247af8d93c7d0fed27ead77b32a2298333ac4cec43740",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 33919,
+          "contractStateSha256": "a8183ee5ad89efa60961163e89328bd6e2dcecd873b6a6fabcfeeb028316f77d",
+          "event": "Call",
+          "extrinsicHash": "1e77de932ada638df2dc9d7508471d13f207ee14acc7633074e8ec2c474704eb",
+          "extrinsicIndex": 4,
+          "finalizedHash": "5db3c76229959b72d9a247af8d93c7d0fed27ead77b32a2298333ac4cec43740",
+          "finalizedHeight": "23612",
+          "height": "23612",
+          "intentId": "bf8daaefb6e72832a493d4745f49c3555b0878813cccf901b0632c0a25a475bb",
+          "transactionId": "a852837714136c80b4c84d81c8ffe72b8cd65eb615bb9444ef0c93e7f8c4f908"
+        }
+      },
+      {
+        "entrypoint": "computeAccountId",
+        "circuitK": 13,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "d33534b6f553b76c91f370e495a494c2f125341a339ac667be903ae22c8b20c9",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 33919,
+          "contractStateSha256": "a8183ee5ad89efa60961163e89328bd6e2dcecd873b6a6fabcfeeb028316f77d",
+          "event": "Call",
+          "extrinsicHash": "bb1e9197912936c770ea58b65fda51ccc913d698db60f7e03cba7a3757ba0df3",
+          "extrinsicIndex": 4,
+          "finalizedHash": "d33534b6f553b76c91f370e495a494c2f125341a339ac667be903ae22c8b20c9",
+          "finalizedHeight": "23615",
+          "height": "23615",
+          "intentId": "9640a08e9d162cc7b38747ef3768f38915e7e1a7deaaceb373aeea73ea68405b",
+          "transactionId": "a7889f3c91cba243c6fd45e22f5bdae115e5e41de27ada48abda05a7f42e2dd1"
+        }
+      },
+      {
+        "entrypoint": "registerWithKey",
+        "circuitK": 13,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "40aad393c368f4a8d5a0898c7fd60d1e5ae54f1dfd47e53e315019ae2ed8ad2b",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 34560,
+          "contractStateSha256": "f60f510b57acff18d0d52a2ab230d1a6a53c9184b9c07ca95022bd63d2090d69",
+          "event": "Call",
+          "extrinsicHash": "5480a299985b7fbae3d1b43361a0cc6e18c22599bec55217b960c46c22a94472",
+          "extrinsicIndex": 4,
+          "finalizedHash": "40aad393c368f4a8d5a0898c7fd60d1e5ae54f1dfd47e53e315019ae2ed8ad2b",
+          "finalizedHeight": "23618",
+          "height": "23618",
+          "intentId": "ac12471d84e3bf49a25df7efb1df87401665f9ce5010d017458986973b7acd9b",
+          "transactionId": "0e254ee7a588c82515844576b4a1fda3387a428f793fbdf7c20f607ede3f5076"
+        }
+      },
+      {
+        "entrypoint": "registerWithKey",
+        "circuitK": 13,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "390d786d0681119663332460e0be083933ac5ddd8c305a263c74506fb36029ed",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 34305,
+          "contractStateSha256": "609ddcf428e12eff50d30336856fb201df5daf1968a88ed2a6ddf4053d7d4d90",
+          "event": "Call",
+          "extrinsicHash": "c30816935cbf53232795735c4a89cd9c6ac264dc9e276d64e5b5ae6c3a32b4c3",
+          "extrinsicIndex": 4,
+          "finalizedHash": "390d786d0681119663332460e0be083933ac5ddd8c305a263c74506fb36029ed",
+          "finalizedHeight": "23621",
+          "height": "23621",
+          "intentId": "4f74b070b78bedef2ba713258180202367901bd73c49418c583d1707b2cd5915",
+          "transactionId": "577eef364c47c9f3ee8f86933c07fa1a8b0ce92136ba650a2566b59db2143901"
+        }
+      },
+      {
+        "entrypoint": "isRegistered",
+        "circuitK": 9,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "c37f7f58109e76f32048bfb42b5b9d8e9eb94a471635963690a4fcddfd4a3eac",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 34305,
+          "contractStateSha256": "609ddcf428e12eff50d30336856fb201df5daf1968a88ed2a6ddf4053d7d4d90",
+          "event": "Call",
+          "extrinsicHash": "295e2d053c204dd780d6e90c8a4399bbdf27ed28400d26b575c1f6e732fcee8e",
+          "extrinsicIndex": 4,
+          "finalizedHash": "c37f7f58109e76f32048bfb42b5b9d8e9eb94a471635963690a4fcddfd4a3eac",
+          "finalizedHeight": "23624",
+          "height": "23624",
+          "intentId": "365aa8d58c7ea9cf2e0bcd31329ed7b831eba279f2b169544429fe62e2677d6e",
+          "transactionId": "01053f06d46335bee2596fd92ae1820aaca728fdb23220259ade4ee8c1868af6"
+        }
+      },
+      {
+        "entrypoint": "balanceOf",
+        "circuitK": 10,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "9239f313e6ccc2bfea47a910ab196f04cbe2c0508df3d14167c8ac544f8743fa",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 34305,
+          "contractStateSha256": "609ddcf428e12eff50d30336856fb201df5daf1968a88ed2a6ddf4053d7d4d90",
+          "event": "Call",
+          "extrinsicHash": "54df76283b42be032f5b40620a205b183c6ec0a9c0b4c27749b8138dafc40689",
+          "extrinsicIndex": 4,
+          "finalizedHash": "9239f313e6ccc2bfea47a910ab196f04cbe2c0508df3d14167c8ac544f8743fa",
+          "finalizedHeight": "23627",
+          "height": "23627",
+          "intentId": "40a08eeda776670fa509b20b09278f21b635b114d291f6bff56532978cf1be87",
+          "transactionId": "7a9d0497905d6b5b7d8688b31252a992da5cdc365a8f57e0ff08a0d295859525"
+        }
+      },
+      {
+        "entrypoint": "pendingOf",
+        "circuitK": 10,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "1699214033953d452b749bc9d9d8bed7eb44d4fba2683359cdc2f1de11138c91",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 34305,
+          "contractStateSha256": "609ddcf428e12eff50d30336856fb201df5daf1968a88ed2a6ddf4053d7d4d90",
+          "event": "Call",
+          "extrinsicHash": "6277eff87ccfb98fe84eda57d5f42443657bb3dd52269c6bb3a4e404086a653f",
+          "extrinsicIndex": 4,
+          "finalizedHash": "1699214033953d452b749bc9d9d8bed7eb44d4fba2683359cdc2f1de11138c91",
+          "finalizedHeight": "23630",
+          "height": "23630",
+          "intentId": "8f5e6887ee5c2099c59c14569158ee15fb41c4a821a26a49f2f00fcef74446cb",
+          "transactionId": "4a7af9baf5d0287c52107d63ec4132d98d6348cb6700fd2b04b632a701e895a0"
+        }
+      },
+      {
+        "entrypoint": "mint",
+        "circuitK": 15,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "1fd74ca4270707be937c5d1d776e188340fd03945d97e9324c1928fb3e16bdb1",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 35321,
+          "contractStateSha256": "f2927c6c27235238e08080352a760a80ad5955b7a2b0c8d4f3ea37e8ade6d52e",
+          "event": "Call",
+          "extrinsicHash": "ab23a3ba6b075fde42a8ecf3dc84f8ac687990b7bcf90e336099fa141b4a1936",
+          "extrinsicIndex": 4,
+          "finalizedHash": "1fd74ca4270707be937c5d1d776e188340fd03945d97e9324c1928fb3e16bdb1",
+          "finalizedHeight": "23634",
+          "height": "23634",
+          "intentId": "25bd6de07eb2ac2f791569264bfe2f8d042b1f927909d4b642c2ca03cdff9610",
+          "transactionId": "4ea2322d37fd110a6246be946aa40e0e00e6165191cf65b9e82c09a7615a2b17"
+        }
+      },
+      {
+        "entrypoint": "sweep",
+        "circuitK": 13,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "5d53fc2635ffd7231ebeb261c9e876732db343e4fb33819c7aa3346fc05f95ff",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 35321,
+          "contractStateSha256": "56768067bce8f2825b448cbf924933efdc80fa6142f3ac3dcd2ca627e966629c",
+          "event": "Call",
+          "extrinsicHash": "44392599955e1d15313d5963d7896cfd146eb6ef072d2a31f017ab3cc3420026",
+          "extrinsicIndex": 4,
+          "finalizedHash": "5d53fc2635ffd7231ebeb261c9e876732db343e4fb33819c7aa3346fc05f95ff",
+          "finalizedHeight": "23637",
+          "height": "23637",
+          "intentId": "cca47e0861674570ded515b5589572f48561b1530abf7a09d9c9046202cf5b33",
+          "transactionId": "76802c074f1217a0f2fcf50a635f4005c6dbb2ee704cb57ef9ff8111583528d6"
+        }
+      },
+      {
+        "entrypoint": "transfer",
+        "circuitK": 16,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "fc136cf31395a68e5ce75f61f72624aed7699c4689a652bfba952d165e2b4ef5",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 35793,
+          "contractStateSha256": "0d990a7e25b778eb5b3d3786f3df2f2994403b43665860a91edcc164714f3e5b",
+          "event": "Call",
+          "extrinsicHash": "ee18f40e19c62ad64ed7e832db65d6c1eb58b3e75c66ccefadbf0e5108d7b876",
+          "extrinsicIndex": 4,
+          "finalizedHash": "fc136cf31395a68e5ce75f61f72624aed7699c4689a652bfba952d165e2b4ef5",
+          "finalizedHeight": "23643",
+          "height": "23643",
+          "intentId": "34848d0b98863ae5680d634f6f04f1d9b765a3e824626c0a2e5f4a06f0595333",
+          "transactionId": "4d9f7936bae0ff0d5e2aa702d48bb66854c5c49ea9be35df78b60182ecbb1b0d"
+        }
+      },
+      {
+        "entrypoint": "burn",
+        "circuitK": 15,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "75bbccfd92c989b5b28b0c65655d3576b54b548cb3ac766859179ac196efd355",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 35793,
+          "contractStateSha256": "45be3f64a0ff4efd98341ec863667cf0b778862cb808e1356906cd3e6954a5dc",
+          "event": "Call",
+          "extrinsicHash": "077a60907e5d3c74887554c527141ae9a8073f0e57b2c7d59ee350e7911dfe77",
+          "extrinsicIndex": 4,
+          "finalizedHash": "75bbccfd92c989b5b28b0c65655d3576b54b548cb3ac766859179ac196efd355",
+          "finalizedHeight": "23648",
+          "height": "23648",
+          "intentId": "633b78bee3e8329ad74195a2076a2ba557f4ad005e35ae6a13b1cc593e0f031d",
+          "transactionId": "2ddecd888d96fdb2614fed3e5b3e1fb6f6ebf9e4d0c553ab8316fbece465b42d"
+        }
+      },
+      {
+        "entrypoint": "_move",
+        "circuitK": 16,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "3ed94a8bd8db92d041b8ce409bb0b9a4dc4f937634876b8d0e93870dc8328ff5",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 36175,
+          "contractStateSha256": "77ff634881cd77bf44c253d47f020baa236385f4b232de9bd00eadab84d5fc62",
+          "event": "Call",
+          "extrinsicHash": "0806ae453c7cada2509d82ae7e3c70a3068b2b2f62a7268e4898d83a6f90d6f4",
+          "extrinsicIndex": 4,
+          "finalizedHash": "3ed94a8bd8db92d041b8ce409bb0b9a4dc4f937634876b8d0e93870dc8328ff5",
+          "finalizedHeight": "23654",
+          "height": "23654",
+          "intentId": "d38b300028e1f21b3628e5d4ce4dbb72291c68d43968817feef19210d92c6a34",
+          "transactionId": "9e3957eaf6df6e1ea3e772e8a827cf45c3b13a9daffa2008f332e395dc277b65"
+        }
+      },
+      {
+        "entrypoint": "clearMemos",
+        "circuitK": 13,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "cfc2419897dc22f8d220b41153a115a95765d52cb529f15931231c0bace06a57",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 35828,
+          "contractStateSha256": "8da6be975f435984fcb664d3b89be16d3ea2858602b64b7e205c66cf58f46ade",
+          "event": "Call",
+          "extrinsicHash": "5c6fae38341adb40fcc925765bdb7272dc52f35db45112e0de068e01f1eeb1dc",
+          "extrinsicIndex": 4,
+          "finalizedHash": "cfc2419897dc22f8d220b41153a115a95765d52cb529f15931231c0bace06a57",
+          "finalizedHeight": "23657",
+          "height": "23657",
+          "intentId": "5d7f86bb851586f56c23aee1df28c4f969bedb701034d842c055b70b5b71304c",
+          "transactionId": "f017882151379d1a8b806256a69a4990fe5c514ed9166a7ae500c525dd7e279d"
+        }
+      },
+      {
+        "entrypoint": "approve",
+        "circuitK": 16,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "7dd06a2b90185178fbfda747d4ff7859561ecfb36f2827135c0cf8bbbc9d0c63",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 36339,
+          "contractStateSha256": "36c159f2835a9a034606696efefa447ba1db948750708df01e43768bc6520e8c",
+          "event": "Call",
+          "extrinsicHash": "c2974ee17b244a9c7ce2df537b8c17a9e9e47db88e7ba122b8b26d4b17c41935",
+          "extrinsicIndex": 4,
+          "finalizedHash": "7dd06a2b90185178fbfda747d4ff7859561ecfb36f2827135c0cf8bbbc9d0c63",
+          "finalizedHeight": "23664",
+          "height": "23664",
+          "intentId": "3c85d8557c06fb2abea9ab0e67ba797083b1ddcf339075972213b2db062bd996",
+          "transactionId": "46d1ffdb58534ef3f42935540fe6bb8f6c80ace3cd922373a78b023ecb0c77b6"
+        }
+      },
+      {
+        "entrypoint": "allowance",
+        "circuitK": 11,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "a9144298ad315893a63109985e1b7558f444e77ea03ae532be299c1fd9565758",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 36339,
+          "contractStateSha256": "36c159f2835a9a034606696efefa447ba1db948750708df01e43768bc6520e8c",
+          "event": "Call",
+          "extrinsicHash": "a29b703b82d430fef39318177cdbf5b9a754f4df64cc1a6200c323c096735f0e",
+          "extrinsicIndex": 4,
+          "finalizedHash": "a9144298ad315893a63109985e1b7558f444e77ea03ae532be299c1fd9565758",
+          "finalizedHeight": "23667",
+          "height": "23667",
+          "intentId": "428a716f2ef4b9754a881f26c9413dbf2311a7830a8d7bddb5bca13142cdaf41",
+          "transactionId": "70af0290a5bb512b6760dd94cda36534ee8b57b97b908f518318bc9f38ad5b63"
+        }
+      },
+      {
+        "entrypoint": "transferFrom",
+        "circuitK": 16,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "29508c3bedd9f62a94831cd7d7ef30b9923cf576ffda5a1528109562dbf036b7",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 36607,
+          "contractStateSha256": "01f015450c4679c07a8ce2b35b66d0a1f5f730205ca3da0f47a0557662e31504",
+          "event": "Call",
+          "extrinsicHash": "b73f75a0d55d1c2d81339ec4f1c386aa067d190a50ac673be36981ebebfedc2a",
+          "extrinsicIndex": 4,
+          "finalizedHash": "29508c3bedd9f62a94831cd7d7ef30b9923cf576ffda5a1528109562dbf036b7",
+          "finalizedHeight": "23674",
+          "height": "23674",
+          "intentId": "f87eb3b37236d40cec0a00de8fa46b51a8faeb60f25ebc86862d195fe28074e1",
+          "transactionId": "b70721fd2d91fa1dd7e50271d946ba16020d7a9db02cfa2c9a50c22ded565042"
+        }
+      },
+      {
+        "entrypoint": "burnFrom",
+        "circuitK": 16,
+        "privateCommitted": true,
+        "receipt": {
+          "blockHash": "2e67d8d3cbb3757dbd05b395d99d9072ea2f85c97c54160b447897326519480f",
+          "contractAddress": "116861c1962b9503b444d161c468aeafafbbfff56fec6bf5b5b79e1be3370685",
+          "contractStateBytes": 36597,
+          "contractStateSha256": "dc25b73f3e88dd002848546877d864e4c9711b100b899da22337d2c00a1ea612",
+          "event": "Call",
+          "extrinsicHash": "d286ffa296b81c6c212b3538eb58fdc743785ef765d1aafe788abab3497c1c0e",
+          "extrinsicIndex": 4,
+          "finalizedHash": "2e67d8d3cbb3757dbd05b395d99d9072ea2f85c97c54160b447897326519480f",
+          "finalizedHeight": "23680",
+          "height": "23680",
+          "intentId": "4b79ccb9ba08a1e10ad2f02fa9f2acefd8fc8cdab49927923de88de678ec3ef2",
+          "transactionId": "a404435a432e45051aea47d7e08861183320cd077ce8d3bd04f9410a767c22d4"
+        }
+      }
+    ],
+    "distinctEntrypoints": 16,
+    "finalAssertions": {
+      "totalSupply": 9,
+      "aliceSpendable": 1,
+      "alicePending": 1,
+      "bobSpendable": 0,
+      "bobPending": 7,
+      "ownerEscrow": 0,
+      "spenderEscrow": 0,
+      "ownerEscrowMemo": 0,
+      "bobCreditEpoch": 2,
+      "escrowSpendEpoch": 2
+    }
+  },
+  "checks": {
+    "exactSerializedStateAtEachFinalizedReceipt": true,
+    "privateCasCommittedBeforeNextCall": true,
+    "trustedJournalRecoveryObserved": true,
+    "nativeWitnessImplementation": "Rust",
+    "privateSeedFreshPerRequest": true,
+    "compactCompilerOrRuntimeUsed": false,
+    "nodeRuntimeRequiredByHost": false
+  },
+  "limits": [
+    "Development wallet and bootstrap secrets are public fixtures.",
+    "Plaintext callback searches only amounts from 0 through 64.",
+    "Scenario uses one approval of three. Refund and replacement are covered by retained native checker evidence, not this chain run.",
+    "No new negative proof or deployment campaign. Existing focused native rejection evidence remains separate.",
+    "Source constructors execute off chain. This run does not prove frontend/compiler preservation or generic non-disclosure."
+  ]
+}

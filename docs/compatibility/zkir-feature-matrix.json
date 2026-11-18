@@ -4688,6 +4688,15 @@
         "../development/named-helpers.md",
         "../../tests/helpers/qualification-evidence.json"
       ]
+    },
+    {
+      "issue": 68,
+      "commit": "6e19ce7",
+      "scope": "Completed native confidential-token localnet scenario, seventeen accepted calls across sixteen source-generated entrypoints. Reused retained checker rejection evidence. Full native coverage, nominal ABI/composition and wider SDK assurance remain open.",
+      "refs": [
+        "../development/confidential-token.md",
+        "../../tests/confidential-token-localnet-evidence.json"
+      ]
     }
   ],
   "currentSourceSnapshot": {
@@ -4776,8 +4785,7 @@
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
     "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
     "remainingTokenDependencies": [
-      "nominal composite result layouts and cross-contract claim composition",
-      "completed-token localnet lifecycle"
+      "nominal composite result layouts and cross-contract claim composition"
     ],
     "minimumChecksPolicy": "Until feature implementation is complete: build changed code and run one focused source/native example per feature group with necessary rejection coverage. Reuse existing evidence. Defer broad regressions, new proof/key generation and deployment campaigns. Run one completed-token localnet demonstration.",
     "restrictedInternalValueTypes": [
@@ -4946,6 +4954,12 @@
       "native": "runtime/tests/constructor_metadata.rs",
       "implementationCommit": "67d2e54ccb1da2ccc3c360012aab902c7e38ec93",
       "scope": "Public typed source constructor, sealed cells and host-only OpaqueString metadata. Native UTF8 Compress encoding preserves trailingU+0000. One focused native test passes constructor arguments/defaults, metadata read, missing/extra/out-of-range arguments and forged sealed mutation rejection. Source rejects inactive sealed writes. Deployment assembly uses constructor arguments; artifact checks bind constructor/state metadata. No ledger constructor proof or new deployment. Private constructor witnesses and arbitrary initialization effects remain open."
+    },
+    "completedTokenLocalnetEvidence": {
+      "checkedOn": "2026-11-18",
+      "hostRevision": "6e19ce7",
+      "evidence": "../../tests/confidential-token-localnet-evidence.json",
+      "scope": "Seventeen accepted native-proof calls cover all sixteen reference token entrypoints on one isolated localnet contract after eight-key deployment, eight-key signed installation and permanent authority lock. Final supply, decrypted balances, escrow, memo and counters checked. This is not complete opcode, overload, composition or compiler preservation evidence."
     }
   }
 }

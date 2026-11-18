@@ -108,8 +108,8 @@ Maps and counters start empty and supply starts at zero. The lifecycle uses
 Opaque strings use native Compress alignment with their exact UTF-8 bytes.
 
 All sixteen reference circuit entrypoints and the constructor metadata path
-are present. Nominal result layouts and composition remain open, as does the
-completed-contract localnet demonstration. Constructor execution is off chain,
+are present. Nominal result layouts and composition remain open. The completed
+localnet scenario now exercises every entrypoint with native proofs and receipts. Constructor execution is off chain,
 without a constructor proof on the ledger. Mint is the ungated public-supply
 benchmark operation, not a production issuance policy. Native acceptance here
 is checker evidence. No new keys, proofs or deployment were created for this
@@ -162,5 +162,15 @@ This example accepts only the isolated development genesis in the
 secrets are public fixtures. The plaintext callback decrypts the actual witness
 request and searches fixture amounts up to 64. Each seed request receives fresh
 host entropy. These callbacks demonstrate the host boundary and require a real
-wallet implementation for production use. The complete token scenario's
-finalized execution is still in progress.
+wallet implementation for production use. On 2026-11-18, the complete scenario
+finished with 17 accepted calls across all sixteen entrypoints.
+
+[Public receipt evidence](../../tests/confidential-token-localnet-evidence.json)
+records the deployment, locked verifier installation and each accepted call.
+The final call finalized at block 23680. Supply is nine. Alice holds one
+spendable and one pending, Bob holds seven pending and zero spendable, and both
+escrow copies and the owner escrow memo decrypt to zero. Bob's credit epoch and
+the permanent escrow spend epoch both equal two. The process exited
+successfully after checking these values from the verified final receipt state.
+This chain scenario approves three once. Approval refund and replacement retain
+their separate native checker evidence described above.
