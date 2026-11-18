@@ -4771,7 +4771,7 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "789efd3c615b33b6d8db624e28f349b9e621d58c",
+    "sourceCommit": "11784a1942690b4891df5455a79efa0dc13fd684",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
@@ -5226,7 +5226,7 @@
       "readBoundary": "Nonempty reads use bounded Native chunk bindings in FAB high-to-low order, reconstructed as low-to-high logical bytes. Active reads validate declared scalar leaf type, exact alignment and canonical atom encoding. Inactive reads return zero bytes without inspecting skipped paths.",
       "emptySemantics": "Source Bytes0 inputs/results remain valid singleton values with zero native payload fields. Empty ledger bytes remain explicit Cell values distinct from Null. Native typed Bytes0 inputs are not emitted. Empty write expressions retain evaluation and assertions in the length-header let expression.",
       "limits": "No new key/proof generation or deployment. Byte keys other than Bytes32, composite record leaves, full source/native preservation and portable SDK qualification remain separate work.",
-      "focusedChecks": "66-job compiler build, Source fixture, exact input/instruction over-cap guards and guide snippet pass. One native case checks three invocations, all 14 old/new results, 1,122 private fields, lengths 0/1/31/32/33/1024, trailing zeros, inactive missing defaults, overwrite and sibling preservation. Altered transcript, false empty-write assertion, bad input length, Null/wrong-alignment/noncanonical cells and wrong leaf/key schemas reject. Focused control projection/range/length check and retained public Bytes32 native compatibility pass. Legacy 3.2.0 library compilation passes.",
+      "focusedChecks": "66-job compiler build, Source fixture, exact input/instruction over-cap guards and guide snippet pass. One native case checks three invocations, all 14 old/new results, 1,122 private fields, lengths 0/1/31/32/33/1024, trailing zeros, inactive missing defaults, overwrite and sibling preservation. Altered transcript, false empty-write assertion, bad input length, Null/wrong-alignment/noncanonical cells and wrong leaf/key schemas reject. Focused control projection/range/length check and retained public Bytes32 native compatibility pass. Legacy 3.2.0 library compilation passes. Clean CI explicitly builds the existing Claim module and runs the producer inventory/claim-lowering check.",
       "nativeSeconds": 0.05,
       "artifactMetrics": {
         "zkirInstructions": 4813,
