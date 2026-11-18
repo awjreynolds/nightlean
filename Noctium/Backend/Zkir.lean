@@ -41,6 +41,7 @@ private def checkConstants : Expr ty → Except String Unit
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
   | .toBytes32 value => checkConstants value
+  | .reverseBytes32 value => checkConstants value
   | .fromBytes32 value => checkConstants value
   | .inv value => checkConstants value
   | .persistentHash32 value => checkConstants value
@@ -324,6 +325,20 @@ private def lowerComputedBytes32ByteAt (values : List String) (index : Nat) : Lo
         pure output
     encodeByte byte
 
+private def lowerReverseBytes32 (values : List String) : LowerM (List String) := do
+  let (low31, highByte) ← bytes32Chunks values
+  let bytes ← lowerBytesFromChunks low31 highByte
+  let key : ExpressionKey := ("reverse", [bytes], none)
+  let reversed ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "reverse" [("bytes", toJson bytes), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  let (low, high) ← encodeBytes32 reversed
+  pure [low, high]
+
 private def nativeTypeName : Ty → String
   | .native => "Scalar<BLS12-381>"
   | .jubjubScalar => "Scalar<Jubjub>"
@@ -429,6 +444,8 @@ private def lowerBytes : Expr (.bytes length) → LowerM (List String)
     let input ← lowerExpr value
     let (low, high) ← lowerToBytes32 input
     pure [low, high]
+  | .reverseBytes32 value => do
+    lowerReverseBytes32 (← lowerBytes value)
   | .select condition yes no => do
     let condition ← lowerExpr condition
     let (yesLow, yesHigh) ← bytes32Chunks (← lowerBytes yes)
@@ -645,7 +662,7 @@ def lowerExpr : Expr ty → LowerM String
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
-  | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ => do
+  | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ | .reverseBytes32 _ => do
     rejectLowering "Bytes32 expressions must be consumed with their typed FAB alignment"
     pure "0x00"
 termination_by value => sizeOf value

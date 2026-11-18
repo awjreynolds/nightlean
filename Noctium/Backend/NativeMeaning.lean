@@ -122,7 +122,7 @@ private def opaqueBytes32Value : Term → Bool
   | .unary opcode _ => opcode == "persistent_hash32" || opcode == "persistent_hash_native" ||
       opcode.startsWith "persistent_hash_vector32:" || opcode.startsWith "persistent_hash_native_vector:" ||
       opcode.startsWith "to_bytes32_" || opcode.startsWith "from_bytes32_" ||
-      opcode == "bytes32_from_chunks"
+      opcode == "bytes32_from_chunks" || opcode == "reverse_bytes32"
   | _ => false
 
 private def splitBytes32Fields : Term → Except String (Term × Term)
@@ -149,6 +149,10 @@ private def bytes32FromChunksTerm (low31 highByte : Term) : Term :=
 /-- A fixed byte projection after reconstructing canonical Bytes32 chunks. -/
 def bytes32ByteAtTerm (bytes : Term) (index : Nat) : Term :=
   .unary s!"bytes32_byte_at:{index}" bytes
+
+/-- Reversal preserves the typed byte sequence rather than reversing its field chunks. -/
+def reverseBytes32Term (bytes : Term) : Term :=
+  .unary "reverse_bytes32" bytes
 
 private def arithmetic (ty : Ty) (opcode : String) (left right : Normalized) : Normalized :=
   {requireSourceType ty (.binary opcode left.term right.term) (left.bounds ++ right.bounds) with assertions := left.assertions ++ right.assertions}
@@ -228,6 +232,11 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let bounds := (normalized.map (fun item => item.bounds)).flatten
     let assertions := (normalized.map (fun item => item.assertions)).flatten
     pure {term, bounds, assertions}
+  | .reverseBytes32 value => do
+    let normalized ← normalize env value
+    let (highByte, low31) ← alignedBytes32Fields normalized
+    let bytes := bytes32FromChunksTerm low31 highByte
+    pure {normalized with term := reverseBytes32Term bytes}
   | .toBytes32 (source := source) value => do
     let normalized ← normalize env value
     let opcode := match source with

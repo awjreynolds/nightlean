@@ -271,6 +271,11 @@ fn bytes_operation(
                 ],
             },
         ),
+        "reverseBytes32" => (
+            vec![Bytes32],
+            Bytes32,
+            crate::Expr::ReverseBytes32 { value: argument(0) },
+        ),
         "nativeToBytes32" | "jubjubScalarToBytes32" | "jubjubPointToBytes32" => (
             vec![match operation {
                 "nativeToBytes32" => Native,

@@ -102,6 +102,7 @@ inductive BytesOp where
   | persistentHashNative
   | persistentHashNativeVector
   | persistentHashPoint
+  | reverseBytes32
   | degradeToNative
   | toBytes32 (source : Ty)
   deriving Repr, BEq, DecidableEq, Inhabited
@@ -112,6 +113,7 @@ def BytesOp.operationName : BytesOp → String
   | .persistentHashNative => "persistentHashNative"
   | .persistentHashNativeVector => "persistentHashNativeVector"
   | .persistentHashPoint => "persistentHashPoint"
+  | .reverseBytes32 => "reverseBytes32"
   | .degradeToNative => "degradeToNative"
   | .toBytes32 .native => "nativeToBytes32"
   | .toBytes32 .jubjubScalar => "jubjubScalarToBytes32"
@@ -137,6 +139,9 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
   | .persistentHashPoint =>
     unless argumentCount == 1 do throw "persistentHashPoint requires one JubjubPoint argument"
     pure ([.jubjubPoint], .bytes 32)
+  | .reverseBytes32 =>
+    unless argumentCount == 1 do throw "reverseBytes32 requires one Bytes32 argument"
+    pure ([.bytes 32], .bytes 32)
   | .degradeToNative =>
     unless argumentCount == 1 do throw "degradeToNative requires one Bytes32 argument"
     pure ([.bytes 32], .native)
@@ -1572,6 +1577,9 @@ mutual
           let point ← liftD (typedExpr span .jubjubPoint value)
           pure (scalarValue (Expr.persistentHashNativeVector [
             Expr.jubjubCoordinate point 0, Expr.jubjubCoordinate point 1]))
+        | .reverseBytes32, [value] => do
+          let value ← liftD (typedExpr span (.bytes 32) value)
+          pure (scalarValue (Expr.reverseBytes32 value))
         | .toBytes32 source, [value] => do
           let value ← liftD (typedExpr span source value)
           pure (scalarValue (Expr.toBytes32 value))

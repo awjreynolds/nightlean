@@ -188,6 +188,8 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
   | .bytes32Literal values =>
     if values.length == 32 && values.all (· ≤ 255) then pure values
     else .error "Bytes32 literal must contain exactly 32 byte values"
+  | .reverseBytes32 value => do
+    pure ((← value.eval ctx env).reverse)
   | .jubjubScalarFromNative value => do
     pure ((← value.eval ctx env) % Jubjub.scalarOrder)
   | .jubjubScalarToNative value => do
@@ -313,6 +315,11 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     let value ← ctx.poseidon2 domain (← a.eval ctx env) (← b.eval ctx env)
     if value >= ctx.modulus then throw "hash oracle returned noncanonical value"
     pure value
+
+theorem Expr.eval_reverseBytes32_twice (ctx : EvalContext) (env : EvalEnv)
+    (value : Expr (.bytes 32)) :
+    (Expr.reverseBytes32 (Expr.reverseBytes32 value)).eval ctx env = value.eval ctx env := by
+  simp [Expr.eval]
 
 /-- Check constraints in source order, preserving the first evaluation error. -/
 def runConstraints (ctx : EvalContext) (env : EvalEnv) : List (Expr .bool) → Except String Unit

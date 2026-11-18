@@ -399,6 +399,11 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     let term ← toBytes32Term input.valueType input.term
     let fact ← combine term 0 [input]
     defineResult state instruction {fact with valueType := .bytes32}
+  | "reverse" => do
+    let bytes ← argument state instruction "bytes"
+    ensure (bytes.valueType == .bytes32) "reverse requires a typed Bytes32 operand"
+    let fact ← combine (reverseBytes32Term bytes.term) 0 [bytes]
+    defineResult state instruction {fact with valueType := .bytes32}
   | "bytes_from_natives" => do
     let values ← nativeArguments state instruction "inputs"
     ensure ((← natField instruction "len") == 32)

@@ -122,6 +122,7 @@ scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
+scoped syntax "reverseBytes32(" nlexpr ")" : nlexpr
 scoped syntax "bytes32(" str ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
@@ -337,6 +338,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
+  | `(nlexpr| reverseBytes32($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
@@ -464,6 +466,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless valueTy == .bytes 32 do
       throwErrorAt stx "persistentHash32 requires a Bytes32 expression"
     pure (.bytes 32, ← `(Noctium.Expr.persistentHash32 $value))
+  | `(nlexpr| reverseBytes32($value)) => do
+    let value ← expected env value (.bytes 32)
+    pure (.bytes 32, ← `(Noctium.Expr.reverseBytes32 $value))
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"

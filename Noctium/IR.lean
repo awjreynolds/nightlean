@@ -27,6 +27,8 @@ inductive Expr : Ty → Type where
   /-- A canonical source-time Bytes32 value. The frontend pads UTF-8 bytes on
   the right and validation checks the resulting 32 byte values. -/
   | bytes32Literal (values : List Nat) : Expr (.bytes 32)
+  /-- Reverse the source-order bytes of a typed Bytes32 value. -/
+  | reverseBytes32 (value : Expr (.bytes 32)) : Expr (.bytes 32)
   /-- SHA-256 over an ordered, bounded vector of FAB-aligned Bytes32 values. -/
   | persistentHashVector32 (values : List (Expr (.bytes 32))) : Expr (.bytes 32)
   /-- SHA-256 over the canonical 32-byte little-endian Native field encoding. -/
@@ -391,6 +393,9 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .bytesAt value index => do
     value.validate caps env
     unless index < 32 do throw "Bytes32 byte index is out of range"
+  | .reverseBytes32 value => do
+    unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
+    value.validate caps env
   | .persistentHash32 value => do
     unless caps.persistentHash32 do throw "target lacks qualified Bytes32 persistent-hash support"
     value.validate caps env

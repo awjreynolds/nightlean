@@ -8,7 +8,7 @@ inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
-  | bytes32Conversion
+  | bytes32Conversion | bytes32Reverse
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
   deriving Repr, BEq, DecidableEq
 
@@ -16,7 +16,7 @@ inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
   | bytes32ByteExtraction | nativeLimbs
   | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
-  | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks
+  | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks | bytes32Reversal
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -42,7 +42,7 @@ inductive GuardRule where
 inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
   | sourceHashTerm | encodedHashChunks | canonicalScalarInput | exactCoordinateRoundtrip
-  | typedInverseResult | typedBytes32Conversion | bytes32ByteIndex | typedEncoding
+  | typedInverseResult | typedBytes32Conversion | bytes32ByteIndex | typedEncoding | bytes32Reversal
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -179,6 +179,10 @@ def instructionSupport (opcode : String) : Except String Support :=
     let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
       .noGuard .typedBytes32Conversion ["input", "output"]
     {descriptor with encoding := .bytes32NativeSerialization}
+  | "reverse" => .supported <|
+    let descriptor := scalar .bytes32Reverse .propagateAll .pure .typedBytes32Input
+      .noGuard .bytes32Reversal ["bytes", "output"]
+    {descriptor with encoding := .bytes32Reversal}
   | "from_bytes" => .supported <|
     let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
       .noGuard .typedBytes32Conversion ["bytes", "type", "output"]

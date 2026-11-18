@@ -40,6 +40,7 @@ origins. Missing references fail closed instead of becoming public values. -/
 def origins (env : Environment) : Expr ty → Except String Origins
   | .native _ | .bool _ | .uint _ _ => pure []
   | .bytesField value _ | .bytesAt value _ => origins env value
+  | .reverseBytes32 value => origins env value
   | .persistentHash32 value => origins env value
   | .bytes32Literal _ => pure []
   | .persistentHashVector32 values => do

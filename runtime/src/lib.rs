@@ -175,6 +175,10 @@ pub enum Expr {
     ToBytes32 {
         value: Box<Expr>,
     },
+    #[serde(rename = "reverseBytes32")]
+    ReverseBytes32 {
+        value: Box<Expr>,
+    },
     #[serde(rename = "fromBytes32")]
     FromBytes32 {
         #[serde(rename = "type")]
@@ -434,6 +438,14 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             Value::JubjubPoint(value) => jubjub::to_bytes(value)?.to_vec(),
             _ => bail!("toBytes32 requires Native, JubjubScalar or JubjubPoint"),
         }),
+        Expr::ReverseBytes32 { value } => {
+            let Value::Bytes(mut bytes) = evaluate(value, env)? else {
+                bail!("reverseBytes32 requires Bytes32")
+            };
+            ensure!(bytes.len() == 32, "reverseBytes32 requires 32 bytes");
+            bytes.reverse();
+            Value::Bytes(bytes)
+        }
         Expr::FromBytes32 { ty, value } => {
             let Value::Bytes(bytes) = evaluate(value, env)? else {
                 bail!("fromBytes32 requires Bytes32")

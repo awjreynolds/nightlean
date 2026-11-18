@@ -25,6 +25,8 @@ private def expressionJson : Expr ty → Json
       ("value", expressionJson value), ("index", toJson index)])]
   | .bytesAt value index => Json.mkObj [("byteAt", Json.mkObj [
       ("value", expressionJson value), ("index", toJson index)])]
+  | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
+      ("value", expressionJson value)]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
       ("value", expressionJson value)]
   | .bytes32Literal values => Json.mkObj [("tag", toJson ("bytes32Literal" : String)),
@@ -85,6 +87,8 @@ private def nativeExpressionJson : Expr ty → Json
       ("value", nativeExpressionJson value), ("index", toJson index)]
   | .bytesAt value index => Json.mkObj [("tag", toJson ("byteAt" : String)),
       ("value", nativeExpressionJson value), ("index", toJson index)]
+  | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
+      ("value", nativeExpressionJson value)]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
       ("value", nativeExpressionJson value)]
   | .bytes32Literal values => Json.mkObj [("tag", toJson ("bytes32Literal" : String)),

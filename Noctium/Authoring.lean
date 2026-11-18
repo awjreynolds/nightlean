@@ -305,6 +305,7 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     s!"persistentHashNativeVector([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashPoint($point)) => s!"persistentHashPoint({renderExpr point})"
+  | `(nlexpr| reverseBytes32($value)) => s!"reverseBytes32({renderExpr value})"
   | `(nlexpr| degradeToNative($value)) => s!"degradeToNative({renderExpr value})"
   | `(nlexpr| toBytes32($value)) => s!"toBytes32({renderExpr value})"
   | `(nlexpr| jubjubScalarFromNative($value)) => s!"jubjubScalarFromNative({renderExpr value})"
@@ -335,7 +336,7 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| poseidon2($_:num, $left, $right)) => disclosedValues left ++ disclosedValues right
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value))
-  | `(nlexpr| toBytes32($value)) => disclosedValues value
+  | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value)) => disclosedValues value
   | `(nlexpr| persistentHashVector32([$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap disclosedValues
   | `(nlexpr| jubjubScalarFromNative($value))
@@ -365,7 +366,7 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| poseidon2($_:num, $left, $right)) => inlineAssertions left ++ inlineAssertions right
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value))
-  | `(nlexpr| toBytes32($value)) => inlineAssertions value
+  | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value)) => inlineAssertions value
   | `(nlexpr| persistentHashVector32([$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap inlineAssertions
   | `(nlexpr| jubjubScalarFromNative($value))
@@ -506,6 +507,8 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     lowerBytesOperation programName callPrefix env stx .persistentHashNativeVector values.getElems.toList
   | `(nlexpr| persistentHashPoint($point)) =>
     lowerBytesOperation programName callPrefix env stx .persistentHashPoint [point]
+  | `(nlexpr| reverseBytes32($value)) =>
+    lowerBytesOperation programName callPrefix env stx .reverseBytes32 [value]
   | `(nlexpr| degradeToNative($value)) =>
     lowerBytesOperation programName callPrefix env stx .degradeToNative [value]
   | `(nlexpr| toBytes32($value)) => do
@@ -674,6 +677,7 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .persistentHashNative => `(Noctium.Helpers.BytesOp.persistentHashNative)
       | .persistentHashNativeVector => `(Noctium.Helpers.BytesOp.persistentHashNativeVector)
       | .persistentHashPoint => `(Noctium.Helpers.BytesOp.persistentHashPoint)
+      | .reverseBytes32 => `(Noctium.Helpers.BytesOp.reverseBytes32)
       | .degradeToNative => `(Noctium.Helpers.BytesOp.degradeToNative)
       | .toBytes32 source => `(Noctium.Helpers.BytesOp.toBytes32 $(← tyTerm source))
     let arguments ← arguments.mapM termTerm
