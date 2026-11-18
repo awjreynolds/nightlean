@@ -150,6 +150,38 @@ private def unitCall : Program := exported [
   | _ => false
 #guard accepted ((compile unitCall "main").bind Backend.Zkir.lowerCircuit)
 
+private def emptyAggregateType : Types.CompositeType := .vector 0 (.scalar .native)
+private def emptyAggregateReturn : Program := {
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "empty"
+    result := .composite emptyAggregateType
+    body := [.return (some (.composite emptyAggregateType []))]
+  }]
+  exports := [{name := "empty", target := ⟨0, 0⟩}]
+}
+
+-- Logical empty aggregates retain a return view without physical Native fields.
+#guard match Helpers.compileEntrypoint emptyAggregateReturn "empty" with
+  | .ok entry => entry.returns.isEmpty && match entry.returnViews with
+    | [view] => view.type == .vector 0 (.scalar .native) && view.fields.isEmpty
+    | _ => false
+  | .error _ => false
+
+private def oversizedAggregateType : Types.CompositeType := .vector 257 (.scalar .native)
+private def oversizedAggregateReturn : Program := {
+  declarations := [{
+    id := ⟨0, 0⟩
+    name := "oversized"
+    result := .composite oversizedAggregateType
+    body := [.return (some (.composite oversizedAggregateType (List.replicate 257 (.native 0))))]
+  }]
+  exports := [{name := "oversized", target := ⟨0, 0⟩}]
+}
+
+#guard errorContains (Helpers.compileEntrypoint oversizedAggregateReturn "oversized")
+  "entrypoint return field limit"
+
 -- Exported inputs named result do not collide with the generated public return.
 #guard accepted (compile {noCapture with exports := [{name := "capture", target := ⟨0, 0⟩, inputs := [
   {name := "result", ty := .native, visibility := .public},

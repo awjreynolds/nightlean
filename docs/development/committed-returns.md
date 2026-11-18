@@ -1,7 +1,8 @@
 # Committed getter results
 
-Entrypoints return named Native, Bool, bounded UInt, Bytes32, JubjubScalar and
-JubjubPoint values. Return expressions resolve after state effects, including ledger reads after writes.
+Entrypoints return named Native, Bool, bounded UInt, fixed Bytes, Jubjub and
+supported foreign-curve values. Helper entrypoints also return checked composite
+values. Return expressions resolve after state effects, including ledger reads after writes.
 `tests/NativeReturns.lean` contains a getter and an update operation:
 
 ```lean
@@ -24,8 +25,11 @@ Logical returns expand into canonical Native Fields in declaration order:
 | --- | --- |
 | Native, Bool, UInt | One field; Bool and UInt retain their bounds |
 | Bytes32 | Two chunks, using the existing FAB byte-alignment order |
+| Bytes(n) | `ceil(n / 31)` chunks in FAB order, including zero fields for Bytes0 |
 | JubjubScalar | One canonical scalar-to-Native encoding |
 | JubjubPoint | Two affine coordinates, x then y |
+| Foreign curve values | The native family's canonical encoded fields |
+| Composite helper result | One Native field per checked layout leaf |
 
 Point and scalar values retain the existing canonical/subgroup input and
 expression checks. Bytes32 results retain every digest bit. The 256-field output
@@ -37,14 +41,28 @@ and communication randomness. The ledger stores that commitment. It does not
 need a separate clear return field.
 
 Rust callers prepare the operation, run `check(&execution, &circuit)`, then read
-`execution.returns()` or `execution.returns_json()`. Values retain their logical
-types, so JSON uses booleans for Bool and decimal strings for Native and UInt.
+`execution.returns()` or `execution.returns_json()`. Primitive values retain their
+logical types, so JSON uses booleans for Bool and decimal strings for Native and UInt.
 Bytes32 uses `{kind:"bytes", values:[...]}`; scalar and point JSON use their
 existing `jubjubScalar` and `jubjubPoint` shapes. The C runtime's completed JSON
 response adds `result.returns` when nonempty.
 Native transaction assembly uses the evaluated output and fresh communication
 randomness. Bundle validation checks agreement among the plan return schema,
 compiler metadata and native output header.
+
+Composite helper results use `returnViews` metadata. Each view contains a logical
+name, canonical schema and ordered physical Native return names. The runtime
+validates the schema, field mapping and values during preparation and completion.
+`returns()` retains physical fields for native callers. `returns_json()` groups
+them into typed record, tuple, vector, enum, bytes and Unit JSON and omits their
+physical aliases. The existing C JSON result path exposes the same logical views.
+Empty composites retain their logical result with zero physical fields.
+
+Enums retain their variant tag and canonical padding checks. Bool and UInt fields
+retain their bounds. Reordered or reused field mappings reject. A private field
+still needs explicit disclosure in the source, including fields nested in a
+composite result. Views never authorize disclosure. The current limit is 256
+physical Native return fields and 256 logical views.
 
 The source metadata includes return labels, types and expressions. Existing
 entrypoints omit the optional `returns` field and keep empty native outputs.
@@ -62,6 +80,15 @@ add one source/native example for Bytes32 and Jubjub results. Independent SHA-25
 and group arithmetic agree with the named results and their six-field commitment.
 The case covers a full-range scalar and rejects an altered digest high byte.
 
-This is native-checker evidence for primitive SDK results. No new keys, proofs or
-deployments were generated. Composite/general-byte layouts, generated language
-bindings and the cross-contract claim protocol remain separate work.
+`tests/NativeBytes.lean`, `tests/ForeignOperations.lean` and `tests/Curve25519.lean`
+also supply retained source/native return cases for general bytes and foreign
+families. The staged helper path in `tests/IterationWitness.lean` returns a receipt
+with a total, Bool vector, enum claim, bytes, nested Unit and an explicitly released
+private offset. Its eight Native fields form one committed SDK result. The native
+case checks active and inactive records and rejects an altered provider response.
+Source guards reject removal of the field's disclosure. Codec checks reject
+noncanonical Bool/UInt leaves and retain empty values.
+
+This is scoped native-checker evidence. No new keys, proofs or deployments were
+generated. Readable composite return syntax, generated language bindings and the
+cross-contract claim protocol remain separate work.

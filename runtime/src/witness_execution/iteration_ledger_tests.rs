@@ -19,6 +19,12 @@ const BINDING: &[u8] = include_bytes!(
 fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
     let plan: Plan = serde_json::from_str(PLAN).unwrap();
     let initial = create_state(&plan, &BTreeMap::from([("total".into(), json!("0"))])).unwrap();
+    let mut reordered: Json = serde_json::from_str(PLAN).unwrap();
+    reordered["returnViews"][0]["fields"]
+        .as_array_mut()
+        .unwrap()
+        .swap(0, 1);
+    assert!(crate::validate_return_views_json(&reordered).is_err());
     let control: Json = serde_json::from_slice(CONTROL).unwrap();
     let binding: Json = serde_json::from_slice(BINDING).unwrap();
     let unit = binding["inputBindings"]
@@ -74,6 +80,24 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
         });
         let context = serde_json::from_value(context_json.clone()).unwrap();
         let expected = if enabled { "22" } else { "0" };
+        let claim = if enabled {
+            json!({"kind":"enum","id":"Iteration.Claim","variant":"Applied","fields":[
+                {"name":"amount","value":{"kind":"uint","maximum":"31","value":expected}}
+            ]})
+        } else {
+            json!({"kind":"enum","id":"Iteration.Claim","variant":"Empty","fields":[]})
+        };
+        let expected_receipt = json!({"kind":"struct","id":"Iteration.Receipt","fields":[
+            {"name":"total","value":{"kind":"native","value":expected}},
+            {"name":"flags","value":{"kind":"vector","items":[
+                {"kind":"bool","value":true},{"kind":"bool","value":false}
+            ]}},
+            {"name":"claim","value":claim},
+            {"name":"audit","value":{"kind":"tuple","items":[
+                {"kind":"bytes","values":[7,9]},{"kind":"unit"}
+            ]}},
+            {"name":"releasedOffset","value":{"kind":"native","value":"2"}}
+        ]});
         let inputs = BTreeMap::from([
             ("enabled".into(), json!(enabled)),
             ("expected".into(), json!(expected)),
@@ -150,7 +174,7 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
         }
         let result = execution.advance().unwrap();
         assert_eq!(result["status"], "completed");
-        assert_eq!(result["result"], expected);
+        assert_eq!(result["result"], expected_receipt);
         let session = execution.session.as_mut().unwrap();
         let relation = serde_json::from_slice(CIRCUIT).unwrap();
         let completion = session.private_completion(&relation).unwrap();
@@ -161,9 +185,10 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
         }
         let inputs = complete_native_inputs(session, &relation);
         let native = advance_native(&plan, &circuit, &initial, &inputs);
+        assert_eq!(native.returns().len(), 8);
         assert_eq!(
             native.returns_json(),
-            BTreeMap::from([("result".into(), json!(expected))])
+            BTreeMap::from([("result".into(), expected_receipt)])
         );
         assert_eq!(
             native.after.state,

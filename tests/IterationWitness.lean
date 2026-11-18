@@ -10,14 +10,29 @@ private def iterationSource : Except Diagnostic Program := do
     .tuple [.scalar (.uint 7), .scalar (.uint 3)]]
   let item := Types.CompositeType.structure "Iteration.Item"
   let amount := Types.CompositeType.enumeration "Iteration.Amount"
+  let receipt := Types.CompositeType.structure "Iteration.Receipt"
+  let receiptValue := fun total : Term => Term.composite receipt [
+    total, .bool Bool.true, .bool Bool.false,
+    .select (.eq total (.native 0)) (.native 0) (.native 1),
+    .cast (.uint 31) total, .uint 255 7, .uint 255 9,
+    .disclose {} (.ref "offset")]
   let base : Program := {
     composites := {
       structures := [{id := "Iteration.Item", fields := [
         {name := "amount", type := amount},
-        {name := "metadata", type := .vector 2 (.scalar .native)}]}]
+        {name := "metadata", type := .vector 2 (.scalar .native)}]},
+        {id := "Iteration.Receipt", fields := [
+          {name := "total", type := .scalar .native},
+          {name := "flags", type := .vector 2 (.scalar .bool)},
+          {name := "claim", type := .enumeration "Iteration.Claim"},
+          {name := "audit", type := .tuple [.bytes 2, .unit]},
+          {name := "releasedOffset", type := .scalar .native}]}]
       enumerations := [{id := "Iteration.Amount", variants := [
         {name := "Empty"}, {name := "Full", fields := [
-          {name := "value", type := .scalar .native}]}]}]}
+          {name := "value", type := .scalar .native}]}]},
+        {id := "Iteration.Claim", variants := [
+          {name := "Empty"}, {name := "Applied", fields := [
+            {name := "amount", type := .scalar (.uint 31)}]}]}]}
     ledger := [{name := "total", kind := .cell .native}]
     witnesses := [
       {name := "touch", operation := "noctium.iteration-touch.v1", capability := "touch",
@@ -33,7 +48,7 @@ private def iterationSource : Except Diagnostic Program := do
       parameters := [⟨"enabled", .bool⟩, ⟨"expected", .native⟩, ⟨"offset", .native⟩,
         ⟨"rootUnit", .native⟩],
       compositeParameters := [("rootUnit", .unit)],
-      result := .scalar .native, body := [.return (some (.native 0))]}]
+      result := .composite receipt, body := [.return (some (receiptValue (.native 0)))]}]
     exports := [{
       name := "update", target := ⟨0, 0⟩
       inputs := [
@@ -85,7 +100,7 @@ private def iterationSource : Except Diagnostic Program := do
         .writeCell "total" .native (.disclose {} (.ref "sum")),
         .stage "private" "iteration/last" .native (.ref "sum")] [],
       .readCell "total" "after" .native,
-      .return (some (.ref "after"))]}
+      .return (some (receiptValue (.ref "after")))]}
     else declaration}
 
 #guard iterationSource.isOk
@@ -111,6 +126,19 @@ termination_by body => sizeOf body
 
 #guard match Witness.compileStateEntrypoint
     (Helpers.mapDeclarationBodies withoutWriteReleases iterationProgram) "update" iterationProgram.ledger with
+  | .error diagnostic => (diagnostic.message.splitOn "private").length > 1
+  | .ok _ => Bool.false
+
+private def withoutReturnReleases (body : List Statement) : List Statement :=
+  body.map fun
+    | .return (some (.composite type leaves)) =>
+      .return (some (.composite type (leaves.map fun
+        | .disclose _ value => value
+        | value => value)))
+    | statement => statement
+
+#guard match Witness.compileStateEntrypoint
+    (Helpers.mapDeclarationBodies withoutReturnReleases iterationProgram) "update" iterationProgram.ledger with
   | .error diagnostic => (diagnostic.message.splitOn "private").length > 1
   | .ok _ => Bool.false
 

@@ -1,6 +1,7 @@
 import Noctium.Semantics
 import Noctium.Types.ValueExpressions
 import Noctium.Types.ValueViews
+import Noctium.Types.ValueSchema
 import Noctium.GuardedExpression
 
 namespace Noctium.Helpers
@@ -2773,8 +2774,6 @@ private def compileEntrypointForState (allowWitnesses : Bool) (limits : Limits) 
   let some exported := program.exports.find? (·.name == entryName)
     | fail {} "unknown helper entrypoint"
   let declaration ← lookup program exported.target exported.span
-  if !(match declaration.result with | .unit | .scalar _ => true | .composite _ => false) then
-    fail declaration.span "native ledger helper results must be scalar or Unit"
   let inputs ← aggregateInputs program exported
   unless uniqueNames (inputs.map (·.name)) do fail exported.span "aggregate input component names collide"
   let inputTypes : TypeEnv := inputs.map fun input => (input.name, input.ty)
@@ -2826,21 +2825,56 @@ private def compileEntrypointForState (allowWitnesses : Bool) (limits : Limits) 
     | .readCell _ destination _ => some destination
     | .readMap _ destination _ _ _ | .readMember _ destination _ _ _ => some destination
     | _ => none
-  let outputName := ((List.range (inputs.length + readNames.length + 1)).map fun index =>
+  let compositeReturnInfo ← match declaration.result with
+    | .composite type => do
+      let compiled ← checkedComposite program exported.span type
+      if compiled.checked.expandedLeaves > maxEntrypointReturnFields then
+        fail exported.span "entrypoint return field limit exceeded"
+      discard (Types.schemaJson compiled |>.mapError fun message =>
+        {span := exported.span, message})
+      pure (some (type, compiled.checked.expandedLeaves))
+    | _ => pure none
+  let reservedOutputNames := (inputs ++ lowering.witnessInputs).map (·.name) ++ readNames
+  let physicalNames (base : String) := match compositeReturnInfo with
+    | some (_, count) => (List.range count).map fun index => s!"{base}_{index}"
+    | none => [base]
+  let outputName := ((List.range (reservedOutputNames.length + 1)).map fun index =>
     if index == 0 then "result" else s!"result{index}").find?
-      (fun name => !inputs.any (·.name == name) && !readNames.contains name) |>.getD "result"
-  let returns ← match declaration.result with
-    | .unit => pure []
+      (fun name => !reservedOutputNames.contains name &&
+        (physicalNames name).all (!reservedOutputNames.contains ·)) |>.getD "result_fresh"
+  let returnData ← match declaration.result with
+    | .unit => pure (([] : List Output), ([] : List ReturnView))
     | .scalar ty => do
       let value ← typedExpr exported.span ty body
-      pure [{name := outputName, ty, value, span := exported.span}]
-    | .composite _ => pure []
+      pure ([{name := outputName, ty := ty, value := value, span := exported.span}],
+        ([] : List ReturnView))
+    | .composite type => do
+      let some (_, expectedCount) := compositeReturnInfo
+        | fail exported.span "composite return layout was not checked"
+      let returnComponents := components body
+      unless returnComponents.length == expectedCount do
+        fail exported.span "composite return leaf count mismatch"
+      let mut outputs : List Output := []
+      let mut fields : List String := []
+      for (component, index) in returnComponents.zipIdx do
+        let name := s!"{outputName}_{index}"
+        let value ← nativeOfScalar exported.span component
+        outputs := outputs ++ [{name, ty := .native, value, span := exported.span}]
+        fields := fields ++ [name]
+      let view : ReturnView := {
+        name := outputName
+        environment := program.composites
+        type := type
+        fields := fields}
+      pure (outputs, [view])
+  let returns := returnData.1
+  let returnViews := returnData.2
   let circuit : Circuit := {
     name := exported.name, inputs := inputs ++ lowering.witnessInputs, outputs := [],
     constraints := if allowWitnesses then lowering.witnessConstraints else [], span := exported.span,
     privateOrigins := lowering.privateOrigins}
   let result : Entrypoint := {
-    name := exported.name, circuit, effects := lowering.ledgerEffects, returns,
+    name := exported.name, circuit, effects := lowering.ledgerEffects, returns, returnViews,
     span := exported.span, effectSpans := lowering.ledgerSpans,
     effectGuards := lowering.ledgerGuards}
   let capabilities := {Capabilities.crypto with stateCells := true, stateMaps := true}

@@ -876,6 +876,7 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "operations",
             "reads",
             "returns",
+            "returnViews",
             "constructor",
             "state",
             "circuit",
@@ -884,6 +885,12 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "targetProfile",
         ],
     )?;
+    crate::validate_return_views_json(&plan).map_err(|_| {
+        error(
+            "plan_mismatch",
+            "invalid composite call return schema or field mapping",
+        )
+    })?;
     if let Some(target) = plan.get("target") {
         require(
             target.is_string(),
@@ -985,6 +992,11 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         matched[0].get("returns") == plan.get("returns"),
         "plan_mismatch",
         "call return schema differs from compiler metadata",
+    )?;
+    require(
+        matched[0].get("returnViews") == plan.get("returnViews"),
+        "plan_mismatch",
+        "composite call return views differ from compiler metadata",
     )?;
     let return_count = match plan.get("returns") {
         None => 0,

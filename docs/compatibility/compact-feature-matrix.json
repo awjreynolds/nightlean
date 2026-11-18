@@ -364,7 +364,7 @@
       "id": "C-LANG-TUPLE",
       "layer": "language",
       "surface": "Tuple and unit []",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "subset",
       "notes": "Heterogeneous tuples, vector subtyping, destructuring, access, spread and unit returns.",
       "source": [
         "reference"
@@ -373,18 +373,24 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "SEM"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
+        "checkedOn": "2026-11-18",
+        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. Readable composite return syntax, wider combinations, full equivalence and preservation remain unverified.",
         "evidence": [
           "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
           "docs/development/composite-values.md",
-          "tests/composite-values/qualification-evidence.json"
+          "tests/composite-values/qualification-evidence.json",
+          "tests/Helpers.lean",
+          "tests/IterationWitness.lean",
+          "runtime/src/witness_execution/iteration_ledger_tests.rs",
+          "docs/development/committed-returns.md"
         ],
         "fullEquivalence": "unverified"
       }
@@ -402,11 +408,13 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "SEM"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-17",
-        "scope": "Checked Lean composite values and Rust/C++ codecs preserve nominal/logical identity. Source helper composite outputs flatten under component disclosure checks. Bounded generic structures specialize with declaration-derived nominal identity. General aggregate ledger effects, complete constructor/default/spread/destructuring surface and Compact equivalence remain unqualified.",
+        "checkedOn": "2026-11-18",
+        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. Readable composite return syntax, wider combinations, full equivalence and preservation remain unverified.",
         "evidence": [
           "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
@@ -418,7 +426,11 @@
           "tests/GenericSpecialization.lean",
           "tests/generics/Native.lean",
           "tests/generics/qualification-evidence.json",
-          "docs/development/generics.md"
+          "docs/development/generics.md",
+          "tests/Helpers.lean",
+          "tests/IterationWitness.lean",
+          "runtime/src/witness_execution/iteration_ledger_tests.rs",
+          "docs/development/committed-returns.md"
         ],
         "fullEquivalence": "unverified",
         "sourceCommit": "396c514de223c9cda7f6f49a4525c9531ccfe1ba"
@@ -428,7 +440,7 @@
       "id": "C-LANG-ENUM",
       "layer": "language",
       "surface": "Enum",
-      "noctiumStatus": "missing",
+      "noctiumStatus": "subset",
       "notes": "Member creation, comparisons, bounds, casts and defaults.",
       "source": [
         "reference"
@@ -437,18 +449,24 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "SEM"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Internal checked Lean values preserve nominal/logical types, canonical traversal and scalar/tag/padding bounds. Rust/C++ codec round trips and a nested typed native proof fixture are qualified. Public source aggregate effects remain gated on component disclosure analysis. Full language equivalence stays unverified.",
+        "checkedOn": "2026-11-18",
+        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. Readable composite return syntax, wider combinations, full equivalence and preservation remain unverified.",
         "evidence": [
           "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
           "tests/composite-types/manifest.json",
           "docs/development/composite-types.md",
           "docs/development/composite-values.md",
-          "tests/composite-values/qualification-evidence.json"
+          "tests/composite-values/qualification-evidence.json",
+          "tests/Helpers.lean",
+          "tests/IterationWitness.lean",
+          "runtime/src/witness_execution/iteration_ledger_tests.rs",
+          "docs/development/committed-returns.md"
         ],
         "fullEquivalence": "unverified"
       }

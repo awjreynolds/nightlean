@@ -179,6 +179,15 @@ def Output.nativeReturnFieldCount (output : Output) : Nat :=
   | .foreign kind => kind.encodedFieldCount
   | _ => 1
 
+def maxEntrypointReturnFields : Nat := 256
+
+structure ReturnView where
+  name : String
+  environment : Types.CompositeEnv
+  type : Types.CompositeType
+  fields : List String
+  deriving Repr
+
 /-- Recursive ledger value descriptions. Scalar leaves use the existing typed
 scalar surface. Maps retain their key type and recursively describe values. -/
 inductive LedgerValueType where
@@ -371,6 +380,8 @@ structure Entrypoint where
   effects : List Effect := []
   /-- Proof-bound public values returned with the entrypoint call. -/
   returns : List Output := []
+  /-- Logical composite returns grouped from their canonical Native fields. -/
+  returnViews : List ReturnView := []
   span : SourceSpan := {}
   effectSpans : List SourceSpan := []
   /-- Optional activity guards aligned with `effects`. Scalar reads, writes,
@@ -1020,6 +1031,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         env := env ++ [(name, ty)]
   unless uniqueNames (e.returns.map (·.name)) do
     throw {span := e.span, message := "duplicate entrypoint return label"}
+  unless (e.returns.map Output.nativeReturnFieldCount).sum ≤ maxEntrypointReturnFields do
+    throw {span := e.span, message := "entrypoint return field limit exceeded"}
   for output in e.returns do
     if (env.lookup output.name).isSome then
       throw {span := output.span, message := s!"entrypoint return '{output.name}' shadows a source binding"}
@@ -1029,6 +1042,37 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
     match output.value.validate caps env with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()
+  unless uniqueNames (e.returnViews.map (·.name)) do
+    throw {span := e.span, message := "duplicate logical entrypoint return name"}
+  unless e.returnViews.length ≤ maxEntrypointReturnFields do
+    throw {span := e.span, message := "entrypoint logical return view limit exceeded"}
+  let mut groupedFields : List String := []
+  for view in e.returnViews do
+    unless !view.name.isEmpty do
+      throw {span := e.span, message := "logical entrypoint return name must not be empty"}
+    if (e.returns.any (·.name == view.name)) then
+      throw {span := e.span, message := s!"logical return '{view.name}' conflicts with a physical return field"}
+    unless uniqueNames view.fields do
+      throw {span := e.span, message := s!"duplicate physical field in logical return '{view.name}'"}
+    let checked ← match Types.checkedLayout {} view.environment view.type e.span with
+      | .ok checked => pure checked
+      | .error diagnostic => throw {span := e.span, message := diagnostic.message}
+    unless checked.expandedLeaves ≤ maxEntrypointReturnFields do
+      throw {span := e.span, message := "entrypoint return field limit exceeded"}
+    unless view.fields.length == checked.expandedLeaves do
+      throw {span := e.span, message := s!"logical return '{view.name}' field count does not match its type"}
+    let fieldsInEntryOrder := e.returns.filterMap fun output =>
+      if view.fields.contains output.name then some output.name else none
+    unless fieldsInEntryOrder == view.fields do
+      throw {span := e.span, message := s!"logical return '{view.name}' fields do not follow physical return order"}
+    for fieldName in view.fields do
+      if groupedFields.contains fieldName then
+        throw {span := e.span, message := s!"physical return field '{fieldName}' belongs to multiple logical returns"}
+      let some output := e.returns.find? (·.name == fieldName)
+        | throw {span := e.span, message := s!"logical return '{view.name}' references missing physical field '{fieldName}'"}
+      unless output.ty == .native do
+        throw {span := output.span, message := s!"logical return field '{fieldName}' must use Native"}
+      groupedFields := groupedFields ++ [fieldName]
 
 def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic Unit := do
   if !uniqueNames (c.state.map (·.name)) then

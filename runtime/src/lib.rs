@@ -1,4 +1,5 @@
 //! Native execution of the bounded Noctium plan schema. No process or JavaScript API.
+use crate::aggregates::Schema;
 use crate::zkir::IrSource;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
@@ -920,7 +921,16 @@ pub struct Plan {
     #[serde(default)]
     pub returns: Vec<Output>,
     #[serde(default)]
+    pub return_views: Vec<ReturnView>,
+    #[serde(default)]
     pub constructor: Option<constructor::Constructor>,
+}
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ReturnView {
+    pub name: String,
+    pub schema: Json,
+    pub fields: Vec<String>,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct Circuit {
@@ -1712,6 +1722,101 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
         ScalarType::parse(&output.ty)?;
     }
     ensure!(plan.returns.len() <= 256, "too many call returns");
+    validate_return_views_specs(
+        &plan.return_views,
+        plan.returns.iter().map(|output| {
+            (
+                output.name.as_str(),
+                output.ty.as_str(),
+                output.visibility.as_str(),
+            )
+        }),
+    )?;
+    Ok(())
+}
+
+fn validate_return_views_specs<'a>(
+    views: &[ReturnView],
+    returns: impl IntoIterator<Item = (&'a str, &'a str, &'a str)>,
+) -> Result<BTreeSet<String>> {
+    ensure!(views.len() <= 256, "too many composite return views");
+    let mut physical = BTreeMap::new();
+    let mut logical_names = BTreeSet::new();
+    let mut total_fields = 0usize;
+    for (index, (name, ty, visibility)) in returns.into_iter().enumerate() {
+        ensure!(
+            visibility == "public" && !name.is_empty() && logical_names.insert(name),
+            "invalid call return declaration"
+        );
+        let scalar = ScalarType::parse(ty)?;
+        total_fields = total_fields
+            .checked_add(scalar.call_return_fields())
+            .ok_or_else(|| anyhow!("too many native call return fields"))?;
+        ensure!(total_fields <= 256, "too many native call return fields");
+        physical.insert(name, (index, ty));
+    }
+
+    let mut grouped = BTreeSet::new();
+    for view in views {
+        ensure!(
+            !view.name.is_empty()
+                && view.name.len() <= 4096
+                && logical_names.insert(view.name.as_str())
+                && view.fields.len() <= 256,
+            "invalid or colliding composite return view"
+        );
+        let schema_bytes = serde_json::to_vec(&view.schema)?;
+        let schema = Schema::from_json(&schema_bytes)?;
+        ensure!(
+            schema.counts().leaves == view.fields.len(),
+            "composite return field count differs from its schema"
+        );
+        let mut previous_index = None;
+        for field in &view.fields {
+            let (index, ty) = physical
+                .get(field.as_str())
+                .ok_or_else(|| anyhow!("composite return references an unknown field"))?;
+            ensure!(
+                *ty == "Native" && grouped.insert(field.clone()),
+                "composite return fields must be unique Native outputs"
+            );
+            ensure!(
+                previous_index.is_none_or(|previous| previous < *index),
+                "composite return fields are out of order"
+            );
+            previous_index = Some(*index);
+        }
+    }
+    Ok(grouped)
+}
+
+pub(crate) fn validate_return_views_json(plan: &Json) -> Result<()> {
+    let views = match plan.get("returnViews") {
+        None => Vec::new(),
+        Some(value) => serde_json::from_value::<Vec<ReturnView>>(value.clone())?,
+    };
+    let returns = match plan.get("returns") {
+        None => &[][..],
+        Some(Json::Array(values)) => values.as_slice(),
+        _ => bail!("invalid call return schema"),
+    };
+    let returns = returns
+        .iter()
+        .map(|output| {
+            Ok((
+                output["name"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid call return name"))?,
+                output["type"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid call return type"))?,
+                output["visibility"]
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid call return visibility"))?,
+            ))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    validate_return_views_specs(&views, returns)?;
     Ok(())
 }
 
@@ -2194,6 +2299,34 @@ fn aligned_call_returns(values: &[(String, Value)]) -> Result<AlignedValue> {
     Ok(aligned_fields(&fields))
 }
 
+fn reconstruct_return_views(
+    views: &[ReturnView],
+    return_values: &[(String, Value)],
+) -> Result<Vec<(String, Json)>> {
+    let values: BTreeMap<_, _> = return_values
+        .iter()
+        .map(|(name, value)| (name.as_str(), value))
+        .collect();
+    views
+        .iter()
+        .map(|view| {
+            let schema_bytes = serde_json::to_vec(&view.schema)?;
+            let schema = Schema::from_json(&schema_bytes)?;
+            let leaves = view
+                .fields
+                .iter()
+                .map(|field| match values.get(field.as_str()).copied() {
+                    Some(Value::Native(value)) => Ok(Json::String(field_decimal(*value))),
+                    Some(_) => bail!("composite return field is not Native"),
+                    None => bail!("composite return field is missing"),
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let encoded = schema.from_native_leaves_json(&leaves)?;
+            Ok((view.name.clone(), serde_json::from_slice(&encoded)?))
+        })
+        .collect()
+}
+
 pub struct Execution {
     pub program: Program,
     /// Exact source schedule returned by the checked native Impact groups.
@@ -2203,6 +2336,8 @@ pub struct Execution {
     pub fallible: Option<Transcript<Db>>,
     pub preimage: ProofPreimage,
     return_values: Vec<(String, Value)>,
+    logical_return_views: Vec<(String, Json)>,
+    grouped_return_fields: BTreeSet<String>,
 }
 impl Execution {
     /// Typed source-declared results. Call `check` before treating them as checked.
@@ -2210,10 +2345,14 @@ impl Execution {
         &self.return_values
     }
     pub fn returns_json(&self) -> BTreeMap<String, Json> {
-        self.return_values
+        let mut values: BTreeMap<_, _> = self
+            .return_values
             .iter()
+            .filter(|(name, _)| !self.grouped_return_fields.contains(name))
             .map(|(name, value)| (name.clone(), value.public_json()))
-            .collect()
+            .collect();
+        values.extend(self.logical_return_views.iter().cloned());
+        values
     }
     pub(crate) fn call_output(&self) -> Result<AlignedValue> {
         aligned_call_returns(&self.return_values)
@@ -2643,7 +2782,18 @@ impl PreparationCursor {
 }
 
 fn validate_return_environment(plan: &Plan, env: &Environment) -> Result<()> {
+    validate_return_views_specs(
+        &plan.return_views,
+        plan.returns.iter().map(|output| {
+            (
+                output.name.as_str(),
+                output.ty.as_str(),
+                output.visibility.as_str(),
+            )
+        }),
+    )?;
     let mut names = BTreeSet::new();
+    let mut return_values = Vec::with_capacity(plan.returns.len());
     for output in &plan.returns {
         ensure!(
             output.visibility == "public"
@@ -2655,7 +2805,9 @@ fn validate_return_environment(plan: &Plan, env: &Environment) -> Result<()> {
         let value = evaluate(&output.expression, env)?;
         ensure!(value.scalar_type() == ty, "call return type mismatch");
         value.validate()?;
+        return_values.push((output.name.clone(), value));
     }
+    reconstruct_return_views(&plan.return_views, &return_values)?;
     Ok(())
 }
 
@@ -3566,6 +3718,17 @@ impl PreparationCursor {
             value.validate()?;
             return_values.push((output.name.clone(), value));
         }
+        let grouped_return_fields = validate_return_views_specs(
+            &plan.return_views,
+            plan.returns.iter().map(|output| {
+                (
+                    output.name.as_str(),
+                    output.ty.as_str(),
+                    output.visibility.as_str(),
+                )
+            }),
+        )?;
+        let logical_return_views = reconstruct_return_views(&plan.return_views, &return_values)?;
         let output = aligned_call_returns(&return_values)?;
         let randomness = Fr::from(0u64); // Diagnostic checker context. Final transactions need fresh randomness.
         let empty = AlignedValue {
@@ -3650,6 +3813,8 @@ impl PreparationCursor {
             fallible,
             preimage,
             return_values,
+            logical_return_views,
+            grouped_return_fields,
         })
     }
 }

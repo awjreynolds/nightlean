@@ -399,6 +399,11 @@ mutual
       emitLift (fail span "control coercion does not match its checked target")
     let encoded ← emitExpression checked scope env span value
     match info.ty, target with
+    | .scalar source, .scalar target =>
+      if source == target then pure encoded
+      else
+        pure (node span "cast" [("type", toJson (typeName (.scalar target))),
+          ("value", encoded)])
     | .composite source, .composite target =>
       if source == target then pure encoded
       else
@@ -497,8 +502,16 @@ mutual
     | .effect .. => emitLift (fail span "portable control capability unavailable: labelled effect fixture")
     | .composite type leaves =>
       unless (← get).typed do emitLift (fail span "aggregate control values require schema version 2")
+      let compiled ← match Types.compileType checked.program.composites type with
+        | .ok compiled => pure compiled
+        | .error diagnostic => emitLift (fail span diagnostic.message)
+      let expected := Helpers.sourceLeafTypes compiled.checked.value
+      unless leaves.length == expected.length do
+        emitLift (fail span "aggregate control leaf count mismatch")
+      let encodedLeaves ← (leaves.zip expected).mapM fun (leaf, leafType) =>
+        emitCoercedExpression checked scope env span (.scalar leafType) leaf
       pure (node span "composite" [("type", toJson (← emitType checked span (.composite type))),
-        ("leaves", toJson (← leaves.mapM (emitExpression checked scope env span)))])
+        ("leaves", toJson encodedLeaves)])
     | .project value projection =>
       unless (← get).typed do emitLift (fail span "aggregate control values require schema version 2")
       let info ← emitLift (checked.infer scope env span (.project value projection))

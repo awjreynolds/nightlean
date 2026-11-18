@@ -4865,9 +4865,10 @@
       "structured scalar cell/map bodies with typed witnesses and private staging, using authenticated native cursor callbacks; focused native evidence covers one Native cell"
     ],
     "recordEvidence": "One selected-3.2.1 four-field source/native fixture passes insertion, replacement, exact alignment, grouped read activity and rejection checks. It establishes storage shape, not curve validity.",
-    "nativeContractReturns": "Named Native, Bool, bounded UInt, Bytes32, JubjubScalar and JubjubPoint SDK results evaluate after ledger effects and bind to canonical Native output fields. Clear values remain off-chain. Composite/general-byte layouts and cross-contract claim composition remain in issue 50.",
+    "nativeContractReturns": "Primitive Native, Bool, bounded UInt, fixed Bytes, Jubjub and supported foreign-family SDK results bind to canonical native call outputs. Helper entrypoints additionally commit checked composite results as Native fields with returnViews metadata. SDK JSON reconstructs record/tuple/vector/enum/bytes/Unit values, while native commitments retain exact physical field order. Scoped checker evidence covers one eight-field receipt, empty views, bounds and disclosure rejection. Readable composite return syntax, broader combinations and cross-contract claims remain open.",
     "remainingTokenDependencies": [
-      "nominal composite result layouts and cross-contract claim composition"
+      "readable composite return declarations and broader interface combinations",
+      "cross-contract claim composition"
     ],
     "minimumChecksPolicy": "Until feature implementation is complete: build changed code and run one focused source/native example per feature group with necessary rejection coverage. Reuse existing evidence. Defer broad regressions, new proof/key generation and deployment campaigns. Run one completed-token localnet demonstration.",
     "restrictedInternalValueTypes": [
@@ -5463,12 +5464,12 @@
       "implementation": "../../Noctium/Helpers/Iteration.lean",
       "documentation": "../development/iteration.md",
       "newOpcodes": 0,
-      "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vectors, structurally compatible tuples or scalar/composite byte sequence expressions once and returns a vector of checked scalar, Unit, record, tuple, nested-vector, byte or enum results. Enum tags retain their private origins and active payload projections are guarded with canonical zero padding. Fold evaluates initial before its list of equal-length sequences, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution. Unit parameters, captures and root inputs use the existing Unit marker and canonical host value; they retain logical arity and contribute no native fields. Generic Unit specializations use this same path. Shared type joins recurse through equal-shape tuples/vectors; UInt bounds widen or embed in Native. Nominal identities, Bool and byte lengths remain exact. Lean emits explicit checked aggregate casts at typed boundaries, while the runtime keeps implicit aggregate equality and all private taints.",
+      "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vectors, structurally compatible tuples or scalar/composite byte sequence expressions once and returns a vector of checked scalar, Unit, record, tuple, nested-vector, byte or enum results. Enum tags retain their private origins and active payload projections are guarded with canonical zero padding. Fold evaluates initial before its list of equal-length sequences, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution. Unit parameters, captures and root inputs use the existing Unit marker and canonical host value; they retain logical arity and contribute no native fields. Generic Unit specializations use this same path. Shared type joins recurse through equal-shape tuples/vectors; UInt bounds widen or embed in Native. Nominal identities, Bool and byte lengths remain exact. Lean emits explicit checked aggregate casts at typed boundaries, while the runtime keeps implicit aggregate equality and all private taints. Composite helper entrypoint results now emit Native return fields and canonical returnViews; SDK JSON groups those fields without changing native commitment encoding.",
       "checks": {
-        "compilerBuild": "passed,76 jobs with canonical Native aggregate representation and shared structural type joins",
+        "compilerBuild": "passed,76 jobs with committed composite helper returns and explicit scalar leaf coercions",
         "operatorSource": "passed, captured/inferred and named apply, both lexical hiding rejects, map/fold compilation, empty vector map, unequal lengths, missing capture and accumulator mismatch",
         "sourceExport": "passed, selected3.2.1 with private source definitions and mandatory source disclosure rejection",
-        "native": "one case passed in0.05seconds: Unit root/capture/argument, touch then seed then one private tuple of differently typed pairs[(1,0),(1,1),(1,2)], structural conversion to(Native,Native), mapped callbacks3/4/5, record enum amounts6/Empty/10 plus byte fees1/2/3 folded to22; inactive preserves0, altered reply fails, both completed paths pass native checker",
+        "native": "one case passed in0.06seconds: Unit root/capture/argument, touch then seed then one private tuple of differently typed pairs, structural conversion, mapped callbacks3/4/5, enum amounts plus byte fees folded/staged22. Eight physical Native returns reconstruct one Receipt record with Bool vector, enum, bytes, nested Unit and released offset2; inactive receipt total0/Empty, altered reply fails, both completed paths pass native checker",
         "existingWitnessSource": "passed after raw composite witness canonical constraints moved to unconditional circuit input constraints",
         "aggregateSource": "passed, nested nominal record and Bool map compilation, Unit map callback active failure/zero-iteration success, empty-vector sequence compile success plus checked-cast failure, closed public-write guard active narrowing-cast failure and inactive skip",
         "unitSource": "passed, Unit argument/capture/vector map, zero-native-field Unit root, missing-root-schema arity rejection, computed Unit argument compile success and runtime failure",
@@ -5479,13 +5480,14 @@
         "enumHost": "passed, Native ordinal1 at physical leaf0, wrong type/malformed payload/non-enum source reject",
         "privateAuthoringRefresh": "passed, exact source fixture comparison and native private read/provider/stage checks after removal of unused total lets",
         "structuralSource": "passed, crossed tuple map/fold evaluates4, inferred anonymous return joins, nested vector/tuple UInt widening with unchanged Bool fields, and shape/nominal/Bool mismatches reject",
-        "structuralHost": "passed, explicit tuple/vector casts canonicalize UInt widening and UInt-to-Native while rejecting narrowing, shape mismatch, invalid source values and same-ID conflicting nominal layouts"
+        "structuralHost": "passed, explicit tuple/vector casts canonicalize UInt widening and UInt-to-Native while rejecting narrowing, shape mismatch, invalid source values and same-ID conflicting nominal layouts",
+        "compositeReturns": "passed, source rejects removed private return-field release; empty composite has zero physical fields and one view;257fields reject; reordered view field mapping rejects; codec rejects malformed Bool/UInt leaves; compiler metadata and plan schemas match"
       },
       "artifactBytes": {
-        "impact": 192838,
-        "zkir": 18437,
-        "binding": 25359,
-        "control": 70948
+        "impact": 231506,
+        "zkir": 27386,
+        "binding": 33720,
+        "control": 84728
       },
       "limits": "Staged source API only. Empty-tuple element inference, readable iteration syntax and general preservation remain open under issue48/21. Native evidence samples this typed nested-tuple/record/enum/byte workload, not full cross-host equivalence. No keys/proofs/deployments, cross-profile campaign, K/timing benchmark or general pass proof. Broader optimisation remains deferred under issue85.",
       "closurePruning": {

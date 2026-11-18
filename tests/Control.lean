@@ -15,9 +15,9 @@ private def returned (value : Term) : List Statement := [.return (some value)]
 #guard errorContains (analyze (program [.branch (.bool false) [.assert (.native 1)] [], .return (some (.native 0))])) "assertion requires Bool"
 #guard errorContains (analyze (program (returned (.ite (.bool true) (.native 1) (.ref "missing"))))) "unknown helper value"
 #guard errorContains (analyze (program [.branch (.native 0) [] [], .return (some (.native 0))])) "condition requires Bool"
--- CF-TYPE-JOIN requires a subtype relation, including unit/scalar incompatibility.
-#guard errorContains (analyze (program (returned (.ite (.bool true) (.native 1) (.bool false))))) "one type to be a subtype"
-#guard errorContains (analyze (program (returned (.ite (.bool true) .unit (.native 1))))) "one type to be a subtype"
+-- CF-TYPE-JOIN requires a common type, including unit/scalar incompatibility.
+#guard errorContains (analyze (program (returned (.ite (.bool true) (.native 1) (.bool false))))) "common type"
+#guard errorContains (analyze (program (returned (.ite (.bool true) .unit (.native 1))))) "common type"
 #guard accepted (analyze (program (returned (.ite (.bool false) (.uint 3 2) (.uint 7 4))) (.scalar (.uint 7))))
 
 -- CF-ASSERT-INACTIVE and CF-CAST-INACTIVE preserve type checks but skip execution.

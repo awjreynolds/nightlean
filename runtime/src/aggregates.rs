@@ -1228,6 +1228,45 @@ impl Schema {
         self.decode_wire(&wire)
     }
 
+    pub fn from_native_leaves_json(&self, native_leaves: &[serde_json::Value]) -> Result<Vec<u8>> {
+        let types = self.leaf_types()?;
+        ensure!(
+            native_leaves.len() == types.len(),
+            "aggregate native leaf count mismatch"
+        );
+        let modulus = decimal(crate::MODULUS)?;
+        let mut leaves = Vec::with_capacity(types.len());
+        for (value, ty) in native_leaves.iter().zip(types) {
+            let Some(text) = value.as_str() else {
+                leaves.iter_mut().for_each(wipe_leaf_json);
+                bail!("expected canonical Native return decimal");
+            };
+            let number = match decimal(text) {
+                Ok(number) if number < modulus => number,
+                Ok(_) => {
+                    leaves.iter_mut().for_each(wipe_leaf_json);
+                    bail!("Native return outside the field");
+                }
+                Err(error) => {
+                    leaves.iter_mut().for_each(wipe_leaf_json);
+                    return Err(error);
+                }
+            };
+            if ty == "Bool" {
+                if number > BigUint::from(1u8) {
+                    leaves.iter_mut().for_each(wipe_leaf_json);
+                    bail!("noncanonical aggregate Boolean return");
+                }
+                leaves.push(serde_json::Value::Bool(number == BigUint::from(1u8)));
+            } else {
+                leaves.push(serde_json::Value::String(text.to_owned()));
+            }
+        }
+        let rendered = self.from_leaf_json(&leaves);
+        leaves.iter_mut().for_each(wipe_leaf_json);
+        rendered
+    }
+
     fn node_type_key(&self, root: usize) -> Result<String> {
         enum Task {
             Node(usize),
@@ -1816,6 +1855,14 @@ impl Schema {
         Ok(output)
     }
 }
+
+fn wipe_leaf_json(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::String(value) => value.zeroize(),
+        serde_json::Value::Bool(value) => *value = false,
+        _ => {}
+    }
+}
 fn value_fields(tree: &JsonTree, raw: usize, fields: &[Field]) -> Result<Vec<usize>> {
     let values = tree.items(raw, "fields")?;
     ensure!(
@@ -2044,4 +2091,55 @@ pub extern "C" fn noctium_aggregate_buffer_free(token: u64) -> i32 {
         value.zeroize();
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Schema;
+    use serde_json::{Value as Json, json};
+
+    #[test]
+    fn native_returns_reconstruct_typed_aggregate_and_reject_invalid_leaves() {
+        let schema = Schema::from_json(
+            br#"{"schemaVersion":1,"typeFingerprint":"NoctiumCompositeTypeV1;t2;[sBsU10;]NoctiumCompositeLayoutV1;0;0;","layout":{"kind":"tuple","items":[{"kind":"scalar","leaf":{"kind":"bool"}},{"kind":"scalar","leaf":{"kind":"uint","maximum":"10"}}]},"counts":{"leaves":2,"expandedNodes":3,"layoutNodes":3}}"#,
+        )
+        .unwrap();
+        let rendered = schema
+            .from_native_leaves_json(&[json!("1"), json!("8")])
+            .unwrap();
+        let value: Json = serde_json::from_slice(&rendered).unwrap();
+        assert_eq!(
+            value,
+            json!({"kind":"tuple","items":[
+                {"kind":"bool","value":true},
+                {"kind":"uint","maximum":"10","value":"8"}
+            ]})
+        );
+        assert!(
+            schema
+                .from_native_leaves_json(&[json!("2"), json!("8")])
+                .is_err()
+        );
+        assert!(
+            schema
+                .from_native_leaves_json(&[json!("1"), json!("11")])
+                .is_err()
+        );
+
+        for (schema_json, expected) in [
+            (
+                br#"{"schemaVersion":1,"typeFingerprint":"NoctiumCompositeTypeV1;uNoctiumCompositeLayoutV1;0;0;","layout":{"kind":"unit"},"counts":{"leaves":0,"expandedNodes":1,"layoutNodes":1}}"#.as_slice(),
+                json!({"kind":"unit"}),
+            ),
+            (
+                br#"{"schemaVersion":1,"typeFingerprint":"NoctiumCompositeTypeV1;t0;[]NoctiumCompositeLayoutV1;0;0;","layout":{"kind":"tuple","items":[]},"counts":{"leaves":0,"expandedNodes":1,"layoutNodes":1}}"#.as_slice(),
+                json!({"kind":"tuple","items":[]}),
+            ),
+        ] {
+            let schema = Schema::from_json(schema_json).unwrap();
+            let rendered = schema.from_native_leaves_json(&[]).unwrap();
+            let value: Json = serde_json::from_slice(&rendered).unwrap();
+            assert_eq!(value, expected);
+        }
+    }
 }

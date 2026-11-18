@@ -462,6 +462,17 @@ private def nativeCircuitFile (contract : Name) (ep : Entrypoint) : String :=
 private def nativePlanFile (contract : Name) (ep : Entrypoint) : String :=
   artifactName contract ++ "." ++ ep.name ++ ".impact.json"
 
+private def returnViewsJson (views : List ReturnView) : Json :=
+  Json.arr (views.toArray.map fun view =>
+    let schema : Except String Json := do
+      let compiled ← (Types.compileType view.environment view.type).mapError
+        fun diagnostic => diagnostic.message
+      Types.schemaJson compiled
+    Json.mkObj [
+      ("name", toJson view.name),
+      ("schema", schema.toOption.getD Json.null),
+      ("fields", toJson view.fields)])
+
 /-- The exact symbolic plan tree written by the compiler. This pure function
 also gives proof modules a kernel-visible artifact boundary. -/
 def nativePlanJson (profile : TargetProfile) (contractName : Name)
@@ -495,6 +506,8 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
       ("name", toJson returned.name), ("type", toJson (typeName returned.ty)),
       ("visibility", toJson ("public" : String)),
       ("expression", nativeExpressionJson returned.value)]))]
+  let returnViewFields := if ep.returnViews.isEmpty then [] else [
+    ("returnViews", returnViewsJson ep.returnViews)]
   let constructorFields := match ctor with
     | none => []
     | some value => [("constructor", constructorJson value)]
@@ -506,7 +519,7 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
-    ] ++ constructorFields ++ returnFields ++ [
+    ] ++ constructorFields ++ returnFields ++ returnViewFields ++ [
     ("reads", toJson reads),
     ("guards", toJson (plan.guards.map nativeExpressionJson))])
 
@@ -647,18 +660,22 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
   unless uniqueNames (lowered.toList.map (·.1)) do
     throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
   let contractMetadata := contracts.map fun (name, contract) =>
-    let entrypoints := contract.entrypoints.map fun ep => Json.mkObj ([
-      ("name", toJson ep.name), ("circuit", toJson ep.circuit.name),
-      ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
-      ("nativePlanFile", toJson (nativePlanFile name ep)),
-      ("nativeCircuitQualified", toJson Bool.false),
-      ("effects", toJson (ep.effects.zipIdx.map fun (effect, index) =>
-        guardedEffectJson (ep.effectGuards[index]?.getD none) effect))] ++
-      (if ep.returns.isEmpty then [] else [
+    let entrypoints := contract.entrypoints.map fun ep => Id.run do
+      let baseFields : List (String × Json) := [
+        ("name", toJson ep.name), ("circuit", toJson ep.circuit.name),
+        ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
+        ("nativePlanFile", toJson (nativePlanFile name ep)),
+        ("nativeCircuitQualified", toJson Bool.false),
+        ("effects", toJson (ep.effects.zipIdx.map fun (effect, index) =>
+          guardedEffectJson (ep.effectGuards[index]?.getD none) effect))]
+      let returnFields : List (String × Json) := if ep.returns.isEmpty then [] else [
         ("returns", toJson (ep.returns.map fun returned => Json.mkObj [
           ("name", toJson returned.name), ("type", toJson (typeName returned.ty)),
           ("visibility", toJson ("public" : String)),
-          ("expression", nativeExpressionJson returned.value)]))]))
+          ("expression", nativeExpressionJson returned.value)]))]
+      let returnViewFields : List (String × Json) := if ep.returnViews.isEmpty then [] else [
+        ("returnViews", returnViewsJson ep.returnViews)]
+      pure (Json.mkObj (baseFields ++ returnFields ++ returnViewFields))
     let constructorFields := match contract.constructor with
       | none => []
       | some ctor => [("constructor", constructorJson ctor)]
