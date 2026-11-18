@@ -266,6 +266,30 @@ fn bytes_operation(
             },
         ));
     }
+    if let Some(encoded_length) = operation.strip_prefix("sha512:") {
+        let length = canonical_byte_length(encoded_length)?;
+        ensure!(count == 1, "sha512 argument count");
+        return Ok((
+            vec![byte_scalar_type(length)],
+            byte_scalar_type(64),
+            crate::Expr::Sha512 {
+                length,
+                value: argument(0),
+            },
+        ));
+    }
+    if let Some(encoded_length) = operation.strip_prefix("keccak256:") {
+        let length = canonical_byte_length(encoded_length)?;
+        ensure!(count == 1, "keccak256 argument count");
+        return Ok((
+            vec![byte_scalar_type(length)],
+            byte_scalar_type(32),
+            crate::Expr::Keccak256 {
+                length,
+                value: argument(0),
+            },
+        ));
+    }
     if let Some(encoded_bounds) = operation.strip_prefix("sliceBytes:") {
         let fields = encoded_bounds.split(':').collect::<Vec<_>>();
         ensure!(fields.len() == 3, "sliceBytes operation encoding");
@@ -5169,37 +5193,37 @@ mod completed_invocation_tests {
         panic!("control source call sequence exceeded test bound");
     }
 
+    fn byte_host_plan(result_type: &str, value: Json) -> Json {
+        json!({
+            "schemaVersion": 2,
+            "kind": "host-control",
+            "name": "genericBytesTest",
+            "types": [],
+            "mode": "host",
+            "binding": null,
+            "inputs": [],
+            "witnesses": [],
+            "functions": [{
+                "id": "main",
+                "name": "main",
+                "parameters": [],
+                "resultType": result_type,
+                "body": [{"tag": "return", "value": value}]
+            }],
+            "entry": "main",
+            "limits": {"maxSteps": 256}
+        })
+    }
+
+    fn run_byte_host_plan(plan: Json) -> Json {
+        let parsed = Plan::parse(&plan, None).unwrap();
+        let context = source_context(&parsed, &"d".repeat(64));
+        let mut session = Session::from_json(plan, BTreeMap::new(), context).unwrap();
+        session.advance().unwrap()
+    }
+
     #[test]
     fn generic_fixed_bytes_execute_operations_and_reject_bad_bounds() {
-        fn plan(result_type: &str, value: Json) -> Json {
-            json!({
-                "schemaVersion": 2,
-                "kind": "host-control",
-                "name": "genericBytesTest",
-                "types": [],
-                "mode": "host",
-                "binding": null,
-                "inputs": [],
-                "witnesses": [],
-                "functions": [{
-                    "id": "main",
-                    "name": "main",
-                    "parameters": [],
-                    "resultType": result_type,
-                    "body": [{"tag": "return", "value": value}]
-                }],
-                "entry": "main",
-                "limits": {"maxSteps": 256}
-            })
-        }
-
-        fn run(plan: Json) -> Json {
-            let parsed = Plan::parse(&plan, None).unwrap();
-            let context = source_context(&parsed, &"d".repeat(64));
-            let mut session = Session::from_json(plan, BTreeMap::new(), context).unwrap();
-            session.advance().unwrap()
-        }
-
         let source = json!({"tag":"bytesLiteral","length":4,"values":[1,2,3,4]});
         let reverse = json!({
             "tag":"bytes",
@@ -5216,8 +5240,8 @@ mod completed_invocation_tests {
             "operation":"concatBytes:2:0",
             "arguments":[slice,{"tag":"bytesLiteral","length":0,"values":[]}]
         });
-        let nonempty_plan = plan("Bytes<2>", joined);
-        let completed = run(nonempty_plan.clone());
+        let nonempty_plan = byte_host_plan("Bytes<2>", joined);
+        let completed = run_byte_host_plan(nonempty_plan.clone());
         assert_eq!(completed["status"], "completed");
         assert_eq!(completed["result"], json!({"kind":"bytes","values":[3,2]}));
 
@@ -5231,9 +5255,73 @@ mod completed_invocation_tests {
             "operation":"sliceBytes:4:2:2",
             "arguments":[{"tag":"bytesLiteral","length":4,"values":[9,8,7,6]}]
         });
-        let completed = run(plan("Bytes<0>", empty));
+        let completed = run_byte_host_plan(byte_host_plan("Bytes<0>", empty));
         assert_eq!(completed["status"], "completed");
         assert_eq!(completed["result"], json!({"kind":"bytes","values":[]}));
+    }
+
+    #[test]
+    fn generic_bytes_hashes_match_sha512_and_keccak256_vectors() {
+        fn run_hash(
+            operation: &str,
+            input_length: usize,
+            values: Vec<u8>,
+            result_type: &str,
+        ) -> Json {
+            let plan = byte_host_plan(
+                result_type,
+                json!({
+                        "tag":"bytes",
+                        "operation":operation,
+                        "arguments":[{"tag":"bytesLiteral","length":input_length,"values":values}]
+                }),
+            );
+            run_byte_host_plan(plan)
+        }
+
+        let abc = b"abc".to_vec();
+        let sha512_abc = run_hash("sha512:3", 3, abc.clone(), "Bytes<64>");
+        assert_eq!(sha512_abc["status"], "completed");
+        assert_eq!(
+            sha512_abc["result"]["values"],
+            json!(hex::decode(
+                "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+            ).unwrap())
+        );
+
+        let keccak_abc = run_hash("keccak256:3", 3, abc, "Bytes<32>");
+        assert_eq!(keccak_abc["status"], "completed");
+        assert_eq!(
+            keccak_abc["result"]["values"],
+            json!(
+                hex::decode("4e03657aea45a94fc7d47ba826c8d667c0d1e6e33a64a036ec44f58fa12d6c45")
+                    .unwrap()
+            )
+        );
+
+        let sha512_empty = run_hash("sha512:0", 0, Vec::new(), "Bytes<64>");
+        assert_eq!(sha512_empty["status"], "completed");
+        assert_eq!(
+            sha512_empty["result"]["values"],
+            json!(hex::decode(
+                "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+            ).unwrap())
+        );
+
+        let keccak_empty = run_hash("keccak256:0", 0, Vec::new(), "Bytes<32>");
+        assert_eq!(keccak_empty["status"], "completed");
+        assert_eq!(
+            keccak_empty["result"]["values"],
+            json!(
+                hex::decode("c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470")
+                    .unwrap()
+            )
+        );
+
+        assert!(super::bytes_operation("sha512:3", 0).is_err());
+        assert!(super::bytes_operation("sha512:1025", 1).is_err());
+        assert!(super::bytes_operation("keccak256:03", 1).is_err());
+        assert!(super::bytes_operation("keccak256:0", 2).is_err());
     }
 
     #[test]

@@ -33,6 +33,10 @@ inductive Expr : Ty → Type where
   /-- Concatenate two fixed-length byte strings. -/
   | concatBytes {leftLength rightLength : Nat} (left : Expr (.bytes leftLength))
       (right : Expr (.bytes rightLength)) : Expr (.bytes (leftLength + rightLength))
+  /-- SHA-512 over a source byte string, returning its full fixed-width digest. -/
+  | sha512 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 64)
+  /-- Keccak-256 over a source byte string, returning its full fixed-width digest. -/
+  | keccak256 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 32)
   /-- SHA-256 over the pinned FAB Bytes32 alignment, using native ZKIR
   persistent_hash and returning a typed Bytes32 digest. -/
   | persistentHash32 (value : Expr (.bytes 32)) : Expr (.bytes 32)
@@ -355,6 +359,8 @@ structure Capabilities where
   persistentHash32 : Bool := false
   persistentHashVector32 : Bool := false
   persistentHashNative : Bool := false
+  sha512 : Bool := false
+  keccak256 : Bool := false
   bytes32Conversions : Bool := false
   jubjub : Bool := false
   stateCells : Bool := false
@@ -364,13 +370,15 @@ structure Capabilities where
 /-- Pure expression capabilities implemented by the pinned native crypto path. -/
 def Capabilities.crypto : Capabilities := {
   poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-  persistentHashNative := true, bytes32Conversions := true, jubjub := true
+  persistentHashNative := true, sha512 := true, keccak256 := true,
+  bytes32Conversions := true, jubjub := true
 }
 
 /-- Source checking includes the currently implemented ledger state features. -/
 def Capabilities.source : Capabilities := {
   poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-  persistentHashNative := true, bytes32Conversions := true, jubjub := true,
+  persistentHashNative := true, sha512 := true, keccak256 := true,
+  bytes32Conversions := true, jubjub := true,
   stateCells := true, stateMaps := true
 }
 
@@ -432,6 +440,16 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
     left.validate caps env
     right.validate caps env
+  | .sha512 (length := length) value => do
+    unless caps.sha512 do throw "target lacks qualified SHA-512 support"
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    value.validate caps env
+  | .keccak256 (length := length) value => do
+    unless caps.keccak256 do throw "target lacks qualified Keccak-256 support"
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    value.validate caps env
   | .reverseBytes32 value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
     value.validate caps env

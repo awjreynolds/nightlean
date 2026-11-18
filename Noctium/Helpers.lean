@@ -104,6 +104,8 @@ inductive BytesOp where
   | persistentHashNative
   | persistentHashNativeVector
   | persistentHashPoint
+  | sha512 (length : Nat)
+  | keccak256 (length : Nat)
   | reverseBytes32
   | reverseBytes (length : Nat)
   | sliceBytes (length start stop : Nat)
@@ -119,6 +121,8 @@ def BytesOp.operationName : BytesOp → String
   | .persistentHashNative => "persistentHashNative"
   | .persistentHashNativeVector => "persistentHashNativeVector"
   | .persistentHashPoint => "persistentHashPoint"
+  | .sha512 length => s!"sha512:{length}"
+  | .keccak256 length => s!"keccak256:{length}"
   | .reverseBytes32 => "reverseBytes32"
   | .reverseBytes length => s!"reverseBytes:{length}"
   | .sliceBytes length start stop => s!"sliceBytes:{length}:{start}:{stop}"
@@ -154,6 +158,14 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
   | .persistentHashPoint =>
     unless argumentCount == 1 do throw "persistentHashPoint requires one JubjubPoint argument"
     pure ([.jubjubPoint], .bytes 32)
+  | .sha512 length =>
+    unless argumentCount == 1 do throw "sha512 requires one byte-string argument"
+    unless length ≤ Types.defaultLimits.maxVectorLength do throw "sha512 input length exceeds the source limit"
+    pure ([.bytes length], .bytes 64)
+  | .keccak256 length =>
+    unless argumentCount == 1 do throw "keccak256 requires one byte-string argument"
+    unless length ≤ Types.defaultLimits.maxVectorLength do throw "keccak256 input length exceeds the source limit"
+    pure ([.bytes length], .bytes 32)
   | .reverseBytes32 =>
     unless argumentCount == 1 do throw "reverseBytes32 requires one Bytes32 argument"
     pure ([.bytes 32], .bytes 32)
@@ -1618,6 +1630,12 @@ mutual
           let point ← liftD (typedExpr span .jubjubPoint value)
           pure (scalarValue (Expr.persistentHashNativeVector [
             Expr.jubjubCoordinate point 0, Expr.jubjubCoordinate point 1]))
+        | .sha512 length, [value] => do
+          let value ← liftD (typedExpr span (.bytes length) value)
+          pure (scalarValue (Expr.sha512 value))
+        | .keccak256 length, [value] => do
+          let value ← liftD (typedExpr span (.bytes length) value)
+          pure (scalarValue (Expr.keccak256 value))
         | .reverseBytes32, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.reverseBytes32 value))

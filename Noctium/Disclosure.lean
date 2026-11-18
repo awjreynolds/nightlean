@@ -44,6 +44,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .reverseBytes value | .sliceBytes value .. => origins env value
   | .concatBytes left right => do
     pure (merge (← origins env left) (← origins env right))
+  | .sha512 value | .keccak256 value => origins env value
   | .reverseBytes32 value => origins env value
   | .persistentHash32 value => origins env value
   | .bytes32Literal _ => pure []

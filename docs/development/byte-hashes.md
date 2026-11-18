@@ -1,0 +1,42 @@
+# SHA-512 and Keccak-256
+
+`sha512(value)` accepts `Bytes n` and returns `Bytes 64`.
+`keccak256(value)` returns `Bytes32` and uses Keccak padding, distinct from
+SHA3-256. Both accept source lengths from 0 through the existing 1024-byte limit.
+Use explicit serialization or concatenation to construct a preimage.
+
+```lean
+import Noctium.Frontend
+open scoped Noctium
+
+noctium_circuit hashPayload where
+  private payload : Bytes 64
+  output digest : Bytes 64 := disclose(sha512(payload))
+end
+```
+
+Hashing preserves private origins. Releasing a hash or a selected digest byte
+requires the same explicit disclosure as other derived private values. The Lean
+semantic context supplies separate hash oracles with fail-closed defaults and
+checks every returned digest's length and octet bounds.
+
+The compiler emits the native `sha512` and `keccak256` instructions directly.
+Preimages use one exact FAB byte alignment and canonical Native chunks, with
+the partial final chunk first in FAB order. Empty source preimages use an empty
+alignment and no operands. Native hashing accepts this route without constructing
+an unsupported native `Bytes 0` value or substituting a constant digest.
+Operand evaluation, assertions and range requirements remain active for empty
+preimages.
+
+[The source fixture](../../tests/ByteHashes.lean) and
+[native cases](../../runtime/tests/byte_hashes.rs) cover empty and `abc` preimages,
+31/32/33-byte boundaries, typed 32/64-byte returns and reuse of SHA-512 output in
+slicing and concatenation. Changed input/output bindings, a false private guard,
+SHA3 substitution, and malformed producer alignment/count/ranges reject.
+Empty hashes pass the official checker and native circuit sizing. A focused
+Rust host Session case exercises the same operations through the interpreter.
+
+These are source, checker, sizing and host execution results on the selected
+3.2.1 profile. No new keys, proofs or deployment were created for this feature.
+The source API covers bounded byte preimages. Mixed FAB overloads, broader
+profile qualification and compiler-wide preservation remain separate work.

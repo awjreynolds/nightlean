@@ -9,11 +9,11 @@ namespace Noctium.Backend.Impact
 
 private def expressionCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, jubjub := true}
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, jubjub := true}
 
 private def ledgerCapabilities : Capabilities :=
   {poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
-    persistentHashNative := true, bytes32Conversions := true, jubjub := true,
+    persistentHashNative := true, bytes32Conversions := true, sha512 := true, keccak256 := true, jubjub := true,
     stateCells := true, stateMaps := true}
 
 /-- Symbols in the ledger public-input sequence are source expressions, not
@@ -342,7 +342,7 @@ private def resolveListState (state : List StateDecl) (name : String)
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ => []
   | .bytesField value _ | .bytesAt value _ => expressionNames value
-  | .persistentHash32 value => expressionNames value
+  | .sha512 value | .keccak256 value | .persistentHash32 value => expressionNames value
   | .bytes32Literal _ | .bytesLiteral _ _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
@@ -406,6 +406,8 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .uint maximum value => .uint maximum value
   | .bytesField value index => .bytesField (totalizeUnder guard value) index
   | .bytesAt value index => .bytesAt (totalizeUnder guard value) index
+  | .sha512 value => .sha512 (totalizeUnder guard value)
+  | .keccak256 value => .keccak256 (totalizeUnder guard value)
   | .persistentHash32 value => .persistentHash32 (totalizeUnder guard value)
   | .bytes32Literal values => .bytes32Literal values
   | .bytesLiteral length values => .bytesLiteral length values

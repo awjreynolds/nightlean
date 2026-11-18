@@ -8,7 +8,7 @@ inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
-  | bytes32Conversion | bytes32Reverse | fixedBytes
+  | bytes32Conversion | bytes32Reverse | fixedBytes | fixedByteHash
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
   deriving Repr, BEq, DecidableEq
 
@@ -30,7 +30,7 @@ inductive EffectRule where
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input | typedEncodeInput
-  | typedBytes32Index | typedFixedBytes
+  | typedBytes32Index | typedFixedBytes | fixedByteHashPreimage
   | typedBytes32Conversion
   | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
@@ -163,6 +163,10 @@ def instructionSupport (opcode : String) : Except String Support :=
     scalar .nativeBinary .propagateAll .pure .boundedOperands .noGuard .none ["a", "b", "bits", "output"]
   | "transient_hash" => .supported <|
     scalar .nativeVector .propagateAll .pure .canonicalNative .noGuard .none ["inputs", "output"]
+  | "sha512" | "keccak256" => .supported <|
+    let descriptor := scalar .fixedByteHash .propagateAll .pure .fixedByteHashPreimage .noGuard .sourceHashTerm
+      ["alignment", "inputs", "output"]
+    {descriptor with encoding := .fabAlignedHashPreimage}
   | "persistent_hash" => .supported <|
     let descriptor := scalar .persistentHashPreimage .propagateAll .pure .alignedHashPreimage .noGuard .sourceHashTerm
       ["alignment", "inputs", "output"]

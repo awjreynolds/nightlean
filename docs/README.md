@@ -50,6 +50,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 
 - [Scalar design](designs/scalar-types.md), [native unsigned lowering](development/native-unsigned-scalars.md) and [producer safety gate](development/native-producer-safety.md).
 - [Fixed byte values](development/fixed-bytes.md), including bounded lengths, reversal, slicing, concatenation, typed results and empty-value checks.
+- [SHA-512 and Keccak-256](development/byte-hashes.md), with explicit preimages, private origins and direct native empty-input hashing.
 - [Sequential native cell reads](development/sequential-state.md), with source-generated read-after-write fixtures on both runtime profiles. Generic state preservation remains separate proof work.
 - [Composite type identity and bounded layouts](development/composite-types.md), plus [checked values and Rust/C++ codecs](development/composite-values.md). [Component-aware helper outputs](development/component-disclosure.md) compile to native circuit leaves with disclosure checks. Bytes32-keyed ledger records support nonempty Native-only layouts.
 - [Portable runtime design](designs/portable-runtime.md) and the [host/runtime boundary](research/noctium-portable-runtime-boundary.md).

@@ -46,7 +46,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .bytesLiteral _ _ => pure ()
   | .fromBytes32 value => checkConstants value
   | .inv value => checkConstants value
-  | .persistentHash32 value => checkConstants value
+  | .sha512 value | .keccak256 value | .persistentHash32 value => checkConstants value
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
@@ -386,6 +386,24 @@ private def encodeFixedBytes (length : Nat) (bytes : String) : LowerM ByteOperan
   modify fun state => {state with expressions := keys.zip outputs ++ state.expressions}
   pure {values := outputs, packed := true}
 
+/-- Hash one fixed byte preimage. FAB consumes chunks in the reverse of Encode
+order. Empty preimages use empty alignment and no operands, never Bytes0. -/
+private def lowerFixedByteHash (algorithm : String) (length outputLength : Nat)
+    (value : ByteOperands) : LowerM ByteOperands := do
+  let operands := (← byteChunks length value).reverse
+  let alignment := if length == 0 then Json.arr #[] else Json.arr #[Json.mkObj [
+    ("tag", toJson ("atom" : String)),
+    ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson length)])]]
+  let key : ExpressionKey := (algorithm, operands, some length)
+  let output ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit algorithm [("alignment", alignment), ("inputs", toJson operands), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  encodeFixedBytes outputLength output
+
 private def lowerFixedReverse (length : Nat) (value : ByteOperands) : LowerM ByteOperands := do
   if length == 0 then return {values := []}
   let input ← lowerFixedBytesFromChunks length (← byteChunks length value)
@@ -540,6 +558,10 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
     let left ← lowerBytes left
     let right ← lowerBytes right
     lowerFixedConcat leftLength rightLength left right
+  | .sha512 (length := length) value => do
+    lowerFixedByteHash "sha512" length 64 (← lowerBytes value)
+  | .keccak256 (length := length) value => do
+    lowerFixedByteHash "keccak256" length 32 (← lowerBytes value)
   | .persistentHash32 value => do
     let values ← lowerBytes value
     let (highByte, low31) ← alignedBytes32Fields values.values
@@ -777,6 +799,7 @@ def lowerExpr : Expr ty → LowerM String
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
+  | .sha512 _ | .keccak256 _
   | .bytesLiteral _ _ | .reverseBytes _ | .sliceBytes _ _ _ | .concatBytes _ _
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
   | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ | .reverseBytes32 _ => do
@@ -819,7 +842,7 @@ still bind this public-input sequence to its accepted ledger call transcript. -/
 private def loweringCapabilities : Capabilities :=
   { poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
-    bytes32Conversions := true, jubjub := true }
+    bytes32Conversions := true, sha512 := true, keccak256 := true, jubjub := true }
 
 def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
   Disclosure.circuit c

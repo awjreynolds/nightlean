@@ -62,8 +62,8 @@ structure JubjubOracle where
   neg : (Nat × Nat) → Except String (Nat × Nat) :=
     fun _ => .error "qualified Jubjub negation oracle is unavailable"
 
-/-- The crypto oracles have fail-closed defaults. A backend must supply pinned
-Jubjub operations before semantic evaluation can execute curve expressions. -/
+/-- Crypto oracles have fail-closed defaults. A backend must supply pinned hash
+and Jubjub operations before semantic evaluation can execute those expressions. -/
 structure EvalContext where
   modulus : Nat
   poseidon2 : Nat → Nat → Nat → Except String Nat
@@ -71,6 +71,12 @@ structure EvalContext where
   The default rejects, so evaluation never substitutes a placeholder hash. -/
   persistentHash32 : List Nat → Except String (List Nat) :=
     fun _ => .error "qualified Bytes32 persistent-hash oracle is unavailable"
+  /-- Qualified SHA-512 oracle for source byte strings. -/
+  sha512 : List Nat → Except String (List Nat) :=
+    fun _ => .error "qualified SHA-512 oracle is unavailable"
+  /-- Qualified Keccak-256 oracle for source byte strings. -/
+  keccak256 : List Nat → Except String (List Nat) :=
+    fun _ => .error "qualified Keccak-256 oracle is unavailable"
   jubjub : JubjubOracle := {}
   /-- Pinned native serialization of validated Jubjub affine points. -/
   jubjubToBytes32 : (Nat × Nat) → Except String (List Nat) :=
@@ -200,6 +206,26 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     pure ((bytes.drop start).take (stop - start))
   | .concatBytes left right => do
     pure ((← left.eval ctx env) ++ (← right.eval ctx env))
+  | .sha512 (length := length) value => do
+    if length > maxBytesLength then
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    let input ← value.eval ctx env
+    if input.length != length || !input.all (· ≤ 255) then
+      throw "SHA-512 input is not a canonical fixed byte string"
+    let digest ← ctx.sha512 input
+    if digest.length != 64 || !digest.all (· ≤ 255) then
+      throw "SHA-512 oracle returned a malformed Bytes64 digest"
+    pure digest
+  | .keccak256 (length := length) value => do
+    if length > maxBytesLength then
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    let input ← value.eval ctx env
+    if input.length != length || !input.all (· ≤ 255) then
+      throw "Keccak-256 input is not a canonical fixed byte string"
+    let digest ← ctx.keccak256 input
+    if digest.length != 32 || !digest.all (· ≤ 255) then
+      throw "Keccak-256 oracle returned a malformed Bytes32 digest"
+    pure digest
   | .reverseBytes32 value => do
     pure ((← value.eval ctx env).reverse)
   | .jubjubScalarFromNative value => do
@@ -359,6 +385,7 @@ theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSp
 private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
+    sha512 := true, keccak256 := true,
     bytes32Conversions := true, jubjub := true}
 
 def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except String EvalEnv := do

@@ -178,6 +178,23 @@ private def nativeFieldAtom : Json := Json.mkObj [
   ("tag", toJson ("atom" : String)),
   ("value", Json.mkObj [("tag", toJson ("field" : String))])]
 
+/-- Accept only the single fixed-byte source preimage, or the empty preimage.
+Canonical comparison rejects mixed atoms, extra fields and alternate number forms. -/
+private def fixedByteHashLength (alignment : Json) : Except String Nat := do
+  let atoms ← alignment.getArr?
+  if atoms.isEmpty then return 0
+  ensure (atoms.size == 1) "byte hash requires exactly one byte alignment atom"
+  let atom := atoms[0]!
+  let value ← atom.getObjVal? "value"
+  let length ← natField value "length"
+  ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
+    "byte hash preimage length is unsupported"
+  let canonical := Json.arr #[Json.mkObj [
+    ("tag", toJson ("atom" : String)),
+    ("value", Json.mkObj [("tag", toJson ("bytes" : String)), ("length", toJson length)])]]
+  ensure (alignment == canonical) "byte hash requires canonical fixed-byte alignment"
+  pure length
+
 private def bytes32FromChunksTerm (low31 highByte : Term) : Term :=
   .unary "bytes32_from_chunks" (.hash [low31, highByte])
 
@@ -344,6 +361,16 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       ensure (exclusive > 0) "asserted less_than has an impossible zero bound"
       refine state identifier (exclusive - 1)
     else pure state
+  | "sha512" | "keccak256" => do
+    let length ← fixedByteHashLength (← instruction.getObjVal? "alignment")
+    let values ← nativeArguments state instruction "inputs"
+    ensure (values.length == bytesChunkCount length) "byte hash aligned field count mismatch"
+    for (value, index) in values.reverse.zipIdx do
+      ensure (value.maximum ≤ 2 ^ (8 * bytesChunkWidth length index) - 1)
+        "byte hash operand lacks its exact chunk range bound"
+    let term := fixedByteHashTerm opcode length (values.map (·.term))
+    let fact ← combine term 0 values
+    defineResult state instruction {fact with valueType := byteValueType (if opcode == "sha512" then 64 else 32)}
   | "persistent_hash" => do
     let alignment ← instruction.getObjVal? "alignment"
     let values ← nativeArguments state instruction "inputs"

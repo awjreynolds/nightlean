@@ -107,6 +107,10 @@ def persistentHashNativeVectorTerm (values : List Term) : Term :=
   | [value] => persistentHashNativeTerm value
   | _ => .unary s!"persistent_hash_native_vector:{values.length}" (.hash values)
 
+/-- Distinct algorithms bind the fixed preimage length and ordered FAB chunks. -/
+def fixedByteHashTerm (algorithm : String) (length : Nat) (alignedChunks : List Term) : Term :=
+  .unary s!"{algorithm}_bytes:{length}" (.hash alignedChunks)
+
 /-- Modern Encode output chunk terms. Index 0 is low31 and index 1 is highByte. -/
 def encodedHashChunkTerm (digest : Term) (index : Nat) : Term :=
   .unary (if index == 0 then "encode_bytes32_low31" else "encode_bytes32_highByte") digest
@@ -125,6 +129,7 @@ private def opaqueBytes32Value : Term → Bool
       opcode == "bytes32_from_chunks" || opcode == "reverse_bytes32"
       || opcode.startsWith "bytes_from_chunks:" || opcode.startsWith "reverse_bytes:"
       || opcode.startsWith "slice_bytes:"
+      || opcode.startsWith "sha512_bytes:" || opcode.startsWith "keccak256_bytes:"
   | .binary opcode _ _ => opcode.startsWith "concat_bytes:"
   | _ => false
 
@@ -276,6 +281,14 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
       concatBytesTerm leftLength rightLength
         (bytesFromChunksTerm leftLength leftChunks) (bytesFromChunksTerm rightLength rightChunks)
     pure {term, bounds := left.bounds ++ right.bounds, assertions := left.assertions ++ right.assertions}
+  | .sha512 (length := length) value => do
+    let normalized ← normalize env value
+    let chunks ← bytesChunksTerm length normalized.term
+    pure {normalized with term := fixedByteHashTerm "sha512" length chunks.reverse}
+  | .keccak256 (length := length) value => do
+    let normalized ← normalize env value
+    let chunks ← bytesChunksTerm length normalized.term
+    pure {normalized with term := fixedByteHashTerm "keccak256" length chunks.reverse}
   | .persistentHash32 value => do
     let normalized ← normalize env value
     let (highByte, low31) ← alignedBytes32Fields normalized

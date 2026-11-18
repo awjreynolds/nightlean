@@ -214,6 +214,14 @@ pub enum Expr {
         length: usize,
         value: Box<Expr>,
     },
+    Sha512 {
+        length: usize,
+        value: Box<Expr>,
+    },
+    Keccak256 {
+        length: usize,
+        value: Box<Expr>,
+    },
     #[serde(rename = "sliceBytes")]
     SliceBytes {
         length: usize,
@@ -509,6 +517,12 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             let mut bytes = evaluated_bytes(value, *length, env)?;
             bytes.reverse();
             Value::Bytes(bytes)
+        }
+        Expr::Sha512 { length, value } => {
+            Value::Bytes(sha2::Sha512::digest(evaluated_bytes(value, *length, env)?).to_vec())
+        }
+        Expr::Keccak256 { length, value } => {
+            Value::Bytes(sha3::Keccak256::digest(evaluated_bytes(value, *length, env)?).to_vec())
         }
         Expr::SliceBytes {
             length,

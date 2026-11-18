@@ -303,6 +303,8 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| poseidon2($domain:num, $left, $right)) =>
     s!"poseidon2({domain.getNat}, {renderExpr left}, {renderExpr right})"
   | `(nlexpr| persistentHash32($value)) => s!"persistentHash32({renderExpr value})"
+  | `(nlexpr| sha512($value)) => s!"sha512({renderExpr value})"
+  | `(nlexpr| keccak256($value)) => s!"keccak256({renderExpr value})"
   | `(nlexpr| bytes32($literal:str)) => s!"bytes32({(toJson literal.getString).compress})"
   | `(nlexpr| bytes($length:num, $literal:str)) =>
     s!"bytes({length.getNat}, {(toJson literal.getString).compress})"
@@ -349,7 +351,8 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
     disclosedValues condition ++ disclosedValues yes ++ disclosedValues no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => disclosedValues left ++ disclosedValues right
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
-  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value))
+  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
+  | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => disclosedValues value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => disclosedValues value
@@ -383,7 +386,8 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
     inlineAssertions condition ++ inlineAssertions yes ++ inlineAssertions no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => inlineAssertions left ++ inlineAssertions right
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
-  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value))
+  | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
+  | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => inlineAssertions value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => inlineAssertions value
@@ -548,6 +552,24 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     lowerBytesOperation programName callPrefix env stx .persistentHashNativeVector values.getElems.toList
   | `(nlexpr| persistentHashPoint($point)) =>
     lowerBytesOperation programName callPrefix env stx .persistentHashPoint [point]
+  | `(nlexpr| sha512($value)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type
+      | throwErrorAt stx "sha512 requires a fixed byte-string value"
+    let operation := Noctium.Helpers.BytesOp.sha512 length
+    let (_, result) ← match operation.signature 1 with
+      | .error message => throwErrorAt stx message
+      | .ok signature => pure signature
+    pure (mergeLowered (.scalar result) (.bytes operation [value.term]) [value])
+  | `(nlexpr| keccak256($value)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type
+      | throwErrorAt stx "keccak256 requires a fixed byte-string value"
+    let operation := Noctium.Helpers.BytesOp.keccak256 length
+    let (_, result) ← match operation.signature 1 with
+      | .error message => throwErrorAt stx message
+      | .ok signature => pure signature
+    pure (mergeLowered (.scalar result) (.bytes operation [value.term]) [value])
   | `(nlexpr| reverseBytes32($value)) =>
     lowerBytesOperation programName callPrefix env stx .reverseBytes32 [value]
   | `(nlexpr| reverseBytes($value)) => do
@@ -749,6 +771,8 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .persistentHashNative => `(Noctium.Helpers.BytesOp.persistentHashNative)
       | .persistentHashNativeVector => `(Noctium.Helpers.BytesOp.persistentHashNativeVector)
       | .persistentHashPoint => `(Noctium.Helpers.BytesOp.persistentHashPoint)
+      | .sha512 length => `(Noctium.Helpers.BytesOp.sha512 $(natTerm length))
+      | .keccak256 length => `(Noctium.Helpers.BytesOp.keccak256 $(natTerm length))
       | .reverseBytes32 => `(Noctium.Helpers.BytesOp.reverseBytes32)
       | .reverseBytes length => `(Noctium.Helpers.BytesOp.reverseBytes $(natTerm length))
       | .sliceBytes length start stop =>

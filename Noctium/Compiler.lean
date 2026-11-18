@@ -37,6 +37,12 @@ private def expressionJson : Expr ty → Json
       Json.mkObj [("tag", toJson ("concatBytes" : String)),
         ("leftLength", toJson leftLength), ("rightLength", toJson rightLength),
         ("left", expressionJson left), ("right", expressionJson right)]
+  | .sha512 (length := length) value => Json.mkObj [
+      ("tag", toJson ("sha512" : String)), ("length", toJson length),
+      ("value", expressionJson value)]
+  | .keccak256 (length := length) value => Json.mkObj [
+      ("tag", toJson ("keccak256" : String)), ("length", toJson length),
+      ("value", expressionJson value)]
   | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
       ("value", expressionJson value)]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),
@@ -111,6 +117,12 @@ private def nativeExpressionJson : Expr ty → Json
       Json.mkObj [("tag", toJson ("concatBytes" : String)),
         ("leftLength", toJson leftLength), ("rightLength", toJson rightLength),
         ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
+  | .sha512 (length := length) value => Json.mkObj [
+      ("tag", toJson ("sha512" : String)), ("length", toJson length),
+      ("value", nativeExpressionJson value)]
+  | .keccak256 (length := length) value => Json.mkObj [
+      ("tag", toJson ("keccak256" : String)), ("length", toJson length),
+      ("value", nativeExpressionJson value)]
   | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
       ("value", nativeExpressionJson value)]
   | .persistentHash32 value => Json.mkObj [("tag", toJson ("persistentHash32" : String)),

@@ -123,6 +123,8 @@ scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
+scoped syntax "sha512(" nlexpr ")" : nlexpr
+scoped syntax "keccak256(" nlexpr ")" : nlexpr
 scoped syntax "reverseBytes32(" nlexpr ")" : nlexpr
 scoped syntax "bytes(" num "," str ")" : nlexpr
 scoped syntax "reverseBytes(" nlexpr ")" : nlexpr
@@ -347,6 +349,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
+  | `(nlexpr| sha512($value)) | `(nlexpr| keccak256($value)) => hasPartialScalar value
   | `(nlexpr| bytes($_:num, $_:str)) => Bool.false
   | `(nlexpr| reverseBytes($value)) => hasPartialScalar value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => Bool.true
@@ -511,6 +514,16 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless valueTy == .bytes 32 do
       throwErrorAt stx "persistentHash32 requires a Bytes32 expression"
     pure (.bytes 32, ← `(Noctium.Expr.persistentHash32 $value))
+  | `(nlexpr| sha512($value)) => do
+    let (valueTy, value) ← expression env value
+    let .bytes _ := valueTy
+      | throwErrorAt stx "sha512 requires a Bytes expression"
+    pure (.bytes 64, ← `(Noctium.Expr.sha512 $value))
+  | `(nlexpr| keccak256($value)) => do
+    let (valueTy, value) ← expression env value
+    let .bytes _ := valueTy
+      | throwErrorAt stx "keccak256 requires a Bytes expression"
+    pure (.bytes 32, ← `(Noctium.Expr.keccak256 $value))
   | `(nlexpr| bytes($length:num, $literal:str)) => do
     let length := length.getNat
     if length > Noctium.maxBytesLength then
@@ -1722,6 +1735,8 @@ private def moduleCapabilities : Capabilities := {
   persistentHash32 := Bool.true
   persistentHashVector32 := Bool.true
   persistentHashNative := Bool.true
+  sha512 := Bool.true
+  keccak256 := Bool.true
   bytes32Conversions := Bool.true
   jubjub := Bool.true
   stateCells := Bool.true
