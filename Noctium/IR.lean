@@ -114,21 +114,31 @@ structure Input where
   span : SourceSpan := {}
   deriving Repr
 
-/-- Native input identifiers. Byte leaves keep source order. Foreign values
-keep one typed identifier because the backend performs their native decoding. -/
+/-- Native input identifiers. Public Bytes32 uses FAB high-byte then low31
+fields. Other byte leaves keep source order. Foreign values keep one typed
+identifier because the backend performs their native decoding. -/
+def Input.bytes32ProjectionIdentifiers (name : String) : List String :=
+  [s!"_noctium_bytes32_{name}_high", s!"_noctium_bytes32_{name}_low31"]
+
 def Input.nativeIdentifiers (input : Input) : List String :=
   match input.ty with
+  | .bytes 32 =>
+    if input.visibility == .«public» then
+      (Input.bytes32ProjectionIdentifiers input.name).map fun name => "%input_" ++ name
+    else (List.range 32).map fun index =>
+      s!"%input_{input.name}_byte_{index}"
   | .bytes length => (List.range length).map fun index =>
       s!"%input_{input.name}_byte_{index}"
   | .jubjubPoint => [s!"%input_{input.name}_x", s!"%input_{input.name}_y"]
   | .foreign _ => ["%input_" ++ input.name]
   | _ => ["%input_" ++ input.name]
 
-/-- Reserved Native projections used by the public transcript prologue for
-opaque curve inputs. These names never replace the typed source alias. -/
+/-- Reserved Native projections used by the public transcript prologue.
+These names never replace the typed source alias. -/
 def Input.publicProjectionIdentifiers (input : Input) : List String :=
   if input.visibility != .«public» then [] else
   match input.ty with
+  | .bytes 32 => Input.bytes32ProjectionIdentifiers input.name
   | .jubjubScalar => [s!"_noctium_jubjub_scalar_{input.name}"]
   | .jubjubPoint => [s!"_noctium_jubjub_point_{input.name}_0",
       s!"_noctium_jubjub_point_{input.name}_1"]

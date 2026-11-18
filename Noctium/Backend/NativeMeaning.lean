@@ -172,6 +172,8 @@ private def opaqueBytes32Value : Term → Bool
   | _ => false
 
 private def splitBytes32Fields : Term → Except String (Term × Term)
+  | .unary "bytes32_from_chunks" (.hash [low31, highByte]) =>
+    pure (highByte, low31)
   | .bytes terms => do
     unless terms.length == 32 do throw "Bytes32 source term has wrong byte count"
     let some highByte := terms[31]? | throw "Bytes32 source term has no high byte"
@@ -219,6 +221,9 @@ def bytesChunksTerm (length : Nat) : Term → Except String (List Term)
     let yes ← bytesChunksTerm length yes
     let no ← bytesChunksTerm length no
     pure ((yes.zip no).map fun (a, b) => .select condition a b)
+  | .unary "bytes32_from_chunks" (.hash [low31, highByte]) => do
+    unless length == 32 do throw "byte source term has wrong length"
+    pure [low31, highByte]
   | term =>
     if opaqueBytes32Value term then
       pure ((List.range (bytesChunkCount length)).map (encodedBytesChunkTerm length term))
@@ -227,6 +232,9 @@ def bytesChunksTerm (length : Nat) : Term → Except String (List Term)
 def bytesFromChunksTerm (length : Nat) (chunks : List Term) : Term :=
   if length == 32 then .unary "bytes32_from_chunks" (.hash chunks)
   else .unary s!"bytes_from_chunks:{length}" (.hash chunks)
+
+def bytesFromChunksTerm32 (low31 highByte : Term) : Term :=
+  bytesFromChunksTerm 32 [low31, highByte]
 
 def reverseBytesTerm (length : Nat) (bytes : Term) : Term :=
   if length == 32 then reverseBytes32Term bytes else .unary s!"reverse_bytes:{length}" bytes
@@ -600,6 +608,13 @@ private def jubjubScalarInputRequirement (input : Input) : InputRequirement :=
 
 def Input.requirements (input : Input) : List InputRequirement :=
   match input.ty with
+  | .bytes 32 =>
+    if input.visibility == .«public» then
+      let identifiers := input.nativeIdentifiers
+      [{identifier := identifiers[0]!, visibility := input.visibility, ty := .uint 255},
+        {identifier := identifiers[1]!, visibility := input.visibility,
+          ty := .uint (2 ^ (31 * 8) - 1)}]
+    else (List.range 32).map (InputRequirement.byte input)
   | .bytes length => (List.range length).map (InputRequirement.byte input)
   | .jubjubScalar => [jubjubScalarInputRequirement input]
   | .jubjubPoint => input.nativeIdentifiers.map fun identifier =>
@@ -608,6 +623,11 @@ def Input.requirements (input : Input) : List InputRequirement :=
 
 def Input.sourceTerm (input : Input) : Term :=
   match input.ty with
+  | .bytes 32 =>
+    if input.visibility == .«public» then
+      let identifiers := input.nativeIdentifiers
+      bytesFromChunksTerm32 (.input identifiers[1]!) (.input identifiers[0]!)
+    else .bytes (input.nativeIdentifiers.map Term.input)
   | .bytes _ => .bytes (input.nativeIdentifiers.map Term.input)
   | .jubjubScalar => .unary "jubjub_scalar_from_native" (.input ("%input_" ++ input.name))
   | .jubjubPoint => .binary "from_coordinates_jubjub"

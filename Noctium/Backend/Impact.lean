@@ -261,6 +261,7 @@ def publicInputReadCount (inputs : List Input) : Nat :=
   inputs.foldl (fun count input =>
     if input.visibility != .«public» then count
     else count + match input.ty with
+      | .bytes 32 => 1
       | .bytes length => length
       | .jubjubPoint => 2
       | .foreign kind => kind.encodedFieldCount
@@ -949,6 +950,12 @@ def appendEffectsGuarded (state : List StateDecl) (effects : List Effect)
 private def publicInputStep (input : Input) (plan : Plan) : Except String Plan := do
   if input.visibility != .«public» then return plan
   match input.ty with
+  | .bytes 32 =>
+    let bytes : Expr (.bytes 32) := .ref input.name
+    let value := Aligned.bytes32 bytes
+    pure {plan with
+      operations := plan.operations ++ [.push value, .popeq value]
+      reads := plan.reads ++ [{name := input.name, ty := .bytes 32}]}
   | .bytes length =>
     let mut result := plan
     for index in List.range length do

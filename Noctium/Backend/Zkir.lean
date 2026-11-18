@@ -669,6 +669,24 @@ private def lowerByteInput (input : Input) : LowerM Unit := do
     emit (if input.visibility == .«public» then "public_input" else "private_input")
       [("guard", Json.null), ("type", toJson kind.nativeName), ("output", toJson output)]
     modify fun state => {state with aliases := (input.name, output) :: state.aliases}
+  | .bytes 32 =>
+    let identifiers := input.nativeIdentifiers
+    if input.visibility == .«public» then do
+      let (low31, highByte) ← bytes32Chunks [identifiers[1]!, identifiers[0]!]
+      emit "public_input" [
+        ("guard", Json.null), ("type", toJson nativeType), ("output", toJson identifiers[0]!)]
+      constrainUnsigned 255 highByte
+      emit "public_input" [
+        ("guard", Json.null), ("type", toJson nativeType), ("output", toJson identifiers[1]!)]
+      constrainUnsigned (2 ^ 248 - 1) low31
+      modify fun state => {state with byteAliases :=
+        (input.name, {values := [low31, highByte], packed := true}) :: state.byteAliases}
+    else do
+      for output in identifiers do
+        emit "private_input" [
+          ("guard", Json.null), ("type", toJson nativeType), ("output", toJson output)]
+        constrainUnsigned 255 output
+      modify fun state => {state with byteAliases := (input.name, {values := identifiers}) :: state.byteAliases}
   | .bytes _ =>
     let identifiers := input.nativeIdentifiers
     for output in identifiers do
@@ -1021,6 +1039,7 @@ def lowerBody (c : Circuit) : LowerM Unit := do
       match input.ty with
       | .foreign kind => do
         for output in (← encodeForeign kind ("%input_" ++ input.name)) do bindPublic [output]
+      | .bytes 32 => bindPublic input.nativeIdentifiers
       | _ => for output in input.nativeIdentifiers do bindPublic [output]
   for condition in c.constraints do
     let value ← lowerExpr condition

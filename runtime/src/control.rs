@@ -1759,6 +1759,75 @@ fn matching_native_input_type(declared: &str, semantic: &str) -> bool {
             ))
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum PublicBytes32Abi {
+    LegacyBytes,
+    PackedFields,
+}
+
+fn bytes32_relation_input_names(name: &str, abi: PublicBytes32Abi) -> Vec<String> {
+    match abi {
+        PublicBytes32Abi::LegacyBytes => (0..32)
+            .map(|index| format!("{name}_byte_{index}"))
+            .collect(),
+        PublicBytes32Abi::PackedFields => vec![
+            format!("_noctium_bytes32_{name}_high"),
+            format!("_noctium_bytes32_{name}_low31"),
+        ],
+    }
+}
+
+fn native_relation_input_names(instructions: &[Json]) -> Result<BTreeSet<String>> {
+    let mut names = BTreeSet::new();
+    for instruction in instructions {
+        if matches!(text(instruction, "op")?, "public_input" | "private_input") {
+            let input = text(instruction, "output")?
+                .strip_prefix("%input_")
+                .ok_or_else(|| anyhow!("invalid native input operation"))?;
+            ensure!(
+                names.insert(input.to_owned()),
+                "duplicate native relation input"
+            );
+        }
+    }
+    Ok(names)
+}
+
+fn public_bytes32_relation_abi(
+    binding: &Json,
+    relation: &Json,
+) -> Result<Option<PublicBytes32Abi>> {
+    let relation_names = native_relation_input_names(list(relation, "instructions")?)?;
+    let mut abi = None;
+    for input in list(binding, "circuitInputs")? {
+        if text(input, "visibility")? != "public"
+            || ScalarType::parse(text(input, "type")?)? != ScalarType::Bytes32
+        {
+            continue;
+        }
+        let name = text(input, "name")?;
+        let packed = bytes32_relation_input_names(name, PublicBytes32Abi::PackedFields);
+        let legacy = bytes32_relation_input_names(name, PublicBytes32Abi::LegacyBytes);
+        let packed_matches = packed.iter().all(|input| relation_names.contains(input));
+        let legacy_matches = legacy.iter().all(|input| relation_names.contains(input));
+        ensure!(
+            packed_matches ^ legacy_matches,
+            "native public Bytes32 input has an unsupported field shape"
+        );
+        let input_abi = if packed_matches {
+            PublicBytes32Abi::PackedFields
+        } else {
+            PublicBytes32Abi::LegacyBytes
+        };
+        ensure!(
+            abi.is_none_or(|previous| previous == input_abi),
+            "mixed native public Bytes32 input shapes"
+        );
+        abi = Some(input_abi);
+    }
+    Ok(abi)
+}
+
 fn validate_relation_inputs(
     relation: &Json,
     circuit_inputs: &BTreeMap<String, (String, String)>,
@@ -1771,18 +1840,46 @@ fn validate_relation_inputs(
         "invalid native relation version"
     );
     let instructions = list(relation, "instructions")?;
+    let relation_input_names = native_relation_input_names(instructions)?;
     let mut physical_inputs = BTreeMap::new();
     let mut physical_order = Vec::new();
+    let mut public_bytes32_abi = None;
     for (name, visibility) in input_order {
         let (token, _) = circuit_inputs
             .get(name)
             .ok_or_else(|| anyhow!("unknown native circuit input"))?;
-        let byte_length = ScalarType::parse(token)
-            .ok()
-            .and_then(|scalar| scalar.bytes_length());
-        let names = if token == "JubjubPoint" {
+        let scalar = ScalarType::parse(token)?;
+        let names = if scalar == ScalarType::JubjubPoint {
             vec![format!("{name}_x"), format!("{name}_y")]
-        } else if let Some(length) = byte_length {
+        } else if scalar == ScalarType::Bytes32 && visibility == "public" {
+            let packed = bytes32_relation_input_names(name, PublicBytes32Abi::PackedFields);
+            let legacy = bytes32_relation_input_names(name, PublicBytes32Abi::LegacyBytes);
+            let packed_matches = packed
+                .iter()
+                .all(|input| relation_input_names.contains(input));
+            let legacy_matches = legacy
+                .iter()
+                .all(|input| relation_input_names.contains(input));
+            ensure!(
+                packed_matches ^ legacy_matches,
+                "native public Bytes32 input has an unsupported field shape"
+            );
+            let abi = if packed_matches {
+                PublicBytes32Abi::PackedFields
+            } else {
+                PublicBytes32Abi::LegacyBytes
+            };
+            ensure!(
+                public_bytes32_abi.is_none_or(|previous| previous == abi),
+                "mixed native public Bytes32 input shapes"
+            );
+            public_bytes32_abi = Some(abi);
+            if abi == PublicBytes32Abi::PackedFields {
+                packed
+            } else {
+                legacy
+            }
+        } else if let Some(length) = scalar.bytes_length() {
             (0..length)
                 .map(|index| format!("{name}_byte_{index}"))
                 .collect()
@@ -1877,11 +1974,43 @@ fn validate_relation_inputs(
             ScalarType::Native => None,
             ScalarType::Bool => Some(1),
             ScalarType::UInt(maximum) => Some(maximum.bits().max(1)),
+            ScalarType::Bytes32 if circuit_inputs[name].1 == "public" => {
+                match public_bytes32_abi
+                    .ok_or_else(|| anyhow!("missing native public Bytes32 input shape"))?
+                {
+                    PublicBytes32Abi::LegacyBytes => {
+                        for index in 0..32 {
+                            ensure!(
+                                bit_constraints
+                                    .get(&format!("{name}_byte_{index}"))
+                                    .is_some_and(|values| values.contains(&8)),
+                                "native byte input lacks its octet range constraint"
+                            );
+                        }
+                    }
+                    PublicBytes32Abi::PackedFields => {
+                        let [high, low] =
+                            bytes32_relation_input_names(name, PublicBytes32Abi::PackedFields)
+                                .try_into()
+                                .expect("packed Bytes32 has two inputs");
+                        ensure!(
+                            bit_constraints
+                                .get(&high)
+                                .is_some_and(|values| values.contains(&8))
+                                && bit_constraints
+                                    .get(&low)
+                                    .is_some_and(|values| values.contains(&248)),
+                            "native public Bytes32 fields lack their range constraints"
+                        );
+                    }
+                }
+                None
+            }
             byte_type @ (ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
-                let length = byte_type
+                for index in 0..byte_type
                     .bytes_length()
-                    .expect("byte scalar type carries its checked length");
-                for index in 0..length {
+                    .expect("byte scalar type carries its checked length")
+                {
                     ensure!(
                         bit_constraints
                             .get(&format!("{name}_byte_{index}"))
@@ -2666,9 +2795,22 @@ fn append_impact_ledger_input(
     Ok(())
 }
 
-fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
+fn matches_public_input_prologue(reads: &[Json], expected: &[(String, String)]) -> bool {
+    expected.len() <= reads.len()
+        && expected.iter().zip(reads).all(|((name, ty), read)| {
+            read.get("components").is_none()
+                && read.get("guard").is_none()
+                && read.get("schema").is_none()
+                && read.get("name").and_then(Json::as_str) == Some(name)
+                && read.get("type").and_then(Json::as_str) == Some(ty)
+        })
+}
+
+fn expected_ledger_inputs(impact_plan: &Json) -> Result<(Vec<Json>, Option<PublicBytes32Abi>)> {
     let source_inputs = list(field(impact_plan, "circuit")?, "inputs")?;
+    let reads = list(impact_plan, "reads")?;
     let mut public_source_inputs = Vec::new();
+    let mut public_bytes32_abi = None;
     for input in source_inputs {
         shape(input, &["name", "type", "visibility"], false)?;
         match text(input, "visibility")? {
@@ -2676,10 +2818,49 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
                 let input_name = text(input, "name")?;
                 let input_type = text(input, "type")?;
                 match ScalarType::parse(input_type)? {
-                    byte_type @ (ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
-                        let length = byte_type
-                            .bytes_length()
-                            .expect("byte scalar type carries its checked length");
+                    ScalarType::Bytes32 => {
+                        let first_read =
+                            reads.get(public_source_inputs.len()).ok_or_else(|| {
+                                anyhow!("Impact plan is missing its public input prologue")
+                            })?;
+                        let packed = matches_public_input_prologue(
+                            std::slice::from_ref(first_read),
+                            &[(input_name.to_owned(), input_type.to_owned())],
+                        );
+                        let legacy = matches_public_input_prologue(
+                            std::slice::from_ref(first_read),
+                            &[(
+                                format!("_noctium_bytes_{input_name}_0"),
+                                "UIntRange<256>".to_owned(),
+                            )],
+                        );
+                        ensure!(
+                            packed ^ legacy,
+                            "Impact plan public input prologue mismatch"
+                        );
+                        let abi = if packed {
+                            PublicBytes32Abi::PackedFields
+                        } else {
+                            PublicBytes32Abi::LegacyBytes
+                        };
+                        ensure!(
+                            public_bytes32_abi.is_none_or(|previous| previous == abi),
+                            "mixed Impact public Bytes32 input shapes"
+                        );
+                        public_bytes32_abi = Some(abi);
+                        if packed {
+                            public_source_inputs
+                                .push((input_name.to_owned(), input_type.to_owned()));
+                        } else {
+                            for index in 0..32 {
+                                public_source_inputs.push((
+                                    format!("_noctium_bytes_{input_name}_{index}"),
+                                    "UIntRange<256>".to_owned(),
+                                ));
+                            }
+                        }
+                    }
+                    ScalarType::Bytes(length) => {
                         for index in 0..length {
                             public_source_inputs.push((
                                 format!("_noctium_bytes_{input_name}_{index}"),
@@ -2687,10 +2868,12 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
                             ));
                         }
                     }
-                    ScalarType::JubjubScalar => public_source_inputs.push((
-                        format!("_noctium_jubjub_scalar_{input_name}"),
-                        "Native".to_owned(),
-                    )),
+                    ScalarType::JubjubScalar => {
+                        public_source_inputs.push((
+                            format!("_noctium_jubjub_scalar_{input_name}"),
+                            "Native".to_owned(),
+                        ));
+                    }
                     ScalarType::JubjubPoint => {
                         for index in 0..2 {
                             public_source_inputs.push((
@@ -2716,21 +2899,10 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
         }
     }
 
-    let reads = list(impact_plan, "reads")?;
     ensure!(
-        reads.len() >= public_source_inputs.len(),
-        "Impact plan is missing its public input prologue"
+        matches_public_input_prologue(reads, &public_source_inputs),
+        "Impact plan public input prologue mismatch"
     );
-    for ((input_name, input_type), read) in public_source_inputs.iter().zip(reads) {
-        ensure!(
-            read.get("components").is_none()
-                && read.get("guard").is_none()
-                && read.get("schema").is_none()
-                && input_name == text(read, "name")?
-                && input_type == text(read, "type")?,
-            "Impact plan public input prologue mismatch"
-        );
-    }
 
     let mut expected = Vec::new();
     let mut names = BTreeSet::new();
@@ -2762,7 +2934,7 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
             append_impact_ledger_input(read, true, source_inputs.len(), &mut names, &mut expected)?;
         }
     }
-    Ok(expected)
+    Ok((expected, public_bytes32_abi))
 }
 
 pub(crate) fn validate_witness_artifacts(
@@ -2817,11 +2989,17 @@ pub(crate) fn validate_witness_artifacts(
             .ok_or_else(|| anyhow!("invalid native ledger input list"))?,
         None => &[],
     };
-    let expected_ledger_descriptors = expected_ledger_inputs(impact_plan)?;
+    let (expected_ledger_descriptors, public_bytes32_abi) = expected_ledger_inputs(impact_plan)?;
     ensure!(
         actual_ledger_inputs == expected_ledger_descriptors.as_slice(),
         "selected Impact plan ledger input mismatch"
     );
+    if let Some(expected_abi) = public_bytes32_abi {
+        ensure!(
+            public_bytes32_relation_abi(binding, relation)? == Some(expected_abi),
+            "selected Impact plan and native relation Bytes32 input shapes differ"
+        );
+    }
     ensure!(
         field(binding, "nativeRelation")? == relation,
         "typed witness relation mismatch"
@@ -5513,12 +5691,56 @@ mod completed_invocation_tests {
         )).unwrap();
         let binding: serde_json::Value =
             serde_json::from_str(control["binding"].as_str().unwrap()).unwrap();
+        let (expected, bytes32_abi) = super::expected_ledger_inputs(&plan).unwrap();
+        assert_eq!(bytes32_abi, Some(super::PublicBytes32Abi::LegacyBytes));
         assert_eq!(
-            super::expected_ledger_inputs(&plan).unwrap(),
+            expected,
             binding["ledgerInputs"].as_array().unwrap().clone()
+        );
+        assert_eq!(
+            super::public_bytes32_relation_abi(&binding, &binding["nativeRelation"]).unwrap(),
+            bytes32_abi
         );
         plan["reads"][31]["name"] = serde_json::json!("changed_high_byte_projection");
         assert!(super::expected_ledger_inputs(&plan).is_err());
+    }
+
+    #[test]
+    fn typed_public_bytes32_prologue_uses_two_bounded_native_chunks() {
+        let plan = json!({
+            "circuit":{"inputs":[{"name":"probe","type":"Bytes<32>","visibility":"public"}]},
+            "reads":[{"name":"probe","type":"Bytes<32>"}]
+        });
+        let (ledger_inputs, abi) = super::expected_ledger_inputs(&plan).unwrap();
+        assert!(ledger_inputs.is_empty());
+        assert_eq!(abi, Some(super::PublicBytes32Abi::PackedFields));
+
+        let relation = json!({
+            "version":{"major":3,"minor":2},
+            "instructions":[
+                {"op":"public_input","output":"%input__noctium_bytes32_probe_high","type":"Scalar<BLS12-381>"},
+                {"op":"constrain_bits","val":"%input__noctium_bytes32_probe_high","bits":8},
+                {"op":"public_input","output":"%input__noctium_bytes32_probe_low31","type":"Scalar<BLS12-381>"},
+                {"op":"constrain_bits","val":"%input__noctium_bytes32_probe_low31","bits":248}
+            ]
+        });
+        let binding = json!({"circuitInputs":[{
+            "name":"probe","type":"Bytes<32>","visibility":"public"
+        }]});
+        let inputs = std::collections::BTreeMap::from([(
+            "probe".to_owned(),
+            ("Bytes<32>".to_owned(), "public".to_owned()),
+        )]);
+        let order = vec![("probe".to_owned(), "public".to_owned())];
+        super::validate_relation_inputs(&relation, &inputs, &order).unwrap();
+        assert_eq!(
+            super::public_bytes32_relation_abi(&binding, &relation).unwrap(),
+            abi
+        );
+
+        let mut wrong_width = relation;
+        wrong_width["instructions"][3]["bits"] = json!(247);
+        assert!(super::validate_relation_inputs(&wrong_width, &inputs, &order).is_err());
     }
 
     use super::{AuthenticatedNativeTarget, InvocationTarget, Session, TypedResponse};
@@ -6170,15 +6392,17 @@ mod completed_invocation_tests {
             "operation":format!("foreignBinary:fromCoordinates:{}:{}", base_type.source_name(), base_type.source_name()),
             "arguments":[literal(&base(0)), literal(&base(1))]
         });
-        let coordinates = ["x", "y"].map(|coordinate| json!({
-            "tag":"bytes",
-            "operation":format!("foreignToBytes:{}", base_type.source_name()),
-            "arguments":[{
-                "tag":"curve",
-                "operation":format!("foreignUnary:{}:{}", coordinate, point_type.source_name()),
-                "arguments":[identity_coordinates.clone()]
-            }]
-        }));
+        let coordinates = ["x", "y"].map(|coordinate| {
+            json!({
+                "tag":"bytes",
+                "operation":format!("foreignToBytes:{}", base_type.source_name()),
+                "arguments":[{
+                    "tag":"curve",
+                    "operation":format!("foreignUnary:{}:{}", coordinate, point_type.source_name()),
+                    "arguments":[identity_coordinates.clone()]
+                }]
+            })
+        });
         let identity_coordinate_bytes = json!({
             "tag":"bytes",
             "operation":"concatBytes:32:32",

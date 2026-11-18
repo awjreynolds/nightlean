@@ -28,11 +28,32 @@ private def issue69Entry : Entrypoint :=
   | ep :: _ => ep
   | _ => {name := "missing", circuit := {name := "missing"}}
 
+#guard Backend.Impact.publicInputReadCount issue69Entry.circuit.inputs == 1
+
+#guard match Backend.Impact.lower Issue69Bytes32Map.state issue69Entry with
+  | .ok plan =>
+    match plan.operations, plan.reads with
+    | Backend.Impact.Op.push (.bytes32 (.ref "probe")) _ ::
+        Backend.Impact.Op.popeq (.bytes32 (.ref "probe")) :: _, item :: _ =>
+      item.name == "probe" && item.ty == .bytes 32 && item.guard.isNone &&
+        item.components.isEmpty && item.schema.isNone
+    | _, _ => _root_.Bool.false
+  | .error _ => _root_.Bool.false
+
+#guard match issue69Entry.circuit.inputs with
+  | _ :: account :: _ =>
+    account.nativeIdentifiers == (List.range 32).map fun index => s!"%input_account_byte_{index}"
+  | _ => _root_.Bool.false
+
 #guard match Backend.Impact.lower Issue69Bytes32Map.state issue69Entry with
   | .ok plan => plan.reads.any fun item => item.name == "before" && item.guard.isSome
   | .error _ => Bool.false
 
 #guard match Backend.Zkir.lowerEntrypoint Issue69Bytes32Map.state issue69Entry with
+  | .ok _ => Bool.true
+  | .error _ => Bool.false
+
+#guard match Backend.Zkir.lowerCircuit issue69Bytes32Register with
   | .ok _ => Bool.true
   | .error _ => Bool.false
 

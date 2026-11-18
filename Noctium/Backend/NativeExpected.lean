@@ -107,6 +107,7 @@ def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
   let returns := outputs.map (·.term)
   let groups := (value.inputs.filter (·.visibility == .«public»)).flatMap fun input =>
     match input.ty with
+    | .bytes 32 => [input.nativeIdentifiers.map Term.input]
     | .foreign kind => (List.range kind.encodedFieldCount).map fun index =>
         [foreignEncodedFieldTerm kind (Input.sourceTerm input) index]
     | _ => input.nativeIdentifiers.map fun identifier => [.input identifier]
