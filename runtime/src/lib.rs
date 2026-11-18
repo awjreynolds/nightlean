@@ -1118,7 +1118,12 @@ fn foreign_storage_type_at_path(
         .state
         .get(slot as usize)
         .ok_or_else(|| anyhow!("state slot out of range"))?;
-    let declared = if let Some(ty) = state.kind.get("cell").and_then(Json::as_str) {
+    let declared = if state.kind.get("tree").is_some() {
+        tree_schema_at_path(plan, slot, depth)?
+            .get("scalar")
+            .and_then(Json::as_str)
+            .ok_or_else(|| anyhow!("foreign tree path does not select a scalar leaf"))?
+    } else if let Some(ty) = state.kind.get("cell").and_then(Json::as_str) {
         ensure!(depth == 0, "foreign cell path schema mismatch");
         ty
     } else if let Some(types) = state.kind.get("map").and_then(Json::as_array) {
@@ -1226,6 +1231,11 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
     }
     if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
         let ty = ScalarType::parse(ty)?;
+        #[cfg(feature = "zkir-321")]
+        if !matches!(&ty, ScalarType::Foreign(_)) {
+            reject_unqualified_foreign_storage(&ty)?;
+        }
+        #[cfg(not(feature = "zkir-321"))]
         reject_unqualified_foreign_storage(&ty)?;
         ensure!(
             ty.bytes_length().is_none(),

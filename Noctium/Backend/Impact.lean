@@ -322,14 +322,14 @@ private def splitPath (keys : List Aligned) : Except String (List Aligned × Ali
   let some finalKey := keys.getLast? | throw "nested map path must contain at least one key"
   pure (keys.take (keys.length - 1), finalKey)
 
-private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : Aligned)
-    (emptyMap : Bool) : Except String (List Op) := do
+private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : Option Op)
+    : Except String (List Op) := do
   let (parents, finalKey) ← splitPath keys
   let levels := keys.length + 1
   if levels >= 16 then throw "nested map insertion exceeds native Ins depth"
-  let newValue := if emptyMap then
-    [.push finalKey, .push (.field (.native 2)), .newMap]
-  else [.push finalKey, .push value true]
+  let newValue := match value with
+    | some value => [.push finalKey, value]
+    | none => [.push finalKey, .push (.field (.native 2)), .newMap]
   pure ([.indexPath slot true parents] ++ newValue ++ [.insert levels])
 
 private def pathWriteCompositeOps (slot : Nat) (keys : List Aligned)
@@ -659,9 +659,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .readPath name destination keys ty => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
-    let value ← nativeRead ty destination
+    let value ← storageReadValue ty destination
     pure {plan with
-      operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
+      operations := plan.operations ++ [.dup, .indexPath slot false keys, value]
       reads := plan.reads ++ [{name := destination, ty}]}
   | .counterRead name destination keys => do
     let slot ← stateSlot state name
@@ -749,8 +749,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .insertPath name keys ty value | .writePath name keys ty value => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
-    let value ← nativeAligned ty value
-    let operations ← pathWriteOps slot keys value false
+    let value ← match ty with
+      | .foreign _ => storageWriteValue ty value
+      | _ => pure (.push (← nativeAligned ty value) true)
+    let operations ← pathWriteOps slot keys (some value)
     pure {plan with operations := plan.operations ++ operations}
   | .writeCompositePath name keys type values => do
     let slot ← stateSlot state name
@@ -780,12 +782,12 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     else
       let alignedKeys ← nativePathKeys keys
       let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
-      let operations ← pathWriteOps slot alignedKeys (.counter value) false
+      let operations ← pathWriteOps slot alignedKeys (some (.push (.counter value) true))
       pure {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
-    let operations ← pathWriteOps slot keys (.field (.native 2)) true
+    let operations ← pathWriteOps slot keys none
     pure {plan with operations := plan.operations ++ operations}
 
 def appendEffects (state : List StateDecl) (effects : List Effect)
@@ -1051,9 +1053,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .readPath name destination keys ty => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
-    let value ← nativeRead ty destination
+    let value ← storageReadValue ty destination
     plan := {plan with
-      operations := plan.operations ++ [.dup, .indexPath slot false keys, .popeq (.field value)]
+      operations := plan.operations ++ [.dup, .indexPath slot false keys, value]
       reads := plan.reads ++ [{name := destination, ty}]}
   | .counterRead name destination keys => do
     let slot ← stateSlot state name
@@ -1132,8 +1134,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .insertPath name keys ty value | .writePath name keys ty value => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
-    let value ← nativeAligned ty value
-    let operations ← pathWriteOps slot keys value false
+    let value ← match ty with
+      | .foreign _ => storageWriteValue ty value
+      | _ => pure (.push (← nativeAligned ty value) true)
+    let operations ← pathWriteOps slot keys (some value)
     plan := {plan with operations := plan.operations ++ operations}
   | .writeCompositePath name keys type values => do
     let slot ← stateSlot state name
@@ -1163,12 +1167,12 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     else
       let alignedKeys ← nativePathKeys keys
       let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
-      let operations ← pathWriteOps slot alignedKeys (.counter value) false
+      let operations ← pathWriteOps slot alignedKeys (some (.push (.counter value) true))
       plan := {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
     let slot ← stateSlot state name
     let keys ← nativePathKeys keys
-    let operations ← pathWriteOps slot keys (.field (.native 2)) true
+    let operations ← pathWriteOps slot keys none
     plan := {plan with operations := plan.operations ++ operations}
   | .removePath name keys => do
     let slot ← stateSlot state name

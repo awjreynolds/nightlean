@@ -664,7 +664,6 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
   | .scalar (.bytes _) => throw "Bytes32 state values are not supported"
   | .scalar .jubjubScalar | .scalar .jubjubPoint =>
     throw "Jubjub values require a qualified ledger schema"
-  | .scalar (.foreign _) => throw "foreign values require a qualified ledger schema"
   | .scalar ty => ty.validate caps
   | .map keyTy value => do
     validateLedgerMapKeyType keyTy
