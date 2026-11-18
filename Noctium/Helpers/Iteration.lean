@@ -433,16 +433,61 @@ private def flattenMapResult (span : SourceSpan) (result : ResultType)
     (List.range length).mapM fun index => pure (.bytesAt value index)
   | _, layout => flattenLayoutTerms span layout value
 
-private def vectorElement (limits : Limits) (program : Program) (scope : Nat)
+private inductive SequenceProjection where
+  | vector
+  | tuple
+  | compositeBytes
+  | scalarBytes
+  deriving Repr
+
+private structure SequenceDescriptor where
+  sourceType : ResultType
+  length : Nat
+  elementType : ResultType
+  projection : SequenceProjection
+  deriving Repr
+
+private def commonSequenceElementType (span : SourceSpan)
+    (elements : List Types.CompositeType) : Except Diagnostic ResultType := do
+  let types := elements.map resultTypeOfComposite
+  match types with
+  | [] => failAt span "tuple sequence has no element type"
+  | first :: rest => rest.foldlM (fun common next =>
+      if subtype common next then pure next
+      else if subtype next common then pure common
+      else failAt span "tuple sequence elements have no common type") first
+
+private def sequenceDescriptor (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (sequence : Term) :
-    Except Diagnostic (Nat × Types.CompositeType) := do
-  let inferred ← inferType limits program scope env span sequence
-  let .composite (.vector length element) := inferred
-    | failAt span "iteration sequence must be a fixed vector expression"
-  if length > Types.defaultLimits.maxVectorLength then
-    failAt span "helper resource limit exceeded: iteration vector length"
-  discard (checkedComposite program span (.vector length element))
-  pure (length, element)
+    Except Diagnostic SequenceDescriptor := do
+  let sourceType ← inferType limits program scope env span sequence
+  let descriptor ← match sourceType with
+    | .composite (.vector length element) => do
+      discard (checkedComposite program span (.vector length element))
+      pure (SequenceDescriptor.mk sourceType length (resultTypeOfComposite element) .vector)
+    | .composite (.tuple elements) => do
+      if elements.length > Types.defaultLimits.maxVectorLength then
+        failAt span "helper resource limit exceeded: iteration tuple length"
+      discard (checkedComposite program span (.tuple elements))
+      let elementType ← commonSequenceElementType span elements
+      pure (SequenceDescriptor.mk sourceType elements.length elementType .tuple)
+    | .composite (.bytes length) => do
+      discard (checkedComposite program span (.bytes length))
+      pure (SequenceDescriptor.mk sourceType length (.scalar (.uint 255)) .compositeBytes)
+    | .scalar (.bytes length) =>
+      pure (SequenceDescriptor.mk sourceType length (.scalar (.uint 255)) .scalarBytes)
+    | _ => failAt span "iteration sequence must be a fixed vector, vector-compatible tuple, or byte vector"
+  if descriptor.length > Types.defaultLimits.maxVectorLength then
+    failAt span "helper resource limit exceeded: iteration sequence length"
+  pure descriptor
+
+private def projectSequence (sequence : Term) (descriptor : SequenceDescriptor)
+    (index : Nat) : Term :=
+  match descriptor.projection with
+  | .vector => .project sequence (.vectorIndex index)
+  | .tuple => .project sequence (.tupleIndex index)
+  | .compositeBytes => .project sequence (.byteIndex index)
+  | .scalarBytes => .bytesAt sequence index
 
 private def freshNames (used : List String) (stems : List String) : List String := Id.run do
   let mut reserved := used
@@ -483,9 +528,9 @@ private def checkGeneratedSourceBudget (limits : Limits) (span : SourceSpan)
     (nodes : Nat) : Except Diagnostic Unit := do
   if nodes > limits.maxSourceNodes then failAt span "helper resource limit exceeded: source nodes"
 
-/-- Apply an operator once to each element of one or more fixed vector
-expressions. Sequence expressions become wrapper arguments, so each evaluates
-once before the wrapper body starts. -/
+/-- Apply an operator once to each element of one or more equal-length fixed
+sequence expressions. Sequence expressions become wrapper arguments, so each
+evaluates once before the wrapper body starts. -/
 def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (sequences : List Term) (operator : Operator) :
     Except Diagnostic (Program × Term) := do
@@ -494,14 +539,13 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   if sequences.isEmpty then failAt span "map requires at least one sequence"
   if sequences.length > limits.maxParameters then
     failAt span "helper resource limit exceeded: map sequences"
-  let typedSequences ← sequences.mapM fun sequence => do
-    let (length, element) ← vectorElement limits program scope env span sequence
-    pure (length, element)
-  let some (length, _) := typedSequences.head?
+  let typedSequences ← sequences.mapM (sequenceDescriptor limits program scope env span)
+  let some firstSequence := typedSequences.head?
     | failAt span "map requires at least one sequence"
-  unless typedSequences.all (fun item => item.1 == length) do
+  let length := firstSequence.length
+  unless typedSequences.all (fun item => item.length == length) do
     failAt span "map sequence lengths must match"
-  let actualTypes := typedSequences.map fun (_, element) => resultTypeOfComposite element
+  let actualTypes := typedSequences.map (·.elementType)
   let compiled ← materializeOperator limits program scope env span operator actualTypes
   if let .composite (.scalar _) := compiled.result then
     failAt span "map cannot flatten a composite scalar wrapper"
@@ -535,11 +579,11 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let resultNames := freshNames reserved (List.range length |>.map fun i =>
     s!"_noctium_map_result_{i}")
   let wrapperParameters := (sequenceNames.zip typedSequences).map fun (name, typed) =>
-    (name, .composite (.vector typed.1 typed.2))
+    (name, typed.sourceType)
   let wrapperParameters := wrapperParameters ++ compiled.captures
   let operationCalls := (List.range length).map fun index =>
-    let elements := sequenceNames.zip typedSequences |>.map fun (name, _) =>
-      Term.project (.ref name) (.vectorIndex index)
+    let elements := (sequenceNames.zip typedSequences).map fun (name, descriptor) =>
+      projectSequence (.ref name) descriptor index
     Term.call compiled.name (compiled.captures.map (fun capture => Term.ref capture.1) ++ elements)
   let bindings := resultNames.zip operationCalls |>.map fun (name, value) =>
     Statement.bind name compiled.result value
@@ -554,53 +598,71 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   checkedWrapperCall limits compiledProgram scope env span wrapperName
     (sequences ++ compiled.captures.map fun capture => Term.ref capture.1)
 
-/-- Fold a fixed vector using an operator whose accumulator parameter and result
-share one exact type. The initial expression runs before the sequence. -/
+/-- Fold one or more equal-length fixed sequences using an operator whose
+accumulator parameter and result share one exact type. The initial expression
+runs before the sequence expressions. -/
 def foldWithLimits (limits : Limits) (program : Program) (scope : Nat)
-    (env : Environment) (span : SourceSpan) (initial sequence : Term) (operator : Operator) :
+    (env : Environment) (span : SourceSpan) (initial : Term) (sequences : List Term)
+    (operator : Operator) :
     Except Diagnostic (Program × Term) := do
   discard (Noctium.Helpers.syntacticPreflight limits program)
   discard (inferType limits program scope env span .unit)
+  if sequences.isEmpty then failAt span "fold requires at least one sequence"
+  if sequences.length + 1 > limits.maxParameters then
+    failAt span "helper resource limit exceeded: fold sequences"
   let initialType ← inferType limits program scope env span initial
-  let (length, element) ← vectorElement limits program scope env span sequence
-  let elementType := resultTypeOfComposite element
-  let compiled ← materializeOperator limits program scope env span operator [initialType, elementType]
-  let [accumulatorType, operatorElementType] := compiled.parameters
-    | failAt span "fold operator must accept accumulator and element parameters"
+  let typedSequences ← sequences.mapM (sequenceDescriptor limits program scope env span)
+  let some firstSequence := typedSequences.head?
+    | failAt span "fold requires at least one sequence"
+  let length := firstSequence.length
+  unless typedSequences.all (fun item => item.length == length) do
+    failAt span "fold sequence lengths must match"
+  let elementTypes := typedSequences.map (·.elementType)
+  let compiled ← materializeOperator limits program scope env span operator (initialType :: elementTypes)
+  let some accumulatorType := compiled.parameters.head?
+    | failAt span "fold operator must accept an accumulator parameter"
+  let operatorElementTypes := compiled.parameters.drop 1
+  unless operatorElementTypes.length == typedSequences.length do
+    failAt span "fold operator must accept the accumulator and one parameter per sequence"
   unless subtype initialType accumulatorType do
     failAt span "fold initial value is incompatible with its accumulator parameter"
   unless compiled.result == accumulatorType do
     failAt span "fold operator result must exactly match its accumulator parameter"
-  unless subtype elementType operatorElementType do
-    failAt span "fold element type is incompatible with its operator parameter"
-  if compiled.captures.length + 2 > limits.maxParameters then
+  for (elementType, operatorElementType) in elementTypes.zip operatorElementTypes do
+    unless subtype elementType operatorElementType do
+      failAt span "fold sequence element type is incompatible with its operator parameter"
+  if compiled.captures.length + 1 + sequences.length > limits.maxParameters then
+    failAt span "helper resource limit exceeded: fold wrapper arguments"
+  if compiled.captures.length + 1 + elementTypes.length > limits.maxParameters then
     failAt span "helper resource limit exceeded: fold operator arguments"
-  let estimatedNodes := 4 + length * (5 + compiled.captures.length)
+  let estimatedNodes := 4 + sequences.length * 2 +
+    length * (5 + compiled.captures.length + 2 * sequences.length)
   checkGeneratedSourceBudget limits span estimatedNodes
   let used := appendMany [programNames compiled.program env, termNames initial,
-    termNames sequence, operatorNames operator, compiled.captures.map Prod.fst]
-  let freshParams := freshNames used ["_noctium_fold_initial", "_noctium_fold_sequence"]
-  let [initialName, sequenceName] := freshParams
-    | failAt span "fold wrapper name allocation failed"
-  let accumulatorNames := freshNames (used ++ [initialName, sequenceName])
+    sequences.flatMap termNames, operatorNames operator, compiled.captures.map Prod.fst]
+  let initialName := freshText used "_noctium_fold_initial"
+  let sequenceNames := freshNames (used ++ [initialName])
+    (List.range sequences.length |>.map fun index => s!"_noctium_fold_sequence_{index}")
+  let accumulatorNames := freshNames (used ++ [initialName] ++ sequenceNames)
     (List.range (length + 1) |>.map fun index => s!"_noctium_fold_acc_{index}")
-  let wrapperParameters := [
-    (initialName, initialType),
-    (sequenceName, .composite (.vector length element))] ++ compiled.captures
+  let sequenceParameters := (sequenceNames.zip typedSequences).map fun (name, descriptor) =>
+    (name, descriptor.sourceType)
+  let wrapperParameters := [(initialName, initialType)] ++ sequenceParameters ++ compiled.captures
   let mut body := [Statement.bind accumulatorNames.head! accumulatorType (.ref initialName)]
   for index in List.range length do
     let accumulator := accumulatorNames[index]!
     let nextAccumulator := accumulatorNames[index + 1]!
-    let elementTerm := Term.project (.ref sequenceName) (.vectorIndex index)
+    let elementTerms := (sequenceNames.zip typedSequences).map fun (name, descriptor) =>
+      projectSequence (.ref name) descriptor index
     let call := Term.call compiled.name
       (compiled.captures.map (fun capture => Term.ref capture.1) ++
-        [Term.ref accumulator, elementTerm])
+        [Term.ref accumulator] ++ elementTerms)
     body := body ++ [Statement.bind nextAccumulator accumulatorType call]
   body := body ++ [.return (some (.ref accumulatorNames[length]!))]
   let (compiledProgram, wrapperName) ← makeWrapper limits compiled.program scope span
-    (appendMany [used, [initialName, sequenceName], accumulatorNames]) wrapperParameters
+    (appendMany [used, [initialName], sequenceNames, accumulatorNames]) wrapperParameters
     accumulatorType body
   checkedWrapperCall limits compiledProgram scope env span wrapperName
-    (initial :: sequence :: compiled.captures.map fun capture => Term.ref capture.1)
+    (initial :: sequences ++ compiled.captures.map fun capture => Term.ref capture.1)
 
 end Noctium.Helpers.Iteration

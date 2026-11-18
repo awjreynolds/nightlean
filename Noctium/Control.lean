@@ -429,6 +429,9 @@ mutual
       pure (node span "curve" [("operation", toJson operation.operationName),
         ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
     | .bytes32Literal values => pure (node span "bytes32" [("values", toJson values)])
+    | .bytes (.bytesLiteral length values) [] => do
+      unless (← get).typed do emitLift (fail span "byte literals require control schema version 2")
+      pure (node span "bytesLiteral" [("length", toJson length), ("values", toJson values)])
     | .foreignConstant kind encoding => do
       unless (← get).typed do emitLift (fail span "foreign values require control schema version 2")
       pure (node span "foreignConstant" [

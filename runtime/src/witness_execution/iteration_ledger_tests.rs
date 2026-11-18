@@ -73,7 +73,7 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
             "capabilities":capabilities,"operations":operations,"providers":providers,"commitCapability":"commit"
         });
         let context = serde_json::from_value(context_json.clone()).unwrap();
-        let expected = if enabled { "24" } else { "0" };
+        let expected = if enabled { "30" } else { "0" };
         let inputs = BTreeMap::from([
             ("enabled".into(), json!(enabled)),
             ("expected".into(), json!(expected)),
@@ -105,9 +105,9 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
         let (mut execution, plan, circuit) =
             source_execution(PLAN, CIRCUIT, CONTROL, BINDING, inputs, &initial, context);
         if enabled {
-            let values = json!({"kind":"vector","items":[
+            let values = json!({"kind":"tuple","items":[
                 {"kind":"native","value":"1"},
-                {"kind":"native","value":"2"},
+                {"kind":"uint","maximum":"3","value":"2"},
                 {"kind":"native","value":"3"}
             ]});
             for (name, arguments, value) in [
@@ -146,7 +146,7 @@ fn map_fold_preserves_capture_sequence_evaluation_and_provider_order() {
         let relation = serde_json::from_slice(CIRCUIT).unwrap();
         let completion = session.private_completion(&relation).unwrap();
         if enabled {
-            assert_eq!(completion["hostWrites"]["iteration/last"]["value"], "24");
+            assert_eq!(completion["hostWrites"]["iteration/last"]["value"], "30");
         } else {
             assert_eq!(completion["hostWrites"], json!({}));
         }

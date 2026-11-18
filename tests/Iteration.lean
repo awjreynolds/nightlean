@@ -103,7 +103,7 @@ private def typedFold : Operator := .anonymous [
 private def mapThenFold : Except Diagnostic (Program × Term) := do
   let (program, mapped) ← Iteration.mapWithLimits {} (vectorProgram 2) 0 (vectorEnv 2) {}
     [.ref "left", .ref "right"] pairSum
-  Iteration.foldWithLimits {} program 0 (vectorEnv 2) {} (.uint 3 1) mapped typedFold
+  Iteration.foldWithLimits {} program 0 (vectorEnv 2) {} (.uint 3 1) [mapped] typedFold
 
 -- Equal-length vector map and a narrower initial value compile through Helpers.
 #guard match mapThenFold with
@@ -145,7 +145,7 @@ private def emptyVectorProgram : Program := {
 
 #guard errorContains
   (Iteration.foldWithLimits {} (vectorProgram 2) 0 (vectorEnv 2) {}
-    (.native 1) (.ref "left")
+    (.native 1) [.ref "left"]
     (.anonymous [{name := "acc"}, {name := "value"}] none [.return (some (.bool true))]))
   "accumulator"
 
@@ -364,5 +364,112 @@ private def strictUnitArgumentRun : Except String EvalEnv :=
 -- Compilation succeeds, then strict evaluation of a computed Unit argument fails.
 #guard strictUnitArgumentCircuit.isOk
 #guard match strictUnitArgumentRun with
+  | .error "helper assertion failed" => true
+  | _ => false
+
+private def mixedTupleSequence : Term := .composite
+  (.tuple [.scalar (.uint 7), .scalar .native]) [.uint 7 5, .native 9]
+
+private def tupleIdentityOperator : Operator := .anonymous [
+  {name := "value", type := some (.scalar .native)}]
+  (some (.scalar .native)) [.return (some (.ref "value"))]
+
+-- A heterogeneous tuple sequence joins UInt3 (max 7) and Native to Native.
+#guard match Iteration.mapWithLimits {} unitMainProgram 0 [] {} [mixedTupleSequence]
+    tupleIdentityOperator with
+  | .ok (program, term) =>
+    compilesMain program (.composite (.vector 2 (.scalar .native))) term
+  | .error _ => false
+
+private def incompatibleTupleSequence : Term := .composite
+  (.tuple [.scalar .bool, .scalar .native]) [.bool true, .native 9]
+
+#guard errorContains
+  (Iteration.mapWithLimits {} unitMainProgram 0 [] {} [incompatibleTupleSequence]
+    tupleIdentityOperator)
+  "tuple sequence elements have no common type"
+
+#guard errorContains
+  (Iteration.mapWithLimits {} unitMainProgram 0 [] {}
+    [.composite (.tuple []) []] tupleIdentityOperator)
+  "tuple sequence has no element type"
+
+private def multiSumOperator : Operator := .anonymous [
+  {name := "acc", type := some (.scalar .native)},
+  {name := "leftValue", type := some (.scalar .native)},
+  {name := "rightValue", type := some (.scalar .native)}]
+  (some (.scalar .native)) [
+    .return (some (.binary .add
+      (.binary .add (.ref "acc") (.ref "leftValue")) (.ref "rightValue")))]
+
+private def multiSequenceFold : Except Diagnostic (Program × Term) :=
+  Iteration.foldWithLimits {} (vectorProgram 2) 0 (vectorEnv 2) {}
+    (.native 0) [.ref "left", .ref "right"] multiSumOperator
+
+-- A fold zips two equal-length sequences, and rejects mismatched lengths.
+#guard match multiSequenceFold with
+  | .ok (program, term) => compilesMain program (.scalar .native) term
+  | .error _ => false
+
+#guard errorContains
+  (Iteration.foldWithLimits {} (vectorProgram 3) 0 (vectorEnv 3) {}
+    (.native 0) [.ref "left", .ref "right"] multiSumOperator)
+  "length"
+
+private def byteIdentityOperator : Operator := .anonymous [
+  {name := "byte", type := some (.scalar .native)}]
+  (some (.scalar .native)) [.return (some (.cast .native (.ref "byte")))]
+
+private def byteSumOperator : Operator := .anonymous [
+  {name := "acc", type := some (.scalar .native)},
+  {name := "byte", type := some (.scalar .native)}]
+  (some (.scalar .native)) [
+    .return (some (.binary .add (.ref "acc") (.cast .native (.ref "byte"))))]
+
+private def scalarBytesSequence : Term :=
+  .bytes (.bytesLiteral 3 [1, 2, 3]) []
+
+private def compositeBytesSequence : Term :=
+  .composite (.bytes 3) [.native 1, .native 2, .native 3]
+
+private def emptyScalarBytesSequence : Term :=
+  .bytes (.bytesLiteral 0 []) []
+
+private def byteMapAndFoldCompile (sequence : Term) : Bool :=
+  match Iteration.mapWithLimits {} unitMainProgram 0 [] {} [sequence] byteIdentityOperator with
+  | .ok (mapProgram, mapped) =>
+    compilesMain mapProgram (.composite (.vector 3 (.scalar .native))) mapped &&
+      match Iteration.foldWithLimits {} unitMainProgram 0 [] {} (.native 0)
+        [sequence] byteSumOperator with
+      | .ok (foldProgram, folded) => compilesMain foldProgram (.scalar .native) folded
+      | .error _ => false
+  | .error _ => false
+
+-- Scalar Bytes and composite byte layouts each feed map and fold.
+#guard byteMapAndFoldCompile scalarBytesSequence
+#guard byteMapAndFoldCompile compositeBytesSequence
+
+private def emptyBytesFoldProgram : Program := {
+  unitMainProgram with declarations := unitMainProgram.declarations ++ [{
+    id := ⟨0, 1⟩
+    name := "failInitial"
+    result := .scalar .native
+    body := [.assert (.bool false), .return (some (.native 0))]
+  }]
+}
+
+private def emptyBytesFoldCircuit : Except Diagnostic Circuit := do
+  let (program, term) ← Iteration.foldWithLimits {} emptyBytesFoldProgram 0 [] {}
+    (.call "failInitial" []) [emptyScalarBytesSequence] byteSumOperator
+  Helpers.compile (installMainReturn program (.scalar .native) term) "main"
+
+private def emptyBytesFoldRun : Except String EvalEnv :=
+  match emptyBytesFoldCircuit with
+  | .ok circuit => circuit.run iterationContext []
+  | .error diagnostic => .error diagnostic.message
+
+-- Empty byte folds still evaluate their initial expression.
+#guard emptyBytesFoldCircuit.isOk
+#guard match emptyBytesFoldRun with
   | .error "helper assertion failed" => true
   | _ => false

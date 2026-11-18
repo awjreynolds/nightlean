@@ -1746,8 +1746,59 @@ private def typedExpr (span : SourceSpan) (target : Ty) (value : Lowered) : Exce
   if h : value.scalar.ty = target then pure (h ▸ value.scalar.value)
   else fail span "helper lowering expected declared scalar type"
 
-private def sequence (name : String) (value body : Lowered) : Lowered :=
-  let bind {ty : Ty} (expression : Expr ty) : Expr ty := .letE name value.scalar.value expression
+private partial def expressionUsesName (name : String) : Expr ty → Bool
+  | .native _ | .bool _ | .uint _ _ | .bytesLiteral _ _ | .bytes32Literal _
+  | .foreignBase _ _ | .foreignScalar _ _ => false
+  | .bytesField value _ | .bytesAt value _ | .reverseBytes value | .sliceBytes value _ _
+  | .sha512 value | .keccak256 value | .persistentHash32 value | .reverseBytes32 value
+  | .persistentHashNative value | .toBytes32 value | .fromBytes32 value | .fromBytes value
+  | .jubjubScalarFromNative value | .jubjubScalarToNative value | .jubjubMulGenerator value
+  | .jubjubNeg value | .jubjubCoordinate value _ | .foreignEncodedField value _
+  | .foreignUnary _ value | .foreignToBytes value | .foreignFromBytes _ value
+  | .inv value | .cast _ value | .disclose _ value => expressionUsesName name value
+  | .persistentHashVector32 values | .hashToCurve values
+  | .persistentHashNativeVector values | .transientHash values => values.any (expressionUsesName name)
+  | .concatBytes left right | .foreignBinary _ left right | .jubjubMul left right
+  | .jubjubAdd left right | .add left right | .mul left right | .sub left right
+  | .uadd left right | .usub left right | .umul left right | .eq left right
+  | .poseidon2 _ left right => expressionUsesName name left || expressionUsesName name right
+  | .jubjubFromCoordinates left right => expressionUsesName name left || expressionUsesName name right
+  | .boolAnd left right | .boolOr left right | .boolXor left right =>
+    expressionUsesName name left || expressionUsesName name right
+  | .select condition yes no =>
+    expressionUsesName name condition || expressionUsesName name yes || expressionUsesName name no
+  | .letE localName value body => expressionUsesName name value ||
+      (localName != name && expressionUsesName name body)
+  | .assertE condition body => expressionUsesName name condition || expressionUsesName name body
+  | .ref candidate => candidate == name
+  | _ => true
+
+private partial def expressionIsTotal (env : TypeEnv) : Expr ty → Bool
+  | .native _ | .bool _ | .uint _ _ => true
+  | .bytesLiteral length values =>
+    length ≤ maxBytesLength && values.length == length && values.all (· ≤ 255)
+  | .bytes32Literal values => values.length == 32 && values.all (· ≤ 255)
+  | .bytesAt (length := length) value index => index < length && expressionIsTotal env value
+  | .ref name => env.lookup name == some ty
+  | .add left right | .mul left right | .sub left right
+  | .boolAnd left right | .boolOr left right | .boolXor left right
+  | .eq left right => expressionIsTotal env left && expressionIsTotal env right
+  | .select condition yes no => expressionIsTotal env condition &&
+      expressionIsTotal env yes && expressionIsTotal env no
+  | .letE (source := source) name value body => expressionIsTotal env value &&
+      expressionIsTotal ((name, source) :: env) body
+  | .disclose _ value => expressionIsTotal env value
+  | .cast .native (source := source) value =>
+    match source with
+    | .native | .bool | .uint _ => expressionIsTotal env value
+    | _ => false
+  | _ => false
+
+private def sequence (types : TypeEnv) (name : String) (value body : Lowered) : Lowered :=
+  let bind {ty : Ty} (expression : Expr ty) : Expr ty :=
+    if !expressionUsesName name expression && expressionIsTotal types value.scalar.value then
+      expression
+    else .letE name value.scalar.value expression
   {body with
     scalar := ⟨body.scalar.ty, bind body.scalar.value⟩
     components := body.components.map fun component =>
@@ -1873,50 +1924,6 @@ private def recordLocal (name : String) (value : Scalar) : LowerM Unit := do
   modify fun state => {state with localBindings := {
     name, value, creationGuard := state.guard} :: state.localBindings}
 
-private partial def expressionUsesName (name : String) : Expr ty → Bool
-  | .native _ | .bool _ | .uint _ _ | .bytesLiteral _ _ | .bytes32Literal _
-  | .foreignBase _ _ | .foreignScalar _ _ => false
-  | .bytesField value _ | .bytesAt value _ | .reverseBytes value | .sliceBytes value _ _
-  | .sha512 value | .keccak256 value | .persistentHash32 value | .reverseBytes32 value
-  | .persistentHashNative value | .toBytes32 value | .fromBytes32 value | .fromBytes value
-  | .jubjubScalarFromNative value | .jubjubScalarToNative value | .jubjubMulGenerator value
-  | .jubjubNeg value | .jubjubCoordinate value _ | .foreignEncodedField value _
-  | .foreignUnary _ value | .foreignToBytes value | .foreignFromBytes _ value
-  | .inv value | .cast _ value | .disclose _ value => expressionUsesName name value
-  | .persistentHashVector32 values | .hashToCurve values
-  | .persistentHashNativeVector values | .transientHash values => values.any (expressionUsesName name)
-  | .concatBytes left right | .foreignBinary _ left right | .jubjubMul left right
-  | .jubjubAdd left right | .add left right | .mul left right | .sub left right
-  | .uadd left right | .usub left right | .umul left right | .eq left right
-  | .poseidon2 _ left right => expressionUsesName name left || expressionUsesName name right
-  | .jubjubFromCoordinates left right => expressionUsesName name left || expressionUsesName name right
-  | .boolAnd left right | .boolOr left right | .boolXor left right =>
-    expressionUsesName name left || expressionUsesName name right
-  | .select condition yes no =>
-    expressionUsesName name condition || expressionUsesName name yes || expressionUsesName name no
-  | .letE localName value body => localName == name || expressionUsesName name value ||
-      expressionUsesName name body
-  | .assertE condition body => expressionUsesName name condition || expressionUsesName name body
-  | .ref candidate => candidate == name
-  | _ => true
-
-private partial def expressionIsTotal (env : TypeEnv) : Expr ty → Bool
-  | .native _ | .bool _ | .uint _ _ => true
-  | .ref name => env.lookup name == some ty
-  | .add left right | .mul left right | .sub left right
-  | .boolAnd left right | .boolOr left right | .boolXor left right
-  | .eq left right => expressionIsTotal env left && expressionIsTotal env right
-  | .select condition yes no => expressionIsTotal env condition &&
-      expressionIsTotal env yes && expressionIsTotal env no
-  | .letE (source := source) name value body => expressionIsTotal env value &&
-      expressionIsTotal ((name, source) :: env) body
-  | .disclose _ value => expressionIsTotal env value
-  | .cast .native (source := source) value =>
-    match source with
-    | .native | .bool | .uint _ => expressionIsTotal env value
-    | _ => false
-  | _ => false
-
 private def closeBindings (types : TypeEnv) (bindings : List LocalBinding)
     (value : Expr ty) : Expr ty :=
   bindings.foldl (fun body binding =>
@@ -1961,10 +1968,12 @@ private def appendLedgerConstraints (span : SourceSpan) (conditions : List (Expr
 /-- Retain strict term evaluation even when a Unit result discards its value. -/
 private def evaluateLedgerTerm (span : SourceSpan) (value : Lowered) : LowerM Unit := do
   appendLedgerConstraints span value.constraints
+  let types := (← get).types
   let values := if (components value).isEmpty then [value.scalar] else components value
   for component in values do
-    let name ← fresh
-    appendLedgerEffect span (.require (.letE name component.value (.bool true)))
+    unless expressionIsTotal types component.value do
+      let name ← fresh
+      appendLedgerEffect span (.require (.letE name component.value (.bool true)))
 
 private def andGuard (left right : Expr .bool) : Expr .bool := .boolAnd left right
 
@@ -2192,6 +2201,14 @@ mutual
           witnessInputs := state.witnessInputs ++ [{name := inputName, ty := type, visibility := .private, span}]
           privateOrigins := state.privateOrigins ++ [(inputName,
             if signature.operation == "private_state.read.v1" then .privateState else .provider)]}
+      if let .composite type := signature.result then
+        let compiled ← liftD (checkedComposite program span type)
+        let state ← get
+        let nativeLeaves ← liftD (leaves.mapM (nativeOfScalar span))
+        let checked ← liftD ((Types.checkNativeExpression compiled state.types
+          nativeLeaves).mapError fun message => {span, message})
+        -- Canonical input bounds apply even when the witness call is inactive.
+        modify fun state => {state with witnessConstraints := state.witnessConstraints ++ checked.constraints}
       let state ← get
       if state.guardActive then
         for (inputName, type) in inputs.zip leafTypes do
@@ -2203,20 +2220,14 @@ mutual
       let value ← match signature.result with
         | .unit => pure unitValue
         | .scalar _ => pure {ty := signature.result, scalar := leaves.headD ⟨.bool, .bool true⟩}
-        | .composite type => do
-          let compiled ← liftD (checkedComposite program span type)
-          let state ← get
-          let nativeLeaves ← liftD (leaves.mapM (nativeOfScalar span))
-          let checked ← liftD ((Types.checkNativeExpression compiled state.types
-            nativeLeaves).mapError fun message => {span, message})
-          constraints := constraints ++ checked.constraints
-          pure (aggregateValue type leaves)
+        | .composite type => pure (aggregateValue type leaves)
       modify fun state => {state with witnessCalls := state.witnessCalls ++ [{
         ordinal := state.witnessCalls.length, site, name, path := state.callPath,
         result := signature.result, inputs, effectCount := state.ledgerEffects.length,
         guard := callGuard, guarded := state.guardActive}]}
+      let types := (← get).types
       pure (bindings.foldr (fun (binding, component) body =>
-        sequence binding {ty := .scalar component.ty, scalar := component} body)
+        sequence types binding {ty := .scalar component.ty, scalar := component} body)
           {value with constraints})
     | .poseidon2 domain left right =>
       let left ← lowerTerm program scope env span left
@@ -2463,8 +2474,9 @@ mutual
       localBindings := initial.localBindings}
     let body := {body with constraints :=
       (if initial.ledgerMode then [] else argumentConstraints ++ body.constraints)}
+    let types := (← get).types
     pure (bindings.foldr (fun (name, value) body =>
-      sequence name {ty := .scalar value.ty, scalar := value} body) body)
+      sequence types name {ty := .scalar value.ty, scalar := value} body) body)
 
   private partial def lowerBody (program : Program) (declaration : Declaration)
       (env : LowerEnv) (body : List Statement) : LowerM Lowered :=
@@ -2506,8 +2518,9 @@ mutual
           | .composite type => aggregateValue type references
         let body ← lowerBodyWith program declaration ((name, reference) :: env) rest continuation
         let body := {body with constraints := if (← get).ledgerMode then [] else value.constraints ++ body.constraints}
+        let types := (← get).types
         pure (bindings.foldr (fun (localName, component) body =>
-          sequence localName {ty := .scalar component.ty, scalar := component} body) body)
+          sequence types localName {ty := .scalar component.ty, scalar := component} body) body)
       | .evaluate value =>
         let value ← lowerTerm program declaration.id.scope env declaration.span value
         if (← get).ledgerMode then appendLedgerConstraints declaration.span value.constraints
@@ -2520,8 +2533,9 @@ mutual
           bindings := [(name, value.scalar)]
         let body ← lowerBodyWith program declaration env rest continuation
         let body := {body with constraints := if (← get).ledgerMode then [] else value.constraints ++ body.constraints}
+        let types := (← get).types
         pure (bindings.foldr (fun (name, component) body =>
-          sequence name {ty := .scalar component.ty, scalar := component} body) body)
+          sequence types name {ty := .scalar component.ty, scalar := component} body) body)
       | .assert condition =>
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
         if (← get).ledgerMode then appendLedgerConstraints declaration.span condition.constraints

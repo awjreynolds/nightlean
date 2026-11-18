@@ -4,7 +4,8 @@ open scoped Noctium
 open Noctium Noctium.Helpers
 
 private def iterationSource : Except Diagnostic Program := do
-  let vector := Types.CompositeType.vector 3 (.scalar .native)
+  let sequenceType := Types.CompositeType.tuple [
+    .scalar .native, .scalar (.uint 3), .scalar .native]
   let item := Types.CompositeType.structure "Iteration.Item"
   let base : Program := {
     composites := {structures := [{id := "Iteration.Item", fields := [
@@ -17,7 +18,7 @@ private def iterationSource : Except Diagnostic Program := do
       {name := "seed", operation := "noctium.iteration-seed.v1", capability := "seed",
         result := .scalar .native},
       {name := "values", operation := "noctium.iteration-values.v1", capability := "values",
-        result := .composite vector},
+        result := .composite sequenceType},
       {name := "double", operation := "noctium.iteration-double.v1", capability := "double",
         parameters := [{name := "value", type := .scalar .native}], result := .scalar .native}]
     declarations := [{
@@ -50,9 +51,11 @@ private def iterationSource : Except Diagnostic Program := do
       .bind "doubled" (.scalar .native) (.witnessCall "double-value" "double" [.ref "shifted"]),
       .return (some (.composite item [.ref "doubled", .ref "shifted", .ref "value"]))])
   let (foldedProgram, folded) ← Iteration.foldWithLimits {} mappedProgram 0 env {}
-    initial mapped
-    (.anonymous [{name := "acc"}, {name := "value"}] none [
-      .return (some (.binary .add (.ref "acc") (.project (.ref "value") (.field "amount"))))])
+    initial [mapped, .bytes (.bytesLiteral 3 [1, 2, 3]) []]
+    (.anonymous [{name := "acc"}, {name := "value"}, {name := "fee"}] none [
+      .return (some (.binary .add
+        (.binary .add (.ref "acc") (.project (.ref "value") (.field "amount")))
+        (.cast .native (.ref "fee"))))])
   pure {foldedProgram with declarations := foldedProgram.declarations.map fun declaration =>
     if declaration.id == ⟨0, 0⟩ then {declaration with body := [
       .branch (.disclose {} (.ref "enabled")) [
