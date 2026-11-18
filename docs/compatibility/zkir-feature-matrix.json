@@ -4935,6 +4935,12 @@
       "implementationCommit": "6da74886000759ec3083e97669ae7164c3e9e45b",
       "scope": "One logical disclosed Bytes32 witness-circuit output lowers to two canonical Native fields and remains a full byte-aligned ledger key. Source/control Session/native execution passes against independent SHA256; changing digest byte31 rejects the helper equality during preparation. Missing disclosure rejects in source. Focused case0.01s. Single logical result only; grouped output record layout stays open. Readable toBytes32 dispatch uses existing Native/Jubjub scalar/point serializers; delegated-native lifecycle qualifies Native epoch serialization. No new opcode, key, proof or transaction."
     },
+    "groupedBytes32WitnessOutputEvidence": {
+      "source": "tests/NativeGroupedBytes32WitnessOutput.lean",
+      "native": "runtime/tests/native_bytes32_witness_output.rs",
+      "physicalOutputFields": 33,
+      "scope": "A readable output record combines Bytes32 with UInt8 and preserves a logical Bytes32 alias through lexical lets for ledger key use. Physical byte leaves are range-checked UInt8 projections cast to Native for the existing checked aggregate ABI. Focused source/control/native case checks independent SHA256, stored count and rejection of a changed digest byte31 by preparation or official native checking. Both single and grouped result forms pass in0.02s. No new opcode, keys, proofs or transactions; no general nominal ABI or mobile qualification."
+    },
     "constructorEvidence": {
       "source": "tests/ConstructorMetadata.lean",
       "native": "runtime/tests/constructor_metadata.rs",

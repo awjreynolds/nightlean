@@ -557,7 +557,8 @@ private def sourceChildren (limits : Limits) (span : SourceSpan) :
       pure [.term left, .term right]
     | .cast target value => pure [.typeExpr target, .term value]
     | .witness _ target => pure [.typeExpr target]
-    | .disclose _ value | .project value _ | .effect _ _ value | .at _ value => pure [.term value]
+    | .disclose _ value | .project value _ | .effect _ _ value | .at _ value =>
+      pure [.term value]
     | .select condition yes no | .ite condition yes no => pure [.term condition, .term yes, .term no]
     | .call _ arguments values => do
       if arguments.length > limits.maxTypeArguments || values.length > limits.maxTypeArguments then
@@ -1086,7 +1087,7 @@ private partial def collectWitnessTerms (term : Helpers.Term) (result : Array Si
   | .andThen left right | .orElse left right | .index left right =>
     collectWitnessTerms right (collectWitnessTerms left result)
   | .cast _ value | .disclose _ value | .effect _ _ value
-  | .at _ value | .project value _ => collectWitnessTerms value result
+  | .at _ value | .project value _ | .bytesAt value _ => collectWitnessTerms value result
   | .select condition yes no | .ite condition yes no =>
     collectWitnessTerms no (collectWitnessTerms yes (collectWitnessTerms condition result))
   | .call _ values | .witnessCall _ _ values | .composite _ values | .curve _ values | .bytes _ values =>

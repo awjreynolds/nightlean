@@ -147,6 +147,10 @@ mutual
       let info ← liftD (checked.infer scope (env.map fun (name, value) => (name, value.ty)) span term)
       pure (combined info.ty values)
     | .bytes32Literal _ => pure {ty := .scalar (.bytes 32)}
+    | .bytesAt value _ => do
+      let value ← expression checked scope env span value
+      let info ← liftD (checked.infer scope (env.map fun (name, value) => (name, value.ty)) span term)
+      pure (combined info.ty [value])
     | .bytes _ arguments => do
       let values ← arguments.mapM (expression checked scope env span)
       let info ← liftD (checked.infer scope (env.map fun (name, value) => (name, value.ty)) span term)
@@ -372,6 +376,10 @@ mutual
       pure (node span "curve" [("operation", toJson operation.operationName),
         ("arguments", toJson (← arguments.mapM (emitExpression checked scope env span)))])
     | .bytes32Literal values => pure (node span "bytes32" [("values", toJson values)])
+    | .bytesAt value index => do
+      unless (← get).typed do emitLift (fail span "Bytes32 operations require control schema version 2")
+      pure (node span "byteAt" [("value", ← emitExpression checked scope env span value),
+        ("index", toJson index)])
     | .bytes operation arguments => do
       unless (← get).typed do emitLift (fail span "Bytes32 operations require control schema version 2")
       pure (node span "bytes" [("operation", toJson operation.operationName),

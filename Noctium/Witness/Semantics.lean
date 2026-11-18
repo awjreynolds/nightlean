@@ -27,7 +27,7 @@ def witnessOccurrences : Term → List (String × String)
   | .andThen left right | .orElse left right | .index left right =>
       witnessOccurrences left ++ witnessOccurrences right
   | .cast _ value | .disclose _ value | .effect _ _ value
-  | .at _ value | .project value _ => witnessOccurrences value
+  | .at _ value | .project value _ | .bytesAt value _ => witnessOccurrences value
   | .select condition yes no | .ite condition yes no =>
       witnessOccurrences condition ++ witnessOccurrences yes ++ witnessOccurrences no
   | .call _ arguments | .composite _ arguments => arguments.flatMap witnessOccurrences
@@ -287,7 +287,7 @@ private def eligibilityChildren : EligibilityNode → Option (List EligibilityNo
     | .select condition yes no => some [.term condition, .term yes, .term no]
     | .witnessCall _ _ arguments | .call _ arguments | .composite _ arguments =>
         some (arguments.map EligibilityNode.term)
-    | .ite .. | .andThen .. | .orElse .. | .witness .. | .effect .. => none
+    | .ite .. | .andThen .. | .orElse .. | .witness .. | .effect .. | .bytesAt .. => none
 
 def nativeEligibleNodes : Nat → List EligibilityNode → Bool
   | 0, [] => true
@@ -1254,7 +1254,7 @@ mutual
             let typed ← liftResult ((Types.unflattenChecked compiled leaves).mapError id)
             let selected ← liftResult ((Types.project compiled typed (.vectorIndex position)).mapError id)
             pure (fromSomeTypedValue selected)
-      | .witness _ _ | .ite .. | .andThen .. | .orElse .. | .effect .. =>
+      | .witness _ _ | .ite .. | .andThen .. | .orElse .. | .effect .. | .bytesAt .. =>
           fail "source term is outside the bounded native replay semantics"
   termination_by fuel _ _ _ _ _ _ _ => fuel
   decreasing_by all_goals omega

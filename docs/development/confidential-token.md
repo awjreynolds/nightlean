@@ -48,11 +48,12 @@ keys, and every candidate ciphertext against actual ordered ledger reads before
 writing. A candidate input is not trusted state. The account ID is returned as
 a typed Bytes32 result bound to the native output commitment.
 
-A witness helper now returns a single logical Bytes32 value directly, with
+A witness helper now returns a logical Bytes32 value directly, with
 [focused source/host/native evidence](bytes32-witness-output.md). Approval's
 grouped ciphertext result still uses a public account-ID candidate constrained
-against the private secret. Records mixing Bytes32 with other output fields
-remain separate ABI work. The helper analyzer enforces a maximum expanded depth
+against the private secret. A separate focused fixture also returns Bytes32
+with a UInt8 count in a checked record. General nominal result layouts remain
+separate ABI work. The helper analyzer enforces a maximum expanded depth
 of 256. Typed point candidates avoid unused parameters within this bound.
 
 Private account and encryption secrets come from wallet-scoped native witness

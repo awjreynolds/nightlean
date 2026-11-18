@@ -1,0 +1,776 @@
+{"witnesses": [],
+ "types":
+ [{"schema":
+   {"typeFingerprint":
+    "NoctiumCompositeTypeV1;r21:groupedAccount.OutputNoctiumCompositeLayoutV1;1;R21:groupedAccount.Output2;f9:accountIdb32;f10:countValuesU255;0;",
+    "schemaVersion": 1,
+    "layout":
+    {"kind": "struct",
+     "id": "groupedAccount.Output",
+     "fields":
+     [{"name": "accountId", "layout": {"length": 32, "kind": "bytes"}},
+      {"name": "countValue",
+       "layout":
+       {"leaf": {"maximum": "255", "kind": "uint"}, "kind": "scalar"}}]},
+    "counts": {"leaves": 33, "layoutNodes": 3, "expandedNodes": 35}},
+   "id": "t0"}],
+ "schemaVersion": 2,
+ "name": "noctium.witness-circuit.groupedAccount.v1",
+ "mode": "native",
+ "limits": {"maxSteps": 131072},
+ "kind": "host-control",
+ "inputs":
+ [{"visibility": "private", "type": "Bytes<32>", "name": "accountSecret"},
+  {"visibility": "public", "type": "Bytes<32>", "name": "expectedAccountId"},
+  {"visibility": "public", "type": "UIntRange<256>", "name": "count"}],
+ "functions":
+ [{"resultType": "Aggregate:t0",
+   "parameters":
+   [{"type": "Bytes<32>", "name": "accountSecret"},
+    {"type": "Bytes<32>", "name": "expectedAccountId"},
+    {"type": "UIntRange<256>", "name": "count"}],
+   "name": "groupedAccount",
+   "id": "s0d0",
+   "body":
+   [{"value":
+     {"tag": "bytes",
+      "span":
+      {"line": 12,
+       "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+       "column": 3},
+      "operation": "persistentHash32",
+      "arguments":
+      [{"tag": "reference",
+        "span":
+        {"line": 12,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 3},
+        "name": "accountSecret"}]},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 8,
+      "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+      "column": 1},
+     "name": "accountDigest"},
+    {"tag": "assert",
+     "span":
+     {"line": 8,
+      "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+      "column": 1},
+     "condition":
+     {"tag": "eq",
+      "span":
+      {"line": 13,
+       "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+       "column": 3},
+      "right":
+      {"tag": "reference",
+       "span":
+       {"line": 13,
+        "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+        "column": 3},
+       "name": "accountDigest"},
+      "left":
+      {"tag": "reference",
+       "span":
+       {"line": 13,
+        "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+        "column": 3},
+       "name": "expectedAccountId"}}},
+    {"value":
+     {"value":
+      {"tag": "reference",
+       "span":
+       {"line": 14,
+        "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+        "column": 3},
+       "name": "accountDigest"},
+      "tag": "disclose",
+      "span":
+      {"line": 14,
+       "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+       "column": 3}},
+     "type": "Bytes<32>",
+     "tag": "bind",
+     "span":
+     {"line": 8,
+      "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+      "column": 1},
+     "name": "__noctium_output_5_accountId"},
+    {"value":
+     {"tag": "reference",
+      "span":
+      {"line": 15,
+       "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+       "column": 3},
+      "name": "count"},
+     "type": "UIntRange<256>",
+     "tag": "bind",
+     "span":
+     {"line": 8,
+      "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+      "column": 1},
+     "name": "__noctium_output_6_countValue"},
+    {"value":
+     {"type": "Aggregate:t0",
+      "tag": "composite",
+      "span":
+      {"line": 8,
+       "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+       "column": 1},
+      "leaves":
+      [{"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 0},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 1},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 2},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 3},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 4},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 5},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 6},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 7},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 8},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 9},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 10},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 11},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 12},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 13},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 14},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 15},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 16},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 17},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 18},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 19},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 20},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 21},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 22},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 23},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 24},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 25},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 26},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 27},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 28},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 29},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 30},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"value":
+        {"value":
+         {"tag": "reference",
+          "span":
+          {"line": 8,
+           "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+           "column": 1},
+          "name": "__noctium_output_5_accountId"},
+         "tag": "byteAt",
+         "span":
+         {"line": 8,
+          "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+          "column": 1},
+         "index": 31},
+        "type": "Native",
+        "tag": "cast",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1}},
+       {"tag": "reference",
+        "span":
+        {"line": 8,
+         "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+         "column": 1},
+        "name": "__noctium_output_6_countValue"}]},
+     "tag": "return",
+     "span":
+     {"line": 8,
+      "file": "tests/NativeGroupedBytes32WitnessOutput.lean",
+      "column": 1}}]}],
+ "entry": "s0d0",
+ "binding":
+ "{\"calls\":[],\"circuitInputs\":[{\"name\":\"accountSecret\",\"type\":\"Bytes<32>\",\"visibility\":\"private\"},{\"name\":\"expectedAccountId\",\"type\":\"Bytes<32>\",\"visibility\":\"public\"},{\"name\":\"count\",\"type\":\"UIntRange<256>\",\"visibility\":\"public\"}],\"circuitName\":\"groupedAccount\",\"circuitOutputs\":[{\"name\":\"result.accountId.0\",\"type\":\"Native\"},{\"name\":\"result.accountId.1\",\"type\":\"Native\"},{\"name\":\"result.accountId.2\",\"type\":\"Native\"},{\"name\":\"result.accountId.3\",\"type\":\"Native\"},{\"name\":\"result.accountId.4\",\"type\":\"Native\"},{\"name\":\"result.accountId.5\",\"type\":\"Native\"},{\"name\":\"result.accountId.6\",\"type\":\"Native\"},{\"name\":\"result.accountId.7\",\"type\":\"Native\"},{\"name\":\"result.accountId.8\",\"type\":\"Native\"},{\"name\":\"result.accountId.9\",\"type\":\"Native\"},{\"name\":\"result.accountId.10\",\"type\":\"Native\"},{\"name\":\"result.accountId.11\",\"type\":\"Native\"},{\"name\":\"result.accountId.12\",\"type\":\"Native\"},{\"name\":\"result.accountId.13\",\"type\":\"Native\"},{\"name\":\"result.accountId.14\",\"type\":\"Native\"},{\"name\":\"result.accountId.15\",\"type\":\"Native\"},{\"name\":\"result.accountId.16\",\"type\":\"Native\"},{\"name\":\"result.accountId.17\",\"type\":\"Native\"},{\"name\":\"result.accountId.18\",\"type\":\"Native\"},{\"name\":\"result.accountId.19\",\"type\":\"Native\"},{\"name\":\"result.accountId.20\",\"type\":\"Native\"},{\"name\":\"result.accountId.21\",\"type\":\"Native\"},{\"name\":\"result.accountId.22\",\"type\":\"Native\"},{\"name\":\"result.accountId.23\",\"type\":\"Native\"},{\"name\":\"result.accountId.24\",\"type\":\"Native\"},{\"name\":\"result.accountId.25\",\"type\":\"Native\"},{\"name\":\"result.accountId.26\",\"type\":\"Native\"},{\"name\":\"result.accountId.27\",\"type\":\"Native\"},{\"name\":\"result.accountId.28\",\"type\":\"Native\"},{\"name\":\"result.accountId.29\",\"type\":\"Native\"},{\"name\":\"result.accountId.30\",\"type\":\"Native\"},{\"name\":\"result.accountId.31\",\"type\":\"Native\"},{\"name\":\"result.countValue\",\"type\":\"Native\"}],\"inputBindings\":[{\"inputs\":[\"accountSecret\"],\"name\":\"accountSecret\",\"type\":\"Bytes<32>\"},{\"inputs\":[\"expectedAccountId\"],\"name\":\"expectedAccountId\",\"type\":\"Bytes<32>\"},{\"inputs\":[\"count\"],\"name\":\"count\",\"type\":\"UIntRange<256>\"}],\"kind\":\"typed-witness-bindings\",\"ledgerInputs\":[{\"name\":\"storedCount\",\"type\":\"UIntRange<256>\",\"visibility\":\"public\"}],\"nativeRelation\":{\"do_communications_commitment\":true,\"inputs\":[],\"instructions\":[{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_0\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_0\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_1\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_2\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_2\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_3\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_3\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_4\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_5\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_6\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_6\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_7\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_7\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_8\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_8\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_9\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_9\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_10\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_10\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_11\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_11\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_12\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_12\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_13\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_13\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_14\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_14\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_15\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_15\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_16\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_16\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_17\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_17\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_18\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_19\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_19\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_20\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_20\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_21\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_21\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_22\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_22\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_23\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_23\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_24\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_24\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_25\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_25\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_26\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_26\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_27\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_27\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_28\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_28\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_29\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_29\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_30\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_30\"},{\"guard\":null,\"op\":\"private_input\",\"output\":\"%input_accountSecret_byte_31\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_accountSecret_byte_31\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_0\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_0\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_1\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_1\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_2\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_2\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_3\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_3\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_4\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_4\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_5\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_5\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_6\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_6\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_7\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_7\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_8\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_8\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_9\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_9\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_10\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_10\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_11\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_11\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_12\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_12\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_13\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_13\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_14\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_14\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_15\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_15\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_16\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_16\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_17\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_17\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_18\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_18\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_19\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_19\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_20\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_20\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_21\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_21\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_22\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_22\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_23\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_23\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_24\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_24\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_25\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_25\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_26\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_26\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_27\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_27\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_28\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_28\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_29\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_29\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_30\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_30\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_expectedAccountId_byte_31\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_expectedAccountId_byte_31\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_count\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_count\"},{\"a\":\"0x0001\",\"b\":\"0x00\",\"op\":\"mul\",\"output\":\"%v0\"},{\"a\":\"%input_accountSecret_byte_30\",\"b\":\"%v0\",\"op\":\"add\",\"output\":\"%v1\"},{\"a\":\"0x0001\",\"b\":\"%v1\",\"op\":\"mul\",\"output\":\"%v2\"},{\"a\":\"%input_accountSecret_byte_29\",\"b\":\"%v2\",\"op\":\"add\",\"output\":\"%v3\"},{\"a\":\"0x0001\",\"b\":\"%v3\",\"op\":\"mul\",\"output\":\"%v4\"},{\"a\":\"%input_accountSecret_byte_28\",\"b\":\"%v4\",\"op\":\"add\",\"output\":\"%v5\"},{\"a\":\"0x0001\",\"b\":\"%v5\",\"op\":\"mul\",\"output\":\"%v6\"},{\"a\":\"%input_accountSecret_byte_27\",\"b\":\"%v6\",\"op\":\"add\",\"output\":\"%v7\"},{\"a\":\"0x0001\",\"b\":\"%v7\",\"op\":\"mul\",\"output\":\"%v8\"},{\"a\":\"%input_accountSecret_byte_26\",\"b\":\"%v8\",\"op\":\"add\",\"output\":\"%v9\"},{\"a\":\"0x0001\",\"b\":\"%v9\",\"op\":\"mul\",\"output\":\"%v10\"},{\"a\":\"%input_accountSecret_byte_25\",\"b\":\"%v10\",\"op\":\"add\",\"output\":\"%v11\"},{\"a\":\"0x0001\",\"b\":\"%v11\",\"op\":\"mul\",\"output\":\"%v12\"},{\"a\":\"%input_accountSecret_byte_24\",\"b\":\"%v12\",\"op\":\"add\",\"output\":\"%v13\"},{\"a\":\"0x0001\",\"b\":\"%v13\",\"op\":\"mul\",\"output\":\"%v14\"},{\"a\":\"%input_accountSecret_byte_23\",\"b\":\"%v14\",\"op\":\"add\",\"output\":\"%v15\"},{\"a\":\"0x0001\",\"b\":\"%v15\",\"op\":\"mul\",\"output\":\"%v16\"},{\"a\":\"%input_accountSecret_byte_22\",\"b\":\"%v16\",\"op\":\"add\",\"output\":\"%v17\"},{\"a\":\"0x0001\",\"b\":\"%v17\",\"op\":\"mul\",\"output\":\"%v18\"},{\"a\":\"%input_accountSecret_byte_21\",\"b\":\"%v18\",\"op\":\"add\",\"output\":\"%v19\"},{\"a\":\"0x0001\",\"b\":\"%v19\",\"op\":\"mul\",\"output\":\"%v20\"},{\"a\":\"%input_accountSecret_byte_20\",\"b\":\"%v20\",\"op\":\"add\",\"output\":\"%v21\"},{\"a\":\"0x0001\",\"b\":\"%v21\",\"op\":\"mul\",\"output\":\"%v22\"},{\"a\":\"%input_accountSecret_byte_19\",\"b\":\"%v22\",\"op\":\"add\",\"output\":\"%v23\"},{\"a\":\"0x0001\",\"b\":\"%v23\",\"op\":\"mul\",\"output\":\"%v24\"},{\"a\":\"%input_accountSecret_byte_18\",\"b\":\"%v24\",\"op\":\"add\",\"output\":\"%v25\"},{\"a\":\"0x0001\",\"b\":\"%v25\",\"op\":\"mul\",\"output\":\"%v26\"},{\"a\":\"%input_accountSecret_byte_17\",\"b\":\"%v26\",\"op\":\"add\",\"output\":\"%v27\"},{\"a\":\"0x0001\",\"b\":\"%v27\",\"op\":\"mul\",\"output\":\"%v28\"},{\"a\":\"%input_accountSecret_byte_16\",\"b\":\"%v28\",\"op\":\"add\",\"output\":\"%v29\"},{\"a\":\"0x0001\",\"b\":\"%v29\",\"op\":\"mul\",\"output\":\"%v30\"},{\"a\":\"%input_accountSecret_byte_15\",\"b\":\"%v30\",\"op\":\"add\",\"output\":\"%v31\"},{\"a\":\"0x0001\",\"b\":\"%v31\",\"op\":\"mul\",\"output\":\"%v32\"},{\"a\":\"%input_accountSecret_byte_14\",\"b\":\"%v32\",\"op\":\"add\",\"output\":\"%v33\"},{\"a\":\"0x0001\",\"b\":\"%v33\",\"op\":\"mul\",\"output\":\"%v34\"},{\"a\":\"%input_accountSecret_byte_13\",\"b\":\"%v34\",\"op\":\"add\",\"output\":\"%v35\"},{\"a\":\"0x0001\",\"b\":\"%v35\",\"op\":\"mul\",\"output\":\"%v36\"},{\"a\":\"%input_accountSecret_byte_12\",\"b\":\"%v36\",\"op\":\"add\",\"output\":\"%v37\"},{\"a\":\"0x0001\",\"b\":\"%v37\",\"op\":\"mul\",\"output\":\"%v38\"},{\"a\":\"%input_accountSecret_byte_11\",\"b\":\"%v38\",\"op\":\"add\",\"output\":\"%v39\"},{\"a\":\"0x0001\",\"b\":\"%v39\",\"op\":\"mul\",\"output\":\"%v40\"},{\"a\":\"%input_accountSecret_byte_10\",\"b\":\"%v40\",\"op\":\"add\",\"output\":\"%v41\"},{\"a\":\"0x0001\",\"b\":\"%v41\",\"op\":\"mul\",\"output\":\"%v42\"},{\"a\":\"%input_accountSecret_byte_9\",\"b\":\"%v42\",\"op\":\"add\",\"output\":\"%v43\"},{\"a\":\"0x0001\",\"b\":\"%v43\",\"op\":\"mul\",\"output\":\"%v44\"},{\"a\":\"%input_accountSecret_byte_8\",\"b\":\"%v44\",\"op\":\"add\",\"output\":\"%v45\"},{\"a\":\"0x0001\",\"b\":\"%v45\",\"op\":\"mul\",\"output\":\"%v46\"},{\"a\":\"%input_accountSecret_byte_7\",\"b\":\"%v46\",\"op\":\"add\",\"output\":\"%v47\"},{\"a\":\"0x0001\",\"b\":\"%v47\",\"op\":\"mul\",\"output\":\"%v48\"},{\"a\":\"%input_accountSecret_byte_6\",\"b\":\"%v48\",\"op\":\"add\",\"output\":\"%v49\"},{\"a\":\"0x0001\",\"b\":\"%v49\",\"op\":\"mul\",\"output\":\"%v50\"},{\"a\":\"%input_accountSecret_byte_5\",\"b\":\"%v50\",\"op\":\"add\",\"output\":\"%v51\"},{\"a\":\"0x0001\",\"b\":\"%v51\",\"op\":\"mul\",\"output\":\"%v52\"},{\"a\":\"%input_accountSecret_byte_4\",\"b\":\"%v52\",\"op\":\"add\",\"output\":\"%v53\"},{\"a\":\"0x0001\",\"b\":\"%v53\",\"op\":\"mul\",\"output\":\"%v54\"},{\"a\":\"%input_accountSecret_byte_3\",\"b\":\"%v54\",\"op\":\"add\",\"output\":\"%v55\"},{\"a\":\"0x0001\",\"b\":\"%v55\",\"op\":\"mul\",\"output\":\"%v56\"},{\"a\":\"%input_accountSecret_byte_2\",\"b\":\"%v56\",\"op\":\"add\",\"output\":\"%v57\"},{\"a\":\"0x0001\",\"b\":\"%v57\",\"op\":\"mul\",\"output\":\"%v58\"},{\"a\":\"%input_accountSecret_byte_1\",\"b\":\"%v58\",\"op\":\"add\",\"output\":\"%v59\"},{\"a\":\"0x0001\",\"b\":\"%v59\",\"op\":\"mul\",\"output\":\"%v60\"},{\"a\":\"%input_accountSecret_byte_0\",\"b\":\"%v60\",\"op\":\"add\",\"output\":\"%v61\"},{\"alignment\":[{\"tag\":\"atom\",\"value\":{\"length\":32,\"tag\":\"bytes\"}}],\"inputs\":[\"%input_accountSecret_byte_31\",\"%v61\"],\"op\":\"persistent_hash\",\"output\":\"%v62\"},{\"input\":\"%v62\",\"op\":\"encode\",\"outputs\":[\"%v63\",\"%v64\"]},{\"a\":\"%input_expectedAccountId_byte_31\",\"b\":\"%v0\",\"op\":\"add\",\"output\":\"%v65\"},{\"a\":\"%v65\",\"b\":\"%v64\",\"op\":\"test_eq\",\"output\":\"%v66\"},{\"a\":\"%input_expectedAccountId_byte_30\",\"b\":\"%v0\",\"op\":\"add\",\"output\":\"%v67\"},{\"a\":\"0x0001\",\"b\":\"%v67\",\"op\":\"mul\",\"output\":\"%v68\"},{\"a\":\"%input_expectedAccountId_byte_29\",\"b\":\"%v68\",\"op\":\"add\",\"output\":\"%v69\"},{\"a\":\"0x0001\",\"b\":\"%v69\",\"op\":\"mul\",\"output\":\"%v70\"},{\"a\":\"%input_expectedAccountId_byte_28\",\"b\":\"%v70\",\"op\":\"add\",\"output\":\"%v71\"},{\"a\":\"0x0001\",\"b\":\"%v71\",\"op\":\"mul\",\"output\":\"%v72\"},{\"a\":\"%input_expectedAccountId_byte_27\",\"b\":\"%v72\",\"op\":\"add\",\"output\":\"%v73\"},{\"a\":\"0x0001\",\"b\":\"%v73\",\"op\":\"mul\",\"output\":\"%v74\"},{\"a\":\"%input_expectedAccountId_byte_26\",\"b\":\"%v74\",\"op\":\"add\",\"output\":\"%v75\"},{\"a\":\"0x0001\",\"b\":\"%v75\",\"op\":\"mul\",\"output\":\"%v76\"},{\"a\":\"%input_expectedAccountId_byte_25\",\"b\":\"%v76\",\"op\":\"add\",\"output\":\"%v77\"},{\"a\":\"0x0001\",\"b\":\"%v77\",\"op\":\"mul\",\"output\":\"%v78\"},{\"a\":\"%input_expectedAccountId_byte_24\",\"b\":\"%v78\",\"op\":\"add\",\"output\":\"%v79\"},{\"a\":\"0x0001\",\"b\":\"%v79\",\"op\":\"mul\",\"output\":\"%v80\"},{\"a\":\"%input_expectedAccountId_byte_23\",\"b\":\"%v80\",\"op\":\"add\",\"output\":\"%v81\"},{\"a\":\"0x0001\",\"b\":\"%v81\",\"op\":\"mul\",\"output\":\"%v82\"},{\"a\":\"%input_expectedAccountId_byte_22\",\"b\":\"%v82\",\"op\":\"add\",\"output\":\"%v83\"},{\"a\":\"0x0001\",\"b\":\"%v83\",\"op\":\"mul\",\"output\":\"%v84\"},{\"a\":\"%input_expectedAccountId_byte_21\",\"b\":\"%v84\",\"op\":\"add\",\"output\":\"%v85\"},{\"a\":\"0x0001\",\"b\":\"%v85\",\"op\":\"mul\",\"output\":\"%v86\"},{\"a\":\"%input_expectedAccountId_byte_20\",\"b\":\"%v86\",\"op\":\"add\",\"output\":\"%v87\"},{\"a\":\"0x0001\",\"b\":\"%v87\",\"op\":\"mul\",\"output\":\"%v88\"},{\"a\":\"%input_expectedAccountId_byte_19\",\"b\":\"%v88\",\"op\":\"add\",\"output\":\"%v89\"},{\"a\":\"0x0001\",\"b\":\"%v89\",\"op\":\"mul\",\"output\":\"%v90\"},{\"a\":\"%input_expectedAccountId_byte_18\",\"b\":\"%v90\",\"op\":\"add\",\"output\":\"%v91\"},{\"a\":\"0x0001\",\"b\":\"%v91\",\"op\":\"mul\",\"output\":\"%v92\"},{\"a\":\"%input_expectedAccountId_byte_17\",\"b\":\"%v92\",\"op\":\"add\",\"output\":\"%v93\"},{\"a\":\"0x0001\",\"b\":\"%v93\",\"op\":\"mul\",\"output\":\"%v94\"},{\"a\":\"%input_expectedAccountId_byte_16\",\"b\":\"%v94\",\"op\":\"add\",\"output\":\"%v95\"},{\"a\":\"0x0001\",\"b\":\"%v95\",\"op\":\"mul\",\"output\":\"%v96\"},{\"a\":\"%input_expectedAccountId_byte_15\",\"b\":\"%v96\",\"op\":\"add\",\"output\":\"%v97\"},{\"a\":\"0x0001\",\"b\":\"%v97\",\"op\":\"mul\",\"output\":\"%v98\"},{\"a\":\"%input_expectedAccountId_byte_14\",\"b\":\"%v98\",\"op\":\"add\",\"output\":\"%v99\"},{\"a\":\"0x0001\",\"b\":\"%v99\",\"op\":\"mul\",\"output\":\"%v100\"},{\"a\":\"%input_expectedAccountId_byte_13\",\"b\":\"%v100\",\"op\":\"add\",\"output\":\"%v101\"},{\"a\":\"0x0001\",\"b\":\"%v101\",\"op\":\"mul\",\"output\":\"%v102\"},{\"a\":\"%input_expectedAccountId_byte_12\",\"b\":\"%v102\",\"op\":\"add\",\"output\":\"%v103\"},{\"a\":\"0x0001\",\"b\":\"%v103\",\"op\":\"mul\",\"output\":\"%v104\"},{\"a\":\"%input_expectedAccountId_byte_11\",\"b\":\"%v104\",\"op\":\"add\",\"output\":\"%v105\"},{\"a\":\"0x0001\",\"b\":\"%v105\",\"op\":\"mul\",\"output\":\"%v106\"},{\"a\":\"%input_expectedAccountId_byte_10\",\"b\":\"%v106\",\"op\":\"add\",\"output\":\"%v107\"},{\"a\":\"0x0001\",\"b\":\"%v107\",\"op\":\"mul\",\"output\":\"%v108\"},{\"a\":\"%input_expectedAccountId_byte_9\",\"b\":\"%v108\",\"op\":\"add\",\"output\":\"%v109\"},{\"a\":\"0x0001\",\"b\":\"%v109\",\"op\":\"mul\",\"output\":\"%v110\"},{\"a\":\"%input_expectedAccountId_byte_8\",\"b\":\"%v110\",\"op\":\"add\",\"output\":\"%v111\"},{\"a\":\"0x0001\",\"b\":\"%v111\",\"op\":\"mul\",\"output\":\"%v112\"},{\"a\":\"%input_expectedAccountId_byte_7\",\"b\":\"%v112\",\"op\":\"add\",\"output\":\"%v113\"},{\"a\":\"0x0001\",\"b\":\"%v113\",\"op\":\"mul\",\"output\":\"%v114\"},{\"a\":\"%input_expectedAccountId_byte_6\",\"b\":\"%v114\",\"op\":\"add\",\"output\":\"%v115\"},{\"a\":\"0x0001\",\"b\":\"%v115\",\"op\":\"mul\",\"output\":\"%v116\"},{\"a\":\"%input_expectedAccountId_byte_5\",\"b\":\"%v116\",\"op\":\"add\",\"output\":\"%v117\"},{\"a\":\"0x0001\",\"b\":\"%v117\",\"op\":\"mul\",\"output\":\"%v118\"},{\"a\":\"%input_expectedAccountId_byte_4\",\"b\":\"%v118\",\"op\":\"add\",\"output\":\"%v119\"},{\"a\":\"0x0001\",\"b\":\"%v119\",\"op\":\"mul\",\"output\":\"%v120\"},{\"a\":\"%input_expectedAccountId_byte_3\",\"b\":\"%v120\",\"op\":\"add\",\"output\":\"%v121\"},{\"a\":\"0x0001\",\"b\":\"%v121\",\"op\":\"mul\",\"output\":\"%v122\"},{\"a\":\"%input_expectedAccountId_byte_2\",\"b\":\"%v122\",\"op\":\"add\",\"output\":\"%v123\"},{\"a\":\"0x0001\",\"b\":\"%v123\",\"op\":\"mul\",\"output\":\"%v124\"},{\"a\":\"%input_expectedAccountId_byte_1\",\"b\":\"%v124\",\"op\":\"add\",\"output\":\"%v125\"},{\"a\":\"0x0001\",\"b\":\"%v125\",\"op\":\"mul\",\"output\":\"%v126\"},{\"a\":\"%input_expectedAccountId_byte_0\",\"b\":\"%v126\",\"op\":\"add\",\"output\":\"%v127\"},{\"a\":\"%v127\",\"b\":\"%v63\",\"op\":\"test_eq\",\"output\":\"%v128\"},{\"a\":\"%v128\",\"b\":\"0x00\",\"bit\":\"%v66\",\"op\":\"cond_select\",\"output\":\"%v129\"},{\"a\":\"%v129\",\"b\":\"0x01\",\"op\":\"test_eq\",\"output\":\"%v130\"},{\"cond\":\"%v130\",\"op\":\"assert\"},{\"inputs\":[\"%v63\",\"%v64\"],\"len\":32,\"op\":\"bytes_from_natives\",\"output\":\"%v131\"},{\"bytes\":\"%v131\",\"index\":0,\"op\":\"nth\",\"output\":\"%v132\"},{\"input\":\"%v132\",\"op\":\"encode\",\"outputs\":[\"%v133\"]},{\"a\":\"%v133\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v134\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v134\"},{\"a\":\"%v134\",\"b\":\"%v134\",\"op\":\"test_eq\",\"output\":\"%v135\"},{\"cond\":\"%v135\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":1,\"op\":\"nth\",\"output\":\"%v136\"},{\"input\":\"%v136\",\"op\":\"encode\",\"outputs\":[\"%v137\"]},{\"a\":\"%v137\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v138\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v138\"},{\"a\":\"%v138\",\"b\":\"%v138\",\"op\":\"test_eq\",\"output\":\"%v139\"},{\"cond\":\"%v139\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":2,\"op\":\"nth\",\"output\":\"%v140\"},{\"input\":\"%v140\",\"op\":\"encode\",\"outputs\":[\"%v141\"]},{\"a\":\"%v141\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v142\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v142\"},{\"a\":\"%v142\",\"b\":\"%v142\",\"op\":\"test_eq\",\"output\":\"%v143\"},{\"cond\":\"%v143\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":3,\"op\":\"nth\",\"output\":\"%v144\"},{\"input\":\"%v144\",\"op\":\"encode\",\"outputs\":[\"%v145\"]},{\"a\":\"%v145\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v146\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v146\"},{\"a\":\"%v146\",\"b\":\"%v146\",\"op\":\"test_eq\",\"output\":\"%v147\"},{\"cond\":\"%v147\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":4,\"op\":\"nth\",\"output\":\"%v148\"},{\"input\":\"%v148\",\"op\":\"encode\",\"outputs\":[\"%v149\"]},{\"a\":\"%v149\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v150\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v150\"},{\"a\":\"%v150\",\"b\":\"%v150\",\"op\":\"test_eq\",\"output\":\"%v151\"},{\"cond\":\"%v151\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":5,\"op\":\"nth\",\"output\":\"%v152\"},{\"input\":\"%v152\",\"op\":\"encode\",\"outputs\":[\"%v153\"]},{\"a\":\"%v153\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v154\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v154\"},{\"a\":\"%v154\",\"b\":\"%v154\",\"op\":\"test_eq\",\"output\":\"%v155\"},{\"cond\":\"%v155\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":6,\"op\":\"nth\",\"output\":\"%v156\"},{\"input\":\"%v156\",\"op\":\"encode\",\"outputs\":[\"%v157\"]},{\"a\":\"%v157\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v158\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v158\"},{\"a\":\"%v158\",\"b\":\"%v158\",\"op\":\"test_eq\",\"output\":\"%v159\"},{\"cond\":\"%v159\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":7,\"op\":\"nth\",\"output\":\"%v160\"},{\"input\":\"%v160\",\"op\":\"encode\",\"outputs\":[\"%v161\"]},{\"a\":\"%v161\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v162\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v162\"},{\"a\":\"%v162\",\"b\":\"%v162\",\"op\":\"test_eq\",\"output\":\"%v163\"},{\"cond\":\"%v163\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":8,\"op\":\"nth\",\"output\":\"%v164\"},{\"input\":\"%v164\",\"op\":\"encode\",\"outputs\":[\"%v165\"]},{\"a\":\"%v165\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v166\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v166\"},{\"a\":\"%v166\",\"b\":\"%v166\",\"op\":\"test_eq\",\"output\":\"%v167\"},{\"cond\":\"%v167\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":9,\"op\":\"nth\",\"output\":\"%v168\"},{\"input\":\"%v168\",\"op\":\"encode\",\"outputs\":[\"%v169\"]},{\"a\":\"%v169\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v170\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v170\"},{\"a\":\"%v170\",\"b\":\"%v170\",\"op\":\"test_eq\",\"output\":\"%v171\"},{\"cond\":\"%v171\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":10,\"op\":\"nth\",\"output\":\"%v172\"},{\"input\":\"%v172\",\"op\":\"encode\",\"outputs\":[\"%v173\"]},{\"a\":\"%v173\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v174\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v174\"},{\"a\":\"%v174\",\"b\":\"%v174\",\"op\":\"test_eq\",\"output\":\"%v175\"},{\"cond\":\"%v175\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":11,\"op\":\"nth\",\"output\":\"%v176\"},{\"input\":\"%v176\",\"op\":\"encode\",\"outputs\":[\"%v177\"]},{\"a\":\"%v177\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v178\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v178\"},{\"a\":\"%v178\",\"b\":\"%v178\",\"op\":\"test_eq\",\"output\":\"%v179\"},{\"cond\":\"%v179\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":12,\"op\":\"nth\",\"output\":\"%v180\"},{\"input\":\"%v180\",\"op\":\"encode\",\"outputs\":[\"%v181\"]},{\"a\":\"%v181\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v182\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v182\"},{\"a\":\"%v182\",\"b\":\"%v182\",\"op\":\"test_eq\",\"output\":\"%v183\"},{\"cond\":\"%v183\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":13,\"op\":\"nth\",\"output\":\"%v184\"},{\"input\":\"%v184\",\"op\":\"encode\",\"outputs\":[\"%v185\"]},{\"a\":\"%v185\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v186\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v186\"},{\"a\":\"%v186\",\"b\":\"%v186\",\"op\":\"test_eq\",\"output\":\"%v187\"},{\"cond\":\"%v187\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":14,\"op\":\"nth\",\"output\":\"%v188\"},{\"input\":\"%v188\",\"op\":\"encode\",\"outputs\":[\"%v189\"]},{\"a\":\"%v189\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v190\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v190\"},{\"a\":\"%v190\",\"b\":\"%v190\",\"op\":\"test_eq\",\"output\":\"%v191\"},{\"cond\":\"%v191\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":15,\"op\":\"nth\",\"output\":\"%v192\"},{\"input\":\"%v192\",\"op\":\"encode\",\"outputs\":[\"%v193\"]},{\"a\":\"%v193\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v194\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v194\"},{\"a\":\"%v194\",\"b\":\"%v194\",\"op\":\"test_eq\",\"output\":\"%v195\"},{\"cond\":\"%v195\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":16,\"op\":\"nth\",\"output\":\"%v196\"},{\"input\":\"%v196\",\"op\":\"encode\",\"outputs\":[\"%v197\"]},{\"a\":\"%v197\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v198\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v198\"},{\"a\":\"%v198\",\"b\":\"%v198\",\"op\":\"test_eq\",\"output\":\"%v199\"},{\"cond\":\"%v199\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":17,\"op\":\"nth\",\"output\":\"%v200\"},{\"input\":\"%v200\",\"op\":\"encode\",\"outputs\":[\"%v201\"]},{\"a\":\"%v201\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v202\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v202\"},{\"a\":\"%v202\",\"b\":\"%v202\",\"op\":\"test_eq\",\"output\":\"%v203\"},{\"cond\":\"%v203\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":18,\"op\":\"nth\",\"output\":\"%v204\"},{\"input\":\"%v204\",\"op\":\"encode\",\"outputs\":[\"%v205\"]},{\"a\":\"%v205\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v206\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v206\"},{\"a\":\"%v206\",\"b\":\"%v206\",\"op\":\"test_eq\",\"output\":\"%v207\"},{\"cond\":\"%v207\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":19,\"op\":\"nth\",\"output\":\"%v208\"},{\"input\":\"%v208\",\"op\":\"encode\",\"outputs\":[\"%v209\"]},{\"a\":\"%v209\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v210\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v210\"},{\"a\":\"%v210\",\"b\":\"%v210\",\"op\":\"test_eq\",\"output\":\"%v211\"},{\"cond\":\"%v211\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":20,\"op\":\"nth\",\"output\":\"%v212\"},{\"input\":\"%v212\",\"op\":\"encode\",\"outputs\":[\"%v213\"]},{\"a\":\"%v213\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v214\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v214\"},{\"a\":\"%v214\",\"b\":\"%v214\",\"op\":\"test_eq\",\"output\":\"%v215\"},{\"cond\":\"%v215\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":21,\"op\":\"nth\",\"output\":\"%v216\"},{\"input\":\"%v216\",\"op\":\"encode\",\"outputs\":[\"%v217\"]},{\"a\":\"%v217\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v218\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v218\"},{\"a\":\"%v218\",\"b\":\"%v218\",\"op\":\"test_eq\",\"output\":\"%v219\"},{\"cond\":\"%v219\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":22,\"op\":\"nth\",\"output\":\"%v220\"},{\"input\":\"%v220\",\"op\":\"encode\",\"outputs\":[\"%v221\"]},{\"a\":\"%v221\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v222\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v222\"},{\"a\":\"%v222\",\"b\":\"%v222\",\"op\":\"test_eq\",\"output\":\"%v223\"},{\"cond\":\"%v223\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":23,\"op\":\"nth\",\"output\":\"%v224\"},{\"input\":\"%v224\",\"op\":\"encode\",\"outputs\":[\"%v225\"]},{\"a\":\"%v225\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v226\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v226\"},{\"a\":\"%v226\",\"b\":\"%v226\",\"op\":\"test_eq\",\"output\":\"%v227\"},{\"cond\":\"%v227\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":24,\"op\":\"nth\",\"output\":\"%v228\"},{\"input\":\"%v228\",\"op\":\"encode\",\"outputs\":[\"%v229\"]},{\"a\":\"%v229\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v230\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v230\"},{\"a\":\"%v230\",\"b\":\"%v230\",\"op\":\"test_eq\",\"output\":\"%v231\"},{\"cond\":\"%v231\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":25,\"op\":\"nth\",\"output\":\"%v232\"},{\"input\":\"%v232\",\"op\":\"encode\",\"outputs\":[\"%v233\"]},{\"a\":\"%v233\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v234\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v234\"},{\"a\":\"%v234\",\"b\":\"%v234\",\"op\":\"test_eq\",\"output\":\"%v235\"},{\"cond\":\"%v235\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":26,\"op\":\"nth\",\"output\":\"%v236\"},{\"input\":\"%v236\",\"op\":\"encode\",\"outputs\":[\"%v237\"]},{\"a\":\"%v237\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v238\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v238\"},{\"a\":\"%v238\",\"b\":\"%v238\",\"op\":\"test_eq\",\"output\":\"%v239\"},{\"cond\":\"%v239\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":27,\"op\":\"nth\",\"output\":\"%v240\"},{\"input\":\"%v240\",\"op\":\"encode\",\"outputs\":[\"%v241\"]},{\"a\":\"%v241\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v242\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v242\"},{\"a\":\"%v242\",\"b\":\"%v242\",\"op\":\"test_eq\",\"output\":\"%v243\"},{\"cond\":\"%v243\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":28,\"op\":\"nth\",\"output\":\"%v244\"},{\"input\":\"%v244\",\"op\":\"encode\",\"outputs\":[\"%v245\"]},{\"a\":\"%v245\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v246\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v246\"},{\"a\":\"%v246\",\"b\":\"%v246\",\"op\":\"test_eq\",\"output\":\"%v247\"},{\"cond\":\"%v247\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":29,\"op\":\"nth\",\"output\":\"%v248\"},{\"input\":\"%v248\",\"op\":\"encode\",\"outputs\":[\"%v249\"]},{\"a\":\"%v249\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v250\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v250\"},{\"a\":\"%v250\",\"b\":\"%v250\",\"op\":\"test_eq\",\"output\":\"%v251\"},{\"cond\":\"%v251\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":30,\"op\":\"nth\",\"output\":\"%v252\"},{\"input\":\"%v252\",\"op\":\"encode\",\"outputs\":[\"%v253\"]},{\"a\":\"%v253\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v254\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v254\"},{\"a\":\"%v254\",\"b\":\"%v254\",\"op\":\"test_eq\",\"output\":\"%v255\"},{\"cond\":\"%v255\",\"op\":\"assert\"},{\"bytes\":\"%v131\",\"index\":31,\"op\":\"nth\",\"output\":\"%v256\"},{\"input\":\"%v256\",\"op\":\"encode\",\"outputs\":[\"%v257\"]},{\"a\":\"%v257\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v258\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v258\"},{\"a\":\"%v258\",\"b\":\"%v258\",\"op\":\"test_eq\",\"output\":\"%v259\"},{\"cond\":\"%v259\",\"op\":\"assert\"},{\"a\":\"%input_count\",\"b\":\"0x00\",\"bit\":\"0x01\",\"op\":\"cond_select\",\"output\":\"%v260\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v260\"},{\"a\":\"%v260\",\"b\":\"%v260\",\"op\":\"test_eq\",\"output\":\"%v261\"},{\"cond\":\"%v261\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v134\"},{\"cond\":\"%v135\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v138\"},{\"cond\":\"%v139\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v142\"},{\"cond\":\"%v143\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v146\"},{\"cond\":\"%v147\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v150\"},{\"cond\":\"%v151\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v154\"},{\"cond\":\"%v155\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v158\"},{\"cond\":\"%v159\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v162\"},{\"cond\":\"%v163\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v166\"},{\"cond\":\"%v167\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v170\"},{\"cond\":\"%v171\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v174\"},{\"cond\":\"%v175\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v178\"},{\"cond\":\"%v179\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v182\"},{\"cond\":\"%v183\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v186\"},{\"cond\":\"%v187\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v190\"},{\"cond\":\"%v191\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v194\"},{\"cond\":\"%v195\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v198\"},{\"cond\":\"%v199\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v202\"},{\"cond\":\"%v203\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v206\"},{\"cond\":\"%v207\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v210\"},{\"cond\":\"%v211\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v214\"},{\"cond\":\"%v215\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v218\"},{\"cond\":\"%v219\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v222\"},{\"cond\":\"%v223\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v226\"},{\"cond\":\"%v227\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v230\"},{\"cond\":\"%v231\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v234\"},{\"cond\":\"%v235\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v238\"},{\"cond\":\"%v239\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v242\"},{\"cond\":\"%v243\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v246\"},{\"cond\":\"%v247\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v250\"},{\"cond\":\"%v251\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v254\"},{\"cond\":\"%v255\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v258\"},{\"cond\":\"%v259\",\"op\":\"assert\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%v260\"},{\"cond\":\"%v261\",\"op\":\"assert\"},{\"guard\":null,\"op\":\"public_input\",\"output\":\"%input_storedCount\",\"type\":\"Scalar<BLS12-381>\"},{\"bits\":8,\"op\":\"constrain_bits\",\"val\":\"%input_storedCount\"},{\"a\":\"%input_storedCount\",\"b\":\"%input_count\",\"op\":\"test_eq\",\"output\":\"%v262\"},{\"cond\":\"%v262\",\"op\":\"assert\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_0\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_0\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_1\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_2\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_3\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_3\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_4\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_5\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_6\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_6\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_7\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_8\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_9\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_9\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_10\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_11\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_12\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_12\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_13\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_14\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_15\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_15\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_16\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_16\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_17\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_17\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_18\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_18\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_19\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_19\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_20\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_20\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_21\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_21\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_22\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_22\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_23\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_23\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_24\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_24\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_25\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_25\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_26\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_26\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_27\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_27\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_28\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_28\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_29\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_29\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_31\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_expectedAccountId_byte_31\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_count\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_count\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x70\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x10\",\"0x01\",\"0x01\",\"0x20\",\"%v64\",\"%v63\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x11\",\"0x01\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_count\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x92\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x30\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x51\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"0x00\",\"0x01\",\"0x20\",\"%v64\",\"%v63\"],\"op\":\"impact\"},{\"guard\":\"0x01\",\"inputs\":[\"0x0c\",\"0x01\",\"0xfffffffffefffffffe5bfeff02a4bd5305d8a10908d83933487d9d2953a7ed73\",\"%input_storedCount\"],\"op\":\"impact\"},{\"op\":\"output\",\"vals\":[]}],\"outputs\":[],\"version\":{\"major\":3,\"minor\":2}},\"schemaVersion\":1,\"signatures\":[],\"sourceExport\":\"noctium.witness-circuit.groupedAccount.v1\",\"target\":{\"contractName\":\"NativeGroupedBytes32WitnessOutput\",\"entrypoint\":\"register\",\"kind\":\"entrypoint\",\"nativeCircuitFile\":\"NativeGroupedBytes32WitnessOutput.register.zkir\",\"targetProfile\":\"midnight-ledger-9-zkir-3.2.1\"},\"types\":[{\"id\":\"t0\",\"schema\":{\"counts\":{\"expandedNodes\":35,\"layoutNodes\":3,\"leaves\":33},\"layout\":{\"fields\":[{\"layout\":{\"kind\":\"bytes\",\"length\":32},\"name\":\"accountId\"},{\"layout\":{\"kind\":\"scalar\",\"leaf\":{\"kind\":\"uint\",\"maximum\":\"255\"}},\"name\":\"countValue\"}],\"id\":\"groupedAccount.Output\",\"kind\":\"struct\"},\"schemaVersion\":1,\"typeFingerprint\":\"NoctiumCompositeTypeV1;r21:groupedAccount.OutputNoctiumCompositeLayoutV1;1;R21:groupedAccount.Output2;f9:accountIdb32;f10:countValuesU255;0;\"}}]}\n"}

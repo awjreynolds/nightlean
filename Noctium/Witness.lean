@@ -82,6 +82,7 @@ structure Compiled where
   circuit : Circuit
   plan : Json
   binding : Json
+  calls : List Helpers.WitnessCallBinding := []
 
 private def boundedNativePlan (plan binding : Json) : Except Diagnostic Json := do
   let text := binding.compress ++ "\n"
@@ -124,7 +125,7 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
     ("circuitOutputs", toJson (circuit.outputs.map fun output => Json.mkObj [("name", toJson output.name),
       ("type", toJson (scalarName output.ty))])),
     ("calls", toJson calls), ("nativeRelation", native)]
-  pure {circuit, binding, plan := ← boundedNativePlan plan binding}
+  pure {circuit, binding, calls := lowered.calls, plan := ← boundedNativePlan plan binding}
 
 def compile (program : Program) (entryName : String) (circuitName : String := "")
     (outputName : String := "") : Except Diagnostic Compiled :=

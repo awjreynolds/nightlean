@@ -210,6 +210,20 @@ fn bytes_operation(
             name: index.to_string(),
         })
     };
+    if let Some(encoded_index) = operation.strip_prefix("__byteAt:") {
+        let index = encoded_index
+            .parse::<usize>()
+            .map_err(|_| anyhow!("control byte index"))?;
+        ensure!(index < 32 && count == 1, "control byte index");
+        return Ok((
+            vec![Bytes32],
+            ScalarType::parse("UIntRange<256>")?,
+            crate::Expr::ByteAt {
+                value: argument(0),
+                index,
+            },
+        ));
+    }
     Ok(match operation {
         "persistentHash32" => (
             vec![Bytes32],
@@ -653,6 +667,24 @@ impl Parser<'_> {
                 (
                     Type::Scalar(ScalarType::Bytes32),
                     ExprKind::Literal(Value::Bytes(bytes)),
+                )
+            }
+            "byteAt" => {
+                ensure!(self.schema_version == 2, "byte projections require v2 plan");
+                shape(v, &["tag", "value", "index"], true)?;
+                let index = field(v, "index")?
+                    .as_u64()
+                    .and_then(|index| usize::try_from(index).ok())
+                    .filter(|index| *index < 32)
+                    .ok_or_else(|| anyhow!("control byte index"))?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                ensure!(
+                    value.ty == Type::Scalar(ScalarType::Bytes32),
+                    "control byte projection requires Bytes<32>"
+                );
+                (
+                    Type::Scalar(ScalarType::parse("UIntRange<256>")?),
+                    ExprKind::Bytes(format!("__byteAt:{index}"), vec![value]),
                 )
             }
             "bytes" => {

@@ -17,6 +17,9 @@ structure CircuitInfo where
   inputs : List (String × Ty)
   publicInputs : List (String × Ty)
   outputs : List (String × Ty)
+  /-- Logical witness-circuit results retained when a grouped helper result is
+  expanded into native leaves. The names point to typed Expr constants. -/
+  logicalOutputs : List (String × Ty × Name) := []
   sourceProgram? : Option (Name × String) := none
   specializationArtifact? : Option String := none
   deriving Inhabited
@@ -714,6 +717,23 @@ private def addReferences (env : Bindings) (items : List (String × Ty)) : Comma
   for (name, ty) in items do
     if env.any (fun p => p.1 == name) then throwError "ambiguous circuit input/output '{name}'"
     env := (name, ty, ← `(@Noctium.Expr.ref $(← tyTerm ty) $(stringTerm name))) :: env
+  pure env
+
+/-- Check and quote a source expression against an explicit typed alias
+environment. Authoring uses this to retain logical expressions across aggregate
+output expansion without adding physical circuit outputs. -/
+def quoteSourceExpression (env : List (String × Ty × TSyntax `term))
+    (stx : TSyntax `nlexpr) (ty : Ty) : CommandElabM (TSyntax `term) :=
+  checkedExpression env stx ty
+
+private def addLogicalReferences (env : Bindings)
+    (items : List (String × Ty × Name)) : CommandElabM Bindings := do
+  let mut env := env
+  for (name, ty, declaration) in items do
+    if env.any (fun p => p.1 == name) then
+      throwError "ambiguous logical output alias '{name}'"
+    let value : TSyntax `term := ⟨mkIdent declaration⟩
+    env := (name, ty, value) :: env
   pure env
 
 private def addReferenceAs (env : Bindings) (sourceName internalName : String) (ty : Ty) :
@@ -1430,6 +1450,7 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
           | throwErrorAt circuit "entrypoint requires a registered Noctium circuit"
         let env ← addReferences [] (info.inputs ++ info.outputs)
+        let env ← addLogicalReferences env info.logicalOutputs
         let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw) ++
           returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
         let initial : EntryEffects := {env, usedLocalNames := reserved}
@@ -1570,7 +1591,8 @@ scoped syntax (name := witnessCircuitCommand) "noctium_witness_circuit" ident
 
 /-- Share checked registration between generated authoring programs and explicit IR sources. -/
 unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportName : String)
-    (outputName : String := "") (observationArtifact? : Option String := none) : CommandElabM Unit := do
+    (outputName : String := "") (observationArtifact? : Option String := none)
+    (logicalOutputs : List (String × Ty × Name) := []) : CommandElabM Unit := do
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     let fullName := (← getCurrNamespace) ++ name.getId
     let compiled ← match Witness.compile program exportName fullName.toString outputName with
@@ -1591,6 +1613,7 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       inputs := compiled.circuit.inputs.map fun input => (input.name, input.ty),
       publicInputs := (compiled.circuit.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty),
       outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
+      logicalOutputs,
       sourceProgram? := some (sourceName, exportName)}
     modifyEnv fun env => witnessRegistry.addEntry env {
       circuitName := fullName, sourceName, exportName, outputName, observationArtifact?}

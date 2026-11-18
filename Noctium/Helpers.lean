@@ -166,6 +166,9 @@ inductive Term where
   | curve (operation : CurveOp) (arguments : List Term)
   | bytes (operation : BytesOp) (arguments : List Term)
   | bytes32Literal (values : List Nat)
+  /-- Project one checked byte from a typed Bytes32 value. The result is
+  lowered through the existing byteAt expression and Control encoding. -/
+  | bytesAt (value : Term) (index : Nat)
   | call (name : String) (arguments : List Term)
   /-- A checked aggregate assembled from scalar source terms in canonical leaf order. -/
   | composite (type : Types.CompositeType) (leaves : List Term)
@@ -323,7 +326,7 @@ where
         | .binary _ a b | .eq a b | .poseidon2 _ a b
         | .andThen a b | .orElse a b => pure [a, b]
         | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
-        | .project value _ => pure [value]
+        | .project value _ | .bytesAt value _ => pure [value]
         | .composite _ leaves => pure leaves
         | .index value index => pure [value, index]
         | .select c a b | .ite c a b => pure [c, a, b]
@@ -370,7 +373,7 @@ where
             | .binary _ a b | .eq a b | .poseidon2 _ a b
             | .andThen a b | .orElse a b => pure [a, b]
             | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
-            | .project value _ => pure [value]
+            | .project value _ | .bytesAt value _ => pure [value]
             | .composite _ leaves => pure leaves
             | .index value index => pure [value, index]
             | .select c a b | .ite c a b => pure [c, a, b]
@@ -415,7 +418,7 @@ where
           | .binary _ a b | .eq a b | .poseidon2 _ a b | .andThen a b | .orElse a b
           | .index a b => ([a, b], none)
           | .cast _ value | .disclose _ value | .effect _ _ value | .at _ value
-          | .project value _ => ([value], none)
+          | .project value _ | .bytesAt value _ => ([value], none)
           | .select c a b | .ite c a b => ([c, a, b], none)
           | _ => ([], none)
         let sites ← match site with
@@ -946,6 +949,13 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       unless bytes.length == 32 && bytes.all (· ≤ 255) do
         fail span "Bytes32 literal must contain exactly 32 byte values"
       pure {ty := .scalar (.bytes 32)}
+    | .bytesAt value index => do
+      let value ← inferTerm fuel program scope env span value
+      let .scalar (.bytes length) := value.ty
+        | fail span "byteAt requires a Bytes32 value"
+      unless length == 32 && index < length do
+        fail span "byteAt index is outside Bytes32"
+      pure (combine (.scalar (.uint 255)) [value])
     | .bytes operation arguments => do
       let (expected, result) ← (operation.signature arguments.length).mapError fun message =>
         {span, message}
@@ -1530,6 +1540,14 @@ mutual
         | _, _ => liftD (fail span "invalid checked curve operation shape")
       pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .bytes32Literal bytes => pure (scalarValue (Expr.bytes32Literal bytes))
+    | .bytesAt value index => do
+      let value ← lowerTerm program scope env span value
+      let .scalar (.bytes length) := value.ty
+        | liftD (fail span "byteAt requires a Bytes32 value")
+      unless length == 32 && index < length do
+        liftD (fail span "byteAt index is outside Bytes32")
+      let bytes ← liftD (typedExpr span (.bytes length) value)
+      pure {scalarValue (Expr.bytesAt bytes index) with constraints := value.constraints}
     | .bytes operation arguments => do
       let (expectedTypes, _) ← liftD ((operation.signature arguments.length).mapError fun message =>
         {span, message})
@@ -1894,7 +1912,7 @@ mutual
     -- shortcut: curve diagnostic traces need typed point values; extend the trace model before enabling them.
     | .curve .. => liftM (fail span "Jubjub helper evaluation requires the native control runtime")
     -- shortcut: Bytes32 traces need ordered byte values; extend the trace model before enabling them.
-    | .bytes32Literal _ | .bytes .. =>
+    | .bytes32Literal _ | .bytes .. | .bytesAt .. =>
       liftM (fail span "Bytes32 helper evaluation requires the qualified native control runtime")
     | .call name arguments =>
       let values ← arguments.mapM (traceTerm program ctx scope env span)

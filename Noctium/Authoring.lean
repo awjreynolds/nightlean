@@ -126,6 +126,15 @@ private structure AuthoringExprState where
   allowAssertThen : _root_.Bool := _root_.Bool.false
   deriving Inhabited
 
+private inductive LogicalAliasSource where
+  | expression (value : TSyntax `nlexpr)
+  | call (site : String)
+
+private structure LogicalAliasBinding where
+  name : String
+  ty : Ty
+  source : LogicalAliasSource
+
 private abbrev ExprM := StateT AuthoringExprState CommandElabM
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
@@ -673,6 +682,8 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
   | .bytes32Literal values => do
     let values := values.map natTerm |>.toArray
     `(Noctium.Helpers.Term.bytes32Literal [$values,*])
+  | .bytesAt value index => do
+    `(Noctium.Helpers.Term.bytesAt $(← termTerm value) $(natTerm index))
   | .composite type leaves => do
     let type ← compositeTypeTerm type
     let leaves ← leaves.mapM termTerm
@@ -848,7 +859,9 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let mut outputName := ""
     let mut outputType : ResultType := .unit
     let mut sawOutput := _root_.Bool.false
-    let mut authoredOutputs : List (String × Ty × Lowered × SourceSpan × Nat) := []
+    let mut authoredOutputs : List
+        (String × Ty × Lowered × SourceSpan × Nat × LogicalAliasSource) := []
+    let mut logicalAliasBindings : List LogicalAliasBinding := []
     for (statement, ordinal) in statements.toList.zip (List.range statements.size) do
       let isOutput := statement.raw[0].getAtomVal == "output"
       if sawOutput && !isOutput then
@@ -879,6 +892,8 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         let readTerm := Noctium.Helpers.Term.witnessCall site signature.name []
         body := body ++ [.bind valueName (.scalar field.ty) (.at (← spanValue statement) readTerm)]
         env := (valueName, .scalar field.ty, .ref valueName) :: env
+        logicalAliasBindings := logicalAliasBindings ++ [
+          {name := valueName, ty := field.ty, source := .call site}]
         privateReads := (privateReads ++ [field.key]).eraseDups
         generatedValidity := (generatedValidity ++ [s!"typed private-state read reply: {field.key}"]).eraseDups
       | `(noctium_witness_statement| witness $function:ident($args:nlexpr,*)) => do
@@ -902,6 +917,12 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         let value ← coerce sourceExpr lowered ty
         body := body ++ value.before ++ [.bind valueName (.scalar ty) (.at (← spanValue statement) value.term)]
         env := (valueName, .scalar ty, .ref valueName) :: env
+        let aliasSource := match value.term with
+          | .witnessCall site .. => LogicalAliasSource.call site
+          | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
+          | _ => LogicalAliasSource.expression sourceExpr
+        logicalAliasBindings := logicalAliasBindings ++ [
+          {name := valueName, ty, source := aliasSource}]
         witnesses := uniqueWitnesses (witnesses ++ value.signatures)
         witnessNames := (witnessNames ++ value.witnessNames).eraseDups
         let observationPart := collectExpressionMetadata {entryName := exportName} sourceExpr value.generatedValidity
@@ -943,7 +964,12 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' {}
         let value ← coerce sourceExpr lowered ty
         let outputSpan ← spanValue statement
-        authoredOutputs := authoredOutputs ++ [(valueName, ty, value, outputSpan, ordinal)]
+        let aliasSource := match value.term with
+          | .witnessCall site .. => LogicalAliasSource.call site
+          | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
+          | _ => LogicalAliasSource.expression sourceExpr
+        authoredOutputs := authoredOutputs ++ [
+          (valueName, ty, value, outputSpan, ordinal, aliasSource)]
         sawOutput := _root_.Bool.true
         witnesses := uniqueWitnesses (witnesses ++ value.signatures)
         witnessNames := (witnessNames ++ value.witnessNames).eraseDups
@@ -954,8 +980,12 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       | _ => throwErrorAt statement "unsupported readable witness statement"
     let compositeId := programNameText ++ ".Output"
     let compositeType := Types.CompositeType.structure compositeId
-    let compositeFields := authoredOutputs.map fun (fieldName, fieldType, _, fieldSpan, _) =>
-      {name := fieldName, type := Types.CompositeType.scalar fieldType, span := fieldSpan : Types.Field}
+    let compositeFields := authoredOutputs.map fun (fieldName, fieldType, _, fieldSpan, _, _) =>
+      {name := fieldName,
+        type := match fieldType with
+          | .bytes length => Types.CompositeType.bytes length
+          | _ => Types.CompositeType.scalar fieldType,
+        span := fieldSpan : Types.Field}
     let declarationSpan ← spanValue stx
     let compositeEnv : Types.CompositeEnv := if authoredOutputs.length > 1 then
       {structures := [{id := compositeId, fields := compositeFields, span := declarationSpan}]}
@@ -964,7 +994,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       body := body ++ [.return none]
       outputType := .unit
     else if authoredOutputs.length == 1 then
-      let some (fieldName, fieldType, fieldValue, fieldSpan, _) := authoredOutputs.head?
+      let some (fieldName, fieldType, fieldValue, fieldSpan, _, _) := authoredOutputs.head?
         | throwErrorAt stx "readable witness output collection failed"
       outputName := fieldName
       outputType := .scalar fieldType
@@ -973,13 +1003,17 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       outputName := ""
       outputType := .composite compositeType
       let mut outputReferences := []
-      for (fieldName, fieldType, fieldValue, fieldSpan, ordinal) in authoredOutputs do
+      for (fieldName, fieldType, fieldValue, fieldSpan, ordinal, _) in authoredOutputs do
         let bindingName := s!"__noctium_output_{ordinal}_{fieldName}"
         if env.any (fun item => item.1 == bindingName) || authoredOutputs.any (fun item => item.1 == bindingName) then
           throwErrorAt stx "generated composite output binding collides with a source name"
         body := body ++ fieldValue.before ++ [
           .bind bindingName (.scalar fieldType) (.at fieldSpan fieldValue.term)]
-        outputReferences := outputReferences ++ [.ref bindingName]
+        match fieldType with
+        | .bytes length =>
+          outputReferences := outputReferences ++ (List.range length).map fun index =>
+            .cast .native (.bytesAt (.ref bindingName) index)
+        | _ => outputReferences := outputReferences ++ [.ref bindingName]
       body := body ++ [.return (some (.composite compositeType outputReferences))]
     let observation : ObservationMetadata := {
       entryName := exportName,
@@ -1011,9 +1045,47 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     if let some expected := readTypes.head? then
       unless readTypes.all (· == expected) do
         throwErrorAt stx "readable witness circuits currently require private-state fields to share one result type"
-    match Witness.compile program exportName programNameText with
-    | .error diagnostic => throwErrorAt stx s!"readable witness compilation failed: {diagnostic.message}"
-    | .ok _ => pure ()
+    let compiled ← match Witness.compile program exportName programNameText with
+      | .error diagnostic => throwErrorAt stx s!"readable witness compilation failed: {diagnostic.message}"
+      | .ok compiled => pure compiled
+    let mut logicalEnv : List (String × Ty × TSyntax `term) := []
+    for input in inputs do
+      let value ← `(@Noctium.Expr.ref $(← tyTerm input.ty) $(stringTerm input.name))
+      logicalEnv := logicalEnv ++ [(input.name, input.ty, value)]
+    let mut logicalOutputAliases : List (String × Ty × Name) := []
+    for binding in logicalAliasBindings do
+      if logicalEnv.any (fun alias => alias.1 == binding.name) then
+        throwErrorAt stx s!"duplicate logical output alias source '{binding.name}'"
+      let value ← match binding.source with
+        | .expression source =>
+          Noctium.quoteSourceExpression logicalEnv source binding.ty
+        | .call site => do
+          let some call := compiled.calls.find? (·.site == site)
+            | throwErrorAt stx s!"compiled witness call '{site}' is missing its result binding"
+          unless call.result == .scalar binding.ty do
+            throwErrorAt stx s!"witness call '{site}' does not produce a scalar logical alias"
+          let some inputName := call.inputs.head?
+            | throwErrorAt stx s!"witness call '{site}' has no scalar result binding"
+          `(@Noctium.Expr.ref $(← tyTerm binding.ty) $(stringTerm inputName))
+      logicalEnv := logicalEnv ++ [(binding.name, binding.ty, value)]
+    if authoredOutputs.length > 1 then
+      for (fieldName, fieldType, _, fieldSpan, ordinal, source) in authoredOutputs do
+        let value ← match source with
+          | .expression expression =>
+            Noctium.quoteSourceExpression logicalEnv expression fieldType
+          | .call site => do
+            let some call := compiled.calls.find? (·.site == site)
+              | throwErrorAt stx s!"compiled witness call '{site}' is missing its result binding"
+            unless call.result == .scalar fieldType do
+              throwErrorAt stx s!"witness call '{site}' does not produce a scalar logical output"
+            let some inputName := call.inputs.head?
+              | throwErrorAt stx s!"witness call '{site}' has no scalar result binding"
+            `(@Noctium.Expr.ref $(← tyTerm fieldType) $(stringTerm inputName))
+        let aliasName := generatedName fullName s!"__logicalOutput_{ordinal}_{fieldName}"
+        if (← getEnv).contains aliasName then
+          throwErrorAt stx "generated logical output alias name already exists"
+        elabCommand (← `(def $(mkIdent aliasName) : Noctium.Expr $(← tyTerm fieldType) := $value))
+        logicalOutputAliases := logicalOutputAliases ++ [(fieldName, fieldType, aliasName)]
     let signatureTerms ← witnesses.mapM quoteSignature
     let signatureTerms := signatureTerms.toArray
     let parameterTerms ← parameters.mapM fun parameter => do
@@ -1029,11 +1101,12 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let compositeEnvTerm ← if authoredOutputs.length > 1 then do
       let fieldTerms ← compositeFields.mapM fun field => do
         let fieldType ← match field.type with
-          | .scalar ty => tyTerm ty
-          | _ => throwErrorAt stx "readable witness record outputs require scalar fields"
+          | .scalar ty => `(Noctium.Types.CompositeType.scalar $(← tyTerm ty))
+          | .bytes length => `(Noctium.Types.CompositeType.bytes $(natTerm length))
+          | _ => throwErrorAt stx "readable witness record outputs require scalar or Bytes32 fields"
         let fieldSpan ← quoteSpan field.span
         `(Noctium.Types.Field.mk $(stringTerm field.name)
-          (Noctium.Types.CompositeType.scalar $fieldType) $fieldSpan)
+          $fieldType $fieldSpan)
       let fieldTerms := fieldTerms.toArray
       let structureSpan ← quoteSpan declarationSpan
       let structureTerm ← `(Noctium.Types.StructDecl.mk $(stringTerm compositeId)
@@ -1051,7 +1124,8 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let metadataTerm ← observationTerm observation
     elabCommand (← `(def $(mkIdent programSyntaxName) : Noctium.Helpers.Program := $programTerm))
     elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))
-    Noctium.registerWitnessCircuit name.raw programName exportName outputName (some observation.toJson.compress)
+    Noctium.registerWitnessCircuit name.raw programName exportName outputName
+      (some observation.toJson.compress) logicalOutputAliases
   | _ => throwUnsupportedSyntax
 
 end Noctium
