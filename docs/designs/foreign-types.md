@@ -1,6 +1,8 @@
 # Foreign-field implementation plan
 
-Status: planned. The current source snapshot does not qualify these types. This package extends [the full native capability goal](../compatibility/GOAL.md), after native hash-to-curve.
+Status: implementation in progress under [issue 75](https://github.com/awjreynolds/noctium/issues/75). The current source snapshot does not qualify these types. This package extends [the full native capability goal](../compatibility/GOAL.md), after native hash-to-curve.
+
+The first dependency is implemented: [Lean metadata and field constant encoding](../../Noctium/Foreign.lean), a [checked Rust native codec](../../runtime/src/foreign.rs), and [shared differential vectors](../../runtime/tests/fixtures/foreign-codec/321/encoding.json). The focused native case covers all six types, canonical boundary values, identity/generator points and malformed encodings. The Rust module is currently exposed only with `zkir-321`. Source Ty/IR, operations, transport and SDK integration remain pending. This foundation adds no source opcode/type coverage, keys, proofs or deployment qualification.
 
 ## Scope and interface
 

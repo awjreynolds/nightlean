@@ -4737,6 +4737,16 @@
         "../../tests/HashToCurve.lean",
         "../../runtime/tests/hash_to_curve.rs"
       ]
+    },
+    {
+      "issue": 75,
+      "commit": "f1d171e",
+      "scope": "Checked six-type native Secp codec and Lean-owned field encodings with differential boundary/identity vectors. Foundation only, no source type or opcode qualification.",
+      "refs": [
+        "../designs/foreign-types.md",
+        "../../Noctium/Foreign.lean",
+        "../../runtime/tests/foreign_codec.rs"
+      ]
     }
   ],
   "currentSourceSnapshot": {
@@ -5049,6 +5059,20 @@
       "implementationCommit": "38b2b35e532a63f8af508026f1a4df60f074ebc9",
       "nativeCheckerRuntimeSeconds": 0.04,
       "typedCircuitOutputs": "Removed the obsolete blanket circuit-output rejection after reusing existing canonical projections. The same focused source/native case checks four typed point outputs, one typed scalar output and compressed point bytes through contract results."
+    },
+    "foreignCodecFoundation": {
+      "issue": 75,
+      "implementationCommit": "f1d171e7cd5d540f6eff42d127da3ad351008dad",
+      "sourceModule": "../../Noctium/Foreign.lean",
+      "runtime": "../../runtime/src/foreign.rs",
+      "sourceChecks": "../../tests/ForeignEncoding.lean",
+      "nativeChecks": "../../runtime/tests/foreign_codec.rs",
+      "vectors": "../../runtime/tests/fixtures/foreign-codec/321/encoding.json",
+      "scope": "Standalone Lean metadata and canonical field constant encoding, plus checked native Rust codec for Secp256k1/Secp256r1 Base, Scalar and Point. Rust module is exposed only with zkir-321.",
+      "checks": "Lean encoding/decoding guards and 12field boundary vectors plus2identities compared with pinned native conversion/encoding. One focused Rust test checks all6types, generator/identity roundtrips, malformed limbs, noncanonical field encodings, altered identity and off-curve rejection.",
+      "compilerTypeIntegration": false,
+      "opcodeCoverageChange": 0,
+      "limits": "Source Ty/IR, operations, helpers, native lowering and SDK transport integration remain pending. No new keys, proofs or deployment. Full issue75 and parent25 remain open."
     }
   }
 }
