@@ -531,6 +531,8 @@ pub struct Plan {
     pub reads: Vec<Read>,
     #[serde(default)]
     pub returns: Vec<Output>,
+    #[serde(default)]
+    pub constructor: Option<constructor::Constructor>,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct Circuit {
@@ -556,6 +558,8 @@ pub struct Output {
 pub struct StateDecl {
     pub name: String,
     pub kind: Json,
+    #[serde(default)]
+    pub sealed: bool,
 }
 #[derive(Clone, Debug, Deserialize)]
 pub struct Read {
@@ -1123,7 +1127,11 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
         let value = config
             .get(&d.name)
             .ok_or_else(|| anyhow!("missing initial state cell"))?;
-        if let Some(ty) = d.kind.get("cell").and_then(Json::as_str) {
+        if d.kind.get("opaqueString") == Some(&Json::Bool(true)) {
+            values.push(StateValue::Cell(Sp::new(constructor::opaque_string(
+                value,
+            )?)));
+        } else if let Some(ty) = d.kind.get("cell").and_then(Json::as_str) {
             values.push(StateValue::Cell(Sp::new(aligned(
                 &input_value(ty, value)?,
                 "field",
@@ -2191,9 +2199,10 @@ pub fn prepare(
         "native activity schedule does not match emitted operations"
     );
     ensure!(read_index == plan.reads.len(), "read schema mismatch");
-    context.query(&program, None, cost).map_err(|_| {
+    let queried = context.query(&program, None, cost).map_err(|_| {
         anyhow!("native state transcript rejected (spent nullifier or state mismatch)")
     })?;
+    constructor::check_sealed_state(plan, state, &queried.context.state)?;
     ensure!(plan.returns.len() <= 256, "too many call returns");
     let mut return_values = Vec::with_capacity(plan.returns.len());
     let mut return_names = BTreeSet::new();
@@ -2366,3 +2375,6 @@ pub mod localnet;
 pub mod localnet_ffi;
 #[cfg_attr(not(feature = "localnet"), allow(dead_code))]
 mod native_client;
+
+pub mod constructor;
+pub use constructor::construct_state;

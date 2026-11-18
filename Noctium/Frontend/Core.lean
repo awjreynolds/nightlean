@@ -148,6 +148,15 @@ scoped syntax (name := circuitCommand) "noctium_circuit" ident "where" nlcstmt* 
 
 declare_syntax_cat nlstate
 scoped syntax "cell" ident ":" nltype : nlstate
+scoped syntax "sealed" "cell" ident ":" nltype : nlstate
+scoped syntax "sealed" "cell" ident ":" "OpaqueString" : nlstate
+declare_syntax_cat nlconstructorparam
+scoped syntax ident ":" nltype : nlconstructorparam
+scoped syntax ident ":" "OpaqueString" : nlconstructorparam
+declare_syntax_cat nlconstructorinit
+scoped syntax "initialize" ident ":=" nlexpr : nlconstructorinit
+scoped syntax "initialize" ident ":=" str : nlconstructorinit
+scoped syntax "constructor" "(" nlconstructorparam,* ")" "where" nlconstructorinit* "end" : nlstate
 scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
 scoped syntax "counter" ident : nlstate
 declare_syntax_cat nlcompositefield
@@ -640,9 +649,12 @@ private unsafe def checkGeneratedCircuit (name : Name) : CommandElabM Unit := do
 
 private unsafe def checkGeneratedContract (name : Name) : CommandElabM Unit := do
   let value ← evalConstCheck Contract ``Contract name
-  match Disclosure.contract value with
-  | .ok _ => pure ()
+  match value.validate Capabilities.source with
   | .error diagnostic => failDisclosure diagnostic
+  | .ok _ =>
+    match Disclosure.contract value with
+    | .ok _ => pure ()
+    | .error diagnostic => failDisclosure diagnostic
 
 @[command_elab circuitCommand] def elabCircuit : CommandElab := fun stx => do
   match stx with
@@ -989,6 +1001,8 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
       bindReadName updated destination.getId.toString readName valueTy
     | some (.tree treeSchema) =>
       elaborateTreeRead storage destination sourceKeys treeSchema depth state
+    | some .opaqueString =>
+      throwErrorAt storage "OpaqueString constructor metadata cannot be read by entrypoints"
     | _ => throwErrorAt storage "read requires a declared state cell or recursive tree"
   | "member" =>
     match schema.lookup storage.getId.toString with
@@ -1203,13 +1217,98 @@ private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
   let environment : Types.CompositeEnv := {structures := [{id := typeId, fields := fieldValues}]}
   pure (environment, compositeType, environmentTerm, compositeTypeTerm)
 
+private def elaborateConstructor (source : TSyntax `nlstate)
+    (schema : List (String × StateKind)) : CommandElabM (TSyntax `term) := do
+  let `(nlstate| constructor($parameters:nlconstructorparam,*) where $initializers:nlconstructorinit* end) := source
+    | throwErrorAt source "invalid Noctium constructor declaration"
+  let mut parameterTerms : Array (TSyntax `term) := #[]
+  let mut scalarBindings : Bindings := []
+  let mut opaqueParameters : List String := []
+  let mut parameterNames : List String := []
+  for parameter in parameters.getElems.toList do
+    let (name, parameterType, typeTerm) ← match parameter with
+      | `(nlconstructorparam| $id:ident : OpaqueString) => do
+        let name := id.getId.toString
+        pure (name, ConstructorType.opaqueString, ← `(Noctium.ConstructorType.opaqueString))
+      | `(nlconstructorparam| $id:ident : $sourceTy:nltype) => do
+        let name := id.getId.toString
+        let ty ← readTy sourceTy
+        pure (name, ConstructorType.scalar ty,
+          ← `(Noctium.ConstructorType.scalar $(← tyTerm ty)))
+      | _ => throwErrorAt parameter "unsupported constructor parameter"
+    if parameterNames.contains name then throwErrorAt parameter s!"duplicate constructor parameter '{name}'"
+    parameterNames := name :: parameterNames
+    if parameterType == .opaqueString then
+      opaqueParameters := name :: opaqueParameters
+    else
+      let .scalar ty := parameterType | throwErrorAt parameter "invalid scalar constructor parameter"
+      let reference ← `(@Noctium.Expr.ref $(← tyTerm ty) $(stringTerm name))
+      scalarBindings := (name, ty, reference) :: scalarBindings
+    parameterTerms := parameterTerms.push (← `(Noctium.ConstructorParameter.mk $(stringTerm name) $typeTerm))
+  let mut initializerTerms : Array (TSyntax `term) := #[]
+  let mut initializedNames : List String := []
+  for initializer in initializers do
+    let (destination, initializerType, initializerValue) ← match initializer with
+      | `(nlconstructorinit| initialize $stateName:ident := $value:nlexpr) => do
+        let destination := stateName.getId.toString
+        match schema.find? (·.1 == destination) with
+        | some (_, .opaqueString) =>
+          match value with
+          | `(nlexpr| $parameter:ident) =>
+            let parameterName := parameter.getId.toString
+            unless opaqueParameters.contains parameterName do
+              throwErrorAt value "OpaqueString initializer must reference an OpaqueString parameter or literal"
+            let typeTerm ← `(Noctium.ConstructorType.opaqueString)
+            let valueTerm ← `(Noctium.ConstructorValue.opaqueStringParameter $(stringTerm parameterName))
+            pure (destination, ConstructorType.opaqueString, (typeTerm, valueTerm))
+          | _ => throwErrorAt value "OpaqueString initializer must reference an OpaqueString parameter or literal"
+        | some (_, .cell ty) => do
+          let expression ← checkedExpression scalarBindings value ty
+          let typeTerm ← `(Noctium.ConstructorType.scalar $(← tyTerm ty))
+          let valueTerm ← `(Noctium.ConstructorValue.scalar $expression)
+          pure (destination, ConstructorType.scalar ty, (typeTerm, valueTerm))
+        | some _ => throwErrorAt stateName "constructor initializers must target cells"
+        | none => throwErrorAt stateName s!"constructor initializes unknown state '{destination}'"
+      | `(nlconstructorinit| initialize $stateName:ident := $literal:str) => do
+        let destination := stateName.getId.toString
+        match schema.find? (·.1 == destination) with
+        | some (_, .opaqueString) => do
+          let typeTerm ← `(Noctium.ConstructorType.opaqueString)
+          let valueTerm ← `(Noctium.ConstructorValue.opaqueStringLiteral $(stringTerm literal.getString))
+          pure (destination, ConstructorType.opaqueString, (typeTerm, valueTerm))
+        | some _ => throwErrorAt literal "string literals initialize only OpaqueString cells"
+        | none => throwErrorAt stateName s!"constructor initializes unknown state '{destination}'"
+      | _ => throwErrorAt initializer "unsupported constructor initializer"
+    if initializedNames.contains destination then
+      throwErrorAt initializer s!"duplicate constructor initializer for '{destination}'"
+    initializedNames := destination :: initializedNames
+    let (typeTerm, valueTerm) := initializerValue
+    initializerTerms := initializerTerms.push
+      (← `(Noctium.ConstructorInitializer.mk $(stringTerm destination) $typeTerm $valueTerm))
+  let parameters := parameterTerms
+  let initializers := initializerTerms
+  `(some ({parameters := [$parameters,*], initializers := [$initializers,*] : Noctium.Constructor}))
+
 @[command_elab contractCommand] def elabContract : CommandElab := fun stx => do
   match stx with
   | `(noctium_contract $name:ident where $states:nlstate* $entries:nlentry* end) =>
     let mut stateTerms : Array (TSyntax `term) := #[]
     let mut schema : List (String × StateKind) := []
+    let mut stateDeclarations : Array (TSyntax `nlstate) := #[]
+    let mut constructorSyntax? : Option (TSyntax `nlstate) := none
     for state in states do
+      match state with
+      | `(nlstate| constructor($_:nlconstructorparam,*) where $_:nlconstructorinit* end) =>
+        if constructorSyntax?.isSome then throwErrorAt state "duplicate constructor declaration"
+        constructorSyntax? := some state
+      | _ => stateDeclarations := stateDeclarations.push state
+    for state in stateDeclarations do
       let (id, kind, term) ← match state with
+        | `(nlstate| sealed cell $id:ident : OpaqueString) =>
+          pure (id, StateKind.opaqueString, ← `(Noctium.StateKind.opaqueString))
+        | `(nlstate| sealed cell $id:ident : $ty:nltype) => do
+          let t ← readTy ty
+          pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
         | `(nlstate| cell $id:ident : $ty:nltype) => do
           let t ← readTy ty
           pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
@@ -1310,7 +1409,15 @@ private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
         | _ => throwErrorAt state "unsupported Noctium state declaration"
       if schema.any (fun p => p.1 == id.getId.toString) then throwErrorAt id "duplicate Noctium state"
       schema := schema ++ [(id.getId.toString, kind)]
-      stateTerms := stateTerms.push (← `({ name := $(stringTerm id.getId.toString), kind := $term, span := $(← spanTerm state) : Noctium.StateDecl }))
+      if state.raw[0].getAtomVal == "sealed" then
+        stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
+          $term Bool.true $(← spanTerm state)))
+      else
+        stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
+          $term Bool.false $(← spanTerm state)))
+    let constructorTerm ← match constructorSyntax? with
+      | none => `(none)
+      | some ctor => elaborateConstructor ctor schema
     let mut entryTerms : Array (TSyntax `term) := #[]
     let mut entryNames : List Name := []
     for entryStx in entries do
@@ -1333,7 +1440,8 @@ private def elaborateNamedRecord (contractName : Name) (record : TSyntax `ident)
       | _ => throwErrorAt entryStx "unsupported Noctium entrypoint"
     let span ← spanTerm stx
     let fullName := (← getCurrNamespace) ++ name.getId
-    elabCommand (← `(def $name : Noctium.Contract := {name := $(stringTerm fullName.toString), state := [$stateTerms,*], entrypoints := [$entryTerms,*], span := $span }))
+    elabCommand (← `(def $name : Noctium.Contract := Noctium.Contract.mk
+      $(stringTerm fullName.toString) [$stateTerms,*] $constructorTerm [$entryTerms,*] $span))
     unsafe checkGeneratedContract fullName
     modifyEnv fun e => contractRegistry.addEntry e fullName
   | _ => throwUnsupportedSyntax

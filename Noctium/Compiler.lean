@@ -6,11 +6,7 @@ import Noctium.Types.ValueSchema
 namespace Noctium.Compiler
 open Lean Elab Command
 
-private def sourceCapabilities : Capabilities :=
-  { poseidon2 := Bool.true, persistentHash32 := Bool.true,
-    persistentHashVector32 := Bool.true, persistentHashNative := Bool.true,
-    bytes32Conversions := Bool.true,
-    jubjub := Bool.true, stateCells := Bool.true, stateMaps := Bool.true }
+private def sourceCapabilities : Capabilities := Capabilities.source
 
 private def typeName : Ty → String
   | .native => "Native"
@@ -338,7 +334,32 @@ private def stateJson (state : StateDecl) : Json :=
     | .cell ty => Json.mkObj [("cell", toJson (typeName ty))]
     | .map kt vt => Json.mkObj [("map", toJson [typeName kt, typeName vt])]
     | .tree value => Json.mkObj [("tree", treeJson value)]
-  Json.mkObj [("name", toJson state.name), ("kind", kind)]
+    | .opaqueString => Json.mkObj [("opaqueString", toJson Bool.true)]
+  Json.mkObj ([("name", toJson state.name), ("kind", kind)] ++
+    (if state.sealed then [("sealed", toJson Bool.true)] else []))
+
+private def constructorTypeName : ConstructorType → String
+  | .scalar ty => typeName ty
+  | .opaqueString => "OpaqueString"
+
+private def constructorValueJson : ConstructorValue → Json
+  | .scalar value => Json.mkObj [
+      ("kind", toJson ("scalarExpression" : String)),
+      ("expression", nativeExpressionJson value)]
+  | .opaqueStringParameter name => Json.mkObj [
+      ("kind", toJson ("opaqueStringParameter" : String)),
+      ("name", toJson name)]
+  | .opaqueStringLiteral value => Json.mkObj [
+      ("kind", toJson ("opaqueStringLiteral" : String)),
+      ("value", toJson value)]
+
+private def constructorJson (ctor : Constructor) : Json := Json.mkObj [
+  ("parameters", toJson (ctor.parameters.map fun parameter => Json.mkObj [
+    ("name", toJson parameter.name), ("type", toJson (constructorTypeName parameter.type))])),
+  ("initializers", toJson (ctor.initializers.map fun initializer => Json.mkObj [
+    ("state", toJson initializer.state),
+    ("type", toJson (constructorTypeName initializer.type)),
+    ("value", constructorValueJson initializer.value)]))]
 
 private def circuitSchemaJson (name : Name) (circuit : Circuit) : Json :=
   Json.mkObj [("name", toJson name.toString), ("file", toJson (name.toString ++ ".zkir")),
@@ -439,7 +460,8 @@ private def nativePlanFile (contract : Name) (ep : Entrypoint) : String :=
 /-- The exact symbolic plan tree written by the compiler. This pure function
 also gives proof modules a kernel-visible artifact boundary. -/
 def nativePlanJson (profile : TargetProfile) (contractName : Name)
-    (state : List StateDecl) (ep : Entrypoint) (plan : Backend.Impact.Plan) : Json := Id.run do
+    (state : List StateDecl) (ctor : Option Constructor)
+    (ep : Entrypoint) (plan : Backend.Impact.Plan) : Json := Id.run do
   let targetPlanFields := if profile.name == TargetProfile.selected321.name then [
     ("target", toJson profile.name), ("targetProfile", toJson profile)
   ] else []
@@ -448,6 +470,9 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
       ("name", toJson returned.name), ("type", toJson (typeName returned.ty)),
       ("visibility", toJson ("public" : String)),
       ("expression", nativeExpressionJson returned.value)]))]
+  let constructorFields := match ctor with
+    | none => []
+    | some value => [("constructor", constructorJson value)]
   return Json.mkObj ([
     ("schemaVersion", toJson (1 : Nat))] ++ targetPlanFields ++ [
     ("contractName", toJson contractName.toString),
@@ -456,7 +481,7 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
-    ] ++ returnFields ++ [
+    ] ++ constructorFields ++ returnFields ++ [
     ("reads", toJson (plan.reads.map fun item => Json.mkObj ([
       ("name", toJson item.name),
       ("type", toJson (if item.schema.isSome then "Composite" else typeName item.ty))] ++
@@ -558,6 +583,9 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
       ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
       ("target", toJson ("standalone" : String)), ("nativeWitnessQualified", toJson Bool.false)])
   for (name, contract) in contracts do
+    match Contract.validate sourceCapabilities contract with
+    | .error diagnostic => failDiagnostic diagnostic
+    | .ok _ => pure ()
     for ep in contract.entrypoints do
       let ep := Passes.pruneEntrypoint ep
       let plan ← match Backend.Impact.lower contract.state ep with
@@ -586,14 +614,12 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
             ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
             ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
             ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
-      let planJson := nativePlanJson profile name contract.state ep plan
+      let planJson := nativePlanJson profile name contract.state contract.constructor ep plan
       lowered := lowered.push (nativePlanFile name ep, planJson.pretty)
   unless uniqueNames (lowered.toList.map (·.1)) do
     throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
-  let contractMetadata := contracts.map fun (name, contract) => Json.mkObj [
-    ("name", toJson name.toString),
-    ("state", toJson (contract.state.map stateJson)),
-    ("entrypoints", toJson (contract.entrypoints.map fun ep => Json.mkObj ([
+  let contractMetadata := contracts.map fun (name, contract) =>
+    let entrypoints := contract.entrypoints.map fun ep => Json.mkObj ([
       ("name", toJson ep.name), ("circuit", toJson ep.circuit.name),
       ("nativeCircuitFile", toJson (nativeCircuitFile name ep)),
       ("nativePlanFile", toJson (nativePlanFile name ep)),
@@ -604,7 +630,14 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
         ("returns", toJson (ep.returns.map fun returned => Json.mkObj [
           ("name", toJson returned.name), ("type", toJson (typeName returned.ty)),
           ("visibility", toJson ("public" : String)),
-          ("expression", nativeExpressionJson returned.value)]))]))))]
+          ("expression", nativeExpressionJson returned.value)]))]))
+    let constructorFields := match contract.constructor with
+      | none => []
+      | some ctor => [("constructor", constructorJson ctor)]
+    Json.mkObj ([
+      ("name", toJson name.toString),
+      ("state", toJson (contract.state.map stateJson)),
+      ("entrypoints", toJson entrypoints)] ++ constructorFields)
   let controlFields := if controls.isEmpty then [] else [
     ("hostControlPlans", toJson (controls.toList.map fun name => Json.mkObj [
       ("name", toJson name.toString), ("file", toJson (artifactName name ++ ".control.json")),

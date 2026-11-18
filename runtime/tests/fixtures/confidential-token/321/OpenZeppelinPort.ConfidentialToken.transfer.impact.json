@@ -145,8 +145,10 @@
           {"leaves": 11, "layoutNodes": 12, "expandedNodes": 12}}}]}]}}},
   {"name": "escrowSpendEpochs",
    "kind":
-   {"tree":
-    {"map": ["Bytes<32>", {"map": ["Bytes<32>", {"counter": true}]}]}}}],
+   {"tree": {"map": ["Bytes<32>", {"map": ["Bytes<32>", {"counter": true}]}]}}},
+  {"sealed": true, "name": "name", "kind": {"opaqueString": true}},
+  {"sealed": true, "name": "symbol", "kind": {"opaqueString": true}},
+  {"sealed": true, "name": "decimals", "kind": {"cell": "UIntRange<256>"}}],
  "schemaVersion": 1,
  "returns":
  [{"visibility": "public",
@@ -2152,6 +2154,27 @@
    "left": {"tag": "reference", "name": "actualEpoch"}}],
  "entrypoint": "transfer",
  "contractName": "OpenZeppelinPort.ConfidentialToken",
+ "constructor":
+ {"parameters":
+  [{"type": "OpaqueString", "name": "name_"},
+   {"type": "OpaqueString", "name": "symbol_"},
+   {"type": "UIntRange<256>", "name": "decimals_"}],
+  "initializers":
+  [{"value": {"name": "name_", "kind": "opaqueStringParameter"},
+    "type": "OpaqueString",
+    "state": "name"},
+   {"value": {"name": "symbol_", "kind": "opaqueStringParameter"},
+    "type": "OpaqueString",
+    "state": "symbol"},
+   {"value":
+    {"kind": "scalarExpression",
+     "expression": {"tag": "reference", "name": "decimals_"}},
+    "type": "UIntRange<256>",
+    "state": "decimals"},
+   {"value":
+    {"kind": "scalarExpression", "expression": {"value": true, "tag": "bool"}},
+    "type": "Bool",
+    "state": "initialized"}]},
  "circuit":
  {"outputs":
   [{"visibility": "public",

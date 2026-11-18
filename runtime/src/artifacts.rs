@@ -360,6 +360,11 @@ impl ContractBundleSet {
                 "plan_mismatch",
                 "selected plan state schema differs from compiler metadata",
             )?;
+            require(
+                plan.get("constructor") == selected_contract_metadata.get("constructor"),
+                "plan_mismatch",
+                "selected plan constructor differs from compiler metadata",
+            )?;
             let declared_operations = entrypoint_artifacts(selected_contract_metadata)?;
             if let Some(expected) = &expected_operations {
                 require(
@@ -871,6 +876,7 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "operations",
             "reads",
             "returns",
+            "constructor",
             "state",
             "circuit",
             "guards",
@@ -954,6 +960,11 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         matched[0]["state"] == plan["state"],
         "plan_mismatch",
         "plan state schema differs from compiler metadata",
+    )?;
+    require(
+        matched[0].get("constructor") == plan.get("constructor"),
+        "plan_mismatch",
+        "plan constructor differs from compiler metadata",
     )?;
     let entries = matched[0]["entrypoints"]
         .as_array()

@@ -1,0 +1,78 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state":
+ [{"sealed": true, "name": "name", "kind": {"opaqueString": true}},
+  {"sealed": true, "name": "symbol", "kind": {"opaqueString": true}},
+  {"sealed": true, "name": "decimals", "kind": {"cell": "UIntRange<256>"}},
+  {"sealed": true, "name": "initialized", "kind": {"cell": "Bool"}},
+  {"sealed": true, "name": "version", "kind": {"opaqueString": true}},
+  {"name": "supply", "kind": {"cell": "UIntRange<18446744073709551616>"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "UIntRange<256>",
+   "name": "decimalsResult",
+   "expression": {"tag": "reference", "name": "observedDecimals"}}],
+ "reads": [{"type": "UIntRange<256>", "name": "observedDecimals"}],
+ "operations":
+ [{"op": "dup"},
+  {"slot": 2, "pushPath": false, "op": "index"},
+  {"op": "popeq",
+   "expression":
+   {"value": {"tag": "reference", "name": "observedDecimals"},
+    "type": "Native",
+    "tag": "cast"},
+   "alignment": "field"}],
+ "nativeCircuitFile": "ConstructorMetadata.inspect.zkir",
+ "guards": [],
+ "entrypoint": "inspect",
+ "contractName": "ConstructorMetadata",
+ "constructor":
+ {"parameters":
+  [{"type": "OpaqueString", "name": "name_"},
+   {"type": "OpaqueString", "name": "symbol_"},
+   {"type": "UIntRange<256>", "name": "decimals_"}],
+  "initializers":
+  [{"value": {"name": "name_", "kind": "opaqueStringParameter"},
+    "type": "OpaqueString",
+    "state": "name"},
+   {"value": {"name": "symbol_", "kind": "opaqueStringParameter"},
+    "type": "OpaqueString",
+    "state": "symbol"},
+   {"value":
+    {"kind": "scalarExpression",
+     "expression": {"tag": "reference", "name": "decimals_"}},
+    "type": "UIntRange<256>",
+    "state": "decimals"},
+   {"value":
+    {"kind": "scalarExpression", "expression": {"value": true, "tag": "bool"}},
+    "type": "Bool",
+    "state": "initialized"},
+   {"value": {"value": "v1", "kind": "opaqueStringLiteral"},
+    "type": "OpaqueString",
+    "state": "version"}]},
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Bool",
+    "name": "ready",
+    "expression": {"value": true, "tag": "bool"}}],
+  "name": "metadataCircuit",
+  "inputs": [],
+  "file": "metadataCircuit.zkir",
+  "constraints": []}}

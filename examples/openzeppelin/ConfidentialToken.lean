@@ -554,6 +554,16 @@ noctium_contract ConfidentialToken where
     ownerMemoAmount : Native
   }
   tree escrowSpendEpochs : Bytes32 => Bytes32 => Counter
+  sealed cell name : OpaqueString
+  sealed cell symbol : OpaqueString
+  sealed cell decimals : UInt 8
+
+  constructor(name_ : OpaqueString, symbol_ : OpaqueString, decimals_ : UInt 8) where
+    initialize name := name_
+    initialize symbol := symbol_
+    initialize decimals := decimals_
+    initialize initialized := true
+  end
 
   entry registerWithKey uses registerAccount where
     read initialized as isInitialized

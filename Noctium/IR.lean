@@ -231,12 +231,43 @@ inductive StateKind where
   | cell (valueTy : Ty)
   | map (keyTy valueTy : Ty)
   | tree (value : LedgerValueType)
+  /-- UTF-8 FAB state metadata. This value is host/deployment-only and never a circuit Ty. -/
+  | opaqueString
   deriving Repr, BEq, DecidableEq
 
 structure StateDecl where
   name : String
   kind : StateKind
+  sealed : Bool := false
   span : SourceSpan := {}
+  deriving Repr
+
+inductive ConstructorType where
+  | scalar (ty : Ty)
+  | opaqueString
+  deriving Repr, BEq, DecidableEq
+
+structure ConstructorParameter where
+  name : String
+  type : ConstructorType
+  deriving Repr
+
+inductive ConstructorValue where
+  | scalar {ty : Ty} (value : Expr ty)
+  | opaqueStringParameter (name : String)
+  | opaqueStringLiteral (value : String)
+  deriving Repr
+
+structure ConstructorInitializer where
+  state : String
+  type : ConstructorType
+  value : ConstructorValue
+  deriving Repr
+
+/-- Fresh-deployment inputs and cell values. This metadata never enters a circuit. -/
+structure Constructor where
+  parameters : List ConstructorParameter := []
+  initializers : List ConstructorInitializer := []
   deriving Repr
 
 /-- State effects are ordered transaction instructions, not circuit nodes.
@@ -291,9 +322,15 @@ def Entrypoint.effectGuardAt (entry : Entrypoint) (index : Nat) : Option (Expr .
 structure Contract where
   name : String
   state : List StateDecl := []
+  constructor : Option Constructor := none
   entrypoints : List Entrypoint := []
   span : SourceSpan := {}
   deriving Repr
+
+private def constructorTypeOfValue : ConstructorValue → ConstructorType
+  | .scalar (ty := ty) _ => .scalar ty
+  | .opaqueStringParameter _ | .opaqueStringLiteral _ => .opaqueString
+
 
 structure Capabilities where
   nativeModulus : Nat := Field.modulus
@@ -314,6 +351,13 @@ structure Capabilities where
 def Capabilities.crypto : Capabilities := {
   poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
   persistentHashNative := true, bytes32Conversions := true, jubjub := true
+}
+
+/-- Source checking includes the currently implemented ledger state features. -/
+def Capabilities.source : Capabilities := {
+  poseidon2 := true, persistentHash32 := true, persistentHashVector32 := true,
+  persistentHashNative := true, bytes32Conversions := true, jubjub := true,
+  stateCells := true, stateMaps := true
 }
 
 structure Diagnostic where
@@ -502,6 +546,59 @@ private def validateCounterEffect (decls : List StateDecl) (state : String)
 
 def uniqueNames (names : List String) : Bool := names.eraseDups.length == names.length
 
+private def Constructor.validate (caps : Capabilities) (states : List StateDecl)
+    (constructor : Constructor) (span : SourceSpan) : Except Diagnostic Unit := do
+  let parameterNames := constructor.parameters.map (·.name)
+  unless uniqueNames parameterNames do
+    throw {span, message := "duplicate constructor parameter"}
+  for parameter in constructor.parameters do
+    unless Types.validFieldName parameter.name do
+      throw {span, message := s!"invalid constructor parameter '{parameter.name}'"}
+    match parameter.type with
+    | .scalar ty =>
+      match ty.validate caps with
+      | .error message => throw {span, message}
+      | .ok _ => pure ()
+    | .opaqueString => pure ()
+  let scalarEnvironment := constructor.parameters.filterMap fun parameter =>
+    match parameter.type with
+    | .scalar ty => some (parameter.name, ty)
+    | .opaqueString => none
+  let initializerNames := constructor.initializers.map (·.state)
+  unless uniqueNames initializerNames do
+    throw {span, message := "duplicate constructor state initializer"}
+  for initializer in constructor.initializers do
+    unless Types.validFieldName initializer.state do
+      throw {span, message := s!"invalid constructor state name '{initializer.state}'"}
+    let some state := states.find? (·.name == initializer.state)
+      | throw {span, message := s!"constructor initializes unknown state '{initializer.state}'"}
+    unless constructorTypeOfValue initializer.value == initializer.type do
+      throw {span, message := s!"constructor initializer type mismatch for '{initializer.state}'"}
+    match state.kind, initializer.type, initializer.value with
+    | .cell stateTy, .scalar initializerTy, .scalar (ty := expressionTy) value => do
+      unless stateTy == initializerTy && stateTy == expressionTy do
+        throw {span := state.span, message := s!"constructor scalar type mismatch for '{initializer.state}'"}
+      match value.validate caps scalarEnvironment with
+      | .error message => throw {span, message}
+      | .ok _ => pure ()
+    | .opaqueString, .opaqueString, .opaqueStringLiteral _ => pure ()
+    | .opaqueString, .opaqueString, .opaqueStringParameter parameterName =>
+      unless constructor.parameters.any (fun parameter =>
+        parameter.name == parameterName && parameter.type == .opaqueString) do
+        throw {span, message := s!"unknown OpaqueString constructor parameter '{parameterName}'"}
+    | _, _, _ =>
+      throw {span := state.span, message := s!"constructor initializer does not match cell '{initializer.state}'"}
+  for state in states do
+    if state.sealed && !(initializerNames.contains state.name) then
+      throw {span := state.span, message := s!"sealed state '{state.name}' must be initialized by the constructor"}
+
+private def Effect.writeTarget : Effect → Option String
+  | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
+    .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
+    .listPushFront state .. | .listPopFront state .. | .listReset state .. |
+    .emptyMapPath state .. | .removePath state .. => some state
+  | _ => none
+
 /-- Preserve first constraint diagnostic and source span in list order. -/
 def validateConstraints (caps : Capabilities) (env : TypeEnv) (span : SourceSpan) :
     List (Expr .bool) → Except Diagnostic Unit
@@ -543,6 +640,8 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
 private def requireState (decls : List StateDecl) (name : String) (kind : StateKind) : Except String Unit :=
   match decls.find? (·.name == name) with
   | none => .error s!"unknown state '{name}'"
+  | some {kind := .opaqueString, ..} =>
+    .error "OpaqueString constructor metadata cannot be read or written by entrypoints"
   | some decl => if decl.kind == kind then pure () else .error s!"state type mismatch for '{name}'"
 
 /-- Validate state names, typed reads, guards and writes in execution order. -/
@@ -563,6 +662,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
+      | .opaqueString => []
     for ty in types do
       match ty.validate caps with
       | .error message => throw {span := decl.span, message}
@@ -579,6 +679,10 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
     env := env ++ [(output.name, output.ty)]
   for (effect, index) in e.effects.zipIdx do
     let span := e.effectSpans[index]?.getD e.span
+    if let some stateName := effect.writeTarget then
+      if let some state := decls.find? (·.name == stateName) then
+        if state.sealed then
+          throw {span, message := s!"sealed state '{stateName}' cannot be written by an entrypoint"}
     if let some condition := e.effectGuardAt index then
       match condition.validate caps env with
       | .error message => throw {span, message}
@@ -759,10 +863,15 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
   if !uniqueNames (c.entrypoints.map (·.name)) then
     throw {span := c.span, message := "duplicate contract entrypoint"}
   for decl in c.state do
+    if decl.sealed && !(match decl.kind with | .cell _ | .opaqueString => true | _ => false) then
+      throw {span := decl.span, message := "only cells can be sealed"}
+    if decl.kind == .opaqueString && !decl.sealed then
+      throw {span := decl.span, message := "OpaqueString state must be sealed"}
     let types := match decl.kind with
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
+      | .opaqueString => []
     for ty in types do
       match ty.validate caps with
       | .error message => throw {span := decl.span, message}
@@ -771,6 +880,11 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       match schema.validate caps with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
+  match c.constructor with
+  | some constructor => Constructor.validate caps c.state constructor c.span
+  | none =>
+    if c.state.any (·.sealed) then
+      throw {span := c.span, message := "sealed states require a constructor"}
   for entry in c.entrypoints do entry.validate caps c.state
 
 end Noctium

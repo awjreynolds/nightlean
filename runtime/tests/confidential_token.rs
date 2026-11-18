@@ -2,9 +2,10 @@
 
 use base_crypto::fab::AlignedValue;
 use noctium_runtime::{
-    check,
+    check, construct_state,
+    constructor::decode_opaque_string,
     control::{InvocationTarget, Session, TypedResponse},
-    create_state, field_decimal, field_value,
+    field_decimal, field_value,
     host::{self, Capability, Context, Limits, Operation, Provider},
     prepare,
     witness::{Parameter, WitnessSignature},
@@ -593,6 +594,28 @@ fn state_slot<'a>(plan: &Plan, state: &'a ChargedState<Db>, name: &str) -> &'a S
     root.get(index).unwrap()
 }
 
+fn state_cell<'a>(plan: &Plan, state: &'a ChargedState<Db>, name: &str) -> &'a AlignedValue {
+    let StateValue::Cell(cell) = state_slot(plan, state, name) else {
+        panic!("expected {name} cell")
+    };
+    cell
+}
+
+fn assert_token_metadata(plan: &Plan, state: &ChargedState<Db>) {
+    assert_eq!(
+        decode_opaque_string(state_cell(plan, state, "name")).unwrap(),
+        "Noctium Token"
+    );
+    assert_eq!(
+        decode_opaque_string(state_cell(plan, state, "symbol")).unwrap(),
+        "NOC"
+    );
+    assert_eq!(
+        state_cell(plan, state, "decimals"),
+        &field_value(Fr::from(6u64))
+    );
+}
+
 fn map_record(plan: &Plan, state: &ChargedState<Db>, name: &str, key: &[u8; 32]) -> Vec<Fr> {
     let StateValue::Map(map) = state_slot(plan, state, name) else {
         panic!("expected {name} map")
@@ -893,18 +916,12 @@ fn run_entry(
 }
 
 fn initial_state(plan: &Plan) -> ChargedState<Db> {
-    create_state(
+    construct_state(
         plan,
         &BTreeMap::from([
-            ("encryptionKeys".into(), json!([])),
-            ("balances".into(), json!([])),
-            ("pending".into(), json!([])),
-            ("escrow".into(), json!([])),
-            ("memos".into(), json!([])),
-            ("creditEpochs".into(), json!([])),
-            ("initialized".into(), json!(true)),
-            ("totalSupply".into(), json!("0")),
-            ("escrowSpendEpochs".into(), json!([])),
+            ("name_".into(), json!("Noctium Token")),
+            ("symbol_".into(), json!("NOC")),
+            ("decimals_".into(), json!("6")),
         ]),
     )
     .unwrap()
@@ -1202,6 +1219,7 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
     let (_, register_text, _) = artifacts("registerWithKey");
     let register_plan: Plan = serde_json::from_str(register_text).unwrap();
     let mut state = initial_state(&register_plan);
+    assert_token_metadata(&register_plan, &state);
     assert_eq!(
         state_slot(&register_plan, &state, "initialized"),
         &StateValue::Cell(storage::arena::Sp::new(field_value(Fr::from(1u64))))
@@ -2137,4 +2155,5 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         vec![Fr::from(2u64)]
     );
     assert_eq!(view("totalSupply", None, &state)["supply"], "9");
+    assert_token_metadata(&burn_from_plan, &state);
 }

@@ -1,7 +1,9 @@
 //! Native assembly of private, unbalanced deploy/call intents. No proving or network.
 use crate::artifacts::{Role, VerifiedBundle};
 use crate::zkir::IrSource;
-use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, create_state, field_value, prepare};
+use crate::{Config, Db, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare};
+#[cfg(test)]
+use crate::create_state;
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::{
     fab::{AlignedValue, Alignment, Value as FabValue},
@@ -195,7 +197,7 @@ pub(crate) fn prepare_operation_map_deployment_target(
     );
 
     let mut initial = ContractState::<Db>::default();
-    initial.data = create_state(plan, state)?;
+    initial.data = crate::constructor::deployment_state(plan, state)?;
     for (name, operation) in operations {
         initial.operations = initial
             .operations
@@ -228,7 +230,7 @@ fn contract_initial_state(
     );
     let entry = EntryPointBuf(plan.entrypoint.as_bytes().to_vec());
     let mut initial = ContractState::<Db>::default();
-    initial.data = create_state(plan, state)?;
+    initial.data = crate::constructor::deployment_state(plan, state)?;
     initial.operations = initial.operations.insert(entry.clone(), operation.clone());
     Ok((initial, entry))
 }
@@ -1017,6 +1019,7 @@ mod tests {
         plan.state.push(crate::StateDecl {
             name: "unused".into(),
             kind: json!({"cell":"UIntRange<511>"}),
+            sealed: false,
         });
         config.state.insert("unused".into(), json!("0"));
         let names = vec!["apply".to_owned(), "alias".to_owned()];
