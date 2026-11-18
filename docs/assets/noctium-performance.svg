@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1360" viewBox="0 0 1200 1360" role="img" aria-labelledby="title desc">
+<title id="title">Noctium and Compact: measured confidential-token compilation</title>
+<desc id="desc">OpenZeppelin-derived workload,16entrypoints,1013lines inNoctium. Median source compile61.811seconds Noctium versus0.255seconds Compact0.36.1. AppleM3Max48GiBRAM. Threefreshprocess runs. Noctium K7throughK16, largest63125rows. Comparablefeatures,differentABIandartifacts. No keys/proofs. K20notmeasured.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#101D30"/><stop offset="1" stop-color="#080F1C"/></linearGradient></defs>
+<rect width="1200" height="1360" fill="url(#bg)"/>
+<path d="M0 2H1200" stroke="#70E6CF" stroke-width="4"/>
+<g font-family="Inter, Arial, Helvetica, sans-serif">
+<text x="60" y="90" fill="#F4F7FC" font-size="50" font-weight="700">Noctium</text>
+<text x="1140" y="82" fill="#AEBFD5" font-size="17" text-anchor="end">MEASURED BASELINE · 18 NOV 2026</text>
+<text x="60" y="154" fill="#F4F7FC" font-size="38" font-weight="600">Confidential-token compilation benchmark</text>
+<text x="60" y="192" fill="#AEBFD5" font-size="22">OpenZeppelin confidential-token workload · Same machine</text>
+<g fill="#132236" stroke="#30435E"><rect x="60" y="226" width="340" height="112" rx="12"/><rect x="430" y="226" width="340" height="112" rx="12"/><rect x="800" y="226" width="340" height="112" rx="12"/></g>
+<g fill="#F4F7FC" font-size="36" font-weight="700"><text x="84" y="277">1,013</text><text x="454" y="277">16</text><text x="824" y="277">K7 to K16</text></g>
+<g fill="#AEBFD5" font-size="19"><text x="84" y="313">Lines in the Noctium port</text><text x="454" y="313">Contract entrypoints</text><text x="824" y="313">Noctium circuit sizes</text></g>
+<text x="60" y="389" fill="#70E6CF" font-size="16" font-weight="700" letter-spacing="1.7">SOURCE COMPILATION · MEDIAN OF 3 RUNS</text>
+<g fill="#132236" stroke="#30435E"><rect x="60" y="411" width="524" height="215" rx="14"/><rect x="616" y="411" width="524" height="215" rx="14"/></g>
+<text x="84" y="452" fill="#70E6CF" font-size="24" font-weight="600">Noctium prototype</text>
+<text x="640" y="452" fill="#8BAFFF" font-size="24" font-weight="600">Compact 0.36.1</text>
+<text x="84" y="533" fill="#F4F7FC" font-size="70" font-weight="700">61.81 s</text>
+<text x="640" y="533" fill="#F4F7FC" font-size="70" font-weight="700">0.255 s</text>
+<text x="84" y="574" fill="#AEBFD5" font-size="20">Range: 61.35 to 62.50 s</text>
+<text x="640" y="574" fill="#AEBFD5" font-size="20">Range: 0.255 to 0.277 s</text>
+<text x="84" y="604" fill="#AEBFD5" font-size="20">Peak observed RAM: 1.50 GiB</text>
+<text x="640" y="604" fill="#AEBFD5" font-size="20">Peak observed RAM: 0.260 GiB</text>
+<text x="60" y="671" fill="#E3EBF5" font-size="23">Compact is substantially faster on this source-compilation workload.</text>
+<text x="60" y="708" fill="#AEBFD5" font-size="20">Prebuilt compilers · Fresh processes · Key generation and proving excluded</text>
+<path d="M60 744H1140" stroke="#30435E"/>
+<text x="60" y="786" fill="#70E6CF" font-size="16" font-weight="700" letter-spacing="1.7">NATIVE CIRCUIT SIZE · SAME ZKIR BACKEND</text>
+<g fill="#AEBFD5" font-size="19"><text x="60" y="826">Circuit</text><text x="570" y="826" text-anchor="end">Noctium rows</text><text x="860" y="826" text-anchor="end">Compact rows</text><text x="1120" y="826" text-anchor="end">K, both</text></g>
+<g fill="#F4F7FC" font-size="25"><text x="60" y="872">transferFrom</text><text x="570" y="872" text-anchor="end">63,125</text><text x="860" y="872" text-anchor="end">62,483</text><text x="1120" y="872" text-anchor="end">16</text>
+<text x="60" y="919">transfer</text><text x="570" y="919" text-anchor="end">41,787</text><text x="860" y="919" text-anchor="end">38,002</text><text x="1120" y="919" text-anchor="end">16</text>
+<text x="60" y="966">approve</text><text x="570" y="966" text-anchor="end">41,575</text><text x="860" y="966" text-anchor="end">38,349</text><text x="1120" y="966" text-anchor="end">16</text></g>
+<path d="M60 997H1140" stroke="#30435E"/>
+<text x="60" y="1041" fill="#E3EBF5" font-size="23">Encrypted balances · Delegated spending · ECDH memos · Private witnesses</text>
+<text x="60" y="1081" fill="#AEBFD5" font-size="20">Apple M3 Max · 16 logical cores · 48 GiB RAM</text>
+<text x="60" y="1132" fill="#CFB58A" font-size="18" font-weight="700">COMPARISON BOUNDARY</text>
+<g fill="#AEBFD5" font-size="18"><text x="60" y="1164">Comparable feature workload. Input/result layouts and artifact sets differ.</text>
+<text x="60" y="1194">Noctium: 16 native entry relations + 13 helper relations. Compact: 15 proof circuits</text>
+<text x="60" y="1224">+ 1 pure JS function. No performance-equivalence claim. K20 was not measured.</text></g>
+<text x="60" y="1290" fill="#92A9C7" font-size="18">Noctium adbc42c · Compact 0.36.1 · OpenZeppelin f85f1a2</text>
+<text x="60" y="1323" fill="#92A9C7" font-size="18">github.com/awjreynolds/noctium · docs/development/oz-compile-performance.md</text>
+</g></svg>

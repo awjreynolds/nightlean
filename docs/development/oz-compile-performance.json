@@ -1,0 +1,350 @@
+{
+  "checkedOn": "2026-11-18",
+  "scope": "Comparable OpenZeppelin-derived confidential-token workload, not a demonstrated ABI/semantic equivalence benchmark. Source compilation excludes keys/proofs; fresh processes with prebuilt compilers and warm dependencies.",
+  "hardware": {
+    "cpu": "Apple M3 Max",
+    "logicalCores": 16,
+    "ramGiB": 48
+  },
+  "source": {
+    "noctiumCommit": "adbc42cc037434c2fb3f7acf536e27f78a500c52",
+    "noctiumPath": "examples/openzeppelin/ConfidentialToken.lean",
+    "noctiumSha256": "f841e14b4112b7a07a042b5d16347d2edc47d54f8f742900b8cdc33e542520ef",
+    "physicalLines": 1013,
+    "nonblankNoncommentLines": 967,
+    "lineCountMethod": "Physical source lines from splitlines; count nonblank lines after excluding full-line Lean -- comments.",
+    "entrypoints": 16,
+    "stateSlots": 12,
+    "privateCells": 2,
+    "witnessCircuitDefinitions": 13,
+    "ozCommit": "f85f1a23685c6bbedfc8c2589ae3aa128aff7c46",
+    "ozWrapper": "contracts/test/integration/_mocks/ComposedConfidentialFungibleTokenPublicSupply.compact",
+    "ozWrapperLines": 144,
+    "ozTokenModuleLines": 1512
+  },
+  "tools": {
+    "lean": "4.35.0",
+    "compact": "0.36.1",
+    "compactSourceCommit": "7fa3a117c5e7efe9d2c51da04263e5f0b3509144",
+    "compactReleaseSha256": "96ee68a59d9e8b093f05c97479a4cf08c79760015dcc26ecc797ec0160ca27f9",
+    "zkir": "3.2.1",
+    "zkirSourceCommit": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+    "zkirBanner": "3.2.0 (known upstream banner; pin and binary hash identify selected3.2.1)",
+    "zkirBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40"
+  },
+  "noctium": {
+    "wallSeconds": [
+      61.35,
+      61.811,
+      62.504
+    ],
+    "medianSeconds": 61.811,
+    "peakRssBytes": [
+      null,
+      1608204288,
+      1611595776
+    ],
+    "entryRelations": 16,
+    "helperRelations": 13,
+    "instructionsAcrossEntryRelations": 9039,
+    "rowsAcrossEntryRelations": 293197,
+    "nativeSizingWallSeconds": 11.843
+  },
+  "compact": {
+    "wallSeconds": [
+      0.2770499170292169,
+      0.2553381249308586,
+      0.2545451249461621
+    ],
+    "medianSeconds": 0.2553381249308586,
+    "peakRssBytes": [
+      278937600,
+      278953984,
+      278937600
+    ],
+    "provableRelations": 15,
+    "pureFunctionsWithoutRelation": [
+      "computeAccountId"
+    ],
+    "flag": "--skip-zk"
+  },
+  "entrypoints": [
+    {
+      "name": "registerWithKey",
+      "noctium": {
+        "k": 13,
+        "rows": 6932,
+        "instructions": 389,
+        "cryptoOperations": {
+          "persistent_hash": 2,
+          "ec_mul": 0,
+          "ec_mul_generator": 1
+        }
+      },
+      "compact": {
+        "k": 13,
+        "rows": 7540
+      }
+    },
+    {
+      "name": "mint",
+      "noctium": {
+        "k": 15,
+        "rows": 25236,
+        "instructions": 510,
+        "cryptoOperations": {
+          "persistent_hash": 5,
+          "ec_mul": 2,
+          "ec_mul_generator": 3
+        }
+      },
+      "compact": {
+        "k": 15,
+        "rows": 25140
+      }
+    },
+    {
+      "name": "sweep",
+      "noctium": {
+        "k": 13,
+        "rows": 7076,
+        "instructions": 517,
+        "cryptoOperations": {
+          "persistent_hash": 2,
+          "ec_mul": 0,
+          "ec_mul_generator": 1
+        }
+      },
+      "compact": {
+        "k": 13,
+        "rows": 7287
+      }
+    },
+    {
+      "name": "transfer",
+      "noctium": {
+        "k": 16,
+        "rows": 41787,
+        "instructions": 1251,
+        "cryptoOperations": {
+          "persistent_hash": 8,
+          "ec_mul": 5,
+          "ec_mul_generator": 7
+        }
+      },
+      "compact": {
+        "k": 16,
+        "rows": 38002
+      }
+    },
+    {
+      "name": "_move",
+      "noctium": {
+        "k": 16,
+        "rows": 41779,
+        "instructions": 1246,
+        "cryptoOperations": {
+          "persistent_hash": 8,
+          "ec_mul": 5,
+          "ec_mul_generator": 7
+        }
+      },
+      "compact": {
+        "k": 16,
+        "rows": 37994
+      }
+    },
+    {
+      "name": "burn",
+      "noctium": {
+        "k": 14,
+        "rows": 16323,
+        "instructions": 749,
+        "cryptoOperations": {
+          "persistent_hash": 3,
+          "ec_mul": 3,
+          "ec_mul_generator": 5
+        }
+      },
+      "compact": {
+        "k": 14,
+        "rows": 13825
+      }
+    },
+    {
+      "name": "clearMemos",
+      "noctium": {
+        "k": 13,
+        "rows": 6924,
+        "instructions": 382,
+        "cryptoOperations": {
+          "persistent_hash": 2,
+          "ec_mul": 0,
+          "ec_mul_generator": 1
+        }
+      },
+      "compact": {
+        "k": 13,
+        "rows": 6573
+      }
+    },
+    {
+      "name": "totalSupply",
+      "noctium": {
+        "k": 7,
+        "rows": 66,
+        "instructions": 6,
+        "cryptoOperations": {
+          "persistent_hash": 0,
+          "ec_mul": 0,
+          "ec_mul_generator": 0
+        }
+      },
+      "compact": {
+        "k": 6,
+        "rows": 34
+      }
+    },
+    {
+      "name": "isRegistered",
+      "noctium": {
+        "k": 7,
+        "rows": 120,
+        "instructions": 15,
+        "cryptoOperations": {
+          "persistent_hash": 0,
+          "ec_mul": 0,
+          "ec_mul_generator": 0
+        }
+      },
+      "compact": {
+        "k": 8,
+        "rows": 129
+      }
+    },
+    {
+      "name": "balanceOf",
+      "noctium": {
+        "k": 9,
+        "rows": 267,
+        "instructions": 124,
+        "cryptoOperations": {
+          "persistent_hash": 0,
+          "ec_mul": 0,
+          "ec_mul_generator": 0
+        }
+      },
+      "compact": {
+        "k": 10,
+        "rows": 901
+      }
+    },
+    {
+      "name": "pendingOf",
+      "noctium": {
+        "k": 9,
+        "rows": 267,
+        "instructions": 124,
+        "cryptoOperations": {
+          "persistent_hash": 0,
+          "ec_mul": 0,
+          "ec_mul_generator": 0
+        }
+      },
+      "compact": {
+        "k": 10,
+        "rows": 901
+      }
+    },
+    {
+      "name": "computeAccountId",
+      "noctium": {
+        "k": 13,
+        "rows": 2085,
+        "instructions": 129,
+        "cryptoOperations": {
+          "persistent_hash": 1,
+          "ec_mul": 0,
+          "ec_mul_generator": 0
+        }
+      },
+      "compact": null
+    },
+    {
+      "name": "approve",
+      "noctium": {
+        "k": 16,
+        "rows": 41575,
+        "instructions": 1101,
+        "cryptoOperations": {
+          "persistent_hash": 8,
+          "ec_mul": 6,
+          "ec_mul_generator": 8
+        }
+      },
+      "compact": {
+        "k": 16,
+        "rows": 38349
+      }
+    },
+    {
+      "name": "allowance",
+      "noctium": {
+        "k": 10,
+        "rows": 513,
+        "instructions": 200,
+        "cryptoOperations": {
+          "persistent_hash": 0,
+          "ec_mul": 0,
+          "ec_mul_generator": 0
+        }
+      },
+      "compact": {
+        "k": 9,
+        "rows": 435
+      }
+    },
+    {
+      "name": "transferFrom",
+      "noctium": {
+        "k": 16,
+        "rows": 63125,
+        "instructions": 1338,
+        "cryptoOperations": {
+          "persistent_hash": 12,
+          "ec_mul": 7,
+          "ec_mul_generator": 9
+        }
+      },
+      "compact": {
+        "k": 16,
+        "rows": 62483
+      }
+    },
+    {
+      "name": "burnFrom",
+      "noctium": {
+        "k": 16,
+        "rows": 39122,
+        "instructions": 958,
+        "cryptoOperations": {
+          "persistent_hash": 7,
+          "ec_mul": 5,
+          "ec_mul_generator": 7
+        }
+      },
+      "compact": {
+        "k": 16,
+        "rows": 38294
+      }
+    }
+  ],
+  "limits": [
+    "K is per circuit, not per contract. K20 was not measured.",
+    "No keys or proofs were timed. Source compiler timings do not establish proving performance.",
+    "Noctium emits16native entry relations plus13helper relations; Compact emits15provable relations and one pure function in JavaScript.",
+    "The Noctium port uses different input/result layouts and explicit state candidates. Nominal ABI and complete semantic equivalence remain unqualified.",
+    "First Noctium run has no peak RSS sample.",
+    "The first Noctium sample overlapped a small native sizing process; subsequent two source runs and all Compact source runs ran without concurrent benchmark synthesis."
+  ]
+}
