@@ -817,6 +817,7 @@ struct Plan {
     binding: Option<Json>,
     native_relation: Option<Json>,
     bound_calls: Vec<Json>,
+    native_input_types: BTreeMap<String, String>,
     entry: String,
     name: String,
     max_steps: usize,
@@ -2208,6 +2209,132 @@ fn validate_curve_input_bridge(instructions: &[Json], name: &str, token: &str) -
     Ok(())
 }
 
+fn native_binding_version(binding: &Json) -> Result<u32> {
+    field(binding, "schemaVersion")?
+        .as_u64()
+        .and_then(|version| u32::try_from(version).ok())
+        .ok_or_else(|| anyhow!("invalid native witness binding version"))
+}
+
+fn guard_references(
+    value: &Json,
+    scope: &mut Vec<String>,
+    references: &mut BTreeSet<String>,
+) -> Result<()> {
+    match value {
+        Json::Object(object) if object.get("tag").and_then(Json::as_str) == Some("reference") => {
+            let reference = text(value, "name")?.to_owned();
+            if !scope.iter().rev().any(|name| name == &reference) {
+                references.insert(reference);
+            }
+        }
+        Json::Object(object) if object.get("tag").and_then(Json::as_str) == Some("let") => {
+            guard_references(field(value, "value")?, scope, references)?;
+            scope.push(text(value, "name")?.to_owned());
+            guard_references(field(value, "body")?, scope, references)?;
+            scope.pop();
+        }
+        Json::Object(object) => {
+            for child in object.values() {
+                guard_references(child, scope, references)?;
+            }
+        }
+        Json::Array(values) => {
+            for child in values {
+                guard_references(child, scope, references)?;
+            }
+        }
+        Json::Null | Json::Bool(_) | Json::Number(_) | Json::String(_) => {}
+    }
+    Ok(())
+}
+
+fn guard_is_bool(
+    expression: &crate::Expr,
+    input_types: &BTreeMap<String, String>,
+    locals: &mut Vec<(String, bool)>,
+) -> Result<bool> {
+    use crate::Expr;
+    Ok(match expression {
+        Expr::Bool { .. } => true,
+        Expr::Reference { name } => locals
+            .iter()
+            .rev()
+            .find(|(local, _)| local == name)
+            .map(|(_, is_bool)| *is_bool)
+            .or_else(|| {
+                input_types
+                    .get(name)
+                    .map(|ty| ScalarType::parse(ty).is_ok_and(|ty| ty == ScalarType::Bool))
+            })
+            .unwrap_or(false),
+        Expr::Eq { .. } => true,
+        Expr::BoolAnd { left, right }
+        | Expr::BoolOr { left, right }
+        | Expr::BoolXor { left, right } => {
+            guard_is_bool(left, input_types, locals)? && guard_is_bool(right, input_types, locals)?
+        }
+        Expr::Cast { ty, .. } => ScalarType::parse(ty)? == ScalarType::Bool,
+        Expr::Let { name, value, body } => {
+            let is_bool = guard_is_bool(value, input_types, locals)?;
+            locals.push((name.clone(), is_bool));
+            let result = guard_is_bool(body, input_types, locals)?;
+            locals.pop();
+            result
+        }
+        Expr::AssertThen { condition, body } => {
+            guard_is_bool(condition, input_types, locals)?
+                && guard_is_bool(body, input_types, locals)?
+        }
+        Expr::Select { condition, yes, no } => {
+            guard_is_bool(condition, input_types, locals)?
+                && guard_is_bool(yes, input_types, locals)?
+                && guard_is_bool(no, input_types, locals)?
+        }
+        _ => false,
+    })
+}
+
+fn native_leaf(input_types: &BTreeMap<String, String>, name: &str, value: Json) -> Result<Json> {
+    let input_type = input_types
+        .get(name)
+        .ok_or_else(|| anyhow!("unknown native circuit input"))?;
+    if input_type == "Native" {
+        match value {
+            Json::Bool(value) => Ok(Json::String(if value { "1" } else { "0" }.into())),
+            Json::String(_) => Ok(value),
+            _ => bail!("native circuit input is not a canonical field value"),
+        }
+    } else {
+        Ok(value)
+    }
+}
+
+fn evaluate_native_guard(
+    call: &Json,
+    input_types: &BTreeMap<String, String>,
+    circuit_values: &BTreeMap<String, Json>,
+) -> Result<bool> {
+    let guard = field(call, "guard")?;
+    let expression: crate::Expr = serde_json::from_value(guard.clone())
+        .map_err(|_| anyhow!("invalid native witness guard"))?;
+    let mut references = BTreeSet::new();
+    guard_references(guard, &mut Vec::new(), &mut references)?;
+    let environment = references
+        .into_iter()
+        .map(|name| {
+            let value = circuit_values
+                .get(&name)
+                .ok_or_else(|| anyhow!("native witness guard input is unavailable"))?;
+            let ty = input_types
+                .get(&name)
+                .ok_or_else(|| anyhow!("unknown native witness guard input"))?;
+            Ok((name, input_value(ty, value)?))
+        })
+        .collect::<Result<crate::Environment>>()?;
+    crate::evaluate(&expression, &environment)?.boolean()
+}
+
 fn validate_native_binding(
     binding: &Json,
     plan_name: &str,
@@ -2220,6 +2347,11 @@ fn validate_native_binding(
     registry: &witness::Registry,
 ) -> Result<Vec<Json>> {
     let has_ledger_inputs = binding.get("ledgerInputs").is_some();
+    let binding_version = native_binding_version(binding)?;
+    ensure!(
+        binding_version == 1 || binding_version == 2,
+        "unsupported native witness binding version"
+    );
     let mut fields = vec![
         "schemaVersion",
         "kind",
@@ -2239,8 +2371,7 @@ fn validate_native_binding(
     }
     shape(binding, &fields, false)?;
     ensure!(
-        field(binding, "schemaVersion")?.as_u64() == Some(1)
-            && text(binding, "kind")? == "typed-witness-bindings"
+        text(binding, "kind")? == "typed-witness-bindings"
             && text(binding, "sourceExport")? == plan_name,
         "invalid native witness binding identity"
     );
@@ -2374,6 +2505,11 @@ fn validate_native_binding(
         "native witness call binding limit"
     );
     let mut expected_inputs = BTreeMap::<String, (String, String)>::new();
+    let guard_input_types = circuit_inputs
+        .iter()
+        .map(|(name, (ty, _))| (name.clone(), ty.clone()))
+        .collect::<BTreeMap<_, _>>();
+    let mut source_input_names = BTreeSet::new();
     let input_bindings = list(binding, "inputBindings")?;
     ensure!(
         input_bindings.len() == source_inputs.len(),
@@ -2408,6 +2544,7 @@ fn validate_native_binding(
                     .is_none(),
                 "duplicate native source input leaf"
             );
+            source_input_names.insert(input_name.to_owned());
             let Some((actual_type, visibility)) = circuit_inputs.get(input_name) else {
                 bail!("unknown native source circuit input")
             };
@@ -2418,12 +2555,29 @@ fn validate_native_binding(
             );
         }
     }
+    let mut witness_slot_ordinals = BTreeMap::new();
     for (ordinal, call) in calls.iter().enumerate() {
-        shape(
-            call,
-            &["ordinal", "site", "path", "name", "resultType", "inputs"],
-            false,
-        )?;
+        if binding_version == 2 {
+            shape(
+                call,
+                &[
+                    "ordinal",
+                    "site",
+                    "path",
+                    "name",
+                    "resultType",
+                    "inputs",
+                    "guard",
+                ],
+                false,
+            )?;
+        } else {
+            shape(
+                call,
+                &["ordinal", "site", "path", "name", "resultType", "inputs"],
+                false,
+            )?;
+        }
         ensure!(
             canonical_index(text(call, "ordinal")?)? == ordinal,
             "native witness call ordinal mismatch"
@@ -2493,12 +2647,34 @@ fn validate_native_binding(
                     .is_none(),
                 "duplicate native witness leaf binding"
             );
+            witness_slot_ordinals.insert(input.to_owned(), ordinal);
             let Some((actual_type, visibility)) = circuit_inputs.get(input) else {
                 bail!("unknown native witness circuit input")
             };
             ensure!(
                 matching_native_input_type(actual_type, &leaf_type) && visibility == "private",
                 "native witness leaf is not a matching private circuit input"
+            );
+        }
+        if binding_version == 2 {
+            let guard = field(call, "guard")?;
+            ensure!(guard.is_object(), "invalid native witness guard");
+            let expression: crate::Expr = serde_json::from_value(guard.clone())
+                .map_err(|_| anyhow!("invalid native witness guard"))?;
+            let mut references = BTreeSet::new();
+            guard_references(guard, &mut Vec::new(), &mut references)?;
+            for reference in &references {
+                ensure!(
+                    source_input_names.contains(reference)
+                        || witness_slot_ordinals
+                            .get(reference)
+                            .is_some_and(|slot_ordinal| *slot_ordinal < ordinal),
+                    "native witness guard references an unavailable input"
+                );
+            }
+            ensure!(
+                guard_is_bool(&expression, &guard_input_types, &mut Vec::new())?,
+                "native witness guard must be Bool"
             );
         }
     }
@@ -2804,48 +2980,68 @@ impl Plan {
         } else {
             None
         };
-        let (binding, native_relation, bound_calls) = match (schema_version, mode.as_deref()) {
-            (1, None) => (None, None, vec![]),
-            (2, Some("host")) => {
-                ensure!(
-                    field(v, "binding")?.is_null() && expected_binding_sha256.is_none(),
-                    "host control plan must not carry native bindings"
-                );
-                (None, None, vec![])
-            }
-            (2, Some("native")) => {
-                let raw_binding = field(v, "binding")?
-                    .as_str()
-                    .ok_or_else(|| anyhow!("native control plan requires witness binding"))?;
-                let expected = expected_binding_sha256
-                    .ok_or_else(|| anyhow!("trusted witness binding digest required"))?;
-                ensure!(
-                    expected.len() == 64
-                        && expected
-                            .bytes()
-                            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
-                    "invalid trusted witness binding digest"
-                );
-                let actual = hex::encode(Sha256::digest(raw_binding.as_bytes()));
-                ensure!(actual == expected, "witness binding digest mismatch");
-                let parsed: Json = serde_json::from_str(raw_binding)
-                    .map_err(|_| anyhow!("invalid native witness binding"))?;
-                let bound_calls = validate_native_binding(
-                    &parsed,
-                    text(v, "name")?,
-                    &entry,
-                    &typed_witnesses,
-                    &signature_jsons,
-                    &type_declarations,
-                    &inputs,
-                    &functions,
-                    &registry,
-                )?;
-                let native_relation = field(&parsed, "nativeRelation")?.clone();
-                (Some(parsed), Some(native_relation), bound_calls)
-            }
-            _ => bail!("invalid control execution mode"),
-        };
+        let (binding, native_relation, bound_calls, native_input_types) =
+            match (schema_version, mode.as_deref()) {
+                (1, None) => (None, None, vec![], BTreeMap::new()),
+                (2, Some("host")) => {
+                    ensure!(
+                        field(v, "binding")?.is_null() && expected_binding_sha256.is_none(),
+                        "host control plan must not carry native bindings"
+                    );
+                    (None, None, vec![], BTreeMap::new())
+                }
+                (2, Some("native")) => {
+                    let raw_binding = field(v, "binding")?
+                        .as_str()
+                        .ok_or_else(|| anyhow!("native control plan requires witness binding"))?;
+                    let expected = expected_binding_sha256
+                        .ok_or_else(|| anyhow!("trusted witness binding digest required"))?;
+                    ensure!(
+                        expected.len() == 64
+                            && expected
+                                .bytes()
+                                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)),
+                        "invalid trusted witness binding digest"
+                    );
+                    let actual = hex::encode(Sha256::digest(raw_binding.as_bytes()));
+                    ensure!(actual == expected, "witness binding digest mismatch");
+                    let parsed: Json = serde_json::from_str(raw_binding)
+                        .map_err(|_| anyhow!("invalid native witness binding"))?;
+                    raw_preflight(&parsed)?;
+                    ensure!(
+                        serde_json::to_vec(&parsed)?.len() <= MAX_BYTES,
+                        "native witness binding byte limit"
+                    );
+                    let bound_calls = validate_native_binding(
+                        &parsed,
+                        text(v, "name")?,
+                        &entry,
+                        &typed_witnesses,
+                        &signature_jsons,
+                        &type_declarations,
+                        &inputs,
+                        &functions,
+                        &registry,
+                    )?;
+                    let native_input_types = list(&parsed, "circuitInputs")?
+                        .iter()
+                        .map(|input| {
+                            Ok((
+                                text(input, "name")?.to_owned(),
+                                text(input, "type")?.to_owned(),
+                            ))
+                        })
+                        .collect::<Result<BTreeMap<_, _>>>()?;
+                    let native_relation = field(&parsed, "nativeRelation")?.clone();
+                    (
+                        Some(parsed),
+                        Some(native_relation),
+                        bound_calls,
+                        native_input_types,
+                    )
+                }
+                _ => bail!("invalid control execution mode"),
+            };
         Ok(Self {
             schema_version,
             mode,
@@ -2857,6 +3053,7 @@ impl Plan {
             binding,
             native_relation,
             bound_calls,
+            native_input_types,
             entry,
             name: name(text(v, "name")?)?,
             max_steps: max_steps as usize,
@@ -4004,6 +4201,8 @@ pub struct Session {
     function_path: Vec<String>,
     witness_records: Vec<WitnessRecord>,
     bound_call_cursor: usize,
+    native_guard_values: Option<BTreeMap<String, Json>>,
+    native_guard_reservations: Vec<AggregateReservation>,
     source_inputs: SecretInputs,
     aggregate_budget: Arc<AggregateBudget>,
     invocation_write_reservations: BTreeMap<String, AggregateReservation>,
@@ -4194,6 +4393,8 @@ impl Session {
             function_path,
             witness_records: Vec::new(),
             bound_call_cursor: 0,
+            native_guard_values: None,
+            native_guard_reservations: Vec::new(),
             source_inputs,
             aggregate_budget,
             invocation_write_reservations: BTreeMap::new(),
@@ -4350,8 +4551,184 @@ impl Session {
         }
         self.invocation_write_reservations.clear();
     }
+    fn guarded_native_binding(&self) -> bool {
+        self.plan
+            .binding
+            .as_ref()
+            .is_some_and(|binding| native_binding_version(binding).ok() == Some(2))
+    }
+    fn ensure_native_guard_values(&mut self) -> Result<()> {
+        if self.native_guard_values.is_some() {
+            return Ok(());
+        }
+        let binding = self
+            .plan
+            .binding
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing native witness binding"))?;
+        let mut circuit_values = BTreeMap::new();
+        for input_binding in list(binding, "inputBindings")? {
+            let source_name = text(input_binding, "name")?;
+            let source_type = text(input_binding, "type")?;
+            let source_value = self
+                .source_inputs
+                .0
+                .get(source_name)
+                .ok_or_else(|| anyhow!("missing native source input"))?;
+            let leaves = self
+                .plan
+                .registry
+                .flatten_leaves(source_type, source_value)?;
+            let output_names = list(input_binding, "inputs")?;
+            ensure!(
+                leaves.len() == output_names.len(),
+                "native source input binding mismatch"
+            );
+            for (name, value) in output_names.iter().zip(leaves) {
+                let name = name
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid native source input name"))?;
+                ensure!(
+                    circuit_values
+                        .insert(
+                            name.to_owned(),
+                            native_leaf(&self.plan.native_input_types, name, value)?,
+                        )
+                        .is_none(),
+                    "duplicate native circuit input value"
+                );
+            }
+        }
+        let reservation = AggregateReservation::new(
+            &self.aggregate_budget,
+            json_map_materialization_charge(&circuit_values)?,
+        )?;
+        self.native_guard_reservations.push(reservation);
+        self.native_guard_values = Some(circuit_values);
+        Ok(())
+    }
+    fn native_call_values(
+        &self,
+        ordinal: usize,
+        value: Option<&Json>,
+    ) -> Result<BTreeMap<String, Json>> {
+        let call = self
+            .plan
+            .bound_calls
+            .get(ordinal)
+            .ok_or_else(|| anyhow!("missing native witness call binding"))?;
+        let result_type = text(call, "resultType")?;
+        let ty = parse_type(result_type, &self.plan.registry)?;
+        let leaf_types = match &ty {
+            Type::Unit => Vec::new(),
+            Type::Scalar(_) => vec![result_type.to_owned()],
+            Type::Aggregate(token) => self.plan.registry.leaf_types(token)?,
+        };
+        let leaves = match value {
+            Some(value) => self.plan.registry.flatten_leaves(result_type, value)?,
+            None => leaf_types
+                .iter()
+                .map(|ty| crate::inactive_read_value(ty).map(|value| value.public_json()))
+                .collect::<Result<Vec<_>>>()?,
+        };
+        let output_names = list(call, "inputs")?;
+        ensure!(
+            leaves.len() == output_names.len() && leaves.len() == leaf_types.len(),
+            "native witness result binding mismatch"
+        );
+        output_names
+            .iter()
+            .zip(leaves)
+            .map(|(name, value)| {
+                let name = name
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid native witness input name"))?;
+                Ok((
+                    name.to_owned(),
+                    native_leaf(&self.plan.native_input_types, name, value)?,
+                ))
+            })
+            .collect()
+    }
+    fn prepare_native_guard_additions(
+        &self,
+        ordinal: usize,
+        value: Option<&Json>,
+    ) -> Result<(BTreeMap<String, Json>, Option<AggregateReservation>)> {
+        let additions = self.native_call_values(ordinal, value)?;
+        let current = self
+            .native_guard_values
+            .as_ref()
+            .ok_or_else(|| anyhow!("missing native guard input prefix"))?;
+        ensure!(
+            additions.keys().all(|name| !current.contains_key(name)),
+            "duplicate native circuit input value"
+        );
+        let reservation = if additions.is_empty() {
+            None
+        } else {
+            Some(AggregateReservation::new(
+                &self.aggregate_budget,
+                json_map_materialization_charge(&additions)?,
+            )?)
+        };
+        Ok((additions, reservation))
+    }
+    fn commit_native_guard_additions(
+        &mut self,
+        additions: BTreeMap<String, Json>,
+        reservation: Option<AggregateReservation>,
+    ) {
+        if !additions.is_empty() {
+            self.native_guard_values
+                .as_mut()
+                .expect("native guard prefix initialized")
+                .extend(additions);
+            self.native_guard_reservations
+                .push(reservation.expect("native guard additions are charged"));
+        }
+    }
+    fn next_native_active_call(&mut self) -> Result<Option<usize>> {
+        if !self.guarded_native_binding() {
+            return Ok((self.bound_call_cursor < self.plan.bound_calls.len())
+                .then_some(self.bound_call_cursor));
+        }
+        self.ensure_native_guard_values()?;
+        while self.bound_call_cursor < self.plan.bound_calls.len() {
+            let ordinal = self.bound_call_cursor;
+            let call = &self.plan.bound_calls[ordinal];
+            let active = evaluate_native_guard(
+                call,
+                &self.plan.native_input_types,
+                self.native_guard_values.as_ref().unwrap(),
+            )?;
+            if active {
+                return Ok(Some(ordinal));
+            }
+            let (additions, reservation) = self.prepare_native_guard_additions(ordinal, None)?;
+            self.commit_native_guard_additions(additions, reservation);
+            self.bound_call_cursor += 1;
+        }
+        Ok(None)
+    }
+    fn consume_trailing_inactive_native_calls(&mut self) -> Result<()> {
+        while self.next_native_active_call()?.is_some() {
+            bail!("required native witness call was not executed");
+        }
+        Ok(())
+    }
+    fn clear_native_guard_values(&mut self) {
+        if let Some(values) = &mut self.native_guard_values {
+            for value in values.values_mut() {
+                wipe_json(value);
+            }
+        }
+        self.native_guard_values = None;
+        self.native_guard_reservations.clear();
+    }
     fn reject(&mut self) {
         self.clear_writes();
+        self.clear_native_guard_values();
         self.tasks.clear();
         self.values.clear();
         self.pending = None;
@@ -4384,7 +4761,8 @@ impl Session {
         );
         ensure!(
             self.bound_call_cursor == self.plan.bound_calls.len()
-                && self.witness_records.len() == self.plan.bound_calls.len(),
+                && (self.guarded_native_binding()
+                    || self.witness_records.len() == self.plan.bound_calls.len()),
             "native witness call sequence is incomplete"
         );
         let binding = self
@@ -4417,25 +4795,7 @@ impl Session {
         let transient_reservation =
             AggregateReservation::new(&self.aggregate_budget, transient_charge)?;
         let retained_reservation = AggregateReservation::new(&self.aggregate_budget, output_bytes)?;
-        let circuit_input_types = input_descriptors
-            .iter()
-            .map(|input| Ok((text(input, "name")?, text(input, "type")?)))
-            .collect::<Result<BTreeMap<_, _>>>()?;
-        let native_leaf = |name: &str, value: Json| -> Result<Json> {
-            ensure!(
-                circuit_input_types.contains_key(name),
-                "unknown native circuit input"
-            );
-            if circuit_input_types[name] == "Native" {
-                match value {
-                    Json::Bool(value) => Ok(Json::String(if value { "1" } else { "0" }.into())),
-                    Json::String(_) => Ok(value),
-                    _ => bail!("native circuit input is not a canonical field value"),
-                }
-            } else {
-                Ok(value)
-            }
-        };
+        let circuit_input_types = &self.plan.native_input_types;
         let mut circuit_values = BTreeMap::new();
         for input_binding in list(binding, "inputBindings")? {
             let source_name = text(input_binding, "name")?;
@@ -4460,18 +4820,48 @@ impl Session {
                     .ok_or_else(|| anyhow!("invalid native source input name"))?;
                 ensure!(
                     circuit_values
-                        .insert(name.to_owned(), native_leaf(name, value)?)
+                        .insert(
+                            name.to_owned(),
+                            native_leaf(circuit_input_types, name, value)?,
+                        )
                         .is_none(),
                     "duplicate native circuit input value"
                 );
             }
         }
-        for (index, (record, call)) in self
-            .witness_records
-            .iter()
-            .zip(&self.plan.bound_calls)
-            .enumerate()
-        {
+        let guarded_binding = self.guarded_native_binding();
+        let mut previous_record_ordinal = None;
+        for record in &self.witness_records {
+            ensure!(
+                record.invocation.ordinal < self.plan.bound_calls.len()
+                    && previous_record_ordinal
+                        .map_or(true, |previous| previous < record.invocation.ordinal),
+                "native witness records are duplicated or reordered"
+            );
+            previous_record_ordinal = Some(record.invocation.ordinal);
+        }
+        let mut record_index = 0;
+        for (index, call) in self.plan.bound_calls.iter().enumerate() {
+            let record = self.witness_records.get(record_index);
+            let active = if guarded_binding {
+                evaluate_native_guard(call, circuit_input_types, &circuit_values)?
+            } else {
+                true
+            };
+            if !active {
+                ensure!(
+                    !record.is_some_and(|record| record.invocation.ordinal == index),
+                    "native witness record exists for an inactive call"
+                );
+                for (name, value) in self.native_call_values(index, None)? {
+                    ensure!(
+                        circuit_values.insert(name, value).is_none(),
+                        "duplicate native circuit input value"
+                    );
+                }
+                continue;
+            }
+            let record = record.ok_or_else(|| anyhow!("required native witness record missing"))?;
             ensure!(
                 record.invocation.ordinal == index
                     && text(call, "ordinal")? == index.to_string()
@@ -4488,27 +4878,18 @@ impl Session {
                     && text(call, "resultType")? == record.result_type,
                 "native witness call binding mismatch"
             );
-            let leaves = self
-                .plan
-                .registry
-                .flatten_leaves(&record.result_type, record.value.as_json())?;
-            let output_names = list(call, "inputs")?;
-            ensure!(
-                leaves.len() == output_names.len(),
-                "native witness result binding mismatch"
-            );
-            for (name, value) in output_names.iter().zip(leaves) {
-                let name = name
-                    .as_str()
-                    .ok_or_else(|| anyhow!("invalid native witness input name"))?;
+            for (name, value) in self.native_call_values(index, Some(record.value.as_json()))? {
                 ensure!(
-                    circuit_values
-                        .insert(name.to_owned(), native_leaf(name, value)?)
-                        .is_none(),
+                    circuit_values.insert(name, value).is_none(),
                     "duplicate native circuit input value"
                 );
             }
+            record_index += 1;
         }
+        ensure!(
+            record_index == self.witness_records.len(),
+            "native witness record ordinal is unknown"
+        );
         let circuit_names = list(binding, "circuitInputs")?
             .iter()
             .map(|input| text(input, "name").map(str::to_owned))
@@ -4605,6 +4986,7 @@ impl Session {
             wipe_json(value);
         }
         self.witness_records.clear();
+        self.clear_native_guard_values();
         Ok(runtime)
     }
     /// Compatibility API for callers that own the returned snapshot outside the session budget.
@@ -4699,6 +5081,7 @@ impl Session {
                 wipe_json(value);
             }
             self.witness_records.clear();
+            self.clear_native_guard_values();
             self.phase = Phase::Cancelled;
         }
         Ok(json!({"abiVersion":1,"status":"cancelled"}))
@@ -4818,6 +5201,11 @@ impl Session {
                     )?),
                     Type::Unit | Type::Scalar(_) => WitnessValue::PublicScalarOrUnit(raw.clone()),
                 };
+                let native_guard_additions = if self.guarded_native_binding() {
+                    Some(self.prepare_native_guard_additions(invocation.ordinal, Some(raw))?)
+                } else {
+                    None
+                };
                 let completed = self
                     .host
                     .as_mut()
@@ -4843,6 +5231,9 @@ impl Session {
                     result_type: signature.result_type.clone(),
                     value: record_value,
                 });
+                if let Some((additions, reservation)) = native_guard_additions {
+                    self.commit_native_guard_additions(additions, reservation);
+                }
                 self.values.push(result);
                 self.pending = None;
                 self.phase = Phase::Ready;
@@ -5276,6 +5667,12 @@ impl Session {
                     ));
                     self.tasks.push(Task::Eval(arguments[index].clone(), env));
                 } else {
+                    let ordinal = if self.plan.mode.as_deref() == Some("native") {
+                        self.next_native_active_call()?
+                            .ok_or_else(|| anyhow!("unexpected native witness call"))?
+                    } else {
+                        self.bound_call_cursor
+                    };
                     let signature = self
                         .plan
                         .signatures
@@ -5298,7 +5695,6 @@ impl Session {
                             .insert(parameter.name.clone(), value.canonical_json(&expected)?);
                     }
                     let path = self.function_path.clone();
-                    let ordinal = self.bound_call_cursor;
                     let invocation = TypedInvocation {
                         ordinal,
                         name: name.clone(),
@@ -5658,11 +6054,20 @@ impl Session {
             Task::Finish => {
                 let value = self.pop()?;
                 if self.plan.mode.as_deref() == Some("native") {
-                    ensure!(
-                        self.bound_call_cursor == self.plan.bound_calls.len()
-                            && self.witness_records.len() == self.plan.bound_calls.len(),
-                        "native witness call sequence is incomplete"
-                    );
+                    if self.guarded_native_binding() {
+                        self.consume_trailing_inactive_native_calls()?;
+                        ensure!(
+                            self.bound_call_cursor == self.plan.bound_calls.len(),
+                            "native witness call sequence is incomplete"
+                        );
+                        self.clear_native_guard_values();
+                    } else {
+                        ensure!(
+                            self.bound_call_cursor == self.plan.bound_calls.len()
+                                && self.witness_records.len() == self.plan.bound_calls.len(),
+                            "native witness call sequence is incomplete"
+                        );
+                    }
                 }
                 let legacy_unit_result = self.plan.schema_version == 1
                     && self.plan.functions[&self.plan.entry].signature.result == Type::Unit
@@ -5779,6 +6184,7 @@ impl Session {
 impl Drop for Session {
     fn drop(&mut self) {
         self.clear_writes();
+        self.clear_native_guard_values();
     }
 }
 

@@ -1,0 +1,270 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [{"name": "total", "kind": {"cell": "Native"}}],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Native",
+   "name": "observed",
+   "expression": {"tag": "reference", "name": "result"}}],
+ "reads": [{"type": "Native", "name": "expected"}],
+ "operations":
+ [{"storage": false,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "expected"},
+   "alignment": "field"},
+  {"op": "popeq",
+   "expression": {"tag": "reference", "name": "expected"},
+   "alignment": "field"},
+  {"storage": false,
+   "op": "push",
+   "expression": {"value": "0", "tag": "constant"},
+   "alignment": "field"},
+  {"storage": true,
+   "op": "push",
+   "expression": {"tag": "reference", "name": "result"},
+   "alignment": "field"},
+  {"op": "insert", "n": 1}],
+ "nativeCircuitFile": "GuardedWitness.claim.zkir",
+ "guards": [],
+ "entrypoint": "claim",
+ "contractName": "GuardedWitness",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Native",
+    "name": "result",
+    "expression":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper1"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "let",
+       "name": "$helper3",
+       "body":
+       {"yes":
+        {"value": {"tag": "reference", "name": "$helper4"},
+         "tag": "let",
+         "name": "$helper5",
+         "body":
+         {"tag": "assertThen",
+          "condition":
+          {"yes":
+           {"tag": "eq",
+            "right": {"tag": "reference", "name": "$helper0"},
+            "left": {"tag": "reference", "name": "$helper5"}},
+           "tag": "select",
+           "no": {"value": true, "tag": "bool"},
+           "condition": {"tag": "reference", "name": "$helper3"}},
+          "body":
+          {"value": {"value": true, "tag": "bool"},
+           "tag": "let",
+           "name": "$helper10",
+           "body":
+           {"value": {"tag": "reference", "name": "$helper5"},
+            "tag": "let",
+            "name": "$helper6",
+            "body":
+            {"value":
+             {"value": {"tag": "reference", "name": "$helper0"},
+              "tag": "let",
+              "name": "$helper7",
+              "body": {"tag": "reference", "name": "$helper8"}},
+             "tag": "let",
+             "name": "$helper9",
+             "body":
+             {"tag": "assertThen",
+              "condition":
+              {"yes":
+               {"tag": "eq",
+                "right": {"tag": "reference", "name": "$helper0"},
+                "left": {"tag": "reference", "name": "$helper9"}},
+               "tag": "select",
+               "no": {"value": true, "tag": "bool"},
+               "condition": {"tag": "reference", "name": "$helper3"}},
+              "body": {"tag": "reference", "name": "$helper0"}}}}}}},
+        "tag": "select",
+        "no":
+        {"value": {"tag": "reference", "name": "$helper11"},
+         "tag": "let",
+         "name": "$helper12",
+         "body":
+         {"tag": "assertThen",
+          "condition":
+          {"yes":
+           {"tag": "eq",
+            "right": {"tag": "reference", "name": "$helper0"},
+            "left": {"tag": "reference", "name": "$helper12"}},
+           "tag": "select",
+           "no": {"value": true, "tag": "bool"},
+           "condition":
+           {"tag": "eq",
+            "right": {"value": false, "tag": "bool"},
+            "left": {"tag": "reference", "name": "$helper3"}}},
+          "body":
+          {"value": {"tag": "reference", "name": "$helper12"},
+           "tag": "let",
+           "name": "$helper13",
+           "body":
+           {"value":
+            {"value": {"tag": "reference", "name": "$helper0"},
+             "tag": "let",
+             "name": "$helper14",
+             "body": {"tag": "reference", "name": "$helper15"}},
+            "tag": "let",
+            "name": "$helper16",
+            "body":
+            {"tag": "assertThen",
+             "condition":
+             {"yes":
+              {"tag": "eq",
+               "right": {"tag": "reference", "name": "$helper0"},
+               "left": {"tag": "reference", "name": "$helper16"}},
+              "tag": "select",
+              "no": {"value": true, "tag": "bool"},
+              "condition":
+              {"tag": "eq",
+               "right": {"value": false, "tag": "bool"},
+               "left": {"tag": "reference", "name": "$helper3"}}},
+             "body": {"tag": "reference", "name": "$helper0"}}}}}},
+        "condition": {"tag": "reference", "name": "$helper3"}}}}}}],
+  "name": "guardedWitnessValues",
+  "inputs":
+  [{"visibility": "public", "type": "Native", "name": "expected"},
+   {"visibility": "private", "type": "Bool", "name": "$helper1"},
+   {"visibility": "private", "type": "Native", "name": "$helper4"},
+   {"visibility": "private", "type": "Native", "name": "$helper8"},
+   {"visibility": "private", "type": "Native", "name": "$helper11"},
+   {"visibility": "private", "type": "Native", "name": "$helper15"}],
+  "file": "guardedWitnessValues.zkir",
+  "constraints":
+  [{"yes": {"value": true, "tag": "bool"},
+    "tag": "select",
+    "no":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left": {"tag": "reference", "name": "$helper4"}},
+    "condition":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper1"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "let",
+       "name": "$helper3",
+       "body":
+       {"tag": "boolAnd",
+        "right": {"tag": "reference", "name": "$helper3"},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   {"yes": {"value": true, "tag": "bool"},
+    "tag": "select",
+    "no":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left": {"tag": "reference", "name": "$helper8"}},
+    "condition":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper1"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "let",
+       "name": "$helper3",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper4"},
+        "tag": "let",
+        "name": "$helper5",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper0"},
+         "tag": "let",
+         "name": "$helper7",
+         "body":
+         {"tag": "boolAnd",
+          "right": {"tag": "reference", "name": "$helper3"},
+          "left": {"value": true, "tag": "bool"}}}}}}}},
+   {"yes": {"value": true, "tag": "bool"},
+    "tag": "select",
+    "no":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left": {"tag": "reference", "name": "$helper11"}},
+    "condition":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper1"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "let",
+       "name": "$helper3",
+       "body":
+       {"tag": "boolAnd",
+        "right":
+        {"tag": "eq",
+         "right": {"value": false, "tag": "bool"},
+         "left": {"tag": "reference", "name": "$helper3"}},
+        "left": {"value": true, "tag": "bool"}}}}}},
+   {"yes": {"value": true, "tag": "bool"},
+    "tag": "select",
+    "no":
+    {"tag": "eq",
+     "right": {"value": "0", "tag": "constant"},
+     "left": {"tag": "reference", "name": "$helper15"}},
+    "condition":
+    {"value": {"tag": "reference", "name": "expected"},
+     "tag": "let",
+     "name": "$helper0",
+     "body":
+     {"value": {"tag": "reference", "name": "$helper1"},
+      "tag": "let",
+      "name": "$helper2",
+      "body":
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "let",
+       "name": "$helper3",
+       "body":
+       {"value": {"tag": "reference", "name": "$helper11"},
+        "tag": "let",
+        "name": "$helper12",
+        "body":
+        {"value": {"tag": "reference", "name": "$helper0"},
+         "tag": "let",
+         "name": "$helper14",
+         "body":
+         {"tag": "boolAnd",
+          "right":
+          {"tag": "eq",
+           "right": {"value": false, "tag": "bool"},
+           "left": {"tag": "reference", "name": "$helper3"}},
+          "left": {"value": true, "tag": "bool"}}}}}}}}]}}

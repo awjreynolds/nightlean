@@ -2,7 +2,7 @@ import Noctium.IR
 
 namespace Noctium.GuardedExpression
 
-private def zeroValue : (ty : Ty) → Option (Expr ty)
+def zeroValue : (ty : Ty) → Option (Expr ty)
   | .native => some (.native 0)
   | .bool => some (.bool false)
   | .uint maximum => some (.uint maximum 0)

@@ -1479,6 +1479,12 @@ private def bindCondition (name : String) (condition : Expr .bool)
     constraints := value.constraints.map bind}
 
 private abbrev LowerEnv := List (String × Lowered)
+private structure LocalBinding where
+  name : String
+  value : Scalar
+  creationGuard : Expr .bool
+  deriving Repr
+
 structure WitnessCallBinding where
   ordinal : Nat
   site : String
@@ -1486,6 +1492,8 @@ structure WitnessCallBinding where
   path : List DeclarationId
   result : ResultType
   inputs : List String
+  guard : Expr .bool := .bool true
+  guarded : Bool := false
   deriving Repr
 
 structure HostedCircuit where
@@ -1500,6 +1508,11 @@ private structure LowerState where
   witnessInputs : List Input := []
   privateOrigins : List (String × PrivateOriginKind) := []
   witnessCalls : List WitnessCallBinding := []
+  witnessConstraints : List (Expr .bool) := []
+  allowGuardedWitnesses : Bool := false
+  guard : Expr .bool := .bool true
+  guardActive : Bool := false
+  localBindings : List LocalBinding := []
   callPath : List DeclarationId := []
   remaining : Nat
   deriving Inhabited
@@ -1525,6 +1538,21 @@ private def freshTyped (type : Ty) : LowerM String := do
   let name ← fresh
   modify fun state => {state with types := (name, type) :: state.types}
   pure name
+
+private def recordLocal (name : String) (value : Scalar) : LowerM Unit := do
+  modify fun state => {state with localBindings := {
+    name, value, creationGuard := state.guard} :: state.localBindings}
+
+private def closeGuard (guard : Expr .bool) (bindings : List LocalBinding) : Expr .bool :=
+  bindings.foldl (fun body binding =>
+    match binding.value with
+    | ⟨_, value⟩ => .letE binding.name
+        (GuardedExpression.totalize binding.creationGuard value) body) guard
+
+private def andGuard (left right : Expr .bool) : Expr .bool := .boolAnd left right
+
+private def guardedBranch (guard condition : Expr .bool) (active : Bool) : Expr .bool :=
+  andGuard guard (if active then condition else .eq condition (.bool false))
 
 def projectionSlice (layout : Types.Layout) (projection : Types.Projection) :
     Except String (Nat × Nat) := do
@@ -1649,14 +1677,25 @@ mutual
       pure {result with constraints}
     | .ite condition yes no => do
       let condition ← lowerTerm program scope env span condition
+      let conditionExpr ← liftD (boolExpr span condition)
+      let entryState ← get
+      let safeCondition := GuardedExpression.totalize entryState.guard conditionExpr
+      modify fun state => {state with
+        guard := guardedBranch entryState.guard safeCondition true, guardActive := true}
       let yes ← lowerTerm program scope env span yes
+      modify fun state => {state with
+        guard := guardedBranch entryState.guard safeCondition false, guardActive := true,
+        localBindings := entryState.localBindings}
       let no ← lowerTerm program scope env span no
+      let noState ← get
+      modify fun state => {noState with
+        guard := entryState.guard, guardActive := entryState.guardActive,
+        localBindings := entryState.localBindings}
       let ty ← if subtype yes.ty no.ty then pure no.ty
         else if subtype no.ty yes.ty then pure yes.ty
         else liftD (fail span "conditional branches require one type to be a subtype of the other")
       let yes ← liftD (coerce span yes ty)
       let no ← liftD (coerce span no ty)
-      let conditionExpr ← liftD (boolExpr span condition)
       let name ← freshTyped .bool
       let conditionRef : Expr .bool := .ref name
       let selected ← liftD (selectLowered span conditionRef yes no)
@@ -1664,9 +1703,18 @@ mutual
       pure {selected with constraints := condition.constraints ++ selected.constraints}
     | .andThen left right | .orElse left right => do
       let left ← lowerTerm program scope env span left
-      let right ← lowerTerm program scope env span right
       let leftExpr ← liftD (boolExpr span left)
+      let entryState ← get
+      let safeLeft := GuardedExpression.totalize entryState.guard leftExpr
+      modify fun state => {state with
+        guard := guardedBranch entryState.guard safeLeft
+          (match term with | .andThen .. => true | _ => false), guardActive := true}
+      let right ← lowerTerm program scope env span right
       let rightExpr ← liftD (boolExpr span right)
+      let rightState ← get
+      modify fun state => {rightState with
+        guard := entryState.guard, guardActive := entryState.guardActive,
+        localBindings := entryState.localBindings}
       let name ← freshTyped .bool
       let leftRef : Expr .bool := .ref name
       let active := match term with
@@ -1685,6 +1733,9 @@ mutual
       let result := bindCondition name leftExpr result
       pure result
     | .witness _ ty => do
+      let state ← get
+      if state.allowGuardedWitnesses && state.guardActive then
+        liftD (fail span "guarded native witnesses require a typed provider binding")
       let inputName ← freshTyped ty
       modify fun state => {state with
         witnessInputs := state.witnessInputs ++ [{name := inputName, ty, visibility := .private, span}]
@@ -1699,6 +1750,7 @@ mutual
         let argument ← liftD (coerce span argument parameter.type)
         for component in components argument do
           let binding ← freshTyped component.ty
+          recordLocal binding component
           bindings := bindings ++ [(binding, component)]
       let leafTypes ← match signature.result with
         | .unit => pure []
@@ -1716,6 +1768,14 @@ mutual
           witnessInputs := state.witnessInputs ++ [{name := inputName, ty := type, visibility := .private, span}]
           privateOrigins := state.privateOrigins ++ [(inputName,
             if signature.operation == "private_state.read.v1" then .privateState else .provider)]}
+      let state ← get
+      let callGuard := closeGuard state.guard state.localBindings
+      if state.guardActive then
+        for (inputName, type) in inputs.zip leafTypes do
+          let some zero := GuardedExpression.zeroValue type
+            | liftD (fail span "native witness result has no canonical default")
+          modify fun state => {state with witnessConstraints := state.witnessConstraints ++
+            [Expr.select callGuard (.bool true) (Expr.eq (.ref inputName) zero)]}
       let value ← match signature.result with
         | .unit => pure unitValue
         | .scalar _ => pure {ty := signature.result, scalar := leaves.headD ⟨.bool, .bool true⟩}
@@ -1729,7 +1789,7 @@ mutual
           pure (aggregateValue type leaves)
       modify fun state => {state with witnessCalls := state.witnessCalls ++ [{
         ordinal := state.witnessCalls.length, site, name, path := state.callPath,
-        result := signature.result, inputs}]}
+        result := signature.result, inputs, guard := callGuard, guarded := state.guardActive}]}
       pure (bindings.foldr (fun (binding, component) body =>
         sequence binding {ty := .scalar component.ty, scalar := component} body)
           {value with constraints})
@@ -1942,7 +2002,8 @@ mutual
   private partial def lowerCall (program : Program) (declaration : Declaration)
       (values : List Lowered) (span : SourceSpan) : LowerM Lowered := do
     spendLower span
-    let callerPath := (← get).callPath
+    let initial ← get
+    let callerPath := initial.callPath
     modify fun state => {state with callPath := callerPath ++ [declaration.id]}
     let mut env := []
     let mut bindings := []
@@ -1953,6 +2014,7 @@ mutual
       let mut references : List Scalar := []
       for component in components actual do
         let name ← freshTyped component.ty
+        recordLocal name component
         bindings := bindings ++ [(name, component)]
         references := references ++ [⟨component.ty, .ref name⟩]
       let reference := match parameterType with
@@ -1961,7 +2023,11 @@ mutual
         | .unit => unitValue
       env := (parameter.name, reference) :: env
     let body ← lowerBody program declaration env declaration.body
-    modify fun state => {state with callPath := callerPath}
+    modify fun state => {state with
+      callPath := callerPath
+      guard := initial.guard
+      guardActive := initial.guardActive
+      localBindings := initial.localBindings}
     let body := {body with constraints := values.flatMap (·.constraints) ++ body.constraints}
     pure (bindings.foldr (fun (name, value) body =>
       sequence name {ty := .scalar value.ty, scalar := value} body) body)
@@ -1990,6 +2056,7 @@ mutual
         let mut bindings := []
         for component in components value do
           let localName ← freshTyped component.ty
+          recordLocal localName component
           bindings := bindings ++ [(localName, component)]
           references := references ++ [⟨component.ty, .ref localName⟩]
         let reference : Lowered := match ty with
@@ -2028,12 +2095,23 @@ mutual
       | .branch condition yes no => do
         let condition ← lowerTerm program declaration.id.scope env declaration.span condition
         let conditionExpr ← liftD (boolExpr declaration.span condition)
+        let entryState ← get
         let name ← freshTyped .bool
         let conditionRef : Expr .bool := .ref name
+        recordLocal name ⟨.bool, conditionExpr⟩
+        let branchState ← get
         let resume : LowerEnv → LowerM Lowered := fun _ =>
           lowerBodyWith program declaration env rest continuation
+        modify fun state => {state with
+          guard := guardedBranch branchState.guard conditionRef true, guardActive := true}
         let yes ← lowerBodyWith program declaration env yes resume
+        modify fun state => {state with
+          guard := guardedBranch branchState.guard conditionRef false, guardActive := true,
+          localBindings := branchState.localBindings}
         let no ← lowerBodyWith program declaration env no resume
+        modify fun state => {state with
+          guard := entryState.guard, guardActive := entryState.guardActive,
+          localBindings := entryState.localBindings}
         let selected ← liftD (selectLowered declaration.span conditionRef yes no)
         let selected := bindCondition name conditionExpr selected
         pure {selected with constraints := condition.constraints ++ selected.constraints}
@@ -2043,10 +2121,11 @@ end
 
 /-- Compilation always performs typing, call-graph/purity analysis and DF-00.
 No caller-supplied summary or disclosure exemption is accepted. -/
-def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : String) : Except Diagnostic HostedCircuit := do
+private def compileHostedMode (limits : Limits) (program : Program) (entryName : String)
+    (allowGuardedWitnesses : Bool) : Except Diagnostic HostedCircuit := do
   let summaries ← analyzeWithLimits limits program
   for summary in summaries do
-    if summary.guarded && summary.effects.contains .witness then
+    if summary.guarded && summary.effects.contains .witness && !allowGuardedWitnesses then
       fail {} "native helper capability unavailable: witness-dependent guarded control (CF-02)"
     if let some effect := summary.effects.find? fun effect => effect.impure && effect != .witness then
       let declaration ← lookup program summary.id {}
@@ -2086,7 +2165,8 @@ def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : S
   unless scalarInputs.isEmpty && aggregateInputs.isEmpty do
     fail entry.span "helper entrypoint input signature mismatch"
   let (body, lowering) ← (lowerCall program declaration values entry.span).run
-    {reserved := inputs.map (·.name), types := inputTypes, remaining := limits.maxExecutionSteps}
+    {reserved := inputs.map (·.name), types := inputTypes,
+      allowGuardedWitnesses, remaining := limits.maxExecutionSteps}
   let inputs := inputs ++ lowering.witnessInputs
   let outputName := ((List.range (inputs.length + 1)).map fun n =>
     if n == 0 then "result" else s!"result{n}").find?
@@ -2114,12 +2194,20 @@ def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : S
   let circuit : Circuit := {
     name := entry.name, inputs, outputs, span := entry.span
     privateOrigins := lowering.privateOrigins
-    constraints := inputConstraints ++ body.constraints ++ outputConstraints ++
+    constraints := inputConstraints ++ lowering.witnessConstraints ++ body.constraints ++ outputConstraints ++
       (if outputValues.isEmpty then [.letE "$unit" body.scalar.value (.bool true)] else [])
   }
   circuit.validate Capabilities.crypto
   Disclosure.circuit circuit
   pure {circuit, calls := lowering.witnessCalls}
+
+def compileHostedWithLimits (limits : Limits) (program : Program) (entryName : String) :
+    Except Diagnostic HostedCircuit := compileHostedMode limits program entryName false
+
+/-- Witness artifacts opt in to guarded typed provider calls. Ordinary helper
+compilation keeps rejecting witness-dependent control. -/
+def compileHostedWitnessWithLimits (limits : Limits) (program : Program) (entryName : String) :
+    Except Diagnostic HostedCircuit := compileHostedMode limits program entryName true
 
 def compileWithLimits (limits : Limits) (program : Program) (entryName : String) : Except Diagnostic Circuit :=
   (compileHostedWithLimits limits program entryName).map (·.circuit)

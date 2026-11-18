@@ -1,5 +1,6 @@
 import Noctium.Control
 import Noctium.Backend.Zkir
+import Noctium.NativeExpression
 
 namespace Noctium.Witness
 open Lean Helpers
@@ -99,7 +100,7 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
     (circuitName : String := "") (outputName : String := "") : Except Diagnostic Compiled := do
   let plan ← Control.compileTypedWithLimits limits program entryName
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown witness entrypoint"
-  let lowered ← Helpers.compileHostedWithLimits limits (eraseProgram program) entryName
+  let lowered ← Helpers.compileHostedWitnessWithLimits limits (eraseProgram program) entryName
   let mut circuit := if circuitName.isEmpty then lowered.circuit else {lowered.circuit with name := circuitName}
   unless outputName.isEmpty do
     let some declaration := program.declarations.find? (·.id == entry.target)
@@ -111,12 +112,17 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
       fail entry.span "witness output name collides with an input"
     circuit := {circuit with outputs := [{output with name := outputName}]}
   let native ← Backend.Zkir.lowerCircuit circuit
+  let guardedCalls := lowered.calls.any (·.guarded)
   let mut calls := []
   for call in lowered.calls do
-    calls := calls ++ [Json.mkObj [("ordinal", toJson (toString call.ordinal)), ("site", toJson call.site),
+    let fields := [("ordinal", toJson (toString call.ordinal)), ("site", toJson call.site),
       ("name", toJson call.name), ("path", toJson (call.path.map idName)),
-      ("resultType", toJson (← resultToken program plan entry.span call.result)), ("inputs", toJson call.inputs)]]
-  let binding := Json.mkObj [("schemaVersion", toJson (1 : Nat)),
+      ("resultType", toJson (← resultToken program plan entry.span call.result)),
+      ("inputs", toJson call.inputs)]
+    let fields := if guardedCalls then fields ++
+      [("guard", Noctium.NativeExpression.toJson call.guard)] else fields
+    calls := calls ++ [Json.mkObj fields]
+  let binding := Json.mkObj [("schemaVersion", toJson ((if guardedCalls then 2 else 1) : Nat)),
     ("kind", toJson ("typed-witness-bindings" : String)), ("circuitName", toJson circuit.name),
     ("sourceExport", toJson entryName), ("target", Json.mkObj [("kind", toJson ("standalone" : String))]),
     ("types", toJson (← arrayField plan "types")), ("signatures", toJson (← arrayField plan "witnesses")),
