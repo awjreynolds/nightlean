@@ -39,4 +39,4 @@ The compiler and runtime reuse the existing `pushFields` and `popeqFields` opera
 
 This scope is tracked in [issue 78](https://github.com/awjreynolds/noctium/issues/78). Runtime control parsing did not change, so this package adds no repeated witness Session campaign.
 
-No new keys, proofs or deployment qualify this slice. The [full native goal](../compatibility/GOAL.md) still includes byte ledger values, foreign keys, composite leaves and broader compiler preservation.
+No new keys, proofs or deployment qualify this slice. [Byte ledger values](byte-storage.md) have separate scoped source/native checks. The [full native goal](../compatibility/GOAL.md) still includes foreign keys, composite leaves and broader compiler preservation.

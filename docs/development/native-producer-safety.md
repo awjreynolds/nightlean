@@ -24,7 +24,7 @@ Exactly one final Output is mandatory. Standalone relations disable communicatio
 
 PublicInput and PrivateInput accept only null guards in the current producer. Impact accepts only the literal active guard one. A preprocessing guard does not establish in-circuit activation, disclosure permission, lazy host execution or totality of inactive partial operations. Guarded source execution and unsupported partial primitives reject until their separate source and native packages are qualified.
 
-Current caps are 4,096 instructions, 4,096 operands per vector, 512 transcript input definitions, 256 returns, 65,536 symbolic nodes per computed value and symbolic depth 256. These caps bound this producer check. They are not a complete source/elaboration/proving resource policy.
+Current caps are 8,192 instructions, 4,096 operands per vector, 2,048 transcript input definitions, 256 returns, 65,536 symbolic nodes per computed value and symbolic depth 256. The byte-storage fixture needs 4,813 instructions and 1,208 inputs to retain the bytewise Source Bytes1024 ABI. Focused guards reject both instruction and input counts above the caps. These caps bound this producer check. They are not a complete source/elaboration/proving resource policy.
 
 ## Typed Bool plan repair
 

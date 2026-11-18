@@ -29,4 +29,4 @@ The runtime recognizes the packed logical prologue and the retained bytewise pro
 
 The [native conformance case](../../runtime/tests/public_bytes32.rs) compares both artifacts through the upstream checker and exact ledger state. It covers zero, modulus-sized and full-FF keys, repeated lookup, unchanged private input width, malformed byte values and changed public chunks. Focused control checks cover packed and retained prologue validation.
 
-No new keys, proofs or deployments qualify this optimization. Byte ledger values and public packing for other lengths remain full-goal work. The implementation follows [issue 72](https://github.com/awjreynolds/noctium/issues/72).
+No new keys, proofs or deployments qualify this optimization. [Byte ledger values](byte-storage.md) have separate scoped source/native checks. Public packing for other lengths remains full-goal work. The implementation follows [issue 72](https://github.com/awjreynolds/noctium/issues/72).

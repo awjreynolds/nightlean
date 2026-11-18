@@ -50,6 +50,7 @@ still rejects a false private assertion. The existing Bytes32 reversal fixture's
 circuit and plan remain equal to their retained JSON objects.
 
 These are source and native-checker results on the selected 3.2.1 profile. No new
-keys, proofs or deployment were created for this feature. General byte ledger cells
-and non-Bytes32 map keys remain gated. Other native byte operations and full
+keys, proofs or deployment were created for this feature. [Byte ledger cells,
+map values and nested leaves](byte-storage.md) have separate scoped checks.
+Non-Bytes32 byte keys remain gated. Other native byte operations and full
 overload, proof and SDK qualification remain part of the wider capability goal.

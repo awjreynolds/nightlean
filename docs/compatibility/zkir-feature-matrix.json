@@ -4771,8 +4771,8 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "67e5f9b68b0153fa4784e07ded5ec73b01b221ac",
-    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
+    "sourceCommit": "789efd3c615b33b6d8db624e28f349b9e621d58c",
+    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
       "add",
@@ -5216,6 +5216,37 @@
         "zkirJsonBytes": 15479
       },
       "limits": "Structural fixture comparison only. No new keygen, proofs, deployment, proving-time/K benchmark or Compact efficiency claim. Public packing for other byte lengths, byte ledger values and broader preservation remain open."
+    },
+    "byteLedgerStorage": {
+      "issue": 79,
+      "source": "../../tests/BytesStorage.lean",
+      "native": "../../runtime/tests/byte_storage.rs",
+      "guide": "../development/byte-storage.md",
+      "scope": "Source Bytes0 through Bytes1024 in direct cells, map values and nested scalar leaves. Uses length-indexed FAB byte alignment, preserves existing bytes32 JSON and key encodings, and adds no opcode name.",
+      "readBoundary": "Nonempty reads use bounded Native chunk bindings in FAB high-to-low order, reconstructed as low-to-high logical bytes. Active reads validate declared scalar leaf type, exact alignment and canonical atom encoding. Inactive reads return zero bytes without inspecting skipped paths.",
+      "emptySemantics": "Source Bytes0 inputs/results remain valid singleton values with zero native payload fields. Empty ledger bytes remain explicit Cell values distinct from Null. Native typed Bytes0 inputs are not emitted. Empty write expressions retain evaluation and assertions in the length-header let expression.",
+      "limits": "No new key/proof generation or deployment. Byte keys other than Bytes32, composite record leaves, full source/native preservation and portable SDK qualification remain separate work.",
+      "focusedChecks": "66-job compiler build, Source fixture, exact input/instruction over-cap guards and guide snippet pass. One native case checks three invocations, all 14 old/new results, 1,122 private fields, lengths 0/1/31/32/33/1024, trailing zeros, inactive missing defaults, overwrite and sibling preservation. Altered transcript, false empty-write assertion, bad input length, Null/wrong-alignment/noncanonical cells and wrong leaf/key schemas reject. Focused control projection/range/length check and retained public Bytes32 native compatibility pass. Legacy 3.2.0 library compilation passes.",
+      "nativeSeconds": 0.05,
+      "artifactMetrics": {
+        "zkirInstructions": 4813,
+        "nativeInputs": 1208,
+        "transcriptGroups": 80,
+        "reads": 17,
+        "logicalReturns": 14,
+        "returnFields": 82,
+        "privateFields": 1122,
+        "zkirJsonBytes": 445869
+      },
+      "producerCaps": {
+        "instructions": 8192,
+        "inputs": 2048,
+        "vectorLength": 4096,
+        "returns": 256,
+        "symbolicNodes": 65536,
+        "symbolicDepth": 256
+      },
+      "supersedes": "Earlier byte scalar storage exclusions are superseded for direct cells, map values and nested scalar leaves. Composite leaves and non-Bytes32 byte keys remain separate work."
     }
   }
 }
