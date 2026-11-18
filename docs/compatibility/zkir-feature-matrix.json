@@ -4771,8 +4771,8 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "eecce93473a978432b499f38755012451434db29",
-    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub paths and six typed Secp transport/operation/storage paths. This is not complete native type/overload, proof or ledger qualification.",
+    "sourceCommit": "94326b038abc3af775c26fa39e8b58a9c7dae721",
+    "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes, hashing, typed Boolean gates, Jubjub paths and scoped typed transport/operations/scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
     "registeredOpcodeCount": 38,
     "registeredOpcodes": [
       "add",
@@ -4835,7 +4835,10 @@
       "Secp256k1Point",
       "Secp256r1Base",
       "Secp256r1Scalar",
-      "Secp256r1Point"
+      "Secp256r1Point",
+      "Curve25519Base",
+      "Curve25519Scalar",
+      "Curve25519Point"
     ],
     "derivedSourceEncodings": [
       "Bool as constrained Native 0/1",
@@ -5124,7 +5127,7 @@
       "focusedChecks": "Compiler/source guards, real Rust witness Session, source-generated native checker case with BigUint field expectations, separate generator route point expectations,64-byte field reduction, empty field assertion, unchanged inactive marker cells and87private fields. Each of4guard failures rejects in host and raw native preimage. Legacy320 runtime compiles.",
       "nativeCheckerRuntimeSeconds": 0.03,
       "sourceSemantics": "Pure field arithmetic and directly checked point rules, with explicit fail-closed oracle hooks for other point math and SEC1 codecs. Oracle results are validated for kind/canonicality.",
-      "limits": "No new opcode names, keys, proofs or deployment. No claim of whole-language preservation. Scalar cells/map values have separate foreignStorageEvidence. Foreign keys, record/tree storage, Curve25519 and nonidentity point load_constant remain open."
+      "limits": "No new opcode names, keys, proofs or deployment. No claim of whole-language preservation. Scalar cells/map values and Curve25519 have separate evidence below. Foreign keys, record/tree storage and nonidentity point load_constant remain open."
     },
     "foreignStorageEvidence": {
       "issue": 75,
@@ -5136,7 +5139,26 @@
       "defaults": "Constructor defaults and inactive guarded reads use logical field zero or point identity, encoded with the native codec. Inactive reads do not inspect state or evaluate a skipped index.",
       "focusedChecks": "Compiler build (66 jobs), Lean source and semantic assertions, source artifact export, one native checker case with two updates, 24 typed results (72 return fields), old values, guarded absent-map defaults, cell/map overwrites and sibling preservation. Altered public transcript, stored width, high limb, point encoding and foreign map-key schema reject. Legacy320 library compiles.",
       "nativeCheckerRuntimeSeconds": 0.05,
-      "limits": "No new opcode names, keys, proofs, deployment or Rust Session campaign. Runtime control parsing did not change. Foreign map keys, record leaves, tree storage, Curve25519, nonidentity point load_constant and full formal preservation remain open."
+      "limits": "No new opcode names, keys, proofs, deployment or Rust Session campaign for this slice. Runtime control parsing did not change. Curve25519 has separate evidence below. Foreign map keys, record leaves, tree storage, nonidentity point load_constant and full formal preservation remain open."
+    },
+    "curve25519Evidence": {
+      "issue": 76,
+      "implementationCommit": "94326b038abc3af775c26fa39e8b58a9c7dae721",
+      "source": "../../tests/Curve25519.lean",
+      "sourceModel": "../../tests/Curve25519Encoding.lean",
+      "native": "../../runtime/tests/curve25519.rs",
+      "codec": "../../runtime/tests/curve25519_codec.rs",
+      "vectors": "../../runtime/tests/fixtures/curve25519/321/encoding.json",
+      "guide": "../development/curve25519.md",
+      "scope": "Curve25519 Base/Scalar/Point: explicit source types and literals, public/private input transport, generic field/group operations, coordinates, canonical point and reducing field byte conversions, typed results and direct scalar cell/map-value storage.",
+      "representation": "Prime-order Edwards points use four Field atoms (x2,y2), 32-byte Ed25519 compression and one logical identity. Identity bytes01 then31zeros, coordinates(0,1). Coordinate construction/extraction accept identity. Edwards negation changes x.",
+      "scalarEncoding": "Canonical x-1 mod q splits at204 low bits for Curve25519 Scalar. Pinned AssignedField packs four51-bit limbs into the first Native field and one into the second. Base/point coordinate splitting stays192. Source canonical reconstruction requires shifted<modulus; scalar high is at most2^48. Native producer low bounds use Kind.lowRadix.",
+      "subgroupBoundary": "Pure Lean canonical validation checks coordinate bounds, Edwards equation and253-bit projective multiplication by the prime subgroup order. Raw duplicate affine identity rejects. Decoder/fromCoordinates normalize(0,1) to identity. Native Rust reuses the pinned subgroup decoder and exact re-encode check.",
+      "focusedChecks": "66-job compiler build, focused source/model checks, seven field vectors plus identity/generator compared with native, one real witness Session, one source-generated native checker case. Three typed public inputs, five private inputs totaling73fields,15typed results, point4-field cells/maps, old/missing/default values, arithmetic/bytes and guarded malformed decode. Changed public transcript, active invalid decode and zero inverse reject in both host and raw native preimage. Existing six-type Secp codec and legacy320 library compilation pass.",
+      "nativeCheckerRuntimeSeconds": 0.03,
+      "sourceModelExportSeconds": 0.9,
+      "witnessSessionRuntimeSeconds": 0.01,
+      "limits": "No new opcode names, keys, proofs or deployment. Executable subgroup validation is not a formal proof of Edwards formulas or full compiler preservation. Foreign keys, record/tree storage, nonidentity point load_constant and broader type/overload qualification remain open."
     }
   }
 }
