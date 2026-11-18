@@ -173,6 +173,10 @@ private def readScalarTy (stx : TSyntax `nltype) : CommandElabM Ty := do
     | .error message => throwErrorAt stx message
     | _ => throwErrorAt stx "invalid unsigned range"
   | `(nltype| Bytes32) => pure (.bytes 32)
+  | `(nltype| Bytes $length:num) => do
+    if length.getNat > Types.defaultLimits.maxVectorLength then
+      throwErrorAt stx s!"byte string length exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    pure (.bytes length.getNat)
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
   | _ => throwErrorAt stx "unsupported readable witness scalar type"
@@ -271,6 +275,7 @@ private partial def renderType : TSyntax `nltype → String
   | `(nltype| UInt $bits:num) => s!"UInt {bits.getNat}"
   | `(nltype| UIntRange $exclusive:num) => s!"UIntRange {exclusive.getNat}"
   | `(nltype| Bytes32) => "Bytes32"
+  | `(nltype| Bytes $length:num) => s!"Bytes {length.getNat}"
   | `(nltype| JubjubScalar) => "JubjubScalar"
   | `(nltype| JubjubPoint) => "JubjubPoint"
   | _ => "?"
@@ -299,6 +304,10 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"poseidon2({domain.getNat}, {renderExpr left}, {renderExpr right})"
   | `(nlexpr| persistentHash32($value)) => s!"persistentHash32({renderExpr value})"
   | `(nlexpr| bytes32($literal:str)) => s!"bytes32({(toJson literal.getString).compress})"
+  | `(nlexpr| bytes($length:num, $literal:str)) =>
+    s!"bytes({length.getNat}, {(toJson literal.getString).compress})"
+  | `(nlexpr| byteAt($value, $index:num)) =>
+    s!"byteAt({renderExpr value}, {index.getNat})"
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     s!"persistentHashVector32([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashNative($value)) => s!"persistentHashNative({renderExpr value})"
@@ -306,6 +315,11 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"persistentHashNativeVector([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
   | `(nlexpr| persistentHashPoint($point)) => s!"persistentHashPoint({renderExpr point})"
   | `(nlexpr| reverseBytes32($value)) => s!"reverseBytes32({renderExpr value})"
+  | `(nlexpr| reverseBytes($value)) => s!"reverseBytes({renderExpr value})"
+  | `(nlexpr| sliceBytes($value, $start:num, $stop:num)) =>
+    s!"sliceBytes({renderExpr value}, {start.getNat}, {stop.getNat})"
+  | `(nlexpr| concatBytes($left, $right)) =>
+    s!"concatBytes({renderExpr left}, {renderExpr right})"
   | `(nlexpr| degradeToNative($value)) => s!"degradeToNative({renderExpr value})"
   | `(nlexpr| toBytes32($value)) => s!"toBytes32({renderExpr value})"
   | `(nlexpr| jubjubScalarFromNative($value)) => s!"jubjubScalarFromNative({renderExpr value})"
@@ -336,7 +350,11 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| poseidon2($_:num, $left, $right)) => disclosedValues left ++ disclosedValues right
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value))
-  | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value)) => disclosedValues value
+  | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
+  | `(nlexpr| reverseBytes($value)) => disclosedValues value
+  | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => disclosedValues value
+  | `(nlexpr| concatBytes($left, $right)) => disclosedValues left ++ disclosedValues right
+  | `(nlexpr| byteAt($value, $_:num)) => disclosedValues value
   | `(nlexpr| persistentHashVector32([$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap disclosedValues
   | `(nlexpr| jubjubScalarFromNative($value))
@@ -366,7 +384,11 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| poseidon2($_:num, $left, $right)) => inlineAssertions left ++ inlineAssertions right
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| degradeToNative($value))
-  | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value)) => inlineAssertions value
+  | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
+  | `(nlexpr| reverseBytes($value)) => inlineAssertions value
+  | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => inlineAssertions value
+  | `(nlexpr| concatBytes($left, $right)) => inlineAssertions left ++ inlineAssertions right
+  | `(nlexpr| byteAt($value, $_:num)) => inlineAssertions value
   | `(nlexpr| persistentHashVector32([$values,*]))
   | `(nlexpr| persistentHashNativeVector([$values,*])) => values.getElems.toList.flatMap inlineAssertions
   | `(nlexpr| jubjubScalarFromNative($value))
@@ -497,6 +519,25 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
     pure {type := .scalar (.bytes 32), term := .bytes32Literal (bytes ++ List.replicate (32 - bytes.length) 0)}
+  | `(nlexpr| bytes($length:num, $literal:str)) => do
+    let length := length.getNat
+    if length > Types.defaultLimits.maxVectorLength then
+      throwErrorAt stx s!"byte string length exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+    let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
+    if bytes.length > length then
+      throwErrorAt stx s!"byte string literal exceeds its declared length {length}"
+    let values := bytes ++ List.replicate (length - bytes.length) 0
+    let operation := Noctium.Helpers.BytesOp.bytesLiteral length values
+    match operation.signature 0 with
+    | .error message => throwErrorAt stx message
+    | .ok _ => pure ()
+    pure {type := .scalar (.bytes length), term := .bytes operation []}
+  | `(nlexpr| byteAt($value, $index:num)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type
+      | throwErrorAt stx "byteAt requires a fixed byte-string value"
+    unless index.getNat < length do throwErrorAt stx "byteAt index is outside the byte string"
+    pure (mergeLowered (.scalar (.uint 255)) (.bytesAt value.term index.getNat) [value])
   | `(nlexpr| persistentHash32($value)) =>
     lowerBytesOperation programName callPrefix env stx .persistentHash32 [value]
   | `(nlexpr| persistentHashVector32([$values,*])) =>
@@ -509,6 +550,37 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     lowerBytesOperation programName callPrefix env stx .persistentHashPoint [point]
   | `(nlexpr| reverseBytes32($value)) =>
     lowerBytesOperation programName callPrefix env stx .reverseBytes32 [value]
+  | `(nlexpr| reverseBytes($value)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type
+      | throwErrorAt stx "reverseBytes requires a fixed byte-string value"
+    let operation := Noctium.Helpers.BytesOp.reverseBytes length
+    match operation.signature 1 with
+    | .error message => throwErrorAt stx message
+    | .ok _ => pure ()
+    pure (mergeLowered (.scalar (.bytes length)) (.bytes operation [value.term]) [value])
+  | `(nlexpr| sliceBytes($value, $start:num, $stop:num)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type
+      | throwErrorAt stx "sliceBytes requires a fixed byte-string value"
+    let operation := Noctium.Helpers.BytesOp.sliceBytes length start.getNat stop.getNat
+    match operation.signature 1 with
+    | .error message => throwErrorAt stx message
+    | .ok _ => pure ()
+    let resultLength := stop.getNat - start.getNat
+    pure (mergeLowered (.scalar (.bytes resultLength)) (.bytes operation [value.term]) [value])
+  | `(nlexpr| concatBytes($left, $right)) => do
+    let left ← lowerExpr programName callPrefix env left
+    let right ← lowerExpr programName callPrefix env right
+    let .scalar (.bytes leftLength) := left.type
+      | throwErrorAt stx "concatBytes requires fixed byte-string values"
+    let .scalar (.bytes rightLength) := right.type
+      | throwErrorAt stx "concatBytes requires fixed byte-string values"
+    let operation := Noctium.Helpers.BytesOp.concatBytes leftLength rightLength
+    let (_, resultType) ← match operation.signature 2 with
+      | .error message => throwErrorAt stx message
+      | .ok signature => pure signature
+    pure (mergeLowered (.scalar resultType) (.bytes operation [left.term, right.term]) [left, right])
   | `(nlexpr| degradeToNative($value)) =>
     lowerBytesOperation programName callPrefix env stx .degradeToNative [value]
   | `(nlexpr| toBytes32($value)) => do
@@ -539,11 +611,11 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let signatureName := signature.name
     validIdentity function signatureName
     unless signature.parameters.all (fun p => match p.type with
-      | .scalar ty => !ty.isBytes || ty == .bytes 32
+      | .scalar _ => _root_.Bool.true
       | _ => _root_.Bool.false) do
       throwErrorAt function "witness callback parameters must use supported scalar types"
     let supportedResult : _root_.Bool := match signature.result with
-      | .scalar ty => !ty.isBytes || ty == .bytes 32
+      | .scalar _ => _root_.Bool.true
       | .unit => _root_.Bool.true
       | .composite _ => _root_.Bool.false
     if !supportedResult then
@@ -577,7 +649,7 @@ where
       | .error message => throwErrorAt stx message
     let values ← arguments.mapM (lowerExpr programName callPrefix env)
     for (value, expectedType) in values.zip expected do
-      let .scalar actualType := value.type | throwErrorAt stx "Bytes32 operation argument cannot be Unit"
+      let .scalar actualType := value.type | throwErrorAt stx "byte operation argument cannot be Unit"
       unless actualType == expectedType do
         throwErrorAt stx s!"{operation.operationName} argument type mismatch"
     let term := Noctium.Helpers.Term.bytes operation (values.map (·.term))
@@ -678,8 +750,16 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .persistentHashNativeVector => `(Noctium.Helpers.BytesOp.persistentHashNativeVector)
       | .persistentHashPoint => `(Noctium.Helpers.BytesOp.persistentHashPoint)
       | .reverseBytes32 => `(Noctium.Helpers.BytesOp.reverseBytes32)
+      | .reverseBytes length => `(Noctium.Helpers.BytesOp.reverseBytes $(natTerm length))
+      | .sliceBytes length start stop =>
+        `(Noctium.Helpers.BytesOp.sliceBytes $(natTerm length) $(natTerm start) $(natTerm stop))
+      | .concatBytes leftLength rightLength =>
+        `(Noctium.Helpers.BytesOp.concatBytes $(natTerm leftLength) $(natTerm rightLength))
       | .degradeToNative => `(Noctium.Helpers.BytesOp.degradeToNative)
       | .toBytes32 source => `(Noctium.Helpers.BytesOp.toBytes32 $(← tyTerm source))
+      | .bytesLiteral length values => do
+        let values := values.map natTerm |>.toArray
+        `(Noctium.Helpers.BytesOp.bytesLiteral $(natTerm length) [$values,*])
     let arguments ← arguments.mapM termTerm
     let arguments := arguments.toArray
     `(Noctium.Helpers.Term.bytes $operation [$arguments,*])
@@ -1107,7 +1187,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         let fieldType ← match field.type with
           | .scalar ty => `(Noctium.Types.CompositeType.scalar $(← tyTerm ty))
           | .bytes length => `(Noctium.Types.CompositeType.bytes $(natTerm length))
-          | _ => throwErrorAt stx "readable witness record outputs require scalar or Bytes32 fields"
+          | _ => throwErrorAt stx "readable witness record outputs require scalar or fixed byte-string fields"
         let fieldSpan ← quoteSpan field.span
         `(Noctium.Types.Field.mk $(stringTerm field.name)
           $fieldType $fieldSpan)

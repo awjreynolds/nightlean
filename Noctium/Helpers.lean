@@ -94,26 +94,35 @@ def CurveOp.signature : CurveOp → List Ty × Ty
   | .x | .y => ([.jubjubPoint], .native)
   | .fromCoordinates => ([.native, .native], .jubjubPoint)
 
-/-- Closed readable Bytes32/hash operations. Vector operations are bounded at
-the typed source boundary, and point hashing follows FAB affine coordinates. -/
+/-- Closed readable byte/hash operations. Vector and fixed-byte lengths are
+bounded at the typed source boundary, and point hashing follows FAB affine
+coordinates. -/
 inductive BytesOp where
+  | bytesLiteral (length : Nat) (values : List Nat)
   | persistentHash32
   | persistentHashVector32
   | persistentHashNative
   | persistentHashNativeVector
   | persistentHashPoint
   | reverseBytes32
+  | reverseBytes (length : Nat)
+  | sliceBytes (length start stop : Nat)
+  | concatBytes (leftLength rightLength : Nat)
   | degradeToNative
   | toBytes32 (source : Ty)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def BytesOp.operationName : BytesOp → String
+  | .bytesLiteral _ _ => "bytesLiteral"
   | .persistentHash32 => "persistentHash32"
   | .persistentHashVector32 => "persistentHashVector32"
   | .persistentHashNative => "persistentHashNative"
   | .persistentHashNativeVector => "persistentHashNativeVector"
   | .persistentHashPoint => "persistentHashPoint"
   | .reverseBytes32 => "reverseBytes32"
+  | .reverseBytes length => s!"reverseBytes:{length}"
+  | .sliceBytes length start stop => s!"sliceBytes:{length}:{start}:{stop}"
+  | .concatBytes leftLength rightLength => s!"concatBytes:{leftLength}:{rightLength}"
   | .degradeToNative => "degradeToNative"
   | .toBytes32 .native => "nativeToBytes32"
   | .toBytes32 .jubjubScalar => "jubjubScalarToBytes32"
@@ -122,6 +131,12 @@ def BytesOp.operationName : BytesOp → String
 
 def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except String (List Ty × Ty) := do
   match operation with
+  | .bytesLiteral length values =>
+    unless argumentCount == 0 do throw "bytes literal does not accept arguments"
+    unless length ≤ Types.defaultLimits.maxVectorLength do throw "byte literal length exceeds the source limit"
+    unless values.length == length && values.all (· ≤ 255) do
+      throw "byte literal must contain exactly its declared number of octets"
+    pure ([], .bytes length)
   | .persistentHash32 =>
     unless argumentCount == 1 do throw "persistentHash32 requires one Bytes32 argument"
     pure ([.bytes 32], .bytes 32)
@@ -142,6 +157,22 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
   | .reverseBytes32 =>
     unless argumentCount == 1 do throw "reverseBytes32 requires one Bytes32 argument"
     pure ([.bytes 32], .bytes 32)
+  | .reverseBytes length =>
+    unless argumentCount == 1 do throw "reverseBytes requires one byte-string argument"
+    unless length ≤ Types.defaultLimits.maxVectorLength do throw "reverseBytes length exceeds the source limit"
+    pure ([.bytes length], .bytes length)
+  | .sliceBytes length start stop =>
+    unless argumentCount == 1 do throw "sliceBytes requires one byte-string argument"
+    unless length ≤ Types.defaultLimits.maxVectorLength do throw "sliceBytes length exceeds the source limit"
+    unless start ≤ stop && stop ≤ length do throw "sliceBytes bounds are outside the source byte string"
+    pure ([.bytes length], .bytes (stop - start))
+  | .concatBytes leftLength rightLength =>
+    unless argumentCount == 2 do throw "concatBytes requires two byte-string arguments"
+    unless leftLength ≤ Types.defaultLimits.maxVectorLength &&
+        rightLength ≤ Types.defaultLimits.maxVectorLength &&
+        leftLength + rightLength ≤ Types.defaultLimits.maxVectorLength do
+      throw "concatBytes result exceeds the source byte limit"
+    pure ([.bytes leftLength, .bytes rightLength], .bytes (leftLength + rightLength))
   | .degradeToNative =>
     unless argumentCount == 1 do throw "degradeToNative requires one Bytes32 argument"
     pure ([.bytes 32], .native)
@@ -171,8 +202,7 @@ inductive Term where
   | curve (operation : CurveOp) (arguments : List Term)
   | bytes (operation : BytesOp) (arguments : List Term)
   | bytes32Literal (values : List Nat)
-  /-- Project one checked byte from a typed Bytes32 value. The result is
-  lowered through the existing byteAt expression and Control encoding. -/
+  /-- Project one checked byte from a fixed-length source byte string. -/
   | bytesAt (value : Term) (index : Nat)
   | call (name : String) (arguments : List Term)
   /-- A checked aggregate assembled from scalar source terms in canonical leaf order. -/
@@ -473,8 +503,6 @@ private def projectedType (program : Program) (span : SourceSpan)
 private def validateResultType (program : Program) (span : SourceSpan) : ResultType → Except Diagnostic Unit
   | .unit => pure ()
   | .scalar type => do
-    if type.isBytes && type != .bytes 32 then
-      fail span "only Bytes32 is supported as a readable witness scalar"
     liftError span (type.validate Capabilities.crypto)
   | .composite type => discard (checkedComposite program span type)
 
@@ -954,13 +982,6 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       unless bytes.length == 32 && bytes.all (· ≤ 255) do
         fail span "Bytes32 literal must contain exactly 32 byte values"
       pure {ty := .scalar (.bytes 32)}
-    | .bytesAt value index => do
-      let value ← inferTerm fuel program scope env span value
-      let .scalar (.bytes length) := value.ty
-        | fail span "byteAt requires a Bytes32 value"
-      unless length == 32 && index < length do
-        fail span "byteAt index is outside Bytes32"
-      pure (combine (.scalar (.uint 255)) [value])
     | .bytes operation arguments => do
       let (expected, result) ← (operation.signature arguments.length).mapError fun message =>
         {span, message}
@@ -969,6 +990,13 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
         unless value.ty == .scalar expectedType do
           fail span s!"{operation.operationName} argument type mismatch"
       pure (combine (.scalar result) values)
+    | .bytesAt value index => do
+      let value ← inferTerm fuel program scope env span value
+      let .scalar (.bytes length) := value.ty
+        | fail span "byteAt requires a fixed byte-string value"
+      unless index < length do
+        fail span "byteAt index is outside the byte string"
+      pure (combine (.scalar (.uint 255)) [value])
     | .call name arguments =>
       if (env.lookup name).isSome then fail span s!"helper '{name}' is hidden by a value binding"
       let arguments ← arguments.mapM (inferTerm fuel program scope env span)
@@ -1416,12 +1444,23 @@ mutual
       let right ← lowerTerm program scope env span right
       let constraints := left.constraints ++ right.constraints
       let ty ← liftD (common span left.scalar.ty right.scalar.ty)
-      let value ← if ty == .bytes 32 then do
-        let left ← liftD (typedExpr span (.bytes 32) left)
-        let right ← liftD (typedExpr span (.bytes 32) right)
-        let highEqual := Expr.eq (Expr.bytesField left 0) (Expr.bytesField right 0)
-        let lowEqual := Expr.eq (Expr.bytesField left 1) (Expr.bytesField right 1)
-        pure (Expr.select highEqual lowEqual (.bool false))
+      let value ← if ty.isBytes then do
+        let .bytes length := ty | liftD (fail span "byte equality requires a fixed byte-string type")
+        let left ← liftD (typedExpr span (.bytes length) left)
+        let right ← liftD (typedExpr span (.bytes length) right)
+        let equalities := (List.range ((length + 30) / 31)).map fun chunk =>
+          Expr.eq (Expr.bytesField left chunk) (Expr.bytesField right chunk)
+        let value := match equalities with
+          | [] => .bool true
+          | first :: rest => rest.foldl (fun accumulated next =>
+              Expr.select accumulated next (.bool false)) first
+        if length == 0 then do
+          let leftName ← fresh
+          let rightName ← fresh
+          pure (Expr.letE leftName left
+            (Expr.letE rightName right (.bool true)))
+        else
+          pure value
       else do
         let left ← liftD (typedExpr span ty left)
         let right ← liftD (typedExpr span ty right)
@@ -1548,9 +1587,9 @@ mutual
     | .bytesAt value index => do
       let value ← lowerTerm program scope env span value
       let .scalar (.bytes length) := value.ty
-        | liftD (fail span "byteAt requires a Bytes32 value")
-      unless length == 32 && index < length do
-        liftD (fail span "byteAt index is outside Bytes32")
+        | liftD (fail span "byteAt requires a fixed byte-string value")
+      unless index < length do
+        liftD (fail span "byteAt index is outside the byte string")
       let bytes ← liftD (typedExpr span (.bytes length) value)
       pure {scalarValue (Expr.bytesAt bytes index) with constraints := value.constraints}
     | .bytes operation arguments => do
@@ -1561,6 +1600,8 @@ mutual
         unless value.ty == .scalar expectedType do
           liftD (fail span s!"{operation.operationName} argument type mismatch")
       let result ← match operation, values with
+        | .bytesLiteral length bytes, [] => do
+          pure (scalarValue (Expr.bytesLiteral length bytes))
         | .persistentHash32, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.persistentHash32 value))
@@ -1580,13 +1621,23 @@ mutual
         | .reverseBytes32, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.reverseBytes32 value))
+        | .reverseBytes length, [value] => do
+          let value ← liftD (typedExpr span (.bytes length) value)
+          pure (scalarValue (Expr.reverseBytes value))
+        | .sliceBytes length start stop, [value] => do
+          let value ← liftD (typedExpr span (.bytes length) value)
+          pure (scalarValue (Expr.sliceBytes value start stop))
+        | .concatBytes leftLength rightLength, [left, right] => do
+          let left ← liftD (typedExpr span (.bytes leftLength) left)
+          let right ← liftD (typedExpr span (.bytes rightLength) right)
+          pure (scalarValue (Expr.concatBytes left right))
         | .toBytes32 source, [value] => do
           let value ← liftD (typedExpr span source value)
           pure (scalarValue (Expr.toBytes32 value))
         | .degradeToNative, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.bytesField value 1))
-        | _, _ => liftD (fail span "invalid checked Bytes32 operation shape")
+        | _, _ => liftD (fail span "invalid checked byte operation shape")
       pure {result with constraints := values.flatMap (·.constraints) ++ result.constraints}
     | .call name arguments =>
       let values ← arguments.mapM (lowerTerm program scope env span)
@@ -1919,9 +1970,9 @@ mutual
       pure (some value)
     -- shortcut: curve diagnostic traces need typed point values; extend the trace model before enabling them.
     | .curve .. => liftM (fail span "Jubjub helper evaluation requires the native control runtime")
-    -- shortcut: Bytes32 traces need ordered byte values; extend the trace model before enabling them.
+    -- shortcut: byte traces need ordered byte values; extend the trace model before enabling them.
     | .bytes32Literal _ | .bytes .. | .bytesAt .. =>
-      liftM (fail span "Bytes32 helper evaluation requires the qualified native control runtime")
+      liftM (fail span "byte-string helper evaluation requires the qualified native control runtime")
     | .call name arguments =>
       let values ← arguments.mapM (traceTerm program ctx scope env span)
       let declaration ← liftM (resolveUnchecked program scope name (values.map traceType) span)

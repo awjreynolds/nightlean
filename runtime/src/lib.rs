@@ -100,6 +100,31 @@ pub fn field_value(n: Fr) -> AlignedValue {
         alignment: Alignment::singleton(AlignmentAtom::Field),
     }
 }
+fn aligned_bytes(value: &Value) -> Result<AlignedValue> {
+    value.validate()?;
+    let Value::Bytes(bytes) = value else {
+        bail!("expected bytes value")
+    };
+    Ok(AlignedValue {
+        value: FabValue(vec![ValueAtom::from(bytes.as_slice())]),
+        alignment: Alignment::singleton(AlignmentAtom::Bytes {
+            length: bytes.len() as u32,
+        }),
+    })
+}
+
+fn evaluated_bytes(value: &Expr, length: usize, env: &Environment) -> Result<Vec<u8>> {
+    ensure!(
+        length <= scalars::MAX_BYTES_LENGTH,
+        "byte length exceeds compiler limit"
+    );
+    let Value::Bytes(bytes) = evaluate(value, env)? else {
+        bail!("expected bytes value")
+    };
+    ensure!(bytes.len() == length, "byte operand length mismatch");
+    Ok(bytes)
+}
+
 fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
     match alignment {
         "field" => Ok(field_value(value.field_encoding()?)),
@@ -178,6 +203,32 @@ pub enum Expr {
     #[serde(rename = "reverseBytes32")]
     ReverseBytes32 {
         value: Box<Expr>,
+    },
+    #[serde(rename = "bytesLiteral")]
+    BytesLiteral {
+        length: usize,
+        values: Vec<u8>,
+    },
+    #[serde(rename = "reverseBytes")]
+    ReverseBytes {
+        length: usize,
+        value: Box<Expr>,
+    },
+    #[serde(rename = "sliceBytes")]
+    SliceBytes {
+        length: usize,
+        value: Box<Expr>,
+        start: usize,
+        end: usize,
+    },
+    #[serde(rename = "concatBytes")]
+    ConcatBytes {
+        #[serde(rename = "leftLength")]
+        left_length: usize,
+        #[serde(rename = "rightLength")]
+        right_length: usize,
+        left: Box<Expr>,
+        right: Box<Expr>,
     },
     #[serde(rename = "fromBytes32")]
     FromBytes32 {
@@ -374,13 +425,13 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             }
         }
         Expr::BytesField { value, index } => {
-            let value = aligned(&evaluate(value, env)?, "bytes32")?;
+            let value = aligned_bytes(&evaluate(value, env)?)?;
             let mut fields = Vec::new();
             value.value_only_field_repr(&mut fields);
             Value::Native(
                 *fields
                     .get(*index)
-                    .ok_or_else(|| anyhow!("Bytes32 field index must be 0 or 1"))?,
+                    .ok_or_else(|| anyhow!("byte field index out of range"))?,
             )
         }
         Expr::Bytes32Literal { values } => {
@@ -388,6 +439,14 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 values.len() == 32,
                 "Bytes32 literal must contain exactly 32 bytes"
             );
+            Value::Bytes(values.clone())
+        }
+        Expr::BytesLiteral { length, values } => {
+            ensure!(
+                *length <= scalars::MAX_BYTES_LENGTH,
+                "byte length exceeds compiler limit"
+            );
+            ensure!(values.len() == *length, "byte literal length mismatch");
             Value::Bytes(values.clone())
         }
         Expr::PersistentHash32 { value } => {
@@ -444,6 +503,40 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             };
             ensure!(bytes.len() == 32, "reverseBytes32 requires 32 bytes");
             bytes.reverse();
+            Value::Bytes(bytes)
+        }
+        Expr::ReverseBytes { length, value } => {
+            let mut bytes = evaluated_bytes(value, *length, env)?;
+            bytes.reverse();
+            Value::Bytes(bytes)
+        }
+        Expr::SliceBytes {
+            length,
+            value,
+            start,
+            end,
+        } => {
+            ensure!(
+                start <= end && *end <= *length,
+                "byte slice bounds are invalid"
+            );
+            let bytes = evaluated_bytes(value, *length, env)?;
+            Value::Bytes(bytes[*start..*end].to_vec())
+        }
+        Expr::ConcatBytes {
+            left_length,
+            right_length,
+            left,
+            right,
+        } => {
+            ensure!(
+                left_length
+                    .checked_add(*right_length)
+                    .is_some_and(|length| length <= scalars::MAX_BYTES_LENGTH),
+                "concatenated byte length exceeds compiler limit"
+            );
+            let mut bytes = evaluated_bytes(left, *left_length, env)?;
+            bytes.extend(evaluated_bytes(right, *right_length, env)?);
             Value::Bytes(bytes)
         }
         Expr::FromBytes32 { ty, value } => {
@@ -845,7 +938,12 @@ fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<Scalar
             let key = parts[0]
                 .as_str()
                 .ok_or_else(|| anyhow!("invalid map key schema"))?;
-            types.push(ScalarType::parse(key)?);
+            let key = ScalarType::parse(key)?;
+            ensure!(
+                !matches!(key, ScalarType::Bytes(_)),
+                "only Bytes32 byte map keys are supported"
+            );
+            types.push(key);
             schema = &parts[1];
         }
         return Ok(types);
@@ -857,11 +955,16 @@ fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<Scalar
         .and_then(Json::as_array)
         .filter(|parts| parts.len() == 2)
         .ok_or_else(|| anyhow!("invalid map key schema"))?;
-    Ok(vec![ScalarType::parse(
+    let key = ScalarType::parse(
         parts[0]
             .as_str()
             .ok_or_else(|| anyhow!("invalid map key schema"))?,
-    )?])
+    )?;
+    ensure!(
+        !matches!(key, ScalarType::Bytes(_)),
+        "only Bytes32 byte map keys are supported"
+    );
+    Ok(vec![key])
 }
 
 fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
@@ -887,7 +990,7 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
     }
     if let Some(ty) = fields.get("scalar").and_then(Json::as_str) {
         ensure!(
-            ScalarType::parse(ty)? != ScalarType::Bytes32,
+            ScalarType::parse(ty)?.bytes_length().is_none(),
             "bytes ledger values are unsupported"
         );
         return Ok(());
@@ -901,11 +1004,15 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         .and_then(Json::as_array)
         .filter(|parts| parts.len() == 2)
         .ok_or_else(|| anyhow!("invalid state tree map schema"))?;
-    ScalarType::parse(
+    let key = ScalarType::parse(
         parts[0]
             .as_str()
             .ok_or_else(|| anyhow!("invalid state tree key type"))?,
     )?;
+    ensure!(
+        !matches!(key, ScalarType::Bytes(_)),
+        "only Bytes32 byte map keys are supported"
+    );
     validate_tree_schema(&parts[1], depth + 1)
 }
 
@@ -979,6 +1086,7 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
             maximum,
         },
         ScalarType::Bytes32 => Value::Bytes(vec![0; 32]),
+        ScalarType::Bytes(length) => Value::Bytes(vec![0; length]),
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
             bail!("Jubjub ledger reads require typed coordinate records")
         }
@@ -1024,7 +1132,7 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
             )?,
             maximum,
         }),
-        ScalarType::Bytes32 => {
+        bytes_type @ (ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
             let object = json
                 .as_object()
                 .ok_or_else(|| anyhow!("expected bytes object"))?;
@@ -1036,7 +1144,10 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
                 .get("values")
                 .and_then(Json::as_array)
                 .ok_or_else(|| anyhow!("expected bytes array"))?;
-            ensure!(values.len() == 32, "expected 32 bytes");
+            ensure!(
+                values.len() == bytes_type.bytes_length().unwrap(),
+                "byte input length mismatch"
+            );
             let bytes = values
                 .iter()
                 .map(|value| {
@@ -1157,6 +1268,13 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                 "unsupported map schema"
             );
             ensure!(
+                types.iter().all(|ty| !matches!(
+                    ScalarType::parse(ty.as_str().unwrap()),
+                    Ok(ScalarType::Bytes(_))
+                )),
+                "general byte map schemas require explicit native ledger support"
+            );
+            ensure!(
                 value.as_array().is_some_and(|a| a.is_empty()),
                 "initial map must be explicitly empty"
             );
@@ -1263,7 +1381,7 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
             bool::try_from(fields[0]).map_err(|_| anyhow!("noncanonical state bool"))?,
         )),
         ScalarType::UInt(_) => input_value(ty, &Json::String(field_decimal(fields[0]))),
-        ScalarType::Bytes32 => bail!("bytes ledger values are unsupported"),
+        ScalarType::Bytes32 | ScalarType::Bytes(_) => bail!("bytes ledger values are unsupported"),
         ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
             bail!("Jubjub ledger values require typed coordinate records")
         }
@@ -1490,7 +1608,7 @@ fn aligned_call_returns(values: &[(String, Value)]) -> Result<AlignedValue> {
     for (_, value) in values {
         value.validate()?;
         match value {
-            Value::Bytes(_) => aligned(value, "bytes32")?.value_only_field_repr(&mut fields),
+            Value::Bytes(_) => aligned_bytes(value)?.value_only_field_repr(&mut fields),
             Value::JubjubScalar(value) => fields.push(jubjub::scalar_native(*value)?),
             Value::JubjubPoint(value) => fields.extend(jubjub::coordinates(*value)?),
             _ => fields.push(value.field_encoding()?),

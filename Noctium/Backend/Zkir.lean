@@ -41,7 +41,9 @@ private def checkConstants : Expr ty → Except String Unit
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
   | .toBytes32 value => checkConstants value
-  | .reverseBytes32 value => checkConstants value
+  | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => checkConstants value
+  | .concatBytes left right => do checkConstants left; checkConstants right
+  | .bytesLiteral _ _ => pure ()
   | .fromBytes32 value => checkConstants value
   | .inv value => checkConstants value
   | .persistentHash32 value => checkConstants value
@@ -100,12 +102,17 @@ where
 Structural keys make cache-hit meaning available to kernel proofs. -/
 abbrev ExpressionKey := String × List String × Option Nat
 
+/-- Byte leaves and encoded chunks must remain distinct, including Bytes1. -/
+structure ByteOperands where
+  values : List String
+  packed : Bool := false
+
 structure LowerState where
   next : Nat := 0
   instructions : Array Json := #[]
   expressions : List (ExpressionKey × String) := []
   aliases : List (String × String) := []
-  byteAliases : List (String × List String) := []
+  byteAliases : List (String × ByteOperands) := []
   pointCoordinates : List (String × (String × String)) := []
 
 private abbrev LowerM := StateM LowerState
@@ -339,6 +346,112 @@ private def lowerReverseBytes32 (values : List String) : LowerM (List String) :=
   let (low, high) ← encodeBytes32 reversed
   pure [low, high]
 
+private def byteChunks (length : Nat) (bytes : ByteOperands) : LowerM (List String) := do
+  if bytes.packed then
+    if bytes.values.length != Native.bytesChunkCount length then
+      rejectLowering "byte chunk count mismatch"
+    pure bytes.values
+  else if bytes.values.length != length then
+    rejectLowering "byte leaf count mismatch"
+    pure []
+  else
+    (List.range (Native.bytesChunkCount length)).mapM fun index => do
+      let chunk := (bytes.values.drop (index * 31)).take 31
+      if chunk.length == 1 then pure chunk.head! else packBytes chunk
+
+private def lowerFixedBytesFromChunks (length : Nat) (chunks : List String) : LowerM String := do
+  if length == 0 then
+    rejectLowering "native Bytes0 values are not supported"
+    return "0x00"
+  let key : ExpressionKey := ("bytes_from_natives", chunks, some length)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "bytes_from_natives" [("inputs", toJson chunks), ("len", toJson length), ("output", toJson output)]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  pure output
+
+private def encodeFixedBytes (length : Nat) (bytes : String) : LowerM ByteOperands := do
+  if length == 32 then
+    let (low, high) ← encodeBytes32 bytes
+    return {values := [low, high], packed := true}
+  let keys := (List.range (Native.bytesChunkCount length)).map fun index =>
+    (("encode_bytes:" ++ toString length, [bytes], some index) : ExpressionKey)
+  -- Lookups are collected before mutation so partial cache hits never reorder outputs.
+  let expressions := (← get).expressions
+  let cached := keys.map (fun key => expressions.lookup key)
+  if cached.all Option.isSome then
+    return {values := cached.filterMap id, packed := true}
+  let outputs ← keys.mapM fun _ => fresh
+  emit "encode" [("input", toJson bytes), ("outputs", toJson outputs)]
+  modify fun state => {state with expressions := keys.zip outputs ++ state.expressions}
+  pure {values := outputs, packed := true}
+
+private def lowerFixedReverse (length : Nat) (value : ByteOperands) : LowerM ByteOperands := do
+  if length == 0 then return {values := []}
+  let input ← lowerFixedBytesFromChunks length (← byteChunks length value)
+  let key : ExpressionKey := ("reverse", [input], none)
+  let output ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "reverse" [("bytes", toJson input), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  encodeFixedBytes length output
+
+private def lowerFixedSlice (length start end_ : Nat) (value : ByteOperands) : LowerM ByteOperands := do
+  if !(start ≤ end_ && end_ ≤ length) then
+    rejectLowering "byte slice is out of range"
+    return {values := []}
+  if start == end_ then return {values := []}
+  let input ← lowerFixedBytesFromChunks length (← byteChunks length value)
+  let key : ExpressionKey := ("slice:" ++ toString start, [input], some (end_ - start))
+  let output ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "slice" [("bytes", toJson input), ("start", toJson start),
+        ("len", toJson (end_ - start)), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  encodeFixedBytes (end_ - start) output
+
+private def lowerFixedConcat (leftLength rightLength : Nat)
+    (left right : ByteOperands) : LowerM ByteOperands := do
+  if leftLength == 0 then return right
+  if rightLength == 0 then return left
+  let left ← lowerFixedBytesFromChunks leftLength (← byteChunks leftLength left)
+  let right ← lowerFixedBytesFromChunks rightLength (← byteChunks rightLength right)
+  let key : ExpressionKey := ("concat", [left, right], none)
+  let output ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "concat" [("inputs", toJson [left, right]), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  encodeFixedBytes (leftLength + rightLength) output
+
+private def lowerFixedByteAt (length index : Nat) (value : ByteOperands) : LowerM String := do
+  if index ≥ length then
+    rejectLowering "byte index is out of range"
+    return "0x00"
+  if !value.packed then
+    if value.values.length != length then
+      rejectLowering "byte leaf count mismatch"
+      return "0x00"
+    return value.values[index]!
+  let input ← lowerFixedBytesFromChunks length (← byteChunks length value)
+  let key : ExpressionKey := ("nth", [input], some index)
+  let byte ← match (← get).expressions.lookup key with
+    | some existing => pure existing
+    | none => do
+      let output ← fresh
+      emit "nth" [("bytes", toJson input), ("index", toJson index), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
+  encodeByte byte
+
 private def nativeTypeName : Ty → String
   | .native => "Scalar<BLS12-381>"
   | .jubjubScalar => "Scalar<Jubjub>"
@@ -386,7 +499,7 @@ private def lowerByteInput (input : Input) : LowerM Unit := do
       emit (if input.visibility == .«public» then "public_input" else "private_input")
         [("guard", Json.null), ("type", nativeType), ("output", toJson output)]
       constrainUnsigned 255 output
-    modify fun state => {state with byteAliases := (input.name, identifiers) :: state.byteAliases}
+    modify fun state => {state with byteAliases := (input.name, {values := identifiers}) :: state.byteAliases}
   | .jubjubScalar => do
     let native := input.nativeIdentifiers.head!
     emit (if input.visibility == .«public» then "public_input" else "private_input")
@@ -410,53 +523,62 @@ private def lowerByteInput (input : Input) : LowerM Unit := do
     constrainType input.ty output
 
 mutual
-private def lowerBytes : Expr (.bytes length) → LowerM (List String)
+private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
   | .ref name => do
     match (← get).byteAliases.lookup name with
     | some values => pure values
     | none =>
       rejectLowering s!"unbound Bytes32 source symbol '{name}'"
-      pure []
+      pure {values := []}
   | .disclose _ value => lowerBytes value
-  | .bytes32Literal values => pure (values.map fieldImmediate)
+  | .bytes32Literal values | .bytesLiteral _ values => pure {values := values.map fieldImmediate}
+  | .reverseBytes (length := length) value => do
+    lowerFixedReverse length (← lowerBytes value)
+  | .sliceBytes (length := length) value start end_ => do
+    lowerFixedSlice length start end_ (← lowerBytes value)
+  | .concatBytes (leftLength := leftLength) (rightLength := rightLength) left right => do
+    let left ← lowerBytes left
+    let right ← lowerBytes right
+    lowerFixedConcat leftLength rightLength left right
   | .persistentHash32 value => do
     let values ← lowerBytes value
-    let (highByte, low31) ← alignedBytes32Fields values
-    lowerPersistentHash "bytes32" bytes32Alignment [highByte, low31]
+    let (highByte, low31) ← alignedBytes32Fields values.values
+    pure {values := ← lowerPersistentHash "bytes32" bytes32Alignment [highByte, low31], packed := true}
   | .persistentHashVector32 values => do
     let operands ← lowerBytes32VectorFields values
     if values.length == 1 then
-      lowerPersistentHash "bytes32" bytes32Alignment operands
+      pure {values := ← lowerPersistentHash "bytes32" bytes32Alignment operands, packed := true}
     else
-      lowerPersistentHash ("bytes32-vector:" ++ toString values.length)
+      let result ← lowerPersistentHash ("bytes32-vector:" ++ toString values.length)
         (bytes32VectorAlignment values.length) operands
+      pure {values := result, packed := true}
   | .persistentHashNative value => do
     let native ← lowerExpr value
-    lowerPersistentHash "native-field" nativeFieldAlignment [native]
+    pure {values := ← lowerPersistentHash "native-field" nativeFieldAlignment [native], packed := true}
   | .persistentHashNativeVector values => do
     let operands ← lowerNativeVectorFields values
     if values.length == 1 then
-      lowerPersistentHash "native-field" nativeFieldAlignment operands
+      pure {values := ← lowerPersistentHash "native-field" nativeFieldAlignment operands, packed := true}
     else
-      lowerPersistentHash ("native-field-vector:" ++ toString values.length)
+      let result ← lowerPersistentHash ("native-field-vector:" ++ toString values.length)
         (nativeFieldVectorAlignment values.length) operands
+      pure {values := result, packed := true}
   | .toBytes32 value => do
     let input ← lowerExpr value
     let (low, high) ← lowerToBytes32 input
-    pure [low, high]
+    pure {values := [low, high], packed := true}
   | .reverseBytes32 value => do
-    lowerReverseBytes32 (← lowerBytes value)
+    pure {values := ← lowerReverseBytes32 (← lowerBytes value).values, packed := true}
   | .select condition yes no => do
     let condition ← lowerExpr condition
-    let (yesLow, yesHigh) ← bytes32Chunks (← lowerBytes yes)
-    let (noLow, noHigh) ← bytes32Chunks (← lowerBytes no)
-    let low ← fresh
-    emit "cond_select" [("bit", toJson condition), ("a", toJson yesLow),
-      ("b", toJson noLow), ("output", toJson low)]
-    let high ← fresh
-    emit "cond_select" [("bit", toJson condition), ("a", toJson yesHigh),
-      ("b", toJson noHigh), ("output", toJson high)]
-    pure [low, high]
+    let yes ← byteChunks length (← lowerBytes yes)
+    let no ← byteChunks length (← lowerBytes no)
+    let values ← (yes.zip no).mapM fun (yes, no) => do
+      let output ← fresh
+      emit "cond_select" [("bit", toJson condition), ("a", toJson yes),
+        ("b", toJson no), ("output", toJson output)]
+      pure output
+    pure {values, packed := true}
   | @Expr.letE (.bytes _) _ name value body => do
     let values ← lowerBytes value
     let aliases := (← get).byteAliases
@@ -476,7 +598,7 @@ private def lowerBytes : Expr (.bytes length) → LowerM (List String)
     lowerBytes body
   | _ => do
     rejectLowering "unsupported Bytes32 expression in native lowering"
-    pure []
+    pure {values := []}
 termination_by value => sizeOf value
 decreasing_by
   all_goals simp_wf <;> omega
@@ -485,7 +607,7 @@ private def lowerBytes32VectorFields : List (Expr (.bytes 32)) → LowerM (List 
   | [] => pure []
   | value :: rest => do
     let bytes ← lowerBytes value
-    let (highByte, low31) ← alignedBytes32Fields bytes
+    let (highByte, low31) ← alignedBytes32Fields bytes.values
     pure ([highByte, low31] ++ (← lowerBytes32VectorFields rest))
 termination_by values => sizeOf values
 decreasing_by
@@ -517,29 +639,23 @@ def lowerExpr : Expr ty → LowerM String
         rejectLowering "unbound typed Jubjub source symbol"
         pure "0x00"
     | _ => pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
-  | .bytesField value index => do
-    let values ← lowerBytes value
-    match values.length, index with
-    | 2, 0 => pure values[1]!
-    | 2, 1 => pure values[0]!
-    | 32, 0 => packBytes (values.drop 31)
-    | 32, 1 => packBytes (values.take 31)
-    | _, _ => do
-      rejectLowering "Bytes32 source or field chunk index has an invalid encoding"
-      pure "0x00"
-  | .bytesAt value index => do
-    let values ← lowerBytes value
-    if values.length == 2 then
-      lowerComputedBytes32ByteAt values index
-    else if values.length != 32 then
-      rejectLowering "Bytes32 source has wrong byte count"
-      pure "0x00"
+  | .bytesField (length := length) value index => do
+    let value ← lowerBytes value
+    if index ≥ Native.bytesChunkCount length then
+      rejectLowering "byte field chunk index is out of range"
+      return "0x00"
+    if value.packed then
+      if value.values.length != Native.bytesChunkCount length then
+        rejectLowering "byte chunk count mismatch"
+        return "0x00"
+      pure value.values.reverse[index]!
     else
-      match values[index]? with
-      | some byte => pure byte
-      | none =>
-        rejectLowering "Bytes32 byte index is out of range"
-        pure "0x00"
+      if value.values.length != length then
+        rejectLowering "byte leaf count mismatch"
+        return "0x00"
+      packBytes ((value.values.drop ((Native.bytesChunkCount length - 1 - index) * 31)).take 31)
+  | .bytesAt (length := length) value index => do
+    lowerFixedByteAt length index (← lowerBytes value)
   | .jubjubScalarFromNative value => do
     lowerJubjubScalarFromNative (← lowerExpr value)
   | .jubjubScalarToNative value => do
@@ -577,7 +693,7 @@ def lowerExpr : Expr ty → LowerM String
     lowerPointFromCoordinates (← lowerExpr x) (← lowerExpr y)
   | .fromBytes32 value => do
     let values ← lowerBytes value
-    lowerFromBytes32 ty values
+    lowerFromBytes32 ty values.values
   | .add a b => do binary "add" (← lowerExpr a) (← lowerExpr b)
   | .mul a b => do binary "mul" (← lowerExpr a) (← lowerExpr b)
   | .sub a b => do binary "add" (← lowerExpr a) (← unary "neg" (← lowerExpr b))
@@ -661,6 +777,7 @@ def lowerExpr : Expr ty → LowerM String
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
+  | .bytesLiteral _ _ | .reverseBytes _ | .sliceBytes _ _ _ | .concatBytes _ _
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
   | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ | .reverseBytes32 _ => do
     rejectLowering "Bytes32 expressions must be consumed with their typed FAB alignment"
@@ -685,6 +802,9 @@ def lowerBody (c : Circuit) : LowerM Unit := do
     emit "assert" [("cond", toJson value)]
   let mut outputs := []
   for output in c.outputs do
+    match output with
+    | {ty := .bytes 0, value, ..} => discard (lowerBytes value)
+    | _ => pure ()
     match output.nativeReturnFields with
     | .error message => rejectLowering message
     | .ok fields =>
@@ -762,7 +882,7 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
     emit "assert" [("cond", toJson (← lowerExpr condition))]
   for output in entry.circuit.outputs do
     match output with
-    | {name, ty := .bytes 32, value, ..} =>
+    | {name, ty := .bytes _, value, ..} =>
       let value ← lowerBytes value
       modify fun s => {s with byteAliases := (name, value) :: s.byteAliases}
     | {name, value, ..} =>
@@ -792,6 +912,9 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
   -- Entrypoint returns are public outputs committed with the call statement.
   let mut returned := []
   for output in entry.returns do
+    match output with
+    | {ty := .bytes 0, value, ..} => discard (lowerBytes value)
+    | _ => pure ()
     match output.nativeReturnFields with
     | .error message => rejectLowering message
     | .ok fields =>

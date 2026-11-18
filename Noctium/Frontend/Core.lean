@@ -100,6 +100,7 @@ scoped syntax "Bool" : nltype
 scoped syntax "UInt" num : nltype
 scoped syntax "UIntRange" num : nltype
 scoped syntax "Bytes32" : nltype
+scoped syntax "Bytes" num : nltype
 scoped syntax "JubjubScalar" : nltype
 scoped syntax "JubjubPoint" : nltype
 
@@ -123,6 +124,10 @@ scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
 scoped syntax "reverseBytes32(" nlexpr ")" : nlexpr
+scoped syntax "bytes(" num "," str ")" : nlexpr
+scoped syntax "reverseBytes(" nlexpr ")" : nlexpr
+scoped syntax "sliceBytes(" nlexpr "," num "," num ")" : nlexpr
+scoped syntax "concatBytes(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "bytes32(" str ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
@@ -251,6 +256,10 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
     | .error message => throwErrorAt stx message
     | _ => throwErrorAt stx "invalid unsigned range"
   | `(nltype| Bytes32) => pure (.bytes 32)
+  | `(nltype| Bytes $length:num) => do
+    if length.getNat > Noctium.maxBytesLength then
+      throwErrorAt length s!"byte string length exceeds the maximum of {Noctium.maxBytesLength}"
+    pure (.bytes length.getNat)
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
   | _ => throwErrorAt stx "unsupported Noctium type"
@@ -338,6 +347,11 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| eq($a, $b)) | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
+  | `(nlexpr| bytes($_:num, $_:str)) => Bool.false
+  | `(nlexpr| reverseBytes($value)) => hasPartialScalar value
+  | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => Bool.true
+  | `(nlexpr| concatBytes($left, $right)) =>
+    hasPartialScalar left || hasPartialScalar right
   | `(nlexpr| reverseBytes32($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashVector32([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
@@ -399,7 +413,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .native => pure (.native, ← `(Noctium.Expr.native 0))
     | .bool => pure (.bool, ← `(Noctium.Expr.bool Bool.false))
     | .uint maximum => pure (target, ← `(Noctium.Expr.uint $(natTerm maximum) 0))
-    | .bytes _ => throwErrorAt stx "Bytes32 has no scalar default expression"
+    | .bytes _ => throwErrorAt stx "byte strings have no scalar default expression"
     | .jubjubScalar | .jubjubPoint => throwErrorAt stx "Jubjub values have no generic default expression"
   | `(nlexpr| disclose($value)) =>
     let (ty, value) ← expression env value
@@ -427,23 +441,54 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let value ← expected env value (.bytes 32)
     pure (target, ← `(Noctium.Expr.fromBytes32 (target := $(← tyTerm target)) $value))
   | `(nlexpr| byteAt($value, $index:num)) => do
-    unless index.getNat < 32 do throwErrorAt index "Bytes32 byte index must be between 0 and 31"
-    let value ← expected env value (.bytes 32)
+    let (valueTy, value) ← expression env value
+    let .bytes length := valueTy
+      | throwErrorAt stx "byteAt requires a Bytes expression"
+    unless index.getNat < length do
+      throwErrorAt index s!"byte index must be less than the byte string length {length}"
     pure (.uint 255, ← `(Noctium.Expr.bytesAt $value $(natTerm index.getNat)))
   | `(nlexpr| eq($a, $b)) =>
     let (ta, a) ← expression env a
     let (tb, b) ← expression env b
     if ta.isBytes || tb.isBytes then do
-      unless ta == .bytes 32 && tb == .bytes 32 do
-        throwErrorAt stx "Bytes32 equality requires two Bytes32 expressions"
-      let aHigh ← `(Noctium.Expr.bytesField $a 0)
-      let bHigh ← `(Noctium.Expr.bytesField $b 0)
-      let aLow ← `(Noctium.Expr.bytesField $a 1)
-      let bLow ← `(Noctium.Expr.bytesField $b 1)
-      let highEqual ← `(Noctium.Expr.eq $aHigh $bHigh)
-      let lowEqual ← `(Noctium.Expr.eq $aLow $bLow)
-      let falseValue ← `(Noctium.Expr.bool Bool.false)
-      pure (.bool, ← `(Noctium.Expr.select $highEqual $lowEqual $falseValue))
+      if ta == .bytes 32 || tb == .bytes 32 then do
+        unless ta == .bytes 32 && tb == .bytes 32 do
+          throwErrorAt stx "Bytes32 equality requires two Bytes32 expressions"
+        let aHigh ← `(Noctium.Expr.bytesField $a 0)
+        let bHigh ← `(Noctium.Expr.bytesField $b 0)
+        let aLow ← `(Noctium.Expr.bytesField $a 1)
+        let bLow ← `(Noctium.Expr.bytesField $b 1)
+        let highEqual ← `(Noctium.Expr.eq $aHigh $bHigh)
+        let lowEqual ← `(Noctium.Expr.eq $aLow $bLow)
+        let falseValue ← `(Noctium.Expr.bool Bool.false)
+        pure (.bool, ← `(Noctium.Expr.select $highEqual $lowEqual $falseValue))
+      else do
+        let .bytes length := ta
+          | throwErrorAt stx "byte equality requires two same-length Bytes expressions"
+        unless tb == .bytes length do
+          throwErrorAt stx "byte equality requires two same-length Bytes expressions"
+        if length == 0 then do
+          let usedNames := env.map (fun binding => binding.1)
+          let mut index := 0
+          let mut leftName := s!"$byteEq{index}"
+          while usedNames.contains leftName do
+            index := index + 1
+            leftName := s!"$byteEq{index}"
+          index := index + 1
+          let mut rightName := s!"$byteEq{index}"
+          while usedNames.contains rightName || rightName == leftName do
+            index := index + 1
+            rightName := s!"$byteEq{index}"
+          pure (.bool, ← `(Noctium.Expr.letE $(stringTerm leftName) $a
+            (Noctium.Expr.letE $(stringTerm rightName) $b (Noctium.Expr.bool Bool.true))))
+        else do
+          let mut equal ← `(Noctium.Expr.bool Bool.true)
+          for chunk in List.range ((length + 30) / 31) do
+            let aField ← `(Noctium.Expr.bytesField $a $(natTerm chunk))
+            let bField ← `(Noctium.Expr.bytesField $b $(natTerm chunk))
+            let chunkEqual ← `(Noctium.Expr.eq $aField $bField)
+            equal ← `(Noctium.Expr.select $chunkEqual $equal (Noctium.Expr.bool Bool.false))
+          pure (.bool, equal)
     else do
       let ty ← commonType stx ta tb
       let a ← coerceExpression stx ta ty a
@@ -466,6 +511,38 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless valueTy == .bytes 32 do
       throwErrorAt stx "persistentHash32 requires a Bytes32 expression"
     pure (.bytes 32, ← `(Noctium.Expr.persistentHash32 $value))
+  | `(nlexpr| bytes($length:num, $literal:str)) => do
+    let length := length.getNat
+    if length > Noctium.maxBytesLength then
+      throwErrorAt stx s!"byte string length exceeds the maximum of {Noctium.maxBytesLength}"
+    let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
+    if bytes.length > length then
+      throwErrorAt literal s!"byte string literal exceeds its declared length {length}"
+    let values ← natListTerm (bytes ++ List.replicate (length - bytes.length) 0)
+    pure (.bytes length, ← `(Noctium.Expr.bytesLiteral $(natTerm length) $values))
+  | `(nlexpr| reverseBytes($value)) => do
+    let (valueTy, value) ← expression env value
+    let .bytes _ := valueTy
+      | throwErrorAt stx "reverseBytes requires a Bytes expression"
+    pure (valueTy, ← `(Noctium.Expr.reverseBytes $value))
+  | `(nlexpr| sliceBytes($value, $start:num, $stop:num)) => do
+    let (valueTy, value) ← expression env value
+    let .bytes length := valueTy
+      | throwErrorAt stx "sliceBytes requires a Bytes expression"
+    let start := start.getNat
+    let stop := stop.getNat
+    unless start ≤ stop && stop ≤ length do
+      throwErrorAt stx s!"byte slice bounds must satisfy 0 ≤ start ≤ end ≤ {length}"
+    pure (.bytes (stop - start), ← `(Noctium.Expr.sliceBytes $value $(natTerm start) $(natTerm stop)))
+  | `(nlexpr| concatBytes($left, $right)) => do
+    let (leftTy, left) ← expression env left
+    let (rightTy, right) ← expression env right
+    let (.bytes leftLength, .bytes rightLength) := (leftTy, rightTy)
+      | throwErrorAt stx "concatBytes requires two Bytes expressions"
+    let length := leftLength + rightLength
+    if length > Noctium.maxBytesLength then
+      throwErrorAt stx s!"concatenated byte string length exceeds the maximum of {Noctium.maxBytesLength}"
+    pure (.bytes length, ← `(Noctium.Expr.concatBytes $left $right))
   | `(nlexpr| reverseBytes32($value)) => do
     let value ← expected env value (.bytes 32)
     pure (.bytes 32, ← `(Noctium.Expr.reverseBytes32 $value))
@@ -695,8 +772,14 @@ private unsafe def checkGeneratedContract (name : Name) : CommandElabM Unit := d
         let value ← checkedExpression env value t
         if retain then
           -- Equality keeps partial range/underflow checks in unused bindings.
-          -- Removing it requires a proof that evaluating the expression cannot reject.
-          constraints := constraints.push (← `(Noctium.Expr.eq $value $value))
+          -- Byte expressions have no equality operator on the source surface, so
+          -- retain their evaluation in a typed let whose body is true.
+          match t with
+          | .bytes _ =>
+            constraints := constraints.push
+              (← `(Noctium.Expr.letE "$byteRetain" $value (Noctium.Expr.bool Bool.true)))
+          | _ =>
+            constraints := constraints.push (← `(Noctium.Expr.eq $value $value))
         env := (id.getId.toString, t, value) :: env
       | `(nlcstmt| assert $value:nlexpr) =>
         constraints := constraints.push (← checkedExpression env value .bool)
@@ -1206,9 +1289,6 @@ private def elaborateReturns (statements : Array (TSyntax `nlreturn))
         throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
       labels := labelName :: labels
       let ty ← readTy returnTy
-      match ty with
-      | .native | .bool | .uint _ | .bytes 32 | .jubjubScalar | .jubjubPoint => pure ()
-      | _ => throwErrorAt returnTy "entry returns support only Native, Bool, UInt, Bytes32, JubjubScalar, and JubjubPoint values"
       let value ← checkedExpression state.env value ty
       let span ← spanTerm statement
       state := {state with returns := state.returns.push (← `({

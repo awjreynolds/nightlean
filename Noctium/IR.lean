@@ -3,6 +3,8 @@ import Noctium.Types.Composite
 
 namespace Noctium
 
+def maxBytesLength : Nat := Types.defaultLimits.maxVectorLength
+
 inductive Visibility where
   | «public» | «private»
   deriving Repr, BEq, DecidableEq, Inhabited
@@ -21,6 +23,16 @@ inductive Expr : Ty → Type where
   lowering. Source expressions cannot cast or do arithmetic on byte strings. -/
   | bytesField (value : Expr (.bytes length)) (chunkIndex : Nat) : Expr .native
   | bytesAt (value : Expr (.bytes length)) (index : Nat) : Expr (.uint 255)
+  /-- A fixed-length, right-zero-padded source byte string. -/
+  | bytesLiteral (length : Nat) (values : List Nat) : Expr (.bytes length)
+  /-- Reverse a fixed-length source byte string without changing its type. -/
+  | reverseBytes {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes length)
+  /-- Take the half-open byte range [start, end) from a fixed-length string. -/
+  | sliceBytes {length : Nat} (value : Expr (.bytes length)) (start stop : Nat) :
+      Expr (.bytes (stop - start))
+  /-- Concatenate two fixed-length byte strings. -/
+  | concatBytes {leftLength rightLength : Nat} (left : Expr (.bytes leftLength))
+      (right : Expr (.bytes rightLength)) : Expr (.bytes (leftLength + rightLength))
   /-- SHA-256 over the pinned FAB Bytes32 alignment, using native ZKIR
   persistent_hash and returning a typed Bytes32 digest. -/
   | persistentHash32 (value : Expr (.bytes 32)) : Expr (.bytes 32)
@@ -107,16 +119,16 @@ def Output.nativeReturnFields : Output → Except String (List (Expr .native))
   | {ty := .native, value, ..} => pure [value]
   | {ty := .bool, value, ..} => pure [.cast .native value]
   | {ty := .uint _, value, ..} => pure [.cast .native value]
-  | {ty := .bytes 32, value, ..} => pure [.bytesField value 0, .bytesField value 1]
-  | {ty := .bytes _, ..} => throw "entrypoint returns support only Bytes32 byte strings"
+  | {ty := .bytes length, value, ..} =>
+    pure ((List.range ((length + 30) / 31)).map fun index => .bytesField value index)
   | {ty := .jubjubScalar, value, ..} => pure [.jubjubScalarToNative value]
   | {ty := .jubjubPoint, value, ..} => pure [
       .jubjubCoordinate value 0, .jubjubCoordinate value 1]
 
 def Output.nativeReturnFieldCount (output : Output) : Nat :=
   match output.ty with
-  | .bytes 32 | .jubjubPoint => 2
-  | .bytes _ => 0
+  | .bytes length => (length + 30) / 31
+  | .jubjubPoint => 2
   | _ => 1
 
 /-- Recursive ledger value descriptions. Scalar leaves use the existing typed
@@ -372,7 +384,8 @@ abbrev TypeEnv := List (String × Ty)
 def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
   match ty with
   | .bytes length =>
-    unless length == 32 do throw "only Bytes32 is supported by this source surface"
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
   | .jubjubScalar | .jubjubPoint =>
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
   | .native | .bool => ScalarPolicy.validate ty.scalarKind
@@ -387,12 +400,38 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     (Ty.uint maximum).validate caps
     if value ≤ maximum then pure () else .error "unsigned constant exceeds its type"
   | .bool _ => .ok ()
-  | .bytesField value chunkIndex => do
+  | .bytesField (length := length) value chunkIndex => do
     value.validate caps env
-    unless chunkIndex < 2 do throw "Bytes32 field chunk index is out of range"
-  | .bytesAt value index => do
+    unless chunkIndex < (length + 30) / 31 do
+      if length == 32 then throw "Bytes32 field chunk index is out of range"
+      else throw "byte field chunk index is out of range"
+  | .bytesAt (length := length) value index => do
     value.validate caps env
-    unless index < 32 do throw "Bytes32 byte index is out of range"
+    unless index < length do
+      if length == 32 then throw "Bytes32 byte index is out of range"
+      else throw "byte index is out of range"
+  | .bytesLiteral length values => do
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    unless values.length == length && values.all (· ≤ 255) do
+      throw "byte literal must contain exactly its declared number of byte values"
+  | .reverseBytes (length := length) value => do
+    unless caps.bytes32Conversions do throw "target lacks qualified fixed-byte support"
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    value.validate caps env
+  | .sliceBytes (length := length) value start stop => do
+    unless caps.bytes32Conversions do throw "target lacks qualified fixed-byte support"
+    unless length ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    unless start ≤ stop && stop ≤ length do throw "byte slice bounds are out of range"
+    value.validate caps env
+  | .concatBytes (leftLength := leftLength) (rightLength := rightLength) left right => do
+    unless caps.bytes32Conversions do throw "target lacks qualified fixed-byte support"
+    unless leftLength + rightLength ≤ maxBytesLength do
+      throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    left.validate caps env
+    right.validate caps env
   | .reverseBytes32 value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
     value.validate caps env
@@ -495,7 +534,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     a.validate caps env
     b.validate caps env
   | .select c a b => do
-    if ty.isJubjub || (ty.isBytes && !(ty == .bytes 32 && caps.bytes32Conversions)) then
+    if ty.isJubjub || (ty.isBytes && !caps.bytes32Conversions) then
       throw "byte string and Jubjub selection is not supported by this source surface"
     if !caps.select then throw "target lacks conditional selection"
     c.validate caps env
@@ -510,6 +549,11 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
 def PathKey.validate (caps : Capabilities) (env : TypeEnv) : PathKey → Except String Unit
   | .mk _ value => value.validate caps env
 
+private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
+  match keyTy with
+  | .bytes length => unless length == 32 do throw "only Bytes32 is supported as a ledger map key"
+  | _ => pure ()
+
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
   | .counter => pure ()
   | .scalar (.bytes _) => throw "Bytes32 state values are not supported"
@@ -517,6 +561,7 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
     throw "Jubjub values require a qualified ledger schema"
   | .scalar ty => ty.validate caps
   | .map keyTy value => do
+    validateLedgerMapKeyType keyTy
     keyTy.validate caps
     value.validate caps
   | .composite environment type => do
@@ -616,6 +661,11 @@ def validateConstraints (caps : Capabilities) (env : TypeEnv) (span : SourceSpan
 def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Unit := do
   if !uniqueNames (c.inputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit input"}
+  let env := c.inputs.map fun i => (i.name, i.ty)
+  for input in c.inputs do
+    match input.ty.validate caps with
+    | .error message => throw {span := input.span, message}
+    | .ok _ => pure ()
   if !uniqueNames (c.inputs.flatMap Input.nativeIdentifiers) then
     throw {span := c.span, message := "input names collide after native byte expansion"}
   let projections := c.inputs.flatMap Input.publicProjectionIdentifiers
@@ -624,15 +674,10 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     throw {span := c.span, message := "input names collide with generated Jubjub public projections"}
   if !uniqueNames (c.outputs.map (·.name)) then
     throw {span := c.span, message := "duplicate circuit output"}
-  let env := c.inputs.map fun i => (i.name, i.ty)
-  for input in c.inputs do
-    match input.ty.validate caps with
-    | .error message => throw {span := input.span, message}
-    | .ok _ => pure ()
   validateConstraints caps env c.span c.constraints
   for output in c.outputs do
-    if output.ty.isJubjub || (output.ty.isBytes && output.ty != .bytes 32) then
-      throw {span := output.span, message := "circuit outputs support only Bytes32 among opaque values"}
+    if output.ty.isJubjub then
+      throw {span := output.span, message := "circuit outputs do not support Jubjub values"}
     match output.ty.validate caps with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()
@@ -652,6 +697,10 @@ private def requireState (decls : List StateDecl) (name : String) (kind : StateK
 /-- Validate state names, typed reads, guards and writes in execution order. -/
 def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entrypoint) : Except Diagnostic Unit := do
   for decl in decls do
+    if let .map keyTy _ := decl.kind then
+      match validateLedgerMapKeyType keyTy with
+      | .error message => throw {span := decl.span, message}
+      | .ok _ => pure ()
     match decl.kind with
     | .cell (.bytes _) | .map _ (.bytes _) =>
       throw {span := decl.span, message := "Bytes32 state values are not supported"}
@@ -853,8 +902,6 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
   for output in e.returns do
     if (env.lookup output.name).isSome then
       throw {span := output.span, message := s!"entrypoint return '{output.name}' shadows a source binding"}
-    if output.ty.isBytes && output.ty != .bytes 32 then
-      throw {span := output.span, message := "entrypoint returns support only Bytes32 byte strings"}
     match output.ty.validate caps with
     | .error message => throw {span := output.span, message}
     | .ok _ => pure ()
@@ -872,6 +919,10 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       throw {span := decl.span, message := "only cells can be sealed"}
     if decl.kind == .opaqueString && !decl.sealed then
       throw {span := decl.span, message := "OpaqueString state must be sealed"}
+    if let .map keyTy _ := decl.kind then
+      match validateLedgerMapKeyType keyTy with
+      | .error message => throw {span := decl.span, message}
+      | .ok _ => pure ()
     let types := match decl.kind with
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]

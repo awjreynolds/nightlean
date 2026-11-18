@@ -4,6 +4,7 @@ use anyhow::{Result, anyhow, bail, ensure};
 use num_bigint::BigUint;
 
 pub const MAX_UINT_BITS: usize = 248;
+pub const MAX_BYTES_LENGTH: usize = 1024;
 pub fn max_uint() -> BigUint {
     (BigUint::from(1u8) << MAX_UINT_BITS) - 1u8
 }
@@ -38,13 +39,22 @@ pub enum ScalarType {
     Bool,
     UInt(BigUint),
     Bytes32,
+    Bytes(usize),
     JubjubScalar,
     JubjubPoint,
 }
 impl ScalarType {
+    pub fn bytes_length(&self) -> Option<usize> {
+        match self {
+            Self::Bytes32 => Some(32),
+            Self::Bytes(length) => Some(*length),
+            _ => None,
+        }
+    }
     pub(crate) fn call_return_fields(&self) -> usize {
         match self {
             Self::Bytes32 | Self::JubjubPoint => 2,
+            Self::Bytes(length) => length.div_ceil(31),
             _ => 1,
         }
     }
@@ -56,6 +66,24 @@ impl ScalarType {
             "JubjubScalar" => Ok(Self::JubjubScalar),
             "JubjubPoint" => Ok(Self::JubjubPoint),
             _ => {
+                if let Some(length) = text
+                    .strip_prefix("Bytes<")
+                    .and_then(|s| s.strip_suffix('>'))
+                {
+                    ensure!(
+                        !length.is_empty()
+                            && length.len() <= 4
+                            && length.bytes().all(|byte| byte.is_ascii_digit())
+                            && (length == "0" || !length.starts_with('0')),
+                        "expected canonical byte length"
+                    );
+                    let length: usize = length.parse()?;
+                    ensure!(
+                        length <= MAX_BYTES_LENGTH,
+                        "byte length exceeds compiler limit"
+                    );
+                    return Ok(Self::Bytes(length));
+                }
                 let bound = text
                     .strip_prefix("UIntRange<")
                     .and_then(|s| s.strip_suffix('>'))
@@ -70,6 +98,13 @@ impl ScalarType {
         }
     }
     fn validate(&self) -> Result<()> {
+        if let Self::Bytes(length) = self {
+            ensure!(
+                *length <= MAX_BYTES_LENGTH,
+                "byte length exceeds compiler limit"
+            );
+            ensure!(*length != 32, "use the canonical Bytes32 type for 32 bytes");
+        }
         if let Self::UInt(maximum) = self {
             ensure!(
                 *maximum <= max_uint(),
@@ -85,7 +120,8 @@ impl Value {
             Self::Native(_) => ScalarType::Native,
             Self::Bool(_) => ScalarType::Bool,
             Self::UInt { maximum, .. } => ScalarType::UInt(maximum.clone()),
-            Self::Bytes(_) => ScalarType::Bytes32,
+            Self::Bytes(bytes) if bytes.len() == 32 => ScalarType::Bytes32,
+            Self::Bytes(bytes) => ScalarType::Bytes(bytes.len()),
             Self::JubjubScalar(_) => ScalarType::JubjubScalar,
             Self::JubjubPoint(_) => ScalarType::JubjubPoint,
         }
@@ -94,9 +130,6 @@ impl Value {
         self.scalar_type().validate()?;
         if let Self::UInt { number, maximum } = self {
             ensure!(number <= maximum, "unsigned value outside declared type");
-        }
-        if let Self::Bytes(bytes) = self {
-            ensure!(bytes.len() == 32, "expected 32 bytes");
         }
         Ok(())
     }
@@ -132,7 +165,7 @@ impl Value {
                 number,
                 maximum: maximum.clone(),
             },
-            ScalarType::Bytes32 => bail!("scalars cannot be cast to bytes"),
+            ScalarType::Bytes32 | ScalarType::Bytes(_) => bail!("scalars cannot be cast to bytes"),
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                 bail!("scalars cannot be cast to Jubjub values")
             }

@@ -90,7 +90,10 @@ def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
   let (_, constraints, _) ← convert value.span (collect aliases value.constraints)
   let conditions ← convert value.span (value.constraints.mapM (normalize aliases))
   let mut outputs := []
+  let mut emptyOutputs := []
   for output in value.outputs do
+    if output.ty == .bytes 0 then
+      emptyOutputs := emptyOutputs ++ [← convert output.span (normalize aliases output.value)]
     let fields ← convert output.span output.nativeReturnFields
     for field in fields do
       outputs := outputs ++ [← convert output.span (normalize aliases field)]
@@ -102,9 +105,9 @@ def expectedCircuit (value : Circuit) : Except Diagnostic Expected := do
     inputs := inputs
     returns := returns
     assertions := conditions.flatMap (fun result => result.assertions ++ [result.term]) ++
-      outputs.flatMap (·.assertions)
+      outputs.flatMap (·.assertions) ++ emptyOutputs.flatMap (·.assertions)
     groups := groups ++ (if returns.isEmpty then [] else [returns])
-    bounds := constraints ++ outputs.flatMap (·.bounds)
+    bounds := constraints ++ outputs.flatMap (·.bounds) ++ emptyOutputs.flatMap (·.bounds)
   }
 
 /-- Derive the schedule from source effects again, rather than trusting a raw
@@ -151,12 +154,15 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
   let (groups, bounds, operationAssertions) ←
     collectOperations value.span aliases plan.operations outputBounds
   let mut returnResults := []
+  let mut emptyReturns := []
   for output in value.returns do
+    if output.ty == .bytes 0 then
+      emptyReturns := emptyReturns ++ [← convert output.span (normalize aliases output.value)]
     let fields ← convert output.span output.nativeReturnFields
     for field in fields do
       returnResults := returnResults ++ [← convert output.span (normalize aliases field)]
-  let returnedBounds := returnResults.flatMap (·.bounds)
-  let returnedAssertions := returnResults.flatMap (·.assertions)
+  let returnedBounds := (returnResults ++ emptyReturns).flatMap (·.bounds)
+  let returnedAssertions := (returnResults ++ emptyReturns).flatMap (·.assertions)
   let activityGuards := if plan.activityGuards.isEmpty then
       plan.operations.flatMap fun operation => List.replicate operation.fieldGroups.length none
     else

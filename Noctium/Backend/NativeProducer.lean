@@ -65,8 +65,16 @@ private def validIdentifier (name : String) : Bool :=
   name.startsWith "%" && name.length > 1 && name.utf8ByteSize ≤ 1024
 
 inductive NativeValueType where
-  | native | byte | bytes32 | jubjubScalar | jubjubPoint
+  | native | byte | bytes32 | bytes (length : Nat) | jubjubScalar | jubjubPoint
   deriving Repr, BEq, DecidableEq
+
+private def byteLength? : NativeValueType → Option Nat
+  | .bytes32 => some 32
+  | .bytes length => some length
+  | _ => none
+
+private def byteValueType (length : Nat) : NativeValueType :=
+  if length == 32 then .bytes32 else .bytes length
 
 structure Fact where
   term : Term
@@ -257,7 +265,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     ensure (left.valueType == right.valueType)
       "native equality/add operands have different typed values"
     if opcode == "test_eq" then do
-      ensure (left.valueType != .bytes32) "Bytes32 equality is unsupported by this source surface"
+      ensure ((byteLength? left.valueType).isNone) "typed byte equality is unsupported by this source surface"
       let fact ← combine (.binary "test_eq" left.term right.term) 1 [left, right]
       defineResult state instruction fact
     else if left.valueType == .jubjubPoint then do
@@ -366,22 +374,25 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     define state output {fact with valueType := .bytes32}
   | "nth" => do
     let bytes ← argument state instruction "bytes"
-    ensure (bytes.valueType == .bytes32) "nth requires a typed Bytes32 value"
+    let some length := byteLength? bytes.valueType | throw "nth requires typed bytes"
     let index ← natField instruction "index"
-    ensure (index < 32) "nth Bytes32 byte index is out of range"
-    let fact ← combine (bytes32ByteAtTerm bytes.term index) 255 [bytes]
+    ensure (index < length) "nth byte index is out of range"
+    let fact ← combine (bytesByteAtTerm length bytes.term index) 255 [bytes]
     defineResult state instruction {fact with valueType := .byte}
   | "encode" => do
     let input ← argument state instruction "input"
     let outputs ← arrayField instruction "outputs"
-    if input.valueType == .bytes32 then do
-      ensure (outputs.size == 2) "Bytes32 encode requires exactly two native outputs"
-      let lowName ← outputs[0]!.getStr?
-      let highName ← outputs[1]!.getStr?
-      let low ← combine (encodedHashChunkTerm input.term 0) (2 ^ (31 * 8) - 1) [input]
-      let state ← define state lowName low
-      let high ← combine (encodedHashChunkTerm input.term 1) 255 [input]
-      define state highName high
+    if let some length := byteLength? input.valueType then do
+      ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
+        "encode byte length is unsupported"
+      ensure (outputs.size == bytesChunkCount length) "byte encode chunk count mismatch"
+      let mut state := state
+      for index in List.range outputs.size do
+        let name ← outputs[index]!.getStr?
+        let fact ← combine (encodedBytesChunkTerm length input.term index)
+          (2 ^ (8 * bytesChunkWidth length index) - 1) [input]
+        state ← define state name fact
+      pure state
     else if input.valueType == .jubjubScalar then do
       ensure (outputs.size == 1) "JubjubScalar encode requires exactly one Native output"
       let output ← outputs[0]!.getStr?
@@ -401,20 +412,39 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     defineResult state instruction {fact with valueType := .bytes32}
   | "reverse" => do
     let bytes ← argument state instruction "bytes"
-    ensure (bytes.valueType == .bytes32) "reverse requires a typed Bytes32 operand"
-    let fact ← combine (reverseBytes32Term bytes.term) 0 [bytes]
-    defineResult state instruction {fact with valueType := .bytes32}
+    let some length := byteLength? bytes.valueType | throw "reverse requires typed bytes"
+    ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength) "reverse byte length is unsupported"
+    let fact ← combine (reverseBytesTerm length bytes.term) 0 [bytes]
+    defineResult state instruction {fact with valueType := byteValueType length}
+  | "slice" => do
+    let bytes ← argument state instruction "bytes"
+    let some length := byteLength? bytes.valueType | throw "slice requires typed bytes"
+    let start ← natField instruction "start"
+    let count ← natField instruction "len"
+    ensure (0 < count && start + count ≤ length && length ≤ Types.defaultLimits.maxVectorLength)
+      "native slice requires a nonempty in-bounds byte range"
+    let fact ← combine (sliceBytesTerm length start (start + count) bytes.term) 0 [bytes]
+    defineResult state instruction {fact with valueType := byteValueType count}
+  | "concat" => do
+    let values ← arguments state instruction "inputs"
+    let [left, right] := values | throw "source concat requires exactly two byte operands"
+    let some leftLength := byteLength? left.valueType | throw "concat requires typed bytes"
+    let some rightLength := byteLength? right.valueType | throw "concat requires typed bytes"
+    ensure (0 < leftLength && 0 < rightLength && leftLength + rightLength ≤ Types.defaultLimits.maxVectorLength)
+      "concat byte length is unsupported"
+    let fact ← combine (concatBytesTerm leftLength rightLength left.term right.term) 0 values
+    defineResult state instruction {fact with valueType := byteValueType (leftLength + rightLength)}
   | "bytes_from_natives" => do
     let values ← nativeArguments state instruction "inputs"
-    ensure ((← natField instruction "len") == 32)
-      "bytes_from_natives supports only Bytes32"
-    match values with
-    | [low31, highByte] => do
-      ensure (low31.maximum ≤ 2 ^ (31 * 8) - 1 && highByte.maximum ≤ 255)
-        "bytes_from_natives operands lack canonical low31/highByte bounds"
-      let fact ← combine (bytes32FromChunksTerm low31.term highByte.term) 0 values
-      defineResult state instruction {fact with valueType := .bytes32}
-    | _ => throw "bytes_from_natives requires [low31, highByte]"
+    let length ← natField instruction "len"
+    ensure (0 < length && length ≤ Types.defaultLimits.maxVectorLength)
+      "bytes_from_natives length is unsupported"
+    ensure (values.length == bytesChunkCount length) "bytes_from_natives chunk count mismatch"
+    for (value, index) in values.zipIdx do
+      ensure (value.maximum ≤ 2 ^ (8 * bytesChunkWidth length index) - 1)
+        "bytes_from_natives operand lacks its exact chunk range bound"
+    let fact ← combine (bytesFromChunksTerm length (values.map (·.term))) 0 values
+    defineResult state instruction {fact with valueType := byteValueType length}
   | "from_bytes" => do
     let bytes ← argument state instruction "bytes"
     ensure (bytes.valueType == .bytes32) "from_bytes requires a typed Bytes32 operand"

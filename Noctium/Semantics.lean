@@ -188,6 +188,18 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
   | .bytes32Literal values =>
     if values.length == 32 && values.all (· ≤ 255) then pure values
     else .error "Bytes32 literal must contain exactly 32 byte values"
+  | .bytesLiteral length values =>
+    if length ≤ maxBytesLength && values.length == length && values.all (· ≤ 255) then
+      pure values
+    else .error "byte literal must contain exactly its declared number of byte values"
+  | .reverseBytes value => do
+    pure ((← value.eval ctx env).reverse)
+  | .sliceBytes value start stop => do
+    let bytes ← value.eval ctx env
+    if start > stop || stop > bytes.length then throw "byte slice bounds are out of range"
+    pure ((bytes.drop start).take (stop - start))
+  | .concatBytes left right => do
+    pure ((← left.eval ctx env) ++ (← right.eval ctx env))
   | .reverseBytes32 value => do
     pure ((← value.eval ctx env).reverse)
   | .jubjubScalarFromNative value => do
@@ -211,11 +223,16 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     | _ => throw "Jubjub coordinate index must be 0 or 1"
   | .jubjubFromCoordinates x y => do
     checkedJubjubPoint ctx (← ctx.jubjub.fromCoordinates (← x.eval ctx env) (← y.eval ctx env))
-  | .bytesAt value index => do
+  | .bytesAt (length := length) value index => do
     let values ← value.eval ctx env
     match values[index]? with
-    | some byte => if byte ≤ 255 then pure byte else .error "noncanonical Bytes32 byte"
-    | none => .error "Bytes32 byte index is out of range"
+    | some byte =>
+      if byte ≤ 255 then pure byte
+      else if length == 32 then .error "noncanonical Bytes32 byte"
+      else .error "noncanonical byte value"
+    | none =>
+      if length == 32 then .error "Bytes32 byte index is out of range"
+      else .error "byte index is out of range"
   | .persistentHash32 value => do
     let input ← value.eval ctx env
     evaluatePersistentHash ctx input
@@ -319,6 +336,11 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
 theorem Expr.eval_reverseBytes32_twice (ctx : EvalContext) (env : EvalEnv)
     (value : Expr (.bytes 32)) :
     (Expr.reverseBytes32 (Expr.reverseBytes32 value)).eval ctx env = value.eval ctx env := by
+  simp [Expr.eval]
+
+theorem Expr.eval_reverseBytes_twice (ctx : EvalContext) (env : EvalEnv)
+    (value : Expr (.bytes length)) :
+    (Expr.reverseBytes (Expr.reverseBytes value)).eval ctx env = value.eval ctx env := by
   simp [Expr.eval]
 
 /-- Check constraints in source order, preserving the first evaluation error. -/

@@ -343,12 +343,13 @@ private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ => []
   | .bytesField value _ | .bytesAt value _ => expressionNames value
   | .persistentHash32 value => expressionNames value
-  | .bytes32Literal _ => []
+  | .bytes32Literal _ | .bytesLiteral _ _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
   | .persistentHashNativeVector values => values.flatMap expressionNames
   | .toBytes32 value | .fromBytes32 value => expressionNames value
-  | .reverseBytes32 value => expressionNames value
+  | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => expressionNames value
+  | .concatBytes left right => expressionNames left ++ expressionNames right
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
   | .jubjubCoordinate value _ => expressionNames value
@@ -385,7 +386,7 @@ private def zeroValue : (ty : Ty) → Option (Expr ty)
   | .bool => some (.bool false)
   | .uint maximum => some (.uint maximum 0)
   | .bytes 32 => some (.bytes32Literal (List.replicate 32 0))
-  | .bytes _ => none
+  | .bytes length => some (.bytesLiteral length (List.replicate length 0))
   | .jubjubScalar => some (.jubjubScalarFromNative (.native 0))
   | .jubjubPoint => some (.jubjubFromCoordinates (.native 0) (.native 1))
 
@@ -407,6 +408,10 @@ private def totalizeUnder (guard : Expr .bool) : Expr ty → Expr ty
   | .bytesAt value index => .bytesAt (totalizeUnder guard value) index
   | .persistentHash32 value => .persistentHash32 (totalizeUnder guard value)
   | .bytes32Literal values => .bytes32Literal values
+  | .bytesLiteral length values => .bytesLiteral length values
+  | .reverseBytes value => .reverseBytes (totalizeUnder guard value)
+  | .sliceBytes value start end_ => .sliceBytes (totalizeUnder guard value) start end_
+  | .concatBytes left right => .concatBytes (totalizeUnder guard left) (totalizeUnder guard right)
   | .persistentHashVector32 values => .persistentHashVector32 (values.map (totalizeUnder guard))
   | .persistentHashNative value => .persistentHashNative (totalizeUnder guard value)
   | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalizeUnder guard))
@@ -491,6 +496,11 @@ private def totalizePathKeys (condition : Expr .bool) (keys : List PathKey) : Li
       let guardedValue := totalizeUnder (.ref guardName) value
       .mk (.bytes 32) (.letE guardName condition (.select (.ref guardName) guardedValue
         (.bytes32Literal (List.replicate 32 0))))
+    | .mk (.bytes length) value =>
+      let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
+      let guardedValue := totalizeUnder (.ref guardName) value
+      .mk (.bytes length) (.letE guardName condition (.select (.ref guardName) guardedValue
+        (.bytesLiteral length (List.replicate length 0))))
     | .mk ty value =>
       let guardName := freshActivityName (avoid ++ expressionNames condition ++ expressionNames value)
       .mk ty (.letE guardName condition (totalizeUnder (.ref guardName) value))
@@ -819,7 +829,7 @@ private def publicInputStep (input : Input) (plan : Plan) : Except String Plan :
   | .bytes length =>
     let mut result := plan
     for index in List.range length do
-      let bytes : Expr (.bytes 32) := .ref input.name
+      let bytes : Expr (.bytes length) := .ref input.name
       let byte : Expr (.uint 255) := .bytesAt bytes index
       let value := Aligned.field (.cast .native byte)
       let name := byteProjectionName input.name index

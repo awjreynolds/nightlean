@@ -74,6 +74,7 @@ impl Type {
             Self::Scalar(ScalarType::Native) => "Native".to_owned(),
             Self::Scalar(ScalarType::Bool) => "Bool".to_owned(),
             Self::Scalar(ScalarType::Bytes32) => "Bytes<32>".to_owned(),
+            Self::Scalar(ScalarType::Bytes(length)) => format!("Bytes<{length}>"),
             Self::Scalar(ScalarType::JubjubScalar) => "JubjubScalar".to_owned(),
             Self::Scalar(ScalarType::JubjubPoint) => "JubjubPoint".to_owned(),
             Self::Scalar(ScalarType::UInt(maximum)) => {
@@ -98,6 +99,7 @@ fn scalar_type_key(ty: &ScalarType) -> String {
         ScalarType::Native => "sN".to_owned(),
         ScalarType::Bool => "sB".to_owned(),
         ScalarType::Bytes32 => "bytes32".to_owned(),
+        ScalarType::Bytes(length) => format!("bytes{length}"),
         ScalarType::JubjubScalar => "jubjubScalar".to_owned(),
         ScalarType::JubjubPoint => "jubjubPoint".to_owned(),
         ScalarType::UInt(maximum) => format!("sU{};", maximum.to_str_radix(10)),
@@ -129,7 +131,10 @@ fn validate_scalar(ty: &ScalarType, value: &Json) -> Result<()> {
                 .ok_or_else(|| anyhow!("expected canonical unsigned decimal"))?;
             canonical_unsigned(text, maximum)?;
         }
-        ScalarType::Bytes32 | ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
+        ScalarType::Bytes32
+        | ScalarType::Bytes(_)
+        | ScalarType::JubjubScalar
+        | ScalarType::JubjubPoint => {
             let token = Type::Scalar(ty.clone()).token();
             crate::input_value(&token, value)?;
         }
@@ -360,7 +365,9 @@ impl Registry {
                 ScalarType::Native => "native",
                 ScalarType::Bool => "bool",
                 ScalarType::UInt(_) => "uint",
-                ScalarType::Bytes32 => bail!("byte projections require an aggregate schema"),
+                ScalarType::Bytes32 | ScalarType::Bytes(_) => {
+                    bail!("byte projections require an aggregate schema")
+                }
                 ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                     bail!("Jubjub projections require a typed curve schema")
                 }
@@ -391,7 +398,9 @@ impl Registry {
                         .and_then(Json::as_bool)
                         .ok_or_else(|| anyhow!("aggregate projection Boolean value missing"))?,
                 ),
-                ScalarType::Bytes32 => bail!("byte projections require an aggregate schema"),
+                ScalarType::Bytes32 | ScalarType::Bytes(_) => {
+                    bail!("byte projections require an aggregate schema")
+                }
                 ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                     bail!("Jubjub projections require a typed curve schema")
                 }

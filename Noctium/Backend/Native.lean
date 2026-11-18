@@ -8,7 +8,7 @@ inductive OperandRule where
   | nativeUnary | nativeBinary | nativeVector | booleanAssertion | nativeSelect
   | nativeRange | nativeEquality | nativeInput | nativeOutput
   | persistentHash32 | persistentHashPreimage | encodeValue | bytes32ByteIndex
-  | bytes32Conversion | bytes32Reverse
+  | bytes32Conversion | bytes32Reverse | fixedBytes
   | jubjubScalarBridge | jubjubPointArithmetic | jubjubCoordinates | primeFieldInverse
   deriving Repr, BEq, DecidableEq
 
@@ -16,7 +16,7 @@ inductive EncodingRule where
   | canonicalNative | fabBytes32Hash | fabAlignedHashPreimage | bytes32EncodingChunks
   | bytes32ByteExtraction | nativeLimbs
   | jubjubSubgroupScalar | jubjubAffinePoint | nativeOrJubjubScalar
-  | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks | bytes32Reversal
+  | bytes32NativeSerialization | bytes32NativeDecoding | bytes32NativeChunks | bytes32Reversal | fixedBytes
   deriving Repr, BEq, DecidableEq
 
 inductive PrivacyRule where
@@ -30,7 +30,7 @@ inductive EffectRule where
 inductive Precondition where
   | canonicalNative | nativeBoolean | boundedOperands | matchingNativeSignature
   | alignedBytes32 | alignedHashPreimage | typedBytes32Input | typedEncodeInput
-  | typedBytes32Index
+  | typedBytes32Index | typedFixedBytes
   | typedBytes32Conversion
   | reducedJubjubScalar | validJubjubPoint | exactJubjubCoordinates | nonzeroField
   deriving Repr, BEq, DecidableEq
@@ -42,7 +42,7 @@ inductive GuardRule where
 inductive BindingRule where
   | none | expectedInputSchema | exactActivityGroup | exactReturnAndBinding
   | sourceHashTerm | encodedHashChunks | canonicalScalarInput | exactCoordinateRoundtrip
-  | typedInverseResult | typedBytes32Conversion | bytes32ByteIndex | typedEncoding | bytes32Reversal
+  | typedInverseResult | typedBytes32Conversion | bytes32ByteIndex | typedEncoding | bytes32Reversal | fixedBytes
   deriving Repr, BEq, DecidableEq
 
 /-- No metadata field has a default. Exposing a primitive requires every rule. -/
@@ -172,25 +172,33 @@ def instructionSupport (opcode : String) : Except String Support :=
       .noGuard .typedEncoding ["input", "outputs"]
     {descriptor with encoding := .nativeLimbs}
   | "nth" => .supported <|
-    let descriptor := scalar .bytes32ByteIndex .propagateAll .pure .typedBytes32Index
-      .noGuard .bytes32ByteIndex ["bytes", "index", "output"]
-    {descriptor with encoding := .bytes32ByteExtraction}
+    let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
+      .noGuard .fixedBytes ["bytes", "index", "output"]
+    {descriptor with encoding := .fixedBytes}
   | "to_bytes" => .supported <|
     let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
       .noGuard .typedBytes32Conversion ["input", "output"]
     {descriptor with encoding := .bytes32NativeSerialization}
   | "reverse" => .supported <|
-    let descriptor := scalar .bytes32Reverse .propagateAll .pure .typedBytes32Input
-      .noGuard .bytes32Reversal ["bytes", "output"]
-    {descriptor with encoding := .bytes32Reversal}
+    let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
+      .noGuard .fixedBytes ["bytes", "output"]
+    {descriptor with encoding := .fixedBytes}
   | "from_bytes" => .supported <|
     let descriptor := scalar .bytes32Conversion .propagateAll .pure .typedBytes32Conversion
       .noGuard .typedBytes32Conversion ["bytes", "type", "output"]
     {descriptor with encoding := .bytes32NativeDecoding}
   | "bytes_from_natives" => .supported <|
-    let descriptor := scalar .bytes32Conversion .propagateAll .pure .alignedBytes32
-      .noGuard .typedBytes32Conversion ["inputs", "len", "output"]
-    {descriptor with encoding := .bytes32NativeChunks}
+    let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
+      .noGuard .fixedBytes ["inputs", "len", "output"]
+    {descriptor with encoding := .fixedBytes}
+  | "slice" => .supported <|
+    let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
+      .noGuard .fixedBytes ["bytes", "start", "len", "output"]
+    {descriptor with encoding := .fixedBytes}
+  | "concat" => .supported <|
+    let descriptor := scalar .fixedBytes .propagateAll .pure .typedFixedBytes
+      .noGuard .fixedBytes ["inputs", "output"]
+    {descriptor with encoding := .fixedBytes}
   | "jubjub_scalar_from_native" => .supported <|
     let descriptor := scalar .jubjubScalarBridge .propagateAll .pure .reducedJubjubScalar
       .noGuard .canonicalScalarInput ["native", "output"]

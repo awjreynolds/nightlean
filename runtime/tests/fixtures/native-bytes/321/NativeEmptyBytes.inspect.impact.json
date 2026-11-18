@@ -1,0 +1,48 @@
+{"targetProfile":
+ {"zkir": "3.2.1",
+  "zkStdlib": "2.4.0",
+  "schemaVersion": 1,
+  "qualification": "selected-native-subset-qualified",
+  "proofServer": "9.0.0",
+  "onchainRuntime": "4.0.1",
+  "nativeSource":
+  {"tag": "zkir-3.2.1",
+   "revision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0",
+   "repository": "https://github.com/midnightntwrk/midnight-zkir",
+   "reportedCliVersion": "midnight-zkir 3.2.0",
+   "declaredCrateVersion": "3.2.0"},
+  "name": "midnight-ledger-9-zkir-3.2.1",
+  "ledger": "9.1.0.1",
+  "circuits": "7.3.0"},
+ "target": "midnight-ledger-9-zkir-3.2.1",
+ "state": [],
+ "schemaVersion": 1,
+ "returns":
+ [{"visibility": "public",
+   "type": "Bytes<0>",
+   "name": "emptyBytes",
+   "expression": {"tag": "reference", "name": "emptyChecked"}}],
+ "reads": [],
+ "operations": [],
+ "nativeCircuitFile": "NativeEmptyBytes.inspect.zkir",
+ "guards": [],
+ "entrypoint": "inspect",
+ "contractName": "NativeEmptyBytes",
+ "circuit":
+ {"outputs":
+  [{"visibility": "public",
+    "type": "Bytes<0>",
+    "name": "emptyChecked",
+    "expression":
+    {"value":
+     {"tag": "assertThen",
+      "condition": {"tag": "reference", "name": "enabled"},
+      "body": {"tag": "reference", "name": "empty0"}},
+     "tag": "reverseBytes",
+     "length": 0}}],
+  "name": "emptyGuard",
+  "inputs":
+  [{"visibility": "private", "type": "Bool", "name": "enabled"},
+   {"visibility": "private", "type": "Bytes<0>", "name": "empty0"}],
+  "file": "emptyGuard.zkir",
+  "constraints": []}}

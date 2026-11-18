@@ -200,6 +200,31 @@ fn curve_operation(operation: &str) -> Result<(Vec<ScalarType>, ScalarType, crat
     })
 }
 
+fn byte_scalar_type(length: usize) -> ScalarType {
+    if length == 32 {
+        ScalarType::Bytes32
+    } else {
+        ScalarType::Bytes(length)
+    }
+}
+
+fn canonical_byte_length(text: &str) -> Result<usize> {
+    ensure!(
+        !text.is_empty()
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "noncanonical control byte length"
+    );
+    let length = text
+        .parse::<usize>()
+        .map_err(|_| anyhow!("control byte length"))?;
+    ensure!(
+        length <= scalars::MAX_BYTES_LENGTH,
+        "control byte length exceeds the source limit"
+    );
+    Ok(length)
+}
+
 fn bytes_operation(
     operation: &str,
     count: usize,
@@ -210,17 +235,79 @@ fn bytes_operation(
             name: index.to_string(),
         })
     };
-    if let Some(encoded_index) = operation.strip_prefix("__byteAt:") {
-        let index = encoded_index
-            .parse::<usize>()
-            .map_err(|_| anyhow!("control byte index"))?;
-        ensure!(index < 32 && count == 1, "control byte index");
+    if let Some(encoded) = operation.strip_prefix("__byteAt:") {
+        let (length, index) = match encoded.split_once(':') {
+            Some((length, index)) => (
+                canonical_byte_length(length)?,
+                canonical_byte_length(index)?,
+            ),
+            None => (32, canonical_byte_length(encoded)?),
+        };
+        ensure!(count == 1 && index < length, "control byte index");
         return Ok((
-            vec![Bytes32],
+            vec![byte_scalar_type(length)],
             ScalarType::parse("UIntRange<256>")?,
             crate::Expr::ByteAt {
                 value: argument(0),
                 index,
+            },
+        ));
+    }
+    if let Some(encoded_length) = operation.strip_prefix("reverseBytes:") {
+        let length = canonical_byte_length(encoded_length)?;
+        ensure!(count == 1, "reverseBytes argument count");
+        let ty = byte_scalar_type(length);
+        return Ok((
+            vec![ty.clone()],
+            ty,
+            crate::Expr::ReverseBytes {
+                length,
+                value: argument(0),
+            },
+        ));
+    }
+    if let Some(encoded_bounds) = operation.strip_prefix("sliceBytes:") {
+        let fields = encoded_bounds.split(':').collect::<Vec<_>>();
+        ensure!(fields.len() == 3, "sliceBytes operation encoding");
+        let length = canonical_byte_length(fields[0])?;
+        let start = canonical_byte_length(fields[1])?;
+        let end = canonical_byte_length(fields[2])?;
+        ensure!(
+            count == 1 && start <= end && end <= length,
+            "sliceBytes bounds"
+        );
+        return Ok((
+            vec![byte_scalar_type(length)],
+            byte_scalar_type(end - start),
+            crate::Expr::SliceBytes {
+                length,
+                value: argument(0),
+                start,
+                end,
+            },
+        ));
+    }
+    if let Some(encoded_lengths) = operation.strip_prefix("concatBytes:") {
+        let fields = encoded_lengths.split(':').collect::<Vec<_>>();
+        ensure!(fields.len() == 2, "concatBytes operation encoding");
+        let left_length = canonical_byte_length(fields[0])?;
+        let right_length = canonical_byte_length(fields[1])?;
+        let length = left_length
+            .checked_add(right_length)
+            .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+            .ok_or_else(|| anyhow!("concatBytes result exceeds the source byte limit"))?;
+        ensure!(count == 2, "concatBytes argument count");
+        return Ok((
+            vec![
+                byte_scalar_type(left_length),
+                byte_scalar_type(right_length),
+            ],
+            byte_scalar_type(length),
+            crate::Expr::ConcatBytes {
+                left_length,
+                right_length,
+                left: argument(0),
+                right: argument(1),
             },
         ));
     }
@@ -572,7 +659,8 @@ impl Parser<'_> {
                             | (_, ScalarType::JubjubScalar | ScalarType::JubjubPoint) => {
                                 bail!("control arithmetic requires numeric scalar operands")
                             }
-                            (ScalarType::Bytes32, _) | (_, ScalarType::Bytes32) => {
+                            (ScalarType::Bytes32 | ScalarType::Bytes(_), _)
+                            | (_, ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
                                 bail!("control byte arithmetic")
                             }
                             (ScalarType::Bool, _) | (_, ScalarType::Bool) => {
@@ -674,22 +762,134 @@ impl Parser<'_> {
                     ExprKind::Literal(Value::Bytes(bytes)),
                 )
             }
+            "bytesLiteral" => {
+                ensure!(self.schema_version == 2, "byte literals require v2 plan");
+                shape(v, &["tag", "length", "values"], true)?;
+                let length = field(v, "length")?
+                    .as_u64()
+                    .and_then(|length| usize::try_from(length).ok())
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("control byte literal length"))?;
+                let values = list(v, "values")?;
+                ensure!(values.len() == length, "control byte literal length");
+                let bytes = values
+                    .iter()
+                    .map(|value| {
+                        value
+                            .as_u64()
+                            .and_then(|value| u8::try_from(value).ok())
+                            .ok_or_else(|| anyhow!("control byte literal must contain octets"))
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                (
+                    Type::Scalar(byte_scalar_type(length)),
+                    ExprKind::Literal(Value::Bytes(bytes)),
+                )
+            }
             "byteAt" => {
                 ensure!(self.schema_version == 2, "byte projections require v2 plan");
                 shape(v, &["tag", "value", "index"], true)?;
                 let index = field(v, "index")?
                     .as_u64()
                     .and_then(|index| usize::try_from(index).ok())
-                    .filter(|index| *index < 32)
                     .ok_or_else(|| anyhow!("control byte index"))?;
                 let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                let length = scalar_type(&value.ty)?.bytes_length().ok_or_else(|| {
+                    anyhow!("control byte projection requires a fixed byte string")
+                })?;
                 ensure!(
-                    value.ty == Type::Scalar(ScalarType::Bytes32),
-                    "control byte projection requires Bytes<32>"
+                    index < length,
+                    "control byte projection index is outside the byte string"
                 );
+                let operation = if length == 32 {
+                    format!("__byteAt:{index}")
+                } else {
+                    format!("__byteAt:{length}:{index}")
+                };
                 (
                     Type::Scalar(ScalarType::parse("UIntRange<256>")?),
-                    ExprKind::Bytes(format!("__byteAt:{index}"), vec![value]),
+                    ExprKind::Bytes(operation, vec![value]),
+                )
+            }
+            "reverseBytes" => {
+                ensure!(self.schema_version == 2, "byte operations require v2 plan");
+                shape(v, &["tag", "length", "value"], true)?;
+                let length = field(v, "length")?
+                    .as_u64()
+                    .and_then(|length| usize::try_from(length).ok())
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("control byte length"))?;
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                ensure!(
+                    value.ty == Type::Scalar(byte_scalar_type(length)),
+                    "reverseBytes operand length mismatch"
+                );
+                (
+                    Type::Scalar(byte_scalar_type(length)),
+                    ExprKind::Bytes(format!("reverseBytes:{length}"), vec![value]),
+                )
+            }
+            "sliceBytes" => {
+                ensure!(self.schema_version == 2, "byte operations require v2 plan");
+                shape(v, &["tag", "length", "value", "start", "end"], true)?;
+                let length = field(v, "length")?
+                    .as_u64()
+                    .and_then(|length| usize::try_from(length).ok())
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("control byte length"))?;
+                let start = field(v, "start")?
+                    .as_u64()
+                    .and_then(|start| usize::try_from(start).ok())
+                    .ok_or_else(|| anyhow!("control byte slice start"))?;
+                let end = field(v, "end")?
+                    .as_u64()
+                    .and_then(|end| usize::try_from(end).ok())
+                    .ok_or_else(|| anyhow!("control byte slice end"))?;
+                ensure!(start <= end && end <= length, "control byte slice bounds");
+                let value = self.expr(field(v, "value")?, env, depth + 1)?;
+                ensure!(
+                    value.ty == Type::Scalar(byte_scalar_type(length)),
+                    "sliceBytes operand length mismatch"
+                );
+                (
+                    Type::Scalar(byte_scalar_type(end - start)),
+                    ExprKind::Bytes(format!("sliceBytes:{length}:{start}:{end}"), vec![value]),
+                )
+            }
+            "concatBytes" => {
+                ensure!(self.schema_version == 2, "byte operations require v2 plan");
+                shape(
+                    v,
+                    &["tag", "leftLength", "rightLength", "left", "right"],
+                    true,
+                )?;
+                let left_length = field(v, "leftLength")?
+                    .as_u64()
+                    .and_then(|length| usize::try_from(length).ok())
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("control left byte length"))?;
+                let right_length = field(v, "rightLength")?
+                    .as_u64()
+                    .and_then(|length| usize::try_from(length).ok())
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("control right byte length"))?;
+                let length = left_length
+                    .checked_add(right_length)
+                    .filter(|length| *length <= scalars::MAX_BYTES_LENGTH)
+                    .ok_or_else(|| anyhow!("control concatenated byte length"))?;
+                let left = self.expr(field(v, "left")?, env, depth + 1)?;
+                let right = self.expr(field(v, "right")?, env, depth + 1)?;
+                ensure!(
+                    left.ty == Type::Scalar(byte_scalar_type(left_length))
+                        && right.ty == Type::Scalar(byte_scalar_type(right_length)),
+                    "concatBytes operand length mismatch"
+                );
+                (
+                    Type::Scalar(byte_scalar_type(length)),
+                    ExprKind::Bytes(
+                        format!("concatBytes:{left_length}:{right_length}"),
+                        vec![left, right],
+                    ),
                 )
             }
             "bytes" => {
@@ -1160,10 +1360,13 @@ fn validate_relation_inputs(
         let (token, _) = circuit_inputs
             .get(name)
             .ok_or_else(|| anyhow!("unknown native circuit input"))?;
+        let byte_length = ScalarType::parse(token)
+            .ok()
+            .and_then(|scalar| scalar.bytes_length());
         let names = if token == "JubjubPoint" {
             vec![format!("{name}_x"), format!("{name}_y")]
-        } else if token == "Bytes<32>" {
-            (0..32)
+        } else if let Some(length) = byte_length {
+            (0..length)
                 .map(|index| format!("{name}_byte_{index}"))
                 .collect()
         } else {
@@ -1257,8 +1460,11 @@ fn validate_relation_inputs(
             ScalarType::Native => None,
             ScalarType::Bool => Some(1),
             ScalarType::UInt(maximum) => Some(maximum.bits().max(1)),
-            ScalarType::Bytes32 => {
-                for index in 0..32 {
+            byte_type @ (ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
+                let length = byte_type
+                    .bytes_length()
+                    .expect("byte scalar type carries its checked length");
+                for index in 0..length {
                     ensure!(
                         bit_constraints
                             .get(&format!("{name}_byte_{index}"))
@@ -2051,8 +2257,11 @@ fn expected_ledger_inputs(impact_plan: &Json) -> Result<Vec<Json>> {
                 let input_name = text(input, "name")?;
                 let input_type = text(input, "type")?;
                 match ScalarType::parse(input_type)? {
-                    ScalarType::Bytes32 => {
-                        for index in 0..32 {
+                    byte_type @ (ScalarType::Bytes32 | ScalarType::Bytes(_)) => {
+                        let length = byte_type
+                            .bytes_length()
+                            .expect("byte scalar type carries its checked length");
+                        for index in 0..length {
                             public_source_inputs.push((
                                 format!("_noctium_bytes_{input_name}_{index}"),
                                 "UIntRange<256>".to_owned(),
@@ -4958,6 +5167,73 @@ mod completed_invocation_tests {
             session.resume_typed(response).unwrap();
         }
         panic!("control source call sequence exceeded test bound");
+    }
+
+    #[test]
+    fn generic_fixed_bytes_execute_operations_and_reject_bad_bounds() {
+        fn plan(result_type: &str, value: Json) -> Json {
+            json!({
+                "schemaVersion": 2,
+                "kind": "host-control",
+                "name": "genericBytesTest",
+                "types": [],
+                "mode": "host",
+                "binding": null,
+                "inputs": [],
+                "witnesses": [],
+                "functions": [{
+                    "id": "main",
+                    "name": "main",
+                    "parameters": [],
+                    "resultType": result_type,
+                    "body": [{"tag": "return", "value": value}]
+                }],
+                "entry": "main",
+                "limits": {"maxSteps": 256}
+            })
+        }
+
+        fn run(plan: Json) -> Json {
+            let parsed = Plan::parse(&plan, None).unwrap();
+            let context = source_context(&parsed, &"d".repeat(64));
+            let mut session = Session::from_json(plan, BTreeMap::new(), context).unwrap();
+            session.advance().unwrap()
+        }
+
+        let source = json!({"tag":"bytesLiteral","length":4,"values":[1,2,3,4]});
+        let reverse = json!({
+            "tag":"bytes",
+            "operation":"reverseBytes:4",
+            "arguments":[source]
+        });
+        let slice = json!({
+            "tag":"bytes",
+            "operation":"sliceBytes:4:1:3",
+            "arguments":[reverse]
+        });
+        let joined = json!({
+            "tag":"bytes",
+            "operation":"concatBytes:2:0",
+            "arguments":[slice,{"tag":"bytesLiteral","length":0,"values":[]}]
+        });
+        let nonempty_plan = plan("Bytes<2>", joined);
+        let completed = run(nonempty_plan.clone());
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(completed["result"], json!({"kind":"bytes","values":[3,2]}));
+
+        let mut out_of_bounds = nonempty_plan;
+        out_of_bounds["functions"][0]["body"][0]["value"]["arguments"][0]["operation"] =
+            json!("sliceBytes:4:1:5");
+        assert!(Plan::parse(&out_of_bounds, None).is_err());
+
+        let empty = json!({
+            "tag":"bytes",
+            "operation":"sliceBytes:4:2:2",
+            "arguments":[{"tag":"bytesLiteral","length":4,"values":[9,8,7,6]}]
+        });
+        let completed = run(plan("Bytes<0>", empty));
+        assert_eq!(completed["status"], "completed");
+        assert_eq!(completed["result"], json!({"kind":"bytes","values":[]}));
     }
 
     #[test]
