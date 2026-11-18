@@ -64,9 +64,9 @@ def contract (c : Config := {}) : Except String Contract := do
   let circuit ← relation c
   pure {
     name := "PrivateClaim"
-    state := [⟨"acceptedRoot", .cell .native, {}⟩,
-      ⟨"campaignId", .cell .native, {}⟩,
-      ⟨"spent", .map .native .bool, {}⟩]
+    state := [{name := "acceptedRoot", kind := .cell .native},
+      {name := "campaignId", kind := .cell .native},
+      {name := "spent", kind := .map .native .bool}]
     entrypoints := [{
       name := "claim"
       circuit
