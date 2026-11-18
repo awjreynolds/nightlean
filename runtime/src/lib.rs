@@ -2525,6 +2525,9 @@ mod jubjub;
 mod scalars;
 pub use scalars::{MAX_UINT_BITS, ScalarType, canonical_unsigned, max_uint};
 
+#[cfg(feature = "zkir-321")]
+pub mod foreign;
+
 /// Versioned portable artifact manifests.
 pub mod artifacts;
 pub use artifacts::ContractBundleSet;

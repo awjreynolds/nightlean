@@ -33,7 +33,7 @@ jobs:
           use-mathlib-cache: false
           use-github-cache: false
       - name: Build the POC compiler
-        run: lake build noctium Noctium.Compiler
+        run: lake build noctium Noctium.Compiler Noctium.Foreign
       - name: Check source contract examples
         run: |
           lake env lean examples/PrivateClaim.lean
@@ -57,6 +57,8 @@ jobs:
           lake env lean tests/ByteHashes.lean
           lake env lean tests/BooleanGates.lean
           lake env lean tests/HashToCurve.lean
+          lake env lean --run tests/ForeignEncoding.lean > /tmp/noctium-foreign-encoding.json
+          cmp /tmp/noctium-foreign-encoding.json runtime/tests/fixtures/foreign-codec/321/encoding.json
           lake env lean tests/CurveWitness.lean
           lake env lean tests/CurveHelpers.lean
           lake env lean tests/HashWitness.lean
