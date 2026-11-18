@@ -46,11 +46,20 @@ Zero-byte equality and unused partial byte bindings also preserve evaluation.
 [The source fixture](../../tests/NativeBytes.lean) and
 [focused native case](../../runtime/tests/native_bytes.rs) cover chunk boundaries,
 selection, typed returns, invalid lengths and output binding. A zero-field return
-still rejects a false private assertion. The existing Bytes32 reversal fixture's
-circuit and plan remain equal to their retained JSON objects.
+still rejects a false private assertion.
 
 These are source and native-checker results on the selected 3.2.1 profile. No new
 keys, proofs or deployment were created for this feature. [Byte ledger cells,
 map values and nested leaves](byte-storage.md) have separate scoped checks.
 Non-Bytes32 byte keys remain gated. Other native byte operations and full
 overload, proof and SDK qualification remain part of the wider capability goal.
+
+## Native byte packing
+
+Computed byte values now lower through native `bytes_into_natives`. The operation returns exactly `ceil(n / 31)` Native chunks, ordered from the first input bytes to the last. Each chunk uses little-endian byte order. The final partial chunk keeps its exact range. Source representations, disclosure rules and FAB output ordering stay the same. Other typed values continue using native `encode`.
+
+The source and producer support lengths 1 through 1024. Source `Bytes 0` erases to zero fields without creating a native zero-length byte value. The producer shares checked byte-chunk semantics with `encode` and rejects wrong types, output counts and unsupported lengths.
+
+The [source example](../../tests/NativeBytePacking.lean) returns reversed private byte strings at lengths 1, 31, 32, 62 and 63, plus an empty value. The [focused Rust case](../../runtime/tests/native_byte_packing.rs) checks the actual opcode and output counts, compares every returned byte and rejects a changed byte in the final chunk. The pinned 3.2.1 checker accepts the generated relation. One case passes in 0.01 seconds.
+
+Implementation revision: `4292fa13c494a8d27c40fd27f8f78b727ada3e1a`. The compiler, producer checks and source export pass. No new key generation, proofs, deployment or performance comparison accompanies this change. Upstream describes this instruction as a temporary bridge. The Lean byte representation stays independent of the instruction choice at future pins.

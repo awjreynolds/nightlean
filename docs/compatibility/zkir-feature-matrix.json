@@ -4771,9 +4771,9 @@
   ],
   "currentSourceSnapshot": {
     "checkedOn": "2026-11-18",
-    "sourceCommit": "121c415917551cc15f05a8c8dd6ee2a8a90a74a0",
+    "sourceCommit": "4292fa13c494a8d27c40fd27f8f78b727ada3e1a",
     "meaning": "Registered source-producer opcode coverage for restricted Native operations, bounded bytes including exact-length scalar ledger storage, hashing, typed Boolean gates, Jubjub inputs/operations/results/storage and scoped typed transport/operations/direct/nested scalar storage for all nine Secp and Curve25519 foreign types. This is not complete native type/overload, proof or ledger qualification.",
-    "registeredOpcodeCount": 38,
+    "registeredOpcodeCount": 39,
     "registeredOpcodes": [
       "add",
       "mul",
@@ -4812,9 +4812,10 @@
       "and",
       "or",
       "xor",
-      "hash_to_curve"
+      "hash_to_curve",
+      "bytes_into_natives"
     ],
-    "notExposedOpcodeCount": 9,
+    "notExposedOpcodeCount": 8,
     "notExposedOpcodes": [
       "copy",
       "into_bytes32",
@@ -4823,8 +4824,7 @@
       "bytes32_into_low_high",
       "bytes32_from_low_high",
       "div_mod_power_of_two",
-      "reconstitute_field",
-      "bytes_into_natives"
+      "reconstitute_field"
     ],
     "explicitNativeValueTypes": [
       "Native",
@@ -5396,6 +5396,24 @@
         "essentialRejects": "wrong provider result before staging, forged host response to internal callback, read metadata redirected to a different native read, undisclosed source write"
       },
       "limits": "Native runtime evidence covers one Native cell. Map/provider combinations, aggregate and nested state bodies, portable SDK bindings, whole guarded proof/ledger qualification and general source preservation remain open. No new keys, proofs, deployments, broad regressions or K benchmark."
+    },
+    "bytePacking": {
+      "checkedOn": "2026-11-18",
+      "sourceCommit": "4292fa13c494a8d27c40fd27f8f78b727ada3e1a",
+      "source": "../../tests/NativeBytePacking.lean",
+      "native": "../../runtime/tests/native_byte_packing.rs",
+      "documentation": "../development/fixed-bytes.md#native-byte-packing",
+      "opcode": "bytes_into_natives",
+      "newOpcodes": 1,
+      "scope": "Computed typed byte values use the existing native BytesIntoNatives operation with exactly ceil(n/31) little-endian Native chunks. Source Bytes1..1024 retain current ABI and disclosure, source Bytes0 erases to zero fields. Producer admission shares checked chunk semantics with Encode, while general Bool/Byte/curve Encode remains unchanged.",
+      "checks": {
+        "compilerAndClaimBuild": "passed",
+        "producerAdmission": "passed, including type, output-count and length rejects",
+        "sourceExport": "passed, selected 3.2.1 profile",
+        "native": "passed, one case in0.01seconds, byte lengths1/31/32/62/63 and empty erasure",
+        "bindingReject": "changing byte62 of a committed Bytes63 result rejects"
+      },
+      "limits": "Native checker evidence, no new keys/proofs/deployment, cross-profile rerun, K benchmark or general preservation theorem. Copy and seven deprecated instruction names remain unexposed. Upstream marks this packing instruction as a temporary bridge; the typed Lean byte representation does not depend on its continued presence in future pins."
     }
   }
 }
