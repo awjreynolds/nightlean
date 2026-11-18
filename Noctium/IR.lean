@@ -158,6 +158,18 @@ def LedgerValueType.counterPath (schema : LedgerValueType) (keys : List PathKey)
     let .counter ← schema.resolvePath keys
       | throw "counter path must select a Counter value"
 
+/-- A removal path names the complete entry path. Its final key selects an
+entry inside a map, while earlier keys select the parent map. -/
+def LedgerValueType.removalPath (schema : LedgerValueType) (keys : List PathKey) :
+    Except String Unit := do
+  if keys.isEmpty then throw "map removal requires at least one key"
+  if keys.length > 14 then throw "map removal path exceeds the native insertion depth"
+  let parents := keys.take (keys.length - 1)
+  let .map keyTy _ ← schema.resolvePath parents
+    | throw "map removal parent path must select a map"
+  let some finalKey := keys.getLast? | throw "map removal requires at least one key"
+  unless finalKey.ty == keyTy do throw "map removal key type mismatch"
+
 private def checkedNativeRecord (environment : Types.CompositeEnv)
     (type : Types.CompositeType) : Except String (Types.CheckedLayout Types.defaultLimits) := do
   let checked ← (Types.checkedLayout Types.defaultLimits environment type).mapError (·.message)
@@ -257,6 +269,7 @@ inductive Effect where
   | listPopFront (state : String) (keys : List PathKey)
   | listReset (state : String) (keys : List PathKey)
   | emptyMapPath (state : String) (keys : List PathKey)
+  | removePath (state : String) (keys : List PathKey)
   deriving Repr
 
 structure Entrypoint where
@@ -575,7 +588,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
-          .listPushFront .. | .listPopFront .. | .listReset .. => pure ()
+          .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on ledger reads, writes, and require effects"}
@@ -709,6 +722,15 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         for key in keys do key.validate caps env
         let .map _ _ ← resolveTreeState decls state keys
           | throw "emptyMap assignment must select a map value"
+        pure []
+      | .removePath state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown tree state '{state}'"
+        let .tree schema := decl.kind
+          | throw s!"state '{state}' is not a recursive map"
+        schema.removalPath keys
         pure []
     match result with
     | .error message => throw {span := e.span, message}

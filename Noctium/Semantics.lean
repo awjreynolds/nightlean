@@ -398,6 +398,20 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
         let next ← treeSet child rest value
         pure (.map (updateAssoc key next entries))
 
+/-- Remove a final map entry while preserving ancestor maps. A missing final key
+is an unchanged map, matching the ledger VM's Map.remove behavior. -/
+private def treeRemove (root : LedgerValue) : List Value → Option LedgerValue
+  | [] => none
+  | [key] => match root with
+    | .map entries => some (.map (entries.filter fun (oldKey, _) => oldKey != key))
+    | _ => none
+  | key :: rest => match root with
+    | .map entries => do
+      let child ← entries.lookup key
+      let updated ← treeRemove child rest
+      pure (.map (updateAssoc key updated entries))
+    | _ => none
+
 private def counterValueAt (ctx : EvalContext) (root : LedgerValue)
     (keys : List Value) : Except String Nat := do
   let maximum := 2 ^ 64 - 1
@@ -579,6 +593,12 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       let some updated := treeSet root evaluated (.map [])
         | throw s!"nested map parent is missing or not a map '{name}'"
       next := {next with trees := updateAssoc name updated next.trees}
+    | .removePath name keys => do
+      let evaluated ← evaluatePath ctx env keys
+      let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
+      let some updated := treeRemove root evaluated
+        | throw s!"nested map parent is missing or not a map '{name}'"
+      next := {next with trees := updateAssoc name updated next.trees}
   pure (env, next)
 
 /-- Execute ordered effects while preserving the historical state-only result. -/
@@ -606,7 +626,7 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
         | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
-            .counterAdjust .. | .counterReset .. => pure ()
+            .counterAdjust .. | .counterReset .. | .removePath .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -760,6 +780,12 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
           let some updated := treeSet root evaluated (.map [])
             | throw s!"nested map parent is missing or not a map '{name}'"
           next := {next with trees := updateAssoc name updated next.trees}
+        | .removePath name keys => do
+          let evaluated ← evaluatePath ctx env keys
+          let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
+          let some updated := treeRemove root evaluated
+            | throw s!"nested map parent is missing or not a map '{name}'"
+          next := {next with trees := updateAssoc name updated next.trees}
       else
         match effect with
         | .readCell _ destination ty =>
@@ -784,7 +810,7 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
           env := (destination, .bool false) :: env
         | .writeCell .. | .writeMap .. | .require .. | .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
-            .listPopFront .. | .listReset .. => pure ()
+            .listPopFront .. | .listReset .. | .removePath .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with
             | .native => 0

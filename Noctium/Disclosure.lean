@@ -161,6 +161,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .readCompositePath .. | some condition, .writeCompositePath ..
       | some condition, .emptyMapPath .. | some condition, .counterRead ..
       | some condition, .counterAdjust .. | some condition, .counterReset ..
+      | some condition, .removePath ..
       | some condition, .listLength .. | some condition, .listHead ..
       | some condition, .listPushFront .. | some condition, .listPopFront ..
       | some condition, .listReset .. =>
@@ -262,6 +263,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
           (← expression env span payload) activeControl
     | .emptyMapPath state keys =>
       checkSink {description := s!"public empty-map path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+    | .removePath state keys =>
+      checkSink {description := s!"public nested map removal path '{state}'", span}
         (← pathExpression env span keys) activeControl
   for output in value.returns do
     checkSink {description := s!"public entrypoint return '{output.name}'", span := output.span}

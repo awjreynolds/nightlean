@@ -574,7 +574,7 @@ fn run_entry(
         session
             .resume_typed(reply(request, &attempt_id, value))
             .unwrap();
-    };
+    }
     let expected_reads = if wallet.is_empty() {
         BTreeSet::new()
     } else {
@@ -604,7 +604,10 @@ fn run_entry(
     )
     .unwrap();
     check(&execution, &circuit).map_err(|error| error.to_string())?;
-    if matches!(entry, "registerWithKey" | "sweep" | "transfer" | "_move" | "burn") {
+    if matches!(
+        entry,
+        "registerWithKey" | "sweep" | "transfer" | "_move" | "burn"
+    ) {
         assert_eq!(
             execution.returns_json()["caller"],
             expected_caller.expect("caller return needs accountId")
@@ -1101,24 +1104,15 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         ("recipientPk".into(), point_json(alice_key)),
         ("epoch".into(), json!("2")),
     ]);
-    for (name, value) in [
-        "balanceC1X",
-        "balanceC1Y",
-        "balanceC2X",
-        "balanceC2Y",
-    ]
-    .into_iter()
-    .zip(alice_balance_before_move)
-    .chain(
-        [
-            "pendingC1X",
-            "pendingC1Y",
-            "pendingC2X",
-            "pendingC2Y",
-        ]
+    for (name, value) in ["balanceC1X", "balanceC1Y", "balanceC2X", "balanceC2Y"]
         .into_iter()
-        .zip(alice_pending_before_move),
-    ) {
+        .zip(alice_balance_before_move)
+        .chain(
+            ["pendingC1X", "pendingC1Y", "pendingC2X", "pendingC2Y"]
+                .into_iter()
+                .zip(alice_pending_before_move),
+        )
+    {
         move_values.insert(name.into(), json!(field_decimal(value)));
     }
     let (after_move, move_inputs) = run_entry(
@@ -1155,11 +1149,11 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
     );
     assert_ciphertext(&move_plan, &state, "pending", &bob, recipient_after);
     assert_eq!(decrypt_small(alice_after_move, alice_key_scalar, 64), 4);
-    assert_eq!(decrypt_small(alice_pending_after_move, alice_key_scalar, 64), 1);
     assert_eq!(
-        decrypt_small(recipient_after, bob_key_scalar, 64),
-        5
+        decrypt_small(alice_pending_after_move, alice_key_scalar, 64),
+        1
     );
+    assert_eq!(decrypt_small(recipient_after, bob_key_scalar, 64), 5);
     let (alice_memo_count, alice_memos) = memo_records(&move_plan, &state, &alice);
     assert_eq!(alice_memo_count, 2);
     assert_eq!(
@@ -1198,7 +1192,10 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
         8,
         &state,
     );
-    assert!(stale_clear.is_err(), "stale memo epoch passed the native relation");
+    assert!(
+        stale_clear.is_err(),
+        "stale memo epoch passed the native relation"
+    );
     let wrong_key_clear = run_entry(
         "clearMemos",
         clear_values("2"),
@@ -1227,7 +1224,10 @@ fn confidential_token_registration_pending_sweep_and_transfer_use_native_relatio
     .unwrap()
     .0;
     assert_eq!(memo_records(&clear_plan, &state, &alice), (0, Vec::new()));
-    assert_eq!(memo_records(&clear_plan, &state, &bob), bob_memos_before_clear);
+    assert_eq!(
+        memo_records(&clear_plan, &state, &bob),
+        bob_memos_before_clear
+    );
     assert_record(
         &clear_plan,
         &state,

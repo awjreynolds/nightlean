@@ -192,6 +192,7 @@ scoped syntax "insert" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleff
 scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffect
 scoped syntax "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "popFront" nlpath : nleffect
+scoped syntax "remove" nlpath : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
@@ -207,6 +208,7 @@ scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by"
 scoped syntax "when" nlexpr "reset" nlpath : nleffect
 scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
+scoped syntax "when" nlexpr "remove" nlpath : nleffect
 
 declare_syntax_cat nlstatement
 scoped syntax nleffect : nlstatement
@@ -732,6 +734,7 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr reset $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlleaves) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
   | _ => none
 
 private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
@@ -942,6 +945,22 @@ private def elaborateCompositePathWrite (schema : List (String × StateKind))
     $(stringTerm storage.getId.toString) $pathTerm $typeTerm $valueList)
   pure {state with terms := state.terms.push term}
 
+private def elaborateMapRemove (schema : List (String × StateKind))
+    (path : TSyntax `nlpath) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let (storage, sourceKeys) ← sourcePathParts path
+  let some finalKey := sourceKeys.getLast?
+    | throwErrorAt path "remove requires at least one map key"
+  let treeSchema ← treeStateSchema schema storage
+  let parents := sourceKeys.take (sourceKeys.length - 1)
+  let (parentTerms, parentSchema) ← lowerTreePath state.env treeSchema parents
+  let .map keyTy _ := parentSchema
+    | throwErrorAt path "remove parent path must select a map"
+  let loweredFinalKey ← checkedExpression state.env finalKey keyTy
+  let finalTerm ← `(Noctium.PathKey.mk $(← tyTerm keyTy) $loweredFinalKey)
+  let keys ← pathKeysTerm (parentTerms ++ [finalTerm])
+  let term ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keys)
+  pure {state with terms := state.terms.push term}
+
 private def elaborateNamedPathRead (schema : List (String × StateKind))
     (operation : String) (path : TSyntax `nlpath) (destination : TSyntax `ident)
     (depth : Nat) (state : EntryEffects) : CommandElabM EntryEffects := do
@@ -1087,6 +1106,9 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| popFront $path:nlpath)
   | `(nleffect| when $_:nlexpr popFront $path:nlpath) =>
     state := ← elaborateListPopFront schema path state
+  | `(nleffect| remove $path:nlpath)
+  | `(nleffect| when $_:nlexpr remove $path:nlpath) =>
+    state := ← elaborateMapRemove schema path state
   | `(nleffect| reset $path:nlpath)
   | `(nleffect| when $_:nlexpr reset $path:nlpath) =>
     state := ← elaborateReset schema path state

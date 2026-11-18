@@ -48,6 +48,7 @@ inductive Op where
   | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
   | listPopFront (slot : Nat) (keys : List Aligned)
   | listReset (slot : Nat) (keys : List Aligned)
+  | mapRemove (slot : Nat) (keys : List Aligned)
 
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
@@ -125,6 +126,13 @@ def Op.fields : Op → List Scalar
           let parents := keys.take (keys.length - 1)
           indexPathFields slot true parents ++ [.native 0x10, .native 1] ++
             finalKey.fields ++ emptyListPushFields ++ [.native (0x90 + keys.length + 1)]
+  | .mapRemove slot keys =>
+      match keys.getLast? with
+      | none => []
+      | some finalKey =>
+        let parents := keys.take (keys.length - 1)
+        indexPathFields slot true parents ++ [.native 0x10, .native 1] ++
+          finalKey.fields ++ [.native 0x19, .native (0x90 + keys.length)]
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
 macros remain one typed source effect, but their field vectors split at each
@@ -156,6 +164,14 @@ def Op.fieldGroups : Op → List (List Scalar)
         [indexPathFields slot true parents,
           [.native 0x10, .native 1] ++ finalKey.fields,
           emptyListPushFields, [.native (0x90 + keys.length + 1)]]
+  | .mapRemove slot keys =>
+      match keys.getLast? with
+      | none => []
+      | some finalKey =>
+        let parents := keys.take (keys.length - 1)
+        [indexPathFields slot true parents,
+          [.native 0x10, .native 1] ++ finalKey.fields,
+          [.native 0x19], [.native (0x90 + keys.length)]]
   | operation => [operation.fields]
 
 structure Read where
@@ -598,6 +614,15 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     discard (resolveListState state name keys)
     let alignedKeys ← nativePathKeys keys
     pure {plan with operations := plan.operations ++ [.listReset slot alignedKeys]}
+  | .removePath name keys => do
+    let slot ← stateSlot state name
+    let some declaration := state.find? (·.name == name)
+      | throw s!"unknown tree state '{name}'"
+    let .tree schema := declaration.kind
+      | throw s!"state '{name}' is not a recursive map"
+    schema.removalPath keys
+    let alignedKeys ← nativePathKeys keys
+    pure {plan with operations := plan.operations ++ [.mapRemove slot alignedKeys]}
   | .readCompositePath name destination keys type destinations => do
     let slot ← stateSlot state name
     let .composite environment foundType ← resolveTreeState state name keys
@@ -711,6 +736,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.listPopFront name (totalizePathKeys condition keys))
     | some condition, .listReset name keys =>
       pure (.listReset name (totalizePathKeys condition keys))
+    | some condition, .removePath name keys =>
+      pure (.removePath name (totalizePathKeys condition keys))
     | some condition, .insertPath name keys ty value =>
       let avoid := pathExpressionNames keys ++ expressionNames value
       pure (.insertPath name (totalizePathKeys condition keys) ty
@@ -762,7 +789,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .writeCompositePath .. | some condition, .emptyMapPath .. |
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
-      some condition, .listReset .. =>
+      some condition, .listReset .. | some condition, .removePath .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -1034,6 +1061,15 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let keys ← nativePathKeys keys
     let operations ← pathWriteOps slot keys (.field (.native 2)) true
     plan := {plan with operations := plan.operations ++ operations}
+  | .removePath name keys => do
+    let slot ← stateSlot state name
+    let some declaration := state.find? (·.name == name)
+      | throw s!"unknown tree state '{name}'"
+    let .tree schema := declaration.kind
+      | throw s!"state '{name}' is not a recursive map"
+    schema.removalPath keys
+    let alignedKeys ← nativePathKeys keys
+    plan := {plan with operations := plan.operations ++ [.mapRemove slot alignedKeys]}
   pure plan
 
 private def previousEffectLoop (state : List StateDecl) (effects : List Effect)
@@ -1201,6 +1237,8 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .listPopFront slot keys => pure (Lean.Json.mkObj [("listPopFront", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .listReset slot keys => pure (Lean.Json.mkObj [("listReset", Lean.Json.mkObj [
+      ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
+  | .mapRemove slot keys => pure (Lean.Json.mkObj [("mapRemove", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do

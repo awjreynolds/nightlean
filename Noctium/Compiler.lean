@@ -208,6 +208,9 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .listReset slot keys => Json.mkObj [
       ("op", toJson ("listReset" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
+  | .mapRemove slot keys => Json.mkObj [
+      ("op", toJson ("mapRemove" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
 
 private def operationJson (activityGuard : Option (Expr .bool))
     (operation : Backend.Impact.Op) : Json :=
@@ -303,6 +306,10 @@ private def effectJson : Effect → Json
       ("values", toJson (values.map expressionJson))]
   | .emptyMapPath state keys => Json.mkObj [
       ("op", toJson ("emptyMapPath" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .removePath state keys => Json.mkObj [
+      ("op", toJson ("removePath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value))]
 

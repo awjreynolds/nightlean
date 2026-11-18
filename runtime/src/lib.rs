@@ -654,6 +654,11 @@ pub enum Instruction {
         slot: u32,
         keys: Vec<PathPart>,
     },
+    #[serde(rename = "mapRemove")]
+    MapRemove {
+        slot: u32,
+        keys: Vec<PathPart>,
+    },
     #[serde(rename = "listReset")]
     ListReset {
         slot: u32,
@@ -719,6 +724,14 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         Instruction::ListPopFront { slot, keys } => {
             vec![path_field_count(plan, *slot, keys)?, 1, 4, 2, 1, 4, 1]
         }
+        Instruction::MapRemove { slot, keys } => {
+            let (_, parents) = keys
+                .split_last()
+                .ok_or_else(|| anyhow!("map removal requires a key"))?;
+            let full = path_field_count(plan, *slot, keys)?;
+            let parent = path_field_count(plan, *slot, parents)?;
+            vec![parent, 2 + full - parent, 1, 1]
+        }
         Instruction::ListReset { slot, keys } => {
             if let Some((_, parents)) = keys.split_last() {
                 let full = path_field_count(plan, *slot, keys)?;
@@ -757,7 +770,8 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         | Instruction::ListHead { .. }
         | Instruction::ListPushFront { .. }
         | Instruction::ListPopFront { .. }
-        | Instruction::ListReset { .. } => {
+        | Instruction::ListReset { .. }
+        | Instruction::MapRemove { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
         Instruction::Push { alignment, .. } => 4 + value_fields(alignment)?,
@@ -1543,6 +1557,7 @@ pub fn prepare(
                             | Instruction::ListPushFront { .. }
                             | Instruction::ListPopFront { .. }
                             | Instruction::ListReset { .. }
+                            | Instruction::MapRemove { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -2063,6 +2078,26 @@ pub fn prepare(
                     n: (keys.len() + 1).try_into()?,
                 }
             }
+            Instruction::MapRemove { slot, keys } => {
+                let (_, parents) = keys
+                    .split_last()
+                    .ok_or_else(|| anyhow!("map removal requires a key"))?;
+                let (_, values) = native_index(plan, *slot, keys, false, &env)?;
+                let (index, _) = native_index(plan, *slot, parents, true, &env)?;
+                program.extend([
+                    index,
+                    push_native_state(
+                        StateValue::Cell(Sp::new(values.last().expect("nonempty path").clone())),
+                        false,
+                    )?,
+                    Op::Rem { cached: false },
+                ]);
+                has_written = true;
+                Op::Ins {
+                    cached: false,
+                    n: keys.len().try_into()?,
+                }
+            }
             Instruction::ListReset { slot, keys } => {
                 list_schema_at_path(plan, *slot, keys.len())?;
                 let (_, values) = native_index(plan, *slot, keys, false, &env)?;
@@ -2142,6 +2177,7 @@ pub fn prepare(
                 | Instruction::ListPushFront { .. }
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
+                | Instruction::MapRemove { .. }
         ) {
             mutation_boundary = program.len();
         }
