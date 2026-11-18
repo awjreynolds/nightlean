@@ -1908,8 +1908,7 @@ private def elaborateConstructor (source : TSyntax `nlstate)
       | `(nlentry| entry $id:ident from $source:ident entry $exportName:str end) =>
         if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
         entryNames := id.getId :: entryNames
-        let namespaceName := (← getCurrNamespace) ++ source.getId
-        let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+        let sourceName ← liftCoreM <| resolveGlobalConstNoOverload source
         let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
         let value ← match Witness.compileStateEntrypoint program exportName.getString concreteSchema with
           | .ok value => pure value
@@ -1954,8 +1953,7 @@ open scoped Noctium
 @[command_elab helperCircuitCommand] unsafe def elabHelperCircuit : CommandElab := fun stx => do
   match stx with
   | `(noctium_helper_circuit $name:ident from $source:ident entry $exportName:str) =>
-    let namespaceName := (← getCurrNamespace) ++ source.getId
-    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+    let sourceName ← liftCoreM <| resolveGlobalConstNoOverload source
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     match ComponentDisclosure.checkProgram program exportName.getString with
     | .ok _ => pure ()
@@ -2048,8 +2046,7 @@ open scoped Noctium
 @[command_elab controlPlanCommand] unsafe def elabControlPlan : CommandElab := fun stx => do
   match stx with
   | `(noctium_control $name:ident from $source:ident entry $exportName:str) =>
-    let namespaceName := (← getCurrNamespace) ++ source.getId
-    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+    let sourceName ← liftCoreM <| resolveGlobalConstNoOverload source
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     match Control.compile program exportName.getString with
     | .error diagnostic => throwErrorAt stx diagnostic.message
@@ -2098,8 +2095,7 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
 @[command_elab witnessCircuitCommand] unsafe def elabWitnessCircuit : CommandElab := fun stx => do
   match stx with
   | `(noctium_witness_circuit $name:ident from $source:ident entry $exportName:str) =>
-    let namespaceName := (← getCurrNamespace) ++ source.getId
-    let sourceName := if (← getEnv).contains namespaceName then namespaceName else source.getId
+    let sourceName ← liftCoreM <| resolveGlobalConstNoOverload source
     registerWitnessCircuit name sourceName exportName.getString
   | _ => throwUnsupportedSyntax
 

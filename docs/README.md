@@ -63,6 +63,7 @@ The [assurance report](development/assurance.md) documents the proved pruning pa
 - [Typed signature helpers](development/signatures.md), ECDSA, Schnorr, Ed25519 and Ethereum addresses with explicit disclosure and protocol boundaries.
 - [Native helper branches](development/native-helper-branches.md), witness-free lazy control, scoped bindings and guarded cell updates through shared native lowering.
 - [Structured state entries](development/structured-cells.md), typed cell/map reads, membership and writes inside guarded helper bodies, plus state-dependent typed witnesses and private staging.
+- [Anonymous operators, map and fold](development/iteration.md), staged Lean source construction with lexical captures, strict sequence evaluation and ordered typed providers.
 - [Guarded typed witnesses](development/guarded-witnesses.md), conditional providers, canonical skipped slots and sparse static call bindings.
 - [Jubjub ledger storage](development/jubjub-storage.md), checked scalar/point values across cells, maps and nested leaves.
 - [Nested foreign ledger state](development/foreign-trees.md), typed scalar leaves, parent creation, guarded defaults and preserved sibling entries.

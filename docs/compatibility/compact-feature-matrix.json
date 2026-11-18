@@ -778,8 +778,8 @@
       "id": "C-LANG-MAPFOLD",
       "layer": "language",
       "surface": "map, fold and anonymous circuits",
-      "noctiumStatus": "missing",
-      "notes": "Do not confuse expression map with ledger Map.",
+      "noctiumStatus": "subset",
+      "notes": "Staged Lean Iteration.applyWithLimits/mapWithLimits/foldWithLimits construct checked ordinary Helpers programs. Named helpers and anonymous statement bodies support inferred signatures and typed lexical captures. Fixed vector map requires equal lengths and checked scalar results. Fold evaluates initial before sequence and requires exact accumulator/result types. Unit parameters/captures, composite map results, other sequence forms and readable operator grammar remain open. See docs/development/iteration.md and tests/IterationWitness.lean.",
       "source": [
         "reference"
       ],
@@ -787,7 +787,9 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "SEM"
+      ],
       "equivalence": "unverified"
     },
     {

@@ -5454,6 +5454,30 @@
       },
       "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable loop grammar, anonymous functions and container map/fold remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85.",
       "genericSource": "../../tests/GenericSpecialization.lean"
+    },
+    "staticOperators": {
+      "checkedOn": "2026-11-18",
+      "source": "../../tests/Iteration.lean",
+      "contract": "../../tests/IterationWitness.lean",
+      "native": "../../runtime/src/witness_execution/iteration_ledger_tests.rs",
+      "implementation": "../../Noctium/Helpers/Iteration.lean",
+      "documentation": "../development/iteration.md",
+      "newOpcodes": 0,
+      "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vector expressions once and returns a checked scalar vector. Fold evaluates initial before sequence, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution.",
+      "checks": {
+        "compilerBuild": "passed,76 jobs",
+        "operatorSource": "passed, captured/inferred and named apply, both lexical hiding rejects, map/fold compilation, empty vector map, unequal lengths, missing capture and accumulator mismatch",
+        "sourceExport": "passed, selected3.2.1 with private source definitions and mandatory source disclosure rejection",
+        "native": "one case passed in0.08seconds covering active/inactive/altered reply; seed then one vector load then mapped provider args3/4/5 and replies6/8/10; final total24 or0 with matching private staging; both completed paths pass native checker",
+        "existingWitnessSource": "passed after source name resolution change"
+      },
+      "artifactBytes": {
+        "impact": 1812690,
+        "zkir": 11479,
+        "binding": 35948,
+        "control": 56573
+      },
+      "limits": "Staged source API only. Unit parameters/captures, composite map results and other sequence forms remain open in issue48. Existing aggregate scalar-layout restrictions apply. No new keys/proofs/deployments, cross-profile campaign, K/timing benchmark, portable-runner comparison or general operator-preservation proof. Syntax closure sharing and broader optimisation remain deferred under issue85."
     }
   }
 }

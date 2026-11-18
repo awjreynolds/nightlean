@@ -70,7 +70,9 @@ jobs:
           lake env lean tests/StructuredLedgerWitness.lean
           lake env lean tests/StructuredTypedCells.lean
           lake env lean tests/FiniteRangeWitness.lean
+          lake env lean tests/IterationWitness.lean
           lake env lean tests/Helpers.lean
+          lake env lean tests/Iteration.lean
           lake env lean tests/GenericSpecialization.lean
           lake env lean tests/Control.lean
           lake env lean --run tests/NativeProducer.lean
