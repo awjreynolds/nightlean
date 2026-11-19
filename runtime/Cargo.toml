@@ -5,6 +5,10 @@ edition = "2024"
 license = "MIT"
 publish = false
 
+[workspace]
+members = ["web"]
+default-members = ["."]
+
 [lib]
 crate-type = ["rlib", "cdylib", "staticlib"]
 

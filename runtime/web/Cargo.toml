@@ -1,0 +1,19 @@
+[package]
+name = "noctium-witness-web"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+noctium-runtime = { path = "..", default-features = false, features = ["zkir-321"] }
+wasm-bindgen = "=0.2.130"
+js-sys = "=0.3.107"
+zeroize = "1.9"
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+getrandom-web-02 = { package = "getrandom", version = "0.2", features = ["js"] }
+getrandom-web-04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }

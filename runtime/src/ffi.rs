@@ -454,14 +454,14 @@ fn advance(session: &mut Session) -> Result<Json, i32> {
     }
 }
 
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_runtime_abi_version() -> u32 {
     ABI_VERSION
 }
 
 /// # Safety
 /// Foreign pointers must satisfy the readable/writable memory contract in the C header.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_session_begin(
     bytes: *const u8,
     length: usize,
@@ -492,7 +492,7 @@ pub unsafe extern "C" fn noctium_session_begin(
 }
 /// # Safety
 /// out_result must point to writable storage for one uint64_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_session_advance(session: u64, out_result: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_result)? };
@@ -508,7 +508,7 @@ pub unsafe extern "C" fn noctium_session_advance(session: u64, out_result: *mut 
 }
 /// # Safety
 /// bytes/length and out_result must satisfy the C header's memory contract.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_session_resume(
     session: u64,
     bytes: *const u8,
@@ -579,7 +579,7 @@ pub unsafe extern "C" fn noctium_session_resume(
 }
 /// # Safety
 /// out_result must point to writable storage for one uint64_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_session_cancel(session: u64, out_result: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_result)? };
@@ -600,7 +600,7 @@ pub unsafe extern "C" fn noctium_session_cancel(session: u64, out_result: *mut u
         Ok(())
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_session_free(session: u64) -> i32 {
     guard(|| {
         registry().sessions.remove(&session).ok_or(INVALID_HANDLE)?;
@@ -609,7 +609,7 @@ pub extern "C" fn noctium_session_free(session: u64) -> i32 {
 }
 /// # Safety
 /// out_length must point to writable storage for one size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_result_length(result: u64, out_length: *mut usize) -> i32 {
     guard(|| {
         if out_length.is_null() {
@@ -624,7 +624,7 @@ pub unsafe extern "C" fn noctium_result_length(result: u64, out_length: *mut usi
 }
 /// # Safety
 /// destination must be writable for capacity bytes; out_written for one size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_result_copy(
     result: u64,
     destination: *mut u8,
@@ -651,7 +651,7 @@ pub unsafe extern "C" fn noctium_result_copy(
         Ok(())
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_result_free(result: u64) -> i32 {
     guard(|| {
         let mut bytes = registry().results.remove(&result).ok_or(INVALID_HANDLE)?;
@@ -758,7 +758,7 @@ impl Registry {
 }
 /// # Safety
 /// bytes/length and out_result must satisfy the C header's memory contract.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_session_stage_private(
     session: u64,
     bytes: *const u8,
@@ -787,7 +787,7 @@ pub unsafe extern "C" fn noctium_session_stage_private(
 }
 /// # Safety
 /// bytes/length and out_result must satisfy the C header's memory contract.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_session_notify(
     session: u64,
     bytes: *const u8,
@@ -823,7 +823,7 @@ pub unsafe extern "C" fn noctium_session_notify(
 /// Return a separately owned PRIVATE buffer token, never a normal result token.
 /// # Safety
 /// out_private must address writable storage for one uint64_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_session_private_data(
     session: u64,
     kind: u32,
@@ -855,7 +855,7 @@ pub unsafe extern "C" fn noctium_session_private_data(
 }
 /// # Safety
 /// out_length must address writable storage for one size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_private_length(token: u64, out_length: *mut usize) -> i32 {
     guard(|| {
         if out_length.is_null() {
@@ -870,7 +870,7 @@ pub unsafe extern "C" fn noctium_private_length(token: u64, out_length: *mut usi
 }
 /// # Safety
 /// destination and out_written follow the C header's writable-memory contract.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_private_copy(
     token: u64,
     destination: *mut u8,
@@ -897,7 +897,7 @@ pub unsafe extern "C" fn noctium_private_copy(
         Ok(())
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_private_free(token: u64) -> i32 {
     guard(|| {
         let mut value = registry()

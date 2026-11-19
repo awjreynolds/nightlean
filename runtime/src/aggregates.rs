@@ -1981,13 +1981,13 @@ fn store(mut value: Vec<u8>) -> std::result::Result<u64, i32> {
     registry.data.insert(token, value);
     Ok(token)
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_aggregate_abi_version() -> u32 {
     1
 }
 /// # Safety
 /// Borrowed inputs must be readable and output must be aligned writable storage, without overlap.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_aggregate_encode(
     schema: *const u8,
     schema_length: usize,
@@ -2013,7 +2013,7 @@ pub unsafe extern "C" fn noctium_aggregate_encode(
 }
 /// # Safety
 /// Borrowed inputs must be readable and output must be aligned writable storage, without overlap.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_aggregate_decode(
     schema: *const u8,
     schema_length: usize,
@@ -2039,7 +2039,7 @@ pub unsafe extern "C" fn noctium_aggregate_decode(
 }
 /// # Safety
 /// out_length must be aligned writable storage for one size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_aggregate_buffer_length(
     token: u64,
     out_length: *mut usize,
@@ -2058,7 +2058,7 @@ pub unsafe extern "C" fn noctium_aggregate_buffer_length(
 }
 /// # Safety
 /// Output storage must be writable, aligned and nonoverlapping. No partial copies are performed.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_aggregate_buffer_copy(
     token: u64,
     destination: *mut u8,
@@ -2084,7 +2084,7 @@ pub unsafe extern "C" fn noctium_aggregate_buffer_copy(
         Ok(())
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_aggregate_buffer_free(token: u64) -> i32 {
     guard(|| {
         let mut value = buffers().data.remove(&token).ok_or(INVALID_HANDLE)?;

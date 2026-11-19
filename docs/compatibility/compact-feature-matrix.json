@@ -1385,7 +1385,7 @@
       "layer": "artifact-runtime",
       "surface": "Portable execution and value ABI",
       "noctiumStatus": "subset",
-      "notes": "Qualified Rust, C/C++, Swift and Kotlin Android proof/client subsets run without Node. Kotlin proved and finalized both the original K9 claim and the typed K7 witness, and recovered and committed private state for the typed witness on an arm64 Android emulator. Physical-device execution, TypeScript/WASM and full ABI equivalence remain open.",
+      "notes": "Qualified Rust, C/C++, Swift and Kotlin Android proof/client subsets run without Node. Kotlin proved and finalized both the original K9 claim and the typed K7 witness, and recovered and committed private state for the typed witness on an arm64 Android emulator. TypeScript/WASM runs host-control witnesses in a Chrome worker. Physical-device execution, browser proving and transactions, and full ABI equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -1403,6 +1403,7 @@
         "docs/development/android-witness-sdk.md",
         "docs/development/android-localnet-receipt.json",
         "docs/development/android-private-claim-receipt.json",
+        "docs/development/web-witness-sdk.md",
         "tests/witness62-public/qualification-evidence.json"
       ],
       "equivalence": "unverified",

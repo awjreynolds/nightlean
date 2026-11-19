@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Noctium browser witness smoke test</title>
+<body data-result="pending">
+<script type="module">
+    const worker = new Worker("./witness-smoke.js", { type: "module" })
+    worker.onmessage = ({ data }) => {
+        document.body.dataset.result = data.passed ? "passed" : "failed"
+        document.body.textContent = JSON.stringify(data)
+        worker.terminate()
+    }
+    worker.onerror = () => {
+        document.body.dataset.result = "failed"
+        document.body.textContent = "Witness worker failed to load"
+        worker.terminate()
+    }
+</script>
+</body>
+</html>

@@ -273,7 +273,7 @@ pub(crate) fn native_target_context_snapshot(
 
 /// # Safety
 /// All buffers must remain valid until return. State is private initial contract state.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_native_witness_target_begin(
     descriptor: *const u8,
     descriptor_len: usize,
@@ -370,7 +370,7 @@ pub unsafe extern "C" fn noctium_native_witness_target_begin(
     })
 }
 
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_native_target_context_free(token: u64) -> i32 {
     guard(|| {
         registry(|r| {
@@ -391,7 +391,7 @@ pub extern "C" fn noctium_native_target_context_free(token: u64) -> i32 {
 /// # Safety
 /// Descriptor, SRS and entropy buffers must remain valid until return. Private inputs stay in
 /// the completed Control session and are read only after bundle and SRS validation.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_native_begin_from_witness(
     descriptor: *const u8,
     descriptor_len: usize,
@@ -598,7 +598,7 @@ pub unsafe extern "C" fn noctium_native_begin_from_witness(
 
 /// # Safety
 /// Every pointer must reference the stated readable/writable memory until return. Entropy is 32 fresh secret bytes.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_native_begin(
     descriptor: *const u8,
     descriptor_len: usize,
@@ -721,7 +721,7 @@ pub unsafe extern "C" fn noctium_native_begin(
 }
 /// # Safety
 /// out_result must reference a writable token. Request metadata is host-private transport.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_native_advance(session: u64, out_result: *mut u64) -> i32 {
     guard(|| {
         unsafe {
@@ -750,7 +750,7 @@ pub unsafe extern "C" fn noctium_native_advance(session: u64, out_result: *mut u
 }
 /// # Safety
 /// out_payload must reference a writable token. The returned token grants explicit private service access.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_native_private_request(
     session: u64,
     out_payload: *mut u64,
@@ -783,7 +783,7 @@ pub unsafe extern "C" fn noctium_native_private_request(
 }
 /// # Safety
 /// Reply metadata/proof must remain readable until return. No asynchronous work survives return.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_native_resume(
     session: u64,
     metadata: *const u8,
@@ -852,7 +852,7 @@ pub unsafe extern "C" fn noctium_native_resume(
 }
 /// # Safety
 /// Fresh 32-byte host entropy and out_response must remain valid until return. This call performs CPU work.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_native_local_prove(
     payload: u64,
     coins: *const u8,
@@ -900,7 +900,7 @@ pub unsafe extern "C" fn noctium_native_local_prove(
         })
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_native_cancel(session: u64) -> i32 {
     guard(|| {
         registry(|r| {
@@ -917,7 +917,7 @@ pub extern "C" fn noctium_native_cancel(session: u64) -> i32 {
         })
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_native_free(session: u64) -> i32 {
     guard(|| {
         registry(|r| {
@@ -998,13 +998,13 @@ macro_rules! buffers {
     ($len:ident,$copy:ident,$free:ident,$private:expr) => {
         /// # Safety
         /// out must reference writable size_t memory.
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
         pub unsafe extern "C" fn $len(token: u64, out: *mut usize) -> i32 {
             unsafe { length(token, out, $private) }
         }
         /// # Safety
         /// buffer must reference capacity writable bytes and written a writable size_t.
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
         pub unsafe extern "C" fn $copy(
             token: u64,
             buffer: *mut u8,
@@ -1013,7 +1013,7 @@ macro_rules! buffers {
         ) -> i32 {
             unsafe { copy(token, buffer, capacity, written, $private) }
         }
-        #[unsafe(no_mangle)]
+        #[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
         pub extern "C" fn $free(token: u64) -> i32 {
             free(token, $private)
         }
@@ -1214,7 +1214,7 @@ pub(crate) fn service_reply(
 }
 /// # Safety
 /// All input/output pointers must remain valid until return. Setup is a separate private channel.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_start(
     source: u64,
     kind: u32,
@@ -1283,7 +1283,7 @@ pub unsafe extern "C" fn noctium_client_start(
 /// # Safety
 /// Descriptor and output buffers must remain valid until return. The owned source Runtime is
 /// consumed only after target, descriptor and recovery-envelope checks succeed.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_start_from_witness(
     source: u64,
     descriptor: *const u8,
@@ -1325,7 +1325,7 @@ pub unsafe extern "C" fn noctium_client_start_from_witness(
 }
 /// # Safety
 /// Descriptor/context and writable output token must remain valid until return. No private witness is required.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_recover(
     descriptor: *const u8,
     descriptor_len: usize,
@@ -1354,7 +1354,7 @@ pub unsafe extern "C" fn noctium_client_recover(
 }
 /// # Safety
 /// command bytes and writable output token must remain valid until return.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_command(
     client: u64,
     command: *const u8,
@@ -1379,7 +1379,7 @@ pub unsafe extern "C" fn noctium_client_command(
 }
 /// # Safety
 /// out_result must reference a writable token.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_advance(client: u64, out_result: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_result)? };
@@ -1388,7 +1388,7 @@ pub unsafe extern "C" fn noctium_client_advance(client: u64, out_result: *mut u6
 }
 /// # Safety
 /// out_request must reference a writable opaque service token.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_request(client: u64, out_request: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_request)? };
@@ -1419,7 +1419,7 @@ pub unsafe extern "C" fn noctium_client_request(client: u64, out_request: *mut u
 }
 /// # Safety
 /// Reply correlation metadata/output token must remain valid until return. Reply payload is a checked Rust token.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_resume(
     client: u64,
     metadata: *const u8,
@@ -1474,7 +1474,7 @@ pub unsafe extern "C" fn noctium_client_resume(
 }
 /// # Safety
 /// out_reply must reference writable memory. This explicitly reports a host service failure, never rejection evidence.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_service_failure(request: u64, out_reply: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_reply)? };
@@ -1485,7 +1485,7 @@ pub unsafe extern "C" fn noctium_client_service_failure(request: u64, out_reply:
 }
 /// # Safety
 /// out_payload must reference writable memory. This separate token contains private native bytes.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_private_request(
     request: u64,
     out_payload: *mut u64,
@@ -1524,7 +1524,7 @@ pub unsafe extern "C" fn noctium_client_private_request(
         })
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_client_service_free(token: u64) -> i32 {
     guard(|| {
         registry(|r| {
@@ -1535,7 +1535,7 @@ pub extern "C" fn noctium_client_service_free(token: u64) -> i32 {
         })
     })
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_client_detach(client: u64) -> i32 {
     guard(|| {
         registry(|r| {
@@ -1582,20 +1582,20 @@ unsafe fn client_bytes(client: u64, out: *mut u64, state: bool) -> i32 {
 }
 /// # Safety
 /// out_result must reference writable memory. Returns only sealed public native transaction bytes.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_transaction(client: u64, out_result: *mut u64) -> i32 {
     unsafe { client_bytes(client, out_result, false) }
 }
 /// # Safety
 /// out_result must reference writable memory. Returns full checked finalized public contract state.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_receipt_state(client: u64, out_result: *mut u64) -> i32 {
     unsafe { client_bytes(client, out_result, true) }
 }
 
 /// # Safety
 /// out_private must reference writable memory. The context contains private host data.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_client_recovery_context(client: u64, out_private: *mut u64) -> i32 {
     guard(|| {
         unsafe { output(out_private)? };

@@ -147,7 +147,7 @@ unsafe fn input<'a>(pointer: *const u8, length: usize) -> Result<&'a [u8], i32> 
 
 /// # Safety
 /// Input must reference length readable bytes. Output must reference a writable uint64_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_begin(
     bytes: *const u8,
     length: usize,
@@ -180,7 +180,7 @@ pub unsafe extern "C" fn noctium_control_begin(
 }
 /// # Safety
 /// Plan and begin buffers must stay readable until return. The target token is process-local.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_begin_from_native_target(
     target_context: u64,
     plan: *const u8,
@@ -306,7 +306,7 @@ pub(crate) fn take_completed_invocation(
 }
 /// # Safety
 /// out_result must reference a writable uint64_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_advance(session: u64, out_result: *mut u64) -> i32 {
     action(
         session,
@@ -317,7 +317,7 @@ pub unsafe extern "C" fn noctium_control_advance(session: u64, out_result: *mut 
 }
 /// # Safety
 /// Input and output pointers must satisfy the declared readable/writable lengths.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_resume(
     session: u64,
     bytes: *const u8,
@@ -346,7 +346,7 @@ pub unsafe extern "C" fn noctium_control_resume(
 }
 /// # Safety
 /// Input and output pointers must satisfy the declared readable/writable lengths.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_resume_typed(
     session: u64,
     bytes: *const u8,
@@ -375,7 +375,7 @@ pub unsafe extern "C" fn noctium_control_resume_typed(
 }
 /// # Safety
 /// Input and output pointers must satisfy the declared readable/writable lengths.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_stage(
     session: u64,
     bytes: *const u8,
@@ -403,7 +403,7 @@ pub unsafe extern "C" fn noctium_control_stage(
 }
 /// # Safety
 /// out_result must reference a writable uint64_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_cancel(session: u64, out_result: *mut u64) -> i32 {
     action(
         session,
@@ -412,7 +412,7 @@ pub unsafe extern "C" fn noctium_control_cancel(session: u64, out_result: *mut u
         false,
     )
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_control_free(session: u64) -> i32 {
     guard(|| {
         with_registry(|r| {
@@ -425,7 +425,7 @@ pub extern "C" fn noctium_control_free(session: u64) -> i32 {
 }
 /// # Safety
 /// out_result must reference a writable uint64_t. The returned token is private.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_private_request(
     session: u64,
     out_result: *mut u64,
@@ -439,7 +439,7 @@ pub unsafe extern "C" fn noctium_control_private_request(
 }
 /// # Safety
 /// The relation buffer and output token must remain valid until return. The returned snapshot is private.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_private_completion(
     session: u64,
     relation: *const u8,
@@ -464,7 +464,7 @@ pub unsafe extern "C" fn noctium_control_private_completion(
 }
 /// # Safety
 /// out_result must reference a writable uint64_t. The returned token is private.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_private_trace(session: u64, out_result: *mut u64) -> i32 {
     action(session, out_result, |s| Ok(s.private_trace()), true)
 }
@@ -530,13 +530,13 @@ fn free(token: u64, private: bool) -> i32 {
 }
 /// # Safety
 /// out_length must reference a writable size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_result_length(token: u64, out_length: *mut usize) -> i32 {
     unsafe { length(token, out_length, false) }
 }
 /// # Safety
 /// buffer must reference capacity writable bytes. out_written must reference a writable size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_result_copy(
     token: u64,
     buffer: *mut u8,
@@ -545,19 +545,19 @@ pub unsafe extern "C" fn noctium_control_result_copy(
 ) -> i32 {
     unsafe { copy(token, buffer, capacity, out_written, false) }
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_control_result_free(token: u64) -> i32 {
     free(token, false)
 }
 /// # Safety
 /// out_length must reference a writable size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_private_length(token: u64, out_length: *mut usize) -> i32 {
     unsafe { length(token, out_length, true) }
 }
 /// # Safety
 /// buffer must reference capacity writable bytes. out_written must reference a writable size_t.
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub unsafe extern "C" fn noctium_control_private_copy(
     token: u64,
     buffer: *mut u8,
@@ -566,7 +566,7 @@ pub unsafe extern "C" fn noctium_control_private_copy(
 ) -> i32 {
     unsafe { copy(token, buffer, capacity, out_written, true) }
 }
-#[unsafe(no_mangle)]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
 pub extern "C" fn noctium_control_private_free(token: u64) -> i32 {
     free(token, true)
 }
