@@ -113,6 +113,13 @@ actual parent in the assembled call forest before proving. A root call and a
 different parent fail this check. This path authenticates the parent address.
 The pinned ledger does not supply a parent operation name to the callee.
 
+The funded case attached two K8 proofs and finalized at localnet block 28533.
+The node replayed the guard against the actual parent before the callee balance
+moved from 10 to 13. In-process checks reject a missing caller, a user address
+with identical bytes, and a host-supplied parent that differs from the call
+forest. The inactive guard skips all three Impact operation groups and the five
+caller value fields. [Caller qualification receipt](native-caller-receipt.json)
+
 ## Assemble a native call forest
 
 The Rust SDK takes prepared calls in ledger execution order through
@@ -226,4 +233,15 @@ rotation parameters with `NOCTIUM_COMPOSITION_ROTATE_SRS_SHA256`.
 cargo test --manifest-path runtime/Cargo.toml --locked \
   --no-default-features --features zkir-321,localnet --test native_composition \
   registry_rotation_routes_two_finalized_calls_without_redeploying -- --ignored --nocapture
+```
+
+For the authenticated-caller case, compile `tests/ContractCaller.lean` with
+the same profile. Build `caller-bundle` for `ForwardingCaller.forward` and
+`callee-bundle` for `ProtectedCallee.move`. Both use K8. Use the same bundle,
+SRS and node environment variables as the two-operation funded check.
+
+```sh
+cargo test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321,localnet --test native_composition \
+  composed_call_finalizes_with_a_ledger_authenticated_parent -- --ignored --nocapture
 ```

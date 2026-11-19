@@ -1,0 +1,40 @@
+{
+  "blockHash": "1e468d7f3de627e36c359a41e59e6236c40689d2e88ad92c989d700f8b2a4a72",
+  "callee": {
+    "address": "fb00c1ac0b9a202992729c13410b478f7a3e0352fd9938d900b1341b69a880e9",
+    "balance": "13",
+    "bundleManifestSha256": "70959c1c5e6f6fb4e527df0d2a994c6b0b7577dfd10762f592fd65e2061d63f0",
+    "deploymentHeight": 28530,
+    "k": 8,
+    "operation": "ProtectedCallee.move",
+    "rows": 195
+  },
+  "caller": {
+    "address": "0e12c928f9a1ccb404d03f8df65d626df24efd083566a69159f44eea14e54931",
+    "bundleManifestSha256": "5167cd6eaf5de9f16a7628407d57ff16413ef9a1a938b11d86b48bb5f2b08301",
+    "deploymentHeight": 28527,
+    "k": 8,
+    "operation": "ForwardingCaller.forward",
+    "rows": 232
+  },
+  "extrinsicHash": "68d37ba99682293a49109e9401e4281c2781f2cd24b5c5759acd4696f50db9e4",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "harnessSha256": "95a488dbb3678b0a3fe19bc8c7a7e0846e3938e87eec1519f710649c09d83ec1",
+  "height": 28533,
+  "inProcessRejections": [
+    "absent caller",
+    "user address with the same bytes",
+    "different contract address",
+    "contract parent claimed by a root",
+    "host parent differs from the matching call"
+  ],
+  "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "sourceRevision": "e0c8c27951a79fe4bd8594c2e889b71c287a2579",
+  "sourceSha256": "8b59028a211f60f163698f061893a3120832925b297c702006a8a7d9caa15f2a",
+  "specVersion": 2001100,
+  "transactionId": "84cd119e6203437d0a8af63946f973d9446973ad3a71ccb7531e1517e08fa178",
+  "transactionVersion": 4,
+  "zkirBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+  "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
+}

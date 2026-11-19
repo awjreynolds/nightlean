@@ -5543,6 +5543,17 @@
       "checks": "Native selector match, authorized rotation, and two composed localnet calls through one caller. The first call, rotation and second call finalized at blocks 28361, 28364 and 28367. Both callee states matched the expected value. A stale address, wrong selector and wrong bundle rejected before proving.",
       "newOpcodes": 0,
       "limits": "The host supplies source bundles and trusted proving parameters. This case covers an isolated localnet and direct entrypoints. General bundle discovery and cross-host composition remain open."
+    },
+    "nativeContractCallerGuard": {
+      "checkedOn": "2026-11-19",
+      "source": "../../tests/ContractCaller.lean",
+      "native": "../../runtime/tests/native_composition.rs",
+      "documentation": "../development/native-call-claims.md#require-the-immediate-contract-caller",
+      "receipt": "../development/native-caller-receipt.json",
+      "scope": "Direct and guarded entrypoints check a Bytes32 contract parent against the tagged caller in the pinned ledger context. Lean binds three Impact groups and the caller value fields to the respective transcript streams. Rust assembly checks the supplied parent against the matched call claim.",
+      "checks": "The real K8/K8 call finalized on localnet at 28533 and the protected balance matched 13. Missing caller, wrong contract, user variant with identical bytes and a fabricated parent rejected in process. The inactive guard consumes no caller transcript fields, and source checks reject undisclosed expected addresses.",
+      "newOpcodes": 0,
+      "limits": "Authenticates the immediate contract address. The parent entrypoint and user caller proof flow require separate support. The funded case covers direct Rust composition on the isolated localnet."
     }
   }
 }
