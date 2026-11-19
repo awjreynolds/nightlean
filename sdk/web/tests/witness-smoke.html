@@ -4,7 +4,9 @@
 <title>Noctium browser witness smoke test</title>
 <body data-result="pending">
 <script type="module">
-    const worker = new Worker("./witness-smoke.js", { type: "module" })
+    const script = new URL("./witness-smoke.js", location.href)
+    script.search = location.search
+    const worker = new Worker(script, { type: "module" })
     worker.onmessage = ({ data }) => {
         document.body.dataset.result = data.passed ? "passed" : "failed"
         document.body.textContent = JSON.stringify(data)

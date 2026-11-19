@@ -61,6 +61,13 @@ opt-level = 1
 debug = 0
 incremental = false
 
+[profile.wasm]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
 [[example]]
 name = "native_client"
 required-features = ["localnet"]

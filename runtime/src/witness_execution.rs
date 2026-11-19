@@ -843,6 +843,11 @@ pub struct WitnessProvedCall {
 }
 
 impl WitnessProvedCall {
+    /// Public proof projection. The unsealed binding randomness and source Runtime stay here.
+    pub fn public_serialized(&self) -> Result<Vec<u8>> {
+        self.proved.public_serialized().map_err(Error::Proof)
+    }
+
     pub fn contract_address(&self) -> &str {
         &self.contract_address
     }

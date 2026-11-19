@@ -25,7 +25,7 @@ mkdir -p "$parent"
 stage="$(mktemp -d "$parent/.noctium-web.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 
-wasm="$(cargo +1.100.0 build --locked --lib --manifest-path "$repo/runtime/web/Cargo.toml" \
+wasm="$(cargo +1.100.0 build --locked --profile wasm --lib --manifest-path "$repo/runtime/web/Cargo.toml" \
   --target wasm32-unknown-unknown \
   --message-format=json-render-diagnostics | python3 -c '
 import json

@@ -405,6 +405,36 @@ fn assembly_is_canonical_order_independent_and_retains_verified_bytes() {
 }
 
 #[test]
+fn memory_bundle_checks_manifest_before_reading_payloads() {
+    let fixture = Fixture::new();
+    let manifest = fixture.assemble("bundle");
+    let bytes = artifacts::manifest_bytes(&manifest).unwrap();
+    let pin = artifacts::digest(&bytes);
+    let count = manifest.entries.len();
+    let total = manifest.entries.iter().map(|entry| entry.size).sum::<u64>();
+    for (expected, limit, actual_count, code) in [
+        ("0".repeat(64), total, count, "manifest_digest_mismatch"),
+        (pin.clone(), total - 1, count, "limit_exceeded"),
+        (pin.clone(), total, count - 1, "unexpected_file"),
+    ] {
+        assert_eq!(
+            failure(artifacts::verify_memory_with_limit(
+                &bytes, &expected, limit, actual_count, |_, _| panic!("untrusted payload read"),
+            )),
+            code
+        );
+    }
+    let bundle = artifacts::verify_memory_with_limit(&bytes, &pin, total, count, |index, size| {
+        let file = fs::read(fixture.path("bundle").join(&manifest.entries[index].path)).unwrap();
+        assert_eq!(file.len(), size);
+        Some(file)
+    })
+    .unwrap();
+    assert_eq!(bundle.authenticated_manifest_sha256(), Some(pin.as_str()));
+    assert_eq!(bundle.manifest(), &manifest);
+}
+
+#[test]
 fn every_payload_role_rejects_same_length_tampering() {
     let fixture = Fixture::new();
     let manifest = fixture.assemble("bundle");

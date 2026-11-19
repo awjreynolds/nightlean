@@ -1,6 +1,6 @@
 # WebAssembly witness SDK for TypeScript
 
-Noctium's browser package runs Lean-generated host-control plans in the shared Rust runtime. It ships an ES module with TypeScript declarations and a WebAssembly module. The witness runs inside the browser, including in a dedicated Web Worker. The application owns provider calls and private storage. [Control ABI](../../runtime/include/noctium_control.h)
+Noctium's browser package executes Lean-generated witnesses and produces locally verified Midnight call proofs in a dedicated Web Worker. It ships an ES module, TypeScript declarations and a WebAssembly module. The application owns provider calls and private storage. [Control ABI](../../runtime/include/noctium_control.h)
 
 ## Build the browser package
 
@@ -30,6 +30,34 @@ try {
 
 The step data and replies are UTF-8 JSON in `Uint8Array` values. Read the separate private provider arguments and staged values through `privateRequest()`. Pass the exact correlated response to `resume(reply, true)` for a typed reply. Use `false` for a v1 reply. The adapter throws the numeric Control ABI status on rejection. `cancel()` invalidates a pending request. `close()` releases the native session, and `free()` releases the WebAssembly object. Keep private bytes and decoded provider data inside your trusted application.
 
+## Prove a ledger call
+
+Use `AuthenticatedWitness` with the exact manifest bytes and its payloads in manifest order. Build the descriptor from independently trusted pins, including `abiVersion: 1`, `profile: "midnight-ledger-9-zkir-3.2.1"`, `trustedManifestSha256`, `proofParametersSha256`, `k` and `ttl` in Unix seconds. Source the digests independently of a server serving the bundle or SRS. The initial state uses `{"state":{...}}`. The begin envelope contains `abiVersion`, `inputs` and `hostContext`. The selected bundle supplies the witness plan. [Build an entrypoint bundle](portable-artifacts.md#build-and-use)
+
+```ts
+const witness = new AuthenticatedWitness(descriptor, manifest, payloads, srs, state, begin)
+try {
+    // Drive advance(), privateRequest() and resume(reply) with typed provider replies.
+    // After the witness session reports completion:
+    const proof = witness.prepareProof()
+    try {
+        const proved = await proof.proveLocally()
+        try {
+            const publicIntent = proved.publicIntent()
+            // Return the public projection from the worker if the app needs it.
+        } finally {
+            proved.free()
+        }
+    } finally {
+        proof.free()
+    }
+} finally {
+    witness.free()
+}
+```
+
+Preparing a proof consumes the completed witness session. The worker uses Web Crypto entropy, runs the native prover and verifies against the frozen statement. The public intent contains the commitment to the private binding value. Funding, signing, finality and durable private-state recovery remain open.
+
 ## Reproduce the browser test
 
 ```sh
@@ -45,4 +73,8 @@ python3 -m http.server --bind 127.0.0.1 --directory build/noctium-web 8080
 
 Open `/witness-smoke.html` on the loopback server. The page reports a passing result with five callbacks and result 14.
 
-TypeScript 5.9.3 checked the test against the generated declarations. Chrome 157.0.8103.79 completed it in a dedicated worker. The worker checked its private staged value, rejected a crossed reply without altering the pending request, checked cancellation, and rejected an oversized envelope. The measured WebAssembly file was 3,429,285 bytes. Browser bundle authentication, proving, wallet funding and transaction finality remain open. [TypeScript browser test](../../sdk/web/tests/witness-smoke.ts) · [Browser qualification ticket](https://github.com/awjreynolds/noctium/issues/90)
+For the proof test, compile the same source with `--emit ledger --emit witness --emit control`. Assemble the `TypedWitness.ScalarWitness.claim` entrypoint with the pinned ZKIR 3.2.1 tool, ledger parameters and matching K7 keys. Place the bundle under `build/noctium-web/bundle/`, the public K7 proof parameters in `build/noctium-web/srs` and the pinned descriptor in `build/noctium-web/target.json`. Open `/witness-smoke.html?proof=1`. Use the published synthetic inputs from the test.
+
+TypeScript 5.9.3 checked the generated declarations. Chrome 157.0.8103.79 produced and verified the K7 proof in 380 ms in one local worker run, excluding preparation and loading. The public projection was 4,126 bytes. The test rejected a modified control payload, a mismatched binding under recomputed fixture pins, a crossed callback reply and an incomplete witness. The separate control case checked cancellation and its input limit.
+
+The size-optimized module measured 13,212,519 bytes raw and 2,158,023 bytes gzip-compressed. The same proof-enabled development build measured 36,549,903 bytes raw and 4,014,271 bytes gzipped. [TypeScript browser test](../../sdk/web/tests/witness-smoke.ts) · [Browser qualification ticket](https://github.com/awjreynolds/noctium/issues/90)

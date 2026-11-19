@@ -1,4 +1,4 @@
-import init, { WitnessSession } from "./noctium_witness.js"
+import init, { AuthenticatedWitness, WitnessSession } from "./noctium_witness.js"
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json }
 type Request = { requestId: string, operation: string, capability: string, schema: string, name: string }
@@ -23,15 +23,104 @@ function rejects(status: number, run: () => unknown) {
     throw new Error("Expected native rejection")
 }
 
+type Witness = Pick<WitnessSession, "advance" | "privateRequest" | "resume">
+
+function complete(witness: Witness, attemptId: string) {
+    for (const [index, name] of ["cache", "cache", "lookup", "cache", "lookup"].entries()) {
+        const pending = witness.advance()
+        const step = parse<Step>(pending)
+        check(step.status === "need_host" && step.request?.name === name, "Unexpected callback")
+        check(!Object.hasOwn(step.request, "invocationWrites"), "Public request carries private values")
+        const privateRequest = witness.privateRequest()
+        try {
+            const hidden = parse<{ invocationWrites: Record<string, { value: string }> }>(privateRequest)
+            check(hidden.invocationWrites["cache/last"].value === "1", "Wrong staged private value")
+        } finally {
+            privateRequest.fill(0)
+        }
+        const { requestId, operation, capability, schema } = step.request
+        const reply = { protocolVersion: 2, attemptId, requestId, operation, capability, schema,
+            outcome: "value", value: name === "cache" ? "1" : "14" }
+        if (index === 0) {
+            rejects(4, () => witness.resume(encode({ ...reply, attemptId: "c".repeat(64) }), true))
+            check(decoder.decode(witness.advance()) === decoder.decode(pending), "Crossed reply changed request")
+        }
+        check(parse<Step>(witness.resume(encode(reply), true)).status === "ready", "Reply did not resume")
+    }
+    const completed = parse<Step>(witness.advance())
+    check(completed.status === "completed" && completed.result === "14", "Wrong completion")
+}
+
+async function asset(path: string) {
+    const response = await fetch(path)
+    check(response.ok, "Missing fixture: " + path)
+    return new Uint8Array(await response.arrayBuffer())
+}
+
+async function prove(begin: Uint8Array, attemptId: string) {
+    const [manifest, target, srs] = await Promise.all([
+        asset("./bundle/manifest.json"), asset("./target.json"), asset("./srs"),
+    ])
+    const options = parse<{ k: number, trustedManifestSha256: string }>(target)
+    check(options.k === 7, "Wrong fixture size")
+    const inventory = parse<{ entries: { path: string, role: string, sha256: string, size: number }[] }>(manifest)
+    const { entries } = inventory
+    const payloads = await Promise.all(entries.map(({ path }) => asset("./bundle/" + path)))
+    const state = encode({ state: { total: "0" } })
+    const start = (files: Uint8Array[]) => new AuthenticatedWitness(target, manifest, files, srs, state, begin)
+    const index = entries.findIndex(({ role }) => role === "witnessControl")
+    check(index >= 0, "Missing authenticated witness control")
+    const changed = payloads[index].slice()
+    changed[0] ^= 1
+    rejects(1, () => start(payloads.map((value, i) => i === index ? changed : value)).free())
+    const digest = async (bytes: Uint8Array<ArrayBuffer>) =>
+        Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)),
+            byte => byte.toString(16).padStart(2, "0")).join("")
+    const bindingIndex = entries.findIndex(({ role }) => role === "witnessBinding")
+    check(bindingIndex >= 0, "Missing binding")
+    const binding = parse<{ target: { entrypoint: string } }>(payloads[bindingIndex])
+    binding.target.entrypoint = "someOtherCall"
+    const crossed = encode(binding)
+    const entry = entries[bindingIndex]
+    entry.sha256 = await digest(crossed)
+    entry.size = crossed.byteLength
+    const crossedManifest = encoder.encode(JSON.stringify(inventory) + "\n")
+    const crossedTarget = encode({ ...options, trustedManifestSha256: await digest(crossedManifest) })
+    const crossedFiles = payloads.map((value, i) => i === bindingIndex ? crossed : value)
+    rejects(1, () => new AuthenticatedWitness(crossedTarget, crossedManifest, crossedFiles, srs, state, begin).free())
+    const witness = start(payloads)
+    try {
+        rejects(3, () => witness.prepareProof().free())
+        complete(witness, attemptId)
+        const proof = witness.prepareProof()
+        try {
+            rejects(3, () => witness.advance())
+            const start = performance.now()
+            const proved = await proof.proveLocally()
+            try {
+                const proofMs = Math.round(performance.now() - start)
+                const publicIntentBytes = proved.publicIntent().byteLength
+                check(publicIntentBytes > 0, "Missing proved public intent")
+                return { k: 7, proofMs, publicIntentBytes }
+            } finally {
+                proved.free()
+            }
+        } finally {
+            proof.free()
+        }
+    } finally {
+        witness.free()
+    }
+}
+
 async function run() {
     await init()
     const fixture = await fetch("./plan.json")
     check(fixture.ok, "Missing compiled fixture")
     const plan: Json = await fixture.json()
     const attemptId = "b".repeat(64)
-    const begin = encode({
+    const invocation = {
         abiVersion: 1,
-        plan,
         inputs: { expected: "14", seed: "7" },
         hostContext: {
             protocolVersion: 1,
@@ -54,33 +143,12 @@ async function run() {
             commitCapability: "private",
             limits: { requests: 64, writes: 64, privateBytes: 65536 },
         },
-    })
+    }
+    const begin = encode({ ...invocation, plan })
 
     const witness = new WitnessSession(begin)
     try {
-        for (const [index, name] of ["cache", "cache", "lookup", "cache", "lookup"].entries()) {
-            const pending = witness.advance()
-            const step = parse<Step>(pending)
-            check(step.status === "need_host" && step.request?.name === name, "Unexpected callback")
-            check(!Object.hasOwn(step.request, "invocationWrites"), "Public request carries private values")
-            const privateRequest = witness.privateRequest()
-            try {
-                const hidden = parse<{ invocationWrites: Record<string, { value: string }> }>(privateRequest)
-                check(hidden.invocationWrites["cache/last"].value === "1", "Wrong staged private value")
-            } finally {
-                privateRequest.fill(0)
-            }
-            const { requestId, operation, capability, schema } = step.request
-            const reply = { protocolVersion: 2, attemptId, requestId, operation, capability, schema,
-                outcome: "value", value: name === "cache" ? "1" : "14" }
-            if (index === 0) {
-                rejects(4, () => witness.resume(encode({ ...reply, attemptId: "c".repeat(64) }), true))
-                check(decoder.decode(witness.advance()) === decoder.decode(pending), "Crossed reply changed request")
-            }
-            check(parse<Step>(witness.resume(encode(reply), true)).status === "ready", "Reply did not resume")
-        }
-        const completed = parse<Step>(witness.advance())
-        check(completed.status === "completed" && completed.result === "14", "Wrong completion")
+        complete(witness, attemptId)
         witness.close()
         rejects(2, () => witness.advance())
     } finally {
@@ -97,9 +165,17 @@ async function run() {
         begin.fill(0)
     }
     rejects(5, () => new WitnessSession(new Uint8Array(1024 * 1024 + 1)))
+    const result = { passed: true, callbacks: 5, result: 14 }
+    if (!new URLSearchParams(location.search).has("proof")) return result
+    const source = encode(invocation)
+    try {
+        return { ...result, ...await prove(source, attemptId) }
+    } finally {
+        source.fill(0)
+    }
 }
 
 run().then(
-    () => self.postMessage({ passed: true, callbacks: 5, result: 14 }),
+    result => self.postMessage(result),
     (error: unknown) => self.postMessage({ passed: false, error: String(error) }),
 )

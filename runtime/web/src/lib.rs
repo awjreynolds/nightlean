@@ -1,4 +1,6 @@
 //! Browser adapter for the same bounded Control ABI used by native hosts.
+mod proved;
+
 use js_sys::Uint8Array;
 use noctium_runtime::{control::MAX_BYTES, control_ffi as ffi};
 use wasm_bindgen::prelude::*;
@@ -12,12 +14,12 @@ fn status(code: i32) -> Result<(), JsValue> {
     }
 }
 
-fn input(bytes: &Uint8Array) -> Result<Zeroizing<Vec<u8>>, JsValue> {
+fn input(bytes: &Uint8Array, limit: usize) -> Result<Zeroizing<Vec<u8>>, JsValue> {
     let len = bytes.length() as usize;
     if len == 0 {
         return Err(JsValue::from(ffi::INVALID_ARGUMENT));
     }
-    if len > MAX_BYTES {
+    if len > limit {
         return Err(JsValue::from(ffi::LIMIT));
     }
     let mut copy = Zeroizing::new(vec![0; len]);
@@ -77,7 +79,7 @@ pub struct WitnessSession {
 impl WitnessSession {
     #[wasm_bindgen(constructor)]
     pub fn open(begin: &Uint8Array) -> Result<WitnessSession, JsValue> {
-        let bytes = input(begin)?;
+        let bytes = input(begin, MAX_BYTES)?;
         let mut handle = 0;
         status(unsafe { ffi::noctium_control_begin(bytes.as_ptr(), bytes.len(), &mut handle) })?;
         Ok(Self {
@@ -93,7 +95,7 @@ impl WitnessSession {
 
     /// Resume an exact correlated request. Pass false for a v1 reply.
     pub fn resume(&self, response: &Uint8Array, typed: bool) -> Result<Uint8Array, JsValue> {
-        let bytes = input(response)?;
+        let bytes = input(response, MAX_BYTES)?;
         let resume = if typed {
             ffi::noctium_control_resume_typed
         } else {

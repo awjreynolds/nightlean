@@ -1772,13 +1772,61 @@ pub fn verify_with_limit(
     trusted_manifest_sha256: Option<&str>,
     max_total_bytes: u64,
 ) -> Result<VerifiedBundle> {
+    validate_payload_budget(max_total_bytes)?;
+    no_symlinks(root)?;
+    let manifest_data = read(&root.join("manifest.json"), MAX_JSON_BYTES)?;
+    let manifest = authenticate_manifest(&manifest_data, trusted_manifest_sha256, max_total_bytes)?;
+    let bundle = retain_payloads(manifest, trusted_manifest_sha256, |_, entry| {
+        read(&root.join(&entry.path), entry.size)
+    })?;
+    reject_extra_files(root, bundle.manifest())?;
+    Ok(bundle)
+}
+
+/// Authenticate an ordered in-memory bundle. The reader runs only after the
+/// manifest and budget checks, with the exact expected byte count for each entry.
+pub fn verify_memory_with_limit(
+    manifest_data: &[u8],
+    trusted_manifest_sha256: &str,
+    max_total_bytes: u64,
+    payload_count: usize,
+    mut read_payload: impl FnMut(usize, usize) -> Option<Vec<u8>>,
+) -> Result<VerifiedBundle> {
+    validate_payload_budget(max_total_bytes)?;
+    require(
+        manifest_data.len() as u64 <= MAX_JSON_BYTES,
+        "limit_exceeded",
+        "manifest exceeds its byte budget",
+    )?;
+    let manifest = authenticate_manifest(
+        manifest_data,
+        Some(trusted_manifest_sha256),
+        max_total_bytes,
+    )?;
+    require(
+        payload_count == manifest.entries.len(),
+        "unexpected_file",
+        "payload count differs from manifest",
+    )?;
+    retain_payloads(manifest, Some(trusted_manifest_sha256), |index, entry| {
+        read_payload(index, entry.size as usize)
+            .ok_or_else(|| error("digest_mismatch", "missing or incorrectly sized payload"))
+    })
+}
+
+fn validate_payload_budget(max_total_bytes: u64) -> Result<()> {
     require(
         max_total_bytes > 0 && max_total_bytes <= MAX_TOTAL_BYTES,
         "limit_exceeded",
         "unsupported host payload budget",
-    )?;
-    no_symlinks(root)?;
-    let manifest_data = read(&root.join("manifest.json"), MAX_JSON_BYTES)?;
+    )
+}
+
+fn authenticate_manifest(
+    manifest_data: &[u8],
+    trusted_manifest_sha256: Option<&str>,
+    max_total_bytes: u64,
+) -> Result<Manifest> {
     if let Some(expected) = trusted_manifest_sha256 {
         require(
             hex_length(expected, 64),
@@ -1786,12 +1834,12 @@ pub fn verify_with_limit(
             "trusted manifest digest must be lowercase SHA-256",
         )?;
         require(
-            digest(&manifest_data) == expected,
+            digest(manifest_data) == expected,
             "manifest_digest_mismatch",
             "manifest differs from trusted external digest",
         )?;
     }
-    let manifest: Manifest = serde_json::from_slice(&manifest_data)
+    let manifest: Manifest = serde_json::from_slice(manifest_data)
         .map_err(|_| error("invalid_manifest", "invalid bundle manifest"))?;
     validate_manifest(&manifest)?;
     require(
@@ -1804,9 +1852,17 @@ pub fn verify_with_limit(
         "limit_exceeded",
         "bundle exceeds host payload budget",
     )?;
+    Ok(manifest)
+}
+
+fn retain_payloads(
+    manifest: Manifest,
+    trusted_manifest_sha256: Option<&str>,
+    mut read_payload: impl FnMut(usize, &Entry) -> Result<Vec<u8>>,
+) -> Result<VerifiedBundle> {
     let mut payloads = Payloads::new();
-    for entry in &manifest.entries {
-        let bytes = read(&root.join(&entry.path), entry.size)?;
+    for (index, entry) in manifest.entries.iter().enumerate() {
+        let bytes = read_payload(index, entry)?;
         require(
             bytes.len() as u64 == entry.size && digest(&bytes) == entry.sha256,
             "digest_mismatch",
@@ -1818,7 +1874,6 @@ pub fn verify_with_limit(
             .push((entry.name.clone(), bytes));
     }
     validate_payloads(&payloads)?;
-    reject_extra_files(root, &manifest)?;
     let files = payloads
         .into_iter()
         .flat_map(|(role, values)| {
