@@ -14,6 +14,7 @@ fi
 sdk="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$sdk/../.." && pwd)"
 ndk="$(cd "${ANDROID_NDK_HOME:?Set ANDROID_NDK_HOME to the installed Android NDK}" && pwd)"
+platform="${ANDROID_SDK_ROOT:?Set ANDROID_SDK_ROOT to the installed Android SDK}/platforms/android-35/android.jar"
 case "$(uname -s)" in
   Darwin) host=darwin-x86_64 ;;
   Linux) host=linux-x86_64 ;;
@@ -54,7 +55,8 @@ print(archive)
   -Wl,-soname,libnoctium_jni.so -llog -ldl -lm \
   -o "$stage/aar/jni/arm64-v8a/libnoctium_jni.so"
 "$toolchain/llvm-strip" --strip-debug "$stage/aar/jni/arm64-v8a/libnoctium_jni.so"
-kotlinc "$sdk/WitnessSession.kt" -jvm-target 1.8 -d "$stage/aar/classes.jar"
+kotlinc "$sdk/WitnessSession.kt" "$sdk/NativeWitness.kt" -jvm-target 1.8 \
+  -classpath "$platform" -d "$stage/aar/classes.jar"
 cat > "$stage/aar/AndroidManifest.xml" <<'EOF'
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.noctium.sdk">
   <uses-sdk android:minSdkVersion="24"/>

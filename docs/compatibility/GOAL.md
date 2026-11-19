@@ -129,7 +129,7 @@ The [source proof-audit foundation](../development/proof-registration.md) provid
 
 Swift also generated K9 proofs for the original one-time claim from explicit private inputs and finalized both calls. The native checker rejected replay on the exact exported states. [Original claim receipts](../development/swift-private-claim-receipts.json)
 
-[Kotlin witness sessions](../development/android-witness-sdk.md) run on an arm64 Android 35 emulator. The AAR uses the shared native runtime and the same Lean-generated typed host-control plan. The instrumentation test covers five callbacks, private staged values, reply correlation and cancellation. Android proof and transaction integration remain open.
+[Kotlin witness sessions](../development/android-witness-sdk.md) run on an arm64 Android 35 emulator. The AAR uses the shared native runtime and the same Lean-generated typed host-control plan. The instrumentation test completed five callbacks and generated and verified a K7 proof from the authenticated witness. It covers reply correlation, cancellation and rejection of altered or incomplete witness inputs at the proof boundary. Android transaction integration and physical-device evidence remain open.
 
 [Explicit typed copy](../development/native-copy.md) closes the remaining non-deprecated opcode name in the pinned registry. The compiler registers all 40 non-deprecated names across the scoped source paths. The upstream enum also lists seven deprecated names. Full type and overload coverage, compiler assurance and application flows remain separate gates.
 

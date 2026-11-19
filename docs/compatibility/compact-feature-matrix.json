@@ -1385,7 +1385,7 @@
       "layer": "artifact-runtime",
       "surface": "Portable execution and value ABI",
       "noctiumStatus": "subset",
-      "notes": "Qualified Rust, C/C++ and Swift source-witness/proof/client subsets run without Node. Kotlin runs compiler-generated host-control witnesses on an arm64 Android emulator. Android proof and transaction integration, physical-device execution, TypeScript/WASM and full ABI equivalence remain open.",
+      "notes": "Qualified Rust, C/C++ and Swift source-witness/proof/client subsets run without Node. Kotlin completed a compiler-generated host-control witness and generated and verified a K7 proof in process on an arm64 Android emulator. Android transaction integration, physical-device execution, TypeScript/WASM and full ABI equivalence remain open.",
       "source": [
         "reference"
       ],

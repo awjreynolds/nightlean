@@ -8,6 +8,9 @@ class WitnessSession private constructor(private var handle: Long) : AutoCloseab
     companion object {
         /** Takes the Control ABI's UTF-8 JSON envelope with plan, inputs and hostContext. */
         fun open(begin: ByteArray): WitnessSession = WitnessSession(Native.open(begin))
+
+        internal fun openBound(target: Long, plan: ByteArray, begin: ByteArray): WitnessSession =
+            WitnessSession(Native.targetWitness(target, plan, begin))
     }
 
     @Synchronized
@@ -33,6 +36,13 @@ class WitnessSession private constructor(private var handle: Long) : AutoCloseab
         }
     }
 
+    @Synchronized
+    internal fun consume(action: (Long) -> Long): Long {
+        val result = action(activeHandle())
+        handle = 0L
+        return result
+    }
+
     private fun activeHandle(): Long {
         check(handle != 0L) { "Noctium witness session is closed" }
         return handle
@@ -48,4 +58,13 @@ internal object Native {
     external fun privateRequest(handle: Long): ByteArray
     external fun cancel(handle: Long): ByteArray
     external fun close(handle: Long)
+    external fun targetOpen(descriptor: ByteArray, state: ByteArray, srs: ByteArray, entropy: ByteArray): Long
+    external fun targetWitness(target: Long, plan: ByteArray, begin: ByteArray): Long
+    external fun targetClose(target: Long)
+    external fun proofPrepare(target: Long, witness: Long, descriptor: ByteArray, srs: ByteArray, entropy: ByteArray): Long
+    external fun proofAdvance(proof: Long): ByteArray
+    external fun proofGenerate(proof: Long, entropy: ByteArray): ByteArray
+    external fun proofAttach(proof: Long, metadata: ByteArray, response: ByteArray): ByteArray
+    external fun proofCancel(proof: Long)
+    external fun proofClose(proof: Long)
 }

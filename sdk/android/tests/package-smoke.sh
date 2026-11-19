@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# != 3 )); then
-  echo "usage: bash sdk/android/tests/package-smoke.sh AAR HOST_CONTROL_PLAN NEW_APK" >&2
+if (( $# < 3 || $# > 4 )); then
+  echo "usage: bash sdk/android/tests/package-smoke.sh AAR HOST_CONTROL_PLAN NEW_APK [PUBLIC_PROOF_FIXTURE]" >&2
   exit 2
 fi
 sdk="$(cd "$(dirname "$0")" && pwd)"
@@ -20,6 +20,11 @@ trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/assets" "$stage/aar" "$stage/native/lib/arm64-v8a" "$stage/dex"
 unzip -q "$1" -d "$stage/aar"
 cp "$2" "$stage/assets/plan.json"
+if (( $# == 4 )); then
+  mkdir "$stage/assets/proof"
+  cp "$4/target.json" "$4/srs" "$stage/assets/proof/"
+  cp -R "$4/bundle" "$stage/assets/proof/bundle"
+fi
 cp "$stage/aar/jni/arm64-v8a/libnoctium_jni.so" "$stage/native/lib/arm64-v8a/"
 cat > "$stage/AndroidManifest.xml" <<'EOF'
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.noctium.sdk.tests">
