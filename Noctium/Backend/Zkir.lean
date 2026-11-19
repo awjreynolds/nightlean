@@ -343,6 +343,7 @@ private def lowerBoolGate (opcode left right : String) : LowerM String := do
 
 private def packBytes : List String → LowerM String
   | [] => pure "0x00"
+  | [byte] => pure byte
   | byte :: rest => do
     let suffix ← packBytes rest
     let scaled ← binary "mul" "0x0001" suffix
@@ -487,9 +488,8 @@ private def byteChunks (length : Nat) (bytes : ByteOperands) : LowerM (List Stri
     rejectLowering "byte leaf count mismatch"
     pure []
   else
-    (List.range (Native.bytesChunkCount length)).mapM fun index => do
-      let chunk := (bytes.values.drop (index * 31)).take 31
-      if chunk.length == 1 then pure chunk.head! else packBytes chunk
+    (List.range (Native.bytesChunkCount length)).mapM fun index =>
+      packBytes ((bytes.values.drop (index * 31)).take 31)
 
 private def lowerFixedBytesFromChunks (length : Nat) (chunks : List String) : LowerM String := do
   if length == 0 then

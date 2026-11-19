@@ -81,6 +81,7 @@ private def requireSourceType (ty : Ty) (term : Term) (bounds : List (Term × Na
 
 def packByteTerms : List Term → Term
   | [] => .constant 0
+  | [byte] => byte
   | byte :: rest => .binary "add" byte (.binary "mul" (.constant 256) (packByteTerms rest))
 
 /-- Canonical typed source term for persistent_hash(Bytes32). The operands are
@@ -231,8 +232,7 @@ def bytesChunksTerm (length : Nat) : Term → Except String (List Term)
   | .bytes terms => do
     unless terms.length == length do throw "byte source term has wrong length"
     pure ((List.range (bytesChunkCount length)).map fun index =>
-      let chunk := (terms.drop (index * 31)).take 31
-      if chunk.length == 1 then chunk.head! else packByteTerms chunk)
+      packByteTerms ((terms.drop (index * 31)).take 31))
   | .select condition yes no => do
     let yes ← bytesChunksTerm length yes
     let no ← bytesChunksTerm length no

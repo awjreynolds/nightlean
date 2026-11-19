@@ -64,6 +64,20 @@ Nine of the token port's 16 ledger relations emitted fewer selectors. The pinned
 
 The 16 token Impact plans matched byte for byte. The fresh byte fixture passed both branches and the altered-result rejection in the native checker. The fresh token allowance relation passed the existing token workload's empty and populated allowance checks. These measurements cover circuit sizing. Proving latency and fresh deployments of the changed token relations remain unmeasured. [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
 
+## Remove zero-seed arithmetic from byte packing
+
+The byte packer starts from the highest byte in each nonempty chunk. Previously it multiplied zero by 256 and added the highest byte. The independent producer still checks the packed expression, input bounds and ordered transcript. [ZKIR packer](../../Noctium/Backend/Zkir.lean) · [Source normalization](../../Noctium/Backend/NativeMeaning.lean)
+
+| Workload | Instructions before → after | Rows before → after | K |
+| --- | ---: | ---: | ---: |
+| Byte pack and reverse | 761 → 754 | 1,144 → 1,137 | 11 |
+| Byte storage including Bytes1024 | 4,809 → 4,767 | 11,608 → 11,567 | 14 |
+| Token `sweep` | 517 → 513 | 7,076 → 7,073 | 13 |
+| Token `transfer` | 1,247 → 1,242 | 41,783 → 41,779 | 16 |
+| Token `transferFrom` | 1,328 → 1,322 | 63,115 → 63,110 | 16 |
+
+The comparison starts at `b8b469c`, with `--emit ledger --emit witness` and the default range-pass setting. Pinned `mock-compile` reported fewer rows in 14 of 16 token relations. All Impact plans matched byte for byte. The native byte pack test accepted the regenerated relation and rejected a forged result. The scalar CSE fixture emitted identical bytes. A single token compile in each mode took 4.70 s and 4.68 s. This establishes a small circuit-size reduction. Proof time and funded deployment fall outside this measurement. [Byte packing test](../../runtime/tests/native_byte_packing.rs) · [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
+
 ## Selected ledger outputs
 
 One serial run per mode on the same host compared a full compile with `--emit ledger --emit witness`. Both runs used the same executable, source and ZKIR 3.2.1 profile.
