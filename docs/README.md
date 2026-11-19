@@ -11,6 +11,7 @@ Write a contract, prove its specified behavior in Lean, and compile for Midnight
 | Embed native execution | [Rust runtime](development/native-rust-runtime.md), [C/C++ ABI](development/native-runtime-abi.md) |
 | Build a native application | [Rust client](development/native-client.md), [C/C++ client ABI](development/native-client-abi.md), [proof API](development/native-proof-api.md), [native assembler](development/native-assembler.md) |
 | Understand native call composition | [Call claims, intent assembly and proof attachment](development/native-call-claims.md) |
+| Track Midnight's upcoming contract features | [Roadmap and pinned ledger capabilities](research/midnight-roadmap.md) |
 | Review contract correctness | [Actual-source proofs](development/private-claim-proofs.md), [registered obligations and axiom policy](development/proof-registration.md) |
 | Review compilation and trust | [Layered guarantees](designs/architecture.md#assurance-boundaries), [source-to-artifact proof chain](#follow-the-proof-chain) |
 | Review scope and contribute | [Capability goal](compatibility/GOAL.md), [public issue map](https://github.com/awjreynolds/noctium/issues/1), [contributing](../CONTRIBUTING.md) |

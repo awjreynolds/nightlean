@@ -40,7 +40,7 @@ lake exe noctium check examples/BoundedScalars.lean
 lake exe noctium compile examples/BoundedScalars.lean --output build/bounded
 ```
 
-The output includes the standalone `boundedRelation.zkir`, contract-call `BoundedScalars.apply.zkir`, runtime plan `BoundedScalars.apply.impact.json`, and `noctium.json` manifest. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source: imports and elaborators execute development code.
+The output includes the standalone `boundedRelation.zkir`, contract-call `BoundedScalars.apply.zkir`, runtime plan `BoundedScalars.apply.impact.json`, and `noctium.json` manifest. Use a new or empty output directory for each compile. The CLI publishes the complete directory after Lean succeeds. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source because imports and elaborators execute development code.
 
 For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 

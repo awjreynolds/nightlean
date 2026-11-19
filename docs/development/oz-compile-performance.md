@@ -1,6 +1,6 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-Measured on 2026-11-18. Noctium currently compiles this large workload substantially more slowly than Compact. This is a baseline for optimization, not a speed claim.
+The 2026-11-18 baseline compares Noctium with Compact. The 2026-11-19 follow-up measures the effect of removing a repeated Lean frontend pass.
 
 ![Measured compiler performance](../assets/noctium-performance.png)
 
@@ -15,9 +15,20 @@ Apple M3 Max, 16 logical cores, 48 GiB RAM. Compilers were prebuilt, dependencie
 
 These timings cover source processing and emitted artifacts. Noctium emits 16 native entrypoint relations, 13 standalone helper relations, Impact plans and witness/metadata sidecars. Compact emits 15 provable relations, one pure JavaScript function (`computeAccountId`), JavaScript/types and metadata. The workloads have comparable functions but different input/result layouts, explicit state-candidate handling and artifact sets. This is not a proven semantic/ABI equivalence benchmark.
 
+## Single-pass Noctium follow-up
+
+| OpenZeppelin port, ZKIR 3.2.1 | Wall | User CPU | System CPU |
+| --- | ---: | ---: | ---: |
+| Two Lean passes, `7643dc6` | 65.94 s | 62.96 s | 1.40 s |
+| One Lean pass | 41.29 s | 39.51 s | 0.71 s |
+
+The single-pass CLI saved 24.65 seconds (37%) in one matched run per version on the same M3 Max. Both generated 93 byte-identical files totaling 7,697,562 bytes. The CLI publishes the bundle directory after Lean exits successfully. A late source error leaves no output directory or staging files, and a nonempty destination stays untouched. [Optimization issue](https://github.com/awjreynolds/noctium/issues/85)
+
+An isolated `transferFrom` sizing experiment under [issue 74](https://github.com/awjreynolds/noctium/issues/74) removed 41 of 183 identical-operand, identical-width `constrain_bits` instructions. Pinned `mock-compile` measured 63,125 to 61,813 rows (2.1% fewer), with K16 in both cases. The compiler still emits every original range check.
+
 ## What the timing includes
 
-The Noctium CLI currently launches two complete Lean frontend passes over the source. The first checks the file before any artifact writes. The second repeats source elaboration and performs artifact export. The exporter also compiles witness programs for standalone and entrypoint artifacts. These are identified repeated-work paths, not a measured phase breakdown. No profiler was run for this benchmark.
+The older Noctium baseline ran two complete Lean frontend passes. The first checked the source. The second elaborated it again and exported artifacts. The follow-up times these workflows end to end.
 
 The token source declares no contract theorems. Neither timed command generates cryptographic ZK proofs or keys. Lean theorem checking and transaction ZK proof generation are separate operations. This benchmark does not establish functional correctness of the contract or compiler.
 

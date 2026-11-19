@@ -8,7 +8,7 @@ def usage : String := "Noctium " ++ version ++ "\n\
 Usage: noctium --version\n\
        noctium profiles\n\
        noctium check <file> [--target <manifest>]\n\
-       noctium compile <file> [--target <manifest>] [--output <directory>]\n\
+       noctium compile <file> [--target <manifest>] [--output <new-or-empty-directory>]\n\
 Default target: profiles/midnight-ledger-9.json\n\
 The selectable ZKIR 3.2.1 profile qualifies a selected native subset only."
 
@@ -42,6 +42,37 @@ private def error (message : String) : IO UInt32 := do
   (← IO.getStderr).putStrLn s!"noctium: error: {message}"
   return 1
 
+private def runFrontend (input source command : String) : IO IO.Process.Output :=
+  IO.Process.output
+    {cmd := "lake", args := #["env", "lean", "-D", "Elab.async=false", "--stdin", input]}
+    (some ("import Noctium.Compiler " ++ source ++ "\n" ++ command ++ "\n"))
+
+private def compile (opts : Options) (source profileLiteral : String) : IO IO.Process.Output := do
+  let path : System.FilePath := opts.output
+  let path := System.FilePath.mk
+    ((path.normalize.toString.dropEndWhile (· == System.FilePath.pathSeparator)).toString)
+  unless path.fileName.isSome do
+    throw (IO.userError "--output requires a new or empty directory")
+  if ← path.pathExists then
+    unless (← path.isDir) && (← path.readDir).isEmpty do
+      throw (IO.userError s!"output '{opts.output}' must be a new or empty directory")
+  let parent := path.parent.getD "."
+  IO.FS.createDirAll parent
+  let stage := parent / s!".noctium-{← IO.Process.getPID}-{← IO.monoNanosNow}"
+  IO.FS.createDir stage
+  let result ← try
+    let directory := (Lean.toJson stage.toString).compress
+    let display := (Lean.toJson opts.output).compress
+    let result ← runFrontend opts.input source
+      s!"#noctium_compile_target {directory} {profileLiteral} {display}"
+    if result.exitCode == 0 then
+      -- Publish the complete bundle only after Lean has reported all source diagnostics.
+      IO.FS.rename stage path
+    pure result
+  finally
+    if ← stage.pathExists then IO.FS.removeDirAll stage
+  return result
+
 private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
   let profile ← match ← TargetProfile.load opts.target with
   | .error message => return ← error message
@@ -55,21 +86,10 @@ private def process (opts : Options) (compiling : Bool) : IO UInt32 := do
   -- Lean accepts a filename with --stdin. This keeps module identity and source diagnostics,
   -- avoids a temporary source file, and preserves line numbers by placing the extra import
   -- on the original first line. Inputs are trusted Lean source, like `lake env lean` itself.
-  let input := "import Noctium.Compiler " ++ source ++ "\n#noctium_check_target " ++ profileLiteral ++ "\n"
   let result ← try
-    IO.Process.output {cmd := "lake", args := #["env", "lean", "-D", "Elab.async=false", "--stdin", opts.input]} (some input)
-  catch _ => return ← error "failed to launch the pinned Lean frontend through Lake"
-  if result.exitCode != 0 || !compiling then
-    (← IO.getStdout).putStr result.stdout
-    (← IO.getStderr).putStr result.stderr
-    return result.exitCode
-  -- A separate successful full frontend pass is required before a command may write artifacts.
-  -- Lean reports asynchronous earlier errors only when the frontend finishes.
-  let command := "#noctium_compile_target " ++ (Lean.toJson opts.output).compress ++ " " ++ profileLiteral
-  let compileInput := "import Noctium.Compiler " ++ source ++ "\n" ++ command ++ "\n"
-  let result ← try
-    IO.Process.output {cmd := "lake", args := #["env", "lean", "-D", "Elab.async=false", "--stdin", opts.input]} (some compileInput)
-  catch _ => return ← error "failed to launch the pinned Lean compiler through Lake"
+    if compiling then compile opts source profileLiteral
+    else runFrontend opts.input source s!"#noctium_check_target {profileLiteral}"
+  catch e => return ← error e.toString
   (← IO.getStdout).putStr result.stdout
   (← IO.getStderr).putStr result.stderr
   return result.exitCode

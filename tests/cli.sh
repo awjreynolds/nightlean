@@ -16,7 +16,10 @@ expect_failure() {
 "$cli" --version
 "$cli" check examples/PrivateClaim.lean
 "$cli" compile examples/PrivateClaim.lean --output "$scratch/first"
-"$cli" compile examples/PrivateClaim.lean --output "$scratch/second"
+mkdir "$scratch/second"
+"$cli" compile examples/PrivateClaim.lean --output "$scratch/second/"
+expect_failure "$cli" compile examples/BoundedScalars.lean --output "$scratch/first"
+grep -F 'must be a new or empty directory' "$scratch/stderr" > /dev/null
 diff -r "$scratch/first" "$scratch/second"
 test -f "$scratch/first/claimRelation.zkir"
 test -f "$scratch/first/PrivateClaim.claim.zkir"
@@ -65,6 +68,7 @@ LEAN
 expect_failure "$cli" compile "$scratch/later-error.lean" --output "$scratch/later-output"
 grep -F 'Noctium expression type mismatch' "$scratch/stdout" > /dev/null
 test ! -e "$scratch/later-output"
+test -z "$(find "$scratch" -maxdepth 1 -type d -name '.noctium-*' -print)"
 
 cat > "$scratch/traversal.lean" <<'LEAN'
 import Noctium.Frontend

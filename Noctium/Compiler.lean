@@ -575,7 +575,8 @@ elab "#noctium_check_target" profileJson:str : command => do
   let profile ← parseTargetProfile profileJson.getString
   unsafe checkTarget profile
 
-private def compileArtifacts (directory : String) (profile : TargetProfile) : CommandElabM Unit := do
+private def compileArtifacts (directory : String) (profile : TargetProfile)
+    (displayDirectory : String := directory) : CommandElabM Unit := do
   let moduleOutputs ← unsafe rebuildModuleOutputs
   let (circuits, contracts) ← unsafe inspectWithModules moduleOutputs
   -- Lower everything before creating output files. Unsupported circuits cannot leave partial output.
@@ -716,15 +717,15 @@ private def compileArtifacts (directory : String) (profile : TargetProfile) : Co
   liftIO <| IO.FS.writeFile (path / "noctium.json") (metadata.pretty ++ "\n")
   let nativeCount : Nat := contracts.foldl (fun total (_, contract) => total + contract.entrypoints.length) 0
   if controls.isEmpty then
-    logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {path}; not a deployable contract bundle"
+    logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {displayDirectory}; not a deployable contract bundle"
   else
-    logInfo m!"emitted {controls.size} host-only control plan(s), {circuits.size} circuit relation(s), and {nativeCount} native entrypoint relation(s) to {path}; structured native guards unavailable"
+    logInfo m!"emitted {controls.size} host-only control plan(s), {circuits.size} circuit relation(s), and {nativeCount} native entrypoint relation(s) to {displayDirectory}; structured native guards unavailable"
 
 elab "#noctium_compile" directory:str : command =>
   compileArtifacts directory.getString TargetProfile.sourceBaseline
 
-elab "#noctium_compile_target" directory:str profileJson:str : command => do
+elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(str)? : command => do
   let profile ← parseTargetProfile profileJson.getString
-  compileArtifacts directory.getString profile
+  compileArtifacts directory.getString profile ((displayDirectory.map (·.getString)).getD directory.getString)
 
 end Noctium.Compiler
