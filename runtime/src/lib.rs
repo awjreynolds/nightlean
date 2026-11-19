@@ -442,6 +442,10 @@ pub enum Expr {
         value: Box<Expr>,
         body: Box<Expr>,
     },
+    Lets {
+        bindings: Vec<(String, Expr)>,
+        body: Box<Expr>,
+    },
     #[serde(rename = "assertThen")]
     AssertThen {
         condition: Box<Expr>,
@@ -552,6 +556,14 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             let value = evaluate(value, env)?;
             let mut local = env.clone();
             local.insert(name.clone(), value);
+            evaluate(body, &local)?
+        }
+        Expr::Lets { bindings, body } => {
+            let mut local = env.clone();
+            for (name, value) in bindings {
+                let value = evaluate(value, &local)?;
+                local.insert(name.clone(), value);
+            }
             evaluate(body, &local)?
         }
         Expr::AssertThen { condition, body } => {

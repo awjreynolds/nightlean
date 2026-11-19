@@ -74,37 +74,31 @@
     "type": "UIntRange<256>",
     "name": "nextCount",
     "expression":
-    {"value": {"tag": "reference", "name": "expected"},
-     "tag": "let",
-     "name": "$helper0",
+    {"tag": "lets",
      "body":
-     {"value": {"tag": "reference", "name": "$helper1"},
-      "tag": "let",
-      "name": "$helper2",
+     {"tag": "assertThen",
+      "condition":
+      {"tag": "eq",
+       "right":
+       {"value":
+        {"tag": "uadd",
+         "right": {"value": "1", "tag": "uint", "maximum": "1"},
+         "maximum": "256",
+         "left": {"tag": "reference", "name": "$helper2"}},
+        "type": "UIntRange<256>",
+        "tag": "cast"},
+       "left": {"tag": "reference", "name": "$helper5"}},
       "body":
-      {"value": {"tag": "reference", "name": "$helper4"},
-       "tag": "let",
-       "name": "$helper5",
-       "body":
-       {"tag": "assertThen",
-        "condition":
-        {"tag": "eq",
-         "right":
-         {"value":
-          {"tag": "uadd",
-           "right": {"value": "1", "tag": "uint", "maximum": "1"},
-           "maximum": "256",
-           "left": {"tag": "reference", "name": "$helper2"}},
-          "type": "UIntRange<256>",
-          "tag": "cast"},
-         "left": {"tag": "reference", "name": "$helper5"}},
-        "body":
-        {"tag": "assertThen",
-         "condition":
-         {"tag": "eq",
-          "right": {"tag": "reference", "name": "$helper0"},
-          "left": {"tag": "reference", "name": "$helper5"}},
-         "body": {"tag": "reference", "name": "$helper0"}}}}}}}],
+      {"tag": "assertThen",
+       "condition":
+       {"tag": "eq",
+        "right": {"tag": "reference", "name": "$helper0"},
+        "left": {"tag": "reference", "name": "$helper5"}},
+       "body": {"tag": "reference", "name": "$helper0"}}},
+     "bindings":
+     [["$helper0", {"tag": "reference", "name": "expected"}],
+      ["$helper2", {"tag": "reference", "name": "$helper1"}],
+      ["$helper5", {"tag": "reference", "name": "$helper4"}]]}}],
   "name": "NoctiumExamples.advance",
   "inputs":
   [{"visibility": "public", "type": "UIntRange<256>", "name": "expected"},

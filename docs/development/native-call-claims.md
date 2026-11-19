@@ -35,6 +35,33 @@ alignment metadata or a type schema, so callers must also select and validate th
 callee's interface. Passing a field reference alone does not establish this
 payload binding.
 
+### Check the call payload against a declared interface
+
+Use `callCommitment` to let Lean read an earlier contract declaration's
+committed argument and return types. The [typed caller](../../tests/TypedCallArguments.lean)
+binds a Bool, Bytes33, UInt, Jubjub values, a Secp256k1 field and Bytes0:
+
+```lean
+claimContractCall(target, entryHash,
+  disclose(callCommitment(TypedCallArguments, "store", opening,
+    [flag, payload, score, point, scalar, field, empty],
+    [expectedTail, expectedScore, expectedApproval])))
+```
+
+Lean checks both lists in interface order and emits the same native field
+encoding as the callee. Each expression evaluates once, including Bytes0
+expressions that can fail without contributing a field. The opening and
+payload retain their privacy until the caller explicitly authorizes release.
+The SDK still matches the supplied address and entrypoint hash to the actual
+callee. The compile-time contract name selects a schema and does not travel
+in the commitment.
+
+The native test assembles both source-generated calls and rejects an altered
+expected result. Source checks reject a mismatched type or argument count.
+The checked expression supports direct source calls to declared interfaces
+with scalar and fixed-byte values. Grouped composite views and helper or
+hosted-witness authoring need separate support.
+
 ## Assemble a native call forest
 
 The Rust SDK takes prepared calls in ledger execution order through
@@ -63,7 +90,7 @@ release.
 
 The result is a private, unbalanced intent. Applications supply the initial
 contexts. [Committed scalar and fixed byte arguments](committed-returns.md#native-call-arguments)
-use the native input ABI. Composite arguments, typed source call declarations
+use the native input ABI. Composite arguments, automatic runtime address and entrypoint binding,
 and helper or hosted-witness statement authoring remain open. The reference state interpreter
 rejects active call claims.
 

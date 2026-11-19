@@ -1,5 +1,6 @@
 import Noctium.Frontend
 import Noctium.Backend.Zkir
+import Noctium.NativeExpression
 
 open scoped Noctium
 
@@ -30,6 +31,47 @@ noctium_contract TypedCallArguments where
   end
 end
 
+noctium_circuit typedCallerInput where
+  public target : Bytes32
+  public entryHash : Bytes32
+  private opening : Native
+  private flag : Bool
+  private payload : Bytes 33
+  private score : UInt 8
+  private point : JubjubPoint
+  private scalar : JubjubScalar
+  private field : Secp256k1Base
+  private empty : Bytes 0
+  private emptyAccepted : Bool
+  private expectedTail : UInt 8
+  private expectedScore : UInt 8
+  private expectedApproval : Bool
+end
+
+noctium_contract TypedCaller where
+  cell marker : Native
+  entry claim uses typedCallerInput where
+    claimContractCall(target, entryHash,
+      disclose(callCommitment(TypedCallArguments, "store", opening,
+        [flag, payload, score, point, scalar, field, assertThen(emptyAccepted, empty)],
+        [expectedTail, expectedScore, expectedApproval])))
+  end
+end
+
+/-- error: callCommitment argument count does not match the callee -/
+#guard_msgs in
+noctium_circuit wrongCallArity where
+  output commitment : Native := callCommitment(TypedCallArguments, "store", 1, [], [])
+end
+
+/-- error: Noctium expression type mismatch -/
+#guard_msgs in
+noctium_circuit wrongCallType where
+  output commitment : Native := callCommitment(TypedCallArguments, "store", 1,
+    [1, bytes(33, ""), 0, default(JubjubPoint), default(JubjubScalar), secp256k1Base(0), bytes(0, "")],
+    [0, 0, false])
+end
+
 private def firstCall : Noctium.Entrypoint :=
   match TypedCallArguments.entrypoints with
   | found :: _ => found
@@ -45,3 +87,12 @@ private def argumentFieldsOverflow : Noctium.Entrypoint :=
   {firstCall with circuit := {name := "overBudget", inputs}, callInputs := names, effects := [], effectSpans := [], effectGuards := [], returns := []}
 
 #guard !(argumentFieldsOverflow.validate Noctium.Capabilities.crypto []).isOk
+
+
+private def wideBindingSequence : Noctium.Expr .native :=
+  (List.range 150).foldr (fun i body =>
+    .letE s!"argument{i}" (.native i) body) (.ref "argument149")
+
+#guard match (Noctium.NativeExpression.toJson wideBindingSequence).getObjVal? "bindings" with
+  | .ok (.arr bindings) => bindings.size == 150
+  | _ => Bool.false

@@ -19,6 +19,23 @@ def foreignConstantJson (kind : Foreign.Kind) (value : kind.Denote) : Json :=
     ("type", toJson kind.sourceName),
     ("encoding", toJson ((Foreign.encodeValue kind value).toOption.getD [] |>.map toString))]
 
+/-- Keep sequential bindings flat in the host plan, even for wide call interfaces. -/
+private def nativeLetJson (name : String) (value body : Json) : Json :=
+  let binding := Json.arr #[toJson name, value]
+  let rest : Except String (Array Json × Json) := do
+    let tag ← (← body.getObjVal? "tag").getStr?
+    match tag with
+    | "lets" => pure (← (← body.getObjVal? "bindings").getArr?, ← body.getObjVal? "body")
+    | "let" =>
+      let next := Json.arr #[← body.getObjVal? "name", ← body.getObjVal? "value"]
+      pure (#[next], ← body.getObjVal? "body")
+    | _ => throw "not a binding"
+  match rest with
+  | .ok (bindings, tail) => Json.mkObj [("tag", toJson ("lets" : String)),
+      ("bindings", Json.arr (#[binding] ++ bindings)), ("body", tail)]
+  | .error _ => Json.mkObj [("tag", toJson ("let" : String)),
+      ("name", toJson name), ("value", value), ("body", body)]
+
 private def nativeExpressionJson : Expr ty → Json
   | .copyValue value => nativeExpressionJson value
   | .native n => Json.mkObj [("tag", toJson ("constant" : String)), ("value", toJson (toString n))]
@@ -121,8 +138,7 @@ private def nativeExpressionJson : Expr ty → Json
   | .inv value => Json.mkObj [("tag", toJson ("inv" : String)), ("value", nativeExpressionJson value)]
   | .cast target value => Json.mkObj [("tag", toJson ("cast" : String)),
       ("type", toJson (typeName target)), ("value", nativeExpressionJson value)]
-  | .letE name value body => Json.mkObj [("tag", toJson ("let" : String)),
-      ("name", toJson name), ("value", nativeExpressionJson value), ("body", nativeExpressionJson body)]
+  | .letE name value body => nativeLetJson name (nativeExpressionJson value) (nativeExpressionJson body)
   | .assertE condition body => Json.mkObj [("tag", toJson ("assertThen" : String)),
       ("condition", nativeExpressionJson condition), ("body", nativeExpressionJson body)]
   | .disclose _ value => nativeExpressionJson value

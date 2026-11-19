@@ -38,6 +38,19 @@ initialize contractRegistry : SimplePersistentEnvExtension Name (Array Name) ←
     addEntryFn := Array.push
   }
 
+private structure CallInterface where
+  contract : Name
+  operation : String
+  argumentTypes : List Ty
+  resultTypes : List Ty
+  deriving Inhabited
+
+initialize callInterfaceRegistry : SimplePersistentEnvExtension CallInterface (Array CallInterface) ←
+  registerSimplePersistentEnvExtension {
+    addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
+    addEntryFn := Array.push
+  }
+
 initialize controlRegistry : SimplePersistentEnvExtension Name (Array Name) ←
   registerSimplePersistentEnvExtension {
     addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
@@ -156,6 +169,8 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "callCommitment(" ident "," str "," nlexpr ","
+  "[" nlexpr,* "]" "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
@@ -492,6 +507,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| callCommitment($_:ident, $_:str, $opening, [$inputs,*], [$outputs,*])) =>
+    hasPartialScalar opening || inputs.getElems.any hasPartialScalar || outputs.getElems.any hasPartialScalar
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
@@ -802,6 +819,37 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       throwErrorAt stx "persistentHashNativeVector requires 1 to 32 Native fields"
     let valueList ← nativeExprListTerm expressions
     pure (.bytes 32, ← `(Noctium.Expr.persistentHashNativeVector $valueList))
+  | `(nlexpr| callCommitment($callee:ident, $entrypoint:str, $opening, [$inputs,*], [$outputs,*])) => do
+    let contract ← liftCoreM <| resolveGlobalConstNoOverload callee
+    let interfaces := callInterfaceRegistry.getState (← getEnv)
+    let some interface := interfaces.find? (fun item =>
+        item.contract == contract && item.operation == entrypoint.getString)
+      | throwErrorAt entrypoint "callCommitment requires a declared callee with scalar or fixed-byte results"
+    unless inputs.getElems.size == interface.argumentTypes.length do
+      throwErrorAt stx "callCommitment argument count does not match the callee"
+    unless outputs.getElems.size == interface.resultTypes.length do
+      throwErrorAt stx "callCommitment result count does not match the callee"
+    let payload := [(opening, Ty.native)] ++
+      (inputs.getElems.toList.zip interface.argumentTypes) ++
+      (outputs.getElems.toList.zip interface.resultTypes)
+    let mut bindings := []
+    let mut fields : Array (TSyntax `term) := #[]
+    for ((part, ty), index) in payload.zipIdx do
+      let value ← expected env part ty
+      -- Pick a local name outside the incoming environment before expanding ABI projections.
+      let name := ((List.range (env.length + 1)).map fun suffix =>
+        s!"_noctium_call_{index}_{suffix}").find? fun name =>
+          !env.any (fun binding => binding.1 == name)
+      let some name := name | throwErrorAt part "cannot allocate call commitment binding"
+      let nameTerm := stringTerm name
+      let typeTerm ← tyTerm ty
+      let ref ← `(Noctium.Expr.ref (ty := $typeTerm) $nameTerm)
+      fields := fields.push (← `(Noctium.Expr.nativeCallFields $ref))
+      bindings := (nameTerm, value) :: bindings
+    let body ← `(Noctium.Expr.transientHash (List.flatten [$fields,*]))
+    let result ← bindings.foldlM (init := body) fun body (name, value) =>
+      `(Noctium.Expr.letE $name $value $body)
+    pure (.native, result)
   | `(nlexpr| transientHashNativeVector([$values,*])) => do
     let sourceValues := values.getElems.toList
     unless sourceValues.length ≤ Types.defaultLimits.maxVectorLength do
@@ -1108,8 +1156,15 @@ private unsafe def checkGeneratedContract (name : Name) : CommandElabM Unit := d
   | .error diagnostic => failDisclosure diagnostic
   | .ok _ =>
     match Disclosure.contract value with
-    | .ok _ => pure ()
     | .error diagnostic => failDisclosure diagnostic
+    | .ok _ =>
+      for entrypoint in value.entrypoints do
+        if entrypoint.returnViews.isEmpty then
+          modifyEnv fun env => callInterfaceRegistry.addEntry env {
+            contract := name, operation := entrypoint.name
+            argumentTypes := entrypoint.callArguments.map (·.ty)
+            resultTypes := entrypoint.returns.map (·.ty)
+          }
 
 @[command_elab circuitCommand] def elabCircuit : CommandElab := fun stx => do
   match stx with

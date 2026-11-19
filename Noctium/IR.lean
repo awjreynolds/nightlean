@@ -165,20 +165,21 @@ structure Output where
   span : SourceSpan := {}
   deriving Repr
 
-/-- Encode one logical entrypoint return as the Native fields committed by the
-call relation. Opaque return layouts reuse canonical curve projections. -/
-def Output.nativeReturnFields : Output → Except String (List (Expr .native))
-  | {ty := .native, value, ..} => pure [value]
-  | {ty := .bool, value, ..} => pure [.cast .native value]
-  | {ty := .uint _, value, ..} => pure [.cast .native value]
-  | {ty := .bytes length, value, ..} =>
-    pure ((List.range ((length + 30) / 31)).map fun index => .bytesField value index)
-  | {ty := .jubjubScalar, value, ..} => pure [.jubjubScalarToNative value]
-  | {ty := .jubjubPoint, value, ..} => pure [
-      .jubjubCoordinate value 0, .jubjubCoordinate value 1]
-  | {ty := .foreign kind, value, ..} =>
-    pure ((List.range kind.encodedFieldCount).map fun index =>
-      .foreignEncodedField value index)
+/-- The scalar and fixed-byte layouts committed by the call ABI. -/
+def Expr.nativeCallFields : Expr ty → List (Expr .native) :=
+  match ty with
+  | .native => fun value => [value]
+  | .bool => fun value => [.cast .native value]
+  | .uint _ => fun value => [.cast .native value]
+  | .bytes length => fun value =>
+    (List.range ((length + 30) / 31)).map fun index => .bytesField value index
+  | .jubjubScalar => fun value => [.jubjubScalarToNative value]
+  | .jubjubPoint => fun value => [.jubjubCoordinate value 0, .jubjubCoordinate value 1]
+  | .foreign kind => fun value =>
+    (List.range kind.encodedFieldCount).map fun index => .foreignEncodedField value index
+
+def Output.nativeReturnFields (output : Output) : Except String (List (Expr .native)) :=
+  pure (output.value.nativeCallFields)
 
 def Ty.nativeCallFieldCount (ty : Ty) : Nat :=
   match ty with

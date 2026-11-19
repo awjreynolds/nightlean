@@ -2332,6 +2332,16 @@ fn guard_is_bool(
             locals.pop();
             result
         }
+        Expr::Lets { bindings, body } => {
+            let old_len = locals.len();
+            for (name, value) in bindings {
+                let is_bool = guard_is_bool(value, input_types, locals)?;
+                locals.push((name.clone(), is_bool));
+            }
+            let result = guard_is_bool(body, input_types, locals)?;
+            locals.truncate(old_len);
+            result
+        }
         Expr::AssertThen { condition, body } => {
             guard_is_bool(condition, input_types, locals)?
                 && guard_is_bool(body, input_types, locals)?

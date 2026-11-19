@@ -72,7 +72,8 @@ hosted-witness authoring for committed arguments remain open.
 The [typed argument example](../../tests/TypedCallArguments.lean) exercises mixed
 input types, an independent private witness and the field order through the
 native checker. A reordered header or an out-of-range byte chunk rejects even
-with a recomputed commitment.
+with a recomputed commitment. [Typed call commitments](native-call-claims.md#check-the-call-payload-against-a-declared-interface)
+reuse the same encoding on the caller side.
 
 Rust callers prepare the operation, run `check(&execution, &circuit)`, then read
 `execution.returns()` or `execution.returns_json()`. Primitive values retain their
