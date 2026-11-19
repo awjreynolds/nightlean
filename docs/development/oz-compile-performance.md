@@ -11,7 +11,19 @@ The current OpenZeppelin comparison measures **4.65 s** for Noctium and **0.274 
 | Noctium ledger and witness | 4.873 / 4.647 / 4.588 | 4.647 | 53 | 5,805,683 | 758,817 |
 | Compact 0.36.1 with `--skip-zk` | 0.274 / 0.286 / 0.274 | 0.274 | 20 | 518,022 | 167,669 |
 
-The three alternating runs used the same Apple M3 Max, prebuilt compilers, warm dependencies, fresh processes and new output directories. Byte counts use the files emitted before sizing. Noctium includes Impact plans and witness sidecars. Compact includes JavaScript, source maps, types and compiler metadata. Noctium emits 16 relations and Compact emits 15. `computeAccountId` is a pure JavaScript function in the Compact build. The ABI, state handling and artifact sets differ. [Machine-readable measurements and hashes](oz-compile-performance.json)
+The three alternating runs used the same Apple M3 Max, prebuilt compilers, warm dependencies, fresh processes and new output directories. Byte counts use the files emitted before sizing. The ABI, state handling and artifact sets differ. [Machine-readable measurements and hashes](oz-compile-performance.json)
+
+Noctium emits 16 ZKIR relations, 16 Impact ledger plans, 10 witness bindings,
+10 private execution plans and `noctium.json`. The run emits zero language
+bindings. Compact emits 15 ZKIR relations, one JavaScript module, a source map,
+a TypeScript declaration and two metadata files. `computeAccountId` runs in
+JavaScript in the Compact build.
+
+About 87% of Noctium's output bytes are JSON plans and metadata. The manifest
+repeats the circuit schema from each Impact plan. For each hosted entrypoint,
+the execution plan embeds the binding, and the binding embeds the ZKIR
+relation. The runtime checks these associations when loading the artifacts.
+[Artifact verification](portable-artifacts.md)
 
 ## Historical source compilation
 
@@ -163,6 +175,14 @@ the change and 5.91, 4.43 and 4.53 s after. Median user CPU fell from 3.76 s to
 3.64 s. All 53 artifacts matched byte for byte. The hosted argument fixture
 and the mixed result fixture also reproduced their range-deduplicated output.
 The wall times varied across runs.
+
+Witness registration now checks disclosure on the circuit it already compiled.
+Previously it evaluated the generated Lean definition, which ran witness
+compilation again. Three OpenZeppelin ledger-and-witness runs took 4.76, 4.75
+and 4.57 s before the change and 5.87, 4.44 and 4.49 s after. Median user CPU
+fell from 3.68 s to 3.49 s. All 53 artifacts matched byte for byte. The private
+state fixture still rejects an implicit public release and accepts an explicit
+one. This change removes compiler work and leaves circuit sizes unchanged.
 
 ## What the timing includes
 

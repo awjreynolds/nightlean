@@ -2412,7 +2412,9 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       match Noctium.Witness.compile $sourceTerm $exportNameTerm $fullNameTerm $outputNameTerm with
       | .ok value => value.circuit
       | .error _ => {name := $fullNameTerm, inputs := [], outputs := [], constraints := []}))
-    unsafe checkGeneratedCircuit fullName
+    match Disclosure.circuit compiled.circuit with
+    | .ok _ => pure ()
+    | .error diagnostic => failDisclosure diagnostic
     let some exported := program.exports.find? (·.name == exportName)
       | throwErrorAt name "unknown witness entrypoint"
     let aggregateInputs ← (exported.compositeInputs.filter (·.visibility == .private)).mapM fun input => do
