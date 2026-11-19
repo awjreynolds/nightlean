@@ -30,17 +30,21 @@ Noctium's host-neutral witness plan serves these runtimes. The OpenZeppelin timi
 
 ## Full pinned ZKIR v3 instruction inventory
 
-Noctium registers 40 non-deprecated opcode names through scoped source routes. Compact's column lists the 20 opcode names observed across its 15 retained OpenZeppelin relations. Each relation's bytes matched its recorded SHA-256. Additional source features require their own evidence. [Pinned ZKIR inventory and scope](zkir-feature-matrix.json) · [Benchmark hashes](../development/oz-compile-performance.json)
+Noctium registers all 40 active opcode names through scoped source routes. The pinned Compact 0.36.1 lowering pass constructs **31 of those 40** and writes ZKIR 3.1. Its JSON printer recognizes 33 active names. This is a comparison of compiler lowering paths by opcode name. [Compact lowering pass](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/reduce-to-zkir.ss) · [Compact JSON printer](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/print-zkir-v3.ss) · [Pinned ZKIR inventory and scope](zkir-feature-matrix.json)
 
-| Instruction group | Noctium source lowering | Compact in the OpenZeppelin build |
+| Instruction group | Noctium source lowering | Compact 0.36.1 lowering |
 | --- | --- | --- |
-| Scalar arithmetic and comparison | `add`, `mul`, `neg`, `inv`, `test_eq`, `less_than` | `add`, `neg`, `test_eq`, `less_than` |
+| Scalar arithmetic and comparison | `add`, `mul`, `neg`, `inv`, `test_eq`, `less_than` | `add`, `mul`, `neg`, `inv`, `test_eq`, `less_than` |
 | Logic and selection | `not`, `and`, `or`, `xor`, `cond_select` | `cond_select` |
-| Constraints | `assert`, `constrain_bits`, `constrain_eq`, `constrain_to_boolean` | `assert`, `constrain_bits` |
+| Constraints | `assert`, `constrain_bits`, `constrain_eq`, `constrain_to_boolean` | `assert`, `constrain_bits`, `constrain_eq`, `constrain_to_boolean` |
 | Inputs, outputs and ledger binding | `public_input`, `private_input`, `impact`, `output`, `copy`, `load_constant` | `public_input`, `private_input`, `impact`, `output`, `copy` |
-| Bytes and encoding | `encode`, `to_bytes`, `from_bytes`, `bytes_from_natives`, `bytes_into_natives`, `nth`, `reverse`, `slice`, `concat` | `encode`, `bytes_into_natives` |
-| Hashes | `transient_hash`, `persistent_hash`, `sha512`, `keccak256`, `hash_to_curve` | `persistent_hash` |
+| Bytes and encoding | `encode`, `to_bytes`, `from_bytes`, `bytes_from_natives`, `bytes_into_natives`, `nth`, `reverse`, `slice`, `concat` | `encode`, `to_bytes`, `from_bytes`, `bytes_from_natives`, `bytes_into_natives` |
+| Hashes | `transient_hash`, `persistent_hash`, `sha512`, `keccak256`, `hash_to_curve` | `transient_hash`, `persistent_hash`, `sha512`, `keccak256`, `hash_to_curve` |
 | Curve operations | `jubjub_scalar_from_native`, `ec_mul_generator`, `ec_mul`, `from_coordinates`, `into_coordinates` | `jubjub_scalar_from_native`, `ec_mul_generator`, `ec_mul`, `from_coordinates`, `into_coordinates` |
+
+**Nine Noctium opcodes lack a direct Compact lowering path.** Compact's printer covers `not` and `slice`. Its lowering pass constructs neither. Compact's printer omits `and`, `or`, `xor`, `concat`, `nth`, `reverse` and `load_constant`. Compact supports Boolean negation in source. A compiled ledger toggle uses `cond_select` for it. [Compact printer note on `not`](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/print-zkir-v3.ss#L144-L151)
+
+The OpenZeppelin build exercised 20 Compact opcode names across its 15 retained relations. Each relation's bytes matched its recorded SHA-256. [Benchmark hashes](../development/oz-compile-performance.json)
 
 The upstream inventory also records seven deprecated instructions. Noctium targets the active instruction set for new contracts.
 
