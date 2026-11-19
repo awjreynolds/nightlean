@@ -1171,6 +1171,15 @@ def resultTypeOfComposite : Types.CompositeType → ResultType
   | .scalar type => .scalar type
   | type => .composite type
 
+def indexResultType (span : SourceSpan) (parent index : ResultType) : Except Diagnostic ResultType := do
+  let .composite (.vector length element) := parent
+    | fail span "dynamic aggregate index requires a vector value"
+  unless length > 0 do fail span "cannot dynamically index an empty aggregate vector"
+  let indexType ← scalar span index
+  unless indexType == .native || (match indexType with | .uint _ => true | _ => false) do
+    fail span "aggregate index requires Native or UInt"
+  pure (resultTypeOfComposite element)
+
 private def common (span : SourceSpan) (left right : Ty) : Except Diagnostic Ty := do
   if subtype (.scalar left) (.scalar right) then pure right
   else if subtype (.scalar right) (.scalar left) then pure left
@@ -1358,13 +1367,7 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
     | .index value index => do
       let parent ← inferTerm fuel program scope env span value
       let index ← inferTerm fuel program scope env span index
-      let .composite (.vector length element) := parent.ty
-        | fail span "dynamic aggregate index requires a vector value"
-      unless length > 0 do fail span "cannot dynamically index an empty aggregate vector"
-      let indexType ← scalar span index.ty
-      unless indexType == .native || (match indexType with | .uint _ => true | _ => false) do
-        fail span "aggregate index requires Native or UInt"
-      pure (combine (resultTypeOfComposite element) [parent, index])
+      pure (combine (← indexResultType span parent.ty index.ty) [parent, index])
     | .effect kind _ result =>
       unless kind.impure do fail span "external helper effects require an external effect category"
       let result ← inferTerm fuel program scope env span result
@@ -2456,12 +2459,14 @@ mutual
       let bounded := Expr.cast (.uint (length - 1)) indexExpr
       let boundCheck := Expr.eq bounded bounded
       let width := childType.checked.expandedLeaves
-      let parentLeaves ← liftD ((components parent).mapM (nativeOfScalar span))
+      let parentLeaves := (← liftD ((components parent).mapM (nativeOfScalar span))).toArray
+      let last := length - 1
+      -- The range constraint makes the last element the only valid fallback.
       let selected := (List.range width).map fun leafOffset =>
-        ((List.range length).foldr (fun position rest =>
+        ((List.range last).foldr (fun position rest =>
           .select (.eq indexExpr (.native position))
             ((parentLeaves[position * width + leafOffset]?).getD (.native 0)) rest)
-          (.native 0))
+          ((parentLeaves[last * width + leafOffset]?).getD (.native 0)))
       let constraints := parent.constraints ++ indexValue.constraints ++ [boundCheck]
       match resultTypeOfComposite element with
       | .unit => pure {unitValue with constraints}

@@ -34,12 +34,28 @@ noctium_witness_circuit authorize using paymentWire where
   output code : UInt 8 := disclose(elementAt(field(payment, memo), 1))
 end
 
+private def optionsWire : Helpers.Wire.Codec := {
+  payload := .vector 3 (.tuple [.scalar .bool, .bytes 1])
+  frameBytes := 6
+}
+
+noctium_witness_circuit choose using optionsWire where
+  public frame : Bytes 6
+  private position : UInt 8
+  let option := elementAt(decode(optionsWire, frame), disclose(position))
+  prove elementAt(option, 0)
+  output code : UInt 8 := disclose(elementAt(elementAt(option, 1), 0))
+end
+
 noctium_contract Codec where
   entry transcode uses transcode where
     return encoding : Bytes 10 := encoded
   end
   entry authorize uses authorize where
     return approval : UInt 8 := code
+  end
+  entry choose uses choose where
+    return choice : UInt 8 := code
   end
 end
 

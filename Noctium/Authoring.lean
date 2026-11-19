@@ -102,7 +102,7 @@ scoped syntax "witness" ident "(" nlexpr,* ")" : nlexpr
 scoped syntax "encode(" ident "," nlexpr ")" : nlexpr
 scoped syntax "decode(" ident "," nlexpr ")" : nlexpr
 scoped syntax "field(" nlexpr "," ident ")" : nlexpr
-scoped syntax "elementAt(" nlexpr "," num ")" : nlexpr
+scoped syntax "elementAt(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "enumTag(" nlexpr ")" : nlexpr
 
 declare_syntax_cat noctium_witness_statement
@@ -342,7 +342,7 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| encode($codec:ident, $value)) => s!"encode({codec.getId}, {renderExpr value})"
   | `(nlexpr| decode($codec:ident, $value)) => s!"decode({codec.getId}, {renderExpr value})"
   | `(nlexpr| field($value, $name:ident)) => s!"field({renderExpr value}, {name.getId})"
-  | `(nlexpr| elementAt($value, $index:num)) => s!"elementAt({renderExpr value}, {index.getNat})"
+  | `(nlexpr| elementAt($value, $index)) => s!"elementAt({renderExpr value}, {renderExpr index})"
   | `(nlexpr| enumTag($value)) => s!"enumTag({renderExpr value})"
   | `(nlexpr| eq($left, $right)) => s!"eq({renderExpr left}, {renderExpr right})"
   | `(nlexpr| boolAnd($left, $right)) => s!"boolAnd({renderExpr left}, {renderExpr right})"
@@ -428,12 +428,13 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| select($condition, $yes, $no)) =>
     disclosedValues condition ++ disclosedValues yes ++ disclosedValues no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => disclosedValues left ++ disclosedValues right
+  | `(nlexpr| elementAt($value, $index)) => disclosedValues value ++ disclosedValues index
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
-  | `(nlexpr| field($value, $_:ident)) | `(nlexpr| elementAt($value, $_:num))
+  | `(nlexpr| field($value, $_:ident))
   | `(nlexpr| enumTag($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => disclosedValues value
@@ -478,12 +479,13 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| select($condition, $yes, $no)) =>
     inlineAssertions condition ++ inlineAssertions yes ++ inlineAssertions no
   | `(nlexpr| poseidon2($_:num, $left, $right)) => inlineAssertions left ++ inlineAssertions right
+  | `(nlexpr| elementAt($value, $index)) => inlineAssertions value ++ inlineAssertions index
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
-  | `(nlexpr| field($value, $_:ident)) | `(nlexpr| elementAt($value, $_:num))
+  | `(nlexpr| field($value, $_:ident))
   | `(nlexpr| enumTag($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => inlineAssertions value
@@ -818,15 +820,30 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     pure {result with generatedValidity := s!"checked wire decode {renderExpr stx}" :: result.generatedValidity}
   | `(nlexpr| field($value, $name:ident)) =>
     lowerProjection stx (← lowerExpr programName callPrefix env value) (.field name.getId.toString)
-  | `(nlexpr| elementAt($value, $index:num)) => do
+  | `(nlexpr| elementAt($value, $index)) => do
     let value ← lowerExpr programName callPrefix env value
-    let index := index.getNat
-    let projection ← match value.type with
-      | .composite (.tuple _) => pure (Types.Projection.tupleIndex index)
-      | .composite (.vector _ _) => pure (.vectorIndex index)
-      | .composite (.bytes _) => pure (.byteIndex index)
-      | _ => throwErrorAt stx "elementAt requires an aggregate tuple, vector or byte string"
-    lowerProjection stx value projection
+    if let `(nlexpr| $literal:num) := index then
+      let offset := literal.getNat
+      let projection ← match value.type with
+        | .composite (.tuple _) => pure (Types.Projection.tupleIndex offset)
+        | .composite (.vector _ _) => pure (.vectorIndex offset)
+        | .composite (.bytes _) => pure (.byteIndex offset)
+        | _ => throwErrorAt stx "elementAt requires an aggregate tuple, vector or byte string"
+      return ← lowerProjection stx value projection
+    let offset ← lowerExpr programName callPrefix env index
+    let type ← match Helpers.indexResultType (← spanValue stx) value.type offset.type with
+      | .ok type => pure type
+      | .error diagnostic => throwErrorAt stx diagnostic.message
+    let result := mergeLowered type (.index value.term offset.term) [value, offset]
+    let result := {result with generatedValidity := s!"checked vector index {renderExpr index}" :: result.generatedValidity}
+    if offset.before.isEmpty then return result
+    -- Evaluate the vector before bindings introduced by the index expression.
+    let next := (← get).nextLet
+    modify fun state => {state with nextLet := state.nextLet + 1}
+    let vector := s!"__noctium_index_vector_{next}"
+    return { result with
+      term := .index (.ref vector) offset.term
+      before := value.before ++ [.bind vector value.type value.term] ++ offset.before}
   | `(nlexpr| enumTag($value)) =>
     lowerProjection stx (← lowerExpr programName callPrefix env value) .enumTag
   | `(nlexpr| jubjubScalarFromNative($value)) =>
@@ -1247,6 +1264,8 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
       | .enumTag => `(Noctium.Types.Projection.enumTag)
       | .enumField .. => throwError "readable witness source does not support enum payload projections"
     `(Noctium.Helpers.Term.project $(← termTerm value) $projection)
+  | .index value index => do
+    `(Noctium.Helpers.Term.index $(← termTerm value) $(← termTerm index))
   | .at span value => do
     let span ← quoteSpan span
     `(Noctium.Helpers.Term.at $span $(← termTerm value))

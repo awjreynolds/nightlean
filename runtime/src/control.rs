@@ -1798,8 +1798,8 @@ impl Parser<'_> {
                 };
                 let index = self.expr(field(v, "index")?, env, depth + 1)?;
                 ensure!(
-                    matches!(scalar_type(&index.ty)?, ScalarType::UInt(_)),
-                    "aggregate index must be bounded unsigned"
+                    matches!(scalar_type(&index.ty)?, ScalarType::Native | ScalarType::UInt(_)),
+                    "aggregate index requires Native or UInt"
                 );
                 let projected = text(v, "type")?.to_owned();
                 let projected_type = parse_type(&projected, self.registry)?;
@@ -6575,11 +6575,12 @@ impl Session {
                     .aggregate
                     .as_ref()
                     .ok_or_else(|| anyhow!("control index aggregate required"))?;
-                let Some(Value::UInt { number, .. }) = index_value.value.as_ref() else {
-                    bail!("control index must be bounded unsigned")
+                let index = match index_value.value.as_ref() {
+                    Some(Value::Native(value)) => crate::field_decimal(*value),
+                    Some(Value::UInt { number, .. }) => number.to_string(),
+                    _ => bail!("control index requires Native or UInt"),
                 };
-                let index = number
-                    .to_string()
+                let index = index
                     .parse::<usize>()
                     .map_err(|_| anyhow!("control index out of range"))?;
                 let (actual_type, value, range) = self.plan.registry.index_with_range(

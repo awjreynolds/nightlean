@@ -34,6 +34,8 @@ end
 
 A successful call establishes the three predicates and returns one memo byte. The other decoded fields stay out of the return value. The fixed-index form uses the checked projection and adds no dynamic selection.
 
+For a fixed vector, `elementAt` also accepts a Native or UInt expression. The `choose` example reads a public vector of three options and uses a private position. `disclose(position)` authorizes the position's influence on the released result. The position stays a private circuit input. When option values are distinguishable, the result still reveals which position was selected. [Complete example](../../examples/AggregateSerialization.lean)
+
 ## Focused qualification
 
 The payment example contains a tuple, a fixed vector, a fieldless enum and a two-byte memo. Its input frame ends in `[200, 255]`. Both Noctium and Compact 0.36.1 return `[44, 1, 1, 0, 1, 1, 12, 42, 0, 0]` and reject a wrong UInt, Bool or ordinal in the prefix. The hosted helper and native checker agreed on the Native frame, and the host rejected the modulus encoding.
@@ -42,6 +44,10 @@ The readable payment circuit emits the same ZKIR bytes as the prior helper progr
 
 The new approval entrypoint measures K9 and 290 rows. Compact 0.36.1's pure evaluator and Noctium's authenticated host both returned 42 from `[44, 1, 1, 0, 1, 0, 12, 42, 200, 255]` and rejected changes at offsets 2, 4 and 5 to 0, 0 and 1 respectively. The pinned checker accepted the matching statement and rejected the same changes in the private preimage. It also rejected changing 42 to 43 while keeping the committed return. These results qualify the new entrypoint at the source and native checker boundaries. [Compact 0.36.1 release](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.36.1) · [Focused Rust test](../../runtime/tests/aggregate_serialization.rs)
 
+The vector lookup returns 12, 42 and 88 for positions 0, 1 and 2. The Rust host and native circuit reject 3 and 255. The native checker also rejects replacing the selected position while keeping the original return commitment. The final checked vector element serves as the fallback in the circuit, saving two selectors and one comparison. ZKIR dropped from 107 to 104 instructions and 162 to 158 rows at K9. The three other circuit relations match byte for byte. Raw Impact preparation builds a candidate preimage and the native checker enforces its bounds. [Focused Rust test](../../runtime/tests/aggregate_serialization.rs)
+
+Compact 0.36.1 rejected direct `options[position]` with a runtime index. Its explicit three-case implementation with a bound assertion returned the same three values and rejected the same two invalid positions. This comparison covers behavior with the fixed vector and public frame used above. [Compact sequence reference rules](https://docs.midnight.network/compact/reference/compact-reference#tuple-vector-and-byte-vector-references)
+
 Using direct byte reads for the memo reduced the circuit from 1,025 to 987 rows and brought K from 11 to 10. The native proof finalized on the pinned Ledger 9.1.0.1 and ZKIR 3.2.1 localnet.
 
 | Action | Block | Transaction ID |
@@ -49,7 +55,7 @@ Using direct byte reads for the memo reduced the circuit from 1,025 to 987 rows 
 | Deploy | 31155 | `3c4a54af494cf956a776d86a932dca9dd13278ff100ce1fc9e2175bda2d5cb66` |
 | Call | 31158 | `897f87eb33d07d0627c0534cd6977283307c9027d9ee9600ca72a513a2b515d1` |
 
-Readable dynamic indexing, aggregate output declarations, payload-carrying wire enum variants and wider host qualification remain open.
+Readable aggregate output declarations, payload-carrying wire enum variants and wider host qualification remain open.
 
 ```sh
 lake build noctium Noctium.Helpers.Wire

@@ -341,7 +341,7 @@
       "layer": "language",
       "surface": "Vector<n,T>",
       "noctiumStatus": "subset",
-      "notes": "Checked fixed-size vectors support literal indexing in readable circuits. A field from a decoded Vector<2,Bool> controls an assertion and passes the pinned Compact evaluator, authenticated Rust host and native checker comparison. Readable dynamic indexing and full slicing/spread coverage remain open.",
+      "notes": "Checked fixed-size vectors support literal and runtime indexing in readable circuits. Runtime indexing accepts UInt and Native values, enforces the vector bound, and requires explicit authorization for private selector influence on public results. Compact 0.36.1 rejects direct runtime indexing. A three-case Compact reference agrees on the selected values and out-of-range failures. Full slicing and spread coverage remain open.",
       "source": [
         "reference"
       ],
