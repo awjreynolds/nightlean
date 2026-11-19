@@ -654,6 +654,7 @@ structure LedgerState where
   cells : List (String × Value) := []
   maps : List (String × List (Value × Value)) := []
   trees : List (String × LedgerValue) := []
+  events : List (EventKind × List Nat) := []
   deriving Repr, BEq
 
 /-- The source evaluator replaces an entry and places it first in the association list. -/
@@ -774,6 +775,8 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .claimContractCall .. =>
       throw "reference evaluator does not execute cross-contract claims"
+    | .emitEvent kind payload =>
+      next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
       unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
     | .writeCell name ty value =>
@@ -935,7 +938,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
-            .claimContractCall .. | .requireContractCaller .. => pure ()
+            .claimContractCall .. | .requireContractCaller .. | .emitEvent .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -967,6 +970,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           if !(← condition.eval ctx env) then throw "state transition guard failed"
         | .claimContractCall .. =>
           throw "reference evaluator does not execute cross-contract claims"
+        | .emitEvent kind payload =>
+          next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
           unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
         | .writeCell name ty value =>
@@ -1125,7 +1130,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
-        | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. | .requireContractCaller .. |
+        | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
+            .requireContractCaller .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
             .listPopFront .. | .listReset .. | .removePath .. => pure ()

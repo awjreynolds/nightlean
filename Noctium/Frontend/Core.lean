@@ -253,6 +253,8 @@ declare_syntax_cat nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
+scoped syntax "emitEvent" "(" ident ")" : nlupdate
+scoped syntax "emitEvent" "(" ident "," nlexpr ")" : nlupdate
 
 declare_syntax_cat nleffect
 scoped syntax nlupdate : nleffect
@@ -1600,6 +1602,19 @@ private def elaborateEffect (schema : List (String × StateKind))
     | `(nlupdate| requireContractCaller($address:nlexpr)) => do
       let address ← checkedExpression state.env address (.bytes 32)
       let term ← `(Noctium.Effect.requireContractCaller $address)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| emitEvent($event:ident)) => do
+      let kind ← match event.getId.toString with
+        | "Paused" => `(Noctium.EventKind.paused)
+        | "Unpaused" => `(Noctium.EventKind.unpaused)
+        | _ => throwErrorAt event "empty events must be Paused or Unpaused"
+      let term ← `(Noctium.Effect.emitEvent $kind (Noctium.Expr.bytesLiteral 0 []))
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| emitEvent($event:ident, $payload:nlexpr)) => do
+      unless event.getId.toString == "ShieldedSpend" do
+        throwErrorAt event "supported event with a payload is ShieldedSpend"
+      let payload ← checkedExpression state.env payload (.bytes 32)
+      let term ← `(Noctium.Effect.emitEvent Noctium.EventKind.shieldedSpend $payload)
       state := {state with terms := state.terms.push term}
     | _ => throwErrorAt update "unsupported Noctium update"
   | `(nleffect| require $value:nlexpr) =>

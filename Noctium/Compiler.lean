@@ -202,6 +202,10 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
 
+  | .emitEvent kind payload => Json.mkObj [
+      ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
+      ("payload", nativeExpressionJson payload)]
+
 private def operationJson (activityGuard : Option (Expr .bool))
     (operation : Backend.Impact.Op) : Json :=
   let encoded := operationJsonBare operation
@@ -229,6 +233,9 @@ private def effectJson : Effect → Json
       ("commitment", expressionJson commitment)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
+  | .emitEvent kind payload => Json.mkObj [
+      ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
+      ("payload", expressionJson payload)]
   | .writeCell state _ value => Json.mkObj [("op", toJson ("writeCell" : String)),
       ("state", toJson state), ("value", expressionJson value)]
   | .writeMap state _ _ key value => Json.mkObj [("op", toJson ("writeMap" : String)),

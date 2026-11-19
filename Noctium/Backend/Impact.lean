@@ -58,6 +58,7 @@ inductive Op where
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | requireContractCaller (address : Expr (.bytes 32))
+  | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
 
 private def claimContractCallFieldGroups
     (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar) : List (List Scalar) :=
@@ -117,6 +118,16 @@ private def emptyListPushFields : List Scalar :=
   [.native 0x11, .native 51, .native 0, .native 0,
     .native 1, .native 1, .native 8, .native 0]
 
+private def eventFieldGroups (kind : EventKind)
+    (payload : Expr (.bytes kind.payloadSize)) : List (List Scalar) :=
+  -- Push a three-cell array containing version (u32), tag (u8) and data.
+  let data := match kind, payload with
+    | .paused, payload | .unpaused, payload =>
+        [.native 1, .letE "_noctium_empty_event" payload (.native 0)]
+    | .shieldedSpend, payload => (Aligned.bytes 32 payload).fields
+  [[.native 0x10, .native 0x33, .native 1, .native 1, .native 4, .native 1,
+    .native 1, .native 1, .native 1, .native kind.tag, .native 1] ++ data, [.native 0x09]]
+
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
   | .index slot pushPath => [.native (if pushPath then 0x70 else 0x50)] ++
@@ -171,6 +182,7 @@ def Op.fields : Op → List Scalar
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
 macros remain one typed source effect, but their field vectors split at each
@@ -213,6 +225,7 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
   | .requireContractCaller address => requireContractCallerFieldGroups address
+  | .emitEvent kind payload => eventFieldGroups kind payload
   | operation => [operation.fields]
 
 structure Read where
@@ -587,6 +600,8 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     pure {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .emitEvent kind payload =>
+    pure {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
     pure {plan with
       operations := plan.operations ++ [.requireContractCaller address]
@@ -787,6 +802,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (totalizeActivityValue condition avoid address)
         (totalizeActivityValue condition avoid entryPointHash)
         (totalizeActivityValue condition avoid commitment))
+    | some condition, .emitEvent kind payload =>
+      pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
       pure (.requireContractCaller (totalizeActivityValue condition (expressionNames address) address))
     | some condition, .readMap name destination keyTy valueTy key =>
@@ -879,7 +896,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
       some condition, .listReset .. | some condition, .removePath .. |
-      some condition, .claimContractCall .. =>
+      some condition, .claimContractCall .. | some condition, .emitEvent .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -1020,6 +1037,8 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     plan := {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .emitEvent kind payload =>
+    plan := {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
     plan := {plan with
       operations := plan.operations ++ [.requireContractCaller address]
@@ -1378,6 +1397,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do
   pure (Lean.Json.arr (← plan.operations.mapM (Op.toJson ctx env)).toArray)

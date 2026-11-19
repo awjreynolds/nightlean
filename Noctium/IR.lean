@@ -352,6 +352,22 @@ structure Constructor where
   initializers : List ConstructorInitializer := []
   deriving Repr
 
+/-- Standard log layouts supported by the pinned Ledger 9 target. -/
+inductive EventKind where
+  | shieldedSpend
+  | paused
+  | unpaused
+  deriving Repr, BEq
+
+def EventKind.tag : EventKind → Nat
+  | .shieldedSpend => 0
+  | .paused => 8
+  | .unpaused => 9
+
+def EventKind.payloadSize : EventKind → Nat
+  | .shieldedSpend => 32
+  | .paused | .unpaused => 0
+
 /-- State effects are ordered transaction instructions, not circuit nodes.
 A read binds a typed name for later guards/writes. Outputs are bound explicitly
 by an entrypoint. The backend must bind these values into the accepted transcript. -/
@@ -368,6 +384,7 @@ inductive Effect where
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | requireContractCaller (address : Expr (.bytes 32))
+  | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
   | counterRead (state destination : String) (keys : List PathKey)
@@ -915,7 +932,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
-          .claimContractCall .. | .requireContractCaller .. |
+          .claimContractCall .. | .requireContractCaller .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -949,6 +966,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         pure []
       | .requireContractCaller address => do
         address.validate caps env
+        pure []
+      | .emitEvent _ payload =>
+        payload.validate caps env
         pure []
       | .writeCell state ty value =>
         if !caps.stateCells then throw "target lacks state cells"

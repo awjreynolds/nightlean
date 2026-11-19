@@ -15,7 +15,7 @@ use num_bigint::BigUint;
 use onchain_runtime::result_mode::{GatherEvent, ResultModeGather};
 use onchain_runtime::{
     context::QueryContext,
-    ops::{Key, Op},
+    ops::{Key, Op, VersionedLogItem},
     result_mode::ResultModeVerify,
     state::{ChargedState, StateValue},
     transcript::Transcript,
@@ -1114,6 +1114,19 @@ pub enum Instruction {
     RequireContractCaller {
         address: Expr,
     },
+    #[serde(rename = "emitEvent")]
+    EmitEvent {
+        tag: u8,
+        payload: Expr,
+    },
+}
+
+fn event_payload_length(tag: u8) -> Result<usize> {
+    match tag {
+        0 => Ok(32),
+        8 | 9 => Ok(0),
+        _ => bail!("unsupported native event tag"),
+    }
 }
 
 fn path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> {
@@ -1185,6 +1198,9 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ClaimContractCall { .. } => vec![1, 4, 1, 1, 11, 2, 2, 1, 1],
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
+        Instruction::EmitEvent { tag, .. } => {
+            vec![13 + event_payload_length(*tag)?.div_ceil(31), 1]
+        }
         _ => vec![impact_field_count(instruction, plan)?],
     })
 }
@@ -1205,6 +1221,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
         Instruction::RequireContractCaller { .. } => 15,
+        Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
         Instruction::Index {
@@ -2349,7 +2366,7 @@ fn push_native_state(value: StateValue<Db>, storage: bool) -> Result<Op<ResultMo
         storage,
         value: value
             .try_into_checked()
-            .map_err(|_| anyhow!("invalid native List storage value"))?,
+            .map_err(|_| anyhow!("invalid native state value for Push"))?,
     })
 }
 
@@ -2514,6 +2531,8 @@ pub struct Execution {
     /// Exact source schedule returned by the checked native Impact groups.
     pub activity_schedule: Vec<Option<usize>>,
     pub after: QueryContext<Db>,
+    /// Public logs produced during local simulation, in execution order.
+    pub logs: Vec<VersionedLogItem<Db>>,
     pub guaranteed: Option<Transcript<Db>>,
     pub fallible: Option<Transcript<Db>>,
     pub preimage: ProofPreimage,
@@ -2747,6 +2766,10 @@ fn probe_instruction(
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
+        Instruction::EmitEvent { tag, payload } => {
+            event_payload_length(*tag)?;
+            probe_expression(payload, plan, env, deferred_outputs)
+        }
         // Read expressions bind values produced by the state read itself.
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
@@ -2847,6 +2870,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::MapRemove { .. }
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::RequireContractCaller { .. }
+                | Instruction::EmitEvent { .. }
         ),
         "guarded native operation has an unsupported shape"
     );
@@ -3156,6 +3180,7 @@ impl PreparationCursor {
                             | Instruction::MapRemove { .. }
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::RequireContractCaller { .. }
+                            | Instruction::EmitEvent { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -3904,6 +3929,19 @@ impl PreparationCursor {
                     result: AlignedValue::from(expected),
                 }
             }
+            Instruction::EmitEvent { tag, payload } => {
+                let bytes = evaluated_bytes(payload, event_payload_length(*tag)?, &env)?;
+                let value = StateValue::Array(
+                    vec![
+                        StateValue::Cell(Sp::new(1u32.into())),
+                        StateValue::Cell(Sp::new((*tag).into())),
+                        StateValue::Cell(Sp::new(aligned_bytes(&Value::Bytes(bytes))?)),
+                    ]
+                    .into(),
+                );
+                program.push(push_native_state(value, false)?);
+                Op::Log
+            }
             Instruction::Member => Op::Member,
             Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {
                 let (slot, keys) = previous_index
@@ -4106,6 +4144,7 @@ impl PreparationCursor {
             program,
             activity_schedule,
             after,
+            logs: queried.events,
             guaranteed,
             fallible,
             preimage,
