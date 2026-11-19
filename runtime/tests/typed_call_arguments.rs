@@ -3,18 +3,22 @@
 use base_crypto::{fab::AlignedValue, hash::HashOutput};
 use coin_structure::contract::ContractAddress;
 use noctium_runtime::{
-    Plan,
+    Db, Plan,
     assembly::{CheckedNativeCall, assemble_checked_calls},
-    check, create_state, field_value,
+    check, create_state, field_decimal, field_value,
     foreign::{ForeignType, ForeignValue},
     prepare,
     zkir::IrSource,
 };
-use onchain_runtime::{communication_commitment, context::QueryContext, state::EntryPointBuf};
+use onchain_runtime::{
+    communication_commitment,
+    context::QueryContext,
+    state::{ChargedState, EntryPointBuf},
+};
 use rand::rngs::OsRng;
 use serde_json::json;
 use std::collections::BTreeMap;
-use transient_crypto::curve::Fr;
+use transient_crypto::{curve::Fr, hash::transient_hash};
 
 use ledger::structure::INITIAL_PARAMETERS;
 
@@ -116,54 +120,57 @@ fn typed_arguments_use_committed_field_order_without_private_transcript_duplicat
         "fixtures/typed-call-arguments/321/TypedCaller.claim.impact.json"
     ))
     .unwrap();
-    let caller_state = create_state(
-        &caller_plan,
-        &BTreeMap::from([("marker".into(), json!("2"))]),
-    )
-    .unwrap();
+    let target_value = |target: ContractAddress| json!({"kind":"bytes", "values":target.0.0});
+    let authority = Fr::from(42u64);
+    let caller_state = |target| {
+        create_state(
+            &caller_plan,
+            &BTreeMap::from([
+                ("route".into(), target_value(target)),
+                (
+                    "adminCommitment".into(),
+                    json!(field_decimal(transient_hash(&[authority]))),
+                ),
+            ]),
+        )
+        .unwrap()
+    };
+    let original_route = caller_state(callee);
     let caller = ContractAddress(HashOutput([8; 32]));
     let callee_entry = EntryPointBuf(b"store".to_vec());
-    let mut inputs = inputs;
+    let callee_inputs = inputs;
+    let mut inputs = callee_inputs.clone();
     inputs.remove("aux");
     inputs.extend([
-        (
-            "target".into(),
-            json!({"kind":"bytes", "values":callee.0.0}),
-        ),
-        (
-            "entryHash".into(),
-            json!({"kind":"bytes", "values":callee_entry.ep_hash().0}),
-        ),
         ("opening".into(), json!("101")),
         ("emptyAccepted".into(), json!(true)),
         ("expectedTail".into(), json!("32")),
         ("expectedScore".into(), json!("200")),
         ("expectedApproval".into(), json!(true)),
     ]);
-    let prepare_caller = |inputs: &BTreeMap<String, serde_json::Value>| {
-        prepare(
-            &caller_plan,
-            inputs,
-            &caller_state,
-            &INITIAL_PARAMETERS,
-            caller,
-        )
+    let prepare_caller = |route: &ChargedState<Db>,
+                          inputs: &BTreeMap<String, serde_json::Value>| {
+        prepare(&caller_plan, inputs, route, &INITIAL_PARAMETERS, caller)
     };
-    let assemble = |source: &noctium_runtime::Execution| {
+    let assemble = |source: &noctium_runtime::Execution,
+                    route: &ChargedState<Db>,
+                    target: ContractAddress,
+                    child: &noctium_runtime::Execution,
+                    entry: EntryPointBuf| {
         assemble_checked_calls(
             &[
                 CheckedNativeCall {
                     execution: source,
                     circuit: &caller_circuit,
-                    initial_context: QueryContext::new(caller_state.clone(), caller),
+                    initial_context: QueryContext::new(route.clone(), caller),
                     entry_point: EntryPointBuf(b"claim".to_vec()),
                     communication_commitment_rand: Fr::from(53u64),
                 },
                 CheckedNativeCall {
-                    execution: &execution,
+                    execution: child,
                     circuit: &circuit,
-                    initial_context: QueryContext::new(initial.clone(), callee),
-                    entry_point: callee_entry.clone(),
+                    initial_context: QueryContext::new(initial.clone(), target),
+                    entry_point: entry,
                     communication_commitment_rand: Fr::from(101u64),
                 },
             ],
@@ -173,22 +180,95 @@ fn typed_arguments_use_committed_field_order_without_private_transcript_duplicat
         )
     };
 
-    let source = prepare_caller(&inputs).unwrap();
-    let intent = assemble(&source).unwrap();
+    let source = prepare_caller(&original_route, &inputs).unwrap();
+    let claims = &source.after.effects.claimed_contract_calls;
+    assert_eq!(claims.iter().count(), 1);
+    let (_, claimed, selector, _) = claims.iter().next().unwrap().into_inner();
+    assert_eq!(claimed, callee);
+    assert_eq!(selector, callee_entry.ep_hash());
+    let intent = assemble(
+        &source,
+        &original_route,
+        callee,
+        &execution,
+        callee_entry.clone(),
+    )
+    .unwrap();
     let mut calls = intent.calls();
     let parent = calls.next().unwrap();
     let child = calls.next().unwrap();
     assert!(parent.calls(child));
     assert_eq!(child.address, callee);
+    assert!(
+        assemble(
+            &source,
+            &original_route,
+            callee,
+            &execution,
+            EntryPointBuf(b"other".to_vec())
+        )
+        .is_err()
+    );
+
+    let rotate_plan: Plan = serde_json::from_str(include_str!(
+        "fixtures/typed-call-arguments/321/TypedCaller.rotateRoute.impact.json"
+    ))
+    .unwrap();
+    let rotate_circuit = IrSource::load(
+        include_bytes!("fixtures/typed-call-arguments/321/TypedCaller.rotateRoute.zkir").as_slice(),
+    )
+    .unwrap();
+    let second = ContractAddress(HashOutput([10; 32]));
+    let rotate = |key| {
+        prepare(
+            &rotate_plan,
+            &BTreeMap::from([
+                ("newTarget".into(), target_value(second)),
+                ("authority".into(), json!(field_decimal(key))),
+            ]),
+            &original_route,
+            &INITIAL_PARAMETERS,
+            caller,
+        )
+    };
+    if let Ok(wrong) = rotate(Fr::from(41u64)) {
+        assert!(check(&wrong, &rotate_circuit).is_err());
+    }
+    let rotation = rotate(authority).unwrap();
+    check(&rotation, &rotate_circuit).unwrap();
+    let rotated = rotation.after.state;
+    assert_eq!(rotated, caller_state(second));
+    let replacement =
+        prepare(&plan, &callee_inputs, &initial, &INITIAL_PARAMETERS, second).unwrap();
+    let routed = prepare_caller(&rotated, &inputs).unwrap();
+    let changed = assemble(
+        &routed,
+        &rotated,
+        second,
+        &replacement,
+        callee_entry.clone(),
+    )
+    .unwrap();
+    assert_eq!(changed.calls().nth(1).unwrap().address, second);
+    assert!(assemble(&routed, &rotated, callee, &execution, callee_entry.clone()).is_err());
 
     inputs.insert("expectedScore".into(), json!("201"));
-    let mismatch = prepare_caller(&inputs).unwrap();
+    let mismatch = prepare_caller(&original_route, &inputs).unwrap();
     check(&mismatch, &caller_circuit).unwrap();
-    assert!(assemble(&mismatch).is_err());
+    assert!(
+        assemble(
+            &mismatch,
+            &original_route,
+            callee,
+            &execution,
+            callee_entry.clone()
+        )
+        .is_err()
+    );
 
     inputs.insert("emptyAccepted".into(), json!(false));
     assert!(
-        prepare_caller(&inputs).is_err(),
+        prepare_caller(&original_route, &inputs).is_err(),
         "Bytes0 still evaluates its assertion"
     );
 }

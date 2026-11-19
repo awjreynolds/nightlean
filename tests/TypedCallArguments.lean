@@ -1,8 +1,16 @@
 import Noctium.Frontend
 import Noctium.Backend.Zkir
+import Noctium.EntryPointHash
 import Noctium.NativeExpression
 
 open scoped Noctium
+
+#guard Noctium.EntryPointHash.hash (String.ofList (List.replicate 23 'a')) ==
+  [0xaa, 0x22, 0xa8, 0xcb, 0x2e, 0x5e, 0x1d, 0xc4, 0x2a, 0x82, 0xc7, 0xb5, 0x1b, 0x51, 0x20, 0x85,
+   0x5f, 0xdf, 0x07, 0x11, 0x89, 0xb8, 0x2c, 0x74, 0x9d, 0x06, 0x10, 0xa0, 0xbc, 0xc5, 0x6c, 0x4d]
+#guard Noctium.EntryPointHash.hash (String.ofList (List.replicate 24 'a')) ==
+  [0xd2, 0x38, 0x1b, 0xe8, 0x8a, 0x1e, 0x92, 0xb1, 0xb4, 0x35, 0x39, 0x92, 0xc6, 0x6d, 0xf6, 0x8c,
+   0xb8, 0xc9, 0x1a, 0x09, 0xc2, 0x61, 0xf6, 0x9f, 0x17, 0xf1, 0xf7, 0xe4, 0x77, 0x4d, 0x04, 0x28]
 
 noctium_circuit typedCallInput where
   private score : UInt 8
@@ -32,8 +40,6 @@ noctium_contract TypedCallArguments where
 end
 
 noctium_circuit typedCallerInput where
-  public target : Bytes32
-  public entryHash : Bytes32
   private opening : Native
   private flag : Bool
   private payload : Bytes 33
@@ -48,13 +54,35 @@ noctium_circuit typedCallerInput where
   private expectedApproval : Bool
 end
 
+noctium_circuit rotateRouteInput where
+  public newTarget : Bytes32
+  private authority : Native
+end
+
 noctium_contract TypedCaller where
-  cell marker : Native
+  cell route : Bytes32
+  cell adminCommitment : Native
   entry claim uses typedCallerInput where
-    claimContractCall(target, entryHash,
+    read route as target
+    claimContractCall(target,
       disclose(callCommitment(TypedCallArguments, "store", opening,
         [flag, payload, score, point, scalar, field, assertThen(emptyAccepted, empty)],
         [expectedTail, expectedScore, expectedApproval])))
+  end
+  entry rotateRoute uses rotateRouteInput where
+    read adminCommitment as admin
+    require eq(transientHashNativeVector([authority]), admin)
+    write route := newTarget
+  end
+end
+
+/-- error: two-argument claimContractCall requires callCommitment, optionally wrapped in disclose -/
+#guard_msgs in
+noctium_contract MissingCallInterface where
+  cell route : Bytes32
+  entry claim uses typedCallerInput where
+    read route as target
+    claimContractCall(target, 1)
   end
 end
 

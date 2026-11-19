@@ -52,15 +52,36 @@ Lean checks both lists in interface order and emits the same native field
 encoding as the callee. Each expression evaluates once, including Bytes0
 expressions that can fail without contributing a field. The opening and
 payload retain their privacy until the caller explicitly authorizes release.
-The SDK still matches the supplied address and entrypoint hash to the actual
-callee. The compile-time contract name selects a schema and does not travel
-in the commitment.
+The SDK matches the claimed address and entrypoint hash to the actual callee.
+The compile-time contract name selects a schema.
 
 The native test assembles both source-generated calls and rejects an altered
 expected result. Source checks reject a mismatched type or argument count.
 The checked expression supports direct source calls to declared interfaces
 with scalar and fixed-byte values. Grouped composite views and helper or
 hosted-witness authoring need separate support.
+
+### Bind the entrypoint and read the address from a registry
+
+The two-argument form derives the entrypoint selector from the same declared
+operation used to check the commitment. The [typed caller source](../../tests/TypedCallArguments.lean)
+reads a public `Bytes32` registry cell before claiming the call.
+
+```lean
+read route as target
+claimContractCall(target,
+  disclose(callCommitment(TypedCallArguments, "store", opening,
+    [flag, payload, score, point, scalar, field, empty],
+    [expectedTail, expectedScore, expectedApproval])))
+```
+
+Lean hashes the public operation name during compilation using Midnight's
+domain and emits a literal selector. The runtime checks the address from the
+current registry cell, the selector and the call commitment together. The
+native case checks the selector against `EntryPointBuf::ep_hash`, runs a
+secret-authorized registry rotation, assembles a call to the second deployment
+address and rejects the stale address and a wrong operation. These checks use
+the pinned native runtime in process. [Midnight selector implementation](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-state/src/state.rs#L912-L918) · [SHA-256 standard](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)
 
 ## Assemble a native call forest
 
@@ -90,7 +111,7 @@ release.
 
 The result is a private, unbalanced intent. Applications supply the initial
 contexts. [Committed scalar and fixed byte arguments](committed-returns.md#native-call-arguments)
-use the native input ABI. Composite arguments, automatic runtime address and entrypoint binding,
+use the native input ABI. Composite arguments, automatic bundle discovery,
 and helper or hosted-witness statement authoring remain open. The reference state interpreter
 rejects active call claims.
 

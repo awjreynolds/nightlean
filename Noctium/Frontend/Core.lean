@@ -7,6 +7,7 @@ import Noctium.Witness
 import Noctium.Modules
 import Noctium.Crypto.Signatures
 import Noctium.Backend.Impact
+import Noctium.EntryPointHash
 import Lean
 
 namespace Noctium
@@ -250,6 +251,7 @@ scoped syntax nlpath "[" nlexpr "]" : nlpath
 
 declare_syntax_cat nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 
 declare_syntax_cat nleffect
 scoped syntax nlupdate : nleffect
@@ -1562,6 +1564,12 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
     | _ => throwErrorAt storage "membership requires a declared state map"
   | _ => throwErrorAt path "unsupported Noctium state query"
 
+private partial def typedClaimOperation (value : TSyntax `nlexpr) : Option String :=
+  match value with
+  | `(nlexpr| callCommitment($_:ident, $operation:str, $_, [$_,*], [$_,*])) => some operation.getString
+  | `(nlexpr| disclose($inner)) => typedClaimOperation inner
+  | _ => none
+
 private def elaborateEffect (schema : List (String × StateKind))
     (parent : Option (TSyntax `term)) (depth : Nat) (state : EntryEffects)
     (effect : TSyntax `nleffect) : CommandElabM EntryEffects := do
@@ -1574,6 +1582,14 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| $update:nlupdate)
   | `(nleffect| when $_:nlexpr $update:nlupdate) =>
     match update with
+    | `(nlupdate| claimContractCall($address:nlexpr, $payload:nlexpr)) => do
+      let some operation := typedClaimOperation payload
+        | throwErrorAt payload "two-argument claimContractCall requires callCommitment, optionally wrapped in disclose"
+      let address ← checkedExpression state.env address (.bytes 32)
+      let commitment ← checkedExpression state.env payload .native
+      let digest ← natListTerm (EntryPointHash.hash operation)
+      let term ← `(Noctium.Effect.claimContractCall $address (Noctium.Expr.bytes32Literal $digest) $commitment)
+      state := {state with terms := state.terms.push term}
     | `(nlupdate| claimContractCall($address:nlexpr, $entryPointHash:nlexpr, $commitment:nlexpr)) => do
       let address ← checkedExpression state.env address (.bytes 32)
       let entryPointHash ← checkedExpression state.env entryPointHash (.bytes 32)
