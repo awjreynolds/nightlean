@@ -82,6 +82,25 @@ noctium_contract Codec where
   end
 end
 
+noctium_circuit paymentClaim where
+  private opening : Native
+  private amount : UIntRange 301
+  private approved : Bool
+  private expectedMemo : Bytes 2
+end
+
+noctium_contract PaymentCaller where
+  cell route : Bytes32
+  entry claim uses paymentClaim where
+    read route as target
+    claimContractCall(target,
+      disclose(callCommitment(Codec, "inspectPayment", opening, [],
+        [payment := fields(amount, approved, false, true, 1,
+          byteAt(expectedMemo, 0), byteAt(expectedMemo, 1)),
+         approved, expectedMemo, flags := fields(false, true)])))
+  end
+end
+
 noctium_witness_circuit hosted where
   private frame : Bytes 34
   output encoded : Bytes 34 := disclose(serialize(deserialize(Native, frame), 34))

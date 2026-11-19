@@ -45,8 +45,21 @@ private structure CallInterface where
   contract : Name
   operation : String
   argumentTypes : List Ty
-  resultTypes : List Ty
+  resultFields : List (String × Ty)
+  resultViews : List (String × List (String × Ty))
   deriving Inhabited
+
+private partial def callViewLeafTypes : Types.Layout → List Ty
+  | .unit => []
+  | .scalar .nativeField => [.native]
+  | .scalar .booleanField => [.bool]
+  | .scalar (.boundedUnsignedField maximum) | .scalar (.enumTagField maximum) => [.uint maximum]
+  | .scalar .byteField => [.uint 255]
+  | .tuple items => items.flatMap callViewLeafTypes
+  | .structure _ fields => fields.flatMap (callViewLeafTypes ∘ Prod.snd)
+  | .vector length element => (List.replicate length (callViewLeafTypes element)).flatten
+  | .bytes length _ => List.replicate length (.uint 255)
+  | .enumeration _ _ maximum payloadLeaves _ _ => .uint maximum :: List.replicate payloadLeaves .native
 
 initialize callInterfaceRegistry : SimplePersistentEnvExtension CallInterface (Array CallInterface) ←
   registerSimplePersistentEnvExtension {
@@ -172,8 +185,11 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
+declare_syntax_cat nlcallresult
+scoped syntax nlexpr : nlcallresult
+scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallresult
 scoped syntax "callCommitment(" ident "," str "," nlexpr ","
-  "[" nlexpr,* "]" "," "[" nlexpr,* "]" ")" : nlexpr
+  "[" nlexpr,* "]" "," "[" nlcallresult,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
@@ -471,6 +487,37 @@ private def spanTerm (stx : Syntax) : CommandElabM (TSyntax `term) := do
 
 private abbrev Bindings := List (String × Ty × TSyntax `term)
 
+private def callResultExpressions (interface : CallInterface)
+    (results : Array (TSyntax `nlcallresult)) (site : Syntax) :
+    CommandElabM (List (TSyntax `nlexpr × Ty)) := do
+  let mut views := interface.resultViews
+  let grouped := views.flatMap fun (_, fields) => fields.map Prod.fst
+  let mut scalars := interface.resultFields.filter fun (name, _) => !grouped.contains name
+  let mut supplied := []
+  for result in results do
+    match result with
+    | `(nlcallresult| $label:ident := fields($values,*)) =>
+      let labelName := label.getId.toString
+      let some fields := views.lookup labelName
+        | throwErrorAt label "unknown or repeated aggregate call result '{labelName}'"
+      if fields.length != values.getElems.size then
+        throwErrorAt result "callCommitment field count does not match aggregate result '{labelName}'"
+      supplied := supplied ++ ((fields.zip values.getElems.toList).map fun ((name, ty), expr) =>
+        (name, expr, ty))
+      views := views.filter (·.1 != labelName)
+    | `(nlcallresult| $value:nlexpr) =>
+      let (name, ty) :: rest := scalars
+        | throwErrorAt site "callCommitment result count does not match the callee"
+      supplied := (name, value, ty) :: supplied
+      scalars := rest
+    | _ => throwErrorAt result "unsupported call result"
+  unless views.isEmpty && scalars.isEmpty do
+    throwErrorAt site "callCommitment result count does not match the callee"
+  interface.resultFields.mapM fun (name, _) => do
+    let some value := supplied.lookup name
+      | throwErrorAt site "missing committed return field '{name}'"
+    pure value
+
 private def coerceExpression (stx : Syntax) (found target : Ty) (value : TSyntax `term) :
     CommandElabM (TSyntax `term) := do
   if found == target then return value
@@ -525,7 +572,11 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| callCommitment($_:ident, $_:str, $opening, [$inputs,*], [$outputs,*])) =>
-    hasPartialScalar opening || inputs.getElems.any hasPartialScalar || outputs.getElems.any hasPartialScalar
+    hasPartialScalar opening || inputs.getElems.any hasPartialScalar || outputs.getElems.any (fun result =>
+      match result with
+      | `(nlcallresult| $value:nlexpr) => hasPartialScalar value
+      | `(nlcallresult| $_:ident := fields($values,*)) => values.getElems.any hasPartialScalar
+      | _ => Bool.true)
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
@@ -860,14 +911,13 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let interfaces := callInterfaceRegistry.getState (← getEnv)
     let some interface := interfaces.find? (fun item =>
         item.contract == contract && item.operation == entrypoint.getString)
-      | throwErrorAt entrypoint "callCommitment requires a declared callee with scalar or fixed-byte results"
+      | throwErrorAt entrypoint "callCommitment requires a declared callee entrypoint"
     unless inputs.getElems.size == interface.argumentTypes.length do
       throwErrorAt stx "callCommitment argument count does not match the callee"
-    unless outputs.getElems.size == interface.resultTypes.length do
-      throwErrorAt stx "callCommitment result count does not match the callee"
+    let results ← callResultExpressions interface outputs.getElems stx
     let payload := [(opening, Ty.native)] ++
       (inputs.getElems.toList.zip interface.argumentTypes) ++
-      (outputs.getElems.toList.zip interface.resultTypes)
+      results
     let mut bindings := []
     let mut fields : Array (TSyntax `term) := #[]
     for ((part, ty), index) in payload.zipIdx do
@@ -1195,12 +1245,17 @@ private unsafe def checkGeneratedContract (name : Name) : CommandElabM Unit := d
     | .error diagnostic => failDisclosure diagnostic
     | .ok _ =>
       for entrypoint in value.entrypoints do
-        if entrypoint.returnViews.isEmpty then
-          modifyEnv fun env => callInterfaceRegistry.addEntry env {
-            contract := name, operation := entrypoint.name
-            argumentTypes := entrypoint.callArguments.map (·.ty)
-            resultTypes := entrypoint.returns.map (·.ty)
-          }
+        let resultViews ← entrypoint.returnViews.mapM fun view => do
+          let checked ← match Types.checkedLayout {} view.environment view.type entrypoint.span with
+            | .ok checked => pure checked
+            | .error diagnostic => throwError diagnostic.message
+          pure (view.name, view.fields.zip (callViewLeafTypes checked.value))
+        modifyEnv fun env => callInterfaceRegistry.addEntry env {
+          contract := name, operation := entrypoint.name
+          argumentTypes := entrypoint.callArguments.map (·.ty)
+          resultFields := entrypoint.returns.map fun result => (result.name, result.ty)
+          resultViews
+        }
 
 @[command_elab circuitCommand] def elabCircuit : CommandElab := fun stx => do
   match stx with

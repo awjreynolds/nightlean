@@ -1,10 +1,12 @@
 #![cfg(feature = "zkir-321")]
 
 use anyhow::Result;
+use base_crypto::hash::HashOutput;
 use coin_structure::contract::ContractAddress;
 use ledger::structure::INITIAL_PARAMETERS;
 use noctium_runtime::{
     MODULUS, Plan, check,
+    assembly::{CheckedNativeCall, assemble_checked_calls},
     control::{InvocationTarget, Session},
     create_state,
     host::{self, Capability, Context, Limits},
@@ -12,6 +14,8 @@ use noctium_runtime::{
     zkir::IrSource,
 };
 use num_bigint::BigUint;
+use onchain_runtime::{context::QueryContext, state::EntryPointBuf};
+use rand::rngs::OsRng;
 use serde_json::{Value as Json, json};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, fs, path::PathBuf};
@@ -202,6 +206,81 @@ fn mixed_payment_returns_keep_their_own_fields() -> Result<()> {
     );
     execution.preimage.private_transcript[7] = Fr::from(43u64);
     assert!(check(&execution, &circuit).is_err());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires fresh AggregateSerialization Lean artifacts"]
+fn aggregate_results_bind_the_caller_to_the_callee() -> Result<()> {
+    let root = artifact_root()?;
+    let load = |name: &str| -> Result<(Plan, IrSource)> {
+        let plan = serde_json::from_slice(&fs::read(root.join(format!("{name}.impact.json")))?)?;
+        let circuit = IrSource::load(fs::File::open(root.join(format!("{name}.zkir")))?)?;
+        Ok((plan, circuit))
+    };
+    let (caller_plan, caller_circuit) = load("AggregateSerialization.PaymentCaller.claim")?;
+    let (callee_plan, callee_circuit) = load("AggregateSerialization.Codec.inspectPayment")?;
+    let caller = ContractAddress(HashOutput([8; 32]));
+    let callee = ContractAddress(HashOutput([9; 32]));
+    let callee_state = create_state(&callee_plan, &BTreeMap::new())?;
+    let callee_execution = prepare(
+        &callee_plan,
+        &frame_inputs(&[44, 1, 1, 0, 1, 1, 12, 42, 200, 255]),
+        &callee_state,
+        &INITIAL_PARAMETERS,
+        callee,
+    )?;
+    let caller_state = create_state(
+        &caller_plan,
+        &BTreeMap::from([("route".into(), bytes(&callee.0.0))]),
+    )?;
+    let mut expected = BTreeMap::from([
+        ("opening".into(), json!("101")),
+        ("amount".into(), json!("300")),
+        ("approved".into(), json!(true)),
+        ("expectedMemo".into(), bytes(&[12, 42])),
+    ]);
+    let prepare_caller = |inputs: &BTreeMap<String, Json>| {
+        prepare(
+            &caller_plan,
+            inputs,
+            &caller_state,
+            &INITIAL_PARAMETERS,
+            caller,
+        )
+    };
+    let assemble = |source: &noctium_runtime::Execution| {
+        assemble_checked_calls(
+            &[
+                CheckedNativeCall {
+                    execution: source,
+                    circuit: &caller_circuit,
+                    initial_context: QueryContext::new(caller_state.clone(), caller),
+                    entry_point: EntryPointBuf(b"claim".to_vec()),
+                    communication_commitment_rand: Fr::from(53u64),
+                },
+                CheckedNativeCall {
+                    execution: &callee_execution,
+                    circuit: &callee_circuit,
+                    initial_context: QueryContext::new(callee_state.clone(), callee),
+                    entry_point: EntryPointBuf(b"inspectPayment".to_vec()),
+                    communication_commitment_rand: Fr::from(101u64),
+                },
+            ],
+            &INITIAL_PARAMETERS,
+            1_800_000_000,
+            &mut OsRng,
+        )
+    };
+    let source = prepare_caller(&expected)?;
+    let intent = assemble(&source)?;
+    let mut calls = intent.calls();
+    assert!(calls.next().unwrap().calls(calls.next().unwrap()));
+
+    expected.insert("amount".into(), json!("299"));
+    let changed = prepare_caller(&expected)?;
+    check(&changed, &caller_circuit)?;
+    assert!(assemble(&changed).is_err());
     Ok(())
 }
 

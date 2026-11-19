@@ -57,9 +57,32 @@ The compile-time contract name selects a schema.
 
 The native test assembles both source-generated calls and rejects an altered
 expected result. Source checks reject a mismatched type or argument count.
-The checked expression supports direct source calls to declared interfaces
-with scalar and fixed-byte values. Grouped composite views and helper or
-hosted-witness authoring need separate support.
+The checked expression supports scalar and fixed-byte arguments and results.
+For a named aggregate result, supply its label and the fields in the checked
+layout order. Scalar results stay positional among the scalar returns.
+
+```lean
+claimContractCall(target,
+  disclose(callCommitment(Codec, "inspectPayment", opening, [],
+    [payment := fields(amount, approved, false, true, 1,
+      byteAt(expectedMemo, 0), byteAt(expectedMemo, 1)),
+     approved, expectedMemo, flags := fields(false, true)])))
+```
+
+The compiler matches each label once against the declared callee. It checks
+the field count and the Native, Bool, UInt, byte and enum-tag leaf types.
+Enum payload slots use their canonical Native representation. The compiled
+call evaluates and commits the values in the callee's physical return order,
+including when aggregate groups appear elsewhere in the source list.
+An empty aggregate still needs its label and contributes zero fields.
+
+The native test assembles a caller and callee with two aggregate results, a Bool
+and fixed bytes. Changing the amount from 300 to 299 produces a checked caller
+whose claim fails to match the callee. Bundle selection still needs a trusted
+manifest and the deployed verifier. The ledger commitment authenticates the
+result fields, with schema selection supplied by the source interface and trusted
+callee bundle. Aggregate arguments and helper-body call authoring remain open.
+[Payment example](../../examples/AggregateSerialization.lean) · [Native test](../../runtime/tests/aggregate_serialization.rs)
 
 ### Bind the entrypoint and read the address from a registry
 

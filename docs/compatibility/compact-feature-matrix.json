@@ -1315,7 +1315,7 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-19",
-        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. The Rust path qualifies a caller and callee, registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Foreign SDK bindings, durable recovery and complete equivalence remain open.",
+        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. Direct Lean calls accept named aggregate results in the checked layout order. The pinned native checker and partitioner accept a mixed two-aggregate result and reject a changed field. The Rust path qualifies a caller and callee, registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Aggregate arguments, foreign SDK bindings, durable recovery and complete equivalence remain open.",
         "evidence": [
           "Noctium/Backend/Impact.lean",
           "runtime/src/proof/composition.rs",

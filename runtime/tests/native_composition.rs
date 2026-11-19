@@ -485,15 +485,26 @@ impl Pair {
         ttl: u64,
     ) -> noctium_runtime::assembly::NativeIntent {
         let address = self.callee.deploy.address();
+        self.intent_with_inputs(
+            ledger,
+            ttl,
+            caller_inputs(address.0, self.callee.entry.ep_hash(), true),
+            callee_inputs(),
+        )
+    }
+
+    fn intent_with_inputs(
+        &self,
+        ledger: &LedgerState<Db>,
+        ttl: u64,
+        caller_inputs: BTreeMap<String, Json>,
+        callee_inputs: BTreeMap<String, Json>,
+    ) -> noctium_runtime::assembly::NativeIntent {
         let mut calls = Vec::new();
         let mut executions = Vec::new();
         for (operation, inputs, opening) in [
-            (
-                &self.caller,
-                caller_inputs(address.0, self.callee.entry.ep_hash(), true),
-                53u64,
-            ),
-            (&self.callee, callee_inputs(), 101u64),
+            (&self.caller, caller_inputs, 53u64),
+            (&self.callee, callee_inputs, 101u64),
         ] {
             let address = operation.deploy.address();
             let data = ledger.contract.get(&address).unwrap().data.clone();
@@ -619,11 +630,19 @@ fn composed_call_finalizes_with_a_ledger_authenticated_parent() {
 }
 
 #[cfg(feature = "localnet")]
+#[test]
+#[ignore = "uses the isolated development wallet and aggregate result bundles"]
+fn composed_call_finalizes_with_named_aggregate_results() {
+    run_local_composition(LocalCase::Aggregate);
+}
+
+#[cfg(feature = "localnet")]
 enum LocalCase {
     Plain,
     Independent,
     Registry,
     Caller,
+    Aggregate,
 }
 
 #[cfg(feature = "localnet")]
@@ -718,11 +737,12 @@ fn run_local_composition(case: LocalCase) {
             submit(&deployment).await
         };
         match case {
-            LocalCase::Plain | LocalCase::Independent => {}
+            LocalCase::Plain | LocalCase::Independent | LocalCase::Aggregate => {}
             LocalCase::Registry => return qualify_registry(&node, deploy, submit).await,
             LocalCase::Caller => return qualify_caller(&node, deploy, submit).await,
         }
         let independent = matches!(case, LocalCase::Independent);
+        let aggregate = matches!(case, LocalCase::Aggregate);
         let mut owners = independent.then(owner::Owners::spawn);
         let pair = if let Some(owners) = &owners {
             let caller_state =
@@ -736,6 +756,14 @@ fn run_local_composition(case: LocalCase) {
                 caller: Operation::load("caller", "claim", caller_state),
                 callee: Operation::load("callee", "advance", callee_state),
             }
+        } else if aggregate {
+            let callee = Operation::load("callee", "inspectPayment", BTreeMap::new());
+            let caller = Operation::load(
+                "caller",
+                "claim",
+                BTreeMap::from([("route".into(), bytes32(callee.deploy.address().0))]),
+            );
+            Pair { caller, callee }
         } else {
             Pair::load()
         };
@@ -749,7 +777,24 @@ fn run_local_composition(case: LocalCase) {
             let (proved, exchange) = owners.compose(&pair, &live.state, ttl);
             (proved, Some(exchange))
         } else {
-            let intent = pair.intent(&live.state, ttl);
+            let intent = if aggregate {
+                pair.intent_with_inputs(
+                    &live.state,
+                    ttl,
+                    BTreeMap::from([
+                        ("opening".into(), json!("101")),
+                        ("amount".into(), json!("300")),
+                        ("approved".into(), json!(true)),
+                        ("expectedMemo".into(), json!({"kind":"bytes","values":[12,42]})),
+                    ]),
+                    BTreeMap::from([(
+                        "frame".into(),
+                        json!({"kind":"bytes","values":[44,1,1,0,1,1,12,42,200,255]}),
+                    )]),
+                )
+            } else {
+                pair.intent(&live.state, ttl)
+            };
             let prepared =
                 PreparedComposition::from_intent(intent, &live.state, &pair.materials()).unwrap();
             (
@@ -777,8 +822,16 @@ fn run_local_composition(case: LocalCase) {
         if let Some(owners) = &owners {
             expected_state.insert("acceptedCredential".into(), owners.credentials[1].clone());
         }
-        let expected = create_state(&pair.callee.plan, &expected_state).unwrap();
-        assert_eq!(callee_state.data, expected);
+        let mut callee_receipt =
+            json!({"address": address, "stateSha256": hex::encode(Sha256::digest(bytes))});
+        if aggregate {
+            assert_eq!(bytes, &deployment_receipts[1].contract_state);
+        } else {
+            let expected = create_state(&pair.callee.plan, &expected_state).unwrap();
+            assert_eq!(callee_state.data, expected);
+            callee_receipt["balance"] = json!("13");
+            callee_receipt["count"] = json!("1");
+        }
         eprintln!(
             "{}",
             json!({
@@ -797,7 +850,7 @@ fn run_local_composition(case: LocalCase) {
                     "blockHash":r.block_hash,
                 })).collect::<Vec<_>>(),
                 "caller": {"address": receipt.contract_address, "stateSha256": hex::encode(Sha256::digest(&receipt.contract_state))},
-                "callee": {"address": address, "balance": "13", "count": "1", "stateSha256": hex::encode(Sha256::digest(bytes))},
+                "callee": callee_receipt,
             })
         );
     });
