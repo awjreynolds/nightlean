@@ -237,10 +237,16 @@ def compileLedger (program : Program) (entryName : String) (ledger : List StateD
   pure {entrypoint := compiledEntry, witness := compiled}
 
 /-- Existing state-only bodies retain their native-only path. -/
+def compileStateEntrypointWithWitness (program : Program) (entryName : String)
+    (ledger : List StateDecl) (circuitName : String := "") (dedupRangeChecks : Bool := false) :
+    Except Diagnostic (Entrypoint × Option Compiled) := do
+  if ← needsLedgerHost program then
+    let compiled ← compileLedger program entryName ledger circuitName dedupRangeChecks
+    return (compiled.entrypoint, some compiled.witness)
+  return (← Helpers.compileEntrypointFor program entryName ledger, none)
+
 def compileStateEntrypoint (program : Program) (entryName : String) (ledger : List StateDecl) :
     Except Diagnostic Entrypoint := do
-  if ← needsLedgerHost program then
-    return (← compileLedger program entryName ledger).entrypoint
-  Helpers.compileEntrypointFor program entryName ledger
+  return (← compileStateEntrypointWithWitness program entryName ledger).1
 
 end Noctium.Witness

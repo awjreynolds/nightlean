@@ -434,28 +434,35 @@ private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuil
         | .ok _ => circuits := circuits.push (info.declName, circuit)
   return circuits
 
-private unsafe def registeredContracts (moduleOutputs : Array (Name × ModuleBuildOutput)) :
-    CommandElabM (Array (Name × Contract)) := do
+private unsafe def registeredContracts (moduleOutputs : Array (Name × ModuleBuildOutput))
+    (dedupRangeChecks : _root_.Bool) :
+    CommandElabM (Array (Name × Contract) × Array (Name × String × Witness.Compiled)) := do
   let env ← getEnv
-  let mut contracts := #[]
+  let mut contracts : Array (Name × Contract) := #[]
+  let mut hosted : Array (Name × String × Witness.Compiled) := #[]
   for name in contractRegistry.getState env do
     unless env.isImportedConst name do
       let contract ← match moduleOutputs.toList.find? (·.1 == name) with
         | some (_, rebuilt) => pure rebuilt.contract
         | none => evalConstCheck Contract ``Contract name
-      let mut entries := []
+      let mut entries : List Entrypoint := []
       for compiledEntry in contract.entrypoints do
         let source := (circuitRegistry.getState env).find? fun info =>
           info.declName.toString == compiledEntry.circuit.name && info.stateProgram?.isSome
-        let compiledEntry ← match source.bind (·.stateProgram?) with
-          | none => pure compiledEntry
+        let rebuilt : Entrypoint × Option Witness.Compiled ← match source.bind (·.stateProgram?) with
+          | none => pure (compiledEntry, none)
           | some (sourceName, exportName) => do
             let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
-            let fresh ← match Witness.compileStateEntrypoint program exportName contract.state with
+            let (fresh, hostWitness) ← match Witness.compileStateEntrypointWithWitness program exportName
+                contract.state compiledEntry.circuit.name dedupRangeChecks with
               | .ok value => pure value
               | .error d => failDiagnostic d
-            pure {fresh with name := compiledEntry.name, circuit := {fresh.circuit with name := compiledEntry.circuit.name}}
-        entries := entries ++ [compiledEntry]
+            let namedCircuit := {fresh.circuit with name := compiledEntry.circuit.name}
+            pure ({fresh with name := compiledEntry.name, circuit := namedCircuit}, hostWitness)
+        let (rebuiltEntry, hostWitness) := rebuilt
+        if let some compiled := hostWitness then
+          hosted := hosted.push (name, rebuiltEntry.name, compiled)
+        entries := entries ++ [rebuiltEntry]
       let contract := {contract with entrypoints := entries}
       match contract.validate sourceCapabilities with
       | .error d => failDiagnostic d
@@ -463,7 +470,7 @@ private unsafe def registeredContracts (moduleOutputs : Array (Name × ModuleBui
         match Disclosure.contract contract with
         | .error d => failDiagnostic d
         | .ok _ => contracts := contracts.push (name, contract)
-  return contracts
+  return (contracts, hosted)
 
 private def artifactName (name : Name) : String := name.toString
 
@@ -544,11 +551,12 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("reads", toJson reads),
     ("guards", toJson (plan.guards.map nativeExpressionJson))])
 
-private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuildOutput)) :
-    CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
+private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuildOutput))
+    (dedupRangeChecks : _root_.Bool := Bool.false) :
+    CommandElabM (Array (Name × Circuit) × Array (Name × Contract) × Array (Name × String × Witness.Compiled)) := do
   if (← get).messages.hasErrors then
     throwError "cannot export Noctium artifacts after source elaboration errors"
-  let contracts ← registeredContracts moduleOutputs
+  let (contracts, hosted) ← registeredContracts moduleOutputs dedupRangeChecks
   let circuits ← registeredCircuits moduleOutputs contracts
   let sourceEnv ← getEnv
   let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
@@ -561,11 +569,12 @@ private unsafe def inspectWithModules (moduleOutputs : Array (Name × ModuleBuil
       validateArtifactStem ep.name
       unless circuits.any (fun (_, circuit) => circuit.name == ep.circuit.name) do
         throwError "contract entrypoint references imported circuit '{ep.circuit.name}'; include its source declaration in this compilation unit"
-  return (circuits, contracts)
+  return (circuits, contracts, hosted)
 
 private unsafe def inspect : CommandElabM (Array (Name × Circuit) × Array (Name × Contract)) := do
   let moduleOutputs ← rebuildModuleOutputs
-  inspectWithModules moduleOutputs
+  let (circuits, contracts, _) ← inspectWithModules moduleOutputs
+  return (circuits, contracts)
 
 elab "#noctium_check" : command => do
   let (circuits, contracts) ← unsafe inspect
@@ -588,7 +597,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
     (displayDirectory : String := directory) (roles : List ArtifactRole := [])
     (rustBindings dedupRangeChecks : _root_.Bool := Bool.false) : CommandElabM Unit := do
   let moduleOutputs ← unsafe rebuildModuleOutputs
-  let (circuits, contracts) ← unsafe inspectWithModules moduleOutputs
+  let (circuits, contracts, hosted) ← unsafe inspectWithModules moduleOutputs dedupRangeChecks
   let emit := fun role => roles.isEmpty || roles.contains role
   let contracts := if emit .ledger then contracts else #[]
   let entryCircuits := contracts.toList.flatMap fun (_, contract) => contract.entrypoints.map (·.circuit.name)
@@ -642,9 +651,6 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
           | .error message => throwError "invalid source observation artifact: {message}"
         lowered := lowered.push (.observations, witnessPrefix ++ ".observations.json", observation.pretty)
   for (name, contract) in contracts do
-    match Contract.validate sourceCapabilities contract with
-    | .error diagnostic => failDiagnostic diagnostic
-    | .ok _ => pure ()
     for ep in contract.entrypoints do
       let ep := Passes.pruneEntrypoint ep
       if !(emit .witness) && witnesses.any (·.circuitName.toString == ep.circuit.name) then
@@ -656,20 +662,11 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       let compiledWitness? ← if let some (_, compiled) :=
           standaloneWitnesses.find? (fun (circuitName, _) => circuitName == ep.circuit.name) then
           pure (some compiled)
-        else if let some info := circuitRegistry.getState (← getEnv) |>.find?
-            (fun info => info.declName.toString == ep.circuit.name && info.stateProgram?.isSome) then do
-          let some (sourceName, exportName) := info.stateProgram? | throwError "missing ledger witness source"
-          let program ← unsafe evalConstCheck Helpers.Program ``Helpers.Program sourceName
-          let needsHost ← match Witness.needsLedgerHost program with
-            | .ok value => pure value
-            | .error diagnostic => failDiagnostic diagnostic
-          if needsHost then
-            unless emit .witness do
-              throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
-            match Witness.compileLedger program exportName contract.state ep.circuit.name dedupRangeChecks with
-            | .ok value => pure (some value.witness)
-            | .error diagnostic => failDiagnostic diagnostic
-          else pure none
+        else if let some (_, _, compiled) := hosted.find? (fun (owner, entrypoint, _) =>
+            owner == name && entrypoint == ep.name) then do
+          unless emit .witness do
+            throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
+          pure (some compiled)
         else pure none
       if let some compiled := compiledWitness? then
         let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name
