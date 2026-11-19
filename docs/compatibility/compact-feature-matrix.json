@@ -1323,8 +1323,8 @@
       "id": "C-EVENT-EMIT",
       "layer": "language-ledger",
       "surface": "Standard event emission",
-      "noctiumStatus": "missing",
-      "notes": "Only standard event types, ordered VersionedLogItem v1 encoding. Constructor emission rejected. General custom event declarations are not assumed.",
+      "noctiumStatus": "subset",
+      "notes": "Three of eleven standard layouts: Paused, Unpaused and ShieldedSpend. Public payload and guard disclosure enforced. Native VM checked exact ordered v1 logs and a funded active call finalized on the selected Ledger 9.1.0.1 profile. Remaining event layouts and indexer observation are open.",
       "source": [
         "reference",
         "events"
@@ -1334,7 +1334,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
