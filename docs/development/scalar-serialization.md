@@ -17,7 +17,7 @@ The type determines how many leading bytes decoding consumes. Serialization writ
 | `Native` | 32 little-endian bytes. The decoder compares the original prefix against the re-encoded residue to reject values at or above the field modulus. |
 | `JubjubScalar` and foreign scalar or base fields | 32 little-endian bytes. Decoding reduces the input by the respective field modulus. |
 
-The typed operations lower through the existing scalar and byte instructions. Event emission uses the same Boolean and unsigned byte encoders. The catalog circuit still measures K13 and 4,937 rows. Point encoding stays outside this interface. Aggregate encoding and helper-body use remain open. [Standard events](standard-events.md)
+The typed operations lower through the existing scalar and byte instructions. Event emission uses the same Boolean and unsigned byte encoders. The catalog circuit still measures K13 and 4,937 rows. Point encoding stays outside this interface. The codec also supports [readable witness helpers and typed aggregate helpers](aggregate-serialization.md). [Standard events](standard-events.md)
 
 ## Focused qualification
 

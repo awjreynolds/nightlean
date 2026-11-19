@@ -5104,7 +5104,7 @@
       "layer": "standard-library",
       "surface": "serialize",
       "noctiumStatus": "subset",
-      "notes": "Direct scalar and fixed-byte source encoding uses explicit length and zero right padding. Focused Bool, UInt, Bytes, Native, and Secp256k1Scalar bytes match Compact 0.36.1. Aggregate syntax, complete field-family comparisons and helper-body support remain open.",
+      "notes": "Direct scalar and fixed-byte source encoding uses explicit length and zero right padding. Focused Bool, UInt, Bytes, Native, and Secp256k1Scalar bytes match Compact 0.36.1. Scalar witness helpers and typed record, tuple, vector, bytes and fieldless enum helpers share this codec. A nested payment frame matches the pinned reference and its proof finalized on localnet. Readable generic aggregate syntax and full conformance remain open.",
       "source": [
         "stdlib",
         "serialization",
@@ -5119,8 +5119,10 @@
       ],
       "observedEvidence": [
         "docs/development/scalar-serialization.md",
+        "docs/development/aggregate-serialization.md",
         "examples/ScalarSerialization.lean",
-        "runtime/tests/scalar_serialization.rs"
+        "runtime/tests/scalar_serialization.rs",
+        "runtime/tests/aggregate_serialization.rs"
       ],
       "equivalence": "unverified"
     },
@@ -5129,7 +5131,7 @@
       "layer": "standard-library",
       "surface": "deserialize",
       "noctiumStatus": "subset",
-      "notes": "Direct scalar and fixed-byte source decoding uses type-sized prefixes. Native, Bool and UInt bounds are checked. Foreign scalar decoding reduces by the target modulus. Focused differential and native mutation checks pass. Aggregate syntax, complete field-family comparisons and helper-body support remain open.",
+      "notes": "Direct scalar and fixed-byte source decoding uses type-sized prefixes. Native, Bool and UInt bounds are checked. Foreign scalar decoding reduces by the target modulus. Focused differential and native mutation checks pass. Scalar witness helpers and typed record, tuple, vector, bytes and fieldless enum helpers share this codec. A nested payment frame matches the pinned reference and its proof finalized on localnet. Readable generic aggregate syntax and full conformance remain open.",
       "source": [
         "stdlib",
         "serialization",
@@ -5144,8 +5146,10 @@
       ],
       "observedEvidence": [
         "docs/development/scalar-serialization.md",
+        "docs/development/aggregate-serialization.md",
         "examples/ScalarSerialization.lean",
-        "runtime/tests/scalar_serialization.rs"
+        "runtime/tests/scalar_serialization.rs",
+        "runtime/tests/aggregate_serialization.rs"
       ],
       "equivalence": "unverified"
     }
