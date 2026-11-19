@@ -119,6 +119,8 @@ structure EvalContext where
   /-- Pinned strict compressed Jubjub decoder, including subgroup checks. -/
   jubjubFromBytes32 : List Nat → Except String (Nat × Nat) :=
     fun _ => .error "qualified Jubjub byte-decoding oracle is unavailable"
+  /-- Address of an immediate contract caller, supplied by the execution context. -/
+  contractCaller : Option (List Nat) := none
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
@@ -771,6 +773,8 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .claimContractCall .. =>
       throw "reference evaluator does not execute cross-contract claims"
+    | .requireContractCaller address =>
+      unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
     | .writeCell name ty value =>
       let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
       if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -928,7 +932,8 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
         | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
-            .counterAdjust .. | .counterReset .. | .removePath .. | .claimContractCall .. => pure ()
+            .counterAdjust .. | .counterReset .. | .removePath .. |
+            .claimContractCall .. | .requireContractCaller .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -960,6 +965,8 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
           if !(← condition.eval ctx env) then throw "state transition guard failed"
         | .claimContractCall .. =>
           throw "reference evaluator does not execute cross-contract claims"
+        | .requireContractCaller address =>
+          unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
         | .writeCell name ty value =>
           let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
           if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -1116,7 +1123,7 @@ private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effec
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
-        | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
+        | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. | .requireContractCaller .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
             .listPopFront .. | .listReset .. | .removePath .. => pure ()

@@ -5,6 +5,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
 use base_crypto::hash::HashOutput;
 use base_crypto::repr::BinaryHashRepr;
+use coin_structure::coin::PublicAddress;
 use coin_structure::contract::ContractAddress;
 use ledger::{
     construct::{PreTranscript, partition_transcripts},
@@ -1109,6 +1110,10 @@ pub enum Instruction {
         entry_point_hash: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "requireContractCaller")]
+    RequireContractCaller {
+        address: Expr,
+    },
 }
 
 fn path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> {
@@ -1179,6 +1184,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             }
         }
         Instruction::ClaimContractCall { .. } => vec![1, 4, 1, 1, 11, 2, 2, 1, 1],
+        Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
         _ => vec![impact_field_count(instruction, plan)?],
     })
 }
@@ -1198,6 +1204,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     Ok(match instruction {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
+        Instruction::RequireContractCaller { .. } => 15,
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
         Instruction::Index {
@@ -2737,6 +2744,9 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::RequireContractCaller { address } => {
+            probe_expression(address, plan, env, deferred_outputs)
+        }
         // Read expressions bind values produced by the state read itself.
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
@@ -2747,6 +2757,31 @@ fn probe_instruction(
         | Instruction::AddImmediate { .. }
         | Instruction::SubImmediate { .. } => Ok(None),
     }
+}
+
+fn consume_contract_caller_reads(
+    plan: &Plan,
+    index: &mut usize,
+    guard: Option<&Expr>,
+) -> Result<()> {
+    let start = *index;
+    for field in 0..5 {
+        let read = plan
+            .reads
+            .get(start + field)
+            .ok_or_else(|| anyhow!("missing contract caller transcript field"))?;
+        ensure!(
+            read.name == format!("_noctium_contract_caller_{start}_{field}")
+                && read.ty == "Native"
+                && read.guard.as_ref() == guard
+                && read.components.is_empty()
+                && read.projections.is_none()
+                && read.schema.is_none(),
+            "invalid contract caller transcript field"
+        );
+    }
+    *index += 5;
+    Ok(())
 }
 
 fn read_event(
@@ -2811,6 +2846,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::ClaimContractCall { .. }
+                | Instruction::RequireContractCaller { .. }
         ),
         "guarded native operation has an unsupported shape"
     );
@@ -2825,9 +2861,22 @@ impl PreparationCursor {
         params: &LedgerParameters,
         address: ContractAddress,
     ) -> Result<Self> {
+        Self::from_context(
+            plan,
+            inputs,
+            QueryContext::new(state.clone(), address),
+            params,
+        )
+    }
+
+    fn from_context(
+        plan: &Plan,
+        inputs: &BTreeMap<String, Json>,
+        context: QueryContext<Db>,
+        params: &LedgerParameters,
+    ) -> Result<Self> {
         let env = parse_input_environment(plan, inputs, true)?;
         let supplied_inputs = inputs.keys().cloned().collect();
-        let context = QueryContext::new(state.clone(), address);
         let prefix_context = context.clone();
         let mut cursor = Self {
             plan: plan.clone(),
@@ -3009,7 +3058,23 @@ pub fn prepare(
     params: &LedgerParameters,
     address: ContractAddress,
 ) -> Result<Execution> {
-    let mut cursor = PreparationCursor::new(plan, inputs, state, params, address)?;
+    prepare_with_context(
+        plan,
+        inputs,
+        QueryContext::new(state.clone(), address),
+        params,
+    )
+}
+
+/// Prepare a call using its prospective ledger query context. Composition assembly
+/// checks the supplied contract parent against the call forest before returning an intent.
+pub fn prepare_with_context(
+    plan: &Plan,
+    inputs: &BTreeMap<String, Json>,
+    context: QueryContext<Db>,
+    params: &LedgerParameters,
+) -> Result<Execution> {
+    let mut cursor = PreparationCursor::from_context(plan, inputs, context, params)?;
     loop {
         match cursor.step()? {
             PreparationStep::PendingInputs(missing) => bail!(
@@ -3090,6 +3155,7 @@ impl PreparationCursor {
                             | Instruction::ListReset { .. }
                             | Instruction::MapRemove { .. }
                             | Instruction::ClaimContractCall { .. }
+                            | Instruction::RequireContractCaller { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -3100,6 +3166,12 @@ impl PreparationCursor {
                             .into_iter()
                             .map(Some),
                     );
+                    if matches!(
+                        operation.as_ref(),
+                        Instruction::RequireContractCaller { .. }
+                    ) {
+                        consume_contract_caller_reads(plan, &mut read_index, Some(guard))?;
+                    }
                     if let Instruction::Popeq {
                         expression,
                         alignment,
@@ -3815,6 +3887,22 @@ impl PreparationCursor {
                 );
                 program.extend(claim_ops[..8].iter().cloned());
                 claim_ops[8].clone()
+            }
+            Instruction::RequireContractCaller { address } => {
+                consume_contract_caller_reads(plan, &mut read_index, instruction_guard)?;
+                let expected = PublicAddress::Contract(ContractAddress(claim_hash_output(
+                    evaluate(address, &env)?,
+                    "contract caller",
+                )?));
+                ensure!(
+                    context.call_context.caller == Some(expected),
+                    "required contract caller mismatch"
+                );
+                program.extend([Op::Dup { n: 2 }, list_index(6)]);
+                Op::Popeq {
+                    cached: false,
+                    result: AlignedValue::from(expected),
+                }
             }
             Instruction::Member => Op::Member,
             Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {

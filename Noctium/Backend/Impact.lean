@@ -57,6 +57,7 @@ inductive Op where
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
+  | requireContractCaller (address : Expr (.bytes 32))
 
 private def claimContractCallFieldGroups
     (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar) : List (List Scalar) :=
@@ -97,6 +98,12 @@ private def indexPathFields (slot : Nat) (pushPath : Bool) (keys : List Aligned)
 
 private def listIndexFields (index : Nat) : List Scalar :=
   [.native 0x50, .native 1, .native 1, .native index]
+
+private def requireContractCallerFieldGroups (address : Expr (.bytes 32)) : List (List Scalar) :=
+  -- Query context is two stack slots down. Context slot six holds the tagged caller.
+  [[.native 0x32], listIndexFields 6,
+    [.native 0x0c, .native 3, .native 1, .native 32, .native 32,
+      .native 1, .bytesField address 0, .bytesField address 1, .native 0, .native 0]]
 
 private def listU8CellPushFields (index : Nat) : List Scalar :=
   [.native 0x10, .native 1, .native 1, .native 1, .native index]
@@ -163,6 +170,7 @@ def Op.fields : Op → List Scalar
           finalKey.fields ++ [.native 0x19, .native (0x90 + keys.length)]
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
+  | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
 macros remain one typed source effect, but their field vectors split at each
@@ -204,6 +212,7 @@ def Op.fieldGroups : Op → List (List Scalar)
           [.native 0x19], [.native (0x90 + keys.length)]]
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
+  | .requireContractCaller address => requireContractCallerFieldGroups address
   | operation => [operation.fields]
 
 structure Read where
@@ -213,6 +222,10 @@ structure Read where
   schema : Option Lean.Json := none
   /-- Source guard for a conditionally bound read. Inactive reads use a canonical default. -/
   guard : Option (Expr .bool) := none
+
+private def contractCallerReads (start : Nat) : List Read :=
+  -- The ledger also puts each Popeq result's value fields in the public input stream.
+  (List.range 5).map fun field => {name := s!"_noctium_contract_caller_{start}_{field}", ty := .native}
 
 private def foreignReadDefault : (kind : Foreign.Kind) → Expr (.foreign kind)
   | .base curve => .foreignBase curve 0
@@ -574,6 +587,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     pure {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .requireContractCaller address =>
+    pure {plan with
+      operations := plan.operations ++ [.requireContractCaller address]
+      reads := plan.reads ++ contractCallerReads plan.reads.length}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -770,6 +787,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (totalizeActivityValue condition avoid address)
         (totalizeActivityValue condition avoid entryPointHash)
         (totalizeActivityValue condition avoid commitment))
+    | some condition, .requireContractCaller address =>
+      pure (.requireContractCaller (totalizeActivityValue condition (expressionNames address) address))
     | some condition, .readMap name destination keyTy valueTy key =>
       pure (.readMap name destination keyTy valueTy
         (totalizeActivityValue condition (expressionNames key) key))
@@ -849,6 +868,12 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
+  | some condition, .requireContractCaller .. =>
+    let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
+      else plan.activityGuards
+    let reads := plan.reads ++ ((result.reads.drop plan.reads.length).map fun read =>
+      {read with guard := some condition})
+    pure {result with reads, activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .insertPath .. | some condition, .writePath .. |
       some condition, .writeCompositePath .. | some condition, .emptyMapPath .. |
       some condition, .counterAdjust .. | some condition, .counterReset .. |
@@ -995,6 +1020,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     plan := {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .requireContractCaller address =>
+    plan := {plan with
+      operations := plan.operations ++ [.requireContractCaller address]
+      reads := plan.reads ++ contractCallerReads plan.reads.length}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -1348,6 +1377,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .mapRemove slot keys => pure (Lean.Json.mkObj [("mapRemove", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
+  | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do
   pure (Lean.Json.arr (← plan.operations.mapM (Op.toJson ctx env)).toArray)

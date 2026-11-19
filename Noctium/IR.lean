@@ -367,6 +367,7 @@ inductive Effect where
   transcript slot. The commitment is the native transient input/output hash.
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
+  | requireContractCaller (address : Expr (.bytes 32))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
   | counterRead (state destination : String) (keys : List PathKey)
@@ -914,7 +915,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
-          .claimContractCall .. |
+          .claimContractCall .. | .requireContractCaller .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -945,6 +946,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         address.validate caps env
         entryPointHash.validate caps env
         commitment.validate caps env
+        pure []
+      | .requireContractCaller address => do
+        address.validate caps env
         pure []
       | .writeCell state ty value =>
         if !caps.stateCells then throw "target lacks state cells"

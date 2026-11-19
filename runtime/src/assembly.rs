@@ -140,7 +140,7 @@ pub fn assemble_checked_calls(
         partitions.len() == calls.len(),
         "invalid native partition count"
     );
-    let mut claimed = BTreeSet::new();
+    let mut claimed = BTreeMap::new();
     let mut intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl));
     for (i, (mut prototype, (mut guaranteed, fallible))) in
         prototypes.into_iter().zip(partitions).enumerate()
@@ -163,7 +163,12 @@ pub fn assemble_checked_calls(
                         && calls[callee].entry_point.ep_hash() == entry_hash
                 })
                 .context("contract claim has no matching later call in this intent")?;
-            ensure!(claimed.insert(callee), "contract call has multiple claims");
+            ensure!(
+                claimed
+                    .insert(callee, calls[i].initial_context.address)
+                    .is_none(),
+                "contract call has multiple claims"
+            );
         }
         prototype.guaranteed_public_transcript = guaranteed;
         prototype.fallible_public_transcript = fallible;
@@ -175,6 +180,14 @@ pub fn assemble_checked_calls(
         "invalid native intent call count"
     );
     for (i, (call, native)) in calls.iter().zip(intent.calls()).enumerate() {
+        if let Some(coin_structure::coin::PublicAddress::Contract(parent)) =
+            call.initial_context.call_context.caller
+        {
+            ensure!(
+                claimed.get(&i) == Some(&parent),
+                "supplied caller context does not match the contract call forest"
+            );
+        }
         let ProofPreimageVersioned::V2(preimage) = &native.proof else {
             return Err(anyhow!("unsupported preimage version"));
         };

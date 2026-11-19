@@ -252,6 +252,7 @@ scoped syntax nlpath "[" nlexpr "]" : nlpath
 declare_syntax_cat nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
 
 declare_syntax_cat nleffect
 scoped syntax nlupdate : nleffect
@@ -1595,6 +1596,10 @@ private def elaborateEffect (schema : List (String × StateKind))
       let entryPointHash ← checkedExpression state.env entryPointHash (.bytes 32)
       let commitment ← checkedExpression state.env commitment .native
       let term ← `(Noctium.Effect.claimContractCall $address $entryPointHash $commitment)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| requireContractCaller($address:nlexpr)) => do
+      let address ← checkedExpression state.env address (.bytes 32)
+      let term ← `(Noctium.Effect.requireContractCaller $address)
       state := {state with terms := state.terms.push term}
     | _ => throwErrorAt update "unsupported Noctium update"
   | `(nleffect| require $value:nlexpr) =>

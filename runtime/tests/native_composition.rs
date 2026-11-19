@@ -96,6 +96,136 @@ fn checked_call<'a>(
 }
 
 #[test]
+fn ledger_caller_guard_accepts_only_the_parent_in_the_call_forest() {
+    use coin_structure::coin::{PublicAddress, UserAddress};
+    use noctium_runtime::prepare_with_context;
+
+    let child_plan: Plan = serde_json::from_slice(include_bytes!(
+        "fixtures/contract-caller/321/ProtectedCallee.move.impact.json"
+    ))
+    .unwrap();
+    let child_circuit = IrSource::load(
+        include_bytes!("fixtures/contract-caller/321/ProtectedCallee.move.zkir").as_slice(),
+    )
+    .unwrap();
+    let parent_plan: Plan = serde_json::from_slice(include_bytes!(
+        "fixtures/contract-caller/321/ForwardingCaller.forward.impact.json"
+    ))
+    .unwrap();
+    let parent_circuit = IrSource::load(
+        include_bytes!("fixtures/contract-caller/321/ForwardingCaller.forward.zkir").as_slice(),
+    )
+    .unwrap();
+    let parent = ContractAddress(HashOutput([21; 32]));
+    let child = ContractAddress(HashOutput([22; 32]));
+    let wrong_parent = ContractAddress(HashOutput([23; 32]));
+    let child_state = |enforce, balance| {
+        create_state(
+            &child_plan,
+            &BTreeMap::from([
+                ("permitted".into(), bytes32(parent.0)),
+                ("enforce".into(), json!(enforce)),
+                ("balance".into(), json!(balance)),
+            ]),
+        )
+        .unwrap()
+    };
+    let child_initial = child_state(true, "10");
+    let query = |caller: Option<PublicAddress>| {
+        let mut context = QueryContext::new(child_initial.clone(), child);
+        context.call_context.caller = caller;
+        context
+    };
+    let child_inputs = BTreeMap::from([("amount".into(), json!("3"))]);
+    for imposter in [
+        None,
+        Some(PublicAddress::User(UserAddress(parent.0))),
+        Some(PublicAddress::Contract(wrong_parent)),
+    ] {
+        assert!(
+            prepare_with_context(
+                &child_plan,
+                &child_inputs,
+                query(imposter),
+                &INITIAL_PARAMETERS
+            )
+            .is_err()
+        );
+    }
+    let claimed_child = query(Some(PublicAddress::Contract(parent)));
+    let execution = prepare_with_context(
+        &child_plan,
+        &child_inputs,
+        claimed_child.clone(),
+        &INITIAL_PARAMETERS,
+    )
+    .unwrap();
+    check(&execution, &child_circuit).unwrap();
+    assert_eq!(execution.after.state, child_state(true, "13"));
+    let inactive = prepare(
+        &child_plan,
+        &child_inputs,
+        &child_state(false, "10"),
+        &INITIAL_PARAMETERS,
+        child,
+    )
+    .unwrap();
+    check(&inactive, &child_circuit).unwrap();
+    assert_eq!(
+        inactive
+            .activity_schedule
+            .iter()
+            .filter_map(|count| *count)
+            .collect::<Vec<_>>(),
+        [1, 4, 10]
+    );
+
+    let child_call = || CheckedNativeCall {
+        execution: &execution,
+        circuit: &child_circuit,
+        initial_context: claimed_child.clone(),
+        entry_point: EntryPointBuf(b"move".to_vec()),
+        communication_commitment_rand: Fr::from(101u64),
+    };
+    let assemble = |calls: &[CheckedNativeCall<'_>]| {
+        assemble_checked_calls(calls, &INITIAL_PARAMETERS, 1_800_000_000, &mut OsRng)
+    };
+    assert!(assemble(&[child_call()]).is_err());
+    let data = create_state(
+        &parent_plan,
+        &BTreeMap::from([("marker".into(), json!("0"))]),
+    )
+    .unwrap();
+    for actual in [parent, wrong_parent] {
+        let forwarded = prepare(
+            &parent_plan,
+            &BTreeMap::from([
+                ("target".into(), bytes32(child.0)),
+                ("opening".into(), json!("101")),
+                ("amount".into(), json!("3")),
+                ("expected".into(), json!("13")),
+            ]),
+            &data,
+            &INITIAL_PARAMETERS,
+            actual,
+        )
+        .unwrap();
+        let parent_call = checked_call(
+            &forwarded,
+            &parent_circuit,
+            data.clone(),
+            actual,
+            EntryPointBuf(b"forward".to_vec()),
+            Fr::from(73u64),
+        );
+        assert_eq!(
+            assemble(&[parent_call, child_call()]).is_ok(),
+            actual == parent
+        );
+    }
+}
+
+#[test]
 fn native_intent_assembles_a_call_forest_and_rejects_unmatched_claims() {
     let (caller_plan, caller_circuit) = caller_fixture();
     let (callee_plan, callee_circuit) = callee_fixture();
@@ -441,18 +571,32 @@ fn composed_intent_attaches_both_proofs_against_installed_keys() {
 #[test]
 #[ignore = "spends only the public development wallet on the explicit isolated Midnight localnet"]
 fn composed_intent_finalizes_both_contract_states_on_localnet() {
-    run_local_composition(false);
+    run_local_composition(LocalCase::Plain);
 }
 
 #[cfg(feature = "localnet")]
 #[test]
 #[ignore = "uses the isolated development wallet and the three registry operation bundles"]
 fn registry_rotation_routes_two_finalized_calls_without_redeploying() {
-    run_local_composition(true);
+    run_local_composition(LocalCase::Registry);
 }
 
 #[cfg(feature = "localnet")]
-fn run_local_composition(registry: bool) {
+#[test]
+#[ignore = "uses the isolated development wallet and authenticated caller bundles"]
+fn composed_call_finalizes_with_a_ledger_authenticated_parent() {
+    run_local_composition(LocalCase::Caller);
+}
+
+#[cfg(feature = "localnet")]
+enum LocalCase {
+    Plain,
+    Registry,
+    Caller,
+}
+
+#[cfg(feature = "localnet")]
+fn run_local_composition(case: LocalCase) {
     use base_crypto::time::Timestamp;
     use futures::{executor::block_on, future::pending};
     use noctium_runtime::{
@@ -549,9 +693,10 @@ fn run_local_composition(registry: bool) {
                 .unwrap();
             submit(&deployment).await
         };
-        if registry {
-            qualify_registry(&node, deploy, submit).await;
-            return;
+        match case {
+            LocalCase::Plain => {}
+            LocalCase::Registry => return qualify_registry(&node, deploy, submit).await,
+            LocalCase::Caller => return qualify_caller(&node, deploy, submit).await,
         }
         let pair = Pair::load();
         let mut deployment_receipts = Vec::new();
@@ -605,6 +750,108 @@ fn run_local_composition(registry: bool) {
             })
         );
     });
+}
+
+#[cfg(feature = "localnet")]
+async fn qualify_caller(
+    node: &noctium_runtime::localnet::Node,
+    deploy: impl AsyncFn(&ContractDeploy<Db>) -> noctium_runtime::client::FinalizedReceipt,
+    submit: impl AsyncFn(
+        &noctium_runtime::proof::ProvedNativeIntent,
+    ) -> noctium_runtime::client::FinalizedReceipt,
+) {
+    use coin_structure::coin::PublicAddress;
+    use futures::future::pending;
+    use noctium_runtime::prepare_with_context;
+
+    let caller = Operation::load(
+        "caller",
+        "forward",
+        BTreeMap::from([("marker".into(), json!("0"))]),
+    );
+    let parent = caller.deploy.address();
+    let callee_state = |balance| {
+        BTreeMap::from([
+            ("permitted".into(), bytes32(parent.0)),
+            ("enforce".into(), json!(true)),
+            ("balance".into(), json!(balance)),
+        ])
+    };
+    let callee = Operation::load("callee", "move", callee_state("10"));
+    let child = callee.deploy.address();
+    let parent_deployed = deploy(&caller.deploy).await;
+    let child_deployed = deploy(&callee.deploy).await;
+    let live = node.sync().unwrap();
+    let parent_state = live.state.contract.get(&parent).unwrap().data.clone();
+    let child_state = live.state.contract.get(&child).unwrap().data.clone();
+    let forwarded = prepare(
+        &caller.plan,
+        &BTreeMap::from([
+            ("target".into(), bytes32(child.0)),
+            ("opening".into(), json!("101")),
+            ("amount".into(), json!("3")),
+            ("expected".into(), json!("13")),
+        ]),
+        &parent_state,
+        &live.state.parameters,
+        parent,
+    )
+    .unwrap();
+    let mut context = QueryContext::new(child_state, child);
+    context.call_context.caller = Some(PublicAddress::Contract(parent));
+    let protected = prepare_with_context(
+        &callee.plan,
+        &BTreeMap::from([("amount".into(), json!("3"))]),
+        context.clone(),
+        &live.state.parameters,
+    )
+    .unwrap();
+    let calls = [
+        checked_call(
+            &forwarded,
+            &caller.circuit,
+            parent_state,
+            parent,
+            caller.entry.clone(),
+            Fr::from(73u64),
+        ),
+        CheckedNativeCall {
+            execution: &protected,
+            circuit: &callee.circuit,
+            initial_context: context,
+            entry_point: callee.entry.clone(),
+            communication_commitment_rand: Fr::from(101u64),
+        },
+    ];
+    let intent = assemble_checked_calls(
+        &calls,
+        &live.state.parameters,
+        live.block.tblock.to_secs() + 1800,
+        &mut OsRng,
+    )
+    .unwrap();
+    let selected = [caller.proof_selection(), callee.proof_selection()];
+    let prepared = PreparedComposition::from_intent(intent, &live.state, &selected).unwrap();
+    let proved = prepared.prove_locally(OsRng, pending()).await.unwrap();
+    let receipt = submit(proved.native()).await;
+    let address = hex::encode(child.0.0);
+    let bytes = &receipt.secondary_states[&address];
+    let state = serialize::tagged_deserialize::<ContractState<Db>>(&mut bytes.as_slice()).unwrap();
+    assert_eq!(receipt.contract_address, hex::encode(parent.0.0));
+    assert_eq!(receipt.contract_state, parent_deployed.contract_state);
+    assert_eq!(
+        state.data,
+        create_state(&callee.plan, &callee_state("13")).unwrap()
+    );
+    eprintln!(
+        "{}",
+        json!({
+            "genesis": receipt.chain.genesis, "profile": receipt.chain.profile, "height": receipt.height,
+            "blockHash": receipt.block_hash, "transactionId": receipt.transaction_id, "extrinsicHash": receipt.extrinsic_hash,
+            "caller": {"address":receipt.contract_address,"deploymentHeight":parent_deployed.height},
+            "callee": {"address":address,"deploymentHeight":child_deployed.height,"balance":"13"},
+        })
+    );
 }
 
 #[cfg(feature = "localnet")]

@@ -90,6 +90,29 @@ the verifier installed at its address and operation. A wrong selector, a
 wrong callee bundle and the stale address all rejected before proving.
 [Registry qualification receipt](native-registry-receipt.json)
 
+### Require the immediate contract caller
+
+Read an address from public state and require the ledger to authenticate it as
+the immediate parent of this call. The [protected callee](../../tests/ContractCaller.lean)
+uses this guard before changing its balance.
+
+```lean
+read permitted as parent
+requireContractCaller(parent)
+```
+
+Lean binds the tagged contract address to the Impact transcript. The ledger
+derives the caller from the matching parent call. A user address with the
+same bytes still fails the contract variant check. Conditional checks use
+`when` and the existing disclosure analysis for both the address and the guard.
+[Ledger caller semantics](https://docs.midnight.network/relnotes/compact/toolchain-0.35.0#the-caller-of-a-circuit-is-available-to-the-circuit)
+
+Rust applications prepare direct entrypoints with `prepare_with_context` and
+the prospective parent address. `assemble_checked_calls` compares it with the
+actual parent in the assembled call forest before proving. A root call and a
+different parent fail this check. This path authenticates the parent address.
+The pinned ledger does not supply a parent operation name to the callee.
+
 ## Assemble a native call forest
 
 The Rust SDK takes prepared calls in ledger execution order through
