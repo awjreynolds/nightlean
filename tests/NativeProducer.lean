@@ -55,6 +55,17 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
   RangeDedup.run #[input, wide, impact, narrow, other, wide, narrow, impact, guarded, guarded, immediate, malformed, output] ==
     #[input, wide, impact, narrow, other, impact, guarded, guarded, immediate, malformed, output]
 
+#guard
+  let first := less "%x" "0x03" "%first" 8
+  let wider := less "%x" "0x03" "%wider" 16
+  let duplicate := less "%x" "0x03" "%duplicate" 8
+  let different := less "%x" "0x02" "%different" 8
+  let reused := op "copy" [("val", toJson ("%first" : String)), ("output", toJson ("%duplicate" : String))]
+  let optimized := RangeDedup.reuseComparisons #[
+    bits "%x" 8, first, assertion "%first", wider, different, duplicate, assertion "%duplicate"]
+  optimized == #[bits "%x" 8, first, assertion "%first", wider, different, reused, assertion "%duplicate"] &&
+    accepted (check optimized.toList)
+
 #guard instructionNames.length == 47
 #guard valueTypeNames.length == 15
 #guard instructionNames.eraseDups.length == 47

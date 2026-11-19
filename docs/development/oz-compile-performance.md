@@ -90,14 +90,23 @@ the following changes.
 | `NativeBytes.inspect` | 1,137 | 1,067 | 11 → 11 |
 | `readPayment` | 298 | 275 | 9 → 9 |
 | `inspectPayment` | 1,545 | 1,194 | 11 → 11 |
-| `inspectPayment` with range deduplication | 1,194 | 730 | 11 → 10 |
+| `inspectPayment` with range-check removal | 1,194 | 730 | 11 → 10 |
+| `inspectPayment` with comparison reuse added | 730 | 352 | 10 → 9 |
 
-The last row compares the optimized compiler with the existing
-`--dedup-range-checks` option off and on. The native tests check exact return
-values and reject altered inputs or results. The optimized circuit still
-emits 65 bounded comparisons for two distinct operand/width combinations.
-Reusing their results while preserving checks and assertions is a follow-up
-under [issue 74](https://github.com/awjreynolds/noctium/issues/74).
+The current `--dedup-range-checks` option applies both range optimizations. The
+comparison pass keeps two distinct `less_than` gates and replaces 63 repeated
+gates with copies. It uses the same ordered SSA operands and bit width, and
+keeps the output names and all assertion sites. The independent producer
+validates the optimized relation. The six aggregate native cases pass,
+including altered-frame rejection. The sizing run excludes key generation
+and proving. [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
+
+A matched OpenZeppelin token run on the same M3 Max compiled all 16 ledger
+entrypoints and witness artifacts in 4.75 s with the flag off and 4.67 s with
+it on. `transferFrom` used 63,110 and 61,798 rows respectively at K16. The
+Impact files matched exactly. The token had no repeated bounded comparisons
+for the new pass to remove. These two runs measure one pair, with no
+established compile-time change.
 
 ## Selected ledger outputs
 

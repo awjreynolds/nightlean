@@ -1128,7 +1128,8 @@ def lowerCircuit (c : Circuit) (dedupRangeChecks : Bool := false) : Except Diagn
     ("outputs", Json.arr ((c.outputs.flatMap fun output =>
       List.replicate output.nativeReturnFieldCount nativeType).toArray)),
     ("do_communications_commitment", toJson false),
-    ("instructions", Json.arr (if dedupRangeChecks then RangeDedup.run result.instructions else result.instructions))]
+    ("instructions", Json.arr (if dedupRangeChecks then
+      RangeDedup.reuseComparisons (RangeDedup.run result.instructions) else result.instructions))]
   validateProduced c.span (← Native.expectedCircuit c) program
 
 /-- Successful lowering necessarily passes the existing mandatory validation
@@ -1265,7 +1266,8 @@ def lowerPrunedEntrypoint (state : List StateDecl) (entry : Entrypoint)
     -- Ledger ContractCall.public_inputs always includes the commitment after
     -- binding input. Standalone relations above deliberately keep it disabled.
     ("do_communications_commitment", toJson true),
-    ("instructions", Json.arr (if dedupRangeChecks then RangeDedup.run result.instructions else result.instructions))]
+    ("instructions", Json.arr (if dedupRangeChecks then
+      RangeDedup.reuseComparisons (RangeDedup.run result.instructions) else result.instructions))]
   let relation ← validateProduced entry.span (← Native.expectedEntrypoint state entry) program
   pure (plan, relation)
 

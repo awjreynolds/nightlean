@@ -32,6 +32,31 @@ the same immutable SSA operand. Retain earlier checks before any narrowing. -/
 def run (instructions : Array Json) : Array Json :=
   (instructions.foldl step {}).retained
 
+private def comparison? (item : Json) : Option ((String × String × Nat) × String) := do
+  let object ← item.getObj?.toOption
+  guard (object.size == 5)
+  guard ((← (item.getObjVal? "op" >>= Json.getStr?).toOption) == "less_than")
+  let left ← (item.getObjVal? "a" >>= Json.getStr?).toOption
+  let right ← (item.getObjVal? "b" >>= Json.getStr?).toOption
+  let width ← (item.getObjVal? "bits" >>= Json.getNat?).toOption
+  let output ← (item.getObjVal? "output" >>= Json.getStr?).toOption
+  pure ((left, right, width), output)
+
+/-- Reuse the result of an identical, earlier comparison over immutable SSA
+operands. Keep output identifiers, check ordering and per-use assertions. -/
+def reuseComparisons (instructions : Array Json) : Array Json := Id.run do
+  let mut seen : Std.HashMap (String × String × Nat) String := {}
+  let mut result := #[]
+  for item in instructions do
+    if let some (key, output) := comparison? item then
+      if let some first := seen[key]? then
+        result := result.push (Json.mkObj [
+          ("op", toJson ("copy" : String)), ("val", toJson first), ("output", toJson output)])
+        continue
+      seen := seen.insert key output
+    result := result.push item
+  return result
+
 private theorem step_retained (state : State) (item : Json) :
     (step state item).retained = state.retained ∨
       (step state item).retained = state.retained.push item := by
