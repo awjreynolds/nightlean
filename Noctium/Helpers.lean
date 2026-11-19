@@ -1520,12 +1520,9 @@ private def checkDeclarationUnchecked (limits : Limits) (program : Program) (dec
   unless info.returned || declaration.result == .unit do fail span "helper fall-through returns unit, incompatible with declared result"
   pure {id := declaration.id, calls := info.calls, direct := info.effects, guarded := info.guarded}
 
-/-- Validate and lower finite ranges into ordinary checked helper syntax.
-Expansion happens only after the weighted source budget and original body
-typing checks pass. -/
-def prepareProgramWithLimits (limits : Limits) (program : Program) :
-    Except Diagnostic Program := do
-  discard (sourcePreflight limits program)
+private def prepareProgramAndSizes (limits : Limits) (program : Program) :
+    Except Diagnostic (Program × List (DeclarationId × SourceSize)) := do
+  let sizes ← sourcePreflight limits program
   let expandedNodes ← expandedSourceNodeCount limits program
   if expandedNodes > limits.maxSourceNodes then resource {} "expanded source nodes"
   if program.declarations.any (fun declaration => bodyHasForRange declaration.body) then
@@ -1541,9 +1538,15 @@ def prepareProgramWithLimits (limits : Limits) (program : Program) :
         pure {declaration with body}
     let (declarations, _) := expandDeclarations.run initial
     let prepared := {program with declarations}
-    discard (sourcePreflight limits prepared)
-    pure prepared
-  else pure program
+    pure (prepared, ← sourcePreflight limits prepared)
+  else pure (program, sizes)
+
+/-- Validate and lower finite ranges into ordinary checked helper syntax.
+Expansion happens only after the weighted source budget and original body
+typing checks pass. -/
+def prepareProgramWithLimits (limits : Limits) (program : Program) :
+    Except Diagnostic Program :=
+  (prepareProgramAndSizes limits program).map Prod.fst
 
 def inferWithLimits (limits : Limits) (program : Program) (scope : Nat) (env : Environment)
     (span : SourceSpan) (value : Term) : Except Diagnostic TermInfo := do
@@ -1616,8 +1619,7 @@ where
 /-- Unreachable recursion is pruned before cycle/purity analysis. Every declared
 signature and statement is still statically checked. -/
 def analyzeWithLimits (limits : Limits) (program : Program) : Except Diagnostic (List Summary) := do
-  let program ← prepareProgramWithLimits limits program
-  let sizes ← sourcePreflight limits program
+  let (program, sizes) ← prepareProgramAndSizes limits program
   unless uniqueNames (program.scopes.map (toString ∘ Scope.id)) do fail {} "duplicate helper scope identity"
   unless (program.declarations.map (·.id)).eraseDups.length == program.declarations.length do
     fail {} "duplicate helper declaration identity"

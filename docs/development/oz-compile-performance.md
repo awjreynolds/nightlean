@@ -1,6 +1,6 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The current CLI compiles the token's ledger and witness artifacts in 6.01 s on the measured M3 Max. The 2026-11-18 graphic records the historical baseline. [Current measurement](#precompiled-lean-frontend)
+The current CLI compiled the token's ledger and witness artifacts in a median of 4.68 s across three runs on the M3 Max. The 2026-11-18 graphic records the historical baseline. [Current measurement](#reuse-checked-source-sizes)
 
 ![Measured compiler performance](../assets/noctium-performance.png)
 
@@ -130,6 +130,17 @@ A CPU sample of the OpenZeppelin compile showed Lean's IR interpreter among the 
 
 These are two serial runs on the same M3 Max with warm dependencies. All 53 files matched byte for byte, including 16 native relations. The reduction was 81.2% in wall time. The shared library measured 14.6 MB on macOS. Source timing excludes building the compiler, generating keys and producing proofs. The earlier Compact timing used a different output set and appears in the historical baseline above.
 
+## Reuse checked source sizes
+
+Helper analysis now reuses the source-size results from program preparation.
+The compiler still checks the weighted expansion budget and checks the expanded
+source after lowering a finite range. Three matched OpenZeppelin runs on the
+same M3 Max took 4.89, 4.64 and 4.74 s before this change, and 6.05, 4.68 and
+4.62 s after. All 53 compiler artifacts matched byte for byte across the
+matched runs. The timings establish no material throughput improvement.
+The CPU sample put ZKIR's linear common-subexpression lookup among the busiest
+Noctium functions. Its representation also appears in the lowering theorems.
+
 ## What the timing includes
 
 The older Noctium baseline ran two complete Lean frontend passes. The first checked the source. The second elaborated it again and exported artifacts. The follow-up times these workflows end to end.
@@ -147,6 +158,12 @@ The workload includes ElGamal encrypted balances on Jubjub, pending credits, ECD
 ## Native circuit sizes
 
 Both artifact sets were sized using the same pinned native ZKIR 3.2.1 implementation, revision `7a51b3385bbf4bce3604df87a7c70867c9ab43c0`. Its executable banner still says 3.2.0; the recorded source pin and binary SHA identify the selected patch. Sizing uses `mock-compile`, which builds the circuit model without generating keys or proofs.
+
+Compact 0.36.1 also compiled a standalone test contract whose only operation
+assigned `disclose(next)` to a `Field` ledger cell. The ordinary compile
+generated the prover and verifier keys. Compact's bundled tool and the
+independent pinned 3.2.1 tool both sized the emitted relation at K6 and 36 rows.
+[Compact release](https://github.com/midnightntwrk/compact/releases/tag/compactc-v0.36.1)
 
 K belongs to each entrypoint circuit. This contract does not measure K20. Noctium reaches K16, with a largest circuit of 63,125 rows. Source compile time is measured for the entire file, so it cannot be divided into trustworthy per-entrypoint compilation times.
 
