@@ -387,7 +387,7 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-18",
-        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. Readable composite return syntax, wider combinations, full equivalence and preservation remain unverified.",
+        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. The readable payment entrypoint now commits and reconstructs a named record with these nested layouts. Wider combinations, full equivalence and preservation remain unverified.",
         "evidence": [
           "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
@@ -408,7 +408,7 @@
       "layer": "language",
       "surface": "Struct",
       "noctiumStatus": "subset",
-      "notes": "Readable projections select named fields on typed decoded records. The checked payment guards and released memo byte preserve field origins. Full defaults, construction, destructuring, spread and generic struct equivalence remain open.",
+      "notes": "Readable projections select named fields on typed decoded records. A named aggregate output commits the record in checked field order while preserving disclosure requirements. The authenticated host and native return agree on the typed payment record. Full defaults, construction, destructuring, spread and generic struct equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -422,7 +422,7 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-18",
-        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. Readable composite return syntax, wider combinations, full equivalence and preservation remain unverified.",
+        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. The readable payment entrypoint now commits and reconstructs a named record with these nested layouts. Wider combinations, full equivalence and preservation remain unverified.",
         "evidence": [
           "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",
@@ -463,7 +463,7 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-18",
-        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. Readable composite return syntax, wider combinations, full equivalence and preservation remain unverified.",
+        "scope": "Checked Lean source construction supports tuple/vector, nominal record/enum and Unit values with canonical bounds and tag/padding rules. Structural tuple/vector widening and component disclosure checks preserve field origins. Helper entrypoints now commit composite results as physical Native outputs with canonical returnViews, reconstructed as typed SDK JSON. The selected native receipt contains record/vector/enum/bytes/Unit fields and an explicitly released private field. The readable payment entrypoint now commits and reconstructs a named record with these nested layouts. Wider combinations, full equivalence and preservation remain unverified.",
         "evidence": [
           "Noctium/Types/Composite.lean",
           "tests/CompositeTypes.lean",

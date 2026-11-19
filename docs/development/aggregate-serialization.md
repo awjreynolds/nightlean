@@ -62,7 +62,9 @@ Using direct byte reads for the memo reduced the circuit from 1,025 to 987 rows 
 | Deploy | 31155 | `3c4a54af494cf956a776d86a932dca9dd13278ff100ce1fc9e2175bda2d5cb66` |
 | Call | 31158 | `897f87eb33d07d0627c0534cd6977283307c9027d9ee9600ca72a513a2b515d1` |
 
-Readable aggregate output declarations, payload-carrying wire enum variants and wider host qualification remain open.
+The `readPayment` entrypoint returns the decoded record through `return payment`. Noctium's authenticated host and native call reconstruct the same record that the pinned Compact evaluator returns. The selected native relation uses K9 and 298 rows. [Named aggregate returns](committed-returns.md)
+
+Mixed scalar and aggregate circuit outputs, payload-carrying wire enum variants and wider host qualification remain open.
 
 ```sh
 lake build noctium Noctium.Helpers.Wire

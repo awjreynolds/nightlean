@@ -25,6 +25,11 @@ noctium_witness_circuit transcode using paymentWire where
     disclose(encode(paymentWire, payment))
 end
 
+noctium_witness_circuit readPayment using paymentWire where
+  private frame : Bytes 10
+  output payment := disclose(decode(paymentWire, frame))
+end
+
 noctium_witness_circuit authorize using paymentWire where
   private frame : Bytes 10
   let payment := decode(paymentWire, frame)
@@ -50,6 +55,9 @@ end
 noctium_contract Codec where
   entry transcode uses transcode where
     return encoding : Bytes 10 := encoded
+  end
+  entry readPayment uses readPayment where
+    return payment
   end
   entry authorize uses authorize where
     return approval : UInt 8 := code

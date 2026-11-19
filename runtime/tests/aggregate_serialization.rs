@@ -101,6 +101,60 @@ fn aggregate_wire_matches_compact_reference() -> Result<()> {
 
 #[test]
 #[ignore = "requires fresh AggregateSerialization Lean artifacts"]
+fn named_payment_return_uses_the_committed_record_layout() -> Result<()> {
+    let root = artifact_root()?;
+    let name = "AggregateSerialization.Codec.readPayment";
+    let control: Json = serde_json::from_slice(&fs::read(
+        root.join(format!("{name}.witness.control.json")),
+    )?)?;
+    let mut plan: Plan = serde_json::from_slice(&fs::read(root.join(format!("{name}.impact.json")))?)?;
+    let circuit = IrSource::load(fs::File::open(root.join(format!("{name}.zkir")))?)?;
+    let state = create_state(&plan, &BTreeMap::new())?;
+    let frame = [44, 1, 1, 0, 1, 1, 12, 42, 200, 255];
+    let inputs = frame_inputs(&frame);
+    let expected = json!({"kind":"struct","id":"Payment","fields":[
+        {"name":"info","value":{"kind":"tuple","items":[
+            {"kind":"uint","maximum":"300","value":"300"},{"kind":"bool","value":true}
+        ]}},
+        {"name":"flags","value":{"kind":"vector","items":[
+            {"kind":"bool","value":false},{"kind":"bool","value":true}
+        ]}},
+        {"name":"side","value":{"kind":"enum","id":"Side","variant":"Cancel","fields":[]}},
+        {"name":"memo","value":bytes(&[12,42])}
+    ]});
+    let run = |plan: &Plan, inputs: &BTreeMap<String, Json>| {
+        prepare(plan, inputs, &state, &INITIAL_PARAMETERS, ContractAddress::default())
+    };
+    let mut execution = run(&plan, &inputs)?;
+    check(&execution, &circuit)?;
+    assert_eq!(execution.returns().len(), 7);
+    assert_eq!(
+        execution.returns_json(),
+        BTreeMap::from([("payment".into(), expected.clone())])
+    );
+    let host_result = wire_session(&control, "readPayment", inputs.clone())?.advance()?;
+    assert_eq!(host_result["status"], "completed");
+    assert_eq!(host_result["result"], expected);
+    for (offset, value) in [(0, 45), (2, 2), (5, 2)] {
+        let mut invalid = frame;
+        invalid[offset] = value;
+        let invalid = frame_inputs(&invalid);
+        assert!(run(&plan, &invalid).and_then(|execution| check(&execution, &circuit)).is_err());
+        assert_eq!(
+            wire_session(&control, "readPayment", invalid)?.advance()?["status"],
+            "failed"
+        );
+    }
+
+    execution.preimage.private_transcript[7] = Fr::from(43u64);
+    assert!(check(&execution, &circuit).is_err());
+    plan.return_views[0].fields.swap(5, 6);
+    assert!(run(&plan, &inputs).is_err());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires fresh AggregateSerialization Lean artifacts"]
 fn decoded_fields_drive_approval_without_returning_the_record() -> Result<()> {
     let root = artifact_root()?;
     let name = "AggregateSerialization.Codec.authorize";

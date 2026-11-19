@@ -113,7 +113,7 @@ scoped syntax "read" "private" ident "as" ident : noctium_witness_statement
 scoped syntax "witness" ident "(" nlexpr,* ")" : noctium_witness_statement
 scoped syntax "prove" nlexpr : noctium_witness_statement
 scoped syntax "stage" ident ":=" nlexpr : noctium_witness_statement
-scoped syntax "output" ident ":" nltype ":=" nlexpr : noctium_witness_statement
+scoped syntax "output" ident (":" nltype)? ":=" nlexpr : noctium_witness_statement
 scoped syntax (name := noctiumAuthoredWitnessCircuitCommand) "noctium_witness_circuit" ident
   ("using" ident,+)? "where" noctium_witness_statement* "end" : command
 
@@ -1457,6 +1457,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let mut sawOutput := _root_.Bool.false
     let mut authoredOutputs : List
         (String × Ty × Lowered × SourceSpan × Nat × LogicalAliasSource) := []
+    let mut aggregateOutput? : Option (String × Types.CompositeType) := none
     let mut logicalAliasBindings : List LogicalAliasBinding := []
     for (statement, ordinal) in statements.toList.zip (List.range statements.size) do
       let isOutput := statement.raw[0].getAtomVal == "output"
@@ -1556,21 +1557,34 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         authoredProves := (authoredProves ++ observationPart.authoredProves).eraseDups
         explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
         generatedValidity := (generatedValidity ++ observationPart.generatedValidity ++ [s!"typed staged private-state value: {field.key}"] ++ value.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
-      | `(noctium_witness_statement| output $id:ident : $type:nltype := $value:nlexpr) => do
+      | `(noctium_witness_statement| output $id:ident $[: $type:nltype]? := $value:nlexpr) => do
         let valueName := id.getId.toString
         if env.any (fun value => value.1 == valueName) || authoredOutputs.any (fun prior => prior.1 == valueName) then
           throwErrorAt id s!"duplicate readable witness output '{valueName}'"
-        let ty ← readScalarTy type
+        if aggregateOutput?.isSome then
+          throwErrorAt id "an aggregate must be the only circuit output"
         let sourceExpr := value
         let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
-        let value ← coerce sourceExpr lowered ty
         let outputSpan ← spanValue statement
-        let aliasSource := match value.term with
-          | .witnessCall site .. => LogicalAliasSource.call site
-          | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
-          | _ => LogicalAliasSource.expression sourceExpr
-        authoredOutputs := authoredOutputs ++ [
-          (valueName, ty, value, outputSpan, ordinal, aliasSource)]
+        let value ← match type with
+          | some annotation => do
+            let ty ← readScalarTy annotation
+            let value ← coerce sourceExpr lowered ty
+            let aliasSource := match value.term with
+              | .witnessCall site .. => LogicalAliasSource.call site
+              | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
+              | _ => LogicalAliasSource.expression sourceExpr
+            authoredOutputs := authoredOutputs ++ [(valueName, ty, value, outputSpan, ordinal, aliasSource)]
+            pure value
+          | none => do
+            let .composite payload := lowered.type
+              | throwErrorAt id "scalar outputs require a type annotation"
+            unless authoredOutputs.isEmpty do
+              throwErrorAt id "an aggregate must be the only circuit output"
+            aggregateOutput? := some (valueName, payload)
+            outputType := lowered.type
+            body := body ++ lowered.before ++ [.return (some (.at outputSpan lowered.term))]
+            pure lowered
         sawOutput := _root_.Bool.true
         witnesses := uniqueWitnesses (witnesses ++ value.signatures)
         witnessNames := (witnessNames ++ value.witnessNames).eraseDups
@@ -1591,7 +1605,8 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let compositeEnv : Types.CompositeEnv := if authoredOutputs.length > 1 then
       {structures := [{id := compositeId, fields := compositeFields, span := declarationSpan}]}
       else {}
-    if authoredOutputs.isEmpty then
+    if aggregateOutput?.isSome then pure ()
+    else if authoredOutputs.isEmpty then
       body := body ++ [.return none]
       outputType := .unit
     else if authoredOutputs.length == 1 then
@@ -1737,8 +1752,23 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let metadataTerm ← observationTerm observation
     elabCommand (← `(def $(mkIdent programSyntaxName) : Noctium.Helpers.Program := $programTerm))
     elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))
+    let registeredAggregate ← match aggregateOutput? with
+      | none => pure none
+      | some (label, payload) => do
+        let localName := generatedName name.getId "__returnView"
+        let fullViewName := generatedName fullName "__returnView"
+        if (← getEnv).contains fullViewName then throwErrorAt name "aggregate return view already exists"
+        let fields := compiled.circuit.outputs.toArray.map fun item => stringTerm item.name
+        let payload ← compositeTypeTerm payload
+        elabCommand (← `(def $(mkIdent localName) : Noctium.ReturnView := {
+          name := $(stringTerm label)
+          environment := $(mkIdent programName).composites
+          type := $payload
+          fields := [$fields,*]
+        }))
+        pure (some (label, fullViewName))
     Noctium.registerWitnessCircuit name.raw programName exportName outputName
-      (some observation.toJson.compress) logicalOutputAliases
+      (some observation.toJson.compress) logicalOutputAliases registeredAggregate
   | _ => throwUnsupportedSyntax
 
 end Noctium

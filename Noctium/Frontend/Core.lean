@@ -22,6 +22,8 @@ structure CircuitInfo where
   /-- Logical witness-circuit results retained when a grouped helper result is
   expanded into native leaves. The names point to typed Expr constants. -/
   logicalOutputs : List (String × Ty × Name) := []
+  /-- The declared aggregate label and its checked return schema. -/
+  aggregateOutput? : Option (String × Name) := none
   sourceProgram? : Option (Name × String) := none
   /-- Structured ledger bodies are rebuilt from their typed source at export. -/
   stateProgram? : Option (Name × String) := none
@@ -310,6 +312,7 @@ scoped syntax "if" nlexpr "then" "{" nlstatement* "}" "else" "{" nlstatement* "}
 
 declare_syntax_cat nlreturn
 scoped syntax "return" ident ":" nltype ":=" nlexpr : nlreturn
+scoped syntax "return" ident : nlreturn
 
 declare_syntax_cat nlentry
 scoped syntax "entry" ident "uses" ident "where" nlstatement* nlreturn* "end" : nlentry
@@ -1292,6 +1295,7 @@ private structure EntryEffects where
   spans : Array (TSyntax `term) := #[]
   guards : Array (TSyntax `term) := #[]
   returns : Array (TSyntax `term) := #[]
+  returnViews : Array (TSyntax `term) := #[]
   nextLocal : Nat := 0
   usedLocalNames : List String := []
 
@@ -1829,7 +1833,7 @@ private partial def elaborateStatements (schema : List (String × StateKind))
   pure state
 
 private def elaborateReturns (statements : Array (TSyntax `nlreturn))
-    (initial : EntryEffects) : CommandElabM EntryEffects := do
+    (info : CircuitInfo) (initial : EntryEffects) : CommandElabM EntryEffects := do
   let mut state := initial
   let mut labels : List String := []
   for statement in statements do
@@ -1847,6 +1851,37 @@ private def elaborateReturns (statements : Array (TSyntax `nlreturn))
       state := {state with returns := state.returns.push (← `({
         name := $(stringTerm labelName), ty := $(← tyTerm ty), value := $value,
         span := $span : Noctium.Output }))}
+    | `(nlreturn| return $label:ident) => do
+      let labelName := label.getId.toString
+      let some (aggregateName, schema) := info.aggregateOutput?
+        | throwErrorAt label "return without a type requires a declared aggregate circuit output"
+      unless aggregateName == labelName do
+        throwErrorAt label "expected aggregate circuit output '{aggregateName}'"
+      if labels.contains labelName then
+        throwErrorAt label "duplicate entry return label '{labelName}'"
+      if state.env.any (fun binding => binding.1 == labelName) then
+        throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
+      labels := labelName :: labels
+      let span ← spanTerm statement
+      let mut fields := #[]
+      for (name, ty) in info.outputs do
+        unless ty == .native do throwErrorAt label "aggregate return requires Native fields"
+        let (physical, nextLocal) := chooseBranchLocalName state.env state.usedLocalNames state.nextLocal
+        let field := stringTerm physical
+        let returnTerm ← `({
+          name := $field
+          ty := Noctium.Ty.native
+          value := @Noctium.Expr.ref Noctium.Ty.native $(stringTerm name)
+          span := $span : Noctium.Output })
+        state := {
+          state with
+          nextLocal
+          usedLocalNames := physical :: state.usedLocalNames
+          returns := state.returns.push returnTerm
+        }
+        fields := fields.push field
+      let view ← `({ $(mkIdent schema) with fields := [$fields,*] : Noctium.ReturnView })
+      state := {state with returnViews := state.returnViews.push view}
     | _ => throwErrorAt statement "unsupported Noctium entry return"
   pure state
 
@@ -2097,13 +2132,13 @@ private def elaborateConstructor (source : TSyntax `nlstate)
           returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
         let initial : EntryEffects := {env, usedLocalNames := reserved}
         let lowered ← elaborateStatements schema none 0 statements initial
-        let lowered ← elaborateReturns returns lowered
+        let lowered ← elaborateReturns returns info lowered
         let circuitTerm := mkIdent info.declName
         let callInputTerms := args.getElems.map fun argument => stringTerm argument.getId.toString
         let entryName := stringTerm id.getId.toString
         let entrySpan ← spanTerm entryStx
         entryTerms := entryTerms.push (← `(Noctium.Entrypoint.mk $entryName $circuitTerm
-          [$callInputTerms,*] [$lowered.terms,*] [$lowered.returns,*] [] $entrySpan
+          [$callInputTerms,*] [$lowered.terms,*] [$lowered.returns,*] [$lowered.returnViews,*] $entrySpan
           [$lowered.spans,*] [$lowered.guards,*]))
       | `(nlentry| entry $id:ident uses $circuit:ident where $statements:nlstatement* $returns:nlreturn* end) =>
         if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
@@ -2118,9 +2153,9 @@ private def elaborateConstructor (source : TSyntax `nlstate)
           returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
         let initial : EntryEffects := {env, usedLocalNames := reserved}
         let lowered ← elaborateStatements schema none 0 statements initial
-        let lowered ← elaborateReturns returns lowered
+        let lowered ← elaborateReturns returns info lowered
         let circuitTerm := mkIdent info.declName
-        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], returns := [$lowered.returns,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Noctium.Entrypoint }))
+        entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], returns := [$lowered.returns,*], returnViews := [$lowered.returnViews,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Noctium.Entrypoint }))
       | `(nlentry| entry $id:ident from $source:ident entry $exportName:str end) =>
         if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
         entryNames := id.getId :: entryNames
@@ -2282,7 +2317,8 @@ scoped syntax (name := witnessCircuitCommand) "noctium_witness_circuit" ident
 /-- Share checked registration between generated authoring programs and explicit IR sources. -/
 unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportName : String)
     (outputName : String := "") (observationArtifact? : Option String := none)
-    (logicalOutputs : List (String × Ty × Name) := []) : CommandElabM Unit := do
+    (logicalOutputs : List (String × Ty × Name) := [])
+    (aggregateOutput? : Option (String × Name) := none) : CommandElabM Unit := do
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     let fullName := (← getCurrNamespace) ++ name.getId
     let compiled ← match Witness.compile program exportName fullName.toString outputName with
@@ -2304,6 +2340,7 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       publicInputs := (compiled.circuit.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty),
       outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
       logicalOutputs,
+      aggregateOutput?,
       sourceProgram? := some (sourceName, exportName)}
     modifyEnv fun env => witnessRegistry.addEntry env {
       circuitName := fullName, sourceName, exportName, outputName, observationArtifact?}

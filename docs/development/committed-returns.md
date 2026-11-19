@@ -93,6 +93,28 @@ them into typed record, tuple, vector, enum, bytes and Unit JSON and omits their
 physical aliases. The existing C JSON result path exposes the same logical views.
 Empty composites retain their logical result with zero physical fields.
 
+Readable witness circuits infer an aggregate result from an unannotated
+`output`. The entrypoint commits that result by its declared label.
+
+```lean
+noctium_witness_circuit readPayment using paymentWire where
+  private frame : Bytes 10
+  output payment := disclose(decode(paymentWire, frame))
+end
+
+noctium_contract PaymentReader where
+  entry readPayment uses readPayment where
+    return payment
+  end
+end
+```
+
+This form supports one aggregate circuit output. The ordinary typed scalar
+output syntax remains available. The named return uses the circuit's checked
+layout and field order. The compiler keeps the disclosure check at the circuit
+output, and the bundler authenticates the view with the entrypoint artifacts.
+[Complete example](../../examples/AggregateSerialization.lean)
+
 Enums retain their variant tag and canonical padding checks. Bool and UInt fields
 retain their bounds. Reordered or reused field mappings reject. A private field
 still needs explicit disclosure in the source, including fields nested in a
@@ -128,6 +150,11 @@ case checks active and inactive records and rejects an altered provider response
 Source guards reject removal of the field's disclosure. Codec checks reject
 noncanonical Bool/UInt leaves and retain empty values.
 
-This is scoped native-checker evidence. No new keys, proofs or deployments were
-generated. Readable composite return syntax and generated language bindings remain separate
-work. See the [native call protocol](native-call-claims.md) for composition evidence.
+The readable `readPayment` example commits seven native fields and exposes one
+`payment` record. The authenticated host and native checker return the same
+tuple, vector, enum and memo fields. They reject the three malformed input
+variants from the pinned Compact comparison. The native checker rejects a
+changed memo byte under the original commitment. The runtime rejects a
+reordered field map. [Focused Rust test](../../runtime/tests/aggregate_serialization.rs)
+
+See the [native call protocol](native-call-claims.md) for composition evidence.
