@@ -78,6 +78,14 @@ The focused host/native case commits a Bytes33 value, a UInt8, a zero-bound UInt
 and Bytes0. It checks exact header fields in declared argument order, the
 remaining salt and provider reply, and rejection after changing an argument
 or reordering the sidecar binding. Composite arguments remain open.
+
+Two builds at compiler revision `0ede45d` reproduced all 12 selected compiler
+files, including the generated Rust binding. The authenticated Rust witness
+API completed the provider call, generated the K9 proof for
+`HostedCallArguments.review` (159 rows), verified it and attached it to the
+native intent. The bundle manifest SHA-256 was
+`9a600a97daa29d304e39e04b1979d8dc7d892887f9f2cb969483515cd26d71ee`.
+This qualification ends at the proved intent.
 The [typed argument example](../../tests/TypedCallArguments.lean) exercises mixed
 input types, an independent private witness and the field order through the
 native checker. A reordered header or an out-of-range byte chunk rejects even
