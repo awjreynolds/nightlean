@@ -1309,6 +1309,7 @@
       "observedEvidence": [
         "docs/development/native-composition-receipt.json",
         "docs/development/native-aggregate-composition-receipt.json",
+        "docs/development/native-aggregate-argument-receipt.json",
         "docs/development/native-caller-receipt.json",
         "docs/development/independent-composition-receipt.json",
         "docs/development/composition-transport-receipt.json"

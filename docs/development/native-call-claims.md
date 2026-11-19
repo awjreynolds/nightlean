@@ -183,6 +183,12 @@ leaf in layout order. The callee binds the group to its typed provider input.
 Automatic bundle discovery and claim statements inside helper bodies remain
 open. The reference state interpreter rejects active call claims.
 
+The hosted pair-argument fixture finalized at localnet block 32173 with two
+K8 proofs. Its provider received the typed record and returned a private reply.
+The node accepted both calls and the callee's `total` moved from 1 to 14. The
+host's staged write stayed in the test invocation. Two builds reproduced all
+15 selected compiler files. [Aggregate argument receipt](native-aggregate-argument-receipt.json)
+
 ## Prove a composed intent
 
 `proof::PreparedComposition::from_intent` freezes the assembled intent.
