@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+features=zkir-321
+if [[ ${1:-} == --localnet ]]; then
+  features+=,localnet
+  shift
+fi
 if (( $# != 1 )); then
-  echo "usage: bash sdk/android/package.sh NEW_ANDROID_AAR" >&2
+  echo "usage: bash sdk/android/package.sh [--localnet] NEW_ANDROID_AAR" >&2
   exit 2
 fi
 output=$1
@@ -27,12 +32,18 @@ mkdir -p "$(dirname "$output")"
 stage="$(mktemp -d "$(dirname "$output")/.noctium-android.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 mkdir -p "$stage/aar/jni/arm64-v8a"
+sources=("$sdk/WitnessSession.kt" "$sdk/NativeWitness.kt")
+cflags=()
+if [[ $features == *,localnet ]]; then
+  cflags+=(-DNOCTIUM_LOCALNET)
+  sources+=("$sdk/DevelopmentTransaction.kt")
+fi
 
 archive="$(
   CC_aarch64_linux_android="$clang" AR_aarch64_linux_android="$toolchain/llvm-ar" \
     CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER="$clang" \
     cargo +1.100.0 build --locked --lib --manifest-path "$repo/runtime/Cargo.toml" \
-      --no-default-features --features zkir-321 --target aarch64-linux-android \
+      --no-default-features --features "$features" --target aarch64-linux-android \
       --message-format=json-render-diagnostics |
     python3 -c '
 import json
@@ -50,12 +61,12 @@ print(archive)
 )"
 
 "$clang" -std=c11 -O2 -Wall -Wextra -Werror -fPIC -shared \
-  -I "$repo/runtime/include" "$sdk/noctium_jni.c" "$archive" \
+  "${cflags[@]}" -I "$repo/runtime/include" "$sdk/noctium_jni.c" "$archive" \
   -Wl,--gc-sections -Wl,--exclude-libs,ALL -Wl,-z,defs -Wl,-z,max-page-size=16384 \
   -Wl,-soname,libnoctium_jni.so -llog -ldl -lm \
   -o "$stage/aar/jni/arm64-v8a/libnoctium_jni.so"
 "$toolchain/llvm-strip" --strip-debug "$stage/aar/jni/arm64-v8a/libnoctium_jni.so"
-kotlinc "$sdk/WitnessSession.kt" "$sdk/NativeWitness.kt" -jvm-target 1.8 \
+kotlinc "${sources[@]}" -jvm-target 1.8 \
   -classpath "$platform" -d "$stage/aar/classes.jar"
 cat > "$stage/aar/AndroidManifest.xml" <<'EOF'
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.noctium.sdk">
@@ -64,6 +75,9 @@ cat > "$stage/aar/AndroidManifest.xml" <<'EOF'
 EOF
 cat > "$stage/aar/proguard.txt" <<'EOF'
 -keep class org.noctium.sdk.Native {
+    native <methods>;
+}
+-keep class org.noctium.sdk.LocalnetBridge {
     native <methods>;
 }
 -keep class org.noctium.sdk.NoctiumFailure {

@@ -67,6 +67,9 @@ class NativeProof internal constructor(private var handle: Long) : AutoCloseable
     fun cancel() = Native.proofCancel(activeHandle())
 
     @Synchronized
+    internal fun <T> withHandle(action: (Long) -> T): T = action(activeHandle())
+
+    @Synchronized
     override fun close() {
         if (handle != 0L) {
             Native.proofClose(handle)
@@ -82,7 +85,7 @@ class NativeProof internal constructor(private var handle: Long) : AutoCloseable
 
 private val entropySource = SecureRandom()
 
-private inline fun <T> withEntropy(action: (ByteArray) -> T): T {
+internal inline fun <T> withEntropy(action: (ByteArray) -> T): T {
     val entropy = ByteArray(32)
     try {
         entropySource.nextBytes(entropy)

@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if (( $# < 3 || $# > 4 )); then
-  echo "usage: bash sdk/android/tests/package-smoke.sh AAR HOST_CONTROL_PLAN NEW_APK [PUBLIC_PROOF_FIXTURE]" >&2
+localnet=false
+if [[ ${1:-} == --localnet ]]; then
+  localnet=true
+  shift
+fi
+
+if (( $# < 3 || $# > 4 )) || { "$localnet" && (( $# != 4 )); }; then
+  echo "usage: bash sdk/android/tests/package-smoke.sh [--localnet] AAR HOST_CONTROL_PLAN NEW_APK [PUBLIC_PROOF_FIXTURE]" >&2
   exit 2
 fi
 sdk="$(cd "$(dirname "$0")" && pwd)"
@@ -25,15 +31,29 @@ if (( $# == 4 )); then
   cp "$4/target.json" "$4/srs" "$stage/assets/proof/"
   cp -R "$4/bundle" "$stage/assets/proof/bundle"
 fi
+sources=("$sdk/WitnessSmoke.kt")
+instrumentation=.WitnessSmoke
+permission=
+app_settings=
+if "$localnet"; then
+  mkdir "$stage/assets/proof/localnet"
+  cp "$4/localnet/client.json" "$4/localnet/localnet.json" "$stage/assets/proof/localnet/"
+  cp -R "$4/localnet/params" "$stage/assets/proof/localnet/params"
+  sources+=("$sdk/DevelopmentSmoke.kt")
+  instrumentation=.DevelopmentSmoke
+  permission='<uses-permission android:name="android.permission.INTERNET"/>'
+  app_settings='android:usesCleartextTraffic="true"'
+fi
 cp "$stage/aar/jni/arm64-v8a/libnoctium_jni.so" "$stage/native/lib/arm64-v8a/"
-cat > "$stage/AndroidManifest.xml" <<'EOF'
+cat > "$stage/AndroidManifest.xml" <<EOF
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.noctium.sdk.tests">
   <uses-sdk android:minSdkVersion="24" android:targetSdkVersion="35"/>
-  <application android:extractNativeLibs="true" android:label="Noctium witness smoke test"/>
-  <instrumentation android:name=".WitnessSmoke" android:targetPackage="org.noctium.sdk.tests"/>
+  $permission
+  <application android:extractNativeLibs="true" android:label="Noctium witness smoke test" $app_settings/>
+  <instrumentation android:name="$instrumentation" android:targetPackage="org.noctium.sdk.tests"/>
 </manifest>
 EOF
-kotlinc "$sdk/WitnessSmoke.kt" -jvm-target 1.8 -classpath "$platform:$stage/aar/classes.jar" \
+kotlinc "${sources[@]}" -jvm-target 1.8 -classpath "$platform:$stage/aar/classes.jar" \
     -d "$stage/smoke.jar"
 "$tool/d8" --min-api 24 --lib "$platform" --output "$stage/dex" \
     "$stage/smoke.jar" "$stage/aar/classes.jar" "${KOTLIN_HOME:?Set KOTLIN_HOME}/lib/kotlin-stdlib.jar"

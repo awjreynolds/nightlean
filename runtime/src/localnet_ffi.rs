@@ -118,9 +118,18 @@ pub unsafe extern "C" fn noctium_localnet_open(
                 .parse()
                 .map_err(|_| INVALID_ARGUMENT)?;
             let cache = ProofCache::new(directory, source).map_err(|_| INVALID_ARGUMENT)?;
-            let material = block_on(cache.dust()).map_err(|_| INVALID_ARGUMENT)?;
-            let parameters =
-                block_on(cache.parameters(material.k())).map_err(|_| INVALID_ARGUMENT)?;
+            // The pinned cache reader has a 1 MiB stack buffer. Mobile host threads may be smaller.
+            let (material, parameters) = std::thread::Builder::new()
+                .stack_size(4 * 1024 * 1024)
+                .spawn(move || -> Result<_, i32> {
+                    let material = block_on(cache.dust()).map_err(|_| INVALID_ARGUMENT)?;
+                    let parameters =
+                        block_on(cache.parameters(material.k())).map_err(|_| INVALID_ARGUMENT)?;
+                    Ok((material, parameters))
+                })
+                .map_err(|_| INTERNAL)?
+                .join()
+                .map_err(|_| INTERNAL)??;
             if Some(parameters.sha256()) != config.dust_srs_sha256.as_deref() {
                 return Err(INVALID_ARGUMENT);
             }

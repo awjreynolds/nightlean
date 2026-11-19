@@ -284,3 +284,180 @@ JNIEXPORT void JNICALL Java_org_noctium_sdk_Native_proofClose(JNIEnv *env, jobje
     int32_t status = noctium_native_free((uint64_t)proof);
     if (status != NOCTIUM_NATIVE_OK) fail(env, status);
 }
+
+#ifdef NOCTIUM_LOCALNET
+enum { RECOVERY_CONTEXT_BYTES = 1200000 };
+
+static const ResultAccess native_private = {
+    noctium_native_private_length, noctium_native_private_copy, noctium_native_private_free
+};
+
+JNIEXPORT jlong JNICALL Java_org_noctium_sdk_LocalnetBridge_open(
+        JNIEnv *env, jobject self, jbyteArray configuration, jbyteArray development_seed) {
+    (void)self;
+    Input inputs[] = {
+        {.array = configuration, .limit = DESCRIPTOR_BYTES},
+        {.array = development_seed, .limit = 32},
+    };
+    size_t count = !development_seed || (*env)->GetArrayLength(env, development_seed) == 0 ? 1 : 2;
+    if (!borrow_inputs(env, inputs, count)) return 0;
+    uint64_t adapter = 0;
+    int32_t status = noctium_localnet_open(
+        (const uint8_t *)inputs[0].bytes, (size_t)inputs[0].length,
+        (const uint8_t *)inputs[1].bytes, (size_t)inputs[1].length, &adapter);
+    release_inputs(env, inputs, count);
+    if (status != NOCTIUM_NATIVE_OK) fail(env, status);
+    return (jlong)adapter;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_context(
+        JNIEnv *env, jobject self, jlong adapter) {
+    (void)self;
+    return step(env, adapter, noctium_localnet_context, &native_result);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_privateValue(
+        JNIEnv *env, jobject self, jlong adapter, jbyteArray query) {
+    (void)self;
+    jsize length;
+    jbyte *bytes = borrow_input(env, query, &length, DESCRIPTOR_BYTES);
+    if (!bytes) return NULL;
+    uint64_t result = 0;
+    int32_t status = noctium_localnet_private_value((uint64_t)adapter,
+        (const uint8_t *)bytes, (size_t)length, &result);
+    (*env)->ReleaseByteArrayElements(env, query, bytes, JNI_ABORT);
+    if (status != NOCTIUM_NATIVE_OK) {
+        fail(env, status);
+        return NULL;
+    }
+    return take_result(env, result, &native_private);
+}
+
+JNIEXPORT void JNICALL Java_org_noctium_sdk_LocalnetBridge_close(
+        JNIEnv *env, jobject self, jlong adapter) {
+    (void)self;
+    int32_t status = noctium_localnet_free((uint64_t)adapter);
+    if (status != NOCTIUM_NATIVE_OK) fail(env, status);
+}
+
+JNIEXPORT jlong JNICALL Java_org_noctium_sdk_LocalnetBridge_startDeployment(
+        JNIEnv *env, jobject self, jlong proof, jbyteArray descriptor, jbyteArray setup) {
+    (void)self;
+    Input inputs[] = {{.array = descriptor, .limit = DESCRIPTOR_BYTES}, {.array = setup, .limit = CONTROL_BYTES}};
+    if (!borrow_inputs(env, inputs, 2)) return 0;
+    uint64_t client = 0;
+    int32_t status = noctium_client_start((uint64_t)proof, 0,
+        (const uint8_t *)inputs[0].bytes, (size_t)inputs[0].length,
+        (const uint8_t *)inputs[1].bytes, (size_t)inputs[1].length, &client);
+    release_inputs(env, inputs, 2);
+    if (status != NOCTIUM_NATIVE_OK) fail(env, status);
+    return (jlong)client;
+}
+
+JNIEXPORT jlong JNICALL Java_org_noctium_sdk_LocalnetBridge_startFromWitness(
+        JNIEnv *env, jobject self, jlong proof, jbyteArray descriptor) {
+    (void)self;
+    jsize length;
+    jbyte *bytes = borrow_input(env, descriptor, &length, DESCRIPTOR_BYTES);
+    if (!bytes) return 0;
+    uint64_t client = 0;
+    int32_t status = noctium_client_start_from_witness((uint64_t)proof,
+        (const uint8_t *)bytes, (size_t)length, &client);
+    (*env)->ReleaseByteArrayElements(env, descriptor, bytes, JNI_ABORT);
+    if (status != NOCTIUM_NATIVE_OK) fail(env, status);
+    return (jlong)client;
+}
+
+JNIEXPORT jlong JNICALL Java_org_noctium_sdk_LocalnetBridge_recover(
+        JNIEnv *env, jobject self, jbyteArray descriptor, jbyteArray context) {
+    (void)self;
+    Input inputs[] = {
+        {.array = descriptor, .limit = DESCRIPTOR_BYTES},
+        {.array = context, .limit = RECOVERY_CONTEXT_BYTES},
+    };
+    if (!borrow_inputs(env, inputs, 2)) return 0;
+    uint64_t client = 0;
+    int32_t status = noctium_client_recover(
+        (const uint8_t *)inputs[0].bytes, (size_t)inputs[0].length,
+        (const uint8_t *)inputs[1].bytes, (size_t)inputs[1].length, &client);
+    release_inputs(env, inputs, 2);
+    if (status != NOCTIUM_NATIVE_OK) fail(env, status);
+    return (jlong)client;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_command(
+        JNIEnv *env, jobject self, jlong client, jbyteArray command) {
+    (void)self;
+    jsize length;
+    jbyte *bytes = borrow_input(env, command, &length, 16);
+    if (!bytes) return NULL;
+    uint64_t result = 0;
+    int32_t status = noctium_client_command((uint64_t)client,
+        (const uint8_t *)bytes, (size_t)length, &result);
+    (*env)->ReleaseByteArrayElements(env, command, bytes, JNI_ABORT);
+    if (status != NOCTIUM_NATIVE_OK) {
+        fail(env, status);
+        return NULL;
+    }
+    return take_result(env, result, &native_result);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_resolve(
+        JNIEnv *env, jobject self, jlong client, jlong adapter, jboolean approve, jbyteArray metadata,
+        jbyteArray entropy) {
+    (void)self;
+    Input inputs[] = {{.array = metadata, .limit = DESCRIPTOR_BYTES}, {.array = entropy, .limit = 32}};
+    size_t count = entropy == NULL ? 1 : 2;
+    if (!borrow_inputs(env, inputs, count)) return NULL;
+    uint64_t request = 0, reply = 0, result = 0;
+    int32_t status = noctium_client_request((uint64_t)client, &request);
+    if (status == NOCTIUM_NATIVE_OK) {
+        status = adapter ? noctium_localnet_resolve((uint64_t)adapter, request, approve ? 1 : 0,
+            (const uint8_t *)inputs[1].bytes, (size_t)inputs[1].length, &reply) :
+            noctium_client_service_failure(request, &reply);
+        noctium_client_service_free(request);
+        if (status == NOCTIUM_NATIVE_OK) {
+            status = noctium_client_resume((uint64_t)client,
+                (const uint8_t *)inputs[0].bytes, (size_t)inputs[0].length, reply, &result);
+            noctium_client_service_free(reply);
+        }
+    }
+    release_inputs(env, inputs, count);
+    if (status != NOCTIUM_NATIVE_OK) {
+        fail(env, status);
+        return NULL;
+    }
+    return take_result(env, result, &native_result);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_advance(
+        JNIEnv *env, jobject self, jlong client) {
+    (void)self;
+    return step(env, client, noctium_client_advance, &native_result);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_recoveryContext(
+        JNIEnv *env, jobject self, jlong client) {
+    (void)self;
+    return step(env, client, noctium_client_recovery_context, &native_private);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_finalizedState(
+        JNIEnv *env, jobject self, jlong client) {
+    (void)self;
+    return step(env, client, noctium_client_receipt_state, &native_result);
+}
+
+JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_LocalnetBridge_sealedTransaction(
+        JNIEnv *env, jobject self, jlong client) {
+    (void)self;
+    return step(env, client, noctium_client_transaction, &native_result);
+}
+
+JNIEXPORT void JNICALL Java_org_noctium_sdk_LocalnetBridge_detach(
+        JNIEnv *env, jobject self, jlong client) {
+    (void)self;
+    int32_t status = noctium_client_detach((uint64_t)client);
+    if (status != NOCTIUM_NATIVE_OK) fail(env, status);
+}
+#endif

@@ -7,10 +7,11 @@ import java.io.File
 import java.util.UUID
 import org.json.JSONObject
 import org.noctium.sdk.NoctiumFailure
+import org.noctium.sdk.NativeProof
 import org.noctium.sdk.NativeWitness
 import org.noctium.sdk.WitnessSession
 
-class WitnessSmoke : Instrumentation() {
+open class WitnessSmoke : Instrumentation() {
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         start()
@@ -19,8 +20,7 @@ class WitnessSmoke : Instrumentation() {
     override fun onStart() {
         val result = Bundle()
         try {
-            val proofPassed = runWitness()
-            val proofResult = if (proofPassed) "Noctium Android K7 authenticated witness proof passed\n" else ""
+            val proofResult = runWitness()
             result.putString("stream", "Noctium Android witness passed\n$proofResult")
             finish(Activity.RESULT_OK, result)
         } catch (error: Exception) {
@@ -31,17 +31,38 @@ class WitnessSmoke : Instrumentation() {
         }
     }
 
-    private fun runWitness(): Boolean {
+    private fun runWitness(): String {
         val plan = targetContext.assets.open("plan.json").bufferedReader().use { JSONObject(it.readText()) }
         val attempt = "b".repeat(64)
+        val sourceBegin = beginEnvelope(attempt).put("plan", plan).bytes()
+
+        WitnessSession.open(sourceBegin).use { completeWitness(it, attempt) }
+        WitnessSession.open(sourceBegin).use { session ->
+            check(session.advance().json().getString("status") == "need_host")
+            check(session.cancel().json().getString("status") == "cancelled")
+            expectStatus(3) { session.privateRequest() }
+        }
+        expectStatus(5) { WitnessSession.open(ByteArray(1024 * 1024 + 1)).close() }
+
+        if (targetContext.assets.list("")?.contains("proof") != true) return ""
+        val directory = File(targetContext.cacheDir, "proof-${UUID.randomUUID()}")
+        try {
+            copyAsset("proof", directory)
+            return testProof(directory)
+        } finally {
+            directory.deleteRecursively()
+        }
+    }
+
+    protected fun beginEnvelope(attempt: String, namespace: String = "noctium", revision: String = "fixture-r0"): JSONObject {
         val context = JSONObject("""
             {
-              "protocolVersion":1,"namespace":"noctium","baseRevision":"fixture-r0",
+              "protocolVersion":1,"namespace":"$namespace","baseRevision":"$revision",
               "attemptId":"$attempt",
               "capabilities":[
-                {"id":"private","namespace":"noctium","keyPrefix":"cache/",
+                {"id":"private","namespace":"$namespace","keyPrefix":"cache/",
                  "operations":["private_state.read.v1","private_state.stage.v1","private_state.compare_exchange.v1"]},
-                {"id":"lookup","namespace":"noctium","keyPrefix":"lookup/","operations":["noctium.lookup.v1"]}
+                {"id":"lookup","namespace":"$namespace","keyPrefix":"lookup/","operations":["noctium.lookup.v1"]}
               ],
               "operations":[
                 {"operation":"private_state.read.v1","argumentSchema":{"key":"Key"},"resultSchema":"UIntRange<256>"},
@@ -54,22 +75,9 @@ class WitnessSmoke : Instrumentation() {
               "commitCapability":"private","limits":{"requests":64,"writes":64,"privateBytes":65536}
             }
         """.trimIndent())
-        val begin = JSONObject().put("abiVersion", 1)
+        return JSONObject().put("abiVersion", 1)
             .put("inputs", JSONObject().put("expected", "14").put("seed", "7"))
             .put("hostContext", context)
-        val sourceBegin = JSONObject(begin.toString()).put("plan", plan).bytes()
-
-        WitnessSession.open(sourceBegin).use { completeWitness(it, attempt) }
-        WitnessSession.open(sourceBegin).use { session ->
-            check(session.advance().json().getString("status") == "need_host")
-            check(session.cancel().json().getString("status") == "cancelled")
-            expectStatus(3) { session.privateRequest() }
-        }
-        expectStatus(5) { WitnessSession.open(ByteArray(1024 * 1024 + 1)).close() }
-
-        val proof = targetContext.assets.list("")?.contains("proof") == true
-        if (proof) runProof(begin.bytes(), attempt)
-        return proof
     }
 
     private fun completeWitness(session: WitnessSession, attempt: String) {
@@ -98,38 +106,41 @@ class WitnessSmoke : Instrumentation() {
         check(finished.getString("status") == "completed" && finished.getString("result") == "14")
     }
 
-    private fun runProof(begin: ByteArray, attempt: String) {
-        val directory = File(targetContext.cacheDir, "proof-${UUID.randomUUID()}")
-        check(directory.mkdir())
-        try {
-            val bundle = File(directory, "bundle")
-            copyAsset("proof/bundle", bundle)
-            val srs = targetContext.assets.open("proof/srs").use { it.readBytes() }
-            val options = targetContext.assets.open("proof/target.json").bufferedReader().use { JSONObject(it.readText()) }
-            check(options.getInt("k") == 7)
-            val descriptor = JSONObject(options.toString()).put("bundleDirectory", bundle.canonicalPath).bytes()
-            val plan = File(bundle, "witness/entrypoint.control.json").readBytes()
-            val state = """{"state":{"total":"0"}}""".toByteArray(Charsets.UTF_8)
-            val proofDescriptor = options.put("proofServiceCapability", "host.prover")
-                .put("maxResponseBytes", 1_048_576).bytes()
-            expectStatus(1) {
-                NativeWitness.open(descriptor, state, srs, plan + byteArrayOf(10), begin).close()
-            }
-            NativeWitness.open(descriptor, state, srs, plan, begin).use { invocation ->
-                expectStatus(3) { invocation.prepareProof(proofDescriptor).close() }
-                completeWitness(invocation.session, attempt)
-                invocation.prepareProof(proofDescriptor).use { native ->
-                    check(runCatching { invocation.session.advance() }.exceptionOrNull() is IllegalStateException)
-                    check(runCatching { invocation.prepareProof(proofDescriptor) }.exceptionOrNull() is IllegalStateException)
-                    val proved = native.proveLocally().json()
-                    check(proved.getString("status") == "proved")
-                    check(!proved.getBoolean("funded") && !proved.getBoolean("submitted"))
-                    check(proved.getString("publicIntentHex").isNotEmpty())
-                }
-            }
-        } finally {
-            directory.deleteRecursively()
+    protected open fun testProof(directory: File): String {
+        val attempt = "b".repeat(64)
+        prepareProof(directory, beginEnvelope(attempt).bytes(), attempt).use(::prove)
+        return "Noctium Android K7 authenticated witness proof passed\n"
+    }
+
+    protected fun prepareProof(directory: File, begin: ByteArray, attempt: String, ttl: Long? = null): NativeProof {
+        val bundle = File(directory, "bundle")
+        val srs = File(directory, "srs").readBytes()
+        val options = JSONObject(File(directory, "target.json").readText())
+        check(options.getInt("k") == 7)
+        if (ttl != null) options.put("ttl", ttl)
+        val descriptor = JSONObject(options.toString()).put("bundleDirectory", bundle.canonicalPath).bytes()
+        val plan = File(bundle, "witness/entrypoint.control.json").readBytes()
+        val state = """{"state":{"total":"0"}}""".toByteArray(Charsets.UTF_8)
+        val proofDescriptor = options.put("proofServiceCapability", "host.prover")
+            .put("maxResponseBytes", 1_048_576).bytes()
+        expectStatus(1) {
+            NativeWitness.open(descriptor, state, srs, plan + byteArrayOf(10), begin).close()
         }
+        NativeWitness.open(descriptor, state, srs, plan, begin).use { invocation ->
+            expectStatus(3) { invocation.prepareProof(proofDescriptor).close() }
+            completeWitness(invocation.session, attempt)
+            val proof = invocation.prepareProof(proofDescriptor)
+            check(runCatching { invocation.session.advance() }.exceptionOrNull() is IllegalStateException)
+            check(runCatching { invocation.prepareProof(proofDescriptor) }.exceptionOrNull() is IllegalStateException)
+            return proof
+        }
+    }
+
+    protected fun prove(native: NativeProof) {
+        val proved = native.proveLocally().json()
+        check(proved.getString("status") == "proved")
+        check(!proved.getBoolean("funded") && !proved.getBoolean("submitted"))
+        check(proved.getString("publicIntentHex").isNotEmpty())
     }
 
     private fun copyAsset(path: String, destination: File) {
@@ -143,7 +154,7 @@ class WitnessSmoke : Instrumentation() {
         }
     }
 
-    private fun expectStatus(status: Int, action: () -> Unit) {
+    protected fun expectStatus(status: Int, action: () -> Unit) {
         try {
             action()
         } catch (error: NoctiumFailure) {
@@ -153,6 +164,6 @@ class WitnessSmoke : Instrumentation() {
         error("Expected a native status")
     }
 
-    private fun ByteArray.json() = JSONObject(toString(Charsets.UTF_8))
-    private fun JSONObject.bytes() = toString().toByteArray(Charsets.UTF_8)
+    protected fun ByteArray.json() = JSONObject(toString(Charsets.UTF_8))
+    protected fun JSONObject.bytes() = toString().toByteArray(Charsets.UTF_8)
 }
