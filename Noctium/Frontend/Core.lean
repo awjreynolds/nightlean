@@ -177,6 +177,8 @@ scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
 scoped syntax "fromBytes32(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "fromBytes(" nltype "," nlexpr ")" : nlexpr
+scoped syntax "serialize(" nlexpr "," num ")" : nlexpr
+scoped syntax "deserialize(" nltype "," nlexpr ")" : nlexpr
 scoped syntax "byteAt(" nlexpr "," num ")" : nlexpr
 scoped syntax "degradeToNative(" nlexpr ")" : nlexpr
 scoped syntax "jubjubScalarFromNative(" nlexpr ")" : nlexpr
@@ -483,6 +485,63 @@ private def commonType (stx : Syntax) (left right : Ty) : CommandElabM Ty := do
   | .native, .uint _ | .uint _, .native => pure .native
   | _, _ => throwErrorAt stx "Noctium expression type mismatch"
 
+private def scalarWireWidth : Ty → Option Nat
+  | .native | .jubjubScalar => some 32
+  | .bool => some 1
+  | .uint 0 => some 0
+  | .uint maximum => some (maximum.log2 / 8 + 1)
+  | .bytes length => some length
+  | .foreign (.base _) | .foreign (.scalar _) => some 32
+  | _ => none
+
+private def serializeScalar (ty : Ty) (value : TSyntax `term) : CommandElabM (TSyntax `term) :=
+  match ty with
+  | .bytes _ => pure value
+  | .native | .jubjubScalar => `(Noctium.Expr.toBytes32 $value)
+  | .foreign (.base _) | .foreign (.scalar _) => `(Noctium.Expr.foreignToBytes $value)
+  | .bool =>
+    `(Noctium.Expr.select $value (Noctium.Expr.bytesLiteral 1 [1]) (Noctium.Expr.bytesLiteral 1 [0]))
+  | .uint _ => do
+    let width := (scalarWireWidth ty).getD 0
+    `(Noctium.Expr.sliceBytes (Noctium.Expr.toBytes32 (Noctium.Expr.cast .native $value))
+      0 $(natTerm width))
+  | _ => throwError "serialization requires a scalar or fixed bytes"
+
+private def deserializeNative (frame : TSyntax `term) : CommandElabM (TSyntax `term) := do
+  let bytesName := stringTerm "$deserializeBytes"
+  let resultName := stringTerm "$deserializeResult"
+  let encodedName := stringTerm "$deserializeEncoded"
+  let input ← `(@Noctium.Expr.ref (.bytes 32) $bytesName)
+  let result ← `(@Noctium.Expr.ref .native $resultName)
+  let encoded ← `(@Noctium.Expr.ref (.bytes 32) $encodedName)
+  -- The existing primitive reduces modulo the field, so check the original
+  -- encoding against the round trip before returning the Native value.
+  `(Noctium.Expr.letE $bytesName $frame
+    (Noctium.Expr.letE $resultName (Noctium.Expr.fromBytes32 (target := .native) $input)
+      (Noctium.Expr.letE $encodedName (Noctium.Expr.toBytes32 $result)
+        (Noctium.Expr.assertE
+          (Noctium.Expr.eq (Noctium.Expr.bytesField $encoded 0) (Noctium.Expr.bytesField $input 0))
+          (Noctium.Expr.assertE
+            (Noctium.Expr.eq (Noctium.Expr.bytesField $encoded 1) (Noctium.Expr.bytesField $input 1))
+            $result)))))
+
+private def deserializeScalar (ty : Ty) (width sourceWidth : Nat) (value : TSyntax `term) :
+    CommandElabM (TSyntax `term) := do
+  let frame ← if width == sourceWidth then pure value
+    else `(Noctium.Expr.sliceBytes $value 0 $(natTerm width))
+  match ty with
+  | .bytes _ => pure frame
+  | .bool =>
+    `(Noctium.Expr.eq (Noctium.Expr.cast (.uint 1) (Noctium.Expr.bytesAt $value 0))
+      (Noctium.Expr.uint 1 1))
+  | .uint _ => do
+    let target ← tyTerm ty
+    `(Noctium.Expr.cast $target (Noctium.Expr.fromBytes (target := .native) $frame))
+  | .native => deserializeNative frame
+  | .jubjubScalar => `(Noctium.Expr.fromBytes32 (target := .jubjubScalar) $frame)
+  | .foreign kind => `(Noctium.Expr.foreignFromBytes $(← foreignKindTerm kind) $frame)
+  | .jubjubPoint => throwError "deserialization requires a scalar or fixed bytes"
+
 /-- A new partial scalar operation must execute even beneath a total wrapper.
 Mark every subtraction conservatively, including total native-field subtraction. -/
 private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
@@ -490,7 +549,9 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| cast($_:nltype, $_:nlexpr)) => Bool.true
   | `(nlexpr| sub($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| inv($_:nlexpr)) => Bool.true
-  | `(nlexpr| fromBytes32($_:nltype, $_:nlexpr)) => Bool.true
+  | `(nlexpr| fromBytes32($_:nltype, $_:nlexpr))
+  | `(nlexpr| deserialize($_:nltype, $_:nlexpr)) => Bool.true
+  | `(nlexpr| serialize($value, $_:num)) => hasPartialScalar value
   | `(nlexpr| fromBytes($_:nltype, $value:nlexpr)) => hasPartialScalar value
   | `(nlexpr| assertThen($_:nlexpr, $_:nlexpr)) => Bool.true
   | `(nlexpr| let $_:ident := $value:nlexpr in $body:nlexpr) =>
@@ -629,6 +690,29 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     if length > maxBytesLength then
       throwErrorAt stx s!"byte string length exceeds the maximum of {maxBytesLength}"
     pure (target, ← `(Noctium.Expr.fromBytes (target := $(← tyTerm target)) $value))
+  | `(nlexpr| serialize($value, $size:num)) => do
+    let (ty, value) ← expression env value
+    let some width := scalarWireWidth ty
+      | throwErrorAt stx "serialize requires a scalar or fixed bytes"
+    let length := size.getNat
+    unless width ≤ length && length ≤ maxBytesLength do
+      throwErrorAt size s!"serialize requires a byte length from {width} through {maxBytesLength}"
+    let encoded ← serializeScalar ty value
+    if width == length then return (.bytes length, encoded)
+    let padding := natTerm (length - width)
+    let padded ← `(Noctium.Expr.concatBytes (leftLength := $(natTerm width))
+      (rightLength := $padding) $encoded
+      (Noctium.Expr.bytesLiteral $padding (List.replicate $padding 0)))
+    pure (.bytes length, padded)
+  | `(nlexpr| deserialize($target:nltype, $value)) => do
+    let ty ← readTy target
+    let some width := scalarWireWidth ty
+      | throwErrorAt target "deserialize requires a scalar or fixed bytes"
+    let (sourceTy, value) ← expression env value
+    let .bytes length := sourceTy | throwErrorAt stx "deserialize requires a Bytes expression"
+    unless width ≤ length do
+      throwErrorAt stx s!"deserialize requires at least {width} bytes"
+    pure (ty, ← deserializeScalar ty width length value)
   | `(nlexpr| byteAt($value, $index:num)) => do
     let (valueTy, value) ← expression env value
     let .bytes length := valueTy
@@ -1594,11 +1678,10 @@ private def serializeEventField (env : Bindings) (source : TSyntax `nlexpr) :
     EventFieldType → CommandElabM (TSyntax `term)
   | .bytes length => checkedExpression env source (.bytes length)
   | .flag => do
-    let flag ← checkedExpression env source .bool
-    `(Noctium.Expr.select $flag (Noctium.Expr.bytesLiteral 1 [1]) (Noctium.Expr.bytesLiteral 1 [0]))
+    serializeScalar .bool (← checkedExpression env source .bool)
   | .amount => do
-    let amount ← checkedExpression env source (.uint (2 ^ 128 - 1))
-    `(Noctium.Expr.sliceBytes (Noctium.Expr.toBytes32 (Noctium.Expr.cast .native $amount)) 0 16)
+    let ty := Ty.uint (2 ^ 128 - 1)
+    serializeScalar ty (← checkedExpression env source ty)
 
 private partial def concatenateEventFields : List (Nat × TSyntax `term) →
     CommandElabM (TSyntax `term)
