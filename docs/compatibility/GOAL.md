@@ -127,6 +127,8 @@ The [source proof-audit foundation](../development/proof-registration.md) provid
 
 [Swift witness sessions](../development/swift-witness-sdk.md) run compiler-generated host-control plans through the shared Rust C ABI. The authenticated K7 witness produced local proofs, finalized development transactions and seedless journal recovery on macOS and the iOS simulator. Both runs committed staged private state after observing the finalized call. The iPhone slice links. Physical-device execution, additional wallet adapters, Kotlin and TypeScript/WASM remain open. [Public receipts](../development/swift-localnet-receipts.json)
 
+Swift also generated K9 proofs for the original one-time claim from explicit private inputs and finalized both calls. The native checker rejected replay on the exact exported states. [Original claim receipts](../development/swift-private-claim-receipts.json)
+
 [Explicit typed copy](../development/native-copy.md) closes the remaining non-deprecated opcode name in the pinned registry. The compiler registers all 40 non-deprecated names across the scoped source paths. The upstream enum also lists seven deprecated names. Full type and overload coverage, compiler assurance and application flows remain separate gates.
 
 [Typed committed call arguments](../development/committed-returns.md#native-call-arguments) now cover scalar families and bounded bytes in direct entrypoints. The Rust checker exercises mixed ordered fields, preserves an independent private witness, and rejects a reordered header and malformed short byte chunk. Direct typed call declarations, full argument overload qualification and hosted argument authoring remain open.

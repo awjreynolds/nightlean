@@ -81,6 +81,25 @@ public final class NativeWitness {
 public final class NativeProof {
     let handle: UInt64
 
+    /// Prepares an authenticated entrypoint using the plan's declared inputs and initial state.
+    public convenience init(descriptor: Data, configuration: Data, parameters: Data) throws {
+        var session: UInt64 = 0
+        try withEntropy { entropy, entropySize in
+            let status = descriptor.withBytePointer { options, optionsSize in
+                configuration.withBytePointer { inputs, inputsSize in
+                    parameters.withBytePointer { srs, srsSize in
+                        noctium_native_begin(
+                            options, optionsSize, inputs, inputsSize,
+                            srs, srsSize, entropy, entropySize, &session
+                        )
+                    }
+                }
+            }
+            try WitnessSession.check(status)
+        }
+        self.init(handle: session)
+    }
+
     fileprivate init(handle: UInt64) {
         self.handle = handle
     }

@@ -61,6 +61,19 @@ Open `DevelopmentLocalnet` with the localnet configuration and a funded public d
 
 To resume, reopen the same journal, call `DevelopmentTransaction.recover` with the client descriptor and previously saved context, then drive the initial load request with `advance()` and `resolve`. Recovery needs no wallet seed or proving material. Keep the recovery context and journal private. Use a worker and retain the transaction object until unsettled requests and durable acknowledgements are resolved.
 
+## Prove an entrypoint with explicit inputs
+
+Use `NativeProof(descriptor:configuration:parameters:)` for a contract whose application already holds the input values. Pass the full native proof descriptor, including `bundleDirectory`, and a private JSON configuration with the plan's `inputs` and initial `state`. The native runtime authenticates the bundle and parameters before parsing that configuration.
+
+```swift
+let proof = try NativeProof(
+    descriptor: proofDescriptor, configuration: privateConfiguration, parameters: srs
+)
+let publicIntent = try proof.proveLocally()
+```
+
+For a development call, use `startDevelopmentCall(descriptor:setup:)` to supply the private journal setup explicitly. The original private one-time claim uses this path. [Native C ABI formats](../../runtime/include/noctium_native.h) · [Private claim source](../../examples/PrivateClaim.lean)
+
 ## Qualification
 
 ```sh
@@ -80,6 +93,12 @@ Both tests passed on Apple Silicon macOS and the arm64 iOS 27.0 simulator. The i
 The development transaction test uses the same K7 source witness. It deploys and calls the contract on the isolated chain, rejects an altered signing request, and requires durable detach. It reopens the journal with a fresh client and adapter using no wallet seed, checks the exact recovered sealed bytes, and commits staged private state after finality. Both runs match all 1,482 finalized contract-state bytes by SHA-256 with the reference typed-witness run. The macOS deployment and call finalized at blocks 28961 and 28964. The iOS simulator deployment and call finalized at 28977 and 28980. [Public receipts](swift-localnet-receipts.json)
 
 To run this test, build with `--localnet`. Set `NOCTIUM_SWIFT_LOCALNET_FIXTURE` to the proof fixture directory with additional `client.json` and `localnet.json` files in the native header's formats. The test uses the funded public development seed and creates its own journal under the fixture directory. Use `TEST_RUNNER_NOCTIUM_SWIFT_LOCALNET_FIXTURE` with Xcode. Execute funded integration tests against the same seed serially.
+
+The original one-time claim regression uses `NOCTIUM_SWIFT_PRIVATE_CLAIM_FIXTURE` (or `TEST_RUNNER_NOCTIUM_SWIFT_PRIVATE_CLAIM_FIXTURE` under Xcode). Supply `proof.json` with the full proof descriptor, `srs` with the K9 parameters, `runtime-config.json` with the published synthetic claim inputs, and the same localnet and client configuration files. Run the `testOriginalPrivateClaimLocalnet` test. It rejects an altered secret, verifies the proof, finalizes deployment and claim, and exports the finalized public state.
+
+Run `noctium-runtime ARTIFACT_DIRECTORY --check-state STATE_FILE --expect-rejection` with the matching native profile. The artifact directory holds the bundle plan as `source-plan.json`, relation as `zkir/claim.zkir`, `ledger.params`, the original `runtime-config.json`, and `native-contract.json` with the finalized call's `address`. This re-executes the same claim against the Swift test's exported state in the native checker. [Private claim fixture workflow](native-contract.md#compile-the-actual-lean-source)
+
+The K9 claim finalized at block 29056 on macOS and 29073 in the iOS simulator. Both captured 1,874-byte public states match the reference private-claim digest. The native checker rejected replay against both exported states without broadcast. [Original private claim receipts](swift-private-claim-receipts.json)
 
 Physical-device execution and production wallet adapters remain open. [Swift smoke tests](../../sdk/swift/Tests/NoctiumTests/WitnessSessionTests.swift) · [Follow-up issue](https://github.com/awjreynolds/noctium/issues/87)
 

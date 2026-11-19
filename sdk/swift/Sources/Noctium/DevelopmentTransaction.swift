@@ -39,10 +39,19 @@ public final class DevelopmentLocalnet {
 
 public extension NativeProof {
     func startDevelopmentDeployment(descriptor: Data, setup: Data) throws -> DevelopmentTransaction {
+        try startDevelopment(kind: 0, descriptor: descriptor, setup: setup)
+    }
+
+    /// Starts a call prepared from explicit inputs. Setup is the host's private journal configuration.
+    func startDevelopmentCall(descriptor: Data, setup: Data) throws -> DevelopmentTransaction {
+        try startDevelopment(kind: 1, descriptor: descriptor, setup: setup)
+    }
+
+    private func startDevelopment(kind: UInt32, descriptor: Data, setup: Data) throws -> DevelopmentTransaction {
         var client: UInt64 = 0
         let status = descriptor.withBytePointer { config, configSize in
             setup.withBytePointer { privacy, privacySize in
-                noctium_client_start(handle, 0, config, configSize, privacy, privacySize, &client)
+                noctium_client_start(handle, kind, config, configSize, privacy, privacySize, &client)
             }
         }
         try WitnessSession.check(status)

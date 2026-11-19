@@ -39,6 +39,65 @@ final class WitnessSessionTests: XCTestCase {
     }
 
 #if NOCTIUM_LOCALNET
+    func testOriginalPrivateClaimLocalnet() throws {
+        guard let directory = ProcessInfo.processInfo.environment["NOCTIUM_SWIFT_PRIVATE_CLAIM_FIXTURE"] else {
+            throw XCTSkip("Set NOCTIUM_SWIFT_PRIVATE_CLAIM_FIXTURE for the original private claim")
+        }
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        let id = freshAttempt()
+        let namespace = "swift-claim-\(id.prefix(16))"
+        var localnetConfig = try decode(Data(contentsOf: root.appendingPathComponent("localnet.json")))
+        localnetConfig["journalDirectory"] = root.appendingPathComponent("journal-\(id)").path
+        let localnet = try DevelopmentLocalnet(
+            configuration: encode(localnetConfig), developmentSeed: Data(repeating: 0, count: 31) + Data([1])
+        )
+        let context = try decode(localnet.context())
+        let blockTime = try XCTUnwrap(context["blockTime"] as? String)
+        var options = try decode(Data(contentsOf: root.appendingPathComponent("proof.json")))
+        options["ttl"] = try XCTUnwrap(UInt64(blockTime)) + 1800
+        let proofDescriptor = try encode(options)
+        let parameters = try Data(contentsOf: root.appendingPathComponent("srs"))
+        let configuration = try Data(contentsOf: root.appendingPathComponent("runtime-config.json"))
+        var invalid = try decode(configuration)
+        var inputs = try XCTUnwrap(invalid["inputs"] as? [String: Any])
+        XCTAssertNotEqual(inputs["secret"] as? String, "0")
+        inputs["secret"] = "0"
+        invalid["inputs"] = inputs
+        XCTAssertThrowsError(try NativeProof(
+            descriptor: proofDescriptor, configuration: encode(invalid), parameters: parameters
+        )) {
+            XCTAssertEqual($0 as? WitnessSession.Failure, .nativeStatus(1))
+        }
+        let proof = try NativeProof(
+            descriptor: proofDescriptor, configuration: configuration, parameters: parameters
+        )
+        XCTAssertEqual(try decode(proof.proveLocally())["status"] as? String, "proved")
+        let descriptor = try Data(contentsOf: root.appendingPathComponent("client.json"))
+        let deployment = try proof.startDevelopmentDeployment(
+            descriptor: descriptor, setup: developmentSetup(namespace: "\(namespace)-deploy")
+        )
+        let deployReceipt = try finalize(deployment, on: localnet)
+        XCTAssertEqual(deployReceipt["event"] as? String, "Deploy")
+        try deployment.close()
+
+        let call = try proof.startDevelopmentCall(
+            descriptor: descriptor, setup: developmentSetup(namespace: "\(namespace)-call")
+        )
+        let callReceipt = try finalize(call, on: localnet)
+        XCTAssertEqual(callReceipt["event"] as? String, "Call")
+        XCTAssertEqual(callReceipt["contractAddress"] as? String, deployReceipt["contractAddress"] as? String)
+        let state = try call.finalizedState()
+        let digest = SHA256.hash(data: state).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(digest, "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3")
+        XCTAssertEqual(callReceipt["contractStateSha256"] as? String, digest)
+        try call.close()
+
+        let stateFile = "\(namespace).state"
+        try state.write(to: root.appendingPathComponent(stateFile), options: .withoutOverwriting)
+        let record = try encode(["deployment": deployReceipt, "call": callReceipt, "stateFile": stateFile])
+        print("NOCTIUM_SWIFT_PRIVATE_CLAIM \(String(decoding: record, as: UTF8.self))")
+    }
+
     func testDevelopmentTransactionRecoversTypedPrivateCommit() throws {
         guard let directory = ProcessInfo.processInfo.environment["NOCTIUM_SWIFT_LOCALNET_FIXTURE"] else {
             throw XCTSkip("Set NOCTIUM_SWIFT_LOCALNET_FIXTURE for an isolated development run")
@@ -59,18 +118,9 @@ final class WitnessSessionTests: XCTestCase {
         )
         XCTAssertEqual(try decode(proof.proveLocally())["status"] as? String, "proved")
 
-        let deployNamespace = "\(namespace)-deployment"
-        let deploymentSetup = try encode([
-            "hostContext": [
-                "protocolVersion": 1, "namespace": deployNamespace, "baseRevision": "r0",
-                "attemptId": freshAttempt(), "operations": [], "providers": [],
-                "commitCapability": "store",
-                "capabilities": [["id": "store", "namespace": deployNamespace, "keyPrefix": "fixture/",
-                    "operations": ["private_state.stage.v1", "private_state.compare_exchange.v1"]]],
-            ] as [String: Any],
-            "stages": [],
-        ])
-        let deploy = try proof.startDevelopmentDeployment(descriptor: descriptor, setup: deploymentSetup)
+        let deploy = try proof.startDevelopmentDeployment(
+            descriptor: descriptor, setup: developmentSetup(namespace: "\(namespace)-deployment")
+        )
         let initial = try deploy.send(.prepare)
         XCTAssertThrowsError(try deploy.close())
         try drive(deploy, on: localnet, from: initial)
@@ -142,6 +192,27 @@ final class WitnessSessionTests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.5)
         }
         throw WitnessSession.Failure.invalidResult
+    }
+
+    private func finalize(_ transaction: DevelopmentTransaction, on localnet: DevelopmentLocalnet) throws -> [String: Any] {
+        try drive(transaction, on: localnet, from: transaction.send(.prepare))
+        try drive(transaction, on: localnet, from: transaction.send(.submit))
+        let receipt = try observe(transaction, on: localnet)
+        XCTAssertEqual(try drive(transaction, on: localnet, from: transaction.send(.commit))["phase"] as? String, "Committed")
+        return receipt
+    }
+
+    private func developmentSetup(namespace: String) throws -> Data {
+        try encode([
+            "hostContext": [
+                "protocolVersion": 1, "namespace": namespace, "baseRevision": "r0",
+                "attemptId": freshAttempt(), "operations": [], "providers": [],
+                "commitCapability": "store",
+                "capabilities": [["id": "store", "namespace": namespace, "keyPrefix": "fixture/",
+                    "operations": ["private_state.stage.v1", "private_state.compare_exchange.v1"]]],
+            ] as [String: Any],
+            "stages": [],
+        ])
     }
 
     private func freshAttempt() -> String {

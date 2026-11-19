@@ -1,0 +1,82 @@
+{
+  "bundleManifestSha256": "f8dceb0d2bff6b732df28df7dbb4cc0fdac2a31ca1d43885ce0e2355522f49e7",
+  "compilerRevision": "edd47a3c51676d6a7a9749293d193f10812b055c",
+  "date": "2026-11-19",
+  "entrypoint": "PrivateClaim.claim",
+  "k": 9,
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "proofParametersSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+  "rows": 297,
+  "runs": [
+    {
+      "alteredSecretRejected": true,
+      "call": {
+        "blockHash": "56b743811138f343a8af48854d7e267c6094a2797284133212645087d1727361",
+        "contractAddress": "3b9d473f711cbebfa397faead6e53df26fb1b25193744f81f4d0d9d95b3ef8bb",
+        "contractStateBytes": 1874,
+        "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "event": "Call",
+        "extrinsicHash": "ba634d09f16a7f67a6a960ec76885ee4d16e51975a395f1948469d3bd1141dd9",
+        "extrinsicIndex": 4,
+        "finalizedHash": "56b743811138f343a8af48854d7e267c6094a2797284133212645087d1727361",
+        "finalizedHeight": "29056",
+        "height": "29056",
+        "intentId": "6114de37bb2f9e33999e790ff571749d22d3ea93aeb547829841421895cfb89a",
+        "transactionId": "1585556458f1113fdc86e3ed8896adbc84102c7c41d35f8986dd84aec9ebf38c"
+      },
+      "deployment": {
+        "blockHash": "add406b75f90d13e89aed7900baf13b9d14f8f5f0edcc1c0982af6948ec52c75",
+        "contractAddress": "3b9d473f711cbebfa397faead6e53df26fb1b25193744f81f4d0d9d95b3ef8bb",
+        "contractStateBytes": 1689,
+        "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+        "event": "Deploy",
+        "extrinsicHash": "a83602d1211345bb6250ca3846640e34345578ac653bcb57a2f928938aa4320d",
+        "extrinsicIndex": 4,
+        "finalizedHash": "add406b75f90d13e89aed7900baf13b9d14f8f5f0edcc1c0982af6948ec52c75",
+        "finalizedHeight": "29053",
+        "height": "29053",
+        "intentId": "5532fb51f821ceefe2f01bc8299546b2e3aa99a69408516372ae3186bbfe6f10",
+        "transactionId": "c3801916cab103cff3a4bf076935be364ea519f7c9430cf9ba711003652b0388"
+      },
+      "nativeReplayRejected": true,
+      "platform": "macOS arm64",
+      "replaySubmitted": false
+    },
+    {
+      "alteredSecretRejected": true,
+      "call": {
+        "blockHash": "f4e82159b0bcf94f5666af27a29443faf55c5c60e681873d41e7c500d1247dfd",
+        "contractAddress": "00076437e63556b491f7f5fceeae99a37ffe93de689042ca83a0c01677f2d993",
+        "contractStateBytes": 1874,
+        "contractStateSha256": "d03deaed2a47e077412acd4db0fb3069e47cd41d05472eebb3c8182f0c938dc3",
+        "event": "Call",
+        "extrinsicHash": "efaa894b42805dde21e45fdd9fb7f2d23082da96da33cdbcb2b8abb6d6b13aa4",
+        "extrinsicIndex": 4,
+        "finalizedHash": "f4e82159b0bcf94f5666af27a29443faf55c5c60e681873d41e7c500d1247dfd",
+        "finalizedHeight": "29073",
+        "height": "29073",
+        "intentId": "a81f63e1a89caa0851b687083419d4b72fa1db6f8eb09d5e99207f4df9ed9295",
+        "transactionId": "450f292d9df04cf551ce0d95c648f0f7b043300e712d427168d5e8b0650ece51"
+      },
+      "deployment": {
+        "blockHash": "438640a2e5d6225f9b42e46f9c685a94edaf798690c7db7ae607af8d56fc187d",
+        "contractAddress": "00076437e63556b491f7f5fceeae99a37ffe93de689042ca83a0c01677f2d993",
+        "contractStateBytes": 1689,
+        "contractStateSha256": "4452a624accc739ff2b4dfcc050a514a1d2a996a7f7d9fca11c5cccea402f06e",
+        "event": "Deploy",
+        "extrinsicHash": "a7c6fb117eb99349bdc785607730fd17fa7de723643f080f1d236f50e54faea1",
+        "extrinsicIndex": 4,
+        "finalizedHash": "438640a2e5d6225f9b42e46f9c685a94edaf798690c7db7ae607af8d56fc187d",
+        "finalizedHeight": "29070",
+        "height": "29070",
+        "intentId": "d33763ab220fba1fcc64402b5a0c6303568c2499713d06d910edf886dc7a8012",
+        "transactionId": "c350135177baa16ea1fd5bb1d87f866b7c63142660f112215a15785320886870"
+      },
+      "nativeReplayRejected": true,
+      "platform": "iOS 27.0 simulator arm64",
+      "replaySubmitted": false
+    }
+  ],
+  "schemaVersion": 1,
+  "source": "examples/PrivateClaim.lean"
+}
