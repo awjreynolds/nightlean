@@ -68,6 +68,14 @@ LEAN
 expect_failure "$cli" compile "$scratch/later-error.lean" --output "$scratch/later-output"
 grep -F 'Noctium expression type mismatch' "$scratch/stdout" > /dev/null
 test ! -e "$scratch/later-output"
+
+cat > "$scratch/early-exit.lean" <<'LEAN'
+import Noctium.Frontend
+run_cmd liftM (IO.Process.exit 0 : IO Unit)
+LEAN
+expect_failure "$cli" compile "$scratch/early-exit.lean" --output "$scratch/early-output"
+grep -F 'Lean exited before producing Noctium artifacts' "$scratch/stderr" > /dev/null
+test ! -e "$scratch/early-output"
 test -z "$(find "$scratch" -maxdepth 1 -type d -name '.noctium-*' -print)"
 
 cat > "$scratch/traversal.lean" <<'LEAN'

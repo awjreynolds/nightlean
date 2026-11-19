@@ -585,6 +585,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
   let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
   let witnesses := (witnessRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·.circuitName)
   let mut witnessMetadata : Array Json := #[]
+  let mut standaloneWitnesses : Array (String × Witness.Compiled) := #[]
   for name in controls do
     validateArtifactName name
     let plan ← unsafe evalConstCheck Json ``Lean.Json name
@@ -612,6 +613,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       | .ok value => pure value
       | .error diagnostic => failDiagnostic diagnostic
     let witnessPrefix := artifactName info.circuitName
+    standaloneWitnesses := standaloneWitnesses.push (info.circuitName.toString, compiled)
     lowered := lowered.push (witnessPrefix ++ ".witness.json", compiled.binding.compress)
     lowered := lowered.push (witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
     if let some text := info.observationArtifact? then
@@ -635,13 +637,9 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       | .error d => failDiagnostic d
       | .ok json =>
         lowered := lowered.push (nativeCircuitFile name ep, json.pretty)
-        let compiledWitness? ← if let some info := witnesses.find? (·.circuitName.toString == ep.circuit.name) then do
-            let program ← match moduleWitnessProgramFor moduleOutputs info with
-              | some fresh => pure fresh
-              | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
-            match Witness.compile program info.exportName info.circuitName.toString info.outputName with
-            | .ok value => pure (some value)
-            | .error diagnostic => failDiagnostic diagnostic
+        let compiledWitness? ← if let some (_, compiled) :=
+            standaloneWitnesses.find? (fun (circuitName, _) => circuitName == ep.circuit.name) then
+            pure (some compiled)
           else if let some info := circuitRegistry.getState (← getEnv) |>.find?
               (fun info => info.declName.toString == ep.circuit.name && info.stateProgram?.isSome) then do
             let some (sourceName, exportName) := info.stateProgram? | throwError "missing ledger witness source"

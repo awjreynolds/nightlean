@@ -1,6 +1,6 @@
 # Compiler optimisation strategy
 
-One frontend pass has shipped under [issue 85](https://github.com/awjreynolds/noctium/issues/85). The OpenZeppelin workload took 65.94 seconds before the change and 41.29 seconds after it, with identical artifacts. The remaining candidates are prioritized by measured impact. [Follow-up measurements](../development/oz-compile-performance.md#single-pass-noctium-follow-up)
+The OpenZeppelin workload took 65.94 seconds before removing the extra frontend pass, 41.29 seconds with one pass, and 38.90 seconds with witness compilation reuse. The artifacts match byte for byte. [Optimization issue](https://github.com/awjreynolds/noctium/issues/85) · [Follow-up measurements](../development/oz-compile-performance.md#single-pass-noctium-follow-up)
 
 When needed, start with one phase profile of the affected compile. Then select the requested artifacts before lowering and remove measured repeated work within one compilation. Repeated range checks on the same immutable operand are a separate circuit candidate. Each change needs a measurable outcome and a small rejection case below.
 

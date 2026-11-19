@@ -66,6 +66,8 @@ private def compile (opts : Options) (source profileLiteral : String) : IO IO.Pr
     let result ← runFrontend opts.input source
       s!"#noctium_compile_target {directory} {profileLiteral} {display}"
     if result.exitCode == 0 then
+      unless ← (stage / "noctium.json").pathExists do
+        throw (IO.userError "Lean exited before producing Noctium artifacts")
       -- Publish the complete bundle only after Lean has reported all source diagnostics.
       IO.FS.rename stage path
     pure result

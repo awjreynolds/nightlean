@@ -21,8 +21,9 @@ These timings cover source processing and emitted artifacts. Noctium emits 16 na
 | --- | ---: | ---: | ---: |
 | Two Lean passes, `7643dc6` | 65.94 s | 62.96 s | 1.40 s |
 | One Lean pass | 41.29 s | 39.51 s | 0.71 s |
+| One Lean pass and witness compilation reuse | 38.90 s | 35.46 s | 0.83 s |
 
-The single-pass CLI saved 24.65 seconds (37%) in one matched run per version on the same M3 Max. Both generated 93 byte-identical files totaling 7,697,562 bytes. The CLI publishes the bundle directory after Lean exits successfully. A late source error leaves no output directory or staging files, and a nonempty destination stays untouched. [Optimization issue](https://github.com/awjreynolds/noctium/issues/85)
+The combined changes saved 27.04 seconds (41%) in one matched run per version on the same M3 Max. The exporter reused 10 compiled witness plans when binding them to ledger entrypoint relations. All three runs generated 93 byte-identical files totaling 7,697,562 bytes. The CLI publishes the bundle directory after Lean exits successfully with a manifest. A late source error or early exit leaves no output directory or staging files, and a nonempty destination stays untouched. [Optimization issue](https://github.com/awjreynolds/noctium/issues/85)
 
 An isolated `transferFrom` sizing experiment under [issue 74](https://github.com/awjreynolds/noctium/issues/74) removed 41 of 183 identical-operand, identical-width `constrain_bits` instructions. Pinned `mock-compile` measured 63,125 to 61,813 rows (2.1% fewer), with K16 in both cases. The compiler still emits every original range check.
 
