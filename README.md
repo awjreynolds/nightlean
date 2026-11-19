@@ -42,7 +42,7 @@ lake exe noctium compile examples/BoundedScalars.lean --output build/bounded
 
 The output includes the standalone `boundedRelation.zkir`, contract-call `BoundedScalars.apply.zkir`, runtime plan `BoundedScalars.apply.impact.json`, and `noctium.json` manifest. Use a new or empty output directory for each compile. The CLI publishes the complete directory after Lean succeeds. This compiler workflow needs no Rust, Node or running chain. Compile trusted Lean source because imports and elaborators execute development code.
 
-For packaging a contract, `--emit ledger --emit witness` selects the ledger relations, Impact plans and their witness artifacts. See [compiler output roles](docs/development/portable-artifacts.md#select-compiler-outputs).
+For packaging a contract, `--emit ledger --emit witness` selects the ledger relations, Impact plans and their witness artifacts. Add `--bindings rust` for typed Rust witness modules. See [compiler output roles](docs/development/portable-artifacts.md#select-compiler-outputs).
 
 For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 

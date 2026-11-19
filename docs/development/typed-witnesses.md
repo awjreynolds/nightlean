@@ -162,6 +162,22 @@ Drive `advance`, `private_request` and `resume_typed` until source execution com
 
 [`runtime/tests/witness_execution_public.rs`](../../runtime/tests/witness_execution_public.rs) compiles against public crate APIs alone. Its integration test requires authenticated retained artifacts and public proving parameters, supplied through the environment. It covers source callbacks, corrected retries, invocation mismatch, changed SRS, local proving and the consuming client handoff.
 
+## Generate a Rust witness module
+
+```sh
+lake exe noctium compile examples/PrivateStateCounter.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --emit witness --bindings rust --output build/private-counter
+```
+
+Include `bindings/rust/NoctiumExamples.PrivateStateCounter.advance.rs` as a module in a crate using `noctium-runtime` and `serde_json`. Keep the module with its artifact directory so Rust resolves the embedded control file. The generated `Inputs { arg_expected: 1 }` holds original source arguments. `Inputs::from_target` starts a frozen deployment target. `Inputs::begin_contract_operation` uses an admitted current-state token. Both check the exact control bytes in the authenticated bundle before calling the SDK. The packager verifies the binding embedded in those bytes.
+
+Provider helpers such as `reply_NoctiumExamples_dnextValue` take the current request, attempt ID and Rust result value. They check the declared provider, operation, capability and result schema. The SDK still validates the pending request, attempt, argument and result values. The host supplies its own capabilities and storage services.
+
+The module uses Rust booleans, fixed byte arrays, Unit and unsigned integers through 128 bits. Wider integers and fields use decimal strings. Jubjub values use decimal strings or a coordinate pair. Nominal aggregates and foreign values use schema-checked JSON. The host still owns private values and decides how to store them.
+
+## Native C/C++ handoff
+
 The additive C entrypoints live in [`noctium_native.h`](../../runtime/include/noctium_native.h) and [`noctium_control.h`](../../runtime/include/noctium_control.h):
 
 1. `noctium_native_witness_target_begin` creates the bounded target context from authenticated artifacts, state-only configuration and explicit entropy.

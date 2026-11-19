@@ -3,6 +3,7 @@ import Noctium.Frontend
 import Noctium.Backend.Zkir
 import Noctium.Target
 import Noctium.ArtifactRole
+import Noctium.RustBinding
 import Noctium.Types.ValueSchema
 
 namespace Noctium.Compiler
@@ -580,7 +581,8 @@ elab "#noctium_check_target" profileJson:str : command => do
   unsafe checkTarget profile
 
 private def compileArtifacts (directory : String) (profile : TargetProfile)
-    (displayDirectory : String := directory) (roles : List ArtifactRole := []) : CommandElabM Unit := do
+    (displayDirectory : String := directory) (roles : List ArtifactRole := [])
+    (rustBindings : _root_.Bool := Bool.false) : CommandElabM Unit := do
   let moduleOutputs ← unsafe rebuildModuleOutputs
   let (circuits, contracts) ← unsafe inspectWithModules moduleOutputs
   let emit := fun role => roles.isEmpty || roles.contains role
@@ -677,6 +679,11 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
           let witnessPrefix := artifactName name ++ "." ++ ep.name
           lowered := lowered.push (.witness, witnessPrefix ++ ".witness.json", compiled.binding.compress)
           lowered := lowered.push (.witness, witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
+          if rustBindings then
+            let code ← match RustBinding.generate (witnessPrefix ++ ".witness.control.json") compiled.binding with
+              | .ok value => pure value
+              | .error message => throwError "invalid Rust witness interface: {message}"
+            lowered := lowered.push (.rustBinding, "bindings/rust/" ++ witnessPrefix ++ ".rs", code)
           witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson ep.circuit.name),
             ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
             ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
@@ -684,6 +691,8 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       let planJson := nativePlanJson profile name contract.state contract.constructor ep plan (emit .standalone)
       lowered := lowered.push (.ledger, nativePlanFile name ep, planJson.pretty)
   if lowered.isEmpty then throwError "source has no artifacts for the selected roles"
+  if rustBindings && !(lowered.any (·.1 == .rustBinding)) then
+    throwError "--bindings rust requires a ledger entrypoint with a host witness"
   unless uniqueNames (lowered.toList.map (·.2.1)) do
     throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
   let contractMetadata := contracts.map fun (name, contract) =>
@@ -717,11 +726,12 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       ("name", toJson name.toString), ("file", toJson (artifactName name ++ ".control.json")),
       ("nativeGuardQualified", toJson Bool.false)]))]
   let witnessFields := if witnessMetadata.isEmpty then [] else [("hostWitnessPlans", Json.arr witnessMetadata)]
-  let inventory := if roles.isEmpty then [] else [("artifacts", Json.arr (lowered.map fun (role, file, _) =>
+  let explicitSelection := !roles.isEmpty || rustBindings
+  let inventory := if !explicitSelection then [] else [("artifacts", Json.arr (lowered.map fun (role, file, _) =>
     Json.mkObj [("role", toJson role.label), ("file", toJson file)]))]
   let circuitSchemas := circuits.filter fun (name, _) => emit .standalone || entryCircuits.contains name.toString
   let metadata := Json.mkObj ([
-    ("schemaVersion", toJson (if roles.isEmpty then 1 else 2 : Nat)), ("target", toJson profile.name),
+    ("schemaVersion", toJson (if explicitSelection then 2 else 1 : Nat)), ("target", toJson profile.name),
     ("targetProfile", toJson profile),
     ("qualification", toJson ("unqualified-relation-and-state-description" : String)),
     ("deployable", toJson Bool.false),
@@ -730,6 +740,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
     controlFields ++ witnessFields ++ inventory)
   let path : System.FilePath := directory
   liftIO <| IO.FS.createDirAll path
+  if rustBindings then liftIO <| IO.FS.createDirAll (path / "bindings" / "rust")
   for (_, name, content) in lowered do
     liftIO <| IO.FS.writeFile (path / name) (content ++ "\n")
   liftIO <| IO.FS.writeFile (path / "noctium.json") (metadata.pretty ++ "\n")
@@ -743,7 +754,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
 elab "#noctium_compile" directory:str : command =>
   compileArtifacts directory.getString TargetProfile.sourceBaseline
 
-elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(str)? selection:(str)? : command => do
+elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(str)? selection:(str)? bindings:(str)? : command => do
   let profile ← parseTargetProfile profileJson.getString
   let selection ← match selection with
     | none => pure []
@@ -751,10 +762,13 @@ elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(s
       match Json.parse value.getString >>= fromJson? >>= List.mapM ArtifactRole.parse with
       | .ok roles => pure roles
       | .error message => throwError "{message}"
-  match ArtifactRole.validateSelection selection with
+  let target := (bindings.map (·.getString)).getD ""
+  if !target.isEmpty && target != "rust" then throwError "unsupported binding target '{target}'"
+  let rustBindings := target == "rust"
+  match ArtifactRole.validateSelection selection rustBindings with
   | .ok _ =>
     let display := (displayDirectory.map (·.getString)).getD directory.getString
-    compileArtifacts directory.getString profile display selection
+    compileArtifacts directory.getString profile display selection rustBindings
   | .error message => throwError "{message}"
 
 end Noctium.Compiler

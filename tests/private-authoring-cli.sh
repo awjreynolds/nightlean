@@ -8,12 +8,19 @@ trap 'rm -rf "$scratch"' EXIT
 "$cli" compile examples/PrivateStateCounter.lean \
   --target profiles/midnight-ledger-9-zkir-3.2.1-target.json --output "$scratch/generated"
 for fixture in runtime/tests/fixtures/private-authoring/321/*; do
+  test -f "$fixture" || continue
   cmp "$fixture" "$scratch/generated/${fixture##*/}"
 done
 
 profile=profiles/midnight-ledger-9-zkir-3.2.1-target.json
 "$cli" compile examples/PrivateStateCounter.lean --target "$profile" \
   --emit ledger --emit witness --output "$scratch/ledger"
+test ! -e "$scratch/generated/bindings"
+test ! -e "$scratch/ledger/bindings"
+"$cli" compile examples/PrivateStateCounter.lean --target "$profile" \
+  --emit ledger --emit witness --bindings rust --output "$scratch/rust"
+binding=bindings/rust/NoctiumExamples.PrivateStateCounter.advance.rs
+cmp "runtime/tests/fixtures/private-authoring/321/$binding" "$scratch/rust/$binding"
 if "$cli" compile examples/PrivateStateCounter.lean --target "$profile" \
   --emit ledger --output "$scratch/missing-witness" > "$scratch/error" 2>&1; then
   echo "expected a hosted ledger entrypoint to require its witness artifacts" >&2
@@ -26,15 +33,16 @@ if "$cli" compile examples/PrivateStateCounter.lean --bindings kotlin \
   echo "expected an unsupported binding target to fail" >&2
   exit 1
 fi
-grep -F 'no per-contract language binding generators are available' "$scratch/error" > /dev/null
+grep -F "unsupported binding target 'kotlin'" "$scratch/error" > /dev/null
 test ! -e "$scratch/unsupported-host"
 
-python3 - "$scratch/generated" "$scratch/ledger" <<'PY'
+python3 - "$scratch/generated" "$scratch/ledger" "$scratch/rust" "$binding" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-full, selected = map(Path, sys.argv[1:])
+full, selected, rust = map(Path, sys.argv[1:4])
+rust_binding = sys.argv[4]
 entry = "NoctiumExamples.PrivateStateCounter.advance"
 expected = {
     entry + ".zkir": "ledger",
@@ -55,6 +63,10 @@ for name in expected:
         assert plan == original
     else:
         assert (selected / name).read_bytes() == (full / name).read_bytes()
+    assert (selected / name).read_bytes() == (rust / name).read_bytes()
+rust_meta = json.loads((rust / "noctium.json").read_text())
+assert {str(path.relative_to(rust)) for path in rust.rglob("*") if path.is_file()} == set(expected) | {"noctium.json", rust_binding}
+assert {row["file"]: row["role"] for row in rust_meta["artifacts"]} == {**expected, rust_binding: "rustBinding"}
 PY
 
 cat > "$scratch/private-release.lean" <<'LEAN'

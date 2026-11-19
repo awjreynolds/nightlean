@@ -51,7 +51,7 @@ Repeat `--emit` to select artifact roles. The target profile still selects the l
 
 Ledger entrypoints with host witnesses require `--emit witness`. Without explicit roles the compiler emits all applicable files. An explicit selection uses compiler metadata schema 2. The `artifacts` list records each emitted file and its role, with `noctium.json` as the inventory itself. Ledger-only schemas omit the standalone `file` property in both the plan and metadata. The Rust bundler checks the selected paths and roles against the inventory and still requires exact plan and metadata schemas. The public bundle has its own version 1 manifest.
 
-The witness files provide a language-neutral interface for the Rust runtime and C/C++ ABI. Per-contract language generators remain tracked under [issue 85](https://github.com/awjreynolds/noctium/issues/85).
+The witness files provide a language-neutral interface for the Rust runtime and C/C++ ABI. Add `--bindings rust` to generate Rust modules for the selected ledger witness entrypoints. Each module appears under `bindings/rust/` and has a `rustBinding` inventory entry. The CLI emits language modules only when requested. [Generated Rust witness modules](typed-witnesses.md#generate-a-rust-witness-module)
 
 ## Build and use
 

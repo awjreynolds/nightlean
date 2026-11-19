@@ -843,6 +843,11 @@ fn validate_compiler_inventory(metadata: &Value, plan: &Value, payloads: &Payloa
             .as_str()
             .ok_or_else(|| error("unsupported_schema", "artifact inventory lacks file name"))?;
         let role = row["role"].as_str().unwrap_or_default();
+        let name = if role == "rustBinding" {
+            file.strip_prefix("bindings/rust/").unwrap_or_default()
+        } else {
+            file
+        };
         let suffix_ok = match role {
             "ledger" => file.ends_with(".zkir") || file.ends_with(".impact.json"),
             "standalone" => file.ends_with(".zkir"),
@@ -852,10 +857,11 @@ fn validate_compiler_inventory(metadata: &Value, plan: &Value, payloads: &Payloa
             "control" => file.ends_with(".control.json"),
             "specialization" => file.ends_with(".specialization.json"),
             "observations" => file.ends_with(".observations.json"),
+            "rustBinding" => name.ends_with(".rs"),
             _ => false,
         };
         require(
-            !file.contains(['/', '\\', '\0']) && suffix_ok && roles.insert(file, role).is_none(),
+            !name.contains(['/', '\\', '\0']) && suffix_ok && roles.insert(file, role).is_none(),
             "unsupported_schema",
             "invalid or duplicate compiler artifact inventory entry",
         )?;

@@ -18,6 +18,31 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+#[allow(dead_code)]
+#[path = "fixtures/private-authoring/321/bindings/rust/NoctiumExamples.PrivateStateCounter.advance.rs"]
+mod generated_counter;
+
+#[test]
+fn generated_rust_binding_encodes_inputs_and_correlates_provider_replies() {
+    let inputs = generated_counter::Inputs { arg_expected: 7 }.into_source_inputs();
+    assert_eq!(inputs, BTreeMap::from([("expected".into(), json!("7"))]));
+    let mut request = json!({
+        "requestId": "42",
+        "name": "NoctiumExamples.nextValue",
+        "operation": "noctium.witness.NoctiumExamples.nextValue.v1",
+        "capability": "NoctiumExamples.nextValue",
+        "schema": "UIntRange<256>"
+    });
+    let reply = generated_counter::reply_NoctiumExamples_dnextValue(&request, "attempt", 7).unwrap();
+    assert_eq!(reply.request_id, "42");
+    assert_eq!(reply.value, Some(json!("7")));
+    request["schema"] = json!("Bool");
+    assert!(matches!(
+        generated_counter::reply_NoctiumExamples_dnextValue(&request, "attempt", 7),
+        Err(Error::InvalidSource)
+    ));
+}
+
 const TTL: u64 = 2_000_000_000;
 
 fn required_env(name: &str) -> String {

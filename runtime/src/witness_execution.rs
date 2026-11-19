@@ -67,6 +67,61 @@ impl fmt::Display for Error {
 impl std::error::Error for Error {}
 type Result<T> = std::result::Result<T, Error>;
 
+/// Exact public witness control expected by a generated Rust entrypoint module.
+pub struct GeneratedBinding {
+    control: &'static [u8],
+}
+
+impl GeneratedBinding {
+    pub const fn new(control: &'static [u8]) -> Self {
+        Self { control }
+    }
+
+    pub fn check_bundle(&self, bundle: &VerifiedBundle) -> Result<()> {
+        if bundle.authenticated_manifest_sha256().is_none()
+            || bundle.file(Role::WitnessControl).ok() != Some(self.control)
+        {
+            return Err(Error::InvalidArtifacts);
+        }
+        // The bundle verifier already checked the binding embedded in this exact control file.
+        Ok(())
+    }
+
+    pub fn check_operation(&self, target: &ContractOperationTarget) -> Result<()> {
+        self.check_bundle(target.bundle().map_err(Error::Proof)?)
+    }
+
+    /// Build a correlated reply for a declared provider. The session still validates the reply.
+    pub fn reply(
+        request: &Json,
+        attempt_id: &str,
+        provider: (&str, &str, &str, &str),
+        value: Json,
+    ) -> Result<TypedResponse> {
+        let (name, operation, capability, schema) = provider;
+        let response = TypedResponse {
+            protocol_version: 2,
+            request_id: request["requestId"].as_str().unwrap_or_default().into(),
+            attempt_id: attempt_id.into(),
+            outcome: "value".into(),
+            operation: operation.into(),
+            capability: capability.into(),
+            schema: schema.into(),
+            value: Some(value),
+            error: None,
+        };
+        if request["name"] != name
+            || request["operation"] != operation
+            || request["capability"] != capability
+            || request["schema"] != schema
+            || response.request_id.is_empty()
+        {
+            return Err(Error::InvalidSource);
+        }
+        Ok(response)
+    }
+}
+
 /// JSON returned by source execution. Treat the contents as private, even when the status is
 /// public, because completion includes the source result.
 pub struct PrivateJson {

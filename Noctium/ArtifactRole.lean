@@ -1,7 +1,7 @@
 namespace Noctium
 
 inductive ArtifactRole where
-  | ledger | standalone | witness | control | specialization | observations
+  | ledger | standalone | witness | control | specialization | observations | rustBinding
   deriving BEq, Repr
 
 namespace ArtifactRole
@@ -13,6 +13,7 @@ def label : ArtifactRole → String
   | .control => "control"
   | .specialization => "specialization"
   | .observations => "observations"
+  | .rustBinding => "rustBinding"
 
 def parse : String → Except String ArtifactRole
   | "ledger" => .ok .ledger
@@ -23,9 +24,11 @@ def parse : String → Except String ArtifactRole
   | "observations" => .ok .observations
   | name => .error s!"unknown artifact role '{name}'"
 
-def validateSelection (roles : List ArtifactRole) : Except String Unit := do
+def validateSelection (roles : List ArtifactRole) (rustBindings : Bool := false) : Except String Unit := do
   if roles.contains .witness && !(roles.contains .ledger || roles.contains .standalone) then
     throw "--emit witness requires --emit ledger or --emit standalone"
+  if rustBindings && !roles.isEmpty && !(roles.contains .ledger && roles.contains .witness) then
+    throw "--bindings rust requires ledger and witness artifacts"
 
 end ArtifactRole
 end Noctium
