@@ -5103,8 +5103,8 @@
       "id": "C-STDLIB-SERIALIZE",
       "layer": "standard-library",
       "surface": "serialize",
-      "noctiumStatus": "missing",
-      "notes": "Pinned API prose says event-only, but compiler source and 0.36.1 regression support ordinary serializable values. Use expand-serialize.ss, reject unsupported point/contract/ADT/opaque cases.",
+      "noctiumStatus": "subset",
+      "notes": "Direct scalar and fixed-byte source encoding uses explicit length and zero right padding. Focused Bool, UInt, Bytes, Native, and Secp256k1Scalar bytes match Compact 0.36.1. Aggregate syntax, complete field-family comparisons and helper-body support remain open.",
       "source": [
         "stdlib",
         "serialization",
@@ -5117,15 +5117,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/scalar-serialization.md",
+        "examples/ScalarSerialization.lean",
+        "runtime/tests/scalar_serialization.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-DESERIALIZE",
       "layer": "standard-library",
       "surface": "deserialize",
-      "noctiumStatus": "missing",
-      "notes": "Pinned API prose says event-only, but compiler source and 0.36.1 regression support ordinary serializable values. Use expand-serialize.ss, reject unsupported point/contract/ADT/opaque cases.",
+      "noctiumStatus": "subset",
+      "notes": "Direct scalar and fixed-byte source decoding uses type-sized prefixes. Native, Bool and UInt bounds are checked. Foreign scalar decoding reduces by the target modulus. Focused differential and native mutation checks pass. Aggregate syntax, complete field-family comparisons and helper-body support remain open.",
       "source": [
         "stdlib",
         "serialization",
@@ -5138,7 +5142,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/scalar-serialization.md",
+        "examples/ScalarSerialization.lean",
+        "runtime/tests/scalar_serialization.rs"
+      ],
       "equivalence": "unverified"
     }
   ],

@@ -84,6 +84,8 @@ The [confidential-token comparison](../development/oz-compile-performance.md) re
 
 [Standard public events](../development/standard-events.md) now bind all eleven Ledger 9 layouts and their execution order to the native transcript. The compiler checks payload and guard disclosure. The catalog bytes matched the pinned Compact reference and a proved catalog call finalized on the funded localnet. Reusable helper emission and indexer observation remain open. The [Midnight roadmap comparison](midnight-roadmap.md) records what the pinned target already supports and what needs new upstream interfaces.
 
+[Scalar serialization](../development/scalar-serialization.md) adds type-sized wire encodings and checked decoding through direct native lowering. The focused reference comparison covers Bool, bounded UInt, fixed Bytes, Native, and a secp256k1 scalar. The K11 codec finalized on the funded localnet. Aggregate codecs and reusable helper syntax remain open.
+
 [Public fixed bytes](../development/fixed-bytes.md#public-byte-arguments) use the same checked FAB chunk layout across lengths 0 through 1024. The 256-byte public event memo now uses two VM operations, down from 512. An all-layout event call with the packed public memo finalized on the funded localnet.
 
 [Byte ledger storage](../development/byte-storage.md) extends scalar state to Source Bytes0 through Bytes1024 in direct cells, map values and nested leaves. Native FAB alignment retains exact lengths and trailing zeros. Empty byte cells remain explicit ledger values with no native payload fields. Source checks, canonical runtime decoding and guarded defaults retain the existing disclosure and key restrictions. This adds no opcode and establishes no new proof or deployment qualification.
