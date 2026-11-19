@@ -576,6 +576,13 @@ fn composed_intent_finalizes_both_contract_states_on_localnet() {
 
 #[cfg(feature = "localnet")]
 #[test]
+#[ignore = "uses independently prepared calls and the funded isolated localnet"]
+fn independent_owners_prove_separate_calls_on_localnet() {
+    run_local_composition(LocalCase::Independent);
+}
+
+#[cfg(feature = "localnet")]
+#[test]
 #[ignore = "uses the isolated development wallet and the three registry operation bundles"]
 fn registry_rotation_routes_two_finalized_calls_without_redeploying() {
     run_local_composition(LocalCase::Registry);
@@ -591,6 +598,7 @@ fn composed_call_finalizes_with_a_ledger_authenticated_parent() {
 #[cfg(feature = "localnet")]
 enum LocalCase {
     Plain,
+    Independent,
     Registry,
     Caller,
 }
@@ -694,20 +702,41 @@ fn run_local_composition(case: LocalCase) {
             submit(&deployment).await
         };
         match case {
-            LocalCase::Plain => {}
+            LocalCase::Plain | LocalCase::Independent => {}
             LocalCase::Registry => return qualify_registry(&node, deploy, submit).await,
             LocalCase::Caller => return qualify_caller(&node, deploy, submit).await,
         }
-        let pair = Pair::load();
+        let independent = matches!(case, LocalCase::Independent);
+        let pair = if independent {
+            Pair {
+                caller: Operation::load("caller", "claim", credential_state(31)),
+                callee: Operation::load(
+                    "callee",
+                    "advance",
+                    BTreeMap::from([
+                        ("balance".into(), json!("10")),
+                        ("count".into(), json!("0")),
+                        ("acceptedCredential".into(), credential(83)),
+                    ]),
+                ),
+            }
+        } else {
+            Pair::load()
+        };
         let mut deployment_receipts = Vec::new();
         for operation in [&pair.caller, &pair.callee] {
             deployment_receipts.push(deploy(&operation.deploy).await);
         }
         let live = node.sync().unwrap();
-        let intent = pair.intent(&live.state, live.block.tblock.to_secs() + 1800);
-        let prepared =
-            PreparedComposition::from_intent(intent, &live.state, &pair.materials()).unwrap();
-        let proved = prepared.prove_locally(OsRng, pending()).await.unwrap();
+        let ttl = live.block.tblock.to_secs() + 1800;
+        let proved = if independent {
+            prove_independent_pair(&pair, &live.state, ttl).await
+        } else {
+            let intent = pair.intent(&live.state, ttl);
+            let prepared =
+                PreparedComposition::from_intent(intent, &live.state, &pair.materials()).unwrap();
+            prepared.prove_locally(OsRng, pending()).await.unwrap()
+        };
         let receipt = submit(proved.native()).await;
         assert_eq!(
             receipt.contract_address,
@@ -721,20 +750,21 @@ fn run_local_composition(case: LocalCase) {
         let bytes = &receipt.secondary_states[&address];
         let callee_state =
             serialize::tagged_deserialize::<ContractState<Db>>(&mut bytes.as_slice()).unwrap();
-        let expected = create_state(
-            &pair.callee.plan,
-            &BTreeMap::from([
-                ("balance".into(), json!("13")),
-                ("count".into(), json!("1")),
-            ]),
-        )
-        .unwrap();
+        let mut expected_state = BTreeMap::from([
+            ("balance".into(), json!("13")),
+            ("count".into(), json!("1")),
+        ]);
+        if independent {
+            expected_state.extend(credential_state(83));
+        }
+        let expected = create_state(&pair.callee.plan, &expected_state).unwrap();
         assert_eq!(callee_state.data, expected);
         eprintln!(
             "{}",
             json!({
                 "genesis": receipt.chain.genesis,
                 "profile": receipt.chain.profile,
+                "independentProvers": independent,
                 "height": receipt.height,
                 "blockHash": receipt.block_hash,
                 "transactionId": receipt.transaction_id,
@@ -750,6 +780,121 @@ fn run_local_composition(case: LocalCase) {
             })
         );
     });
+}
+
+#[cfg(feature = "localnet")]
+fn credential(secret: u64) -> Json {
+    json!(noctium_runtime::field_decimal(
+        transient_crypto::hash::transient_hash(&[Fr::from(secret)])
+    ))
+}
+
+#[cfg(feature = "localnet")]
+fn credential_state(secret: u64) -> BTreeMap<String, Json> {
+    BTreeMap::from([("acceptedCredential".into(), credential(secret))])
+}
+
+#[cfg(feature = "localnet")]
+async fn prove_independent_pair(
+    pair: &Pair,
+    snapshot: &LedgerState<Db>,
+    ttl: u64,
+) -> noctium_runtime::proof::ProvedIntent {
+    use noctium_runtime::proof::{CompositionDraft, Error, IndependentComposition};
+    use rand::Rng;
+
+    let callee_address = pair.callee.deploy.address();
+    let callee_state = snapshot.contract.get(&callee_address).unwrap().data.clone();
+    let callee_execution = prepare(
+        &pair.callee.plan,
+        &BTreeMap::from([
+            ("credential".into(), credential(83)),
+            ("secret".into(), json!("83")),
+            ("amount".into(), json!("3")),
+        ]),
+        &callee_state,
+        &snapshot.parameters,
+        callee_address,
+    )
+    .unwrap();
+    let callee = checked_call(
+        &callee_execution,
+        &pair.callee.circuit,
+        callee_state,
+        callee_address,
+        pair.callee.entry.clone(),
+        OsRng.r#gen(),
+    );
+    let callee_offer = callee.composition_offer(&snapshot.parameters).unwrap();
+
+    // The caller gets the callee's public communication commitment. The callee's input,
+    // opening and separate credential preimage stay with the callee.
+    let parent_address = pair.caller.deploy.address();
+    let parent_state = snapshot.contract.get(&parent_address).unwrap().data.clone();
+    let parent_execution = prepare(
+        &pair.caller.plan,
+        &BTreeMap::from([
+            ("target".into(), bytes32(callee_address.0)),
+            ("entryHash".into(), bytes32(pair.callee.entry.ep_hash())),
+            (
+                "commitment".into(),
+                json!(noctium_runtime::field_decimal(callee_offer.commitment())),
+            ),
+            ("credential".into(), credential(31)),
+            ("secret".into(), json!("31")),
+        ]),
+        &parent_state,
+        &snapshot.parameters,
+        parent_address,
+    )
+    .unwrap();
+    let parent = checked_call(
+        &parent_execution,
+        &pair.caller.circuit,
+        parent_state,
+        parent_address,
+        pair.caller.entry.clone(),
+        OsRng.r#gen(),
+    );
+    let offers = [
+        parent.composition_offer(&snapshot.parameters).unwrap(),
+        callee_offer,
+    ];
+    assert!(IndependentComposition::freeze(&offers[..1], snapshot, ttl, &mut OsRng).is_err());
+    let coordinator = IndependentComposition::freeze(&offers, snapshot, ttl, &mut OsRng).unwrap();
+    let draft = coordinator.draft();
+    let approved = || {
+        CompositionDraft::from_offers(&offers, snapshot, draft.binding_commitment(), draft.ttl())
+            .unwrap()
+    };
+    let parent_draft = approved();
+    let callee_draft = approved();
+    assert_eq!(parent_draft.calls(), draft.calls());
+    assert_eq!(callee_draft.calls(), draft.calls());
+    let selected = pair.materials();
+    assert_eq!(
+        parent_draft
+            .prove_call(1, &parent, snapshot, &selected[0], OsRng)
+            .await
+            .err(),
+        Some(Error::BindingMismatch)
+    );
+    let parent_proof = parent_draft
+        .prove_call(0, &parent, snapshot, &selected[0], OsRng)
+        .await
+        .unwrap();
+    let callee_proof = callee_draft
+        .prove_call(1, &callee, snapshot, &selected[1], OsRng)
+        .await
+        .unwrap();
+    let responses = [parent_proof, callee_proof];
+    // Same call fragments under a different transaction commitment must reject.
+    let different = IndependentComposition::freeze(&offers, snapshot, ttl, &mut OsRng).unwrap();
+    assert_eq!(
+        different.attach(&responses, snapshot, &selected).err(),
+        Some(Error::InvalidProof)
+    );
+    coordinator.attach(&responses, snapshot, &selected).unwrap()
 }
 
 #[cfg(feature = "localnet")]

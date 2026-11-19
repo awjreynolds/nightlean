@@ -189,6 +189,51 @@ cargo test --manifest-path runtime/Cargo.toml --locked \
   --no-default-features --features zkir-321 --test native_composition -- --include-ignored
 ```
 
+## Prove calls with separate witness owners
+
+Each owner prepares its own `CheckedNativeCall` and shares a
+`composition_offer`. Offers contain the public VM program, its context,
+the operation identity, the communication commitment and the unmerged activity
+schedule. The checked inputs, private transcript and communication opening
+stay with the owner. The caller in the example needs the callee's commitment
+to claim the call. The example publishes the balance change, which reveals the
+amount. Each credential preimage stays local. [Lean fixture](../../tests/IndependentComposition.lean)
+
+The coordinator calls `IndependentComposition::freeze` with the ordered
+offers, trusted snapshot, expiry and fresh entropy. The SDK partitions and
+sequences the calls using the pinned ledger and retains the Pedersen opening
+with the coordinator. Owners review the public calls, binding commitment and
+expiry. Each independently rebuilds the `CompositionDraft` and calls
+`prove_call` for its own slot. It checks the local execution against that
+offer and authenticates the installed verifier against the selected bundle.
+The coordinator receives detached proof bytes and `attach` verifies each
+against its exact slot before building the native intent.
+
+Ledger proofs bind their individual call statements to the shared Pedersen
+commitment. Whole-draft agreement, including expiry and order, belongs to
+the host and this SDK workflow. The coordinator and peers see the offered
+public execution details. The qualification uses separate Rust owner values
+in one process. Public offer transport across separate processes and foreign
+SDK bindings remain open.
+
+The K9 caller and K7 callee finalized together at block 30432. The node
+confirmed both call events in the same extrinsic and the exact resulting
+states. The callee balance moved from 10 to 13. The SDK rejected a missing
+callee, an owner proving the wrong slot, and both proofs replayed under
+a different intent commitment. [Separate-owner receipt](independent-composition-receipt.json)
+
+To run the funded case, compile and bundle `IndependentCaller.claim` at K9 and
+`IndependentCallee.advance` at K7 from the fixture. Name the public bundles
+`caller-bundle` and `callee-bundle`. Set the same manifest, SRS and node
+variables described above and below. Run this one test on the isolated
+development chain.
+
+```sh
+cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321,localnet --test native_composition \
+  independent_owners_prove_separate_calls_on_localnet -- --ignored --nocapture
+```
+
 ## Fund and observe on localnet
 
 Pass `ProvedIntent::native()` to `client::BoundTransaction::prepare`.

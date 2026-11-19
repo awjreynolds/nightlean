@@ -9,8 +9,8 @@ use base_crypto::time::Timestamp;
 use ledger::{
     construct::{ContractCallPrototype, PreTranscript, partition_transcripts},
     structure::{
-        ContractAction, ContractDeploy, Intent, LedgerParameters, ProofPreimageMarker,
-        ProofPreimageVersioned, Signature, StandardTransaction,
+        ContractAction, ContractCall, ContractDeploy, Intent, LedgerParameters,
+        ProofPreimageMarker, ProofPreimageVersioned, Signature, StandardTransaction,
     },
 };
 use onchain_runtime::{
@@ -48,40 +48,44 @@ pub struct CheckedNativeCall<'a> {
     pub communication_commitment_rand: Fr,
 }
 
-/// Build one private, unbalanced intent from prepared calls in ledger execution
-/// order. The host supplies the call contexts. The ledger verifies their actual
-/// state, operation keys and effects when the proved transaction is submitted.
-pub fn assemble_checked_calls(
-    calls: &[CheckedNativeCall<'_>],
-    parameters: &LedgerParameters,
-    ttl: u64,
-    rng: &mut (impl Rng + CryptoRng),
-) -> Result<NativeIntent> {
-    ensure!(!calls.is_empty(), "expected at least one native call");
-    ensure!(ttl > 0, "TTL must be explicit Unix seconds");
+/// Public program, context and commitments for one independently prepared call.
+#[derive(Clone)]
+pub struct CompositionOffer {
+    pub(crate) pre_transcript: PreTranscript<Db>,
+    pub(crate) entry_point: EntryPointBuf,
+    pub(crate) activity: Vec<Option<usize>>,
+}
 
-    let mut prototypes = Vec::with_capacity(calls.len());
-    let mut pre_transcripts = Vec::with_capacity(calls.len());
-    let mut commitments = BTreeMap::new();
-    let cost = &parameters.cost_model.runtime_cost_model;
-    for (i, call) in calls.iter().enumerate() {
-        let context = &call.initial_context;
-        let execution = call.execution;
+impl CompositionOffer {
+    pub fn commitment(&self) -> Fr {
+        self.pre_transcript.comm_comm.expect("checked public offer")
+    }
+}
+
+impl CheckedNativeCall<'_> {
+    /// Project only fields that the ledger will use to partition and replay this call.
+    pub fn composition_offer(&self, parameters: &LedgerParameters) -> Result<CompositionOffer> {
+        let context = &self.initial_context;
+        let execution = self.execution;
         ensure!(
             context.effects == Default::default(),
             "native intent requires a fresh effects context for each call"
         );
         ensure!(
-            call.communication_commitment_rand != Fr::from(0u64),
+            self.communication_commitment_rand != Fr::from(0u64),
             "native call commitment randomness must be nonzero"
         );
-        let name = std::str::from_utf8(&call.entry_point)?;
+        let name = std::str::from_utf8(&self.entry_point)?;
         ensure!(
             execution.preimage.key_location.0 == name,
             "native entrypoint differs from the checked relation"
         );
         let replay = context
-            .query(&execution.program, None, cost)
+            .query(
+                &execution.program,
+                None,
+                &parameters.cost_model.runtime_cost_model,
+            )
             .map_err(|_| anyhow!("native execution does not replay from the supplied context"))?;
         ensure!(
             replay.context.address == execution.after.address
@@ -91,62 +95,87 @@ pub fn assemble_checked_calls(
         );
         crate::validate_call_input_header_json(
             &execution.call_input_header,
-            &serde_json::to_value(call.circuit)?,
+            &serde_json::to_value(self.circuit)?,
         )?;
-
-        let input = execution.call_input()?;
-        let output = execution.call_output()?;
         let commitment = onchain_runtime::communication_commitment(
-            input.clone(),
-            output.clone(),
-            call.communication_commitment_rand,
+            execution.call_input()?,
+            execution.call_output()?,
+            self.communication_commitment_rand,
         );
+        let offer = CompositionOffer {
+            pre_transcript: PreTranscript {
+                context: context.clone(),
+                program: execution.program.clone(),
+                comm_comm: Some(commitment),
+            },
+            entry_point: self.entry_point.clone(),
+            activity: execution.activity_schedule.clone(),
+        };
+        let active = self
+            .composition_preimage(&offer)
+            .check(self.circuit)
+            .map_err(|_| anyhow!("native call preimage failed the official circuit checker"))?;
         ensure!(
-            commitments.insert(commitment, i).is_none(),
-            "native intent requires unique communication commitments"
+            active == offer.activity
+                && active.iter().filter(|skip| skip.is_none()).count() == execution.program.len(),
+            "native call activity metadata differs from its checked relation"
         );
-        pre_transcripts.push(PreTranscript {
-            context: context.clone(),
-            program: execution.program.clone(),
-            comm_comm: Some(commitment),
-        });
-        prototypes.push(ContractCallPrototype {
-            address: context.address,
-            entry_point: call.entry_point.clone(),
-            // ProofPreimage construction only needs the relation and call data.
-            op: ContractOperation::new(None, None),
-            guaranteed_public_transcript: None,
-            fallible_public_transcript: None,
-            private_transcript_outputs: execution
-                .preimage
-                .private_transcript
-                .iter()
-                .copied()
-                .map(field_value)
-                .collect(),
-            input,
-            output,
-            communication_commitment_rand: call.communication_commitment_rand,
-            key_location: KeyLocation(Cow::Owned(format!(
-                "{}:{name}",
-                hex::encode(context.address.0.0)
-            ))),
-        });
+        Ok(offer)
     }
 
+    pub(crate) fn composition_preimage(&self, offer: &CompositionOffer) -> ProofPreimage {
+        let mut expected = self.execution.preimage.clone();
+        expected.key_location = KeyLocation(Cow::Owned(format!(
+            "{}:{}",
+            hex::encode(self.initial_context.address.0.0),
+            String::from_utf8_lossy(&self.entry_point),
+        )));
+        expected.communications_commitment =
+            Some((offer.commitment(), self.communication_commitment_rand));
+        expected
+    }
+}
+
+pub(crate) fn partition_composition(
+    offers: &[CompositionOffer],
+    parameters: &LedgerParameters,
+) -> Result<Vec<ContractCall<(), Db>>> {
+    ensure!(!offers.is_empty(), "expected at least one native call");
+    let mut commitments = BTreeMap::new();
+    let pre_transcripts: Vec<_> = offers
+        .iter()
+        .map(|offer| offer.pre_transcript.clone())
+        .collect();
+    for (i, offer) in offers.iter().enumerate() {
+        ensure!(
+            commitments.insert(offer.commitment(), i).is_none(),
+            "native intent requires unique communication commitments"
+        );
+    }
     let partitions = partition_transcripts(&pre_transcripts, parameters)
         .map_err(|_| anyhow!("official native call forest partition failed"))?;
     ensure!(
-        partitions.len() == calls.len(),
+        partitions.len() == offers.len(),
         "invalid native partition count"
     );
+
     let mut claimed = BTreeMap::new();
-    let mut intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl));
-    for (i, (mut prototype, (mut guaranteed, fallible))) in
-        prototypes.into_iter().zip(partitions).enumerate()
-    {
+    let mut actions = Vec::with_capacity(offers.len());
+    for (i, (offer, (mut guaranteed, fallible))) in offers.iter().zip(partitions).enumerate() {
+        let context = &offer.pre_transcript.context;
+        if let Some(coin_structure::coin::PublicAddress::Contract(parent)) =
+            context.call_context.caller
+        {
+            ensure!(
+                claimed.get(&i) == Some(&parent),
+                "supplied caller context does not match the contract call forest"
+            );
+        }
         if guaranteed.is_none() && fallible.is_none() {
-            guaranteed = Some(empty_transcript(&calls[i].initial_context, cost)?);
+            guaranteed = Some(empty_transcript(
+                context,
+                &parameters.cost_model.runtime_cost_model,
+            )?);
         }
         for claim in guaranteed
             .iter()
@@ -159,60 +188,80 @@ pub fn assemble_checked_calls(
                 .copied()
                 .filter(|&callee| {
                     callee > i
-                        && calls[callee].initial_context.address == address
-                        && calls[callee].entry_point.ep_hash() == entry_hash
+                        && offers[callee].pre_transcript.context.address == address
+                        && offers[callee].entry_point.ep_hash() == entry_hash
                 })
                 .context("contract claim has no matching later call in this intent")?;
             ensure!(
-                claimed
-                    .insert(callee, calls[i].initial_context.address)
-                    .is_none(),
+                claimed.insert(callee, context.address).is_none(),
                 "contract call has multiple claims"
             );
         }
-        prototype.guaranteed_public_transcript = guaranteed;
-        prototype.fallible_public_transcript = fallible;
-        intent = intent.add_call::<ProofPreimage>(prototype);
+        actions.push(ContractCall {
+            address: context.address,
+            entry_point: offer.entry_point.clone(),
+            guaranteed_transcript: guaranteed.map(storage::arena::Sp::new),
+            fallible_transcript: fallible.map(storage::arena::Sp::new),
+            communication_commitment: offer.commitment(),
+            proof: (),
+        });
     }
+    Ok(actions)
+}
 
-    ensure!(
-        intent.actions.len() == calls.len(),
-        "invalid native intent call count"
-    );
-    for (i, (call, native)) in calls.iter().zip(intent.calls()).enumerate() {
-        if let Some(coin_structure::coin::PublicAddress::Contract(parent)) =
-            call.initial_context.call_context.caller
-        {
-            ensure!(
-                claimed.get(&i) == Some(&parent),
-                "supplied caller context does not match the contract call forest"
-            );
-        }
+/// Build one private, unbalanced intent from prepared calls in ledger execution
+/// order. The host supplies the call contexts. The ledger verifies their actual
+/// state, operation keys and effects when the proved transaction is submitted.
+pub fn assemble_checked_calls(
+    calls: &[CheckedNativeCall<'_>],
+    parameters: &LedgerParameters,
+    ttl: u64,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<NativeIntent> {
+    ensure!(ttl > 0, "TTL must be explicit Unix seconds");
+    let offers = calls
+        .iter()
+        .map(|call| call.composition_offer(parameters))
+        .collect::<Result<Vec<_>>>()?;
+    let public = partition_composition(&offers, parameters)?;
+    let mut intent = NativeIntent::empty(rng, Timestamp::from_secs(ttl));
+    for ((call, offer), action) in calls.iter().zip(&offers).zip(&public) {
+        let expected = call.composition_preimage(offer);
+        intent = intent.add_call::<ProofPreimage>(ContractCallPrototype {
+            address: action.address,
+            entry_point: action.entry_point.clone(),
+            op: ContractOperation::new(None, None),
+            guaranteed_public_transcript: action.guaranteed_transcript.as_deref().cloned(),
+            fallible_public_transcript: action.fallible_transcript.as_deref().cloned(),
+            private_transcript_outputs: expected
+                .private_transcript
+                .iter()
+                .copied()
+                .map(field_value)
+                .collect(),
+            input: call.execution.call_input()?,
+            output: call.execution.call_output()?,
+            communication_commitment_rand: call.communication_commitment_rand,
+            key_location: expected.key_location.clone(),
+        });
+        let ContractAction::Call(native) = &*intent
+            .actions
+            .get(intent.actions.len() - 1)
+            .context("ledger constructor omitted the checked call")?
+        else {
+            return Err(anyhow!("ledger constructor returned an unexpected action"));
+        };
         let ProofPreimageVersioned::V2(preimage) = &native.proof else {
             return Err(anyhow!("unsupported preimage version"));
         };
-        let commitment = pre_transcripts[i].comm_comm.unwrap();
-        let mut expected = call.execution.preimage.clone();
-        expected.key_location = preimage.key_location.clone();
-        expected.communications_commitment = Some((commitment, call.communication_commitment_rand));
         ensure!(
-            native.address == call.initial_context.address
-                && native.entry_point == call.entry_point
-                && native.communication_commitment == commitment
+            native.address == action.address
+                && native.entry_point == action.entry_point
+                && native.communication_commitment == action.communication_commitment
                 && **preimage == expected,
             "ledger constructor changed the checked call or its preimage"
         );
-        let active = preimage
-            .check(call.circuit)
-            .map_err(|_| anyhow!("native call preimage failed the official circuit checker"))?;
-        ensure!(
-            active == call.execution.activity_schedule
-                && active.iter().filter(|skip| skip.is_none()).count()
-                    == call.execution.program.len(),
-            "native call activity metadata differs from its checked relation"
-        );
     }
-    // Sequencing rules are defined on transactions, but also apply to one intent.
     StandardTransaction::new(
         "",
         [(1, intent.clone())].into_iter().collect(),

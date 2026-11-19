@@ -9,7 +9,7 @@ use crate::{
 use base_crypto::cost_model::CostDuration;
 use futures::{Future, FutureExt, pin_mut, select_biased};
 use ledger::structure::{
-    ContractAction, ContractCall, Intent, LedgerParameters, ProofMarker, ProofPreimageMarker,
+    ContractAction, ContractCall, Intent, LedgerParameters, ProofKind, ProofMarker,
     ProofPreimageVersioned, ProofVersioned, Signature,
 };
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
@@ -35,15 +35,17 @@ use transient_crypto::{
 pub type ProvedNativeIntent = Intent<Signature, ProofMarker, PedersenRandomness, Db>;
 pub type PublicProvedNativeIntent = Intent<Signature, ProofMarker, Pedersen, Db>;
 mod composition;
-pub use composition::{CompositionMaterial, PreparedComposition};
+pub use composition::{
+    CompositionDraft, CompositionMaterial, IndependentComposition, PreparedComposition,
+};
 
 const MAX_RESPONSE: usize = 1_048_576;
 const MAX_PARAMETERS: usize = 134_217_728;
 const MAX_PRIVATE_CONFIG: usize = 1_048_576;
 const MAX_NATIVE_STATE: usize = 1_048_576;
 
-struct CallPreview {
-    call: ContractCall<ProofPreimageMarker, Db>,
+struct CallPreview<P: ProofKind<Db>> {
+    call: ContractCall<P, Db>,
     statement: Vec<Fr>,
 }
 
@@ -123,12 +125,12 @@ fn noop_gas(cost_model: &onchain_runtime::cost_model::CostModel, count: u32) -> 
         .ok_or(Error::UnsupportedActivity)
 }
 
-fn preview_call_activity(
-    call: &ContractCall<ProofPreimageMarker, Db>,
+fn preview_call_activity<P: ProofKind<Db>>(
+    call: &ContractCall<P, Db>,
     activity: &[Option<usize>],
     binding_commitment: Pedersen,
     cost_model: &onchain_runtime::cost_model::CostModel,
-) -> Result<CallPreview> {
+) -> Result<CallPreview<P>> {
     let op_count = call
         .guaranteed_transcript
         .iter()

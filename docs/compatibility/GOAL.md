@@ -117,13 +117,15 @@ The [source proof-audit foundation](../development/proof-registration.md) provid
 
 [Native call arguments](../development/committed-returns.md#native-call-arguments) now bind ordered private Native parameters through the ZKIR input header, preimage and communication commitment. The selected state-update case checks exact argument values, no duplicate private transcript fields, and altered-argument rejection even with a fresh matching commitment. This is a prerequisite for native two-contract composition. Call-claim emission, typed wider arguments, hosted witnesses and multi-call forest assembly remain open.
 
-[Native call-claim references](../development/native-call-claims.md) now use the pinned nine-op kernel macro and pass a checked caller/callee partition with actual nonempty input and typed returns. Exact call identity, distinct commitments, guarded skip activity and source disclosure rejection have focused evidence. Full Intent construction, verifier-key agreement, proof generation and local ledger acceptance remain open under the native composition track.
+[Native call-claim references](../development/native-call-claims.md) use the pinned nine-op kernel macro and pass a checked caller/callee partition with actual nonempty input and typed returns. Exact call identity, distinct commitments, guarded skip activity and source disclosure rejection have focused evidence.
 
 [Native call forest assembly](../development/native-call-claims.md#assemble-a-native-call-forest) now constructs an unbalanced intent and checks the ledger order and each circuit preimage. The case covers a caller, its callee and an independent root. Checked verifier-key resolution, proof attachment and composed localnet acceptance remain open.
 
 [Composed proof attachment](../development/native-call-claims.md#prove-a-composed-intent) now checks retained keys against installed operations and attaches two native V3 proofs to one intent. The sealed transaction passes the pinned ledger verifier with fee balancing disabled. Funded node submission, finality and state equality remain open.
 
 [The first funded native composed transaction](../development/native-composition-receipt.json) finalized at block 27627. The native Rust adapter verified both call events in the exact extrinsic and matched each finalized contract state against the strict ledger prediction. This qualifies a caller and one leaf callee through the Rust client. Private-journal and foreign-language composition remain open.
+
+The [separate-owner composition path](../development/native-call-claims.md#prove-calls-with-separate-witness-owners) finalizes one caller and callee after each Rust owner independently proves its call against the same public draft. The coordinator takes only public offers and proof bytes. Cross-process transport, private-journal recovery and foreign SDK bindings remain open.
 
 [Generated Rust witness modules](../development/typed-witnesses.md#generate-a-rust-witness-module) are available on request for ledger entrypoints. The private-state counter exercised the generated inputs and provider replies through an authenticated bundle and native K7 proof preparation. The generated Rust layer relies on the same witness scheduler and capability checks as the shared SDK.
 
