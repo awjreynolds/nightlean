@@ -42,7 +42,7 @@ Noctium registers 40 non-deprecated opcode names through scoped source routes. C
 | Hashes | `transient_hash`, `persistent_hash`, `sha512`, `keccak256`, `hash_to_curve` | `persistent_hash` |
 | Curve operations | `jubjub_scalar_from_native`, `ec_mul_generator`, `ec_mul`, `from_coordinates`, `into_coordinates` | `jubjub_scalar_from_native`, `ec_mul_generator`, `ec_mul`, `from_coordinates`, `into_coordinates` |
 
-The pin also defines seven deprecated instructions. Noctium leaves these unexposed.
+The upstream inventory also records seven deprecated instructions. Noctium targets the active instruction set for new contracts.
 
 `into_bytes32`, `from_bytes32`, `reverse_bytes`, `bytes32_into_low_high`, `bytes32_from_low_high`, `div_mod_power_of_two`, `reconstitute_field`
 

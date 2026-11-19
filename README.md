@@ -17,7 +17,7 @@ Lean 4 contracts and proofs for Midnight. Noctium compiles directly to native ZK
 
 ## ZKIR v3 and witness targets
 
-The selected ZKIR 3.2.1 profile has 47 instruction names. Noctium registers all 40 non-deprecated opcodes and uses 15 native type families through scoped source and lowering paths. [Full instruction and type lists, grouped against Compact 0.36.1](docs/compatibility/comparison.md)
+Noctium registers all 40 active ZKIR 3.2.1 opcodes and uses 15 native type families through scoped source and lowering paths. [Instruction and type lists, grouped against Compact 0.36.1](docs/compatibility/comparison.md)
 
 | Witness host | Noctium | Compact compiler |
 | --- | --- | --- |
