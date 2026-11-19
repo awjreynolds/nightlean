@@ -719,27 +719,15 @@ private def lowerByteInput (input : Input) (raw : Bool := false) : LowerM Unit :
     let output := "%input_" ++ input.name
     read output (toJson kind.nativeName)
     modify fun state => {state with aliases := (input.name, output) :: state.aliases}
-  | .bytes 32 =>
-    let identifiers := input.nativeIdentifiers
-    if input.visibility == .«public» then do
-      let (low31, highByte) ← bytes32Chunks [identifiers[1]!, identifiers[0]!]
-      read identifiers[0]!
-      constrainUnsigned 255 highByte
-      read identifiers[1]!
-      constrainUnsigned (2 ^ 248 - 1) low31
-      modify fun state => {state with byteAliases :=
-        (input.name, {values := [low31, highByte], packed := true}) :: state.byteAliases}
-    else do
-      for output in identifiers do
-        read output
-        constrainUnsigned 255 output
-      modify fun state => {state with byteAliases := (input.name, {values := identifiers}) :: state.byteAliases}
-  | .bytes _ =>
-    let identifiers := input.nativeIdentifiers
-    for output in identifiers do
-      read output
-      constrainUnsigned 255 output
-    modify fun state => {state with byteAliases := (input.name, {values := identifiers}) :: state.byteAliases}
+  | .bytes _ => do
+    let requirements := Native.Input.requirements input
+    for spec in requirements do
+      read spec.identifier
+      constrainType spec.ty spec.identifier
+    let values := requirements.map (·.identifier)
+    let packed := input.visibility == .«public»
+    modify fun state => {state with byteAliases := (input.name,
+      {values := if packed then values.reverse else values, packed}) :: state.byteAliases}
   | .jubjubScalar => do
     let native := input.nativeIdentifiers.head!
     read native
@@ -1088,7 +1076,8 @@ def lowerBody (c : Circuit) : LowerM Unit := do
       match input.ty with
       | .foreign kind => do
         for output in (← encodeForeign kind ("%input_" ++ input.name)) do bindPublic [output]
-      | .bytes 32 => bindPublic input.nativeIdentifiers
+      | .bytes 0 => pure ()
+      | .bytes _ => bindPublic input.nativeIdentifiers
       | _ => for output in input.nativeIdentifiers do bindPublic [output]
   for condition in c.constraints do
     let value ← lowerExpr condition

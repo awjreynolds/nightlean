@@ -108,6 +108,9 @@ fn standard_event_catalog_matches_pinned_reference_payloads() -> Result<()> {
     )?;
     check(&execution, &circuit)?;
 
+    assert_eq!(execution.program.len(), 28);
+    assert_eq!(execution.preimage.public_transcript_outputs.len(), 12);
+
     // SHA-256 of the full-width payloads emitted by Compact 0.36.1.
     let expected = [
         (

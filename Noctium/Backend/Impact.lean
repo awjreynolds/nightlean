@@ -313,11 +313,6 @@ def Plan.fields (plan : Plan) : List Scalar := plan.operations.flatMap Op.fields
 def Plan.fieldGroups (plan : Plan) : List (List Scalar) :=
   plan.operations.flatMap Op.fieldGroups
 
-/-- Public byte inputs are exposed to the pinned native transcript as one
-field-aligned UInt8 projection per source byte. -/
-def byteProjectionName (input : String) (index : Nat) : String :=
-  s!"_noctium_bytes_{input}_{index}"
-
 def jubjubScalarProjectionName (input : String) : String :=
   s!"_noctium_jubjub_scalar_{input}"
 
@@ -328,8 +323,8 @@ def publicInputReadCount (inputs : List Input) : Nat :=
   inputs.foldl (fun count input =>
     if input.visibility != .«public» then count
     else count + match input.ty with
-      | .bytes 32 => 1
-      | .bytes length => length
+      | .bytes 0 => 0
+      | .bytes _ => 1
       | .jubjubPoint => 2
       | .foreign kind => kind.encodedFieldCount
       | _ => 1) 0
@@ -936,17 +931,13 @@ private def publicInputStep (input : Input) (plan : Plan) : Except String Plan :
     pure {plan with
       operations := plan.operations ++ [.push value, .popeq value]
       reads := plan.reads ++ [{name := input.name, ty := .bytes 32}]}
+  | .bytes 0 => pure plan
   | .bytes length =>
-    let mut result := plan
-    for index in List.range length do
-      let bytes : Expr (.bytes length) := .ref input.name
-      let byte : Expr (.uint 255) := .bytesAt bytes index
-      let value := Aligned.field (.cast .native byte)
-      let name := byteProjectionName input.name index
-      result := { result with
-        operations := result.operations ++ [.push value, .popeq value]
-        reads := result.reads ++ [{name, ty := .uint 255}] }
-    pure result
+    let bytes : Expr (.bytes length) := .ref input.name
+    let value := Aligned.bytes length bytes
+    pure {plan with
+      operations := plan.operations ++ [.push value, .popeq value]
+      reads := plan.reads ++ [{name := input.name, ty := .bytes length}]}
   | .jubjubScalar => do
     let scalar : Expr .jubjubScalar := .ref input.name
     let value := Aligned.field (.jubjubScalarToNative scalar)

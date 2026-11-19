@@ -649,16 +649,17 @@ private def jubjubScalarInputRequirement (input : Input) : InputRequirement :=
   {identifier := "%input_" ++ input.name, visibility := input.visibility,
     ty := .native, canonicalJubjubScalar := true}
 
+private def byteChunkRequirements (input : Input) (length : Nat) (identifiers : List String) :
+    List InputRequirement :=
+  identifiers.zipIdx |>.map fun (identifier, index) =>
+    let width := bytesChunkWidth length (identifiers.length - 1 - index)
+    {identifier, visibility := input.visibility, ty := .uint (2 ^ (8 * width) - 1)}
+
 def Input.requirements (input : Input) : List InputRequirement :=
   match input.ty with
-  | .bytes 32 =>
-    if input.visibility == .«public» then
-      let identifiers := input.nativeIdentifiers
-      [{identifier := identifiers[0]!, visibility := input.visibility, ty := .uint 255},
-        {identifier := identifiers[1]!, visibility := input.visibility,
-          ty := .uint (2 ^ (31 * 8) - 1)}]
-    else (List.range 32).map (InputRequirement.byte input)
-  | .bytes length => (List.range length).map (InputRequirement.byte input)
+  | .bytes length =>
+    if input.visibility == .«public» then byteChunkRequirements input length input.nativeIdentifiers
+    else (List.range length).map (InputRequirement.byte input)
   | .jubjubScalar => [jubjubScalarInputRequirement input]
   | .jubjubPoint => input.nativeIdentifiers.map fun identifier =>
       {identifier, visibility := input.visibility, ty := .native}
@@ -666,21 +667,15 @@ def Input.requirements (input : Input) : List InputRequirement :=
 
 def Input.callArgumentRequirements (input : Input) : List InputRequirement :=
   match input.ty with
-  | .bytes length =>
-    let identifiers := input.callArgumentIdentifiers
-    identifiers.zipIdx |>.map fun (identifier, index) =>
-      let chunkLength := min 31 (length - ((identifiers.length - 1 - index) * 31))
-      {identifier, visibility := input.visibility, ty := .uint (2 ^ (8 * chunkLength) - 1)}
+  | .bytes length => byteChunkRequirements input length input.callArgumentIdentifiers
   | _ => Input.requirements input
 
 def Input.sourceTerm (input : Input) : Term :=
   match input.ty with
-  | .bytes 32 =>
+  | .bytes length =>
     if input.visibility == .«public» then
-      let identifiers := input.nativeIdentifiers
-      bytesFromChunksTerm32 (.input identifiers[1]!) (.input identifiers[0]!)
+      bytesFromChunksTerm length (input.nativeIdentifiers.reverse.map Term.input)
     else .bytes (input.nativeIdentifiers.map Term.input)
-  | .bytes _ => .bytes (input.nativeIdentifiers.map Term.input)
   | .jubjubScalar => .unary "jubjub_scalar_from_native" (.input ("%input_" ++ input.name))
   | .jubjubPoint => .binary "from_coordinates_jubjub"
       (.input input.nativeIdentifiers[0]!) (.input input.nativeIdentifiers[1]!)
