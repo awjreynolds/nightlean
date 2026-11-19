@@ -48,6 +48,13 @@ The vector lookup returns 12, 42 and 88 for positions 0, 1 and 2. The Rust host 
 
 Compact 0.36.1 rejected direct `options[position]` with a runtime index. Its explicit three-case implementation with a bound assertion returned the same three values and rejected the same two invalid positions. This comparison covers behavior with the fixed vector and public frame used above. [Compact sequence reference rules](https://docs.midnight.network/compact/reference/compact-reference#tuple-vector-and-byte-vector-references)
 
+The selected `choose` entrypoint from compiler revision `8002a38` finalized on the pinned Ledger 9.1.0.1 localnet. The Rust client generated the ZKIR 3.2.1 proof, funded both transactions with the development wallet, and verified the exact finalized contract state. The authenticated manifest digest was `114b2a3901d9ef0393103a9f31d128452cd3fd06aeab71906cdb3705a6009f49`.
+
+| Vector lookup action | Finalized block | Transaction ID |
+| --- | ---: | --- |
+| Deploy | 31598 | `c5cd0bf53321868361ac621ba683756a2aeb27089b077ad768bbbbf7c7b9faed` |
+| Call | 31601 | `0cda6c71eb67593d3faf752e4602a932d20e35f2ff06df4a7eaea8aa592d8daf` |
+
 Using direct byte reads for the memo reduced the circuit from 1,025 to 987 rows and brought K from 11 to 10. The native proof finalized on the pinned Ledger 9.1.0.1 and ZKIR 3.2.1 localnet.
 
 | Action | Block | Transaction ID |
