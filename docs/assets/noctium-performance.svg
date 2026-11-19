@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1800" viewBox="0 0 1440 1800" role="img" aria-labelledby="title desc">
 <title id="title">OpenZeppelin confidential-token port benchmark</title>
-<desc id="desc">Alternating source compile runs on an Apple M3 Max and circuit K and rows paired by entrypoint name. Noctium and Compact produce different outputs. The Noctium build generated zero SDK bindings. Timings exclude key generation and proving.</desc>
+<desc id="desc">Alternating source builds on an Apple M3 Max and circuit K and rows paired by entrypoint name. The Noctium development build includes uncommitted compiler changes and generated zero SDK bindings. Timings exclude key generation and proving.</desc>
 <defs>
   <linearGradient id="background" x2="1" y2="1"><stop stop-color="#131f33"/><stop offset="0.72" stop-color="#0b1526"/><stop offset="1" stop-color="#08111f"/></linearGradient>
   <linearGradient id="surface"><stop stop-color="#15273e"/><stop offset="1" stop-color="#112037"/></linearGradient>
@@ -16,14 +16,14 @@
 <text x="1368" y="260" font-size="18" fill="#afc1d7" font-weight="600" text-anchor="end" letter-spacing="1.8">APPLE M3 MAX</text>
 <rect x="72" y="281" width="634" height="225" rx="16" fill="url(#surface)" stroke="#31455f"/>
 <rect x="734" y="281" width="634" height="225" rx="16" fill="url(#surface)" stroke="#31455f"/>
-<text x="100" y="325" font-size="21" fill="#77efd6" font-weight="700" text-anchor="start" letter-spacing="1.8">NOCTIUM · LEAN 4</text>
+<text x="100" y="325" font-size="21" fill="#77efd6" font-weight="700" text-anchor="start" letter-spacing="1.8">NOCTIUM · DEVELOPMENT BUILD</text>
 <text x="762" y="325" font-size="21" fill="#b3c9ff" font-weight="700" text-anchor="start" letter-spacing="1.8">COMPACT 0.36.1</text>
-<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">4.65 s</text>
-<text x="762" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">0.274 s</text>
+<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">3.65 s</text>
+<text x="762" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">0.277 s</text>
 <text x="100" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Ledger and witness outputs · range deduplication on</text>
 <text x="762" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">ZKIR, JavaScript, and TypeScript declarations</text>
-<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">Zero generated SDK bindings</text>
-<text x="762" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">Compile with --skip-zk</text>
+<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files · 2.66 MB · zero SDK bindings</text>
+<text x="762" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">20 files · 517 kB · --skip-zk</text>
 <text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Timings cover different compiler outputs. Both exclude key generation and proving.</text>
 <text x="72" y="622" font-size="38" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-0.6">Circuit size by entrypoint</text>
 <text x="1368" y="619" font-size="22" fill="#afc1d7" font-weight="500" text-anchor="end" letter-spacing="0">Noctium K  ·  3 lower  ·  11 equal  ·  1 higher</text>
@@ -43,62 +43,62 @@
 <path d="M91 808L1349 808" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="790" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">registerWithKey</text>
 <text x="394" y="790" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K13</text>
-<text x="619" y="790" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">6,929</text>
+<text x="619" y="790" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">6,687</text>
 <text x="711" y="790" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K13</text>
 <text x="930" y="790" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">7,540</text>
-<text x="1152" y="790" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−611</text>
-<text x="1335" y="790" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−8.1%</text>
+<text x="1152" y="790" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−853</text>
+<text x="1335" y="790" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−11.3%</text>
 <path d="M91 860L1349 860" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="842" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">mint</text>
 <text x="394" y="842" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K15</text>
-<text x="619" y="842" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">25,230</text>
+<text x="619" y="842" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">24,978</text>
 <text x="711" y="842" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K15</text>
 <text x="930" y="842" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">25,140</text>
-<text x="1152" y="842" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+90</text>
-<text x="1335" y="842" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+0.4%</text>
+<text x="1152" y="842" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−162</text>
+<text x="1335" y="842" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−0.6%</text>
 <rect x="73" y="860" width="1294" height="52" rx="0" fill="#16243a"/>
 <path d="M91 912L1349 912" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="894" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">sweep</text>
 <text x="394" y="894" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K13</text>
-<text x="619" y="894" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">7,073</text>
+<text x="619" y="894" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">6,832</text>
 <text x="711" y="894" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K13</text>
 <text x="930" y="894" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">7,287</text>
-<text x="1152" y="894" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−214</text>
-<text x="1335" y="894" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−2.9%</text>
+<text x="1152" y="894" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−455</text>
+<text x="1335" y="894" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−6.2%</text>
 <path d="M91 964L1349 964" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="946" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">transfer</text>
 <text x="394" y="946" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
-<text x="619" y="946" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">39,113</text>
+<text x="619" y="946" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">38,629</text>
 <text x="711" y="946" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
 <text x="930" y="946" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">38,002</text>
-<text x="1152" y="946" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+1,111</text>
-<text x="1335" y="946" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+2.9%</text>
+<text x="1152" y="946" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+627</text>
+<text x="1335" y="946" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+1.6%</text>
 <rect x="73" y="964" width="1294" height="52" rx="0" fill="#16243a"/>
 <path d="M91 1016L1349 1016" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="998" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">_move</text>
 <text x="394" y="998" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
-<text x="619" y="998" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">39,105</text>
+<text x="619" y="998" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">38,621</text>
 <text x="711" y="998" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
 <text x="930" y="998" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">37,994</text>
-<text x="1152" y="998" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+1,111</text>
-<text x="1335" y="998" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+2.9%</text>
+<text x="1152" y="998" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+627</text>
+<text x="1335" y="998" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+1.7%</text>
 <path d="M91 1068L1349 1068" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1050" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">burn</text>
 <text x="394" y="1050" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K14</text>
-<text x="619" y="1050" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">15,017</text>
+<text x="619" y="1050" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">14,645</text>
 <text x="711" y="1050" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K14</text>
 <text x="930" y="1050" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">13,825</text>
-<text x="1152" y="1050" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+1,192</text>
-<text x="1335" y="1050" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+8.6%</text>
+<text x="1152" y="1050" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+820</text>
+<text x="1335" y="1050" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+5.9%</text>
 <rect x="73" y="1068" width="1294" height="52" rx="0" fill="#16243a"/>
 <path d="M91 1120L1349 1120" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1102" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">clearMemos</text>
 <text x="394" y="1102" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K13</text>
-<text x="619" y="1102" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">6,921</text>
+<text x="619" y="1102" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">6,681</text>
 <text x="711" y="1102" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K13</text>
 <text x="930" y="1102" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">6,573</text>
-<text x="1152" y="1102" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+348</text>
-<text x="1335" y="1102" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+5.3%</text>
+<text x="1152" y="1102" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+108</text>
+<text x="1335" y="1102" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+1.6%</text>
 <path d="M91 1172L1349 1172" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1154" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">totalSupply</text>
 <text x="394" y="1154" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K7</text>
@@ -118,67 +118,67 @@
 <text x="1335" y="1206" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−7.0%</text>
 <path d="M91 1276L1349 1276" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1258" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">balanceOf</text>
-<text x="394" y="1258" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K9</text>
-<text x="619" y="1258" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">264</text>
+<text x="394" y="1258" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K8</text>
+<text x="619" y="1258" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">228</text>
 <text x="711" y="1258" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K10</text>
 <text x="930" y="1258" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">901</text>
-<text x="1152" y="1258" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−637</text>
-<text x="1335" y="1258" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−70.7%</text>
+<text x="1152" y="1258" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−673</text>
+<text x="1335" y="1258" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−74.7%</text>
 <rect x="73" y="1276" width="1294" height="52" rx="0" fill="#16243a"/>
 <path d="M91 1328L1349 1328" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1310" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">pendingOf</text>
-<text x="394" y="1310" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K9</text>
-<text x="619" y="1310" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">264</text>
+<text x="394" y="1310" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K8</text>
+<text x="619" y="1310" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">228</text>
 <text x="711" y="1310" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K10</text>
 <text x="930" y="1310" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">901</text>
-<text x="1152" y="1310" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−637</text>
-<text x="1335" y="1310" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−70.7%</text>
+<text x="1152" y="1310" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−673</text>
+<text x="1335" y="1310" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−74.7%</text>
 <path d="M91 1380L1349 1380" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1362" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">computeAccountId</text>
 <text x="394" y="1362" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K13</text>
-<text x="619" y="1362" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">2,083</text>
+<text x="619" y="1362" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">1,993</text>
 <text x="930" y="1362" font-size="23" fill="#afc1d7" font-weight="500" text-anchor="end" letter-spacing="0">Pure JavaScript</text>
 <text x="1335" y="1362" font-size="23" fill="#afc1d7" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">n/a</text>
 <rect x="73" y="1380" width="1294" height="52" rx="0" fill="#16243a"/>
 <path d="M91 1432L1349 1432" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1414" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">approve</text>
 <text x="394" y="1414" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
-<text x="619" y="1414" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">38,403</text>
+<text x="619" y="1414" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">37,856</text>
 <text x="711" y="1414" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
 <text x="930" y="1414" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">38,349</text>
-<text x="1152" y="1414" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+54</text>
-<text x="1335" y="1414" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+0.1%</text>
+<text x="1152" y="1414" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−493</text>
+<text x="1335" y="1414" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−1.3%</text>
 <path d="M91 1484L1349 1484" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1466" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">allowance</text>
 <text x="394" y="1466" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K9</text>
-<text x="619" y="1466" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">504</text>
+<text x="619" y="1466" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">464</text>
 <text x="711" y="1466" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K9</text>
 <text x="930" y="1466" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">435</text>
-<text x="1152" y="1466" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+69</text>
-<text x="1335" y="1466" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+15.9%</text>
+<text x="1152" y="1466" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+29</text>
+<text x="1335" y="1466" font-size="24" fill="#ffc2a9" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">+6.7%</text>
 <rect x="73" y="1484" width="1294" height="52" rx="0" fill="#16243a"/>
 <path d="M91 1536L1349 1536" stroke="#23364d" stroke-width="1"/>
 <text x="96" y="1518" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">transferFrom</text>
 <text x="394" y="1518" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
-<text x="619" y="1518" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">61,798</text>
+<text x="619" y="1518" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">61,110</text>
 <text x="711" y="1518" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
 <text x="930" y="1518" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">62,483</text>
-<text x="1152" y="1518" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−685</text>
-<text x="1335" y="1518" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−1.1%</text>
+<text x="1152" y="1518" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−1,373</text>
+<text x="1335" y="1518" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−2.2%</text>
 <text x="96" y="1570" font-size="24" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">burnFrom</text>
 <text x="394" y="1570" font-size="23" fill="#77efd6" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
-<text x="619" y="1570" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">38,248</text>
+<text x="619" y="1570" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">37,739</text>
 <text x="711" y="1570" font-size="23" fill="#b3c9ff" font-weight="600" text-anchor="middle" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">K16</text>
 <text x="930" y="1570" font-size="25" fill="#f2f6fc" font-weight="500" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">38,294</text>
-<text x="1152" y="1570" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−46</text>
-<text x="1335" y="1570" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−0.1%</text>
+<text x="1152" y="1570" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−555</text>
+<text x="1335" y="1570" font-size="24" fill="#77efd6" font-weight="600" text-anchor="end" letter-spacing="0" font-family="SF Mono, Menlo, Consolas, monospace">−1.4%</text>
 <path d="M661 667L661 1578" stroke="#2b3e56" stroke-width="1"/>
 <path d="M972 667L972 1578" stroke="#2b3e56" stroke-width="1"/>
 <text x="73" y="1632" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Δ = Noctium rows minus Compact rows. Percentage uses Compact as the baseline.</text>
 <text x="73" y="1665" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Pairs share entrypoint names. The ports have different ABIs and state paths.</text>
 <text x="73" y="1698" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Both sets use the same ZKIR 3.2.1 sizing tool. Proving latency was outside this benchmark.</text>
 <path d="M72 1717L1368 1717" stroke="#31455f" stroke-width="1"/>
-<text x="72" y="1743" font-size="21" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Circuit baseline 61c0568 · Compact 0.36.1 · OpenZeppelin f85f1a2</text>
+<text x="72" y="1743" font-size="21" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium development snapshot (base cedb6ef) · OpenZeppelin f85f1a2</text>
 <text x="1368" y="1743" font-size="20" fill="#afc1d7" font-weight="600" text-anchor="end" letter-spacing="1.4">19 NOV 2026</text>
 <text x="72" y="1776" font-size="22" fill="#77efd6" font-weight="600" text-anchor="start" letter-spacing="0">github.com/awjreynolds/noctium</text>
 </g></svg>

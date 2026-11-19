@@ -1,10 +1,39 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The chart uses alternating baseline runs with medians of **4.65 s** for Noctium and **0.274 s** for Compact 0.36.1. The builds use different contract interfaces, state paths and artifact sets. Noctium enables range deduplication and generates zero SDK bindings. Compact runs with `--skip-zk`. Both timings exclude key generation and proving. Of the 15 pairs by entrypoint name, Noctium's K is lower on three, equal on 11, and higher on `totalSupply`, at K7 against K6. Eight pairs have higher row counts with Noctium.
+The November 19 development benchmark measured **3.65 s for Noctium** and **0.277 s for Compact 0.36.1**. Noctium used a prebuilt compiler and native Lean library from a development worktree based on `cedb6ef`, including uncommitted compiler changes. The [machine-readable sample](oz-compile-performance.json) records the revision, source and executable hashes.
+
+The builds use different contract interfaces, state paths and artifact sets. Noctium ran with range deduplication and emitted ledger and witness artifacts with zero SDK bindings. Compact ran with `--skip-zk`. Both excluded key generation and proving.
 
 ![Noctium and Compact compilation time and per-entrypoint circuit K and rows](../assets/noctium-performance.png)
 
-## Source compilation
+| Source compiler | Three alternating runs (s) | Median (s) | Files | Total bytes | ZKIR bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Noctium development build | 3.727 / 3.653 / 3.645 | 3.65 | 53 | 2,661,156 | 304,477 |
+| Compact 0.36.1 | 0.275 / 0.281 / 0.277 | 0.277 | 20 | 517,229 | 167,669 |
+
+Each run used a fresh process, a fresh output directory and warm dependencies on the same Apple M3 Max with 48 GiB RAM. Each compiler reproduced its output bytes across its three runs. Noctium emits 16 ledger relations, Impact plans and witness artifacts. Compact emits 15 relations and JavaScript and TypeScript artifacts. Compact implements `computeAccountId` in JavaScript. Noctium's corresponding circuit measured K13 and 1,993 rows.
+
+| Entrypoint | Noctium K | Noctium rows | Compact K | Compact rows | Row difference |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `_move` | 16 | 38,621 | 16 | 37,994 | +627 |
+| `allowance` | 9 | 464 | 9 | 435 | +29 |
+| `approve` | 16 | 37,856 | 16 | 38,349 | -493 |
+| `balanceOf` | 8 | 228 | 10 | 901 | -673 |
+| `burn` | 14 | 14,645 | 14 | 13,825 | +820 |
+| `burnFrom` | 16 | 37,739 | 16 | 38,294 | -555 |
+| `clearMemos` | 13 | 6,681 | 13 | 6,573 | +108 |
+| `isRegistered` | 7 | 120 | 8 | 129 | -9 |
+| `mint` | 15 | 24,978 | 15 | 25,140 | -162 |
+| `pendingOf` | 8 | 228 | 10 | 901 | -673 |
+| `registerWithKey` | 13 | 6,687 | 13 | 7,540 | -853 |
+| `sweep` | 13 | 6,832 | 13 | 7,287 | -455 |
+| `totalSupply` | 7 | 66 | 6 | 34 | +32 |
+| `transfer` | 16 | 38,629 | 16 | 38,002 | +627 |
+| `transferFrom` | 16 | 61,110 | 16 | 62,483 | -1,373 |
+
+The pinned ZKIR 3.2.1 sizing tool measured every relation. Of the 15 pairings by name, Noctium used fewer rows in 9 and more in 6. Its K was lower in 3, equal in 11, and higher in 1. `totalSupply` used K7 in Noctium and K6 in Compact. These measurements cover source builds and circuit sizing.
+
+## Earlier source compilation
 
 | Compiler output | Three source runs (s) | Median (s) |
 | --- | ---: | ---: |

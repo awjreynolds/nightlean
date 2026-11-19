@@ -88,6 +88,6 @@ The [Verity comparison](research/verity-lessons.md) records lessons for compiler
 
 ## Benchmark graphic
 
-The [OpenZeppelin benchmark graphic](assets/noctium-performance.png) shows compile times and circuit K and rows across the 16 entrypoints. [Editable SVG](assets/noctium-performance.svg) · [Measurements](development/oz-compile-performance.md)
+The [OpenZeppelin benchmark graphic](assets/noctium-performance.png) shows the November 19 compile times and circuit K and rows for 15 paired entrypoints. [Editable SVG](assets/noctium-performance.svg) · [Measurements](development/oz-compile-performance.md)
 
 The [earlier project pitch](assets/noctium-pitch.png) records the initial research preview. [Editable SVG](assets/noctium-pitch.svg) · [MIT license](../LICENSE)

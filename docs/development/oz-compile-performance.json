@@ -669,5 +669,235 @@
         "rowDelta": -46
       }
     ]
+  },
+  "latestDevelopmentBenchmark": {
+    "checkedOn": "2026-11-19",
+    "baseRevision": "cedb6ef4a00d8b46331e1a3c955b19970d03585a",
+    "compilerWorktreeChanges": true,
+    "compilerDiffSha256": "6a1a2bccf46126eff6c78831da29cbd36f2a1ef0ca1d39b9bb043a0f8e632965",
+    "hardware": {
+      "cpu": "Apple M3 Max",
+      "logicalCores": 16,
+      "ramGiB": 48
+    },
+    "digests": {
+      "noctiumCompilerSha256": "c7b717330b5a5153d4aa5637600afde0f722c6cdf2e22734fbef49360c201217",
+      "noctiumSharedSha256": "6bd247ee7ec16e330552a5886bbec409414b88ee355ab07a32b72c5cebf0291c",
+      "noctiumSourceSha256": "f841e14b4112b7a07a042b5d16347d2edc47d54f8f742900b8cdc33e542520ef",
+      "compactBinarySha256": "15646793d3ff7f36cd81aa63419163e29d9893538bb4a6911a21012e8735b537",
+      "compactSourceSha256": "4f30d84cf9567529ca15cade71f22cab08512a6371b6277655352943efa836f9",
+      "zkirBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40"
+    },
+    "wallSeconds": {
+      "noctium": [
+        3.726679,
+        3.652796,
+        3.645088
+      ],
+      "compact": [
+        0.275109,
+        0.281479,
+        0.276645
+      ]
+    },
+    "medianSeconds": {
+      "noctium": 3.652796,
+      "compact": 0.276645
+    },
+    "artifactInventory": {
+      "noctium": {
+        "files": 53,
+        "bytes": 2661156,
+        "zkirBytes": 304477,
+        "artifactSetSha256": "26098d8ec50f601b8902744782ca5c23fc1ee8c69c791edec52848fdd413df80"
+      },
+      "compact": {
+        "files": 20,
+        "bytes": 517229,
+        "zkirBytes": 167669,
+        "artifactSetSha256": "4e3a02cd3e725580aa1f4c93bcdf7b42dd609e28e2854e511ba6bb252e7bf30c"
+      }
+    },
+    "circuits": {
+      "_move": {
+        "noctium": {
+          "k": 16,
+          "rows": 38621
+        },
+        "compact": {
+          "k": 16,
+          "rows": 37994
+        }
+      },
+      "allowance": {
+        "noctium": {
+          "k": 9,
+          "rows": 464
+        },
+        "compact": {
+          "k": 9,
+          "rows": 435
+        }
+      },
+      "approve": {
+        "noctium": {
+          "k": 16,
+          "rows": 37856
+        },
+        "compact": {
+          "k": 16,
+          "rows": 38349
+        }
+      },
+      "balanceOf": {
+        "noctium": {
+          "k": 8,
+          "rows": 228
+        },
+        "compact": {
+          "k": 10,
+          "rows": 901
+        }
+      },
+      "burn": {
+        "noctium": {
+          "k": 14,
+          "rows": 14645
+        },
+        "compact": {
+          "k": 14,
+          "rows": 13825
+        }
+      },
+      "burnFrom": {
+        "noctium": {
+          "k": 16,
+          "rows": 37739
+        },
+        "compact": {
+          "k": 16,
+          "rows": 38294
+        }
+      },
+      "clearMemos": {
+        "noctium": {
+          "k": 13,
+          "rows": 6681
+        },
+        "compact": {
+          "k": 13,
+          "rows": 6573
+        }
+      },
+      "computeAccountId": {
+        "noctium": {
+          "k": 13,
+          "rows": 1993
+        },
+        "compact": null
+      },
+      "isRegistered": {
+        "noctium": {
+          "k": 7,
+          "rows": 120
+        },
+        "compact": {
+          "k": 8,
+          "rows": 129
+        }
+      },
+      "mint": {
+        "noctium": {
+          "k": 15,
+          "rows": 24978
+        },
+        "compact": {
+          "k": 15,
+          "rows": 25140
+        }
+      },
+      "pendingOf": {
+        "noctium": {
+          "k": 8,
+          "rows": 228
+        },
+        "compact": {
+          "k": 10,
+          "rows": 901
+        }
+      },
+      "registerWithKey": {
+        "noctium": {
+          "k": 13,
+          "rows": 6687
+        },
+        "compact": {
+          "k": 13,
+          "rows": 7540
+        }
+      },
+      "sweep": {
+        "noctium": {
+          "k": 13,
+          "rows": 6832
+        },
+        "compact": {
+          "k": 13,
+          "rows": 7287
+        }
+      },
+      "totalSupply": {
+        "noctium": {
+          "k": 7,
+          "rows": 66
+        },
+        "compact": {
+          "k": 6,
+          "rows": 34
+        }
+      },
+      "transfer": {
+        "noctium": {
+          "k": 16,
+          "rows": 38629
+        },
+        "compact": {
+          "k": 16,
+          "rows": 38002
+        }
+      },
+      "transferFrom": {
+        "noctium": {
+          "k": 16,
+          "rows": 61110
+        },
+        "compact": {
+          "k": 16,
+          "rows": 62483
+        }
+      }
+    },
+    "scope": "Measured Noctium development worktree with uncommitted compiler changes and a current native shared library. The tracked compiler diff digest covers Noctium, the Lean entrypoints and Lake files, profiles and the token source. The pinned Compact release compiled the OpenZeppelin wrapper. Three alternating fresh source processes per compiler, warm dependencies, no key generation or proving.",
+    "noctiumArgs": [
+      "compile",
+      "examples/openzeppelin/ConfidentialToken.lean",
+      "--target",
+      "profiles/midnight-ledger-9-zkir-3.2.1-target.json",
+      "--dedup-range-checks",
+      "--emit",
+      "ledger",
+      "--emit",
+      "witness",
+      "--output",
+      "<new-directory>"
+    ],
+    "compactArgs": [
+      "--skip-zk",
+      "contracts/test/integration/_mocks/ComposedConfidentialFungibleTokenPublicSupply.compact",
+      "<new-directory>"
+    ],
+    "generatedNoctiumSdkBindings": 0,
+    "artifactDigestsMatchAcrossRuns": true,
+    "artifactSetDigestMethod": "SHA-256 of a compact JSON array of sorted relative paths and file SHA-256 pairs before circuit sizing."
   }
 }
