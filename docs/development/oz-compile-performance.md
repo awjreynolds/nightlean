@@ -48,6 +48,8 @@ The pinned `mock-compile` measured 2.1% to 7.6% fewer rows across these entrypoi
 
 The current opt-in pass also removes a wider check when an earlier unconditional check already constrains the same operand. On this port, seven more 248-bit checks follow a 128-bit check on the same value. The pass removes 409 checks in total across 11 relations. Pinned synthesis reports 62 fewer rows in each affected ledger entrypoint (`_move`, `approve`, `burn` and `transfer`). For example, `transfer` drops from 39,183 to 39,121 rows and stays at K16. Impact files remain byte-identical and all 34 raw-witness cases agree with the default compiler.
 
+Lean checks `RangeDedup.preserves_decoded` against the actual JSON pass and the independent scalar ZKIR decoder. For instruction lists accepted by that decoder, the optimized list also decodes, preserves ordered non-range instructions, and has the same satisfying assignments. The model covers the scalar decoder's instruction set. The ZKIR verifier, expanded instruction set and ledger execution require separate evidence. [Preservation theorem](../../Noctium/Verification/RangeDedup.lean)
+
 ## Selected ledger outputs
 
 One serial run per mode on the same host compared a full compile with `--emit ledger --emit witness`. Both runs used the same executable, source and ZKIR 3.2.1 profile.

@@ -1,6 +1,6 @@
 # Generic scalar translation validation
 
-This proof package concerns the current straight-line Native, Bool and UInt scalar relation backend. Issue #64 records the qualified source and audit evidence. The broader compiler, ledger and deployment assurance contract remains issue #21.
+This proof package concerns the straight-line Native, Bool and UInt scalar relation backend at the recorded source pin. Issue #64 records the qualified source and audit evidence. The newer byte, curve and nested expression constructors still require an updated normalization model and proof. The range-pass preservation theorem builds independently against the current scalar instruction decoder. [Proof assurance ticket](https://github.com/awjreynolds/noctium/issues/21) · [Range preservation](../../Noctium/Verification/RangeDedup.lean)
 
 ## Reused implementation
 
