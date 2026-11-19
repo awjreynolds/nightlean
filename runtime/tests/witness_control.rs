@@ -995,9 +995,9 @@ fn readable_private_state_source_binds_callbacks_stages_and_native_constraints()
 fn typed_private_cells_bind_distinct_read_types() {
     use coin_structure::contract::ContractAddress;
     use ledger::structure::INITIAL_PARAMETERS;
-    use noctium_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
+    use noctium_runtime::{Plan, check, create_state, field_decimal, prepare, zkir::IrSource};
     use std::{fs, path::PathBuf};
-    use transient_crypto::curve::Fr;
+    use transient_crypto::curve::{EmbeddedFr, EmbeddedGroupAffine, Fr};
 
     let root = PathBuf::from(std::env::var_os("NOCTIUM_MIXED_PRIVATE_STATE_ARTIFACTS").unwrap());
     let stem = "PrivateStateMixed.Meter.advance";
@@ -1016,9 +1016,18 @@ fn typed_private_cells_bind_distinct_read_types() {
     let pin = hex::encode(Sha256::digest(
         control["binding"].as_str().unwrap().as_bytes(),
     ));
+    let point = |value: EmbeddedGroupAffine| {
+        json!({"kind":"jubjubPoint", "x":field_decimal(value.x().unwrap()), "y":field_decimal(value.y().unwrap())})
+    };
+    let scalar = |value: &str| json!({"kind":"jubjubScalar", "value":value});
+    let generator = EmbeddedGroupAffine::generator();
+    let recipient = generator * EmbeddedFr::from(7u64);
     let mut session = Session::from_json_with_invocation_target(
         control.clone(),
-        BTreeMap::from([("expected".into(), json!("2"))]),
+        BTreeMap::from([
+            ("expected".into(), json!("2")),
+            ("replacement".into(), scalar("11")),
+        ]),
         context,
         Some(&pin),
         Some(InvocationTarget {
@@ -1030,6 +1039,13 @@ fn typed_private_cells_bind_distinct_read_types() {
     for (key, schema, response, invalid) in [
         ("saved", "UIntRange<256>", json!("1"), json!(true)),
         ("enabled", "Bool", json!(true), json!("1")),
+        ("secret", "JubjubScalar", scalar("7"), scalar("07")),
+        (
+            "recipient",
+            "JubjubPoint",
+            point(recipient),
+            json!({"kind":"jubjubPoint", "x":"0", "y":"0"}),
+        ),
     ] {
         let pending = session.advance().unwrap();
         let request = &pending["request"];
@@ -1061,6 +1077,14 @@ fn typed_private_cells_bind_distinct_read_types() {
         completed["hostWrites"]["noctium/PrivateStateMixed.Wallet/enabled"]["value"],
         false
     );
+    assert_eq!(
+        completed["hostWrites"]["noctium/PrivateStateMixed.Wallet/secret"]["value"],
+        scalar("11")
+    );
+    assert_eq!(
+        completed["hostWrites"]["noctium/PrivateStateMixed.Wallet/recipient"]["value"],
+        point(generator * EmbeddedFr::from(11u64))
+    );
     let plan: Plan =
         serde_json::from_slice(&fs::read(root.join(format!("{stem}.impact.json"))).unwrap())
             .unwrap();
@@ -1076,8 +1100,21 @@ fn typed_private_cells_bind_distinct_read_types() {
     )
     .unwrap();
     check(&execution, &circuit).unwrap();
-    assert_eq!(execution.preimage.private_transcript, [Fr::from(1u64); 2]);
-    execution.preimage.private_transcript[1] = Fr::from(0u64);
+    assert_eq!(
+        execution.preimage.private_transcript,
+        [
+            Fr::from(11u64),
+            Fr::from(1u64),
+            Fr::from(1u64),
+            Fr::from(7u64),
+            recipient.x().unwrap(),
+            recipient.y().unwrap(),
+        ]
+    );
+    execution.preimage.private_transcript[2] = Fr::from(0u64);
+    assert!(check(&execution, &circuit).is_err());
+    execution.preimage.private_transcript[2] = Fr::from(1u64);
+    execution.preimage.private_transcript[3] = Fr::from(8u64);
     assert!(check(&execution, &circuit).is_err());
 }
 

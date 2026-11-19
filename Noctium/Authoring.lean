@@ -1356,8 +1356,6 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
       match fieldStx with
       | `(noctium_private_field| cell $field:ident : $type:nltype) => do
         let ty ← readScalarTy type
-        if ty.isJubjub then
-          throwErrorAt type "Jubjub private-state cells are not supported by this witness path"
         let key := "noctium/" ++ schemaName ++ "/" ++ field.getId.toString
         let capability := "private_state:" ++ schemaName
         let signatureName := "private_state.read." ++ schemaName ++ "." ++ field.getId.toString ++ ".v1"

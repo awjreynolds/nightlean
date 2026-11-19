@@ -15,16 +15,22 @@ not Lean theorems. A private read or calculation needs no `disclose`. A public
 result derived from either needs explicit release.
 
 This source form supports Native, Bool, bounded UInt and Bytes32 values, with Unit
-callback results. Typed callbacks also accept and return JubjubScalar and JubjubPoint values. Its `.observations.json` records authored proof conditions separately
-from generated validity checks. The summary is source review material and is
-not yet a verified bundle artifact. Composite curve schemas, curve private-state cells and structured source branches remain separate work.
+callback results. Typed callbacks and private cells also support `JubjubScalar`
+and `JubjubPoint`. The `.observations.json` records authored proof conditions
+separately from generated validity checks for source review. Composite curve
+schemas and structured source branches remain separate work.
 One circuit can read private cells of different supported scalar types. To opt
 in, register `private_state.read.v1` with `argumentSchema` set to `{"key":"Key"}`
 and `resultSchema` set to `"SourceCellType"`. Use the authenticated witness
 plan to register each read's name, capability and exact key. Each request
 reports its declared type, such as `Bool` or `UIntRange<256>`, and the runtime
 validates the response against it. A host that supplies a concrete result
-schema still restricts reads to that type. [Mixed-cell example](../../tests/PrivateStateMixed.lean)
+schema still restricts reads to that type. The mixed-cell example reads a counter,
+a flag and a Jubjub key pair, checks the scalar-to-point relation in the circuit,
+and stages a replacement pair. The Rust host rejects noncanonical scalars and
+off-curve points. The native checker rejects a scalar inconsistent with the
+stored point. The fixture sizes at K12 with 2,184 rows.
+[Mixed-cell example](../../tests/PrivateStateMixed.lean)
 
 Declarations describe access requests. The host still grants storage permissions.
 Generated keys use `noctium/<qualified-schema>/<field>`. Grant a schema with
