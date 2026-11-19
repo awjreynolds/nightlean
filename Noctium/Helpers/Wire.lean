@@ -2,6 +2,14 @@ import Noctium.Helpers
 
 namespace Noctium.Helpers.Wire
 
+/-- A fixed frame and the Lean type environment defining its payload. -/
+structure Codec where
+  payload : Types.CompositeType
+  frameBytes : Nat
+  composites : Types.CompositeEnv := {}
+
+def codecName (index : Nat) : String := s!"__noctium_wire_{index}"
+
 private structure Leaf where
   path : List Types.Projection := []
   type : Ty
@@ -81,5 +89,16 @@ def declarations (compiled : Types.CompiledType) (name : String) (width : Nat)
     {id := decoder, name := name ++ "Decode", parameters := [⟨"frame", .bytes width⟩],
       result := .composite compiled.type,
       body := [.return (some (.composite compiled.type decoded.reverse))]}]
+
+/-- Add the checked codec helpers to a readable circuit's root scope. -/
+def attach (program : Program) (codecs : List Codec) : Except String Program := do
+  let composites : Types.CompositeEnv := {
+    structures := (program.composites.structures ++ codecs.flatMap (·.composites.structures)).eraseDups
+    enumerations := (program.composites.enumerations ++ codecs.flatMap (·.composites.enumerations)).eraseDups
+  }
+  let helpers ← codecs.zipIdx.mapM fun (codec, index) => do
+    let compiled ← (Types.compileType composites codec.payload).mapError (·.message)
+    declarations compiled (codecName index) codec.frameBytes ⟨0, 2 * index + 1⟩ ⟨0, 2 * index + 2⟩
+  pure {program with composites, declarations := program.declarations ++ helpers.flatten}
 
 end Noctium.Helpers.Wire

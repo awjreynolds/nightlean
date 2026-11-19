@@ -1,4 +1,5 @@
 import Noctium.Frontend.Core
+import Noctium.Helpers.Wire
 
 namespace Noctium.Authoring
 
@@ -98,6 +99,8 @@ scoped syntax (name := noctiumWitnessDeclarationCommand) "noctium_witness" ident
   "(" noctium_witness_parameter,* ")" ":" noctium_witness_result : command
 
 scoped syntax "witness" ident "(" nlexpr,* ")" : nlexpr
+scoped syntax "encode(" ident "," nlexpr ")" : nlexpr
+scoped syntax "decode(" ident "," nlexpr ")" : nlexpr
 
 declare_syntax_cat noctium_witness_statement
 scoped syntax "public" ident ":" nltype : noctium_witness_statement
@@ -109,7 +112,7 @@ scoped syntax "prove" nlexpr : noctium_witness_statement
 scoped syntax "stage" ident ":=" nlexpr : noctium_witness_statement
 scoped syntax "output" ident ":" nltype ":=" nlexpr : noctium_witness_statement
 scoped syntax (name := noctiumAuthoredWitnessCircuitCommand) "noctium_witness_circuit" ident
-  "where" noctium_witness_statement* "end" : command
+  ("using" ident,+)? "where" noctium_witness_statement* "end" : command
 
 private abbrev SurfaceEnv := List (String × ResultType × Noctium.Helpers.Term)
 
@@ -122,6 +125,7 @@ private structure Lowered where
   generatedValidity : List String := []
 
 private structure AuthoringExprState where
+  codecs : List (Name × Helpers.Wire.Codec) := []
   nextCall : Nat := 0
   nextLet : Nat := 0
   allowAssertThen : _root_.Bool := _root_.Bool.false
@@ -208,16 +212,22 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .foreign (.scalar .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.curve25519))
   | .foreign (.point .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.curve25519))
 
+private partial def compositeTypeTerm : Types.CompositeType → CommandElabM (TSyntax `term)
+  | .unit => `(Noctium.Types.CompositeType.unit)
+  | .scalar ty => do `(Noctium.Types.CompositeType.scalar $(← tyTerm ty))
+  | .tuple items => do
+    let items := (← items.mapM compositeTypeTerm).toArray
+    `(Noctium.Types.CompositeType.tuple [$items,*])
+  | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
+  | .enumeration id => `(Noctium.Types.CompositeType.enumeration $(stringTerm id))
+  | .vector length element => do
+    `(Noctium.Types.CompositeType.vector $(natTerm length) $(← compositeTypeTerm element))
+  | .bytes length => `(Noctium.Types.CompositeType.bytes $(natTerm length))
+
 private def resultTypeTerm : ResultType → CommandElabM (TSyntax `term)
   | .unit => `(Noctium.Helpers.ResultType.unit)
   | .scalar ty => do `(Noctium.Helpers.ResultType.scalar $(← tyTerm ty))
-  | .composite (.structure id) =>
-    `(Noctium.Helpers.ResultType.composite (Noctium.Types.CompositeType.structure $(stringTerm id)))
-  | .composite _ => throwError "readable witness source supports only synthesized record results"
-
-private def compositeTypeTerm : Types.CompositeType → CommandElabM (TSyntax `term)
-  | .structure id => `(Noctium.Types.CompositeType.structure $(stringTerm id))
-  | _ => throwError "readable witness source supports only synthesized record types"
+  | .composite type => do `(Noctium.Helpers.ResultType.composite $(← compositeTypeTerm type))
 
 private def validIdentity (stx : Syntax) (value : String) : CommandElabM _root_.Unit :=
   unless Helpers.validWitnessIdentifier value do
@@ -325,6 +335,8 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| cast($ty:nltype, $value:nlexpr)) =>
     s!"cast({renderType ty}, {renderExpr value})"
   | `(nlexpr| disclose($value)) => s!"disclose({renderExpr value})"
+  | `(nlexpr| encode($codec:ident, $value)) => s!"encode({codec.getId}, {renderExpr value})"
+  | `(nlexpr| decode($codec:ident, $value)) => s!"decode({codec.getId}, {renderExpr value})"
   | `(nlexpr| eq($left, $right)) => s!"eq({renderExpr left}, {renderExpr right})"
   | `(nlexpr| boolAnd($left, $right)) => s!"boolAnd({renderExpr left}, {renderExpr right})"
   | `(nlexpr| boolOr($left, $right)) => s!"boolOr({renderExpr left}, {renderExpr right})"
@@ -413,6 +425,7 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
+  | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => disclosedValues value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => disclosedValues value
@@ -460,6 +473,7 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
+  | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => inlineAssertions value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => inlineAssertions value
@@ -515,6 +529,11 @@ private def mergeLowered (type : ResultType) (term : Noctium.Helpers.Term) (valu
   generatedValidity := values.flatMap (·.generatedValidity) |>.eraseDups
 }
 
+private def selectedCodec (name : TSyntax `ident) : ExprM (Helpers.Wire.Codec × String) := do
+  let some ((_, codec), index) := (← get).codecs.zipIdx.find? (fun (candidate, _) => candidate.1 == name.getId)
+    | throwErrorAt name s!"add codec '{name.getId}' to the circuit's using clause"
+  pure (codec, Helpers.Wire.codecName index)
+
 private def lowerForeignFieldConstant (stx : Syntax) (kind : Foreign.Kind) (value : Nat) : ExprM Lowered := do
   let encoding ← match Foreign.encodeField kind value with
     | .ok encoding => pure encoding
@@ -539,15 +558,15 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     | .ok _ => pure {type := .scalar (.uint n.getNat), term := .uint n.getNat n.getNat}
   | `(nlexpr| let $id:ident := $value:nlexpr in $body:nlexpr) => do
     let value ← lowerExpr programName callPrefix env value
-    let .scalar ty := value.type | throwErrorAt id "readable witness let cannot bind Unit"
+    if value.type == .unit then throwErrorAt id "readable witness let cannot bind Unit"
     let localIndex ← get
     modify fun state => {state with nextLet := state.nextLet + 1}
     let internalName := s!"__noctium_let_{localIndex.nextLet}_{id.getId}"
     let ref := Noctium.Helpers.Term.ref internalName
-    let body ← lowerExpr programName callPrefix ((id.getId.toString, .scalar ty, ref) :: env) body
+    let body ← lowerExpr programName callPrefix ((id.getId.toString, value.type, ref) :: env) body
     pure
       { body with
-        before := value.before ++ [.bind internalName (.scalar ty) value.term] ++ body.before,
+        before := value.before ++ [.bind internalName value.type value.term] ++ body.before,
         signatures := uniqueWitnesses (value.signatures ++ body.signatures),
         witnessNames := (value.witnessNames ++ body.witnessNames).eraseDups,
         generatedValidity := (value.generatedValidity ++ body.generatedValidity).eraseDups }
@@ -762,6 +781,19 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     | .error message => throwErrorAt stx message
     | .ok _ => pure ()
     let result := mergeLowered (.scalar target) (.bytes operation [value.term]) [value]
+    pure {result with generatedValidity := s!"checked wire decode {renderExpr stx}" :: result.generatedValidity}
+  | `(nlexpr| encode($name:ident, $value)) => do
+    let (codec, helper) ← selectedCodec name
+    let value ← lowerExpr programName callPrefix env value
+    unless value.type == .composite codec.payload do
+      throwErrorAt stx s!"encode requires the payload type of codec '{name.getId}'"
+    pure (mergeLowered (.scalar (.bytes codec.frameBytes)) (.call (helper ++ "Encode") [value.term]) [value])
+  | `(nlexpr| decode($name:ident, $value)) => do
+    let (codec, helper) ← selectedCodec name
+    let value ← lowerExpr programName callPrefix env value
+    unless value.type == .scalar (.bytes codec.frameBytes) do
+      throwErrorAt stx s!"decode requires Bytes {codec.frameBytes} for codec '{name.getId}'"
+    let result := mergeLowered (.composite codec.payload) (.call (helper ++ "Decode") [value.term]) [value]
     pure {result with generatedValidity := s!"checked wire decode {renderExpr stx}" :: result.generatedValidity}
   | `(nlexpr| jubjubScalarFromNative($value)) =>
     lowerCurve programName callPrefix env stx .scalarFromNative [value]
@@ -1103,6 +1135,9 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
     let args ← args.mapM termTerm
     let args := args.toArray
     `(Noctium.Helpers.Term.witnessCall $(stringTerm site) $(stringTerm name) [$args,*])
+  | .call name args => do
+    let args := (← args.mapM termTerm).toArray
+    `(Noctium.Helpers.Term.call $(stringTerm name) [$args,*])
   | .poseidon2 domain left right => do
     `(Noctium.Helpers.Term.poseidon2 $(natTerm domain) $(← termTerm left) $(← termTerm right))
   | .curve operation arguments => do
@@ -1318,7 +1353,8 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
 
 @[command_elab noctiumAuthoredWitnessCircuitCommand] unsafe def elabAuthoredWitnessCircuit : CommandElab := fun stx => do
   match stx with
-  | `(noctium_witness_circuit $name:ident where $statements:noctium_witness_statement* end) => do
+  | `(noctium_witness_circuit $name:ident $[using $usingCodecs:ident,*]?
+      where $statements:noctium_witness_statement* end) => do
     let fullName := (← getCurrNamespace) ++ name.getId
     let programName := generatedName fullName "__program"
     let observationName := generatedName fullName "__observation"
@@ -1330,6 +1366,17 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     validIdentity name programNameText
     let exportName := "noctium.witness-circuit." ++ programNameText ++ ".v1"
     validIdentity name exportName
+    let codecNames := (usingCodecs.map (·.getElems)).getD #[]
+    let mut codecs : List (Name × Helpers.Wire.Codec) := []
+    let mut codecTerms : Array (TSyntax `term) := #[]
+    for codecName in codecNames do
+      if codecs.any (·.1 == codecName.getId) then
+        throwErrorAt codecName "duplicate readable wire codec"
+      let source ← liftCoreM <| resolveGlobalConstNoOverload codecName
+      let codec ← evalConstCheck Helpers.Wire.Codec ``Helpers.Wire.Codec source
+      codecs := codecs ++ [(codecName.getId, codec)]
+      codecTerms := codecTerms.push ⟨mkIdent source⟩
+    let exprState : AuthoringExprState := {codecs}
     let mut env : SurfaceEnv := []
     let mut parameters : List Parameter := []
     let mut inputs : List Input := []
@@ -1384,7 +1431,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         generatedValidity := (generatedValidity ++ [s!"typed private-state read reply: {field.key}"]).eraseDups
       | `(noctium_witness_statement| witness $function:ident($args:nlexpr,*)) => do
         let callbackExpr ← `(nlexpr| witness $function($args,*))
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env callbackExpr).run' {}
+        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env callbackExpr).run' exprState
         let .unit := lowered.type | throwErrorAt statement "standalone witness statements must call a Unit witness"
         body := body ++ lowered.before ++ [.evaluate lowered.term]
         witnesses := uniqueWitnesses (witnesses ++ lowered.signatures)
@@ -1399,7 +1446,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
         let ty ← readScalarTy type
         let sourceExpr := value
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' {}
+        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
         let value ← coerce sourceExpr lowered ty
         body := body ++ value.before ++ [.bind valueName (.scalar ty) (.at (← spanValue statement) value.term)]
         env := (valueName, .scalar ty, .ref valueName) :: env
@@ -1417,7 +1464,8 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         generatedValidity := (generatedValidity ++ observationPart.generatedValidity ++ value.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
       | `(noctium_witness_statement| prove $predicate:nlexpr) => do
         let predicateStx := predicate
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env predicateStx).run' {allowAssertThen := _root_.Bool.true}
+        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env predicateStx).run'
+          {exprState with allowAssertThen := _root_.Bool.true}
         let predicate ← coerce predicateStx lowered .bool
         body := body ++ predicate.before ++ [.assert (.at (← spanValue statement) predicate.term)]
         witnesses := uniqueWitnesses (witnesses ++ predicate.signatures)
@@ -1431,7 +1479,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         let some field := sourceField.fields.find? (·.name == fieldName)
           | throwErrorAt fieldPath "schema '{sourceField.name}' has no field '{fieldName}'"
         let sourceExpr := value
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' {}
+        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
         let value ← coerce sourceExpr lowered field.ty
         body := body ++ value.before ++ [.stage field.capability field.key field.ty (.at (← spanValue statement) value.term)]
         witnesses := uniqueWitnesses (witnesses ++ value.signatures)
@@ -1447,7 +1495,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
           throwErrorAt id s!"duplicate readable witness output '{valueName}'"
         let ty ← readScalarTy type
         let sourceExpr := value
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' {}
+        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
         let value ← coerce sourceExpr lowered ty
         let outputSpan ← spanValue statement
         let aliasSource := match value.term with
@@ -1527,6 +1575,9 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         span := exportSpan }
     let program : Program := {
       declarations := [declaration], exports := [entryExport], composites := compositeEnv, witnesses := witnesses}
+    let program ← match Helpers.Wire.attach program (codecs.map (·.2)) with
+      | .ok value => pure value
+      | .error message => throwErrorAt stx message
     let readTypes := (witnesses.filter (·.operation == "private_state.read.v1")).map (·.result)
     if let some expected := readTypes.head? then
       unless readTypes.all (· == expected) do
@@ -1539,7 +1590,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       let value ← `(@Noctium.Expr.ref $(← tyTerm input.ty) $(stringTerm input.name))
       logicalEnv := logicalEnv ++ [(input.name, input.ty, value)]
     let mut logicalOutputAliases : List (String × Ty × Name) := []
-    for binding in logicalAliasBindings do
+    for binding in (if authoredOutputs.length > 1 then logicalAliasBindings else []) do
       if logicalEnv.any (fun alias => alias.1 == binding.name) then
         throwErrorAt stx s!"duplicate logical output alias source '{binding.name}'"
       let value ← match binding.source with
@@ -1612,6 +1663,10 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       composites := $compositeEnvTerm
       witnesses := [$signatureTerms,*]
       : Noctium.Helpers.Program })
+    let programTerm ← if codecTerms.isEmpty then pure programTerm else
+      `(match Noctium.Helpers.Wire.attach $programTerm [$codecTerms,*] with
+        | .ok program => program
+        | .error _ => {})
     let metadataTerm ← observationTerm observation
     elabCommand (← `(def $(mkIdent programSyntaxName) : Noctium.Helpers.Program := $programTerm))
     elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))
