@@ -45,6 +45,8 @@ NativeWitness.open(targetDescriptor, initialState, srs, controlPlan, beginEnvelo
 
 The application supplies `runCallbacksUntilCompleted`. Successful preparation consumes the target and witness. Proving retains the private preimage in the native runtime and returns the verified public intent projection.
 
+For an entrypoint supplied with explicit inputs, use `NativeProof.open(descriptor, configuration, srs)`. The descriptor includes the bundle's canonical path, manifest and parameter digests, profile, K, TTL, proof capability and maximum response size. The private configuration contains the declared inputs and initial state. [Native proof descriptor](../../runtime/include/noctium_native.h)
+
 ## Fund and submit on the development localnet
 
 Build with `bash sdk/android/package.sh --localnet build/noctium-android-localnet.aar` to include the development adapter. The adapter authenticates the pinned development genesis and accepts a loopback endpoint. Use the native header's configuration, transaction descriptor and deployment setup. Supply a funded public development seed to fund a transaction. [Development stack](../../scripts/localnet/README.md) · [Native client interface](../../runtime/include/noctium_native.h)
@@ -66,6 +68,8 @@ DevelopmentLocalnet(configuration, developmentSeed).use { adapter ->
 ```
 
 The application supplies the driver, storage and finality loop. The driver passes each pending step to `resolve` and approves signing only after inspecting the request. The call takes ownership of the witness's staged private writes. Persist `recoveryContext()` in app-private storage before submitting. Keep the handle until the runtime acknowledges durable state and accepts `close()`. After a restart, open the same journal with `DevelopmentLocalnet(configuration)` and recover with `DevelopmentTransaction.recover(clientDescriptor, context)`. Remove the funding cache, source and DUST digest fields for this recovery-only adapter. Resolve recovery requests, observe a finalized receipt, then send `COMMIT` to acknowledge the private writes. Keep the recovery bytes and private host values out of logs.
+
+Use `startDevelopmentDeployment(clientDescriptor, setup)` to fund and deploy the retained deployment. For an explicit-input proof, call `startDevelopmentCall(clientDescriptor, setup)` with its private journal setup. [Development instrumentation](../../sdk/android/tests/DevelopmentSmoke.kt)
 
 ## Run the Android smoke test
 
@@ -92,6 +96,20 @@ adb -s EMULATOR_SERIAL shell am instrument -w -r org.noctium.sdk.tests/.Developm
 
 Use the test's loopback endpoint on port 19944 and run funded tests sharing the same development seed serially. Check for instrumentation code `-1` and the transaction and private recovery result.
 
+## Reproduce the original one-time claim
+
+Use the same development APK command with a fixture directory for `PrivateClaim.claim`. Include its authenticated `bundle/`, the K9 parameters in `srs` and the pinned proof options in `target.json`. Add the public development inputs from the claim fixture generator as `synthetic-claim.json`. This file selects the K9 case and becomes an APK test asset. Use synthetic inputs. [Fixture generation](native-contract.md#compile-the-actual-lean-source)
+
+Capture the instrumentation output. Expect code `-1` and the marker `Noctium Android K9 private claim passed`. Decode the hex following `NOCTIUM_PUBLIC_STATE` into a binary state file. For the native replay check, use the bundle plan as `source-plan.json`, its relation as `zkir/claim.zkir`, `ledger.params`, the synthetic inputs as `runtime-config.json` and a `native-contract.json` containing the finalized contract address under `address`. [Native replay workflow](swift-witness-sdk.md#qualification)
+
+```sh
+noctium-runtime ARTIFACT_DIRECTORY --check-state STATE_FILE --expect-rejection
+```
+
+## Qualification
+
 The default proof APK passed on the arm64 AOSP Android 35 emulator with Rust 1.100.0, NDK r30, Kotlin 1.9.24 and Temurin 21. It completed five typed callbacks, read a staged value, rejected a crossed reply, and generated and verified a K7 proof after producing result 14. It rejected an altered control plan and an incomplete witness. The default AAR measured 7,343,471 bytes. [Witness instrumentation](../../sdk/android/tests/WitnessSmoke.kt)
 
-The development APK funded and finalized deployment at block 29716 and the witness call at block 29719. It rejected an altered signing request and detach during active work. A fresh client and seedless adapter reopened the on-disk journal and recovered the exact sealed transaction bytes. The 1,482 finalized contract-state bytes match both Swift runs by SHA-256. The private value committed after finality. The development AAR measured 19,772,800 bytes. The original K9 one-time claim and physical Android hardware remain separate qualification work. [Public receipts](android-localnet-receipt.json) · [Transaction instrumentation](../../sdk/android/tests/DevelopmentSmoke.kt)
+The development APK funded and finalized the typed-witness deployment at block 29716 and its call at block 29719. It rejected an altered signing request and detach during active work. A fresh client and seedless adapter reopened the on-disk journal and recovered the exact sealed transaction bytes. The 1,482 finalized contract-state bytes match both Swift runs by SHA-256. The private value committed after finality. The tested development AAR measured 19,772,800 bytes. [Typed-witness receipts](android-localnet-receipt.json) · [Transaction instrumentation](../../sdk/android/tests/DevelopmentSmoke.kt)
+
+The original one-time claim finalized deployment at block 29781 and the claim at block 29784. The Android prover rejected a changed secret before submission. The pinned ZKIR tool sized the circuit at K9 and 297 rows. The 1,874 finalized state bytes match the Swift reference by SHA-256, and the native checker rejected reuse against those bytes. The tested development AAR measured 19,791,423 bytes. Physical Android hardware remains unverified. [Original claim receipts](android-private-claim-receipt.json)

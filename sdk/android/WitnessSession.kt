@@ -62,6 +62,7 @@ internal object Native {
     external fun targetWitness(target: Long, plan: ByteArray, begin: ByteArray): Long
     external fun targetClose(target: Long)
     external fun proofPrepare(target: Long, witness: Long, descriptor: ByteArray, srs: ByteArray, entropy: ByteArray): Long
+    external fun proofOpen(descriptor: ByteArray, configuration: ByteArray, srs: ByteArray, entropy: ByteArray): Long
     external fun proofAdvance(proof: Long): ByteArray
     external fun proofGenerate(proof: Long, entropy: ByteArray): ByteArray
     external fun proofAttach(proof: Long, metadata: ByteArray, response: ByteArray): ByteArray

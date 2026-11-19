@@ -39,6 +39,9 @@ if "$localnet"; then
   mkdir "$stage/assets/proof/localnet"
   cp "$4/localnet/client.json" "$4/localnet/localnet.json" "$stage/assets/proof/localnet/"
   cp -R "$4/localnet/params" "$stage/assets/proof/localnet/params"
+  if [[ -f "$4/synthetic-claim.json" ]]; then
+    cp "$4/synthetic-claim.json" "$stage/assets/proof/"
+  fi
   sources+=("$sdk/DevelopmentSmoke.kt")
   instrumentation=.DevelopmentSmoke
   permission='<uses-permission android:name="android.permission.INTERNET"/>'

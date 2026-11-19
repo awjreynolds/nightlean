@@ -233,6 +233,28 @@ JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_Native_proofAdvance(
     return step(env, proof, noctium_native_advance, &native_result);
 }
 
+JNIEXPORT jlong JNICALL Java_org_noctium_sdk_Native_proofOpen(
+        JNIEnv *env, jobject self, jbyteArray descriptor, jbyteArray configuration,
+        jbyteArray srs, jbyteArray entropy) {
+    (void)self;
+    Input inputs[] = {
+        {.array = descriptor, .limit = DESCRIPTOR_BYTES},
+        {.array = configuration, .limit = CONTROL_BYTES},
+        {.array = srs, .limit = SRS_BYTES},
+        {.array = entropy, .limit = 32},
+    };
+    if (!borrow_inputs(env, inputs, 4)) return 0;
+    uint64_t proof = 0;
+    int32_t status = noctium_native_begin(
+        (const uint8_t *)inputs[0].bytes, (size_t)inputs[0].length,
+        (const uint8_t *)inputs[1].bytes, (size_t)inputs[1].length,
+        (const uint8_t *)inputs[2].bytes, (size_t)inputs[2].length,
+        (const uint8_t *)inputs[3].bytes, (size_t)inputs[3].length, &proof);
+    release_inputs(env, inputs, 4);
+    if (status != NOCTIUM_NATIVE_OK) fail(env, status);
+    return (jlong)proof;
+}
+
 JNIEXPORT jbyteArray JNICALL Java_org_noctium_sdk_Native_proofGenerate(
         JNIEnv *env, jobject self, jlong proof, jbyteArray entropy) {
     (void)self;
@@ -340,13 +362,13 @@ JNIEXPORT void JNICALL Java_org_noctium_sdk_LocalnetBridge_close(
     if (status != NOCTIUM_NATIVE_OK) fail(env, status);
 }
 
-JNIEXPORT jlong JNICALL Java_org_noctium_sdk_LocalnetBridge_startDeployment(
-        JNIEnv *env, jobject self, jlong proof, jbyteArray descriptor, jbyteArray setup) {
+JNIEXPORT jlong JNICALL Java_org_noctium_sdk_LocalnetBridge_start(
+        JNIEnv *env, jobject self, jlong proof, jint kind, jbyteArray descriptor, jbyteArray setup) {
     (void)self;
     Input inputs[] = {{.array = descriptor, .limit = DESCRIPTOR_BYTES}, {.array = setup, .limit = CONTROL_BYTES}};
     if (!borrow_inputs(env, inputs, 2)) return 0;
     uint64_t client = 0;
-    int32_t status = noctium_client_start((uint64_t)proof, 0,
+    int32_t status = noctium_client_start((uint64_t)proof, (uint32_t)kind,
         (const uint8_t *)inputs[0].bytes, (size_t)inputs[0].length,
         (const uint8_t *)inputs[1].bytes, (size_t)inputs[1].length, &client);
     release_inputs(env, inputs, 2);

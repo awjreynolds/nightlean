@@ -30,7 +30,11 @@ class DevelopmentLocalnet(configuration: ByteArray, developmentSeed: ByteArray =
 
 /** Starts the proof's retained deployment with an explicit empty or staged journal setup. */
 fun NativeProof.startDevelopmentDeployment(descriptor: ByteArray, setup: ByteArray): DevelopmentTransaction =
-    withHandle { DevelopmentTransaction(LocalnetBridge.startDeployment(it, descriptor, setup)) }
+    withHandle { DevelopmentTransaction(LocalnetBridge.start(it, 0, descriptor, setup)) }
+
+/** Starts a call prepared with explicit inputs and the supplied host journal setup. */
+fun NativeProof.startDevelopmentCall(descriptor: ByteArray, setup: ByteArray): DevelopmentTransaction =
+    withHandle { DevelopmentTransaction(LocalnetBridge.start(it, 1, descriptor, setup)) }
 
 /** Transfers the completed witness and its staged private writes into the proved call. */
 fun NativeProof.startDevelopmentCall(descriptor: ByteArray): DevelopmentTransaction =
@@ -117,7 +121,7 @@ internal object LocalnetBridge {
     external fun context(adapter: Long): ByteArray
     external fun privateValue(adapter: Long, query: ByteArray): ByteArray
     external fun close(adapter: Long)
-    external fun startDeployment(proof: Long, descriptor: ByteArray, setup: ByteArray): Long
+    external fun start(proof: Long, kind: Int, descriptor: ByteArray, setup: ByteArray): Long
     external fun startFromWitness(proof: Long, descriptor: ByteArray): Long
     external fun recover(descriptor: ByteArray, context: ByteArray): Long
     external fun command(transaction: Long, command: ByteArray): ByteArray

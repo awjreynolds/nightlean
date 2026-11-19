@@ -49,6 +49,12 @@ class NativeWitness private constructor(
 
 /** A native proof session. Run the synchronous prover on a worker thread. */
 class NativeProof internal constructor(private var handle: Long) : AutoCloseable {
+    companion object {
+        /** Prepares a call from explicit inputs and initial state using an authenticated bundle. */
+        fun open(descriptor: ByteArray, configuration: ByteArray, parameters: ByteArray): NativeProof =
+            NativeProof(withEntropy { Native.proofOpen(descriptor, configuration, parameters, it) })
+    }
+
     /** Generates and verifies the local proof before returning the public intent projection. */
     @Synchronized
     fun proveLocally(): ByteArray {
