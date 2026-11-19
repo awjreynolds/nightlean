@@ -92,6 +92,18 @@ noctium-bundle verify new-public-bundle TRUSTED_MANIFEST_SHA256
 
 The verifier optionally accepts a trusted manifest digest, supplied through a separate trusted channel. Without this digest or another authentication scheme, verification establishes internal consistency only. An attacker who replaces both a payload and its unsigned manifest is not detected. Signing, release trust distribution and deployed-key agreement are separate work.
 
+### Distribute without the prover key
+
+```sh
+noctium-bundle assemble-without-prover-key recipe.json new-public-bundle
+```
+
+Use the same recipe and native keys during release. This command writes the complete bundle's exact manifest and omits `keys/entrypoint.prover`. The manifest still commits to its size and SHA-256.
+
+Rust clients load this variant with `artifacts::verify_and_regenerate(directory, trusted_manifest_sha256, finalized_state, parameters)`. Supply the finalized contract state for the intended address from your ledger state provider and the trusted proving parameters. The loader verifies all shipped payloads, selects the plan's operation in the supplied state and checks its installed V3 verifier. The pinned native library independently generates the key pair from the retained circuit and supplied parameters. The loader checks the resulting verifier and the exact committed prover-key bytes before returning an ordinary `VerifiedBundle` with the key in memory. Use that bundle through the normal Rust proving and composition APIs.
+
+The normal `verify` command still requires every listed file. Regeneration writes no key to disk and reports a mismatch when the deployed verifier, regenerated verifier or committed prover key differs. Fetching finalized state and retaining the regenerated bundle across calls belong to the host. The browser and mobile loaders still require complete bundles.
+
 Errors use JSON with stable `error.code` values, including `unsupported_version`, `unsupported_name`, `profile_mismatch`, `plan_mismatch`, `digest_mismatch`, `manifest_digest_mismatch`, `unsafe_path`, `private_artifact`, `missing_role` and `limit_exceeded`. Error messages omit input values and local paths.
 
 ## Canonical representation and limits

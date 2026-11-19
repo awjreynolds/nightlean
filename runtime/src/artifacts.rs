@@ -893,7 +893,7 @@ fn validate_compiler_inventory(metadata: &Value, plan: &Value, payloads: &Payloa
     Ok(())
 }
 
-fn validate_payloads(payloads: &Payloads) -> Result<()> {
+fn validate_payloads(payloads: &Payloads, omit_prover_key: bool) -> Result<()> {
     require(
         payloads
             .get(&Role::Source)
@@ -908,7 +908,6 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         Role::Abi,
         Role::Profile,
         Role::LedgerParameters,
-        Role::ProverKey,
         Role::VerifierKey,
         Role::Toolchain,
     ] {
@@ -1146,7 +1145,10 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
         "invalid_provenance",
         "native provenance must use normalized canonical encoding",
     )?;
-    for role in [Role::LedgerParameters, Role::ProverKey, Role::VerifierKey] {
+    for role in [Role::LedgerParameters, Role::VerifierKey, Role::ProverKey] {
+        if role == Role::ProverKey && omit_prover_key {
+            continue;
+        }
         require(
             !one(payloads, role)?.1.is_empty(),
             "invalid_file",
@@ -1571,6 +1573,15 @@ fn validate_manifest(manifest: &Manifest) -> Result<()> {
 
 /// Assemble only explicitly selected files. An existing destination is never overwritten.
 pub fn assemble(recipe: Recipe, destination: &Path) -> Result<Manifest> {
+    assemble_selected(recipe, destination, false)
+}
+
+/// Write the same manifest while leaving the committed prover-key file out of the bundle.
+pub fn assemble_without_prover_key(recipe: Recipe, destination: &Path) -> Result<Manifest> {
+    assemble_selected(recipe, destination, true)
+}
+
+fn assemble_selected(recipe: Recipe, destination: &Path, omit_prover_key: bool) -> Result<Manifest> {
     require(
         recipe.schema_version == SCHEMA_VERSION,
         "unsupported_version",
@@ -1639,7 +1650,7 @@ pub fn assemble(recipe: Recipe, destination: &Path) -> Result<Manifest> {
     for values in payloads.values_mut() {
         values.sort_by(|a, b| a.0.cmp(&b.0));
     }
-    validate_payloads(&payloads)?;
+    validate_payloads(&payloads, false)?;
     let entries = payloads
         .iter()
         .flat_map(|(role, values)| {
@@ -1684,6 +1695,9 @@ pub fn assemble(recipe: Recipe, destination: &Path) -> Result<Manifest> {
     })?;
     let write_result = (|| {
         for (role, values) in &payloads {
+            if *role == Role::ProverKey && omit_prover_key {
+                continue;
+            }
             for (name, bytes) in values {
                 let path = destination.join(role.path(name));
                 fs::create_dir_all(path.parent().unwrap()).map_err(io_error)?;
@@ -1713,11 +1727,11 @@ pub fn assemble(recipe: Recipe, destination: &Path) -> Result<Manifest> {
     Ok(manifest)
 }
 
-fn reject_extra_files(root: &Path, manifest: &Manifest) -> Result<()> {
-    let expected: BTreeSet<PathBuf> = manifest
-        .entries
-        .iter()
-        .map(|entry| root.join(&entry.path))
+fn reject_extra_files(root: &Path, bundle: &VerifiedBundle) -> Result<()> {
+    let expected: BTreeSet<PathBuf> = bundle
+        .files
+        .keys()
+        .map(|path| root.join(path))
         .chain(std::iter::once(root.join("manifest.json")))
         .collect();
     let mut allowed_dirs = BTreeSet::new();
@@ -1772,14 +1786,55 @@ pub fn verify_with_limit(
     trusted_manifest_sha256: Option<&str>,
     max_total_bytes: u64,
 ) -> Result<VerifiedBundle> {
+    verify_directory(root, trusted_manifest_sha256, max_total_bytes, false)
+}
+
+/// Authenticate an omitted-key bundle and reconstruct the exact prover key in memory.
+/// The host supplies the finalized contract state for the intended deployment.
+pub async fn verify_and_regenerate(
+    root: &Path,
+    trusted_manifest_sha256: &str,
+    deployed: &onchain_runtime::state::ContractState<crate::Db>,
+    parameters: &crate::proof::TrustedParameters,
+) -> Result<VerifiedBundle> {
+    let mut bundle = verify_directory(root, Some(trusted_manifest_sha256), MAX_TOTAL_BYTES, true)?;
+    let entry = bundle
+        .manifest
+        .entries
+        .iter()
+        .find(|entry| entry.role == Role::ProverKey && entry.size != 0)
+        .ok_or_else(|| error("missing_role", "manifest needs the exact prover key commitment"))?;
+    let bytes = crate::proof::regenerate_prover_key(&bundle, deployed, parameters)
+        .await
+        .map_err(|_| {
+            error(
+                "regeneration_failed",
+                "native proving material or deployed verifier mismatch",
+            )
+        })?;
+    require(
+        bytes.len() as u64 == entry.size && digest(&bytes) == entry.sha256,
+        "digest_mismatch",
+        "regenerated prover key differs from manifest",
+    )?;
+    bundle.files.insert(entry.path.clone(), bytes);
+    Ok(bundle)
+}
+
+fn verify_directory(
+    root: &Path,
+    trusted_manifest_sha256: Option<&str>,
+    max_total_bytes: u64,
+    omit_prover_key: bool,
+) -> Result<VerifiedBundle> {
     validate_payload_budget(max_total_bytes)?;
     no_symlinks(root)?;
     let manifest_data = read(&root.join("manifest.json"), MAX_JSON_BYTES)?;
     let manifest = authenticate_manifest(&manifest_data, trusted_manifest_sha256, max_total_bytes)?;
-    let bundle = retain_payloads(manifest, trusted_manifest_sha256, |_, entry| {
+    let bundle = retain_payloads(manifest, trusted_manifest_sha256, omit_prover_key, |_, entry| {
         read(&root.join(&entry.path), entry.size)
     })?;
-    reject_extra_files(root, bundle.manifest())?;
+    reject_extra_files(root, &bundle)?;
     Ok(bundle)
 }
 
@@ -1808,7 +1863,7 @@ pub fn verify_memory_with_limit(
         "unexpected_file",
         "payload count differs from manifest",
     )?;
-    retain_payloads(manifest, Some(trusted_manifest_sha256), |index, entry| {
+    retain_payloads(manifest, Some(trusted_manifest_sha256), false, |index, entry| {
         read_payload(index, entry.size as usize)
             .ok_or_else(|| error("digest_mismatch", "missing or incorrectly sized payload"))
     })
@@ -1858,10 +1913,14 @@ fn authenticate_manifest(
 fn retain_payloads(
     manifest: Manifest,
     trusted_manifest_sha256: Option<&str>,
+    omit_prover_key: bool,
     mut read_payload: impl FnMut(usize, &Entry) -> Result<Vec<u8>>,
 ) -> Result<VerifiedBundle> {
     let mut payloads = Payloads::new();
     for (index, entry) in manifest.entries.iter().enumerate() {
+        if entry.role == Role::ProverKey && omit_prover_key {
+            continue;
+        }
         let bytes = read_payload(index, entry)?;
         require(
             bytes.len() as u64 == entry.size && digest(&bytes) == entry.sha256,
@@ -1873,7 +1932,7 @@ fn retain_payloads(
             .or_default()
             .push((entry.name.clone(), bytes));
     }
-    validate_payloads(&payloads)?;
+    validate_payloads(&payloads, omit_prover_key)?;
     let files = payloads
         .into_iter()
         .flat_map(|(role, values)| {

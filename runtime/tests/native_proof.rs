@@ -299,6 +299,99 @@ fn actual_source_claim_proves_verifies_and_attaches_without_subprocesses() {
     assert!(prepared.deployment_intent().is_some());
     assert_eq!(prepared.profile(), noctium_runtime::profile::NAME);
 
+    // Package the same authenticated inventory without the key. Exercise the
+    // normal proof path with the reconstructed bundle below.
+    let proof_bundle_dir = std::env::temp_dir()
+        .canonicalize()
+        .unwrap()
+        .join(format!(
+            "noctium-regenerated-key-{}",
+            rand::Rng::r#gen::<u64>(&mut OsRng)
+        ));
+    let manifest = bundle.manifest();
+    let recipe = artifacts::Recipe {
+        schema_version: manifest.schema_version,
+        compiler_revision: manifest.compiler.source_revision.clone(),
+        files: manifest
+            .entries
+            .iter()
+            .map(|entry| artifacts::Selection {
+                role: entry.role,
+                name: entry.name.clone(),
+                input: std::path::Path::new(&root).join(&entry.path),
+            })
+            .collect(),
+    };
+    assert_eq!(
+        artifacts::assemble_without_prover_key(recipe, &proof_bundle_dir).unwrap(),
+        *manifest
+    );
+    struct RemoveBundle(std::path::PathBuf);
+    impl Drop for RemoveBundle {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = RemoveBundle(proof_bundle_dir.clone());
+    assert!(artifacts::verify(&proof_bundle_dir, Some(&digest)).is_err());
+    let ContractAction::Deploy(deploy) = prepared
+        .deployment_intent()
+        .unwrap()
+        .actions
+        .iter_deref()
+        .next()
+        .unwrap()
+    else {
+        panic!("expected deployment");
+    };
+    assert_eq!(
+        block_on(artifacts::verify_and_regenerate(
+            &proof_bundle_dir,
+            &digest,
+            &Default::default(),
+            &params,
+        ))
+        .err()
+        .unwrap()
+        .code,
+        "regeneration_failed"
+    );
+    let regenerated = block_on(artifacts::verify_and_regenerate(
+        &proof_bundle_dir,
+        &digest,
+        &deploy.initial_state,
+        &params,
+    ))
+    .unwrap();
+    assert_eq!(
+        regenerated.file(artifacts::Role::ProverKey).unwrap(),
+        bundle.file(artifacts::Role::ProverKey).unwrap()
+    );
+    assert!(!proof_bundle_dir.join("keys/entrypoint.prover").exists());
+    let mut wrong_key_manifest = manifest.clone();
+    wrong_key_manifest
+        .entries
+        .iter_mut()
+        .find(|entry| entry.role == artifacts::Role::ProverKey)
+        .unwrap()
+        .sha256 = "0".repeat(64);
+    let wrong_key_bytes = artifacts::manifest_bytes(&wrong_key_manifest).unwrap();
+    fs::write(proof_bundle_dir.join("manifest.json"), &wrong_key_bytes).unwrap();
+    assert_eq!(
+        block_on(artifacts::verify_and_regenerate(
+            &proof_bundle_dir,
+            &artifacts::digest(&wrong_key_bytes),
+            &deploy.initial_state,
+            &params,
+        ))
+        .err()
+        .unwrap()
+        .code,
+        "digest_mismatch"
+    );
+    let prepared =
+        PreparedProof::from_config(&regenerated, &config, 2_000_000_000, &mut OsRng).unwrap();
+
     // An already-triggered stop prevents the service from seeing private material.
     let response = Response::new(vec![]);
     for abort in [Abort::Cancelled, Abort::Deadline] {

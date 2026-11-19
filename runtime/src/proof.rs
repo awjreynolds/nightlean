@@ -1437,6 +1437,41 @@ impl ParamsProverProvider for TrustedParameters {
     }
 }
 
+pub(crate) async fn regenerate_prover_key(
+    bundle: &VerifiedBundle,
+    deployed: &ContractState<Db>,
+    parameters: &TrustedParameters,
+) -> Result<Vec<u8>> {
+    let get = |role| bundle.file(role).map_err(|_| Error::InvalidArtifacts);
+    let plan: Plan =
+        serde_json::from_slice(get(Role::Plan)?).map_err(|_| Error::InvalidArtifacts)?;
+    let verifier_bytes = get(Role::VerifierKey)?;
+    let operation = EntryPointBuf(plan.entrypoint.into_bytes());
+    let installed = deployed
+        .operations
+        .get(&operation)
+        .ok_or(Error::BindingMismatch)?;
+    let installed = installed.latest().ok_or(Error::BindingMismatch)?;
+    if encode(installed)? != verifier_bytes {
+        return Err(Error::BindingMismatch);
+    }
+
+    let circuit = IrSource::load(get(Role::Circuit)?).map_err(|_| Error::InvalidArtifacts)?;
+    if circuit.k() != parameters.k() {
+        return Err(Error::InvalidParameters);
+    }
+    // Derive the verifier from the authenticated circuit and trusted SRS before
+    // accepting its prover key. Installed key bytes never configure key generation.
+    let (prover, verifier) = circuit
+        .keygen(parameters)
+        .await
+        .map_err(|_| Error::InvalidParameters)?;
+    if encode(&verifier)? != verifier_bytes {
+        return Err(Error::BindingMismatch);
+    }
+    encode(&prover)
+}
+
 struct Material {
     native: ProvingKeyMaterial,
     prover: ProverKey<IrSource>,
