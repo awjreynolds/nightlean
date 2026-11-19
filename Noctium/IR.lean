@@ -352,21 +352,66 @@ structure Constructor where
   initializers : List ConstructorInitializer := []
   deriving Repr
 
-/-- Standard log layouts supported by the pinned Ledger 9 target. -/
+inductive EventFieldType where
+  | bytes (length : Nat)
+  | flag
+  | amount
+
+def EventFieldType.width : EventFieldType → Nat
+  | .bytes length => length
+  | .flag => 1
+  | .amount => 16
+
+/-- Standard log layouts for the pinned Ledger 9 event schema. -/
 inductive EventKind where
   | shieldedSpend
+  | shieldedReceive
+  | shieldedMint
+  | shieldedBurn
+  | unshieldedSpend
+  | unshieldedReceive
+  | unshieldedMint
+  | unshieldedBurn
   | paused
   | unpaused
+  | misc
   deriving Repr, BEq
 
 def EventKind.tag : EventKind → Nat
   | .shieldedSpend => 0
+  | .shieldedReceive => 1
+  | .shieldedMint => 2
+  | .shieldedBurn => 3
+  | .unshieldedSpend => 4
+  | .unshieldedReceive => 5
+  | .unshieldedMint => 6
+  | .unshieldedBurn => 7
   | .paused => 8
   | .unpaused => 9
+  | .misc => 10
 
-def EventKind.payloadSize : EventKind → Nat
-  | .shieldedSpend => 32
-  | .paused | .unpaused => 0
+private def eventAddressFields : List (String × EventFieldType) :=
+  [("isUser", .flag), ("userKey", .bytes 32), ("contractAddress", .bytes 32)]
+
+private def eventTokenFields : List (String × EventFieldType) :=
+  [("domainSep", .bytes 32), ("tokenType", .bytes 32), ("amount", .amount)]
+
+def EventKind.fields : EventKind → List (String × EventFieldType)
+  | .shieldedSpend => [("nullifier", .bytes 32)]
+  | .shieldedReceive =>
+    [("commitment", .bytes 32), ("hasCiphertext", .flag), ("ciphertext", .bytes 512),
+      ("hasContractAddress", .flag), ("contractAddress", .bytes 32)]
+  | .shieldedMint =>
+    [("commitment", .bytes 32), ("domainSep", .bytes 32), ("hasAmount", .flag), ("amount", .amount)]
+  | .shieldedBurn => [("nullifier", .bytes 32), ("hasAmount", .flag), ("amount", .amount)]
+  | .unshieldedSpend | .unshieldedReceive => eventAddressFields ++ eventTokenFields
+  | .unshieldedMint => eventTokenFields
+  | .unshieldedBurn => eventAddressFields ++ [("tokenType", .bytes 32), ("amount", .amount)]
+  | .paused | .unpaused => []
+  | .misc => [("name", .bytes 32), ("payload", .bytes 256)]
+
+def EventKind.payloadSize (kind : EventKind) : Nat :=
+  kind.fields.foldl (fun size field => size + field.2.width) 0
 
 /-- State effects are ordered transaction instructions, not circuit nodes.
 A read binds a typed name for later guards/writes. Outputs are bound explicitly

@@ -253,8 +253,10 @@ declare_syntax_cat nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
+declare_syntax_cat nleventfield
+scoped syntax ident ":=" nlexpr : nleventfield
 scoped syntax "emitEvent" "(" ident ")" : nlupdate
-scoped syntax "emitEvent" "(" ident "," nlexpr ")" : nlupdate
+scoped syntax "emitEvent" "(" ident "," nleventfield,+ ")" : nlupdate
 
 declare_syntax_cat nleffect
 scoped syntax nlupdate : nleffect
@@ -1573,6 +1575,65 @@ private partial def typedClaimOperation (value : TSyntax `nlexpr) : Option Strin
   | `(nlexpr| disclose($inner)) => typedClaimOperation inner
   | _ => none
 
+private def eventKind (name : TSyntax `ident) : CommandElabM (EventKind × TSyntax `term) := do
+  match name.getId.toString with
+  | "ShieldedSpend" => pure (.shieldedSpend, ← `(Noctium.EventKind.shieldedSpend))
+  | "ShieldedReceive" => pure (.shieldedReceive, ← `(Noctium.EventKind.shieldedReceive))
+  | "ShieldedMint" => pure (.shieldedMint, ← `(Noctium.EventKind.shieldedMint))
+  | "ShieldedBurn" => pure (.shieldedBurn, ← `(Noctium.EventKind.shieldedBurn))
+  | "UnshieldedSpend" => pure (.unshieldedSpend, ← `(Noctium.EventKind.unshieldedSpend))
+  | "UnshieldedReceive" => pure (.unshieldedReceive, ← `(Noctium.EventKind.unshieldedReceive))
+  | "UnshieldedMint" => pure (.unshieldedMint, ← `(Noctium.EventKind.unshieldedMint))
+  | "UnshieldedBurn" => pure (.unshieldedBurn, ← `(Noctium.EventKind.unshieldedBurn))
+  | "Paused" => pure (.paused, ← `(Noctium.EventKind.paused))
+  | "Unpaused" => pure (.unpaused, ← `(Noctium.EventKind.unpaused))
+  | "Misc" => pure (.misc, ← `(Noctium.EventKind.misc))
+  | _ => throwErrorAt name "unknown standard event"
+
+private def serializeEventField (env : Bindings) (source : TSyntax `nlexpr) :
+    EventFieldType → CommandElabM (TSyntax `term)
+  | .bytes length => checkedExpression env source (.bytes length)
+  | .flag => do
+    let flag ← checkedExpression env source .bool
+    `(Noctium.Expr.select $flag (Noctium.Expr.bytesLiteral 1 [1]) (Noctium.Expr.bytesLiteral 1 [0]))
+  | .amount => do
+    let amount ← checkedExpression env source (.uint (2 ^ 128 - 1))
+    `(Noctium.Expr.sliceBytes (Noctium.Expr.toBytes32 (Noctium.Expr.cast .native $amount)) 0 16)
+
+private partial def concatenateEventFields : List (Nat × TSyntax `term) →
+    CommandElabM (TSyntax `term)
+  | [] => `(Noctium.Expr.bytesLiteral 0 [])
+  | [(_, field)] => pure field
+  | fields => do
+    -- A balanced tree keeps wide fields from being encoded after every small one.
+    let middle := (fields.length + 1) / 2
+    let leftFields := fields.take middle
+    let rightFields := fields.drop middle
+    let left ← concatenateEventFields leftFields
+    let right ← concatenateEventFields rightFields
+    `(Noctium.Expr.concatBytes
+      (leftLength := $(quote (leftFields.map Prod.fst).sum))
+      (rightLength := $(quote (rightFields.map Prod.fst).sum)) $left $right)
+
+private def elaborateEvent (env : Bindings) (event : TSyntax `ident)
+    (fields : Array (TSyntax `nleventfield)) : CommandElabM (TSyntax `term) := do
+  let (kind, kindTerm) ← eventKind event
+  let mut values : List (String × TSyntax `nlexpr) := []
+  for field in fields do
+    let `(nleventfield| $name:ident := $value:nlexpr) := field
+      | throwErrorAt field "expected a named event field"
+    let key := name.getId.toString
+    unless (kind.fields.lookup key).isSome do
+      throwErrorAt name "unknown field '{key}' for event '{event.getId}'"
+    if (values.lookup key).isSome then
+      throwErrorAt name "duplicate event field '{key}'"
+    values := (key, value) :: values
+  let encoded ← kind.fields.mapM fun (name, ty) => do
+    let some value := values.lookup name | throwErrorAt event "missing event field '{name}'"
+    pure (ty.width, ← serializeEventField env value ty)
+  let payload ← concatenateEventFields encoded
+  `(Noctium.Effect.emitEvent $kindTerm $payload)
+
 private def elaborateEffect (schema : List (String × StateKind))
     (parent : Option (TSyntax `term)) (depth : Nat) (state : EntryEffects)
     (effect : TSyntax `nleffect) : CommandElabM EntryEffects := do
@@ -1604,17 +1665,10 @@ private def elaborateEffect (schema : List (String × StateKind))
       let term ← `(Noctium.Effect.requireContractCaller $address)
       state := {state with terms := state.terms.push term}
     | `(nlupdate| emitEvent($event:ident)) => do
-      let kind ← match event.getId.toString with
-        | "Paused" => `(Noctium.EventKind.paused)
-        | "Unpaused" => `(Noctium.EventKind.unpaused)
-        | _ => throwErrorAt event "empty events must be Paused or Unpaused"
-      let term ← `(Noctium.Effect.emitEvent $kind (Noctium.Expr.bytesLiteral 0 []))
+      let term ← elaborateEvent state.env event #[]
       state := {state with terms := state.terms.push term}
-    | `(nlupdate| emitEvent($event:ident, $payload:nlexpr)) => do
-      unless event.getId.toString == "ShieldedSpend" do
-        throwErrorAt event "supported event with a payload is ShieldedSpend"
-      let payload ← checkedExpression state.env payload (.bytes 32)
-      let term ← `(Noctium.Effect.emitEvent Noctium.EventKind.shieldedSpend $payload)
+    | `(nlupdate| emitEvent($event:ident, $fields:nleventfield,*)) => do
+      let term ← elaborateEvent state.env event fields.getElems
       state := {state with terms := state.terms.push term}
     | _ => throwErrorAt update "unsupported Noctium update"
   | `(nleffect| require $value:nlexpr) =>

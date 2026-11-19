@@ -1124,7 +1124,14 @@ pub enum Instruction {
 fn event_payload_length(tag: u8) -> Result<usize> {
     match tag {
         0 => Ok(32),
+        1 => Ok(578),
+        2 => Ok(81),
+        3 => Ok(49),
+        4 | 5 => Ok(145),
+        6 => Ok(80),
+        7 => Ok(113),
         8 | 9 => Ok(0),
+        10 => Ok(288),
         _ => bail!("unsupported native event tag"),
     }
 }

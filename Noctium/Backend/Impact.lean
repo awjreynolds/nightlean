@@ -121,10 +121,9 @@ private def emptyListPushFields : List Scalar :=
 private def eventFieldGroups (kind : EventKind)
     (payload : Expr (.bytes kind.payloadSize)) : List (List Scalar) :=
   -- Push a three-cell array containing version (u32), tag (u8) and data.
-  let data := match kind, payload with
-    | .paused, payload | .unpaused, payload =>
-        [.native 1, .letE "_noctium_empty_event" payload (.native 0)]
-    | .shieldedSpend, payload => (Aligned.bytes 32 payload).fields
+  let data := if kind.payloadSize == 0 then
+      [.native 1, .letE "_noctium_empty_event" payload (.native 0)]
+    else (Aligned.bytes kind.payloadSize payload).fields
   [[.native 0x10, .native 0x33, .native 1, .native 1, .native 4, .native 1,
     .native 1, .native 1, .native 1, .native kind.tag, .native 1] ++ data, [.native 0x09]]
 
