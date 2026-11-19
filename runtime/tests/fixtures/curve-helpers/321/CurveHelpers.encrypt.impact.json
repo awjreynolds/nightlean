@@ -97,470 +97,286 @@
     "type": "Native",
     "name": "result.c1x",
     "expression":
-    {"value": {"tag": "reference", "name": "recipient"},
-     "tag": "let",
-     "name": "$helper0",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper1"},
-      "tag": "let",
-      "name": "$helper2",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper3"},
-       "tag": "let",
-       "name": "$helper4",
-       "body":
-       {"value": {"tag": "reference", "name": "$helper5"},
-        "tag": "let",
-        "name": "$helper6",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper2"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper7",
-         "body":
-         {"value":
-          {"value": {"tag": "reference", "name": "$helper4"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper8",
-          "body":
-          {"value":
-           {"value":
-            {"value": {"tag": "reference", "name": "$helper6"},
-             "type": "Native",
-             "tag": "cast"},
-            "tag": "jubjubScalarFromNative"},
-           "tag": "let",
-           "name": "$helper9",
-           "body":
-           {"value":
-            {"y":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 1},
-             "x":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 0},
-             "tag": "jubjubFromCoordinates"},
-            "tag": "let",
-            "name": "$helper10",
-            "body":
-            {"value":
-             {"tag": "jubjubMulGenerator",
-              "scalar": {"tag": "reference", "name": "$helper8"}},
-             "tag": "let",
-             "name": "$helper11",
-             "body":
-             {"value":
-              {"tag": "jubjubMulGenerator",
-               "scalar": {"tag": "reference", "name": "$helper9"}},
-              "tag": "let",
-              "name": "$helper12",
-              "body":
-              {"value":
-               {"tag": "jubjubAdd",
-                "right":
-                {"tag": "jubjubMul",
-                 "scalar": {"tag": "reference", "name": "$helper8"},
-                 "point": {"tag": "reference", "name": "$helper0"}},
-                "left": {"tag": "reference", "name": "$helper12"}},
-               "tag": "let",
-               "name": "$helper13",
-               "body":
-               {"value":
-                {"tag": "jubjubAdd",
-                 "right":
-                 {"tag": "jubjubNeg",
-                  "point":
-                  {"tag": "jubjubMul",
-                   "scalar": {"tag": "reference", "name": "$helper7"},
-                   "point": {"tag": "reference", "name": "$helper11"}}},
-                 "left": {"tag": "reference", "name": "$helper13"}},
-                "tag": "let",
-                "name": "$helper14",
-                "body":
-                {"value":
-                 {"tag": "jubjubCoordinate",
-                  "point": {"tag": "reference", "name": "$helper11"},
-                  "index": 0},
-                 "tag": "let",
-                 "name": "$helper15",
-                 "body":
-                 {"value":
-                  {"tag": "jubjubCoordinate",
-                   "point": {"tag": "reference", "name": "$helper11"},
-                   "index": 1},
-                  "tag": "let",
-                  "name": "$helper16",
-                  "body":
-                  {"value":
-                   {"tag": "jubjubCoordinate",
-                    "point": {"tag": "reference", "name": "$helper13"},
-                    "index": 0},
-                   "tag": "let",
-                   "name": "$helper17",
-                   "body":
-                   {"value":
-                    {"tag": "jubjubCoordinate",
-                     "point": {"tag": "reference", "name": "$helper13"},
-                     "index": 1},
-                    "tag": "let",
-                    "name": "$helper18",
-                    "body":
-                    {"tag": "reference", "name": "$helper15"}}}}}}}}}}}}}}}}}},
+    {"tag": "lets",
+     "body": {"tag": "reference", "name": "$helper15"},
+     "bindings":
+     [["$helper0", {"tag": "reference", "name": "recipient"}],
+      ["$helper2", {"tag": "reference", "name": "$helper1"}],
+      ["$helper4", {"tag": "reference", "name": "$helper3"}],
+      ["$helper6", {"tag": "reference", "name": "$helper5"}],
+      ["$helper7",
+       {"value": {"tag": "reference", "name": "$helper2"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper8",
+       {"value": {"tag": "reference", "name": "$helper4"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper9",
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper6"},
+         "type": "Native",
+         "tag": "cast"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper10",
+       {"y":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 1},
+        "x":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 0},
+        "tag": "jubjubFromCoordinates"}],
+      ["$helper11",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper8"}}],
+      ["$helper12",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper9"}}],
+      ["$helper13",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubMul",
+         "scalar": {"tag": "reference", "name": "$helper8"},
+         "point": {"tag": "reference", "name": "$helper0"}},
+        "left": {"tag": "reference", "name": "$helper12"}}],
+      ["$helper14",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubNeg",
+         "point":
+         {"tag": "jubjubMul",
+          "scalar": {"tag": "reference", "name": "$helper7"},
+          "point": {"tag": "reference", "name": "$helper11"}}},
+        "left": {"tag": "reference", "name": "$helper13"}}],
+      ["$helper15",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 0}],
+      ["$helper16",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 1}],
+      ["$helper17",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 0}],
+      ["$helper18",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 1}]]}},
    {"visibility": "public",
     "type": "Native",
     "name": "result.c1y",
     "expression":
-    {"value": {"tag": "reference", "name": "recipient"},
-     "tag": "let",
-     "name": "$helper0",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper1"},
-      "tag": "let",
-      "name": "$helper2",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper3"},
-       "tag": "let",
-       "name": "$helper4",
-       "body":
-       {"value": {"tag": "reference", "name": "$helper5"},
-        "tag": "let",
-        "name": "$helper6",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper2"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper7",
-         "body":
-         {"value":
-          {"value": {"tag": "reference", "name": "$helper4"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper8",
-          "body":
-          {"value":
-           {"value":
-            {"value": {"tag": "reference", "name": "$helper6"},
-             "type": "Native",
-             "tag": "cast"},
-            "tag": "jubjubScalarFromNative"},
-           "tag": "let",
-           "name": "$helper9",
-           "body":
-           {"value":
-            {"y":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 1},
-             "x":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 0},
-             "tag": "jubjubFromCoordinates"},
-            "tag": "let",
-            "name": "$helper10",
-            "body":
-            {"value":
-             {"tag": "jubjubMulGenerator",
-              "scalar": {"tag": "reference", "name": "$helper8"}},
-             "tag": "let",
-             "name": "$helper11",
-             "body":
-             {"value":
-              {"tag": "jubjubMulGenerator",
-               "scalar": {"tag": "reference", "name": "$helper9"}},
-              "tag": "let",
-              "name": "$helper12",
-              "body":
-              {"value":
-               {"tag": "jubjubAdd",
-                "right":
-                {"tag": "jubjubMul",
-                 "scalar": {"tag": "reference", "name": "$helper8"},
-                 "point": {"tag": "reference", "name": "$helper0"}},
-                "left": {"tag": "reference", "name": "$helper12"}},
-               "tag": "let",
-               "name": "$helper13",
-               "body":
-               {"value":
-                {"tag": "jubjubAdd",
-                 "right":
-                 {"tag": "jubjubNeg",
-                  "point":
-                  {"tag": "jubjubMul",
-                   "scalar": {"tag": "reference", "name": "$helper7"},
-                   "point": {"tag": "reference", "name": "$helper11"}}},
-                 "left": {"tag": "reference", "name": "$helper13"}},
-                "tag": "let",
-                "name": "$helper14",
-                "body":
-                {"value":
-                 {"tag": "jubjubCoordinate",
-                  "point": {"tag": "reference", "name": "$helper11"},
-                  "index": 0},
-                 "tag": "let",
-                 "name": "$helper15",
-                 "body":
-                 {"value":
-                  {"tag": "jubjubCoordinate",
-                   "point": {"tag": "reference", "name": "$helper11"},
-                   "index": 1},
-                  "tag": "let",
-                  "name": "$helper16",
-                  "body":
-                  {"value":
-                   {"tag": "jubjubCoordinate",
-                    "point": {"tag": "reference", "name": "$helper13"},
-                    "index": 0},
-                   "tag": "let",
-                   "name": "$helper17",
-                   "body":
-                   {"value":
-                    {"tag": "jubjubCoordinate",
-                     "point": {"tag": "reference", "name": "$helper13"},
-                     "index": 1},
-                    "tag": "let",
-                    "name": "$helper18",
-                    "body":
-                    {"tag": "reference", "name": "$helper16"}}}}}}}}}}}}}}}}}},
+    {"tag": "lets",
+     "body": {"tag": "reference", "name": "$helper16"},
+     "bindings":
+     [["$helper0", {"tag": "reference", "name": "recipient"}],
+      ["$helper2", {"tag": "reference", "name": "$helper1"}],
+      ["$helper4", {"tag": "reference", "name": "$helper3"}],
+      ["$helper6", {"tag": "reference", "name": "$helper5"}],
+      ["$helper7",
+       {"value": {"tag": "reference", "name": "$helper2"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper8",
+       {"value": {"tag": "reference", "name": "$helper4"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper9",
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper6"},
+         "type": "Native",
+         "tag": "cast"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper10",
+       {"y":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 1},
+        "x":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 0},
+        "tag": "jubjubFromCoordinates"}],
+      ["$helper11",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper8"}}],
+      ["$helper12",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper9"}}],
+      ["$helper13",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubMul",
+         "scalar": {"tag": "reference", "name": "$helper8"},
+         "point": {"tag": "reference", "name": "$helper0"}},
+        "left": {"tag": "reference", "name": "$helper12"}}],
+      ["$helper14",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubNeg",
+         "point":
+         {"tag": "jubjubMul",
+          "scalar": {"tag": "reference", "name": "$helper7"},
+          "point": {"tag": "reference", "name": "$helper11"}}},
+        "left": {"tag": "reference", "name": "$helper13"}}],
+      ["$helper15",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 0}],
+      ["$helper16",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 1}],
+      ["$helper17",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 0}],
+      ["$helper18",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 1}]]}},
    {"visibility": "public",
     "type": "Native",
     "name": "result.c2x",
     "expression":
-    {"value": {"tag": "reference", "name": "recipient"},
-     "tag": "let",
-     "name": "$helper0",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper1"},
-      "tag": "let",
-      "name": "$helper2",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper3"},
-       "tag": "let",
-       "name": "$helper4",
-       "body":
-       {"value": {"tag": "reference", "name": "$helper5"},
-        "tag": "let",
-        "name": "$helper6",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper2"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper7",
-         "body":
-         {"value":
-          {"value": {"tag": "reference", "name": "$helper4"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper8",
-          "body":
-          {"value":
-           {"value":
-            {"value": {"tag": "reference", "name": "$helper6"},
-             "type": "Native",
-             "tag": "cast"},
-            "tag": "jubjubScalarFromNative"},
-           "tag": "let",
-           "name": "$helper9",
-           "body":
-           {"value":
-            {"y":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 1},
-             "x":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 0},
-             "tag": "jubjubFromCoordinates"},
-            "tag": "let",
-            "name": "$helper10",
-            "body":
-            {"value":
-             {"tag": "jubjubMulGenerator",
-              "scalar": {"tag": "reference", "name": "$helper8"}},
-             "tag": "let",
-             "name": "$helper11",
-             "body":
-             {"value":
-              {"tag": "jubjubMulGenerator",
-               "scalar": {"tag": "reference", "name": "$helper9"}},
-              "tag": "let",
-              "name": "$helper12",
-              "body":
-              {"value":
-               {"tag": "jubjubAdd",
-                "right":
-                {"tag": "jubjubMul",
-                 "scalar": {"tag": "reference", "name": "$helper8"},
-                 "point": {"tag": "reference", "name": "$helper0"}},
-                "left": {"tag": "reference", "name": "$helper12"}},
-               "tag": "let",
-               "name": "$helper13",
-               "body":
-               {"value":
-                {"tag": "jubjubAdd",
-                 "right":
-                 {"tag": "jubjubNeg",
-                  "point":
-                  {"tag": "jubjubMul",
-                   "scalar": {"tag": "reference", "name": "$helper7"},
-                   "point": {"tag": "reference", "name": "$helper11"}}},
-                 "left": {"tag": "reference", "name": "$helper13"}},
-                "tag": "let",
-                "name": "$helper14",
-                "body":
-                {"value":
-                 {"tag": "jubjubCoordinate",
-                  "point": {"tag": "reference", "name": "$helper11"},
-                  "index": 0},
-                 "tag": "let",
-                 "name": "$helper15",
-                 "body":
-                 {"value":
-                  {"tag": "jubjubCoordinate",
-                   "point": {"tag": "reference", "name": "$helper11"},
-                   "index": 1},
-                  "tag": "let",
-                  "name": "$helper16",
-                  "body":
-                  {"value":
-                   {"tag": "jubjubCoordinate",
-                    "point": {"tag": "reference", "name": "$helper13"},
-                    "index": 0},
-                   "tag": "let",
-                   "name": "$helper17",
-                   "body":
-                   {"value":
-                    {"tag": "jubjubCoordinate",
-                     "point": {"tag": "reference", "name": "$helper13"},
-                     "index": 1},
-                    "tag": "let",
-                    "name": "$helper18",
-                    "body":
-                    {"tag": "reference", "name": "$helper17"}}}}}}}}}}}}}}}}}},
+    {"tag": "lets",
+     "body": {"tag": "reference", "name": "$helper17"},
+     "bindings":
+     [["$helper0", {"tag": "reference", "name": "recipient"}],
+      ["$helper2", {"tag": "reference", "name": "$helper1"}],
+      ["$helper4", {"tag": "reference", "name": "$helper3"}],
+      ["$helper6", {"tag": "reference", "name": "$helper5"}],
+      ["$helper7",
+       {"value": {"tag": "reference", "name": "$helper2"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper8",
+       {"value": {"tag": "reference", "name": "$helper4"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper9",
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper6"},
+         "type": "Native",
+         "tag": "cast"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper10",
+       {"y":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 1},
+        "x":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 0},
+        "tag": "jubjubFromCoordinates"}],
+      ["$helper11",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper8"}}],
+      ["$helper12",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper9"}}],
+      ["$helper13",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubMul",
+         "scalar": {"tag": "reference", "name": "$helper8"},
+         "point": {"tag": "reference", "name": "$helper0"}},
+        "left": {"tag": "reference", "name": "$helper12"}}],
+      ["$helper14",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubNeg",
+         "point":
+         {"tag": "jubjubMul",
+          "scalar": {"tag": "reference", "name": "$helper7"},
+          "point": {"tag": "reference", "name": "$helper11"}}},
+        "left": {"tag": "reference", "name": "$helper13"}}],
+      ["$helper15",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 0}],
+      ["$helper16",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 1}],
+      ["$helper17",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 0}],
+      ["$helper18",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 1}]]}},
    {"visibility": "public",
     "type": "Native",
     "name": "result.c2y",
     "expression":
-    {"value": {"tag": "reference", "name": "recipient"},
-     "tag": "let",
-     "name": "$helper0",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper1"},
-      "tag": "let",
-      "name": "$helper2",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper3"},
-       "tag": "let",
-       "name": "$helper4",
-       "body":
-       {"value": {"tag": "reference", "name": "$helper5"},
-        "tag": "let",
-        "name": "$helper6",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper2"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper7",
-         "body":
-         {"value":
-          {"value": {"tag": "reference", "name": "$helper4"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper8",
-          "body":
-          {"value":
-           {"value":
-            {"value": {"tag": "reference", "name": "$helper6"},
-             "type": "Native",
-             "tag": "cast"},
-            "tag": "jubjubScalarFromNative"},
-           "tag": "let",
-           "name": "$helper9",
-           "body":
-           {"value":
-            {"y":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 1},
-             "x":
-             {"tag": "jubjubCoordinate",
-              "point": {"tag": "reference", "name": "$helper0"},
-              "index": 0},
-             "tag": "jubjubFromCoordinates"},
-            "tag": "let",
-            "name": "$helper10",
-            "body":
-            {"value":
-             {"tag": "jubjubMulGenerator",
-              "scalar": {"tag": "reference", "name": "$helper8"}},
-             "tag": "let",
-             "name": "$helper11",
-             "body":
-             {"value":
-              {"tag": "jubjubMulGenerator",
-               "scalar": {"tag": "reference", "name": "$helper9"}},
-              "tag": "let",
-              "name": "$helper12",
-              "body":
-              {"value":
-               {"tag": "jubjubAdd",
-                "right":
-                {"tag": "jubjubMul",
-                 "scalar": {"tag": "reference", "name": "$helper8"},
-                 "point": {"tag": "reference", "name": "$helper0"}},
-                "left": {"tag": "reference", "name": "$helper12"}},
-               "tag": "let",
-               "name": "$helper13",
-               "body":
-               {"value":
-                {"tag": "jubjubAdd",
-                 "right":
-                 {"tag": "jubjubNeg",
-                  "point":
-                  {"tag": "jubjubMul",
-                   "scalar": {"tag": "reference", "name": "$helper7"},
-                   "point": {"tag": "reference", "name": "$helper11"}}},
-                 "left": {"tag": "reference", "name": "$helper13"}},
-                "tag": "let",
-                "name": "$helper14",
-                "body":
-                {"value":
-                 {"tag": "jubjubCoordinate",
-                  "point": {"tag": "reference", "name": "$helper11"},
-                  "index": 0},
-                 "tag": "let",
-                 "name": "$helper15",
-                 "body":
-                 {"value":
-                  {"tag": "jubjubCoordinate",
-                   "point": {"tag": "reference", "name": "$helper11"},
-                   "index": 1},
-                  "tag": "let",
-                  "name": "$helper16",
-                  "body":
-                  {"value":
-                   {"tag": "jubjubCoordinate",
-                    "point": {"tag": "reference", "name": "$helper13"},
-                    "index": 0},
-                   "tag": "let",
-                   "name": "$helper17",
-                   "body":
-                   {"value":
-                    {"tag": "jubjubCoordinate",
-                     "point": {"tag": "reference", "name": "$helper13"},
-                     "index": 1},
-                    "tag": "let",
-                    "name": "$helper18",
-                    "body":
-                    {"tag": "reference", "name": "$helper18"}}}}}}}}}}}}}}}}}}],
+    {"tag": "lets",
+     "body": {"tag": "reference", "name": "$helper18"},
+     "bindings":
+     [["$helper0", {"tag": "reference", "name": "recipient"}],
+      ["$helper2", {"tag": "reference", "name": "$helper1"}],
+      ["$helper4", {"tag": "reference", "name": "$helper3"}],
+      ["$helper6", {"tag": "reference", "name": "$helper5"}],
+      ["$helper7",
+       {"value": {"tag": "reference", "name": "$helper2"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper8",
+       {"value": {"tag": "reference", "name": "$helper4"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper9",
+       {"value":
+        {"value": {"tag": "reference", "name": "$helper6"},
+         "type": "Native",
+         "tag": "cast"},
+        "tag": "jubjubScalarFromNative"}],
+      ["$helper10",
+       {"y":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 1},
+        "x":
+        {"tag": "jubjubCoordinate",
+         "point": {"tag": "reference", "name": "$helper0"},
+         "index": 0},
+        "tag": "jubjubFromCoordinates"}],
+      ["$helper11",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper8"}}],
+      ["$helper12",
+       {"tag": "jubjubMulGenerator",
+        "scalar": {"tag": "reference", "name": "$helper9"}}],
+      ["$helper13",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubMul",
+         "scalar": {"tag": "reference", "name": "$helper8"},
+         "point": {"tag": "reference", "name": "$helper0"}},
+        "left": {"tag": "reference", "name": "$helper12"}}],
+      ["$helper14",
+       {"tag": "jubjubAdd",
+        "right":
+        {"tag": "jubjubNeg",
+         "point":
+         {"tag": "jubjubMul",
+          "scalar": {"tag": "reference", "name": "$helper7"},
+          "point": {"tag": "reference", "name": "$helper11"}}},
+        "left": {"tag": "reference", "name": "$helper13"}}],
+      ["$helper15",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 0}],
+      ["$helper16",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper11"},
+        "index": 1}],
+      ["$helper17",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 0}],
+      ["$helper18",
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper13"},
+        "index": 1}]]}}],
   "name": "encrypt",
   "inputs":
   [{"visibility": "public", "type": "JubjubPoint", "name": "recipient"},
@@ -571,385 +387,237 @@
     "name": "$helper5"}],
   "file": "encrypt.zkir",
   "constraints":
-  [{"value": {"tag": "reference", "name": "recipient"},
-    "tag": "let",
-    "name": "$helper0",
+  [{"tag": "lets",
     "body":
-    {"value": {"tag": "reference", "name": "$helper1"},
-     "tag": "let",
-     "name": "$helper2",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper3"},
-      "tag": "let",
-      "name": "$helper4",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper5"},
-       "tag": "let",
-       "name": "$helper6",
-       "body":
-       {"value":
-        {"value": {"tag": "reference", "name": "$helper2"},
-         "tag": "jubjubScalarFromNative"},
-        "tag": "let",
-        "name": "$helper7",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper4"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper8",
-         "body":
-         {"value":
-          {"value":
-           {"value": {"tag": "reference", "name": "$helper6"},
-            "type": "Native",
-            "tag": "cast"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper9",
-          "body":
-          {"tag": "eq",
-           "right": {"value": true, "tag": "bool"},
-           "left":
-           {"tag": "eq",
-            "right": {"tag": "reference", "name": "$helper0"},
-            "left":
-            {"tag": "jubjubMulGenerator",
-             "scalar": {"tag": "reference", "name": "$helper7"}}}}}}}}}}},
-   {"value": {"tag": "reference", "name": "recipient"},
-    "tag": "let",
-    "name": "$helper0",
+    {"tag": "eq",
+     "right": {"value": true, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"tag": "reference", "name": "$helper0"},
+      "left":
+      {"tag": "jubjubMulGenerator",
+       "scalar": {"tag": "reference", "name": "$helper7"}}}},
+    "bindings":
+    [["$helper0", {"tag": "reference", "name": "recipient"}],
+     ["$helper2", {"tag": "reference", "name": "$helper1"}],
+     ["$helper4", {"tag": "reference", "name": "$helper3"}],
+     ["$helper6", {"tag": "reference", "name": "$helper5"}],
+     ["$helper7",
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper8",
+      {"value": {"tag": "reference", "name": "$helper4"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper9",
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "type": "Native",
+        "tag": "cast"},
+       "tag": "jubjubScalarFromNative"}]]},
+   {"tag": "lets",
     "body":
-    {"value": {"tag": "reference", "name": "$helper1"},
-     "tag": "let",
-     "name": "$helper2",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper3"},
-      "tag": "let",
-      "name": "$helper4",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper5"},
-       "tag": "let",
-       "name": "$helper6",
-       "body":
-       {"value":
-        {"value": {"tag": "reference", "name": "$helper2"},
-         "tag": "jubjubScalarFromNative"},
-        "tag": "let",
-        "name": "$helper7",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper4"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper8",
-         "body":
-         {"value":
-          {"value":
-           {"value": {"tag": "reference", "name": "$helper6"},
-            "type": "Native",
-            "tag": "cast"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper9",
-          "body":
-          {"tag": "eq",
-           "right": {"value": true, "tag": "bool"},
-           "left":
-           {"tag": "eq",
-            "right": {"tag": "reference", "name": "$helper2"},
-            "left":
-            {"value": {"tag": "reference", "name": "$helper7"},
-             "tag": "jubjubScalarToNative"}}}}}}}}}},
-   {"value": {"tag": "reference", "name": "recipient"},
-    "tag": "let",
-    "name": "$helper0",
+    {"tag": "eq",
+     "right": {"value": true, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"tag": "reference", "name": "$helper2"},
+      "left":
+      {"value": {"tag": "reference", "name": "$helper7"},
+       "tag": "jubjubScalarToNative"}}},
+    "bindings":
+    [["$helper2", {"tag": "reference", "name": "$helper1"}],
+     ["$helper4", {"tag": "reference", "name": "$helper3"}],
+     ["$helper6", {"tag": "reference", "name": "$helper5"}],
+     ["$helper7",
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper8",
+      {"value": {"tag": "reference", "name": "$helper4"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper9",
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "type": "Native",
+        "tag": "cast"},
+       "tag": "jubjubScalarFromNative"}]]},
+   {"tag": "lets",
     "body":
-    {"value": {"tag": "reference", "name": "$helper1"},
-     "tag": "let",
-     "name": "$helper2",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper3"},
-      "tag": "let",
-      "name": "$helper4",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper5"},
-       "tag": "let",
-       "name": "$helper6",
-       "body":
-       {"value":
-        {"value": {"tag": "reference", "name": "$helper2"},
-         "tag": "jubjubScalarFromNative"},
-        "tag": "let",
-        "name": "$helper7",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper4"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper8",
-         "body":
-         {"value":
-          {"value":
-           {"value": {"tag": "reference", "name": "$helper6"},
-            "type": "Native",
-            "tag": "cast"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper9",
-          "body":
-          {"tag": "eq",
-           "right": {"value": true, "tag": "bool"},
-           "left":
-           {"tag": "eq",
-            "right": {"value": false, "tag": "bool"},
-            "left":
-            {"tag": "eq",
-             "right": {"value": "0", "tag": "constant"},
-             "left":
-             {"value": {"tag": "reference", "name": "$helper7"},
-              "tag": "jubjubScalarToNative"}}}}}}}}}}},
-   {"value": {"tag": "reference", "name": "recipient"},
-    "tag": "let",
-    "name": "$helper0",
+    {"tag": "eq",
+     "right": {"value": true, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right": {"value": "0", "tag": "constant"},
+       "left":
+       {"value": {"tag": "reference", "name": "$helper7"},
+        "tag": "jubjubScalarToNative"}}}},
+    "bindings":
+    [["$helper2", {"tag": "reference", "name": "$helper1"}],
+     ["$helper4", {"tag": "reference", "name": "$helper3"}],
+     ["$helper6", {"tag": "reference", "name": "$helper5"}],
+     ["$helper7",
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper8",
+      {"value": {"tag": "reference", "name": "$helper4"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper9",
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "type": "Native",
+        "tag": "cast"},
+       "tag": "jubjubScalarFromNative"}]]},
+   {"tag": "lets",
     "body":
-    {"value": {"tag": "reference", "name": "$helper1"},
-     "tag": "let",
-     "name": "$helper2",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper3"},
-      "tag": "let",
-      "name": "$helper4",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper5"},
-       "tag": "let",
-       "name": "$helper6",
-       "body":
-       {"value":
-        {"value": {"tag": "reference", "name": "$helper2"},
-         "tag": "jubjubScalarFromNative"},
-        "tag": "let",
-        "name": "$helper7",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper4"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper8",
-         "body":
-         {"value":
-          {"value":
-           {"value": {"tag": "reference", "name": "$helper6"},
-            "type": "Native",
-            "tag": "cast"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper9",
-          "body":
-          {"tag": "eq",
-           "right": {"value": true, "tag": "bool"},
-           "left":
-           {"tag": "eq",
-            "right": {"value": false, "tag": "bool"},
-            "left":
-            {"tag": "eq",
-             "right": {"value": "0", "tag": "constant"},
-             "left":
-             {"value": {"tag": "reference", "name": "$helper8"},
-              "tag": "jubjubScalarToNative"}}}}}}}}}}},
-   {"value": {"tag": "reference", "name": "recipient"},
-    "tag": "let",
-    "name": "$helper0",
+    {"tag": "eq",
+     "right": {"value": true, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right": {"value": "0", "tag": "constant"},
+       "left":
+       {"value": {"tag": "reference", "name": "$helper8"},
+        "tag": "jubjubScalarToNative"}}}},
+    "bindings":
+    [["$helper2", {"tag": "reference", "name": "$helper1"}],
+     ["$helper4", {"tag": "reference", "name": "$helper3"}],
+     ["$helper6", {"tag": "reference", "name": "$helper5"}],
+     ["$helper7",
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper8",
+      {"value": {"tag": "reference", "name": "$helper4"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper9",
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "type": "Native",
+        "tag": "cast"},
+       "tag": "jubjubScalarFromNative"}]]},
+   {"tag": "lets",
     "body":
-    {"value": {"tag": "reference", "name": "$helper1"},
-     "tag": "let",
-     "name": "$helper2",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper3"},
-      "tag": "let",
-      "name": "$helper4",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper5"},
-       "tag": "let",
-       "name": "$helper6",
-       "body":
-       {"value":
-        {"value": {"tag": "reference", "name": "$helper2"},
-         "tag": "jubjubScalarFromNative"},
-        "tag": "let",
-        "name": "$helper7",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper4"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper8",
-         "body":
-         {"value":
-          {"value":
-           {"value": {"tag": "reference", "name": "$helper6"},
-            "type": "Native",
-            "tag": "cast"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper9",
-          "body":
-          {"tag": "eq",
-           "right": {"value": true, "tag": "bool"},
-           "left":
-           {"tag": "eq",
-            "right": {"value": false, "tag": "bool"},
-            "left":
-            {"tag": "eq",
-             "right":
-             {"y": {"value": "1", "tag": "constant"},
-              "x": {"value": "0", "tag": "constant"},
-              "tag": "jubjubFromCoordinates"},
-             "left": {"tag": "reference", "name": "$helper0"}}}}}}}}}}},
-   {"value": {"tag": "reference", "name": "recipient"},
-    "tag": "let",
-    "name": "$helper0",
+    {"tag": "eq",
+     "right": {"value": true, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"value": false, "tag": "bool"},
+      "left":
+      {"tag": "eq",
+       "right":
+       {"y": {"value": "1", "tag": "constant"},
+        "x": {"value": "0", "tag": "constant"},
+        "tag": "jubjubFromCoordinates"},
+       "left": {"tag": "reference", "name": "$helper0"}}}},
+    "bindings":
+    [["$helper0", {"tag": "reference", "name": "recipient"}],
+     ["$helper2", {"tag": "reference", "name": "$helper1"}],
+     ["$helper4", {"tag": "reference", "name": "$helper3"}],
+     ["$helper6", {"tag": "reference", "name": "$helper5"}],
+     ["$helper7",
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper8",
+      {"value": {"tag": "reference", "name": "$helper4"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper9",
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "type": "Native",
+        "tag": "cast"},
+       "tag": "jubjubScalarFromNative"}]]},
+   {"tag": "lets",
     "body":
-    {"value": {"tag": "reference", "name": "$helper1"},
-     "tag": "let",
-     "name": "$helper2",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper3"},
-      "tag": "let",
-      "name": "$helper4",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper5"},
-       "tag": "let",
-       "name": "$helper6",
-       "body":
-       {"value":
-        {"value": {"tag": "reference", "name": "$helper2"},
-         "tag": "jubjubScalarFromNative"},
-        "tag": "let",
-        "name": "$helper7",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper4"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper8",
-         "body":
-         {"value":
-          {"value":
-           {"value": {"tag": "reference", "name": "$helper6"},
-            "type": "Native",
-            "tag": "cast"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper9",
-          "body":
-          {"value":
-           {"y":
-            {"tag": "jubjubCoordinate",
-             "point": {"tag": "reference", "name": "$helper0"},
-             "index": 1},
-            "x":
-            {"tag": "jubjubCoordinate",
-             "point": {"tag": "reference", "name": "$helper0"},
-             "index": 0},
-            "tag": "jubjubFromCoordinates"},
-           "tag": "let",
-           "name": "$helper10",
-           "body":
-           {"tag": "eq",
-            "right": {"value": true, "tag": "bool"},
-            "left":
-            {"tag": "eq",
-             "right": {"tag": "reference", "name": "$helper0"},
-             "left": {"tag": "reference", "name": "$helper10"}}}}}}}}}}},
-   {"value": {"tag": "reference", "name": "recipient"},
-    "tag": "let",
-    "name": "$helper0",
+    {"tag": "eq",
+     "right": {"value": true, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"tag": "reference", "name": "$helper0"},
+      "left": {"tag": "reference", "name": "$helper10"}}},
+    "bindings":
+    [["$helper0", {"tag": "reference", "name": "recipient"}],
+     ["$helper2", {"tag": "reference", "name": "$helper1"}],
+     ["$helper4", {"tag": "reference", "name": "$helper3"}],
+     ["$helper6", {"tag": "reference", "name": "$helper5"}],
+     ["$helper7",
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper8",
+      {"value": {"tag": "reference", "name": "$helper4"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper9",
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "type": "Native",
+        "tag": "cast"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper10",
+      {"y":
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper0"},
+        "index": 1},
+       "x":
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper0"},
+        "index": 0},
+       "tag": "jubjubFromCoordinates"}]]},
+   {"tag": "lets",
     "body":
-    {"value": {"tag": "reference", "name": "$helper1"},
-     "tag": "let",
-     "name": "$helper2",
-     "body":
-     {"value": {"tag": "reference", "name": "$helper3"},
-      "tag": "let",
-      "name": "$helper4",
-      "body":
-      {"value": {"tag": "reference", "name": "$helper5"},
-       "tag": "let",
-       "name": "$helper6",
-       "body":
-       {"value":
-        {"value": {"tag": "reference", "name": "$helper2"},
-         "tag": "jubjubScalarFromNative"},
-        "tag": "let",
-        "name": "$helper7",
-        "body":
-        {"value":
-         {"value": {"tag": "reference", "name": "$helper4"},
-          "tag": "jubjubScalarFromNative"},
-         "tag": "let",
-         "name": "$helper8",
-         "body":
-         {"value":
-          {"value":
-           {"value": {"tag": "reference", "name": "$helper6"},
-            "type": "Native",
-            "tag": "cast"},
-           "tag": "jubjubScalarFromNative"},
-          "tag": "let",
-          "name": "$helper9",
-          "body":
-          {"value":
-           {"y":
-            {"tag": "jubjubCoordinate",
-             "point": {"tag": "reference", "name": "$helper0"},
-             "index": 1},
-            "x":
-            {"tag": "jubjubCoordinate",
-             "point": {"tag": "reference", "name": "$helper0"},
-             "index": 0},
-            "tag": "jubjubFromCoordinates"},
-           "tag": "let",
-           "name": "$helper10",
-           "body":
-           {"value":
-            {"tag": "jubjubMulGenerator",
-             "scalar": {"tag": "reference", "name": "$helper8"}},
-            "tag": "let",
-            "name": "$helper11",
-            "body":
-            {"value":
-             {"tag": "jubjubMulGenerator",
-              "scalar": {"tag": "reference", "name": "$helper9"}},
-             "tag": "let",
-             "name": "$helper12",
-             "body":
-             {"value":
-              {"tag": "jubjubAdd",
-               "right":
-               {"tag": "jubjubMul",
-                "scalar": {"tag": "reference", "name": "$helper8"},
-                "point": {"tag": "reference", "name": "$helper0"}},
-               "left": {"tag": "reference", "name": "$helper12"}},
-              "tag": "let",
-              "name": "$helper13",
-              "body":
-              {"value":
-               {"tag": "jubjubAdd",
-                "right":
-                {"tag": "jubjubNeg",
-                 "point":
-                 {"tag": "jubjubMul",
-                  "scalar": {"tag": "reference", "name": "$helper7"},
-                  "point": {"tag": "reference", "name": "$helper11"}}},
-                "left": {"tag": "reference", "name": "$helper13"}},
-               "tag": "let",
-               "name": "$helper14",
-               "body":
-               {"tag": "eq",
-                "right": {"value": true, "tag": "bool"},
-                "left":
-                {"tag": "eq",
-                 "right": {"tag": "reference", "name": "$helper12"},
-                 "left":
-                 {"tag": "reference", "name": "$helper14"}}}}}}}}}}}}}}}]}}
+    {"tag": "eq",
+     "right": {"value": true, "tag": "bool"},
+     "left":
+     {"tag": "eq",
+      "right": {"tag": "reference", "name": "$helper12"},
+      "left": {"tag": "reference", "name": "$helper14"}}},
+    "bindings":
+    [["$helper0", {"tag": "reference", "name": "recipient"}],
+     ["$helper2", {"tag": "reference", "name": "$helper1"}],
+     ["$helper4", {"tag": "reference", "name": "$helper3"}],
+     ["$helper6", {"tag": "reference", "name": "$helper5"}],
+     ["$helper7",
+      {"value": {"tag": "reference", "name": "$helper2"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper8",
+      {"value": {"tag": "reference", "name": "$helper4"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper9",
+      {"value":
+       {"value": {"tag": "reference", "name": "$helper6"},
+        "type": "Native",
+        "tag": "cast"},
+       "tag": "jubjubScalarFromNative"}],
+     ["$helper10",
+      {"y":
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper0"},
+        "index": 1},
+       "x":
+       {"tag": "jubjubCoordinate",
+        "point": {"tag": "reference", "name": "$helper0"},
+        "index": 0},
+       "tag": "jubjubFromCoordinates"}],
+     ["$helper11",
+      {"tag": "jubjubMulGenerator",
+       "scalar": {"tag": "reference", "name": "$helper8"}}],
+     ["$helper12",
+      {"tag": "jubjubMulGenerator",
+       "scalar": {"tag": "reference", "name": "$helper9"}}],
+     ["$helper13",
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubMul",
+        "scalar": {"tag": "reference", "name": "$helper8"},
+        "point": {"tag": "reference", "name": "$helper0"}},
+       "left": {"tag": "reference", "name": "$helper12"}}],
+     ["$helper14",
+      {"tag": "jubjubAdd",
+       "right":
+       {"tag": "jubjubNeg",
+        "point":
+        {"tag": "jubjubMul",
+         "scalar": {"tag": "reference", "name": "$helper7"},
+         "point": {"tag": "reference", "name": "$helper11"}}},
+       "left": {"tag": "reference", "name": "$helper13"}}]]}]}}

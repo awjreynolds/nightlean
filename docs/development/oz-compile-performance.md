@@ -132,6 +132,20 @@ Impact files matched exactly. The token had no repeated bounded comparisons
 for the new pass to remove. These two runs measure one pair, with no
 established compile-time change.
 
+## Reuse checked Jubjub coordinates
+
+The compiler reuses a reconstructed Jubjub point only after emitting both
+coordinate roundtrip equalities. Further uses of the same ordered SSA operands
+reuse the checked point. The native producer still requires both equalities.
+
+The OpenZeppelin ledger-and-witness export removes 882 repeated equality
+instructions across ten relations. `transfer` drops from 1,199 to 901
+instructions. ZKIR shrinks from 758,817 to 704,238 bytes, and total output
+shrinks from 4,542,348 to 4,383,973 bytes. The file count and all 16 Impact
+plans stay the same. Pinned ZKIR 3.2.1 reports the same K and row counts for
+each modified relation. The refreshed CurveHelpers native case produces the
+expected ciphertext and rejects a wrong key. [Focused test](../../runtime/tests/witness_control.rs)
+
 ## Selected ledger outputs
 
 One serial run per mode on the same host compared a full compile with `--emit ledger --emit witness`. Both runs used the same executable, source and ZKIR 3.2.1 profile.

@@ -205,16 +205,13 @@ private def lowerPointCoordinates (point : String) : LowerM (String × String) :
 FromCoordinates operation. This closes the source/native x roundtrip gap. -/
 private def lowerPointFromCoordinates (x y : String) : LowerM String := do
   let key : ExpressionKey := ("from_coordinates_jubjub", [x, y], none)
-  let point ← match (← get).expressions.lookup key with
-    | some existing => pure existing
-    | none => do
-      let output ← fresh
-      emit "from_coordinates" [("inputs", toJson [x, y]), ("output", toJson output)]
-      modify fun state => {state with expressions := (key, output) :: state.expressions}
-      pure output
+  if let some existing := (← get).expressions.lookup key then return existing
+  let point ← fresh
+  emit "from_coordinates" [("inputs", toJson [x, y]), ("output", toJson point)]
   let (actualX, actualY) ← lowerPointCoordinates point
   emit "constrain_eq" [("a", toJson x), ("b", toJson actualX)]
   emit "constrain_eq" [("a", toJson y), ("b", toJson actualY)]
+  modify fun state => {state with expressions := (key, point) :: state.expressions}
   pure point
 
 private def lowerForeignConstant (kind : Foreign.Kind) (encoding : Except String (List Nat)) : LowerM String := do
