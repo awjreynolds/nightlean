@@ -1,6 +1,6 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The November 19 development benchmark measured **3.65 s for Noctium** and **0.277 s for Compact 0.36.1**. Noctium used a prebuilt compiler and native Lean library from a development worktree based on `cedb6ef`, including uncommitted compiler changes. The [machine-readable sample](oz-compile-performance.json) records the revision, source and executable hashes.
+The latest November 19 development benchmark measured **3.69 s for Noctium** and **0.285 s for Compact 0.36.1**. Noctium used a prebuilt compiler and native Lean library from a development worktree based on `cedb6ef`, including uncommitted compiler changes. The [machine-readable sample](oz-compile-performance.json) records the revision, source and executable hashes.
 
 The builds use different contract interfaces, state paths and artifact sets. Noctium ran with range deduplication and emitted ledger and witness artifacts with zero SDK bindings. Compact ran with `--skip-zk`. Both excluded key generation and proving.
 
@@ -8,10 +8,10 @@ The builds use different contract interfaces, state paths and artifact sets. Noc
 
 | Source compiler | Three alternating runs (s) | Median (s) | Files | Total bytes | ZKIR bytes |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Noctium development build | 3.727 / 3.653 / 3.645 | 3.65 | 53 | 2,661,156 | 304,477 |
-| Compact 0.36.1 | 0.275 / 0.281 / 0.277 | 0.277 | 20 | 517,229 | 167,669 |
+| Noctium development build | 4.166 / 3.675 / 3.694 | 3.69 | 53 | 2,596,304 | 304,477 |
+| Compact 0.36.1 | 0.290 / 0.276 / 0.285 | 0.285 | 20 | 517,229 | 167,669 |
 
-Each run used a fresh process, a fresh output directory and warm dependencies on the same Apple M3 Max with 48 GiB RAM. Each compiler reproduced its output bytes across its three runs. Noctium emits 16 ledger relations, Impact plans and witness artifacts. Compact emits 15 relations and JavaScript and TypeScript artifacts. Compact implements `computeAccountId` in JavaScript. Noctium's corresponding circuit measured K13 and 1,993 rows.
+Each run used a fresh process, a fresh output directory and warm dependencies on the same Apple M3 Max with 48 GiB RAM. Each compiler reproduced its output bytes across its three runs. The previous sample measured 3.65 s for the same Noctium executable and native library. Noctium emits 16 ledger relations, Impact plans and witness artifacts. Compact emits 15 relations and JavaScript and TypeScript artifacts. Compact implements `computeAccountId` in JavaScript. Noctium's corresponding circuit measured K13 and 1,993 rows.
 
 | Entrypoint | Noctium K | Noctium rows | Compact K | Compact rows | Row difference |
 | --- | ---: | ---: | ---: | ---: | ---: |

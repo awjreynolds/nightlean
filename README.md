@@ -31,7 +31,7 @@ Noctium's checkmarks cover specific runtime workloads. The Compact column covers
 
 ## OpenZeppelin benchmark
 
-The November 19 development benchmark measured **3.65 s for Noctium** and **0.277 s for Compact 0.36.1** on an Apple M3 Max. Noctium used a development snapshot based on `cedb6ef` with uncommitted compiler changes. The ports emit different artifacts. Noctium generated zero SDK bindings, and both runs excluded key generation and proving. Across 15 entrypoints paired by name, Noctium's K was lower on 3, equal on 11, and higher on 1. Noctium used fewer rows on 9 and more on 6. [Full measurements and artifact inventory](docs/development/oz-compile-performance.md)
+The latest November 19 development benchmark measured **3.69 s for Noctium** and **0.285 s for Compact 0.36.1** on an Apple M3 Max. Noctium used a development snapshot based on `cedb6ef` with uncommitted compiler changes. The ports emit different artifacts. Noctium generated zero SDK bindings, and both runs excluded key generation and proving. Across 15 entrypoints paired by name, Noctium's K was lower on 3, equal on 11, and higher on 1. Noctium used fewer rows on 9 and more on 6. [Full measurements and artifact inventory](docs/development/oz-compile-performance.md)
 
 [![Noctium and Compact compilation times and per-entrypoint K and row counts for the OpenZeppelin confidential token](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
 

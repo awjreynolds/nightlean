@@ -18,11 +18,11 @@
 <rect x="734" y="281" width="634" height="225" rx="16" fill="url(#surface)" stroke="#31455f"/>
 <text x="100" y="325" font-size="21" fill="#77efd6" font-weight="700" text-anchor="start" letter-spacing="1.8">NOCTIUM · DEVELOPMENT BUILD</text>
 <text x="762" y="325" font-size="21" fill="#b3c9ff" font-weight="700" text-anchor="start" letter-spacing="1.8">COMPACT 0.36.1</text>
-<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">3.65 s</text>
-<text x="762" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">0.277 s</text>
+<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">3.69 s</text>
+<text x="762" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">0.285 s</text>
 <text x="100" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Ledger and witness outputs · range deduplication on</text>
 <text x="762" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">ZKIR, JavaScript, and TypeScript declarations</text>
-<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files · 2.66 MB · zero SDK bindings</text>
+<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files · 2.60 MB · zero SDK bindings</text>
 <text x="762" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">20 files · 517 kB · --skip-zk</text>
 <text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Timings cover different compiler outputs. Both exclude key generation and proving.</text>
 <text x="72" y="622" font-size="38" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-0.6">Circuit size by entrypoint</text>
