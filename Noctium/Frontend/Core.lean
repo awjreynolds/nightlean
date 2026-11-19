@@ -23,7 +23,7 @@ structure CircuitInfo where
   expanded into native leaves. The names point to typed Expr constants. -/
   logicalOutputs : List (String × Ty × Name) := []
   /-- The declared aggregate label and its checked return schema. -/
-  aggregateOutput? : Option (String × Name) := none
+  aggregateOutputs : List (String × Name × List String) := []
   sourceProgram? : Option (Name × String) := none
   /-- Structured ledger bodies are rebuilt from their typed source at export. -/
   stateProgram? : Option (Name × String) := none
@@ -1853,10 +1853,8 @@ private def elaborateReturns (statements : Array (TSyntax `nlreturn))
         span := $span : Noctium.Output }))}
     | `(nlreturn| return $label:ident) => do
       let labelName := label.getId.toString
-      let some (aggregateName, schema) := info.aggregateOutput?
-        | throwErrorAt label "return without a type requires a declared aggregate circuit output"
-      unless aggregateName == labelName do
-        throwErrorAt label "expected aggregate circuit output '{aggregateName}'"
+      let some (_, schema, sourceFields) := info.aggregateOutputs.find? (·.1 == labelName)
+        | throwErrorAt label "unknown aggregate circuit output '{labelName}'"
       if labels.contains labelName then
         throwErrorAt label "duplicate entry return label '{labelName}'"
       if state.env.any (fun binding => binding.1 == labelName) then
@@ -1864,8 +1862,9 @@ private def elaborateReturns (statements : Array (TSyntax `nlreturn))
       labels := labelName :: labels
       let span ← spanTerm statement
       let mut fields := #[]
-      for (name, ty) in info.outputs do
-        unless ty == .native do throwErrorAt label "aggregate return requires Native fields"
+      for name in sourceFields do
+        unless info.outputs.lookup name == some Ty.native do
+          throwErrorAt label "aggregate return requires Native fields"
         let (physical, nextLocal) := chooseBranchLocalName state.env state.usedLocalNames state.nextLocal
         let field := stringTerm physical
         let returnTerm ← `({
@@ -2318,7 +2317,7 @@ scoped syntax (name := witnessCircuitCommand) "noctium_witness_circuit" ident
 unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportName : String)
     (outputName : String := "") (observationArtifact? : Option String := none)
     (logicalOutputs : List (String × Ty × Name) := [])
-    (aggregateOutput? : Option (String × Name) := none) : CommandElabM Unit := do
+    (aggregateOutputs : List (String × Name × List String) := []) : CommandElabM Unit := do
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     let fullName := (← getCurrNamespace) ++ name.getId
     let compiled ← match Witness.compile program exportName fullName.toString outputName with
@@ -2340,7 +2339,7 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       publicInputs := (compiled.circuit.inputs.filter (·.visibility == .public)).map fun input => (input.name, input.ty),
       outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
       logicalOutputs,
-      aggregateOutput?,
+      aggregateOutputs,
       sourceProgram? := some (sourceName, exportName)}
     modifyEnv fun env => witnessRegistry.addEntry env {
       circuitName := fullName, sourceName, exportName, outputName, observationArtifact?}

@@ -448,7 +448,7 @@ private partial def flattenLayoutTerms (span : SourceSpan) : Types.Layout → Te
       pure selected
     pure (.project value .enumTag :: payload)
 
-private def flattenMapResult (span : SourceSpan) (result : ResultType)
+def flattenResult (span : SourceSpan) (result : ResultType)
     (layout : Types.Layout) (value : Term) : Except Diagnostic (List Term) := do
   match result, layout with
   | .scalar (.bytes length), .bytes layoutLength _ => do
@@ -611,7 +611,7 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let bindings := resultNames.zip operationCalls |>.map fun (name, value) =>
     Statement.bind name compiled.result value
   let leaves ← (List.range length).mapM fun index =>
-    flattenMapResult span compiled.result compiledResultType.checked.value (.ref resultNames[index]!)
+    flattenResult span compiled.result compiledResultType.checked.value (.ref resultNames[index]!)
   let leaves := leaves.flatten
   let wrapperBody := bindings ++ [
     .return (some (.composite vectorType leaves))]

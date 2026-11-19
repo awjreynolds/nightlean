@@ -64,7 +64,7 @@ Using direct byte reads for the memo reduced the circuit from 1,025 to 987 rows 
 
 The `readPayment` entrypoint returns the decoded record through `return payment`. Noctium's authenticated host and native call reconstruct the same record that the pinned Compact evaluator returns. The selected native relation uses K9 and 298 rows. [Named aggregate returns](committed-returns.md)
 
-Mixed scalar and aggregate circuit outputs, payload-carrying wire enum variants and wider host qualification remain open.
+The `inspectPayment` circuit emits a record, a vector, a Bool and a fixed byte string. Its entrypoint commits them in a different order and the Rust SDK returns each value by name. The native checker rejects changing the private frame under the original commitment. Payload-carrying wire enum variants and wider host qualification remain open.
 
 ```sh
 lake build noctium Noctium.Helpers.Wire

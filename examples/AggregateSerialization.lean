@@ -30,6 +30,15 @@ noctium_witness_circuit readPayment using paymentWire where
   output payment := disclose(decode(paymentWire, frame))
 end
 
+noctium_witness_circuit inspectPayment using paymentWire where
+  private frame : Bytes 10
+  let decoded := decode(paymentWire, frame)
+  output accepted : Bool := disclose(elementAt(field(decoded, info), 1))
+  output payment := disclose(decoded)
+  output memoBytes : Bytes 2 := disclose(sliceBytes(frame, 6, 8))
+  output flags := disclose(field(decoded, flags))
+end
+
 noctium_witness_circuit authorize using paymentWire where
   private frame : Bytes 10
   let payment := decode(paymentWire, frame)
@@ -58,6 +67,12 @@ noctium_contract Codec where
   end
   entry readPayment uses readPayment where
     return payment
+  end
+  entry inspectPayment uses inspectPayment where
+    return flags
+    return authorized : Bool := accepted
+    return payment
+    return memo : Bytes 2 := memoBytes
   end
   entry authorize uses authorize where
     return approval : UInt 8 := code

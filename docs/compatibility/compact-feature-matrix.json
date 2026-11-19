@@ -408,7 +408,7 @@
       "layer": "language",
       "surface": "Struct",
       "noctiumStatus": "subset",
-      "notes": "Readable projections select named fields on typed decoded records. A named aggregate output commits the record in checked field order while preserving disclosure requirements. The authenticated host and native return agree on the typed payment record. Full defaults, construction, destructuring, spread and generic struct equivalence remain open.",
+      "notes": "Readable projections select named fields on typed decoded records. A circuit can mix named aggregates with scalar outputs. Each committed aggregate return selects its own checked layout fields, preserving disclosure requirements. The authenticated host and native checker agree on the record, vector, Bool and byte outputs of the payment example. Full defaults, construction, destructuring, spread and generic struct equivalence remain open.",
       "source": [
         "reference"
       ],

@@ -109,10 +109,11 @@ noctium_contract PaymentReader where
 end
 ```
 
-This form supports one aggregate circuit output. The ordinary typed scalar
-output syntax remains available. The named return uses the circuit's checked
-layout and field order. The compiler keeps the disclosure check at the circuit
-output, and the bundler authenticates the view with the entrypoint artifacts.
+One circuit can declare several aggregate outputs alongside typed scalar
+outputs. Each named return selects its own fields in checked layout order,
+even when the entrypoint returns the groups in a different order. The compiler
+checks disclosure at each circuit output. The bundler authenticates each view
+with the entrypoint artifacts.
 [Complete example](../../examples/AggregateSerialization.lean)
 
 Enums retain their variant tag and canonical padding checks. Bool and UInt fields
@@ -156,6 +157,11 @@ tuple, vector, enum and memo fields. They reject the three malformed input
 variants from the pinned Compact comparison. The native checker rejects a
 changed memo byte under the original commitment. The runtime rejects a
 reordered field map. [Focused Rust test](../../runtime/tests/aggregate_serialization.rs)
+
+The `inspectPayment` entrypoint returns two aggregates, a Bool and two bytes.
+The authenticated host and native checker agree on each value. The test
+checks distinct views in a different order from the circuit's declarations
+and rejects a modified private frame under the original commitment.
 
 Two fresh compilations reproduced all 21 ledger and witness files byte for
 byte. The empty-vector example compiled with one logical view and zero physical

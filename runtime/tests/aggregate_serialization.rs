@@ -59,6 +59,19 @@ fn wire_session(control: &Json, entrypoint: &str, inputs: BTreeMap<String, Json>
     )
 }
 
+fn expected_payment() -> Json {
+    json!({"kind":"struct","id":"Payment","fields":[
+        {"name":"info","value":{"kind":"tuple","items":[
+            {"kind":"uint","maximum":"300","value":"300"},{"kind":"bool","value":true}
+        ]}},
+        {"name":"flags","value":{"kind":"vector","items":[
+            {"kind":"bool","value":false},{"kind":"bool","value":true}
+        ]}},
+        {"name":"side","value":{"kind":"enum","id":"Side","variant":"Cancel","fields":[]}},
+        {"name":"memo","value":bytes(&[12,42])}
+    ]})
+}
+
 #[test]
 #[ignore = "requires fresh AggregateSerialization Lean artifacts"]
 fn aggregate_wire_matches_compact_reference() -> Result<()> {
@@ -112,16 +125,7 @@ fn named_payment_return_uses_the_committed_record_layout() -> Result<()> {
     let state = create_state(&plan, &BTreeMap::new())?;
     let frame = [44, 1, 1, 0, 1, 1, 12, 42, 200, 255];
     let inputs = frame_inputs(&frame);
-    let expected = json!({"kind":"struct","id":"Payment","fields":[
-        {"name":"info","value":{"kind":"tuple","items":[
-            {"kind":"uint","maximum":"300","value":"300"},{"kind":"bool","value":true}
-        ]}},
-        {"name":"flags","value":{"kind":"vector","items":[
-            {"kind":"bool","value":false},{"kind":"bool","value":true}
-        ]}},
-        {"name":"side","value":{"kind":"enum","id":"Side","variant":"Cancel","fields":[]}},
-        {"name":"memo","value":bytes(&[12,42])}
-    ]});
+    let expected = expected_payment();
     let run = |plan: &Plan, inputs: &BTreeMap<String, Json>| {
         prepare(plan, inputs, &state, &INITIAL_PARAMETERS, ContractAddress::default())
     };
@@ -150,6 +154,54 @@ fn named_payment_return_uses_the_committed_record_layout() -> Result<()> {
     assert!(check(&execution, &circuit).is_err());
     plan.return_views[0].fields.swap(5, 6);
     assert!(run(&plan, &inputs).is_err());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires fresh AggregateSerialization Lean artifacts"]
+fn mixed_payment_returns_keep_their_own_fields() -> Result<()> {
+    let root = artifact_root()?;
+    let name = "AggregateSerialization.Codec.inspectPayment";
+    let control: Json = serde_json::from_slice(&fs::read(
+        root.join(format!("{name}.witness.control.json")),
+    )?)?;
+    let plan: Plan = serde_json::from_slice(&fs::read(root.join(format!("{name}.impact.json")))?)?;
+    let circuit = IrSource::load(fs::File::open(root.join(format!("{name}.zkir")))?)?;
+    let state = create_state(&plan, &BTreeMap::new())?;
+    let inputs = frame_inputs(&[44, 1, 1, 0, 1, 1, 12, 42, 200, 255]);
+    let mut execution = prepare(
+        &plan,
+        &inputs,
+        &state,
+        &INITIAL_PARAMETERS,
+        ContractAddress::default(),
+    )?;
+    check(&execution, &circuit)?;
+    let payment = expected_payment();
+    let flags = payment["fields"][1]["value"].clone();
+    let memo = bytes(&[12, 42]);
+    assert_eq!(
+        execution.returns_json(),
+        BTreeMap::from([
+            ("authorized".into(), json!(true)),
+            ("flags".into(), flags.clone()),
+            ("memo".into(), memo.clone()),
+            ("payment".into(), payment.clone()),
+        ])
+    );
+    let result = wire_session(&control, "inspectPayment", inputs)?.advance()?;
+    assert_eq!(result["status"], "completed");
+    assert_eq!(
+        result["result"]["fields"],
+        json!([
+            {"name": "accepted", "value": {"kind": "bool", "value": true}},
+            {"name": "payment", "value": payment},
+            {"name": "memoBytes", "value": memo},
+            {"name": "flags", "value": flags},
+        ])
+    );
+    execution.preimage.private_transcript[7] = Fr::from(43u64);
+    assert!(check(&execution, &circuit).is_err());
     Ok(())
 }
 
