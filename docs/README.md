@@ -88,3 +88,5 @@ The [Verity comparison](research/verity-lessons.md) records lessons for compiler
 ## Project visual
 
 The [1600 × 900 project pitch](assets/noctium-pitch.png) and [editable SVG](assets/noctium-pitch.svg) give one shareable view of Noctium. The graphic separates scoped implementation counts and Lean features from full-coverage, composition and web/mobile SDK goals. Assets use the repository's [MIT license](../LICENSE).
+
+The [OpenZeppelin benchmark graphic](assets/noctium-performance.png) compares all 16 entrypoints, source compile times and emitted artifact sizes. [Editable SVG](assets/noctium-performance.svg) · [Measurements](development/oz-compile-performance.md)

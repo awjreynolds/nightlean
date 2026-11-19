@@ -4,6 +4,7 @@
 
 <p align="center">
   <a href="#try-the-compiler">Quick start</a> ·
+  <a href="#openzeppelin-benchmark">Benchmark</a> ·
   <a href="docs/README.md">Documentation</a> ·
   <a href="docs/assets/noctium-pitch.png">Project pitch</a> ·
   <a href="docs/designs/architecture.md">Architecture &amp; assurance</a> ·
@@ -49,6 +50,12 @@ Add `--dedup-range-checks` to reuse earlier range checks and identical bounded c
 For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 
 Use `Noctium.Frontend`, the `Noctium` scope and `noctium_*` declarations. Native hosts use `noctium_*` C symbols and `noctium_*.h` headers. The compiler and runtime now use one [canonical namespace](docs/development/namespaces.md).
+
+## OpenZeppelin benchmark
+
+The confidential-token port compiled in 4.65 s with Noctium and 0.274 s with Compact 0.36.1 on the same M3 Max. The builds emit different artifact sets. Noctium used fewer rows on seven paired circuits and more on eight. [Full measurements and reproduction](docs/development/oz-compile-performance.md)
+
+[![Noctium and Compact comparison for each of 16 OpenZeppelin entrypoints, with compile times, artifact sizes, K, rows and row differences](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
 
 ## A small, real example
 
@@ -134,8 +141,6 @@ The recipient-bound disclosure example binds ciphertext to a sealed Jubjub key. 
 [Typed curve callbacks](tests/CurveWitness.lean) also pass Jubjub scalars and points through the Rust witness runtime into native constraints without Node. An [ElGamal witness contract](tests/CurveHelpers.lean) checks key ownership and decryption, then releases four computed ciphertext coordinates. A [private wallet example](tests/HashWitness.lean) derives account IDs, encryption keys and ECDH memos from Bytes32 secrets and a private seed callback. [Committed results and typed call arguments](docs/development/committed-returns.md) bind typed values, including composite SDK views, to Midnight’s communication commitment. [Native call claims](docs/development/native-call-claims.md) assemble into ordered intents with checked identities and preimages. Two Rust processes now prove their own calls after exchanging a public draft. Their coordinator attached the proofs, and localnet finalized both calls in one extrinsic. [Cross-process evidence](docs/development/composition-transport-receipt.json)
 
 A [confidential-token milestone](docs/development/confidential-token.md) now combines registration, pending mint, authenticated sweep, transfer, burn, self-moves, epoch-checked memo clearing, encrypted escrow approval/replacement, delegated transfer/burn and checked views in one source module. Its Rust host completed 17 finalized localnet calls across all sixteen reference circuit entrypoints, using native proofs, source witness callbacks and committed private journals. The final checks cover two wallets, encrypted balances, supply, escrow, memos and counters. [Public receipts](tests/confidential-token-localnet-evidence.json)
-
-On an Apple M3 Max, the CLI reduced the OpenZeppelin port's ledger-and-witness compile from 32.02 s to 6.01 s by loading the native Lean compiler library. All 53 output files matched byte for byte. These source timings exclude keys and proofs. [Compiler benchmark and Compact comparison](docs/development/oz-compile-performance.md#precompiled-lean-frontend)
 
 Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/1) and [contribution guide](CONTRIBUTING.md). The [documentation index](docs/README.md) connects authoring, runtime integration, proof reproduction and capability research.
 

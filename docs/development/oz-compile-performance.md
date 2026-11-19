@@ -1,10 +1,19 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The current CLI compiled the token's ledger and witness artifacts in a median of 4.68 s across three runs on the M3 Max. The 2026-11-18 graphic records the historical baseline. [Current measurement](#reuse-checked-source-sizes)
+The current OpenZeppelin comparison measures **4.65 s** for Noctium and **0.274 s** for Compact 0.36.1. Both exclude keys and proofs. The Noctium run uses range deduplication and emits ledger and witness artifacts. Compact emits its source artifacts with `--skip-zk`.
 
-![Measured compiler performance](../assets/noctium-performance.png)
+![Noctium and Compact benchmark showing compilation time, artifact sizes, and K and rows for all 16 entrypoints](../assets/noctium-performance.png)
 
-## Source compilation
+## Current compilation and artifact sizes
+
+| Compiler output | Three source runs (s) | Median (s) | Output files | Total bytes | ZKIR bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Noctium ledger and witness | 4.873 / 4.647 / 4.588 | 4.647 | 53 | 5,805,683 | 758,817 |
+| Compact 0.36.1 with `--skip-zk` | 0.274 / 0.286 / 0.274 | 0.274 | 20 | 518,022 | 167,669 |
+
+The three alternating runs used the same Apple M3 Max, prebuilt compilers, warm dependencies, fresh processes and new output directories. Byte counts use the files emitted before sizing. Noctium includes Impact plans and witness sidecars. Compact includes JavaScript, source maps, types and compiler metadata. Noctium emits 16 relations and Compact emits 15. `computeAccountId` is a pure JavaScript function in the Compact build. The ABI, state handling and artifact sets differ. [Machine-readable measurements and hashes](oz-compile-performance.json)
+
+## Historical source compilation
 
 Apple M3 Max, 16 logical cores, 48 GiB RAM. Compilers were prebuilt, dependencies were warm, each run used a fresh process and output directory. Setup/download time, key generation, proving and deployment are excluded.
 
@@ -165,34 +174,35 @@ generated the prover and verifier keys. Compact's bundled tool and the
 independent pinned 3.2.1 tool both sized the emitted relation at K6 and 36 rows.
 [Compact release](https://github.com/midnightntwrk/compact/releases/tag/compactc-v0.36.1)
 
-K belongs to each entrypoint circuit. This contract does not measure K20. Noctium reaches K16, with a largest circuit of 63,125 rows. Source compile time is measured for the entire file, so it cannot be divided into trustworthy per-entrypoint compilation times.
+K and rows describe each circuit. The table uses Noctium's range-deduplicated export. Δ rows and Δ % use Compact as the baseline. Seven of the 15 paired circuits use fewer rows with Noctium, and eight use more. Noctium reaches a lower K on three and a higher K on one.
 
-| Entrypoint | Noctium K | Noctium rows | Compact K | Compact rows |
-| --- | ---: | ---: | ---: | ---: |
-| `registerWithKey` | 13 | 6,932 | 13 | 7,540 |
-| `mint` | 15 | 25,236 | 15 | 25,140 |
-| `sweep` | 13 | 7,076 | 13 | 7,287 |
-| `transfer` | 16 | 41,787 | 16 | 38,002 |
-| `_move` | 16 | 41,779 | 16 | 37,994 |
-| `burn` | 14 | 16,323 | 14 | 13,825 |
-| `clearMemos` | 13 | 6,924 | 13 | 6,573 |
-| `totalSupply` | 7 | 66 | 6 | 34 |
-| `isRegistered` | 7 | 120 | 8 | 129 |
-| `balanceOf` | 9 | 267 | 10 | 901 |
-| `pendingOf` | 9 | 267 | 10 | 901 |
-| `computeAccountId` | 13 | 2,085 | pure JS | no proof circuit |
-| `approve` | 16 | 41,575 | 16 | 38,349 |
-| `allowance` | 10 | 513 | 9 | 435 |
-| `transferFrom` | 16 | 63,125 | 16 | 62,483 |
-| `burnFrom` | 16 | 39,122 | 16 | 38,294 |
+| Entrypoint | Noctium K | Noctium rows | Compact K | Compact rows | Δ rows | Δ % |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `registerWithKey` | 13 | 6,929 | 13 | 7,540 | -611 | -8.1% |
+| `mint` | 15 | 25,230 | 15 | 25,140 | +90 | +0.4% |
+| `sweep` | 13 | 7,073 | 13 | 7,287 | -214 | -2.9% |
+| `transfer` | 16 | 39,113 | 16 | 38,002 | +1,111 | +2.9% |
+| `_move` | 16 | 39,105 | 16 | 37,994 | +1,111 | +2.9% |
+| `burn` | 14 | 15,017 | 14 | 13,825 | +1,192 | +8.6% |
+| `clearMemos` | 13 | 6,921 | 13 | 6,573 | +348 | +5.3% |
+| `totalSupply` | 7 | 66 | 6 | 34 | +32 | +94.1% |
+| `isRegistered` | 7 | 120 | 8 | 129 | -9 | -7.0% |
+| `balanceOf` | 9 | 264 | 10 | 901 | -637 | -70.7% |
+| `pendingOf` | 9 | 264 | 10 | 901 | -637 | -70.7% |
+| `computeAccountId` | 13 | 2,083 | Pure JS | n/a | n/a | n/a |
+| `approve` | 16 | 38,403 | 16 | 38,349 | +54 | +0.1% |
+| `allowance` | 9 | 504 | 9 | 435 | +69 | +15.9% |
+| `transferFrom` | 16 | 61,798 | 16 | 62,483 | -685 | -1.1% |
+| `burnFrom` | 16 | 38,248 | 16 | 38,294 | -46 | -0.1% |
 
-Noctium emits 9,039 native instructions across its 16 entrypoint relations. `transferFrom` contains 1,338 instructions, 12 persistent hashes and 16 curve multiplications (seven variable-base and nine generator). Native sizing for all 16 Noctium entrypoints took 11.843 seconds, separate from source compilation. Instruction/row totals across entrypoints count shared functionality more than once. They are complexity descriptions, not a single combined circuit.
+The earlier native sizing and instruction counts are retained in the [machine-readable benchmark](oz-compile-performance.json). Circuit sizing measures synthesis rows and K. It excludes proving latency.
 
 ## Reproduction and limits
 
 ```sh
 .lake/build/bin/noctium compile examples/openzeppelin/ConfidentialToken.lean \
-  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json --output FRESH_DIRECTORY
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --emit witness --dedup-range-checks --output FRESH_DIRECTORY
 
 compactc --skip-zk \
   contracts/test/integration/_mocks/ComposedConfidentialFungibleTokenPublicSupply.compact \
@@ -203,4 +213,4 @@ zkir mock-compile ENTRYPOINT.zkir
 
 Use fresh output directories and serial timed runs. The Compact compiler ran externally from temporary storage and is not a Noctium build/runtime dependency. The [official release](https://github.com/midnightntwrk/compact/releases/tag/compactc-v0.36.1) archive SHA-256 was verified before execution. Machine-readable runs, hashes and counts are retained in [oz-compile-performance.json](oz-compile-performance.json).
 
-The first Noctium timing sample overlapped one small sizing process; the subsequent two source runs and all Compact runs ran without concurrent benchmark synthesis. RSS was recorded for the last two Noctium runs and all Compact runs. Background system activity was not controlled. No key-generation/proving-time conclusion follows from these source timings or from matching K. Broad compiler optimization remains under [issue 74](https://github.com/awjreynolds/noctium/issues/74).
+The first historical Noctium timing sample overlapped one small sizing process; the subsequent two source runs and all Compact runs ran without concurrent benchmark synthesis. RSS was recorded for the last two Noctium runs and all Compact runs. Background system activity was not controlled. No key-generation/proving-time conclusion follows from these source timings or from matching K. Broad compiler optimization remains under [issue 74](https://github.com/awjreynolds/noctium/issues/74).

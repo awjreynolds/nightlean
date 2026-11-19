@@ -346,5 +346,300 @@
     "The Noctium port uses different input/result layouts and explicit state candidates. Nominal ABI and complete semantic equivalence remain unqualified.",
     "First Noctium run has no peak RSS sample.",
     "The first Noctium sample overlapped a small native sizing process; subsequent two source runs and all Compact source runs ran without concurrent benchmark synthesis."
-  ]
+  ],
+  "currentComparison": {
+    "checkedOn": "2026-11-19",
+    "noctiumRevision": "61c05685d0f52454b0c0192dc4c0e31ab818b47a",
+    "noctiumSourceSha256": "f841e14b4112b7a07a042b5d16347d2edc47d54f8f742900b8cdc33e542520ef",
+    "compactWrapperSha256": "4f30d84cf9567529ca15cade71f22cab08512a6371b6277655352943efa836f9",
+    "zkirBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "compactVersion": "0.36.1 (7fa3a117c 2026-11-11)",
+    "noctiumOptions": [
+      "--emit",
+      "ledger",
+      "--emit",
+      "witness",
+      "--dedup-range-checks"
+    ],
+    "compactOptions": [
+      "--skip-zk"
+    ],
+    "noctium": {
+      "wallSeconds": [
+        4.872962374938652,
+        4.647172332974151,
+        4.587932665832341
+      ],
+      "medianSeconds": 4.647172332974151,
+      "files": 53,
+      "artifactBytes": 5805683,
+      "zkirFiles": 16,
+      "zkirBytes": 758817
+    },
+    "compact": {
+      "wallSeconds": [
+        0.27369558392092586,
+        0.28569266595877707,
+        0.273747666971758
+      ],
+      "medianSeconds": 0.273747666971758,
+      "files": 20,
+      "artifactBytes": 518022,
+      "zkirFiles": 15,
+      "zkirBytes": 167669
+    },
+    "circuits": [
+      {
+        "name": "registerWithKey",
+        "noctium": {
+          "k": 13,
+          "rows": 6929,
+          "zkirBytes": 33475,
+          "zkirSha256": "7a111dab43606821e9ed6e4c9a4c23b8d524b3390a15d78cc511c29009a84062"
+        },
+        "compact": {
+          "k": 13,
+          "rows": 7540,
+          "zkirBytes": 4891,
+          "zkirSha256": "0ac4feceb9acfd62017be76888d51747d9d10420fef260f7558b5a5fdebe653e"
+        },
+        "rowDelta": -611
+      },
+      {
+        "name": "mint",
+        "noctium": {
+          "k": 15,
+          "rows": 25230,
+          "zkirBytes": 44570,
+          "zkirSha256": "4d3a60144131dd515367a5aea515463dad13534c8551a8b657b395eee966444d"
+        },
+        "compact": {
+          "k": 15,
+          "rows": 25140,
+          "zkirBytes": 14133,
+          "zkirSha256": "ee76f9c4eb1e7f316d28f3d54f1c56cced65b7ae64a6cd08b7213296d7445749"
+        },
+        "rowDelta": 90
+      },
+      {
+        "name": "sweep",
+        "noctium": {
+          "k": 13,
+          "rows": 7073,
+          "zkirBytes": 45752,
+          "zkirSha256": "cb5f537eec90b8b276c311efa2645d8b37fd0b4b3486472ea0166ad999d262f5"
+        },
+        "compact": {
+          "k": 13,
+          "rows": 7287,
+          "zkirBytes": 6266,
+          "zkirSha256": "d0ae945b67d61f77fd4351c9fdd6259f8199254e52a0cd8908c178c3e80e3dfc"
+        },
+        "rowDelta": -214
+      },
+      {
+        "name": "transfer",
+        "noctium": {
+          "k": 16,
+          "rows": 39113,
+          "zkirBytes": 99178,
+          "zkirSha256": "b03408a08566b858f1ca6569b7272679fb1b61237d58d2d12e3b35dc1ac96a98"
+        },
+        "compact": {
+          "k": 16,
+          "rows": 38002,
+          "zkirBytes": 20954,
+          "zkirSha256": "d450c42bcfb5c0dabab24313acc3b4a5efb00aed5f12a6d8f19eeb22c1272924"
+        },
+        "rowDelta": 1111
+      },
+      {
+        "name": "_move",
+        "noctium": {
+          "k": 16,
+          "rows": 39105,
+          "zkirBytes": 98687,
+          "zkirSha256": "1e1baa6eae5ecdbc253839a128c7772fefceb6e6b4b70cff74976db9ac4220a3"
+        },
+        "compact": {
+          "k": 16,
+          "rows": 37994,
+          "zkirBytes": 20564,
+          "zkirSha256": "ab77c28c682d7ca9c8af91e0de5e90c0287163b9ca61ed260b830a267f4f406c"
+        },
+        "rowDelta": 1111
+      },
+      {
+        "name": "burn",
+        "noctium": {
+          "k": 14,
+          "rows": 15017,
+          "zkirBytes": 59755,
+          "zkirSha256": "dd281e5a497e818118505710ace84f3445019eede650b534cbfac8218aa5cf8c"
+        },
+        "compact": {
+          "k": 14,
+          "rows": 13825,
+          "zkirBytes": 9972,
+          "zkirSha256": "a07e14b60a24451510c43f45da8e3b725bf9bd661bb47d4b99094e33fc033256"
+        },
+        "rowDelta": 1192
+      },
+      {
+        "name": "clearMemos",
+        "noctium": {
+          "k": 13,
+          "rows": 6921,
+          "zkirBytes": 32582,
+          "zkirSha256": "02adea9aecfbdb9b4b485608f78771448f3dd1de6dca281ce3eb629955a1a46a"
+        },
+        "compact": {
+          "k": 13,
+          "rows": 6573,
+          "zkirBytes": 4769,
+          "zkirSha256": "11992cdd762117eb6695a87cced4ed5c29e2c0acb8cd7b47d18a982e5a3c07f0"
+        },
+        "rowDelta": 348
+      },
+      {
+        "name": "totalSupply",
+        "noctium": {
+          "k": 7,
+          "rows": 66,
+          "zkirBytes": 785,
+          "zkirSha256": "ed7d3cfeb2ddb03e0d91a9e0600bd7eff8b75efbeeaae130f29b86c38909ae28"
+        },
+        "compact": {
+          "k": 6,
+          "rows": 34,
+          "zkirBytes": 536,
+          "zkirSha256": "d556e7813f99d6e4cf13fc868dca2a1c208bd3c67deb4db1150998671a556113"
+        },
+        "rowDelta": 32
+      },
+      {
+        "name": "isRegistered",
+        "noctium": {
+          "k": 7,
+          "rows": 120,
+          "zkirBytes": 1841,
+          "zkirSha256": "656a5d0bd2026fc4bbc3d11200701a8d8577e5c52c3154a4bee7cee8b82157d5"
+        },
+        "compact": {
+          "k": 8,
+          "rows": 129,
+          "zkirBytes": 957,
+          "zkirSha256": "bb7ea0e34966f6ed9055cd98996a870ad681ceab9231e005b2fce80ed4299d7f"
+        },
+        "rowDelta": -9
+      },
+      {
+        "name": "balanceOf",
+        "noctium": {
+          "k": 9,
+          "rows": 264,
+          "zkirBytes": 10162,
+          "zkirSha256": "46432fe2ec36c0d3a4517efd5cbed43343f2fbe23b8fda6711dd6b044ed0c188"
+        },
+        "compact": {
+          "k": 10,
+          "rows": 901,
+          "zkirBytes": 2487,
+          "zkirSha256": "9a19c545d166557f996f521bc59f1d53b6c0610de5610165971bf0d83fbc8da3"
+        },
+        "rowDelta": -637
+      },
+      {
+        "name": "pendingOf",
+        "noctium": {
+          "k": 9,
+          "rows": 264,
+          "zkirBytes": 10162,
+          "zkirSha256": "b377a9269e78d982e645d39719bd5e3a300725fddef59c3ad0b0de48f6061ee2"
+        },
+        "compact": {
+          "k": 10,
+          "rows": 901,
+          "zkirBytes": 2487,
+          "zkirSha256": "df7801a488017a4c6dd03f04027b00680e8d51f1fad3828fb519c53710063209"
+        },
+        "rowDelta": -637
+      },
+      {
+        "name": "computeAccountId",
+        "noctium": {
+          "k": 13,
+          "rows": 2083,
+          "zkirBytes": 10613,
+          "zkirSha256": "0329978b32a0156cf13e7c60bc07f689605e9836afc9e522a46c1d895c35aeea"
+        },
+        "compact": null,
+        "rowDelta": null
+      },
+      {
+        "name": "approve",
+        "noctium": {
+          "k": 16,
+          "rows": 38403,
+          "zkirBytes": 90378,
+          "zkirSha256": "55e95e0e27190f8e035f44a62bcaeff4423d4d3d096025a624bcdde98fcbb740"
+        },
+        "compact": {
+          "k": 16,
+          "rows": 38349,
+          "zkirBytes": 22974,
+          "zkirSha256": "ab701cece76e00de857a2583463ac5274443936b39c66c61f22868b6b008653f"
+        },
+        "rowDelta": 54
+      },
+      {
+        "name": "allowance",
+        "noctium": {
+          "k": 9,
+          "rows": 504,
+          "zkirBytes": 18543,
+          "zkirSha256": "20a3fe165c9615231b5b8e8e60cedfa18821f6aedd7cd90c6531ee9b9e4e1b82"
+        },
+        "compact": {
+          "k": 9,
+          "rows": 435,
+          "zkirBytes": 4266,
+          "zkirSha256": "8dfb8e40299c1ac4cb362b2478a4a9f9f860f943d71b8c750b8d17165b9e83d8"
+        },
+        "rowDelta": 69
+      },
+      {
+        "name": "transferFrom",
+        "noctium": {
+          "k": 16,
+          "rows": 61798,
+          "zkirBytes": 118386,
+          "zkirSha256": "9b3640161fa1497f5ff6a39fbff17e02864225afb2a4c89e7186472e00d83bed"
+        },
+        "compact": {
+          "k": 16,
+          "rows": 62483,
+          "zkirBytes": 31535,
+          "zkirSha256": "89fcf7318b4c0a78b5b8fe32a38e0516721bb8f602179828c878766fa3282217"
+        },
+        "rowDelta": -685
+      },
+      {
+        "name": "burnFrom",
+        "noctium": {
+          "k": 16,
+          "rows": 38248,
+          "zkirBytes": 83948,
+          "zkirSha256": "841b2f9710de780b5afbd070be6750e316e0c7f5469c92a6937fb4fa4e25f175"
+        },
+        "compact": {
+          "k": 16,
+          "rows": 38294,
+          "zkirBytes": 20878,
+          "zkirSha256": "c398c889f25778081944b80d9de1e37ab82e619173ef51bc24ed4923ef06fae4"
+        },
+        "rowDelta": -46
+      }
+    ]
+  }
 }
