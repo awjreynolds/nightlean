@@ -43,16 +43,17 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
   | .error _ => value
   | .ok object => Json.mkObj ((object.toList.filter (·.1 != name)) ++ [(name, replacement)])
 
--- Only exact SSA repeats disappear. Other widths, operands and transcript events stay in order.
+-- Only a prior check on the same operand covers an equal or wider check.
 #guard
   let narrow := bits "%x" 8
   let wide := bits "%x" 16
   let other := bits "%y" 8
   let guarded := replace narrow "guard" (toJson ("%condition" : String))
   let immediate := bits "0x01" 8
+  let malformed := bits "%x" 249
   let impact := op "impact" [("guard", Json.null), ("inputs", toJson (["%x"] : List String))]
-  RangeDedup.run #[input, narrow, impact, wide, other, narrow, impact, guarded, guarded, immediate, immediate, output] ==
-    #[input, narrow, impact, wide, other, impact, guarded, guarded, immediate, immediate, output]
+  RangeDedup.run #[input, wide, impact, narrow, other, wide, narrow, impact, guarded, guarded, immediate, malformed, output] ==
+    #[input, wide, impact, narrow, other, impact, guarded, guarded, immediate, malformed, output]
 
 #guard instructionNames.length == 47
 #guard valueTypeNames.length == 15
