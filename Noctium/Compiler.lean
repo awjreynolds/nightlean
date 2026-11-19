@@ -649,49 +649,46 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       let ep := Passes.pruneEntrypoint ep
       if !(emit .witness) && witnesses.any (·.circuitName.toString == ep.circuit.name) then
         throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
-      let plan ← match Backend.Impact.lower contract.state ep with
+      let (plan, json) ← match Backend.Zkir.lowerPrunedEntrypoint contract.state ep dedupRangeChecks with
         | .error d => failDiagnostic d
-        | .ok plan => pure plan
-      match Backend.Zkir.lowerEntrypoint contract.state ep dedupRangeChecks with
-      | .error d => failDiagnostic d
-      | .ok json =>
-        lowered := lowered.push (.ledger, nativeCircuitFile name ep, json.pretty)
-        let compiledWitness? ← if let some (_, compiled) :=
-            standaloneWitnesses.find? (fun (circuitName, _) => circuitName == ep.circuit.name) then
-            pure (some compiled)
-          else if let some info := circuitRegistry.getState (← getEnv) |>.find?
-              (fun info => info.declName.toString == ep.circuit.name && info.stateProgram?.isSome) then do
-            let some (sourceName, exportName) := info.stateProgram? | throwError "missing ledger witness source"
-            let program ← unsafe evalConstCheck Helpers.Program ``Helpers.Program sourceName
-            let needsHost ← match Witness.needsLedgerHost program with
-              | .ok value => pure value
-              | .error diagnostic => failDiagnostic diagnostic
-            if needsHost then
-              unless emit .witness do
-                throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
-              match Witness.compileLedger program exportName contract.state ep.circuit.name dedupRangeChecks with
-              | .ok value => pure (some value.witness)
-              | .error diagnostic => failDiagnostic diagnostic
-            else pure none
-          else pure none
-        if let some compiled := compiledWitness? then
-          let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name
-              (nativeCircuitFile name ep) profile.name
-              ((plan.reads.drop (Backend.Impact.publicInputReadCount ep.circuit.inputs)).flatMap (·.bindings)) with
+        | .ok artifacts => pure artifacts
+      lowered := lowered.push (.ledger, nativeCircuitFile name ep, json.pretty)
+      let compiledWitness? ← if let some (_, compiled) :=
+          standaloneWitnesses.find? (fun (circuitName, _) => circuitName == ep.circuit.name) then
+          pure (some compiled)
+        else if let some info := circuitRegistry.getState (← getEnv) |>.find?
+            (fun info => info.declName.toString == ep.circuit.name && info.stateProgram?.isSome) then do
+          let some (sourceName, exportName) := info.stateProgram? | throwError "missing ledger witness source"
+          let program ← unsafe evalConstCheck Helpers.Program ``Helpers.Program sourceName
+          let needsHost ← match Witness.needsLedgerHost program with
             | .ok value => pure value
             | .error diagnostic => failDiagnostic diagnostic
-          let witnessPrefix := artifactName name ++ "." ++ ep.name
-          lowered := lowered.push (.witness, witnessPrefix ++ ".witness.json", compiled.binding.compress)
-          lowered := lowered.push (.witness, witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
-          if rustBindings then
-            let code ← match RustBinding.generate (witnessPrefix ++ ".witness.control.json") compiled.binding with
-              | .ok value => pure value
-              | .error message => throwError "invalid Rust witness interface: {message}"
-            lowered := lowered.push (.rustBinding, "bindings/rust/" ++ witnessPrefix ++ ".rs", code)
-          witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson ep.circuit.name),
-            ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
-            ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
-            ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
+          if needsHost then
+            unless emit .witness do
+              throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
+            match Witness.compileLedger program exportName contract.state ep.circuit.name dedupRangeChecks with
+            | .ok value => pure (some value.witness)
+            | .error diagnostic => failDiagnostic diagnostic
+          else pure none
+        else pure none
+      if let some compiled := compiledWitness? then
+        let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name
+            (nativeCircuitFile name ep) profile.name
+            ((plan.reads.drop (Backend.Impact.publicInputReadCount ep.circuit.inputs)).flatMap (·.bindings)) with
+          | .ok value => pure value
+          | .error diagnostic => failDiagnostic diagnostic
+        let witnessPrefix := artifactName name ++ "." ++ ep.name
+        lowered := lowered.push (.witness, witnessPrefix ++ ".witness.json", compiled.binding.compress)
+        lowered := lowered.push (.witness, witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
+        if rustBindings then
+          let code ← match RustBinding.generate (witnessPrefix ++ ".witness.control.json") compiled.binding with
+            | .ok value => pure value
+            | .error message => throwError "invalid Rust witness interface: {message}"
+          lowered := lowered.push (.rustBinding, "bindings/rust/" ++ witnessPrefix ++ ".rs", code)
+        witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson ep.circuit.name),
+          ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
+          ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
+          ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
       let planJson := nativePlanJson profile name contract.state contract.constructor ep plan (emit .standalone)
       lowered := lowered.push (.ledger, nativePlanFile name ep, planJson.pretty)
   if lowered.isEmpty then throwError "source has no artifacts for the selected roles"

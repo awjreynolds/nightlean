@@ -1253,12 +1253,10 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
         returned := returned ++ [← lowerExpr field]
   emit "output" [("vals", toJson returned)]
 
-/-- Compile a native ledger transcript relation. Public-input binding includes
-all opcode, alignment, key, read-result and write-value fields. The caller must
-execute the matching Impact plan, not the standalone circuit artifact. -/
-def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint)
-    (dedupRangeChecks : Bool := false) : Except Diagnostic Json := do
-  let entry := Passes.pruneEntrypoint entry
+/-- Lower an already-pruned entrypoint and return its plan with the checked
+ledger relation. The producer check still derives its schedule from source. -/
+def lowerPrunedEntrypoint (state : List StateDecl) (entry : Entrypoint)
+    (dedupRangeChecks : Bool := false) : Except Diagnostic (Impact.Plan × Json) := do
   let plan ← Impact.lower state entry
   let (_, result) := (lowerEntrypointBody entry plan).run {}
   let callInputs := (entry.callArguments.flatMap Native.Input.callArgumentRequirements).map fun input =>
@@ -1273,7 +1271,16 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint)
     -- binding input. Standalone relations above deliberately keep it disabled.
     ("do_communications_commitment", toJson true),
     ("instructions", Json.arr (if dedupRangeChecks then RangeDedup.run result.instructions else result.instructions))]
-  validateProduced entry.span (← Native.expectedEntrypoint state entry) program
+  let relation ← validateProduced entry.span (← Native.expectedEntrypoint state entry) program
+  pure (plan, relation)
+
+/-- Compile a native ledger transcript relation. Public-input binding includes
+all opcode, alignment, key, read-result and write-value fields. The caller must
+execute the matching Impact plan, not the standalone circuit artifact. -/
+def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint)
+    (dedupRangeChecks : Bool := false) : Except Diagnostic Json := do
+  let result ← lowerPrunedEntrypoint state (Passes.pruneEntrypoint entry) dedupRangeChecks
+  pure result.2
 
 /-- Accepted ledger-call JSON retains the exact instruction vector emitted by
 the production body over the actual accepted pruned plan. -/
@@ -1283,14 +1290,18 @@ theorem lowerEntrypoint_instructions (state : List StateDecl) (entry : Entrypoin
       Native.arrayField program "instructions" =
         .ok ((lowerEntrypointBody (Passes.pruneEntrypoint entry) plan).run {}).2.instructions := by
   simp only [lowerEntrypoint, bind, bind_ok] at accepted
-  rcases accepted with ⟨plan, lowered, gate⟩
+  obtain ⟨⟨resultPlan, relation⟩, lowered, result⟩ := accepted
+  cases result
+  simp only [lowerPrunedEntrypoint, bind, bind_ok] at lowered
+  rcases lowered with ⟨plan, planAccepted, gate⟩
   cases produced : (lowerEntrypointBody (Passes.pruneEntrypoint entry) plan).run {} with
   | mk value result =>
     simp only [produced] at gate
-    rw [bind_ok] at gate
-    rcases gate with ⟨expected, _, producerAccepted⟩
+    simp only [bind_ok] at gate
+    rcases gate with ⟨expected, _, _, producerAccepted, output⟩
+    cases output
     obtain ⟨equal, _⟩ := (validateProduced_ok _ _ _ _).mp producerAccepted
-    refine ⟨plan, lowered, ?_⟩
+    refine ⟨_, planAccepted, ?_⟩
     rw [equal, produced]
     rfl
 

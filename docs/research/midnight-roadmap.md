@@ -23,3 +23,9 @@ Checked 19 November 2026. Midnight targets registry discovery and verified app-t
 Noctium reads a callee address from a caller-owned public registry slot. Lean derives and binds the entrypoint selector from the declared interface. The native material resolver matches the deployed verifier to the selected bundle. Compact 0.36's security fix uses a fixed call-site entrypoint hash. [Compact call-site fix](https://docs.midnight.network/relnotes/compact/toolchain-0.36.0#contracts-that-make-cross-contract-calls-must-be-recompiled-and-their-keys-replaced) · [Noctium typed call boundary](../development/native-call-claims.md) · [Deployed-key check](../../runtime/src/proof/composition.rs)
 
 One localnet run called deployment A, rotated the registry and called deployment B with the same caller and interface. The stale route, a wrong selector and a wrong callee bundle rejected. Hosts supply the operation bundles for the resolver. [Registry routing receipt](../development/native-registry-receipt.json) · [Registry routing ticket](https://github.com/awjreynolds/noctium/issues/86)
+
+## Next work on the current pin
+
+Qualify one recipient-bound disclosure on localnet. Bind the registered recipient key and selected value in the circuit, and state in Lean which observations the contract releases. Use the current ledger format for this example. [Directed disclosure ticket](https://github.com/awjreynolds/noctium/issues/89)
+
+For composition, the next boundary is two independent witness owners. Freeze the call graph and shared commitment before either proof is produced. Check whether each owner can prove its own bound statement and give an assembler only its public projection and proof. This follows from the current proof and commitment format as a design candidate. A localnet run with separate owners is still needed. [Native composition ticket](https://github.com/awjreynolds/noctium/issues/50)

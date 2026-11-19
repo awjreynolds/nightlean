@@ -4,10 +4,10 @@ import Noctium.Verification.ScalarValidation
 namespace Noctium.Verification.GenericStateLowering
 open Backend
 
-private theorem bind_ok {α β : Type} {first : Except ε α} {next : α → Except ε β}
-    {result : β} : (first >>= next) = .ok result ↔
+private theorem bind_ok (first : Except ε α) (next : α → Except ε β)
+    (result : β) : Except.bind first next = .ok result ↔
     ∃ value, first = .ok value ∧ next value = .ok result := by
-  cases first <;> simp [Bind.bind, Except.bind]
+  cases first <;> simp [Except.bind]
 
 /-- An accepted ledger-call relation passed the actual independent expected
 statement and mandatory native producer validator. The statement is derived
@@ -18,14 +18,18 @@ theorem lowerEntrypoint_validated (state : List StateDecl) (entry : Entrypoint)
       Impact.lower state (Passes.pruneEntrypoint entry) = .ok plan ∧
       Native.expectedEntrypoint state (Passes.pruneEntrypoint entry) = .ok expected ∧
       Native.validate expected json = .ok () := by
-  simp only [Zkir.lowerEntrypoint, bind_ok] at lowered
+  simp only [Zkir.lowerEntrypoint, bind, bind_ok] at lowered
+  obtain ⟨⟨resultPlan, relation⟩, lowered, result⟩ := lowered
+  cases result
+  simp only [Zkir.lowerPrunedEntrypoint, bind, bind_ok] at lowered
   rcases lowered with ⟨plan, planAccepted, remaining⟩
   split at remaining
   simp only [bind_ok] at remaining
-  rcases remaining with ⟨expected, expectedAccepted, accepted⟩
+  rcases remaining with ⟨expected, expectedAccepted, relation, accepted, output⟩
+  cases output
   obtain ⟨same, checked⟩ := (Zkir.validateProduced_ok _ _ _ _).mp accepted
-  subst json
-  exact ⟨plan, expected, planAccepted, expectedAccepted, checked⟩
+  subst relation
+  exact ⟨_, expected, planAccepted, expectedAccepted, checked⟩
 
 /-- The actual accepted lowering fixes every native opcode group's field
 values through the mandatory validator. InputAgreement binds the declared
