@@ -13,7 +13,7 @@ noctium_circuit catalogInputs where
   private commitment : Bytes 32
   public domain : Bytes 32
   private ciphertext : Bytes 512
-  public memo : Bytes 256
+  private memo : Bytes 256
   public value : UInt 128
 end
 
@@ -24,7 +24,7 @@ noctium_contract Token where
     emitEvent(Unpaused)
   end
 
-  entry logCatalog uses catalogInputs where
+  entry logCatalog uses catalogInputs arguments [memo] where
     emitEvent(ShieldedSpend, nullifier := disclose(commitment))
     emitEvent(ShieldedReceive, commitment := disclose(commitment), hasCiphertext := true,
       ciphertext := disclose(ciphertext), hasContractAddress := false, contractAddress := domain)
@@ -40,7 +40,7 @@ noctium_contract Token where
       contractAddress := domain, tokenType := disclose(commitment), amount := value)
     emitEvent(Paused)
     emitEvent(Unpaused)
-    emitEvent(Misc, payload := memo, name := domain)
+    emitEvent(Misc, payload := disclose(memo), name := domain)
   end
 end
 
