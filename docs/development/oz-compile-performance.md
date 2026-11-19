@@ -50,6 +50,20 @@ The current opt-in pass also removes a wider check when an earlier unconditional
 
 Lean checks `RangeDedup.preserves_decoded` against the actual JSON pass and the independent scalar ZKIR decoder. For instruction lists accepted by that decoder, the optimized list also decodes, preserves ordered non-range instructions, and has the same satisfying assignments. The model covers the scalar decoder's instruction set. The ZKIR verifier, expanded instruction set and ledger execution require separate evidence. [Preservation theorem](../../Noctium/Verification/RangeDedup.lean)
 
+## Reuse identical byte selections
+
+Byte chunks now reuse the same exact-operand selector cache as scalars. The compiler still lowers both arms, including any assertions they contain. The cache compares the selector and both ordered SSA operands. [ZKIR lowerer](../../Noctium/Backend/Zkir.lean)
+
+Nine of the token port's 16 ledger relations emitted fewer selectors. The pinned ZKIR 3.2.1 tool measured the following changes with the opt-in range pass disabled.
+
+| Entrypoint | Selectors before → after | Rows before → after | K before → after |
+| --- | ---: | ---: | ---: |
+| `allowance` | 41 → 33 | 513 → 505 | 10 → 9 |
+| `transferFrom` | 35 → 25 | 63,125 → 63,115 | 16 → 16 |
+| `NativeBytes.inspect` | 18 → 6 | 1,137 → 1,108 | 11 → 11 |
+
+The 16 token Impact plans matched byte for byte. The fresh byte fixture passed both branches and the altered-result rejection in the native checker. The fresh token allowance relation passed the existing token workload's empty and populated allowance checks. These measurements cover circuit sizing. Proving latency and fresh deployments of the changed token relations remain unmeasured. [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
+
 ## Selected ledger outputs
 
 One serial run per mode on the same host compared a full compile with `--emit ledger --emit witness`. Both runs used the same executable, source and ZKIR 3.2.1 profile.

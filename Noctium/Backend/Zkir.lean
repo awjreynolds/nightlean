@@ -309,6 +309,15 @@ private def lowerTypedBoolConstant (value : Bool) : LowerM String := do
   modify fun state => {state with expressions := (key, output) :: state.expressions}
   pure output
 
+private def selectOperands (bit yes no : String) : LowerM String := do
+  let key : ExpressionKey := ("cond_select", [bit, yes, no], none)
+  if let some existing := (← get).expressions.lookup key then return existing
+  let output ← fresh
+  emit "cond_select" [("bit", toJson bit), ("a", toJson yes),
+    ("b", toJson no), ("output", toJson output)]
+  modify fun state => {state with expressions := (key, output) :: state.expressions}
+  return output
+
 private def lowerNativeToBool (value : String) : LowerM String := do
   let key : ExpressionKey := ("native_to_bool", [value], none)
   if let some existing := (← get).expressions.lookup key then return existing
@@ -810,11 +819,8 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
     let condition ← lowerExpr condition
     let yes ← byteChunks length (← lowerBytes yes)
     let no ← byteChunks length (← lowerBytes no)
-    let values ← (yes.zip no).mapM fun (yes, no) => do
-      let output ← fresh
-      emit "cond_select" [("bit", toJson condition), ("a", toJson yes),
-        ("b", toJson no), ("output", toJson output)]
-      pure output
+    let values ← (yes.zip no).mapM fun (yes, no) =>
+      selectOperands condition yes no
     pure {values, packed := true}
   | @Expr.letE (.bytes _) _ name value body => do
     let values ← lowerBytes value
@@ -1048,13 +1054,7 @@ def lowerExpr : Expr ty → LowerM String
     let bit ← lowerExpr condition
     let a ← lowerExpr yes
     let b ← lowerExpr no
-    let key : ExpressionKey := ("cond_select", [bit, a, b], none)
-    if let some existing := (← get).expressions.lookup key then return existing
-    let output ← fresh
-    emit "cond_select" [("bit", toJson bit), ("a", toJson a),
-      ("b", toJson b), ("output", toJson output)]
-    modify fun s => {s with expressions := (key, output) :: s.expressions}
-    return output
+    selectOperands bit a b
   | .poseidon2 domain a b => do
     let a ← lowerExpr a
     let b ← lowerExpr b

@@ -15,14 +15,30 @@ fn bytes(value: &[u8]) -> Json {
 
 #[test]
 fn general_bytes_preserve_chunk_boundaries_types_and_committed_returns() {
-    let plan: Plan = serde_json::from_str(include_str!(
-        "fixtures/native-bytes/321/NativeBytes.inspect.impact.json"
-    ))
-    .unwrap();
-    let circuit = IrSource::load(
-        include_bytes!("fixtures/native-bytes/321/NativeBytes.inspect.zkir").as_slice(),
-    )
-    .unwrap();
+    let (plan, circuit): (Plan, IrSource) = if let Some(output) =
+        std::env::var_os("NOCTIUM_NATIVE_BYTES_ARTIFACTS")
+    {
+        let output = std::path::PathBuf::from(output);
+        (
+            serde_json::from_slice(
+                &std::fs::read(output.join("NativeBytes.inspect.impact.json")).unwrap(),
+            )
+            .unwrap(),
+            IrSource::load(std::fs::File::open(output.join("NativeBytes.inspect.zkir")).unwrap())
+                .unwrap(),
+        )
+    } else {
+        (
+            serde_json::from_str(include_str!(
+                "fixtures/native-bytes/321/NativeBytes.inspect.impact.json"
+            ))
+            .unwrap(),
+            IrSource::load(
+                include_bytes!("fixtures/native-bytes/321/NativeBytes.inspect.zkir").as_slice(),
+            )
+            .unwrap(),
+        )
+    };
     let names = [
         "payload31",
         "payload32",
