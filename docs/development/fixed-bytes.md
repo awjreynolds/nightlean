@@ -54,6 +54,12 @@ map values and nested leaves](byte-storage.md) have separate scoped checks.
 Non-Bytes32 byte keys remain gated. Other native byte operations and full
 overload, proof and SDK qualification remain part of the wider capability goal.
 
+## Public byte arguments
+
+An ordinary nonempty public `Bytes n` input uses one Impact push and one readback of the fixed-width value. The native statement binds the readback in FAB order, starting with the highest chunk. Each chunk holds up to 31 bytes and has an exact range constraint. Public `Bytes 0` has no physical fields or readback. The source type and the SDK's byte-array value remain the same.
+
+A 256-byte input now has nine public transcript fields and two VM operations. The previous bytewise prologue used 256 fields and 512 operations. The standard event catalog uses an ordinary public memo and matches the same reference payloads after packing. [Catalog benchmark and localnet receipt](standard-events.md#focused-qualification)
+
 ## Native byte packing
 
 Computed byte values now lower through native `bytes_into_natives`. The operation returns exactly `ceil(n / 31)` Native chunks, ordered from the first input bytes to the last. Each chunk uses little-endian byte order. The final partial chunk keeps its exact range. Source representations, disclosure rules and FAB output ordering stay the same. Other typed values continue using native `encode`.

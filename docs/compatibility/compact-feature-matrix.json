@@ -306,8 +306,8 @@
       "id": "C-LANG-BYTES",
       "layer": "language",
       "surface": "Bytes<n>",
-      "noctiumStatus": "missing",
-      "notes": "Byte literals, padding, conversion, canonical encoding and length bounds.",
+      "noctiumStatus": "subset",
+      "notes": "Lean supports fixed byte lengths 0 through 1024, literals with right padding, typed operations and bounded FAB chunks. The ordinary public 256-byte input produced a proved, finalized catalog call on the pinned localnet. Full conversion and overload equivalence remains open.",
       "source": [
         "reference"
       ],
@@ -315,7 +315,12 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/fixed-bytes.md",
+        "docs/development/standard-events.md",
+        "runtime/tests/native_bytes.rs",
+        "runtime/tests/standard_events.rs"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",

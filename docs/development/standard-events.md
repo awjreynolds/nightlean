@@ -28,16 +28,24 @@ Lean emits two Impact groups per event. The first pushes the version, tag and en
 
 ## Focused qualification
 
-On Ledger 9.1.0.1 and ZKIR 3.2.1, native key generation reported K13 and 5,000 rows for the eleven-event call. The pinned Compact 0.36.1 toolchain and its 0.21.0 runtime produced the reference values. Noctium's native checker matched all eleven versions, tags, declared widths and SHA-256 digests of the full-width payloads. The fixtures exercise a 128-bit amount with the high bit set, both address branches, and a wide payload with a trailing zero. Lean rejected an undisclosed private event flag, missing or duplicate fields, and a non-Boolean flag. The separate guarded-event test checks both branches and rejects a substituted public tape.
+On Ledger 9.1.0.1 and ZKIR 3.2.1, native key generation reported K13 and 4,937 rows for the eleven-event call. The pinned Compact 0.36.1 toolchain and its 0.21.0 runtime produced the reference values. Noctium's native checker matched all eleven versions, tags, declared widths and SHA-256 digests of the full-width payloads. The fixtures exercise a 128-bit amount with the high bit set, both address branches, and a wide payload with a trailing zero. Lean rejected an undisclosed private event flag, missing or duplicate fields, and a non-Boolean flag. The separate guarded-event test checks both branches and rejects a substituted public tape.
 
-The first catalog input layout declared the 256-byte memo public. That produced 527 Impact operations, 7,966 rows and a 19,217-byte transaction. The localnet pool returned error 111, `TransactionTooLarge`. The example now selects the memo as a committed argument using nine FAB chunks and explicitly discloses it in the event. This uses 15 Impact operations, produces a 9,918-byte transaction and preserves all eleven payloads. Packing the standard public-byte input path is follow-up optimization work. [Committed call arguments](committed-returns.md#native-call-arguments) · [Node error codes](https://docs.midnight.network/nodes/error-codes) · [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
+The first catalog used a bytewise public prologue for the 256-byte memo. Its 19,217-byte call was rejected with pool error 111, `TransactionTooLarge`. A committed memo argument qualified at 9,918 bytes and 5,000 rows. The current compiler packs an ordinary public memo into nine fields and one push/readback pair.
+
+| Memo layout | VM operations for the whole call | Circuit rows | K | Signed transaction bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Bytewise public input | 538 | 7,966 | 13 | 19,217 |
+| Packed committed argument | 26 | 5,000 | 13 | 9,918 |
+| Packed public input | 28 | 4,937 | 13 | 10,477 |
+
+The same full-width payload digests passed with each layout. [Public byte inputs](fixed-bytes.md#public-byte-arguments) · [Committed call arguments](committed-returns.md#native-call-arguments) · [Node error codes](https://docs.midnight.network/nodes/error-codes) · [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
 
 The funded isolated localnet accepted the catalog deployment and proved call. Indexer delivery and emission from within reusable helper bodies still need qualification.
 
 | Localnet action | Block | Transaction ID |
 | --- | ---: | --- |
-| Deploy | 30859 | `3ff8bb36d1a37a54b148c26b2b13f813519a756d1cd31bb87a29bdbfc48b1ef2` |
-| Call | 30862 | `37b63e6d8d929e8d90d94777ee71e354551db1344fe90f069dfab4388ea87b73` |
+| Deploy | 30934 | `8fb8b254d3a39fac4d5b09a07a980d9015a872ecc8a05d8faf17f15d2ab1c729` |
+| Call | 30937 | `1844e41af5c35a445d3f3a86d94c7fe661ce9186eb0a9a1b16051792d65e5f21` |
 
 ```sh
 lake build noctium
