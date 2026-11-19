@@ -13,3 +13,4 @@ build/
 *.olean
 *.ilean
 *.c
+!/sdk/android/noctium_jni.c
