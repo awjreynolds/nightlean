@@ -2396,13 +2396,15 @@ scoped syntax (name := witnessCircuitCommand) "noctium_witness_circuit" ident
 /-- Share checked registration between generated authoring programs and explicit IR sources. -/
 unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportName : String)
     (outputName : String := "") (observationArtifact? : Option String := none)
-    (logicalOutputs : List (String × Ty × Name) := [])
-    (aggregateOutputs : List (String × Name × List String) := []) : CommandElabM Unit := do
+    (describeOutputs : Helpers.Program → Witness.Compiled →
+      CommandElabM (List (String × Ty × Name) × List (String × Name × List String)) :=
+      fun _ _ => pure ([], [])) : CommandElabM Unit := do
     let program ← evalConstCheck Helpers.Program ``Helpers.Program sourceName
     let fullName := (← getCurrNamespace) ++ name.getId
     let compiled ← match Witness.compile program exportName fullName.toString outputName with
       | .ok value => pure value
       | .error diagnostic => failDisclosure diagnostic *> throwError "typed witness compilation failed"
+    let (logicalOutputs, aggregateOutputs) ← describeOutputs program compiled
     let sourceTerm := mkIdent sourceName
     let fullNameTerm := stringTerm fullName.toString
     let exportNameTerm := stringTerm exportName

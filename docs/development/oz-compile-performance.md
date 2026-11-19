@@ -209,6 +209,13 @@ fell from 3.68 s to 3.49 s. All 53 artifacts matched byte for byte. The private
 state fixture still rejects an implicit public release and accepts an explicit
 one. This change removes compiler work and leaves circuit sizes unchanged.
 
+Readable declarations now reuse the same checked compilation to build output
+aliases and aggregate views and to register the witness circuit. Three
+OpenZeppelin runs took 4.42, 4.34 and 4.41 s before the change and 5.69, 4.40
+and 4.31 s after. Median user CPU fell from 3.47 to 3.40 s. All 53 OpenZeppelin
+artifacts and the full aggregate example matched byte for byte. A rejected
+private release leaves the declaration name available for a corrected command.
+
 ## What the timing includes
 
 The older Noctium baseline ran two complete Lean frontend passes. The first checked the source. The second elaborated it again and exported artifacts. The follow-up times these workflows end to end.

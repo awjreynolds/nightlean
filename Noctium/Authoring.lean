@@ -1689,55 +1689,91 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         span := exportSpan }
     let program : Program := {
       declarations := [declaration], exports := [entryExport], composites := compositeEnv, witnesses := witnesses}
-    let program ← match Helpers.Wire.attach program (codecs.map (·.2)) with
-      | .ok value => pure value
-      | .error message => throwErrorAt stx message
-    let compiled ← match Witness.compile program exportName programNameText with
-      | .error diagnostic => throwErrorAt stx s!"readable witness compilation failed: {diagnostic.message}"
-      | .ok compiled => pure compiled
-    let mut logicalEnv : List (String × Ty × TSyntax `term) := []
-    for input in inputs do
-      let value ← `(@Noctium.Expr.ref $(← tyTerm input.ty) $(stringTerm input.name))
-      logicalEnv := logicalEnv ++ [(input.name, input.ty, value)]
-    let mut logicalOutputAliases : List (String × Ty × Name) := []
-    let defineAlias (item : AuthoredOutput) (ty : Ty) (value : TSyntax `term) : CommandElabM Name := do
-      let aliasName := generatedName fullName s!"__logicalOutput_{item.ordinal}_{item.name}"
-      if (← getEnv).contains aliasName then
-        throwErrorAt stx "generated logical output alias name already exists"
-      elabCommand (← `(def $(mkIdent aliasName) : Noctium.Expr $(← tyTerm ty) := $value))
-      pure aliasName
-    for binding in (if grouped && !useOutputViews then logicalAliasBindings else []) do
-      if logicalEnv.any (fun alias => alias.1 == binding.name) then
-        throwErrorAt stx s!"duplicate logical output alias source '{binding.name}'"
-      let value ← match binding.source with
-        | .expression source =>
-          Noctium.quoteSourceExpression logicalEnv source binding.ty
-        | .call site => do
-          let some call := compiled.calls.find? (·.site == site)
-            | throwErrorAt stx s!"compiled witness call '{site}' is missing its result binding"
-          unless call.result == .scalar binding.ty do
-            throwErrorAt stx s!"witness call '{site}' does not produce a scalar logical alias"
-          let some inputName := call.inputs.head?
-            | throwErrorAt stx s!"witness call '{site}' has no scalar result binding"
-          `(@Noctium.Expr.ref $(← tyTerm binding.ty) $(stringTerm inputName))
-      logicalEnv := logicalEnv ++ [(binding.name, binding.ty, value)]
-    if grouped && !useOutputViews then
-      for item in authoredOutputs do
-        let .scalar fieldType := item.value.type
-          | throwErrorAt stx "expected a grouped scalar circuit output"
-        let value ← match item.source with
-          | .expression expression =>
-            Noctium.quoteSourceExpression logicalEnv expression fieldType
+    match Helpers.Wire.attach program (codecs.map (·.2)) with
+    | .ok _ => pure ()
+    | .error message => throwErrorAt stx message
+    let describeOutputs (program : Program) (compiled : Witness.Compiled) : CommandElabM _ := do
+      let mut logicalEnv : List (String × Ty × TSyntax `term) := []
+      for input in inputs do
+        let value ← `(@Noctium.Expr.ref $(← tyTerm input.ty) $(stringTerm input.name))
+        logicalEnv := logicalEnv ++ [(input.name, input.ty, value)]
+      let mut logicalOutputAliases : List (String × Ty × Name) := []
+      let defineAlias (item : AuthoredOutput) (ty : Ty) (value : TSyntax `term) : CommandElabM Name := do
+        let aliasName := generatedName fullName s!"__logicalOutput_{item.ordinal}_{item.name}"
+        if (← getEnv).contains aliasName then
+          throwErrorAt stx "generated logical output alias name already exists"
+        elabCommand (← `(def $(mkIdent aliasName) : Noctium.Expr $(← tyTerm ty) := $value))
+        pure aliasName
+      for binding in (if grouped && !useOutputViews then logicalAliasBindings else []) do
+        if logicalEnv.any (fun alias => alias.1 == binding.name) then
+          throwErrorAt stx s!"duplicate logical output alias source '{binding.name}'"
+        let value ← match binding.source with
+          | .expression source =>
+            Noctium.quoteSourceExpression logicalEnv source binding.ty
           | .call site => do
             let some call := compiled.calls.find? (·.site == site)
               | throwErrorAt stx s!"compiled witness call '{site}' is missing its result binding"
-            unless call.result == .scalar fieldType do
-              throwErrorAt stx s!"witness call '{site}' does not produce a scalar logical output"
+            unless call.result == .scalar binding.ty do
+              throwErrorAt stx s!"witness call '{site}' does not produce a scalar logical alias"
             let some inputName := call.inputs.head?
               | throwErrorAt stx s!"witness call '{site}' has no scalar result binding"
-            `(@Noctium.Expr.ref $(← tyTerm fieldType) $(stringTerm inputName))
-        let aliasName ← defineAlias item fieldType value
-        logicalOutputAliases := logicalOutputAliases ++ [(item.name, fieldType, aliasName)]
+            `(@Noctium.Expr.ref $(← tyTerm binding.ty) $(stringTerm inputName))
+        logicalEnv := logicalEnv ++ [(binding.name, binding.ty, value)]
+      if grouped && !useOutputViews then
+        for item in authoredOutputs do
+          let .scalar fieldType := item.value.type
+            | throwErrorAt stx "expected a grouped scalar circuit output"
+          let value ← match item.source with
+            | .expression expression =>
+              Noctium.quoteSourceExpression logicalEnv expression fieldType
+            | .call site => do
+              let some call := compiled.calls.find? (·.site == site)
+                | throwErrorAt stx s!"compiled witness call '{site}' is missing its result binding"
+              unless call.result == .scalar fieldType do
+                throwErrorAt stx s!"witness call '{site}' does not produce a scalar logical output"
+              let some inputName := call.inputs.head?
+                | throwErrorAt stx s!"witness call '{site}' has no scalar result binding"
+              `(@Noctium.Expr.ref $(← tyTerm fieldType) $(stringTerm inputName))
+          let aliasName ← defineAlias item fieldType value
+          logicalOutputAliases := logicalOutputAliases ++ [(item.name, fieldType, aliasName)]
+      let mut registeredAggregates := []
+      if useOutputViews then
+        let mut remaining := compiled.circuit.outputs.map (·.name)
+        for item in authoredOutputs do
+          let .ok layout := Types.compileType program.composites item.layoutType
+            | throwErrorAt stx s!"invalid circuit output layout for '{item.name}'"
+          let (fields, rest) := remaining.splitAt layout.checked.value.leafCount
+          unless fields.length == layout.checked.value.leafCount do
+            throwErrorAt stx "circuit output layout exceeds the compiled Native fields"
+          remaining := rest
+          match item.value.type with
+          | .composite payload =>
+            let suffix := if grouped then s!"__returnView_{item.ordinal}" else "__returnView"
+            let localName := generatedName name.getId suffix
+            let fullViewName := generatedName fullName suffix
+            if (← getEnv).contains fullViewName then throwErrorAt name "aggregate return view already exists"
+            let fieldTerms := (fields.map stringTerm).toArray
+            let payload ← compositeTypeTerm payload
+            elabCommand (← `(def $(mkIdent localName) : Noctium.ReturnView := {
+              name := $(stringTerm item.name)
+              environment := $(mkIdent programName).composites
+              type := $payload
+              fields := [$fieldTerms,*]
+            }))
+            registeredAggregates := registeredAggregates ++ [(item.name, fullViewName, fields)]
+          | .scalar ty =>
+            let value ← match ty with
+              | .bytes _ => quoteByteLeaves fields
+              | _ => do
+                let [field] := fields | throwErrorAt stx "expected one Native field for a scalar output"
+                let ref ← `(@Noctium.Expr.ref Noctium.Ty.native $(stringTerm field))
+                if ty == .native then pure ref else `(Noctium.Expr.cast $(← tyTerm ty) $ref)
+            let aliasName ← defineAlias item ty value
+            logicalOutputAliases := logicalOutputAliases ++ [(item.name, ty, aliasName)]
+          | .unit => throwErrorAt stx "unexpected Unit circuit output"
+        unless remaining.isEmpty do
+          throwErrorAt stx "circuit output layout did not consume the compiled Native fields"
+      pure (logicalOutputAliases, registeredAggregates)
     let signatureTerms ← witnesses.mapM quoteSignature
     let signatureTerms := signatureTerms.toArray
     let parameterTerms ← parameters.mapM fun parameter => do
@@ -1790,47 +1826,15 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         | .ok program => program
         | .error _ => {})
     let metadataTerm ← observationTerm observation
-    elabCommand (← `(def $(mkIdent programSyntaxName) : Noctium.Helpers.Program := $programTerm))
-    elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))
-    let mut registeredAggregates := []
-    if useOutputViews then
-      let mut remaining := compiled.circuit.outputs.map (·.name)
-      for item in authoredOutputs do
-        let .ok layout := Types.compileType program.composites item.layoutType
-          | throwErrorAt stx s!"invalid circuit output layout for '{item.name}'"
-        let (fields, rest) := remaining.splitAt layout.checked.value.leafCount
-        unless fields.length == layout.checked.value.leafCount do
-          throwErrorAt stx "circuit output layout exceeds the compiled Native fields"
-        remaining := rest
-        match item.value.type with
-        | .composite payload =>
-          let suffix := if grouped then s!"__returnView_{item.ordinal}" else "__returnView"
-          let localName := generatedName name.getId suffix
-          let fullViewName := generatedName fullName suffix
-          if (← getEnv).contains fullViewName then throwErrorAt name "aggregate return view already exists"
-          let fieldTerms := (fields.map stringTerm).toArray
-          let payload ← compositeTypeTerm payload
-          elabCommand (← `(def $(mkIdent localName) : Noctium.ReturnView := {
-            name := $(stringTerm item.name)
-            environment := $(mkIdent programName).composites
-            type := $payload
-            fields := [$fieldTerms,*]
-          }))
-          registeredAggregates := registeredAggregates ++ [(item.name, fullViewName, fields)]
-        | .scalar ty =>
-          let value ← match ty with
-            | .bytes _ => quoteByteLeaves fields
-            | _ => do
-              let [field] := fields | throwErrorAt stx "expected one Native field for a scalar output"
-              let ref ← `(@Noctium.Expr.ref Noctium.Ty.native $(stringTerm field))
-              if ty == .native then pure ref else `(Noctium.Expr.cast $(← tyTerm ty) $ref)
-          let aliasName ← defineAlias item ty value
-          logicalOutputAliases := logicalOutputAliases ++ [(item.name, ty, aliasName)]
-        | .unit => throwErrorAt stx "unexpected Unit circuit output"
-      unless remaining.isEmpty do
-        throwErrorAt stx "circuit output layout did not consume the compiled Native fields"
-    Noctium.registerWitnessCircuit name.raw programName exportName outputName
-      (some observation.toJson.compress) logicalOutputAliases registeredAggregates
+    let envBefore ← getEnv
+    try
+      elabCommand (← `(def $(mkIdent programSyntaxName) : Noctium.Helpers.Program := $programTerm))
+      elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))
+      Noctium.registerWitnessCircuit name.raw programName exportName outputName
+        (some observation.toJson.compress) describeOutputs
+    catch error =>
+      modifyEnv fun _ => envBefore
+      throw error
   | _ => throwUnsupportedSyntax
 
 end Noctium

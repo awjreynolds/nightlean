@@ -1,12 +1,12 @@
-import Noctium.Witness
+import Noctium.Frontend
 
 open Noctium Noctium.Helpers
 
 namespace WitnessDisclosure
 
-private def disclosureFailure (result : Except Diagnostic α) : Bool :=
+private def disclosureFailure (result : Except Diagnostic α) : _root_.Bool :=
   match result with
-  | .ok _ => false
+  | .ok _ => _root_.Bool.false
   | .error diagnostic => (diagnostic.message.splitOn "undisclosed private").length > 1
 
 def direct : Program := {
@@ -41,14 +41,15 @@ def throughHelper : Program := {
 
 def guardProgram (condition : Term) : Program := {direct with declarations := [
   {id := ⟨0, 0⟩, name := "root", result := .scalar .bool,
-    body := [.branch condition [.return (some (.bool true))] [.return (some (.bool false))]]}]}
+    body := [.branch condition [.return (some (.bool _root_.Bool.true))]
+      [.return (some (.bool _root_.Bool.false))]]}]}
 
 -- Disclosing constants inside the branch does not disclose its private guard.
 def constantsDisclosed : Program := {direct with declarations := [
   {id := ⟨0, 0⟩, name := "root", result := .scalar .bool,
     body := [.branch (.witnessCall "flag-condition" "flag" [])
-      [.return (some (.disclose {} (.bool true)))]
-      [.return (some (.disclose {} (.bool false)))]]}]}
+      [.return (some (.disclose {} (.bool _root_.Bool.true)))]
+      [.return (some (.disclose {} (.bool _root_.Bool.false)))]]}]}
 
 #guard disclosureFailure (Control.compileTypedWithLimits {} constantsDisclosed "root")
 #guard disclosureFailure (Control.compileTypedWithLimits {} (guardProgram
@@ -58,5 +59,18 @@ def constantsDisclosed : Program := {direct with declarations := [
 -- execution has a separate backend gate, so this is not a ledger proof claim.
 #guard (Control.compileTypedWithLimits {} (guardProgram
   (.disclose {} (.witnessCall "flag-condition" "flag" []))) "root").isOk
+
+open scoped Noctium
+
+#guard_msgs (drop error) in
+noctium_witness_circuit corrected where
+  private value : UInt 8
+  output revealed : UInt 8 := value
+end
+
+noctium_witness_circuit corrected where
+  private value : UInt 8
+  output revealed : UInt 8 := disclose(value)
+end
 
 end WitnessDisclosure
