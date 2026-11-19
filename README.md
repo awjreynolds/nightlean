@@ -123,6 +123,8 @@ Typed Jubjub operations support a [derived-key, ElGamal and ECDH memo example](t
 
 [Typed signature helpers](docs/development/signatures.md) expose secp256k1/P-256 ECDSA, Jubjub Schnorr, Ed25519 and Ethereum address derivation through Lean and existing native operations. Private verification results require explicit disclosure. Protocol bounds and abort-versus-false behavior are documented.
 
+The recipient-bound disclosure example binds ciphertext to a sealed Jubjub key. Lean proves the source policy, and the intended recipient recovered the bounded value from a finalized K12 call on localnet. [Directed disclosure example](docs/development/directed-disclosure.md)
+
 [Native helper branches](docs/development/native-helper-branches.md) compile witness-free structured control and lazy expressions into existing native constraints. Focused checks cover inactive failures, lexical scope, aggregate sequencing and a guarded cell update. The separate [structured state entry](docs/development/structured-cells.md) route lowers typed cell and map reads, membership queries and writes inside helper bodies. Typed providers now receive ordered native state reads through `WitnessExecution`, with a focused cell update and private-staging case. Aggregate state bodies and complete guarded proof/ledger qualification remain open.
 
 [Resumable native preparation](docs/development/native-preparation-cursor.md) exposes ledger reads before later private inputs arrive. The current Rust case computes a private input from the checked state read, resumes the same native executor and checks the resulting state. Integration with source witness/state scheduling remains open.

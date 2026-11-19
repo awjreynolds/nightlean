@@ -1198,14 +1198,16 @@
       "observedEvidence": [],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-16",
-        "scope": "Mandatory scalar source/native-entrypoint gates track private value and control origins at current public outputs, state writes and query paths. Explicit releases preserve control dependencies. Native authorized-release proofs bind public fields. Structured lazy control, composites/helpers and all native descriptors remain open. Failure/timing/provider/proof-byte privacy is separate from scalar flow checking.",
+        "checkedOn": "2026-11-19",
+        "scope": "Mandatory scalar source/native-entrypoint gates track private value and control origins at current public outputs, state writes and query paths. Explicit releases preserve control dependencies. Native authorized-release proofs bind public fields. A recipient-bound example proves its source policy and finalizes a ciphertext write on Ledger 9. Failure, timing, provider and proof-byte privacy and full disclosure equivalence remain open.",
         "evidence": [
           "Noctium/Disclosure.lean",
           "tests/Disclosure.lean",
           "tests/disclosure-cli.sh",
           "tests/disclosure/native-evidence.json",
-          "docs/development/disclosure.md"
+          "docs/development/disclosure.md",
+          "examples/DirectedDisclosureProof.lean",
+          "docs/development/directed-disclosure-receipt.json"
         ],
         "fullEquivalence": "unverified"
       }

@@ -656,7 +656,8 @@ structure LedgerState where
   trees : List (String × LedgerValue) := []
   deriving Repr, BEq
 
-private def updateAssoc [BEq α] (key : α) (value : β) (entries : List (α × β)) : List (α × β) :=
+/-- The source evaluator replaces an entry and places it first in the association list. -/
+def updateAssoc [BEq α] (key : α) (value : β) (entries : List (α × β)) : List (α × β) :=
   (key, value) :: entries.filter (fun item => !(item.1 == key))
 
 private def evaluatePath (ctx : EvalContext) (env : EvalEnv) (keys : List PathKey) :
@@ -914,8 +915,9 @@ def runEffects (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
   pure next
 
 /-- Execute source effects with optional scalar read/write and require guards.
-Inactive reads bind their canonical zero without touching state or keys. -/
-private def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
+Inactive reads bind their canonical zero without touching state or keys.
+Retain the resulting environment for returns and source-level proofs. -/
+def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
     (guards : List (Option (Expr .bool))) (env : EvalEnv)
     (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
   unless guards.isEmpty || guards.length == effects.length do
