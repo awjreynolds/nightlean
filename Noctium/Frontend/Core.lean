@@ -118,6 +118,10 @@ initialize witnessRegistry : SimplePersistentEnvExtension WitnessInfo (Array Wit
     addEntryFn := Array.push
   }
 
+/-- Reuse checked witness compilations within this elaboration environment. -/
+initialize checkedWitnesses : EnvExtension (NameMap Witness.Compiled) ←
+  registerEnvExtension (pure {})
+
 initialize moduleSourceRegistry : SimplePersistentEnvExtension ModuleSourceInfo (Array ModuleSourceInfo) ←
   registerSimplePersistentEnvExtension {
     addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
@@ -2429,6 +2433,7 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       sourceProgram? := some (sourceName, exportName)}
     modifyEnv fun env => witnessRegistry.addEntry env {
       circuitName := fullName, sourceName, exportName, outputName, observationArtifact?}
+    modifyEnv fun env => checkedWitnesses.modifyState env (·.insert fullName compiled)
 
 @[command_elab witnessCircuitCommand] unsafe def elabWitnessCircuit : CommandElab := fun stx => do
   match stx with

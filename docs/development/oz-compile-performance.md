@@ -150,6 +150,20 @@ matched runs. The timings establish no material throughput improvement.
 The CPU sample put ZKIR's linear common-subexpression lookup among the busiest
 Noctium functions. Its representation also appears in the lowering theorems.
 
+## Reuse witness compilation during export
+
+The exporter now reuses the checked witness plans created during source
+elaboration. The cache lives for one compiler invocation. A ledger binding
+still uses the checked ledger relation. The exporter rebuilds module sources
+and recompiles a standalone witness plan when the requested range option
+changes its relation.
+
+Three OpenZeppelin ledger-and-witness runs took 4.86, 4.62 and 4.57 s before
+the change and 5.91, 4.43 and 4.53 s after. Median user CPU fell from 3.76 s to
+3.64 s. All 53 artifacts matched byte for byte. The hosted argument fixture
+and the mixed result fixture also reproduced their range-deduplicated output.
+The wall times varied across runs.
+
 ## What the timing includes
 
 The older Noctium baseline ran two complete Lean frontend passes. The first checked the source. The second elaborated it again and exported artifacts. The follow-up times these workflows end to end.

@@ -638,12 +638,20 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
   for info in witnesses do
     let witnessPrefix := artifactName info.circuitName
     if emit .witness && (emit .standalone || entryCircuits.contains info.circuitName.toString) then
-      let program ← match moduleWitnessProgramFor moduleOutputs info with
-        | some fresh => pure fresh
-        | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
-      let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName dedupRangeChecks with
-        | .ok value => pure value
-        | .error diagnostic => failDiagnostic diagnostic
+      let moduleProgram := moduleWitnessProgramFor moduleOutputs info
+      -- Ledger-only bindings replace the standalone relation with the checked ledger relation.
+      let cached := if moduleProgram.isNone && !(dedupRangeChecks && emit .standalone) then
+        (checkedWitnesses.getState sourceEnv).find? info.circuitName
+        else none
+      let compiled ← match cached with
+        | some value => pure value
+        | none => do
+          let program ← match moduleProgram with
+            | some fresh => pure fresh
+            | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
+          match Witness.compile program info.exportName info.circuitName.toString info.outputName dedupRangeChecks with
+          | .ok value => pure value
+          | .error diagnostic => failDiagnostic diagnostic
       standaloneWitnesses := standaloneWitnesses.push (info.circuitName.toString, compiled)
       if emit .standalone then
         lowered := lowered.push (.witness, witnessPrefix ++ ".witness.json", compiled.binding.compress)
