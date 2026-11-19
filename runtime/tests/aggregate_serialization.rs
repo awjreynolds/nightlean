@@ -15,6 +15,7 @@ use num_bigint::BigUint;
 use serde_json::{Value as Json, json};
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, fs, path::PathBuf};
+use transient_crypto::curve::Fr;
 
 fn artifact_root() -> Result<PathBuf> {
     Ok(std::env::var("NOCTIUM_AGGREGATE_WIRE_ARTIFACTS")?.into())
@@ -88,6 +89,51 @@ fn aggregate_wire_matches_compact_reference() -> Result<()> {
         assert!(run(&invalid).is_err(), "invalid byte at offset {offset}");
         assert_eq!(wire_session(&control, "transcode", &invalid)?.advance()?["status"], "failed");
     }
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires fresh AggregateSerialization Lean artifacts"]
+fn decoded_fields_drive_approval_without_returning_the_record() -> Result<()> {
+    let root = artifact_root()?;
+    let name = "AggregateSerialization.Codec.authorize";
+    let control: Json = serde_json::from_slice(&fs::read(
+        root.join(format!("{name}.witness.control.json")),
+    )?)?;
+    let plan: Plan = serde_json::from_slice(&fs::read(root.join(format!("{name}.impact.json")))?)?;
+    let circuit = IrSource::load(fs::File::open(root.join(format!("{name}.zkir")))?)?;
+    let state = create_state(&plan, &BTreeMap::new())?;
+    let run = |frame: &[u8]| {
+        prepare(
+            &plan,
+            &BTreeMap::from([("frame".into(), bytes(frame))]),
+            &state,
+            &INITIAL_PARAMETERS,
+            ContractAddress::default(),
+        )
+    };
+    let frame = [44, 1, 1, 0, 1, 0, 12, 42, 200, 255];
+    let mut result = run(&frame)?;
+    check(&result, &circuit)?;
+    assert_eq!(
+        result.returns_json(),
+        BTreeMap::from([("approval".into(), json!("42"))])
+    );
+    let host_result = wire_session(&control, "authorize", &frame)?.advance()?;
+    assert_eq!(host_result["status"], "completed");
+    assert_eq!(host_result["result"], "42");
+    for (offset, value) in [(2, 0), (4, 0), (5, 1)] {
+        let mut denied = frame;
+        denied[offset] = value;
+        assert!(run(&denied).is_err());
+        assert_eq!(wire_session(&control, "authorize", &denied)?.advance()?["status"], "failed");
+        let before = result.preimage.private_transcript[offset];
+        result.preimage.private_transcript[offset] = Fr::from(u64::from(value));
+        assert!(check(&result, &circuit).is_err());
+        result.preimage.private_transcript[offset] = before;
+    }
+    result.preimage.private_transcript[7] = Fr::from(43u64);
+    assert!(check(&result, &circuit).is_err());
     Ok(())
 }
 

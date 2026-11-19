@@ -25,9 +25,21 @@ noctium_witness_circuit transcode using paymentWire where
     disclose(encode(paymentWire, payment))
 end
 
+noctium_witness_circuit authorize using paymentWire where
+  private frame : Bytes 10
+  let payment := decode(paymentWire, frame)
+  prove elementAt(field(payment, info), 1)
+  prove elementAt(field(payment, flags), 1)
+  prove eq(enumTag(field(payment, side)), 0)
+  output code : UInt 8 := disclose(elementAt(field(payment, memo), 1))
+end
+
 noctium_contract Codec where
   entry transcode uses transcode where
     return encoding : Bytes 10 := encoded
+  end
+  entry authorize uses authorize where
+    return approval : UInt 8 := code
   end
 end
 

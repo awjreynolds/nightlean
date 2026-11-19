@@ -90,12 +90,15 @@ def declarations (compiled : Types.CompiledType) (name : String) (width : Nat)
       result := .composite compiled.type,
       body := [.return (some (.composite compiled.type decoded.reverse))]}]
 
+def compositeEnv (base : Types.CompositeEnv) (codecs : List Codec) : Types.CompositeEnv :=
+  {
+    structures := (base.structures ++ codecs.flatMap (·.composites.structures)).eraseDups
+    enumerations := (base.enumerations ++ codecs.flatMap (·.composites.enumerations)).eraseDups
+  }
+
 /-- Add the checked codec helpers to a readable circuit's root scope. -/
 def attach (program : Program) (codecs : List Codec) : Except String Program := do
-  let composites : Types.CompositeEnv := {
-    structures := (program.composites.structures ++ codecs.flatMap (·.composites.structures)).eraseDups
-    enumerations := (program.composites.enumerations ++ codecs.flatMap (·.composites.enumerations)).eraseDups
-  }
+  let composites := compositeEnv program.composites codecs
   let helpers ← codecs.zipIdx.mapM fun (codec, index) => do
     let compiled ← (Types.compileType composites codec.payload).mapError (·.message)
     declarations compiled (codecName index) codec.frameBytes ⟨0, 2 * index + 1⟩ ⟨0, 2 * index + 2⟩

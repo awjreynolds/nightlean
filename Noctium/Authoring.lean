@@ -101,11 +101,14 @@ scoped syntax (name := noctiumWitnessDeclarationCommand) "noctium_witness" ident
 scoped syntax "witness" ident "(" nlexpr,* ")" : nlexpr
 scoped syntax "encode(" ident "," nlexpr ")" : nlexpr
 scoped syntax "decode(" ident "," nlexpr ")" : nlexpr
+scoped syntax "field(" nlexpr "," ident ")" : nlexpr
+scoped syntax "elementAt(" nlexpr "," num ")" : nlexpr
+scoped syntax "enumTag(" nlexpr ")" : nlexpr
 
 declare_syntax_cat noctium_witness_statement
 scoped syntax "public" ident ":" nltype : noctium_witness_statement
 scoped syntax "private" ident ":" nltype : noctium_witness_statement
-scoped syntax "let" ident ":" nltype ":=" nlexpr : noctium_witness_statement
+scoped syntax "let" ident (":" nltype)? ":=" nlexpr : noctium_witness_statement
 scoped syntax "read" "private" ident "as" ident : noctium_witness_statement
 scoped syntax "witness" ident "(" nlexpr,* ")" : noctium_witness_statement
 scoped syntax "prove" nlexpr : noctium_witness_statement
@@ -126,6 +129,7 @@ private structure Lowered where
 
 private structure AuthoringExprState where
   codecs : List (Name × Helpers.Wire.Codec) := []
+  composites : Types.CompositeEnv := {}
   nextCall : Nat := 0
   nextLet : Nat := 0
   allowAssertThen : _root_.Bool := _root_.Bool.false
@@ -337,6 +341,9 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| disclose($value)) => s!"disclose({renderExpr value})"
   | `(nlexpr| encode($codec:ident, $value)) => s!"encode({codec.getId}, {renderExpr value})"
   | `(nlexpr| decode($codec:ident, $value)) => s!"decode({codec.getId}, {renderExpr value})"
+  | `(nlexpr| field($value, $name:ident)) => s!"field({renderExpr value}, {name.getId})"
+  | `(nlexpr| elementAt($value, $index:num)) => s!"elementAt({renderExpr value}, {index.getNat})"
+  | `(nlexpr| enumTag($value)) => s!"enumTag({renderExpr value})"
   | `(nlexpr| eq($left, $right)) => s!"eq({renderExpr left}, {renderExpr right})"
   | `(nlexpr| boolAnd($left, $right)) => s!"boolAnd({renderExpr left}, {renderExpr right})"
   | `(nlexpr| boolOr($left, $right)) => s!"boolOr({renderExpr left}, {renderExpr right})"
@@ -426,6 +433,8 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
+  | `(nlexpr| field($value, $_:ident)) | `(nlexpr| elementAt($value, $_:num))
+  | `(nlexpr| enumTag($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => disclosedValues value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => disclosedValues value
@@ -474,6 +483,8 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
   | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| encode($_:ident, $value)) | `(nlexpr| decode($_:ident, $value))
+  | `(nlexpr| field($value, $_:ident)) | `(nlexpr| elementAt($value, $_:num))
+  | `(nlexpr| enumTag($value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => inlineAssertions value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => inlineAssertions value
@@ -533,6 +544,16 @@ private def selectedCodec (name : TSyntax `ident) : ExprM (Helpers.Wire.Codec ×
   let some ((_, codec), index) := (← get).codecs.zipIdx.find? (fun (candidate, _) => candidate.1 == name.getId)
     | throwErrorAt name s!"add codec '{name.getId}' to the circuit's using clause"
   pure (codec, Helpers.Wire.codecName index)
+
+private def lowerProjection (stx : Syntax) (value : Lowered)
+    (projection : Types.Projection) : ExprM Lowered := do
+  let .composite parent := value.type | throwErrorAt stx "projection requires an aggregate value"
+  let composites := (← get).composites
+  let span ← spanValue stx
+  let child ← match Helpers.projectedType composites span parent projection with
+    | .ok child => pure child
+    | .error diagnostic => throwErrorAt stx diagnostic.message
+  pure {value with type := Helpers.resultTypeOfComposite child, term := .project value.term projection}
 
 private def lowerForeignFieldConstant (stx : Syntax) (kind : Foreign.Kind) (value : Nat) : ExprM Lowered := do
   let encoding ← match Foreign.encodeField kind value with
@@ -795,6 +816,19 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
       throwErrorAt stx s!"decode requires Bytes {codec.frameBytes} for codec '{name.getId}'"
     let result := mergeLowered (.composite codec.payload) (.call (helper ++ "Decode") [value.term]) [value]
     pure {result with generatedValidity := s!"checked wire decode {renderExpr stx}" :: result.generatedValidity}
+  | `(nlexpr| field($value, $name:ident)) =>
+    lowerProjection stx (← lowerExpr programName callPrefix env value) (.field name.getId.toString)
+  | `(nlexpr| elementAt($value, $index:num)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let index := index.getNat
+    let projection ← match value.type with
+      | .composite (.tuple _) => pure (Types.Projection.tupleIndex index)
+      | .composite (.vector _ _) => pure (.vectorIndex index)
+      | .composite (.bytes _) => pure (.byteIndex index)
+      | _ => throwErrorAt stx "elementAt requires an aggregate tuple, vector or byte string"
+    lowerProjection stx value projection
+  | `(nlexpr| enumTag($value)) =>
+    lowerProjection stx (← lowerExpr programName callPrefix env value) .enumTag
   | `(nlexpr| jubjubScalarFromNative($value)) =>
     lowerCurve programName callPrefix env stx .scalarFromNative [value]
   | `(nlexpr| jubjubScalarToNative($value)) =>
@@ -1204,6 +1238,15 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
     let leaves ← leaves.mapM termTerm
     let leaves := leaves.toArray
     `(Noctium.Helpers.Term.composite $type [$leaves,*])
+  | .project value projection => do
+    let projection ← match projection with
+      | .field name => `(Noctium.Types.Projection.field $(stringTerm name))
+      | .tupleIndex index => `(Noctium.Types.Projection.tupleIndex $(natTerm index))
+      | .vectorIndex index => `(Noctium.Types.Projection.vectorIndex $(natTerm index))
+      | .byteIndex index => `(Noctium.Types.Projection.byteIndex $(natTerm index))
+      | .enumTag => `(Noctium.Types.Projection.enumTag)
+      | .enumField .. => throwError "readable witness source does not support enum payload projections"
+    `(Noctium.Helpers.Term.project $(← termTerm value) $projection)
   | .at span value => do
     let span ← quoteSpan span
     `(Noctium.Helpers.Term.at $span $(← termTerm value))
@@ -1376,7 +1419,8 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       let codec ← evalConstCheck Helpers.Wire.Codec ``Helpers.Wire.Codec source
       codecs := codecs ++ [(codecName.getId, codec)]
       codecTerms := codecTerms.push ⟨mkIdent source⟩
-    let exprState : AuthoringExprState := {codecs}
+    let composites := Helpers.Wire.compositeEnv {} (codecs.map (·.2))
+    let exprState : AuthoringExprState := {codecs, composites}
     let mut env : SurfaceEnv := []
     let mut parameters : List Parameter := []
     let mut inputs : List Input := []
@@ -1441,21 +1485,25 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
           let observationPart := collectExpressionMetadata {entryName := exportName} argument []
           authoredProves := (authoredProves ++ observationPart.authoredProves).eraseDups
           explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
-      | `(noctium_witness_statement| let $id:ident : $type:nltype := $value:nlexpr) => do
+      | `(noctium_witness_statement| let $id:ident $[: $type:nltype]? := $value:nlexpr) => do
         let valueName := id.getId.toString
         if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
-        let ty ← readScalarTy type
         let sourceExpr := value
         let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
-        let value ← coerce sourceExpr lowered ty
-        body := body ++ value.before ++ [.bind valueName (.scalar ty) (.at (← spanValue statement) value.term)]
-        env := (valueName, .scalar ty, .ref valueName) :: env
-        let aliasSource := match value.term with
-          | .witnessCall site .. => LogicalAliasSource.call site
-          | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
-          | _ => LogicalAliasSource.expression sourceExpr
-        logicalAliasBindings := logicalAliasBindings ++ [
-          {name := valueName, ty, source := aliasSource}]
+        let value ← match type with
+          | some annotation => coerce sourceExpr lowered (← readScalarTy annotation)
+          | none => do
+            if lowered.type == .unit then throwErrorAt id "readable witness let cannot bind Unit"
+            pure lowered
+        body := body ++ value.before ++ [.bind valueName value.type (.at (← spanValue statement) value.term)]
+        env := (valueName, value.type, .ref valueName) :: env
+        if let .scalar ty := value.type then
+          let aliasSource := match value.term with
+            | .witnessCall site .. => LogicalAliasSource.call site
+            | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
+            | _ => LogicalAliasSource.expression sourceExpr
+          logicalAliasBindings := logicalAliasBindings ++ [
+            {name := valueName, ty, source := aliasSource}]
         witnesses := uniqueWitnesses (witnesses ++ value.signatures)
         witnessNames := (witnessNames ++ value.witnessNames).eraseDups
         let observationPart := collectExpressionMetadata {entryName := exportName} sourceExpr value.generatedValidity

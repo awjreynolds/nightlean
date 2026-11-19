@@ -340,8 +340,8 @@
       "id": "C-LANG-VECTOR",
       "layer": "language",
       "surface": "Vector<n,T>",
-      "noctiumStatus": "missing",
-      "notes": "Fixed-size homogeneous arrays, indexing, slicing, spread and bounds.",
+      "noctiumStatus": "subset",
+      "notes": "Checked fixed-size vectors support literal indexing in readable circuits. A field from a decoded Vector<2,Bool> controls an assertion and passes the pinned Compact evaluator, authenticated Rust host and native checker comparison. Readable dynamic indexing and full slicing/spread coverage remain open.",
       "source": [
         "reference"
       ],
@@ -349,7 +349,10 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/aggregate-serialization.md",
+        "runtime/tests/aggregate_serialization.rs"
+      ],
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-16",
@@ -370,7 +373,7 @@
       "layer": "language",
       "surface": "Tuple and unit []",
       "noctiumStatus": "subset",
-      "notes": "Heterogeneous tuples, vector subtyping, destructuring, access, spread and unit returns.",
+      "notes": "Readable literal indexing selects a checked heterogeneous tuple field. The payment example proves a private Bool tuple field and keeps it out of the result. Full destructuring, spread and unit-return equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -405,7 +408,7 @@
       "layer": "language",
       "surface": "Struct",
       "noctiumStatus": "subset",
-      "notes": "Named fields, defaults, construction, access, destructuring, spread and generic structs.",
+      "notes": "Readable projections select named fields on typed decoded records. The checked payment guards and released memo byte preserve field origins. Full defaults, construction, destructuring, spread and generic struct equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -446,7 +449,7 @@
       "layer": "language",
       "surface": "Enum",
       "noctiumStatus": "subset",
-      "notes": "Member creation, comparisons, bounds, casts and defaults.",
+      "notes": "Readable enumTag selects a checked ordinal as Native. The payment case matches Compact member comparison on a fieldless enum. Payload variant access and full member, cast and default equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -5104,7 +5107,7 @@
       "layer": "standard-library",
       "surface": "serialize",
       "noctiumStatus": "subset",
-      "notes": "Direct scalar and fixed-byte source encoding uses explicit length and zero right padding. Focused Bool, UInt, Bytes, Native, and Secp256k1Scalar bytes match Compact 0.36.1. Readable named codecs and scalar helpers share this codec across native and hosted paths. The nested payment frame matches the pinned reference, and the readable source emits identical ZKIR to the earlier helper form. General aggregate projections and full conformance remain open.",
+      "notes": "Direct scalar and fixed-byte source encoding uses explicit length and zero right padding. Focused Bool, UInt, Bytes, Native, and Secp256k1Scalar bytes match Compact 0.36.1. Readable named codecs and scalar helpers share this codec across native and hosted paths. The nested payment frame matches the pinned reference, and the readable source emits identical ZKIR to the earlier helper form. Payload-carrying wire enums and full conformance remain open.",
       "source": [
         "stdlib",
         "serialization",
@@ -5131,7 +5134,7 @@
       "layer": "standard-library",
       "surface": "deserialize",
       "noctiumStatus": "subset",
-      "notes": "Direct scalar and fixed-byte source decoding uses type-sized prefixes. Native, Bool and UInt bounds are checked. Foreign scalar decoding reduces by the target modulus. Readable named codecs decode records, tuples, vectors, bytes and fieldless enums using a fixed frame. The authenticated host and native checker agree on the nested payment case and reject malformed UInt, Bool and enum values. General aggregate projections and full conformance remain open.",
+      "notes": "Direct scalar and fixed-byte source decoding uses type-sized prefixes. Native, Bool and UInt bounds are checked. Foreign scalar decoding reduces by the target modulus. Readable named codecs decode records, tuples, vectors, bytes and fieldless enums using a fixed frame. Readable fixed projections feed private approval predicates and explicitly disclosed output. The authenticated host and native checker agree on the nested payment case and reject malformed UInt, Bool and enum values. Payload-carrying wire enums and full conformance remain open.",
       "source": [
         "stdlib",
         "serialization",

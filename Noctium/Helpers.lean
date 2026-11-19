@@ -602,16 +602,17 @@ private def checkedComposite (program : Program) (span : SourceSpan)
   | .ok compiled => pure compiled
   | .error diagnostic => fail (if diagnostic.span.file.isEmpty then span else diagnostic.span) diagnostic.message
 
-private def projectedType (program : Program) (span : SourceSpan)
+/-- Select a child type using the same checked layout as projection lowering. -/
+def projectedType (composites : Types.CompositeEnv) (span : SourceSpan)
     (parent : Types.CompositeType) (projection : Types.Projection) : Except Diagnostic Types.CompositeType := do
-  discard (checkedComposite program span parent)
+  discard (checkedComposite {composites} span parent)
   match parent, projection with
   | .tuple items, .tupleIndex index =>
     match items[index]? with
     | some type => pure type
     | none => fail span "aggregate tuple projection out of bounds"
   | .structure id, .field name =>
-    match program.composites.structures.find? (·.id == id) with
+    match composites.structures.find? (·.id == id) with
     | none => fail span s!"unknown aggregate struct '{id}'"
     | some declaration =>
       match declaration.fields.find? (·.name == name) with
@@ -622,7 +623,7 @@ private def projectedType (program : Program) (span : SourceSpan)
   | .bytes length, .byteIndex index =>
     if index < length then pure (.scalar (.uint 255)) else fail span "aggregate byte projection out of bounds"
   | .enumeration id, .enumField variant name =>
-    match program.composites.enumerations.find? (·.id == id) with
+    match composites.enumerations.find? (·.id == id) with
     | none => fail span s!"unknown aggregate enum '{id}'"
     | some declaration =>
       match declaration.variants.find? (·.name == variant) with
@@ -1165,7 +1166,7 @@ private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
   | .unit => fail span "unit is not a scalar helper argument"
   | .composite _ => fail span "aggregate helper value is not a scalar"
 
-private def resultTypeOfComposite : Types.CompositeType → ResultType
+def resultTypeOfComposite : Types.CompositeType → ResultType
   | .unit => .unit
   | .scalar type => .scalar type
   | type => .composite type
@@ -1352,7 +1353,7 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
     | .project value projection => do
       let parent ← inferTerm fuel program scope env span value
       let .composite type := parent.ty | fail span "aggregate projection requires a composite value"
-      let selected ← projectedType program span type projection
+      let selected ← projectedType program.composites span type projection
       pure (combine (resultTypeOfComposite selected) [parent])
     | .index value index => do
       let parent ← inferTerm fuel program scope env span value
@@ -2419,7 +2420,7 @@ mutual
       let parent ← lowerTerm program scope env span value
       let .composite parentType := parent.ty
         | liftD (fail span "aggregate projection requires a composite value")
-      let selectedType ← liftD (projectedType program span parentType projection)
+      let selectedType ← liftD (projectedType program.composites span parentType projection)
       let parentLayout := (← liftD (checkedComposite program span parentType)).checked.value
       let childType ← liftD (checkedComposite program span selectedType)
       let (offset, count) ← liftD ((projectionSlice parentLayout projection).mapError fun message => {span, message})
