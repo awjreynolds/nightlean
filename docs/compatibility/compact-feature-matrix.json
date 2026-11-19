@@ -1324,7 +1324,7 @@
       "layer": "language-ledger",
       "surface": "Standard event emission",
       "noctiumStatus": "subset",
-      "notes": "Three of eleven standard layouts: Paused, Unpaused and ShieldedSpend. Public payload and guard disclosure enforced. Native VM checked exact ordered v1 logs and a funded active call finalized on the selected Ledger 9.1.0.1 profile. Remaining event layouts and indexer observation are open.",
+      "notes": "All eleven standard event layouts compile in ledger entrypoint bodies with named, typed fields and payload/guard disclosure enforcement. Versions, tags, widths and bytes match the Compact 0.36.1 reference on the catalog workload. The funded call finalized on the selected Ledger 9.1.0.1 profile. Emission from reusable helper bodies and indexer observation remain open.",
       "source": [
         "reference",
         "events"

@@ -1,25 +1,43 @@
 # Standard public events
 
-Use `emitEvent` inside a ledger entrypoint. The [example](../../examples/StandardEvents.lean) emits `Paused`, optionally follows with `ShieldedSpend`, then emits `Unpaused`.
+Use `emitEvent` with named fields inside a ledger entrypoint. The [example](../../examples/StandardEvents.lean) emits all eleven catalog events in one call and exercises a guarded event in a separate entrypoint.
 
 ```lean
 emitEvent(Paused)
-when active emitEvent(ShieldedSpend, disclose(nullifier))
+when active emitEvent(ShieldedSpend, nullifier := disclose(nullifier))
 emitEvent(Unpaused)
 ```
 
-The current source surface recognizes these three standard layouts. A `ShieldedSpend` payload has exactly 32 bytes. The pause events have empty payloads. Both the payload and the decision to emit are public effects. A private payload or guard requires an explicit `disclose`. Event syntax is limited to entrypoint bodies. Logging a nullifier publishes the value. The example uses a synthetic value and exercises logging itself. [Pinned standard event catalog](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/midnight-events.ss) · [Disclosure policy](disclosure.md)
+Write arguments in any order. The compiler checks field names, duplicates, required fields, and exact types, then encodes them in the catalog order. Payload values and the decision to emit are public. Each private input to either needs an explicit `disclose`. Presence and address flags are public data too. Both slots of an address choice and the value of an absent optional are encoded. Put zero in slots you want left empty. [Pinned standard event catalog](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/midnight-events.ss) · [Disclosure policy](disclosure.md)
 
-Lean emits two Impact groups per event, a push of the version, tag and typed data cells, followed by `Log`. The ZKIR statement binds the ordered public groups and their activity. Rust simulates the ordered plan and returns the decoded native versioned logs in `Execution::logs`. Those values describe local simulation. The finalized client receipt records the accepted transaction and contract state. [Ledger event format](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0002-public-contract-log-emission.md)
+| Event | Named fields in wire order |
+| --- | --- |
+| `ShieldedSpend` | `nullifier` |
+| `ShieldedReceive` | `commitment`, `hasCiphertext`, `ciphertext`, `hasContractAddress`, `contractAddress` |
+| `ShieldedMint` | `commitment`, `domainSep`, `hasAmount`, `amount` |
+| `ShieldedBurn` | `nullifier`, `hasAmount`, `amount` |
+| `UnshieldedSpend`, `UnshieldedReceive` | `isUser`, `userKey`, `contractAddress`, `domainSep`, `tokenType`, `amount` |
+| `UnshieldedMint` | `domainSep`, `tokenType`, `amount` |
+| `UnshieldedBurn` | `isUser`, `userKey`, `contractAddress`, `tokenType`, `amount` |
+| `Paused`, `Unpaused` | Empty |
+| `Misc` | `name`, `payload` |
+
+Flags have type `Bool`. Amounts are `UInt 128` and use 16 little-endian bytes. `ciphertext` takes `Bytes 512`, `payload` takes `Bytes 256`, and the other byte fields take `Bytes 32`.
+
+Lean emits two Impact groups per event. The first pushes the version, tag and encoded bytes as three cells. The second executes `Log`. The ZKIR statement binds the ordered public groups and their activity. The Rust runtime returns the decoded native logs in `Execution::logs` during local simulation. [Ledger event format](https://github.com/midnightntwrk/midnight-improvement-proposals/blob/main/mips/mip-0002-public-contract-log-emission.md)
 
 ## Focused qualification
 
-With the selected Ledger 9.1.0.1 and ZKIR 3.2.1 profile, native key generation reported K8 and 238 rows. The Rust checker accepted both guard values and checked version, order and exact payload bytes. Substituting the public tape from a different private input failed. Lean rejected implicit private payload and private guard disclosure. On the isolated funded genesis, the Rust client verified the deploy and call below. The native VM simulation checked the decoded logs. Indexer observation and the remaining eight event layouts are open.
+On Ledger 9.1.0.1 and ZKIR 3.2.1, native key generation reported K13 and 5,000 rows for the eleven-event call. The pinned Compact 0.36.1 toolchain and its 0.21.0 runtime produced the reference values. Noctium's native checker matched all eleven versions, tags, declared widths and SHA-256 digests of the full-width payloads. The fixtures exercise a 128-bit amount with the high bit set, both address branches, and a wide payload with a trailing zero. Lean rejected an undisclosed private event flag, missing or duplicate fields, and a non-Boolean flag. The separate guarded-event test checks both branches and rejects a substituted public tape.
+
+The first catalog input layout declared the 256-byte memo public. That produced 527 Impact operations, 7,966 rows and a 19,217-byte transaction. The localnet pool returned error 111, `TransactionTooLarge`. The example now selects the memo as a committed argument using nine FAB chunks and explicitly discloses it in the event. This uses 15 Impact operations, produces a 9,918-byte transaction and preserves all eleven payloads. Packing the standard public-byte input path is follow-up optimization work. [Committed call arguments](committed-returns.md#native-call-arguments) · [Node error codes](https://docs.midnight.network/nodes/error-codes) · [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
+
+The funded isolated localnet accepted the catalog deployment and proved call. Indexer delivery and emission from within reusable helper bodies still need qualification.
 
 | Localnet action | Block | Transaction ID |
 | --- | ---: | --- |
-| Deploy | 30681 | `63acc78623f42e8dfff51c0a0d0f7b3f0f03e38770a80288ad2fb9c844b74c7a` |
-| Call, guard active | 30684 | `d5ef04ce1c2e8e846eacb95abdfa37d83707170a676963c0d198fbb3e2390dbb` |
+| Deploy | 30859 | `3ff8bb36d1a37a54b148c26b2b13f813519a756d1cd31bb87a29bdbfc48b1ef2` |
+| Call | 30862 | `37b63e6d8d929e8d90d94777ee71e354551db1344fe90f069dfab4388ea87b73` |
 
 ```sh
 lake build noctium
