@@ -1006,7 +1006,16 @@ fn typed_private_cells_bind_distinct_read_types() {
     )
     .unwrap();
     let attempt = "e".repeat(64);
-    let mut context = source_context(&signatures(&control), &attempt);
+    let witness_signatures = signatures(&control);
+    let receipt_schema = &witness_signatures
+        .iter()
+        .find(|signature| {
+            signature.private_key.as_deref() == Some("noctium/PrivateStateMixed.Wallet/receipt")
+        })
+        .unwrap()
+        .result_type;
+    assert!(receipt_schema.starts_with("Aggregate:"));
+    let mut context = source_context(&witness_signatures, &attempt);
     context
         .capabilities
         .iter_mut()
@@ -1016,9 +1025,7 @@ fn typed_private_cells_bind_distinct_read_types() {
     let pin = hex::encode(Sha256::digest(
         control["binding"].as_str().unwrap().as_bytes(),
     ));
-    let point = |value: EmbeddedGroupAffine| {
-        json!({"kind":"jubjubPoint", "x":field_decimal(value.x().unwrap()), "y":field_decimal(value.y().unwrap())})
-    };
+    let point = |value: EmbeddedGroupAffine| json!({"kind":"jubjubPoint", "x":field_decimal(value.x().unwrap()), "y":field_decimal(value.y().unwrap())});
     let scalar = |value: &str| json!({"kind":"jubjubScalar", "value":value});
     let generator = EmbeddedGroupAffine::generator();
     let recipient = generator * EmbeddedFr::from(7u64);
@@ -1045,6 +1052,15 @@ fn typed_private_cells_bind_distinct_read_types() {
             "JubjubPoint",
             point(recipient),
             json!({"kind":"jubjubPoint", "x":"0", "y":"0"}),
+        ),
+        (
+            "receipt",
+            receipt_schema.as_str(),
+            json!({"kind":"struct", "id":"MeterReceipt", "fields":[
+                {"name":"amount", "value":{"kind":"uint","maximum":"255","value":"2"}},
+                {"name":"okay", "value":{"kind":"bool","value":true}}
+            ]}),
+            json!({"kind":"struct", "id":"MeterReceipt", "fields":[]}),
         ),
     ] {
         let pending = session.advance().unwrap();
@@ -1100,6 +1116,7 @@ fn typed_private_cells_bind_distinct_read_types() {
     )
     .unwrap();
     check(&execution, &circuit).unwrap();
+    assert_eq!(execution.returns_json()["accepted"], true);
     assert_eq!(
         execution.preimage.private_transcript,
         [
@@ -1109,12 +1126,17 @@ fn typed_private_cells_bind_distinct_read_types() {
             Fr::from(7u64),
             recipient.x().unwrap(),
             recipient.y().unwrap(),
+            Fr::from(2u64),
+            Fr::from(1u64),
         ]
     );
     execution.preimage.private_transcript[2] = Fr::from(0u64);
     assert!(check(&execution, &circuit).is_err());
     execution.preimage.private_transcript[2] = Fr::from(1u64);
     execution.preimage.private_transcript[3] = Fr::from(8u64);
+    assert!(check(&execution, &circuit).is_err());
+    execution.preimage.private_transcript[3] = Fr::from(7u64);
+    execution.preimage.private_transcript[6] = Fr::from(3u64);
     assert!(check(&execution, &circuit).is_err());
 }
 

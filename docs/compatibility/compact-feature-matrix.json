@@ -1164,7 +1164,7 @@
       "layer": "private-runtime",
       "surface": "Private-state initialization and evolution",
       "noctiumStatus": "subset",
-      "notes": "Source scalar private stages and transactional native journals are qualified subsets. One readable circuit uses UInt8, Bool, JubjubScalar and JubjubPoint cells under the same private-state capability. The focused test verifies request types, rejects malformed replies, checks staged values, and exercises native rejection of an altered flag or inconsistent scalar and point. Storage truth and persistence remain host assumptions.",
+      "notes": "Source scalar stages and transactional native journals are qualified subsets. A readable circuit reads a nominal record beside UInt8, Bool, JubjubScalar and JubjubPoint cells under the same capability. The focused host/native test verifies request and record schemas, rejects malformed replies, checks staged scalar values, and rejects an altered record or inconsistent key pair. The compiler rejects implicit disclosure of a record field. Whole-composite staging, storage truth and persistence remain separate.",
       "source": [
         "reference"
       ],

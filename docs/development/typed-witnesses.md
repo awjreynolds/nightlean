@@ -25,11 +25,13 @@ and `resultSchema` set to `"SourceCellType"`. Use the authenticated witness
 plan to register each read's name, capability and exact key. Each request
 reports its declared type, such as `Bool` or `UIntRange<256>`, and the runtime
 validates the response against it. A host that supplies a concrete result
-schema still restricts reads to that type. The mixed-cell example reads a counter,
-a flag and a Jubjub key pair, checks the scalar-to-point relation in the circuit,
-and stages a replacement pair. The Rust host rejects noncanonical scalars and
-off-curve points. The native checker rejects a scalar inconsistent with the
-stored point. The fixture sizes at K12 with 2,184 rows.
+schema still restricts reads to that type. Declare a record cell with
+`cell receipt : Payload receiptWire`. The reading circuit lists the same codec
+in `using`. It receives a typed record from the host, projects checked fields,
+and requires explicit disclosure at public sinks. The mixed-cell fixture reads
+the record beside a counter, a flag and a Jubjub key pair. The native checker
+rejects an altered receipt or inconsistent scalar and point. The revised fixture
+sizes at K12 with 2,236 rows. Whole-record staging remains open.
 [Mixed-cell example](../../tests/PrivateStateMixed.lean)
 
 Declarations describe access requests. The host still grants storage permissions.

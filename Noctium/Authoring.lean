@@ -10,10 +10,10 @@ open Noctium.Helpers
 
 structure PrivateStateField where
   name : String
-  ty : Ty
   key : String
   capability : String
   signature : WitnessSignature
+  codec : Option Name := none
   deriving Repr
 
 structure PrivateStateSchema where
@@ -86,8 +86,12 @@ open Noctium.Helpers
 open Noctium.Authoring
 open scoped Noctium
 
+declare_syntax_cat noctium_witness_input_type
+scoped syntax nltype : noctium_witness_input_type
+scoped syntax "Payload" ident : noctium_witness_input_type
+
 declare_syntax_cat noctium_private_field
-scoped syntax "cell" ident ":" nltype : noctium_private_field
+scoped syntax "cell" ident ":" noctium_witness_input_type : noctium_private_field
 scoped syntax (name := noctiumPrivateStateCommand) "noctium_private_state" ident
   "where" noctium_private_field* "end" : command
 
@@ -107,9 +111,6 @@ scoped syntax "elementAt(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "enumTag(" nlexpr ")" : nlexpr
 
 declare_syntax_cat noctium_witness_statement
-declare_syntax_cat noctium_witness_input_type
-scoped syntax nltype : noctium_witness_input_type
-scoped syntax "Payload" ident : noctium_witness_input_type
 scoped syntax "public" ident ":" noctium_witness_input_type : noctium_witness_statement
 scoped syntax "private" ident ":" noctium_witness_input_type : noctium_witness_statement
 scoped syntax "let" ident (":" nltype)? ":=" nlexpr : noctium_witness_statement
@@ -324,10 +325,12 @@ private def quoteSignature (signature : WitnessSignature) : CommandElabM (TSynta
     span := $span : Noctium.Helpers.WitnessSignature }))
 
 private def quoteField (field : PrivateStateField) : CommandElabM (TSyntax `term) := do
-  let ty ← tyTerm field.ty
   let signature ← quoteSignature field.signature
-  `(Noctium.Authoring.PrivateStateField.mk $(stringTerm field.name) $ty
-    $(stringTerm field.key) $(stringTerm field.capability) $signature)
+  let codec ← match field.codec with
+    | none => `(none)
+    | some name => `(some $(quote name))
+  `(Noctium.Authoring.PrivateStateField.mk $(stringTerm field.name)
+    $(stringTerm field.key) $(stringTerm field.capability) $signature $codec)
 
 private partial def renderType : TSyntax `nltype → String
   | `(nltype| Native) => "Native"
@@ -1354,8 +1357,16 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
     let mut fieldValues : List PrivateStateField := []
     for fieldStx in fields do
       match fieldStx with
-      | `(noctium_private_field| cell $field:ident : $type:nltype) => do
-        let ty ← readScalarTy type
+      | `(noctium_private_field| cell $field:ident : $type:noctium_witness_input_type) => do
+        let (result, codec) ← match type with
+          | `(noctium_witness_input_type| $scalar:nltype) => do
+            pure (ResultType.scalar (← readScalarTy scalar), none)
+          | `(noctium_witness_input_type| Payload $name:ident) => do
+            let constant ← liftCoreM <| resolveGlobalConstNoOverload name
+            let codec ← evalConstCheck Helpers.Wire.Codec ``Helpers.Wire.Codec constant
+            let result := if codec.payload == .unit then .unit else .composite codec.payload
+            pure (result, some constant)
+          | _ => throwErrorAt type "unsupported private-state cell type"
         let key := "noctium/" ++ schemaName ++ "/" ++ field.getId.toString
         let capability := "private_state:" ++ schemaName
         let signatureName := "private_state.read." ++ schemaName ++ "." ++ field.getId.toString ++ ".v1"
@@ -1368,10 +1379,10 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
             operation := operation,
             capability := capability,
             privateKey := some key,
-            result := .scalar ty,
+            result,
             span := fieldSpan }
         fieldValues := fieldValues ++ [PrivateStateField.mk
-          field.getId.toString ty key capability signature]
+          field.getId.toString key capability signature codec]
       | _ => throwErrorAt fieldStx "unsupported private-state field"
     let fields := fieldValues
     if !uniqueStrings (fields.map (·.name)) then throwErrorAt name "duplicate private-state field"
@@ -1436,9 +1447,6 @@ private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TS
     explicitReleases := (metadata.explicitReleases ++ disclosedValues stx).eraseDups,
     authoredProves := (metadata.authoredProves ++ inlineAssertions stx).eraseDups,
     generatedValidity := (metadata.generatedValidity ++ generated).eraseDups }
-
-private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
-  field.signature
 
 @[command_elab noctiumAuthoredWitnessCircuitCommand] unsafe def elabAuthoredWitnessCircuit : CommandElab := fun stx => do
   match stx with
@@ -1520,13 +1528,17 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
         let site := s!"{programNameText}.read.{ordinal}"
         validIdentity statement site
-        let signature := makeReadSignature field
+        if let some codec := field.codec then
+          unless codecTerms.any (·.raw.getId == codec) do
+            throwErrorAt fieldPath s!"add codec '{privateToUserName codec}' to the circuit's using clause"
+        let signature := field.signature
         witnesses := uniqueWitnesses (witnesses ++ [signature])
         let readTerm := Noctium.Helpers.Term.witnessCall site signature.name []
-        body := body ++ [.bind valueName (.scalar field.ty) (.at (← spanValue statement) readTerm)]
-        env := (valueName, .scalar field.ty, .ref valueName) :: env
-        logicalAliasBindings := logicalAliasBindings ++ [
-          {name := valueName, ty := field.ty, source := .call site}]
+        body := body ++ [.bind valueName signature.result (.at (← spanValue statement) readTerm)]
+        env := (valueName, signature.result, .ref valueName) :: env
+        if let .scalar ty := signature.result then
+          logicalAliasBindings := logicalAliasBindings ++ [
+            {name := valueName, ty, source := .call site}]
         privateReads := (privateReads ++ [field.key]).eraseDups
         generatedValidity := (generatedValidity ++ [s!"typed private-state read reply: {field.key}"]).eraseDups
       | `(noctium_witness_statement| witness $function:ident($args:nlexpr,*)) => do
@@ -1582,10 +1594,12 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         let sourceField ← privateStateSchema schemaName fieldPath
         let some field := sourceField.fields.find? (·.name == fieldName)
           | throwErrorAt fieldPath "schema '{sourceField.name}' has no field '{fieldName}'"
+        let .scalar ty := field.signature.result
+          | throwErrorAt fieldPath "private staging currently requires a scalar cell"
         let sourceExpr := value
         let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
-        let value ← coerce sourceExpr lowered field.ty
-        body := body ++ value.before ++ [.stage field.capability field.key field.ty (.at (← spanValue statement) value.term)]
+        let value ← coerce sourceExpr lowered ty
+        body := body ++ value.before ++ [.stage field.capability field.key ty (.at (← spanValue statement) value.term)]
         witnesses := uniqueWitnesses (witnesses ++ value.signatures)
         witnessNames := (witnessNames ++ value.witnessNames).eraseDups
         privateStages := (privateStages ++ [field.key]).eraseDups
@@ -1626,7 +1640,11 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       match item.value.type with
       | .composite _ => _root_.Bool.true
       | _ => _root_.Bool.false
-    let useOutputViews := hasAggregate || (grouped && !aggregateInputs.isEmpty)
+    let hasAggregateRead := witnesses.any fun signature =>
+      signature.privateKey.isSome && match signature.result with
+      | .composite _ => _root_.Bool.true
+      | _ => _root_.Bool.false
+    let useOutputViews := hasAggregate || (grouped && (!aggregateInputs.isEmpty || hasAggregateRead))
     let compositeFields : List Types.Field := authoredOutputs.map fun item =>
       {name := item.name, type := item.layoutType, span := item.span}
     let declarationSpan ← spanValue stx
