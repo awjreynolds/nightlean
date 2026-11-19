@@ -1,0 +1,74 @@
+{
+  "blockHash": "d14e74e21150f3358542a378f93cffe2b01e40619d8bd6fdfb64418ead377a1a",
+  "callee": {
+    "address": "2e95970afca30e0b256fdd357266fc612bc1f7242f727699bb6aa45c976259b9",
+    "artifactSha256": {
+      "circuit": "60b1f448ad806bbeae706618acc943d5d5c8c208a9578217be527867823ef977",
+      "plan": "aa17a5cf71a06f54a6c0164b795601186b8cf693e1b4ff50c38afa3fae5f6de7",
+      "source": "e1b8a43ac92d0e869a26f5836a350a7440b7ff6c31672b37453d27df87025d35",
+      "verifierKey": "de10e307fdca29760d8235c8646f0589783c01d02b134a95f0197731651ed365"
+    },
+    "balance": "13",
+    "count": "1",
+    "k": 7,
+    "manifestSha256": "871f33ef15db3a22986eaf78af9fd147244d8ab12f2b4b6340386c20ca799437",
+    "parametersSha256": "e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d",
+    "rows": 101,
+    "stateSha256": "279cd5f059457b2586613d8f80ec71bf44e27385e03165c8726c81fde5440bee"
+  },
+  "caller": {
+    "address": "6ebfb4bd03a7335494b7086b1c739307a5473619fd1d2260e3c30ad87e559de9",
+    "artifactSha256": {
+      "circuit": "a34ca6dfd66edf227ca6fa47e693c0f7211c5ffa95d1e7d4e07176857b1b5e2a",
+      "plan": "449add20ec83c81628404e07f29cc1f7367387bc46f92eef581b2edb139bbe1d",
+      "source": "e1b8a43ac92d0e869a26f5836a350a7440b7ff6c31672b37453d27df87025d35",
+      "verifierKey": "92431428b668f256d648dbd8547dc6bc5ece18055661af8a792d453738aba25d"
+    },
+    "k": 9,
+    "manifestSha256": "e7d90037b05772ae7aaad13553a77fb2d7c2f94633fb76573b16e55dc250ee7e",
+    "parametersSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+    "rows": 259,
+    "stateSha256": "e61dfc1e550c4be2034df405567f67f0feaa7a72344e21e4c2a25275de342e2e"
+  },
+  "compilerRevision": "71b87c4b9dd1179acc115978d19b1600130184ec",
+  "deployments": [
+    {
+      "address": "6ebfb4bd03a7335494b7086b1c739307a5473619fd1d2260e3c30ad87e559de9",
+      "blockHash": "a8a109d38b7c865e1f2051122e74170c8a96b49882e0562d9aaeb6750a53515e",
+      "height": 30550,
+      "transactionId": "4f3c4a7d695f99ba09714747c8b9cef0ee6f584515e7c6db9fa8f47d0e6f73f7"
+    },
+    {
+      "address": "2e95970afca30e0b256fdd357266fc612bc1f7242f727699bb6aa45c976259b9",
+      "blockHash": "a607cd319663db5fe1193627f8b52f435caca34594bdde6265521eac46d012b3",
+      "height": 30553,
+      "transactionId": "6c874bdf11fa2af9c7c774288cc28286b6d33dd64c90c6074b7ee608aa5bbc09"
+    }
+  ],
+  "extrinsicHash": "3a953483268312de396a22f7acf178fa39f992a4636239ebeb49a60a82ba7049",
+  "extrinsicIndex": 4,
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "height": 30556,
+  "independentProvers": true,
+  "intentId": "c7e20eea4ca68fb01ab7f446a4d915a805762da6ed8b009d2c72d1fdfcfb520c",
+  "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "publicExchange": {
+    "alteredDraftRejected": true,
+    "differentCommitmentRejected": true,
+    "draftBytes": 1840,
+    "offerBytes": [
+      945,
+      742
+    ],
+    "proofBytes": [
+      3852,
+      3852
+    ],
+    "proverProcesses": 2,
+    "wrongOwnerSlotRejected": true
+  },
+  "schemaVersion": 1,
+  "transactionId": "aab98dd7c7181b665de579879067e0c85dc7cc92873b39b72a79dc57637516b2",
+  "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
+}

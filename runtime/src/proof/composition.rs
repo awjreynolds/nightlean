@@ -7,11 +7,13 @@ use super::{
 use crate::{
     Db,
     assembly::{CheckedNativeCall, CompositionOffer, partition_composition},
+    composition_wire::{self, MAX_DRAFT_BYTES, MAX_DRAFT_CALLS, PublicContext, PublicDraft},
 };
 use base_crypto::time::Timestamp;
 use futures::Future;
 use ledger::structure::{Intent, LedgerState, Signature, StandardTransaction};
 use rand::{CryptoRng, Rng, SeedableRng, rngs::StdRng};
+use sha2::{Digest, Sha256};
 use std::{cell::RefCell, collections::BTreeSet};
 use storage::arena::Sp;
 use transient_crypto::{
@@ -215,6 +217,7 @@ pub struct CompositionDraft {
     calls: Vec<ContractCall<(), Db>>,
     binding: Pedersen,
     ttl: u64,
+    network_id: String,
 }
 
 impl CompositionDraft {
@@ -265,7 +268,65 @@ impl CompositionDraft {
             calls,
             binding,
             ttl,
+            network_id: snapshot.network_id.clone(),
         })
+    }
+
+    fn calls_sha256(&self) -> Result<[u8; 32]> {
+        let bytes =
+            composition_wire::encode(&self.calls, MAX_DRAFT_BYTES).map_err(|_| Error::Limit)?;
+        Ok(Sha256::digest(bytes).into())
+    }
+
+    /// Encode the full ordered public draft, including a digest of its partitioned calls.
+    pub fn public_bytes(&self) -> Result<Vec<u8>> {
+        if self.offers.len() > MAX_DRAFT_CALLS {
+            return Err(Error::Limit);
+        }
+        let mut budget = MAX_DRAFT_BYTES;
+        let mut offers = Vec::with_capacity(self.offers.len());
+        for offer in &self.offers {
+            let bytes = offer.public_bytes().map_err(|_| Error::Limit)?;
+            budget = budget.checked_sub(bytes.len()).ok_or(Error::Limit)?;
+            offers.push(bytes);
+        }
+        composition_wire::encode(
+            &PublicDraft {
+                profile: crate::profile::NAME.into(),
+                network_id: self.network_id.clone(),
+                ttl: self.ttl,
+                binding: self.binding,
+                offers,
+                calls_sha256: self.calls_sha256()?,
+            },
+            MAX_DRAFT_BYTES,
+        )
+        .map_err(|_| Error::Limit)
+    }
+
+    /// Import a public draft from the host's authenticated channel and rebuild its
+    /// exact partitioned calls against the host's trusted snapshot.
+    pub fn from_public_bytes(bytes: &[u8], snapshot: &LedgerState<Db>) -> Result<Self> {
+        let wire: PublicDraft =
+            composition_wire::decode(bytes, MAX_DRAFT_BYTES).map_err(|_| Error::InvalidIntent)?;
+        if wire.profile != crate::profile::NAME || wire.network_id != snapshot.network_id {
+            return Err(Error::BindingMismatch);
+        }
+        if wire.offers.len() > MAX_DRAFT_CALLS {
+            return Err(Error::Limit);
+        }
+        let offers = wire
+            .offers
+            .iter()
+            .map(|bytes| {
+                CompositionOffer::from_public_bytes(bytes).map_err(|_| Error::InvalidIntent)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let draft = Self::from_offers(&offers, snapshot, wire.binding, wire.ttl)?;
+        if draft.calls_sha256()? != wire.calls_sha256 {
+            return Err(Error::BindingMismatch);
+        }
+        Ok(draft)
     }
 
     pub fn calls(&self) -> &[ContractCall<(), Db>] {
@@ -302,10 +363,8 @@ impl CompositionDraft {
             || actual.program != before.program
             || actual.context.address != before.context.address
             || actual.context.state != before.context.state
-            || serde_json::to_value(&actual.context.call_context)
-                .map_err(|_| Error::InvalidIntent)?
-                != serde_json::to_value(&before.context.call_context)
-                    .map_err(|_| Error::InvalidIntent)?
+            || PublicContext::from(&actual.context.call_context)
+                != PublicContext::from(&before.context.call_context)
         {
             return Err(Error::BindingMismatch);
         }

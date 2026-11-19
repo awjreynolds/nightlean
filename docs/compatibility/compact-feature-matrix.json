@@ -1301,15 +1301,17 @@
       "observedEvidence": [
         "docs/development/native-composition-receipt.json",
         "docs/development/native-caller-receipt.json",
-        "docs/development/independent-composition-receipt.json"
+        "docs/development/independent-composition-receipt.json",
+        "docs/development/composition-transport-receipt.json"
       ],
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-19",
-        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. The supplied Rust path qualifies a caller and callee, registry routing and checked parent addresses. Separate Rust owners now prove their calls against the shared public draft. Cross-process offer exchange, foreign SDK bindings and complete equivalence remain open.",
+        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. The Rust path qualifies a caller and callee, registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Foreign SDK bindings, durable recovery and complete equivalence remain open.",
         "evidence": [
           "Noctium/Backend/Impact.lean",
           "runtime/src/proof/composition.rs",
+          "runtime/src/composition_wire.rs",
           "runtime/tests/native_composition.rs",
           "tests/IndependentComposition.lean",
           "docs/development/native-call-claims.md"

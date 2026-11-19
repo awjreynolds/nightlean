@@ -125,7 +125,7 @@ The [source proof-audit foundation](../development/proof-registration.md) provid
 
 [The first funded native composed transaction](../development/native-composition-receipt.json) finalized at block 27627. The native Rust adapter verified both call events in the exact extrinsic and matched each finalized contract state against the strict ledger prediction. This qualifies a caller and one leaf callee through the Rust client. Private-journal and foreign-language composition remain open.
 
-The [separate-owner composition path](../development/native-call-claims.md#prove-calls-with-separate-witness-owners) finalizes one caller and callee after each Rust owner independently proves its call against the same public draft. The coordinator takes only public offers and proof bytes. Cross-process transport, private-journal recovery and foreign SDK bindings remain open.
+The [separate-owner composition path](../development/native-call-claims.md#prove-calls-with-separate-witness-owners) finalizes one caller and callee after two Rust processes independently prove their calls against the same public draft. The coordinator exchanges canonical public offers and detached proofs. Private-journal recovery and foreign SDK bindings remain open.
 
 [Generated Rust witness modules](../development/typed-witnesses.md#generate-a-rust-witness-module) are available on request for ledger entrypoints. The private-state counter exercised the generated inputs and provider replies through an authenticated bundle and native K7 proof preparation. The generated Rust layer relies on the same witness scheduler and capability checks as the shared SDK.
 

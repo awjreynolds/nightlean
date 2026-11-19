@@ -199,28 +199,43 @@ stay with the owner. The caller in the example needs the callee's commitment
 to claim the call. The example publishes the balance change, which reveals the
 amount. Each credential preimage stays local. [Lean fixture](../../tests/IndependentComposition.lean)
 
-The coordinator calls `IndependentComposition::freeze` with the ordered
-offers, trusted snapshot, expiry and fresh entropy. The SDK partitions and
-sequences the calls using the pinned ledger and retains the Pedersen opening
-with the coordinator. Owners review the public calls, binding commitment and
-expiry. Each independently rebuilds the `CompositionDraft` and calls
-`prove_call` for its own slot. It checks the local execution against that
-offer and authenticates the installed verifier against the selected bundle.
-The coordinator receives detached proof bytes and `attach` verifies each
-against its exact slot before building the native intent.
+Each owner sends `CompositionOffer::public_bytes()` through the application's
+authenticated channel. The coordinator decodes the offers, then calls
+`IndependentComposition::freeze` with their agreed order, a trusted snapshot,
+expiry and fresh entropy. The SDK partitions and sequences the calls and
+retains the Pedersen opening with the coordinator.
+
+The coordinator sends `CompositionDraft::public_bytes()` to both owners. Each
+decodes the draft against its trusted snapshot, rebuilds the partitioned calls,
+and checks their digest before approving the call order, binding commitment and
+expiry. `prove_call` matches the owner's local execution to its offer and checks
+the installed verifier against the authenticated bundle. The coordinator takes
+the detached proof bytes and `attach` verifies each proof for its frozen slot.
 
 Ledger proofs bind their individual call statements to the shared Pedersen
 commitment. Whole-draft agreement, including expiry and order, belongs to
 the host and this SDK workflow. The coordinator and peers see the offered
-public execution details. The qualification uses separate Rust owner values
-in one process. Public offer transport across separate processes and foreign
-SDK bindings remain open.
+public execution details. The versioned native encoding has a 4 MiB limit per
+offer, a 16 MiB total draft limit and a maximum of 64 calls per draft. Imports
+check the profile, canonical encoding, entrypoint and transcript bounds. The
+draft also checks the network ID and that the rebuilt public calls match its
+digest. Hosts supply authentication, expiry policy and the trusted ledger
+snapshot. Foreign SDK bindings and durable recovery remain open.
 
 The K9 caller and K7 callee finalized together at block 30432. The node
 confirmed both call events in the same extrinsic and the exact resulting
 states. The callee balance moved from 10 to 13. The SDK rejected a missing
 callee, an owner proving the wrong slot, and both proofs replayed under
-a different intent commitment. [Separate-owner receipt](independent-composition-receipt.json)
+a different intent commitment. This first qualification used two owner values
+in one process. [Separate-owner receipt](independent-composition-receipt.json)
+
+The next run used two Rust processes. Each generated its credential preimage
+and communication opening locally, fetched its own finalized contract state
+and verified the installed key. The coordinator exchanged a 1,840-byte public
+draft and accepted two 3,852-byte proofs. Both calls finalized in one extrinsic
+at block 30556, with the callee balance at 13 and count at 1. The checks rejected
+an altered draft digest, a wrong owner slot and replay under a different intent
+commitment. [Cross-process receipt](composition-transport-receipt.json)
 
 To run the funded case, compile and bundle `IndependentCaller.claim` at K9 and
 `IndependentCallee.advance` at K7 from the fixture. Name the public bundles
@@ -231,7 +246,7 @@ development chain.
 ```sh
 cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
   --no-default-features --features zkir-321,localnet --test native_composition \
-  independent_owners_prove_separate_calls_on_localnet -- --ignored --nocapture
+  independent_processes_compose_on_localnet -- --ignored --nocapture
 ```
 
 ## Fund and observe on localnet

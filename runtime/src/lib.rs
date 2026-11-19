@@ -4163,6 +4163,7 @@ pub use artifacts::ContractBundleSet;
 
 /// Native private transaction artifact assembly.
 pub mod assembly;
+mod composition_wire;
 
 /// Scoped host providers and private journal transport.
 pub mod host;
