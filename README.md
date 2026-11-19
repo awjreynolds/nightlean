@@ -17,9 +17,9 @@ Lean 4 contracts and proofs for Midnight. Noctium compiles directly to native ZK
 
 ## ZKIR v3 and witness targets
 
-Noctium registers all 40 active ZKIR 3.2.1 opcodes and uses 15 native type families through scoped source and lowering paths. Compact 0.36.1 has direct lowering paths for 31 of those 40 opcodes. [The nine differences and full inventory](docs/compatibility/comparison.md#full-pinned-zkir-v3-instruction-inventory)
+Noctium registers 40 active ZKIR 3.2.1 opcodes and uses 15 native type families through scoped source and lowering paths. [Native inventory and Compact backend audit](docs/compatibility/comparison.md#full-pinned-zkir-v3-instruction-inventory)
 
-| Witness host | Noctium | Compact compiler |
+| Witness host | Noctium execution path | Compact compiler output |
 | --- | --- | --- |
 | Rust | ✓ Native | n/a |
 | C / C++ | ✓ Native ABI | n/a |
@@ -27,11 +27,11 @@ Noctium registers all 40 active ZKIR 3.2.1 opcodes and uses 15 native type famil
 | Swift / Apple | ✓ Native, macOS and iOS simulator tested | n/a |
 | TypeScript / web | ✓ WASM, Chrome tested | ✓ Generated JavaScript and TypeScript declarations |
 
-The checkmarks cover specific documented workloads. [SDK evidence and scope](docs/compatibility/comparison.md#witness-execution-targets)
+Noctium's checkmarks cover specific runtime workloads. The Compact column covers generated interfaces for each host. [SDK evidence and scope](docs/compatibility/comparison.md#witness-execution-targets)
 
 ## OpenZeppelin benchmark
 
-The Noctium confidential-token build took a median of 4.45 s. Compact 0.36.1 took 0.274 s on the same M3 Max. The builds emit different outputs and both timings exclude key generation and proving. The Noctium run generated zero SDK bindings. Across 15 paired circuits, Noctium reached a lower K on three, matched 11, and reached a higher K on one. [Full measurements and artifact inventory](docs/development/oz-compile-performance.md)
+The alternating source builds on an M3 Max had medians of 4.65 s for Noctium and 0.274 s for Compact 0.36.1. The ports emit different outputs. The Noctium run generated zero SDK bindings. Both builds excluded key generation and proving. Across 15 entrypoints paired by name, Noctium's K was lower on three, equal on 11, and higher on `totalSupply` (K7 against K6). Noctium's row count was higher on eight of the 15. [Full measurements and artifact inventory](docs/development/oz-compile-performance.md)
 
 [![Noctium and Compact compilation times and per-entrypoint K and row counts for the OpenZeppelin confidential token](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
 

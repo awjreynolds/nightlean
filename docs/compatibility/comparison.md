@@ -16,9 +16,9 @@ This comparison uses Compact 0.36.1, language 0.28, and the selected Noctium tar
 
 ## Witness execution targets
 
-✓ marks a documented execution path. The Compact column covers the pinned compiler's generated contract and witness interfaces. The Noctium column names the qualification for each host.
+✓ marks a documented execution path. The Compact column covers generated interfaces. An n/a entry refers to a compiler output target. The Noctium column names the qualification for each host.
 
-| Host | Noctium | Compact 0.36.1 |
+| Host | Noctium execution path | Compact 0.36.1 compiler output |
 | --- | --- | --- |
 | Rust | ✓ Native witness runtime and localnet proof/client path. Optional per-contract Rust wrappers. [Rust witness guide](../development/typed-witnesses.md) | n/a |
 | C / C++ | ✓ C ABI. C++ witness execution and finalized development calls. [Qualification](../development/typed-witness-qualification.md) | n/a |
@@ -30,25 +30,29 @@ Noctium's host-neutral witness plan serves these runtimes. The OpenZeppelin timi
 
 ## Full pinned ZKIR v3 instruction inventory
 
-Noctium registers all 40 active opcode names through scoped source routes. The pinned Compact 0.36.1 lowering pass constructs **31 of those 40** and writes ZKIR 3.1. Its JSON printer recognizes 33 active names. This is a comparison of compiler lowering paths by opcode name. [Compact lowering pass](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/reduce-to-zkir.ss) · [Compact JSON printer](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/print-zkir-v3.ss) · [Pinned ZKIR inventory and scope](zkir-feature-matrix.json)
+The pinned ZKIR 3.2.1 inventory contains 40 active instruction names. Noctium registers these names through scoped source routes. Each instruction has separate type, semantics and execution requirements. [Pinned ZKIR inventory and scope](zkir-feature-matrix.json)
 
-| Instruction group | Noctium source lowering | Compact 0.36.1 lowering |
-| --- | --- | --- |
-| Scalar arithmetic and comparison | `add`, `mul`, `neg`, `inv`, `test_eq`, `less_than` | `add`, `mul`, `neg`, `inv`, `test_eq`, `less_than` |
-| Logic and selection | `not`, `and`, `or`, `xor`, `cond_select` | `cond_select` |
-| Constraints | `assert`, `constrain_bits`, `constrain_eq`, `constrain_to_boolean` | `assert`, `constrain_bits`, `constrain_eq`, `constrain_to_boolean` |
-| Inputs, outputs and ledger binding | `public_input`, `private_input`, `impact`, `output`, `copy`, `load_constant` | `public_input`, `private_input`, `impact`, `output`, `copy` |
-| Bytes and encoding | `encode`, `to_bytes`, `from_bytes`, `bytes_from_natives`, `bytes_into_natives`, `nth`, `reverse`, `slice`, `concat` | `encode`, `to_bytes`, `from_bytes`, `bytes_from_natives`, `bytes_into_natives` |
-| Hashes | `transient_hash`, `persistent_hash`, `sha512`, `keccak256`, `hash_to_curve` | `transient_hash`, `persistent_hash`, `sha512`, `keccak256`, `hash_to_curve` |
-| Curve operations | `jubjub_scalar_from_native`, `ec_mul_generator`, `ec_mul`, `from_coordinates`, `into_coordinates` | `jubjub_scalar_from_native`, `ec_mul_generator`, `ec_mul`, `from_coordinates`, `into_coordinates` |
-
-**Nine Noctium opcodes lack a direct Compact lowering path.** Compact's printer covers `not` and `slice`. Its lowering pass constructs neither. Compact's printer omits `and`, `or`, `xor`, `concat`, `nth`, `reverse` and `load_constant`. Compact supports Boolean negation in source. A compiled ledger toggle uses `cond_select` for it. [Compact printer note on `not`](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/print-zkir-v3.ss#L144-L151)
-
-The OpenZeppelin build exercised 20 Compact opcode names across its 15 retained relations. Each relation's bytes matched its recorded SHA-256. [Benchmark hashes](../development/oz-compile-performance.json)
+| Instruction group | Active ZKIR instruction names |
+| --- | --- |
+| Scalar arithmetic and comparison | `add`, `mul`, `neg`, `inv`, `test_eq`, `less_than` |
+| Logic and selection | `not`, `and`, `or`, `xor`, `cond_select` |
+| Constraints | `assert`, `constrain_bits`, `constrain_eq`, `constrain_to_boolean` |
+| Inputs, outputs and ledger binding | `public_input`, `private_input`, `impact`, `output`, `copy`, `load_constant` |
+| Bytes and encoding | `encode`, `to_bytes`, `from_bytes`, `bytes_from_natives`, `bytes_into_natives`, `nth`, `reverse`, `slice`, `concat` |
+| Hashes | `transient_hash`, `persistent_hash`, `sha512`, `keccak256`, `hash_to_curve` |
+| Curve operations | `jubjub_scalar_from_native`, `ec_mul_generator`, `ec_mul`, `from_coordinates`, `into_coordinates` |
 
 The upstream inventory also records seven deprecated instructions. Noctium targets the active instruction set for new contracts.
 
 `into_bytes32`, `from_bytes32`, `reverse_bytes`, `bytes32_into_low_high`, `bytes32_from_low_high`, `div_mod_power_of_two`, `reconstitute_field`
+
+### Compact backend source audit
+
+The pinned Compact 0.36.1 lowering pass contains constructors for 31 of the 40 active names and writes ZKIR 3.1. This count describes the selected backend source. Equivalent operations often lower to different instruction sequences. For example, a Compact ledger toggle compiles Boolean negation into `cond_select`. [Compact lowering pass](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/reduce-to-zkir.ss) · [Compact JSON printer](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/zkir-v3-passes/print-zkir-v3.ss)
+
+The printer recognizes `not` and `slice` without a constructor in the lowering pass. The printer omits `and`, `or`, `xor`, `concat`, `nth`, `reverse` and `load_constant`. These findings describe direct opcode emission. Source-level equivalence needs contracts that exercise the same behavior on both compilers.
+
+The OpenZeppelin ports are one workload. The benchmark pairs entrypoints by name and reports timings and circuit size. The ports use different interfaces and state paths. [OpenZeppelin benchmark and limitations](../development/oz-compile-performance.md)
 
 ## Full pinned ZKIR v3 type inventory
 

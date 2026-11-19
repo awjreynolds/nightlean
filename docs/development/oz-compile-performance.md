@@ -1,6 +1,6 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The chart compares a median source build of **4.45 s** for Noctium and **0.274 s** for Compact 0.36.1. Noctium uses range deduplication and generates zero SDK bindings. Compact runs with `--skip-zk`. Both timings exclude key generation and proving. Of the 15 paired circuits, Noctium reaches a lower K on three, matches 11, and reaches a higher K on one.
+The chart uses alternating baseline runs with medians of **4.65 s** for Noctium and **0.274 s** for Compact 0.36.1. The builds use different contract interfaces, state paths and artifact sets. Noctium enables range deduplication and generates zero SDK bindings. Compact runs with `--skip-zk`. Both timings exclude key generation and proving. Of the 15 pairs by entrypoint name, Noctium's K is lower on three, equal on 11, and higher on `totalSupply`, at K7 against K6. Eight pairs have higher row counts with Noctium.
 
 ![Noctium and Compact compilation time and per-entrypoint circuit K and rows](../assets/noctium-performance.png)
 
