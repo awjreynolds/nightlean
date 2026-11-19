@@ -392,10 +392,153 @@ fn canonical_byte_length(text: &str) -> Result<usize> {
     Ok(length)
 }
 
+fn scalar_wire_operation(
+    encode: bool,
+    encoded: &str,
+    count: usize,
+) -> Result<(Vec<ScalarType>, ScalarType, crate::Expr)> {
+    use crate::Expr;
+    use ScalarType::*;
+    let (token, length) = encoded
+        .split_once(':')
+        .ok_or_else(|| anyhow!("wire codec requires a type and byte length"))?;
+    ensure!(count == 1, "wire codec requires one argument");
+    let ty = ScalarType::parse(token)?;
+    let length = canonical_byte_length(length)?;
+    let width = match &ty {
+        Native | JubjubScalar => 32,
+        Bool => 1,
+        UInt(maximum) => maximum.bits().div_ceil(8) as usize,
+        Bytes32 => 32,
+        Bytes(length) => *length,
+        #[cfg(feature = "zkir-321")]
+        Foreign(kind) if kind.role() != crate::foreign::ForeignRole::Point => 32,
+        _ => bail!("wire codec requires a scalar or fixed bytes"),
+    };
+    ensure!(width <= length, "wire codec frame is too short");
+    let reference = |name: &str| Box::new(Expr::Reference { name: name.into() });
+    let arg = reference("0");
+    let slice = |value, length, end| {
+        Box::new(Expr::SliceBytes {
+            value,
+            length,
+            start: 0,
+            end,
+        })
+    };
+    let literal = |length, values| Box::new(Expr::BytesLiteral { length, values });
+    let cast = |ty: &str, value| {
+        Box::new(Expr::Cast {
+            ty: ty.into(),
+            value,
+        })
+    };
+    if encode {
+        let bytes = match ty {
+            Native | JubjubScalar => Box::new(Expr::ToBytes32 { value: arg }),
+            Bool => Box::new(Expr::Select {
+                condition: arg,
+                yes: literal(1, vec![1]),
+                no: literal(1, vec![0]),
+            }),
+            UInt(_) => slice(
+                Box::new(Expr::ToBytes32 {
+                    value: cast("Native", arg),
+                }),
+                32,
+                width,
+            ),
+            Bytes32 | Bytes(_) => arg,
+            #[cfg(feature = "zkir-321")]
+            Foreign(_) => Box::new(Expr::ForeignToBytes { value: arg }),
+            _ => bail!("unsupported wire encoding kind"),
+        };
+        let result = if width == length {
+            *bytes
+        } else {
+            Expr::ConcatBytes {
+                left_length: width,
+                right_length: length - width,
+                left: bytes,
+                right: literal(length - width, vec![0; length - width]),
+            }
+        };
+        return Ok((vec![ty], byte_scalar_type(length), result));
+    }
+    let frame = if length == width {
+        arg.clone()
+    } else {
+        slice(arg.clone(), length, width)
+    };
+    let result = match ty {
+        Bytes32 | Bytes(_) => *frame,
+        Bool => Expr::Eq {
+            left: cast(
+                "UIntRange<2>",
+                Box::new(Expr::ByteAt {
+                    value: arg,
+                    index: 0,
+                }),
+            ),
+            right: Box::new(Expr::Uint {
+                maximum: "1".into(),
+                value: "1".into(),
+            }),
+        },
+        UInt(_) => *cast(
+            token,
+            Box::new(Expr::FromBytes {
+                ty: "Native".into(),
+                length: width,
+                value: frame,
+            }),
+        ),
+        Native => Expr::Lets {
+            bindings: vec![
+                ("frame".into(), *frame),
+                (
+                    "decoded".into(),
+                    Expr::FromBytes32 {
+                        ty: token.into(),
+                        value: reference("frame"),
+                    },
+                ),
+            ],
+            body: Box::new(Expr::AssertThen {
+                condition: Box::new(Expr::Eq {
+                    left: Box::new(Expr::ToBytes32 {
+                        value: reference("decoded"),
+                    }),
+                    right: reference("frame"),
+                }),
+                body: reference("decoded"),
+            }),
+        },
+        JubjubScalar => Expr::FromBytes32 {
+            ty: token.into(),
+            value: frame,
+        },
+        #[cfg(feature = "zkir-321")]
+        Foreign(_) => Expr::ForeignFromBytes {
+            ty: token.into(),
+            length: width,
+            value: frame,
+        },
+        _ => bail!("unsupported wire decoding kind"),
+    };
+    Ok((vec![byte_scalar_type(length)], ty, result))
+}
+
 fn bytes_operation(
     operation: &str,
     count: usize,
 ) -> Result<(Vec<ScalarType>, ScalarType, crate::Expr)> {
+    if let Some(encoded) = operation.strip_prefix("serialize:") {
+        return scalar_wire_operation(true, encoded, count);
+    }
+    if let Some(encoded) = operation.strip_prefix("deserialize:") {
+        return scalar_wire_operation(false, encoded, count);
+    }
     use ScalarType::{Bytes32, JubjubPoint, JubjubScalar, Native};
     let argument = |index: usize| {
         Box::new(crate::Expr::Reference {

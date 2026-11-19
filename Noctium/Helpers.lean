@@ -1,3 +1,5 @@
+import Noctium.Wire
+import Noctium.NativeExpression
 import Noctium.Semantics
 import Noctium.Types.ValueExpressions
 import Noctium.Types.ValueViews
@@ -129,6 +131,8 @@ inductive BytesOp where
   | foreignFromBytes (kind : Foreign.Kind) (length : Nat)
   | degradeToNative
   | toBytes32 (source : Ty)
+  | serialize (source : Ty) (length : Nat)
+  | deserialize (target : Ty) (length : Nat)
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def BytesOp.operationName : BytesOp → String
@@ -151,6 +155,8 @@ def BytesOp.operationName : BytesOp → String
   | .toBytes32 .jubjubScalar => "jubjubScalarToBytes32"
   | .toBytes32 .jubjubPoint => "jubjubPointToBytes32"
   | .toBytes32 _ => "unsupportedToBytes32"
+  | .serialize source length => s!"serialize:{NativeExpression.typeName source}:{length}"
+  | .deserialize target length => s!"deserialize:{NativeExpression.typeName target}:{length}"
 
 def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except String (List Ty × Ty) := do
   match operation with
@@ -223,6 +229,14 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
     unless source == .native || source == .jubjubScalar || source == .jubjubPoint do
       throw "toBytes32 requires Native, JubjubScalar or JubjubPoint"
     pure ([source], .bytes 32)
+  | .serialize type length | .deserialize type length =>
+    unless argumentCount == 1 do throw "wire codec requires one argument"
+    let some width := Wire.scalarWidth type | throw "wire codec requires a scalar or fixed bytes"
+    unless width ≤ length && length ≤ maxBytesLength do
+      throw s!"wire codec requires a byte length from {width} through {maxBytesLength}"
+    match operation with
+    | .serialize .. => pure ([type], .bytes length)
+    | _ => pure ([.bytes length], type)
 
 inductive Term where
   | unit
@@ -1311,7 +1325,7 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
           fail span s!"{operation.operationName} argument type mismatch"
       pure (combine (.scalar result) values
         (match operation with
-          | .foreignFromBytes (.point _) _ => [.fallibleCast]
+          | .foreignFromBytes (.point _) _ | .deserialize .. => [.fallibleCast]
           | _ => []))
     | .bytesAt value index => do
       let value ← inferTerm fuel program scope env span value
@@ -2371,6 +2385,16 @@ mutual
         | .foreignFromBytes kind length, [value] => do
           let value ← liftD (typedExpr span (.bytes length) value)
           pure (scalarValue (Expr.foreignFromBytes kind value))
+        | .serialize type length, [value] => do
+          let some codec := Wire.scalarCodec type | liftD (fail span "unsupported serialization type")
+          let value ← liftD (typedExpr span type value)
+          if fits : codec.width ≤ length then
+            pure (scalarValue (codec.serialize value length fits))
+          else liftD (fail span "serialization result is too short")
+        | .deserialize type length, [value] => do
+          let some codec := Wire.scalarCodec type | liftD (fail span "unsupported deserialization type")
+          let value ← liftD (typedExpr span (.bytes length) value)
+          pure (scalarValue (codec.deserialize value))
         | .degradeToNative, [value] => do
           let value ← liftD (typedExpr span (.bytes 32) value)
           pure (scalarValue (Expr.bytesField value 1))

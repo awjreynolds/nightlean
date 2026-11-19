@@ -1,0 +1,54 @@
+import Noctium.IR
+
+namespace Noctium.Wire
+
+structure ScalarCodec (type : Ty) where
+  width : Nat
+  encode : Expr type → Expr (.bytes width)
+  deserialize : {length : Nat} → Expr (.bytes length) → Expr type
+
+private def decodeNative (frame : Expr (.bytes 32)) : Expr .native :=
+  let input : Expr (.bytes 32) := .ref "$deserializeBytes"
+  let result : Expr .native := .ref "$deserializeResult"
+  let encoded : Expr (.bytes 32) := .ref "$deserializeEncoded"
+  -- The primitive reduces modulo the field. Check both chunks of the round trip.
+  .letE "$deserializeBytes" frame
+    (.letE "$deserializeResult" (.fromBytes32 (target := .native) input)
+      (.letE "$deserializeEncoded" (.toBytes32 result)
+        (.assertE (.eq (.bytesField encoded 0) (.bytesField input 0))
+          (.assertE (.eq (.bytesField encoded 1) (.bytesField input 1)) result))))
+
+private def leading (width : Nat) (value : Expr (.bytes length)) : Expr (.bytes width) :=
+  if equal : length = width then equal ▸ value
+  else .sliceBytes value 0 width
+
+def scalarCodec : (type : Ty) → Option (ScalarCodec type)
+  | .native => some ⟨32, Expr.toBytes32, fun value => decodeNative (leading 32 value)⟩
+  | .bool => some ⟨1,
+      fun value => .select value (.bytesLiteral 1 [1]) (.bytesLiteral 1 [0]),
+      fun value => .eq (.cast (.uint 1) (.bytesAt value 0)) (.uint 1 1)⟩
+  | .uint maximum =>
+    let width := if maximum == 0 then 0 else maximum.log2 / 8 + 1
+    some ⟨width,
+      fun value => .sliceBytes (.toBytes32 (.cast .native value)) 0 width,
+      fun value => .cast (.uint maximum) (.fromBytes (target := .native) (leading width value))⟩
+  | .bytes length => some ⟨length, id, leading length⟩
+  | .jubjubScalar => some ⟨32, Expr.toBytes32, fun value => .fromBytes32 (leading 32 value)⟩
+  | .foreign (.base curve) =>
+    some ⟨32, Expr.foreignToBytes, fun value => .foreignFromBytes (.base curve) (leading 32 value)⟩
+  | .foreign (.scalar curve) =>
+    some ⟨32, Expr.foreignToBytes, fun value => .foreignFromBytes (.scalar curve) (leading 32 value)⟩
+  | _ => none
+
+def scalarWidth (type : Ty) : Option Nat := (scalarCodec type).map (·.width)
+
+def ScalarCodec.serialize (codec : ScalarCodec type) (value : Expr type)
+    (length : Nat) (fits : codec.width ≤ length) : Expr (.bytes length) :=
+  if equal : codec.width = length then
+    equal ▸ codec.encode value
+  else
+    have sum : codec.width + (length - codec.width) = length := by omega
+    sum ▸ Expr.concatBytes (codec.encode value)
+      (.bytesLiteral (length - codec.width) (List.replicate (length - codec.width) 0))
+
+end Noctium.Wire

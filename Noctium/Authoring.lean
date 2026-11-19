@@ -412,6 +412,7 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
+  | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => disclosedValues value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => disclosedValues value
@@ -458,6 +459,7 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHash32($value)) | `(nlexpr| persistentHashNative($value))
   | `(nlexpr| persistentHashPoint($value)) | `(nlexpr| sha512($value))
   | `(nlexpr| keccak256($value)) | `(nlexpr| degradeToNative($value))
+  | `(nlexpr| serialize($value, $_:num)) | `(nlexpr| deserialize($_:nltype, $value))
   | `(nlexpr| toBytes32($value)) | `(nlexpr| reverseBytes32($value))
   | `(nlexpr| reverseBytes($value)) => inlineAssertions value
   | `(nlexpr| sliceBytes($value, $_:num, $_:num)) => inlineAssertions value
@@ -743,6 +745,24 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     | .error message => throwErrorAt stx message
     | .ok _ => pure ()
     pure (mergeLowered (.scalar (.bytes 32)) (.bytes operation [value.term]) [value])
+  | `(nlexpr| serialize($value, $length:num)) => do
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar source := value.type | throwErrorAt stx "serialize requires a scalar or fixed bytes"
+    let operation := Noctium.Helpers.BytesOp.serialize source length.getNat
+    let (_, result) ← match operation.signature 1 with
+      | .ok signature => pure signature
+      | .error message => throwErrorAt stx message
+    pure (mergeLowered (.scalar result) (.bytes operation [value.term]) [value])
+  | `(nlexpr| deserialize($target:nltype, $value)) => do
+    let target ← readScalarTy target
+    let value ← lowerExpr programName callPrefix env value
+    let .scalar (.bytes length) := value.type | throwErrorAt stx "deserialize requires fixed bytes"
+    let operation := Noctium.Helpers.BytesOp.deserialize target length
+    match operation.signature 1 with
+    | .error message => throwErrorAt stx message
+    | .ok _ => pure ()
+    let result := mergeLowered (.scalar target) (.bytes operation [value.term]) [value]
+    pure {result with generatedValidity := s!"checked wire decode {renderExpr stx}" :: result.generatedValidity}
   | `(nlexpr| jubjubScalarFromNative($value)) =>
     lowerCurve programName callPrefix env stx .scalarFromNative [value]
   | `(nlexpr| jubjubScalarToNative($value)) =>
@@ -1129,6 +1149,10 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
         `(Noctium.Helpers.BytesOp.foreignFromBytes $kind $(natTerm length))
       | .degradeToNative => `(Noctium.Helpers.BytesOp.degradeToNative)
       | .toBytes32 source => `(Noctium.Helpers.BytesOp.toBytes32 $(← tyTerm source))
+      | .serialize source length =>
+        `(Noctium.Helpers.BytesOp.serialize $(← tyTerm source) $(natTerm length))
+      | .deserialize target length =>
+        `(Noctium.Helpers.BytesOp.deserialize $(← tyTerm target) $(natTerm length))
       | .bytesLiteral length values => do
         let values := values.map natTerm |>.toArray
         `(Noctium.Helpers.BytesOp.bytesLiteral $(natTerm length) [$values,*])

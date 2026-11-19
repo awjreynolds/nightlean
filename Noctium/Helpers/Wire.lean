@@ -1,0 +1,85 @@
+import Noctium.Helpers
+
+namespace Noctium.Helpers.Wire
+
+private structure Leaf where
+  path : List Types.Projection := []
+  type : Ty
+  -- Aggregates store byte leaves and enum ordinals as Native fields.
+  nativeLeaf : Bool := false
+
+private def atPath (projection : Types.Projection) (leaves : List Leaf) : List Leaf :=
+  leaves.map fun leaf => {leaf with path := projection :: leaf.path}
+
+private partial def wireLeaves : Types.Layout → Except String (List Leaf)
+  | .unit => pure []
+  | .scalar .nativeField => pure [{type := .native}]
+  | .scalar .booleanField => pure [{type := .bool}]
+  | .scalar (.boundedUnsignedField maximum) => pure [{type := .uint maximum}]
+  | .tuple items => do
+    pure (← items.zipIdx.mapM fun (item, index) =>
+      atPath (.tupleIndex index) <$> wireLeaves item).flatten
+  | .structure _ fields => do
+    pure (← fields.mapM fun (name, field) => atPath (.field name) <$> wireLeaves field).flatten
+  | .vector length element => do
+    let leaves ← wireLeaves element
+    pure ((List.range length).flatMap fun index => atPath (.vectorIndex index) leaves)
+  | .bytes length _ =>
+    pure ((List.range length).map fun index =>
+      {path := [.byteIndex index], type := .uint 255, nativeLeaf := true})
+  | .enumeration _ _ maximum 0 _ variants => do
+    unless variants.all (·.2.1.isEmpty) do
+      throw "wire enum requires fieldless variants"
+    pure [{path := [.enumTag], type := .uint maximum, nativeLeaf := true}]
+  | _ => throw "unsupported aggregate wire layout"
+
+private instance : Inhabited Term := ⟨.unit⟩
+
+
+private partial def concatenate : List (Nat × Term) → Nat × Term
+  | [] => (0, .bytes (.bytesLiteral 0 []) [])
+  | [field] => field
+  | fields =>
+    let middle := (fields.length + 1) / 2
+    let (leftWidth, left) := concatenate (fields.take middle)
+    let (rightWidth, right) := concatenate (fields.drop middle)
+    (leftWidth + rightWidth, .bytes (.concatBytes leftWidth rightWidth) [left, right])
+
+/-- Build one encoder and one decoder for a checked nominal or structural layout.
+A helper argument is evaluated once, and each projected field uses its declared width. -/
+def declarations (compiled : Types.CompiledType) (name : String) (width : Nat)
+    (encoder decoder : DeclarationId) : Except String (List Declaration) := do
+  unless width ≤ maxBytesLength do throw "aggregate wire width exceeds the source limit"
+  let leaves ← wireLeaves compiled.checked.value
+  let mut offset := 0
+  let mut encoded := []
+  let mut decoded := []
+  for leaf in leaves do
+    let some leafWidth := Noctium.Wire.scalarWidth leaf.type
+      | throw "unsupported scalar in aggregate wire layout"
+    let projected := leaf.path.foldl Term.project (.ref "value")
+    let projected := if leaf.path.getLast? == some .enumTag then
+        .cast leaf.type projected else projected
+    encoded := (leafWidth, .bytes (.serialize leaf.type leafWidth) [projected]) :: encoded
+    let value := if leaf.type == .uint 255 then
+        Term.bytesAt (.ref "frame") offset
+      else
+        let bytes := Term.bytes (.sliceBytes width offset (offset + leafWidth)) [.ref "frame"]
+        Term.bytes (.deserialize leaf.type leafWidth) [bytes]
+    decoded := (if leaf.nativeLeaf then Term.cast .native value else value) :: decoded
+    offset := offset + leafWidth
+  unless offset ≤ width do throw s!"aggregate wire layout requires at least {offset} bytes"
+  let fields := encoded.reverse
+  let padding := width - offset
+  let fields := if padding == 0 then fields else
+    fields ++ [(padding, .bytes (.bytesLiteral padding (List.replicate padding 0)) [])]
+  let (_, result) := concatenate fields
+  pure [
+    {id := encoder, name := name ++ "Encode", parameters := [⟨"value", .native⟩],
+      compositeParameters := [("value", compiled.type)], result := .scalar (.bytes width),
+      body := [.return (some result)]},
+    {id := decoder, name := name ++ "Decode", parameters := [⟨"frame", .bytes width⟩],
+      result := .composite compiled.type,
+      body := [.return (some (.composite compiled.type decoded.reverse))]}]
+
+end Noctium.Helpers.Wire
