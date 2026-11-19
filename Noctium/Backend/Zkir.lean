@@ -3,6 +3,7 @@ import Noctium.Backend.Impact
 import Noctium.Passes
 import Noctium.Backend.NativeExpected
 import Noctium.Backend.NativeProducer
+import Noctium.Backend.RangeDedup
 
 namespace Noctium.Backend.Zkir
 
@@ -1113,7 +1114,7 @@ private def loweringCapabilities : Capabilities :=
     persistentHashVector32 := true, persistentHashNative := true,
     bytes32Conversions := true, sha512 := true, keccak256 := true, typedBoolean := true, hashToCurve := true, foreignValues := true, foreignArithmetic := true, foreignByteConversions := true, jubjub := true }
 
-def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
+def lowerCircuit (c : Circuit) (dedupRangeChecks : Bool := false) : Except Diagnostic Json := do
   Disclosure.circuit c
   let c := Passes.pruneCircuit c
   c.validate loweringCapabilities
@@ -1132,7 +1133,7 @@ def lowerCircuit (c : Circuit) : Except Diagnostic Json := do
     ("outputs", Json.arr ((c.outputs.flatMap fun output =>
       List.replicate output.nativeReturnFieldCount nativeType).toArray)),
     ("do_communications_commitment", toJson false),
-    ("instructions", Json.arr result.instructions)]
+    ("instructions", Json.arr (if dedupRangeChecks then RangeDedup.run result.instructions else result.instructions))]
   validateProduced c.span (← Native.expectedCircuit c) program
 
 /-- Successful lowering necessarily passes the existing mandatory validation
@@ -1255,7 +1256,8 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
 /-- Compile a native ledger transcript relation. Public-input binding includes
 all opcode, alignment, key, read-result and write-value fields. The caller must
 execute the matching Impact plan, not the standalone circuit artifact. -/
-def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagnostic Json := do
+def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint)
+    (dedupRangeChecks : Bool := false) : Except Diagnostic Json := do
   let entry := Passes.pruneEntrypoint entry
   let plan ← Impact.lower state entry
   let (_, result) := (lowerEntrypointBody entry plan).run {}
@@ -1270,7 +1272,7 @@ def lowerEntrypoint (state : List StateDecl) (entry : Entrypoint) : Except Diagn
     -- Ledger ContractCall.public_inputs always includes the commitment after
     -- binding input. Standalone relations above deliberately keep it disabled.
     ("do_communications_commitment", toJson true),
-    ("instructions", Json.arr result.instructions)]
+    ("instructions", Json.arr (if dedupRangeChecks then RangeDedup.run result.instructions else result.instructions))]
   validateProduced entry.span (← Native.expectedEntrypoint state entry) program
 
 /-- Accepted ledger-call JSON retains the exact instruction vector emitted by

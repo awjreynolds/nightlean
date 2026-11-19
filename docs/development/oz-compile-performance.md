@@ -25,7 +25,20 @@ These timings cover source processing and emitted artifacts. Noctium emits 16 na
 
 The combined changes saved 27.04 seconds (41%) in one matched run per version on the same M3 Max. The exporter reused 10 compiled witness plans when binding them to ledger entrypoint relations. All three runs generated 93 byte-identical files totaling 7,697,562 bytes. The CLI publishes the bundle directory after Lean exits successfully with a manifest. A late source error or early exit leaves no output directory or staging files, and a nonempty destination stays untouched. [Optimization issue](https://github.com/awjreynolds/noctium/issues/85)
 
-An isolated `transferFrom` sizing experiment under [issue 74](https://github.com/awjreynolds/noctium/issues/74) removed 41 of 183 identical-operand, identical-width `constrain_bits` instructions. Pinned `mock-compile` measured 63,125 to 61,813 rows (2.1% fewer), with K16 in both cases. The compiler still emits every original range check.
+## Exact range-check deduplication
+
+Add `--dedup-range-checks` to the Noctium command below to keep the first unconditional check for each SSA operand and width. On the OpenZeppelin port, the pass removed 402 repeated checks across 11 of 29 emitted relations. Impact plans matched byte for byte. Witness bindings referenced the corresponding relation in each build.
+
+| Changed entrypoint, ZKIR 3.2.1 | Checks removed | Default rows | Deduplicated rows | K in both builds |
+| --- | ---: | ---: | ---: | ---: |
+| `_move` | 42 | 41,779 | 39,175 | 16 |
+| `approve` | 50 | 41,575 | 38,475 | 16 |
+| `burn` | 20 | 16,323 | 15,083 | 14 |
+| `burnFrom` | 27 | 39,122 | 38,258 | 16 |
+| `transfer` | 42 | 41,787 | 39,183 | 16 |
+| `transferFrom` | 41 | 63,125 | 61,813 | 16 |
+
+The pinned `mock-compile` measured 2.1% to 7.6% fewer rows across these entrypoints. The pinned native checker gave the same results for 34 scalar cases in both modes, including acceptance at 255 and rejection at 256 when narrowing to eight bits. One serial full compile per mode took 36.57 and 35.69 seconds respectively, with nearly identical CPU time. These runs did not measure proving time. Generate fresh proving and verifier keys for any changed relation. [Circuit-size issue](https://github.com/awjreynolds/noctium/issues/74)
 
 ## Selected ledger outputs
 

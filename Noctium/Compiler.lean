@@ -586,7 +586,7 @@ elab "#noctium_check_target" profileJson:str : command => do
 
 private def compileArtifacts (directory : String) (profile : TargetProfile)
     (displayDirectory : String := directory) (roles : List ArtifactRole := [])
-    (rustBindings : _root_.Bool := Bool.false) : CommandElabM Unit := do
+    (rustBindings dedupRangeChecks : _root_.Bool := Bool.false) : CommandElabM Unit := do
   let moduleOutputs ← unsafe rebuildModuleOutputs
   let (circuits, contracts) ← unsafe inspectWithModules moduleOutputs
   let emit := fun role => roles.isEmpty || roles.contains role
@@ -605,7 +605,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
     let plan ← unsafe evalConstCheck Json ``Lean.Json name
     lowered := lowered.push (.control, artifactName name ++ ".control.json", plan.pretty)
   for (name, circuit) in (if emit .standalone then circuits else #[]) do
-    match Backend.Zkir.lowerCircuit circuit with
+    match Backend.Zkir.lowerCircuit circuit dedupRangeChecks with
     | .error d => failDiagnostic d
     | .ok json => lowered := lowered.push (.standalone, artifactName name ++ ".zkir", json.pretty)
   for (name, _) in (if emit .specialization then circuits else #[]) do
@@ -625,7 +625,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       let program ← match moduleWitnessProgramFor moduleOutputs info with
         | some fresh => pure fresh
         | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
-      let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName with
+      let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName dedupRangeChecks with
         | .ok value => pure value
         | .error diagnostic => failDiagnostic diagnostic
       standaloneWitnesses := standaloneWitnesses.push (info.circuitName.toString, compiled)
@@ -652,7 +652,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       let plan ← match Backend.Impact.lower contract.state ep with
         | .error d => failDiagnostic d
         | .ok plan => pure plan
-      match Backend.Zkir.lowerEntrypoint contract.state ep with
+      match Backend.Zkir.lowerEntrypoint contract.state ep dedupRangeChecks with
       | .error d => failDiagnostic d
       | .ok json =>
         lowered := lowered.push (.ledger, nativeCircuitFile name ep, json.pretty)
@@ -669,7 +669,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
             if needsHost then
               unless emit .witness do
                 throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
-              match Witness.compileLedger program exportName contract.state ep.circuit.name with
+              match Witness.compileLedger program exportName contract.state ep.circuit.name dedupRangeChecks with
               | .ok value => pure (some value.witness)
               | .error diagnostic => failDiagnostic diagnostic
             else pure none
@@ -758,7 +758,8 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
 elab "#noctium_compile" directory:str : command =>
   compileArtifacts directory.getString TargetProfile.sourceBaseline
 
-elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(str)? selection:(str)? bindings:(str)? : command => do
+elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(str)? selection:(str)?
+    bindings:(str)? optimization:(str)? : command => do
   let profile ← parseTargetProfile profileJson.getString
   let selection ← match selection with
     | none => pure []
@@ -769,10 +770,12 @@ elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(s
   let target := (bindings.map (·.getString)).getD ""
   if !target.isEmpty && target != "rust" then throwError "unsupported binding target '{target}'"
   let rustBindings := target == "rust"
+  let mode := (optimization.map (·.getString)).getD ""
+  if !mode.isEmpty && mode != "dedup-range-checks" then throwError "unsupported optimization '{mode}'"
   match ArtifactRole.validateSelection selection rustBindings with
   | .ok _ =>
     let display := (displayDirectory.map (·.getString)).getD directory.getString
-    compileArtifacts directory.getString profile display selection rustBindings
+    compileArtifacts directory.getString profile display selection rustBindings (mode == "dedup-range-checks")
   | .error message => throwError "{message}"
 
 end Noctium.Compiler

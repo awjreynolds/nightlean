@@ -130,7 +130,8 @@ private def bindHosted (program : Program) (entry : Export) (entryName : String)
 /-- The native workflow requires declared providers and an exact ordered map
 from executed calls to actual fresh private inputs. Host-only control is separate. -/
 def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName : String)
-    (circuitName : String := "") (outputName : String := "") : Except Diagnostic Compiled := do
+    (circuitName : String := "") (outputName : String := "")
+    (dedupRangeChecks : Bool := false) : Except Diagnostic Compiled := do
   let program ← Helpers.prepareProgramWithLimits limits program
   let plan ← Control.compileTypedWithLimits limits program entryName
   let some entry := program.exports.find? (·.name == entryName) | fail {} "unknown witness entrypoint"
@@ -145,12 +146,12 @@ def compileWithLimits (limits : Helpers.Limits) (program : Program) (entryName :
     if circuit.inputs.any (·.name == outputName) then
       fail entry.span "witness output name collides with an input"
     circuit := {circuit with outputs := [{output with name := outputName}]}
-  let native ← Backend.Zkir.lowerCircuit circuit
+  let native ← Backend.Zkir.lowerCircuit circuit dedupRangeChecks
   bindHosted program entry entryName plan circuit lowered.calls native circuit.outputs
 
 def compile (program : Program) (entryName : String) (circuitName : String := "")
-    (outputName : String := "") : Except Diagnostic Compiled :=
-  compileWithLimits {} program entryName circuitName outputName
+    (outputName : String := "") (dedupRangeChecks : Bool := false) : Except Diagnostic Compiled :=
+  compileWithLimits {} program entryName circuitName outputName dedupRangeChecks
 
 /-- Bind the same source invocation to the actual ledger call relation, rather
 than substituting the standalone relation's public-return convention. -/
@@ -181,7 +182,7 @@ def needsLedgerHost (program : Program) : Except Diagnostic Bool := do
 
 /-- Compile one source body into the typed host scheduler and its native ledger relation. -/
 def compileLedger (program : Program) (entryName : String) (ledger : List StateDecl)
-    (circuitName : String := "") : Except Diagnostic CompiledEntrypoint := do
+    (circuitName : String := "") (dedupRangeChecks : Bool := false) : Except Diagnostic CompiledEntrypoint := do
   let transformed ← Ledger.transform program
   let plan ← Control.compileTypedWithLimits {} transformed.host entryName
   let some entry := transformed.host.exports.find? (·.name == entryName)
@@ -189,7 +190,7 @@ def compileLedger (program : Program) (entryName : String) (ledger : List StateD
   let lowered ← Helpers.compileHostedEntrypointForWithLimits {} (eraseProgram transformed.native) entryName ledger
   let compiledEntry := if circuitName.isEmpty then lowered.entrypoint else
     {lowered.entrypoint with circuit := {lowered.entrypoint.circuit with name := circuitName}}
-  let native ← Backend.Zkir.lowerEntrypoint ledger compiledEntry
+  let native ← Backend.Zkir.lowerEntrypoint ledger compiledEntry dedupRangeChecks
   let (impact, boundaries) ← Backend.Impact.lowerWithEffectBoundaries ledger compiledEntry
   let mut rows := []
   for call in lowered.calls do

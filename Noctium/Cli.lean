@@ -9,7 +9,8 @@ def usage : String := "Noctium " ++ version ++ "\n\
 Usage: noctium --version\n\
        noctium profiles\n\
        noctium check <file> [--target <manifest>]\n\
-       noctium compile <file> [--target <manifest>] [--emit <role>]... [--bindings rust] [--output <new-or-empty-directory>]\n\
+       noctium compile <file> [--target <manifest>] [--emit <role>]... [--bindings rust]\n\
+                       [--dedup-range-checks] [--output <new-or-empty-directory>]\n\
 Artifact roles: ledger, standalone, witness, control, specialization, observations.\n\
 Omit --emit to generate all applicable roles.\n\
 Default target: profiles/midnight-ledger-9.json\n\
@@ -21,6 +22,7 @@ structure Options where
   output : String := "build/noctium"
   emit : List ArtifactRole := []
   rustBindings : Bool := false
+  dedupRangeChecks : Bool := false
   deriving Repr
 
 private def parseOptions (input : String) (args : List String) (compiling : Bool) :
@@ -51,6 +53,10 @@ where
       unless value == "rust" do throw s!"unsupported binding target '{value}'"
       if opts.rustBindings then throw "duplicate binding target 'rust'"
       go { opts with rustBindings := true } rest hasTarget hasOutput
+    | "--dedup-range-checks" :: rest => do
+      unless compiling do throw "--dedup-range-checks is only supported by compile"
+      if opts.dedupRangeChecks then throw "duplicate --dedup-range-checks option"
+      go { opts with dedupRangeChecks := true } rest hasTarget hasOutput
     | ["--target"] => .error "--target requires a manifest path"
     | ["--output"] => .error "--output requires a directory"
     | ["--emit"] => .error "--emit requires an artifact role"
@@ -84,8 +90,9 @@ private def compile (opts : Options) (source profileLiteral : String) : IO IO.Pr
     let display := (Lean.toJson opts.output).compress
     let roles := (Lean.toJson (Lean.toJson (opts.emit.map ArtifactRole.label)).compress).compress
     let bindings := if opts.rustBindings then "\"rust\"" else "\"\""
+    let optimization := if opts.dedupRangeChecks then "\"dedup-range-checks\"" else "\"\""
     let result ← runFrontend opts.input source
-      s!"#noctium_compile_target {directory} {profileLiteral} {display} {roles} {bindings}"
+      s!"#noctium_compile_target {directory} {profileLiteral} {display} {roles} {bindings} {optimization}"
     if result.exitCode == 0 then
       unless ← (stage / "noctium.json").pathExists do
         throw (IO.userError "Lean exited before producing Noctium artifacts")

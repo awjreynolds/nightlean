@@ -175,7 +175,7 @@ private def goodSum : EvalEnv := [
 private def invalidMaximum : Nat := ScalarPolicy.maxUint + 1
 #guard match ({name := "unused", inputs := [⟨"unused", .uint invalidMaximum, .«private», {}⟩]} : Circuit).validate {} with
   | .error _ => Bool.true | _ => Bool.false
-#guard match ({name := "unused", state := [⟨"bad", .cell (.uint invalidMaximum), {}⟩]} : Contract).validate {} with
+#guard match ({name := "unused", state := [{name := "bad", kind := .cell (.uint invalidMaximum)}]} : Contract).validate {} with
   | .error _ => Bool.true | _ => Bool.false
 #guard match (Expr.uint 255 256).validate {} [] with
   | .error _ => Bool.true | _ => Bool.false

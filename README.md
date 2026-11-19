@@ -44,6 +44,8 @@ The output includes the standalone `boundedRelation.zkir`, contract-call `Bounde
 
 For packaging a contract, `--emit ledger --emit witness` selects the ledger relations, Impact plans and their witness artifacts. Add `--bindings rust` for typed Rust witness modules. See [compiler output roles](docs/development/portable-artifacts.md#select-compiler-outputs).
 
+Add `--dedup-range-checks` to remove repeated checks on the same circuit value and width. Generate fresh keys for any relation the pass changes. [OpenZeppelin measurements](docs/development/oz-compile-performance.md#exact-range-check-deduplication)
+
 For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 
 Use `Noctium.Frontend`, the `Noctium` scope and `noctium_*` declarations. Native hosts use `noctium_*` C symbols and `noctium_*.h` headers. The compiler and runtime now use one [canonical namespace](docs/development/namespaces.md).
