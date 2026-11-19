@@ -48,6 +48,15 @@ noctium_witness_circuit authorize using paymentWire where
   output code : UInt 8 := disclose(elementAt(field(payment, memo), 1))
 end
 
+noctium_witness_circuit reviewPayment using paymentWire where
+  private payment : Payload paymentWire
+  public expected : Payload paymentWire
+  let info := field(payment, info)
+  prove eq(elementAt(info, 0), elementAt(field(expected, info), 0))
+  output approved : Bool := disclose(elementAt(info, 1))
+  output memoCode : UInt 8 := disclose(elementAt(field(payment, memo), 1))
+end
+
 private def optionsWire : Helpers.Wire.Codec := {
   payload := .vector 3 (.tuple [.scalar .bool, .bytes 1])
   frameBytes := 6
@@ -76,6 +85,10 @@ noctium_contract Codec where
   end
   entry authorize uses authorize where
     return approval : UInt 8 := code
+  end
+  entry reviewPayment uses reviewPayment arguments [payment] where
+    return approval : Bool := approved
+    return memo : UInt 8 := memoCode
   end
   entry choose uses choose where
     return choice : UInt 8 := code

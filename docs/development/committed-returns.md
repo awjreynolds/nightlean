@@ -88,6 +88,15 @@ validator rejects partial or reordered aggregate groups. Empty aggregates still
 take a label in the call interface and contribute zero fields.
 [Aggregate argument fixture](../../tests/WitnessSource.lean)
 
+Readable witness circuits also declare checked aggregate inputs with `Payload`
+and a codec named in `using`. For example, `private payment : Payload paymentWire`
+takes a typed record. A `public` declaration uses the same layout and includes
+its fields in the public statement. The host receives the typed JSON value.
+The compiler uses the codec's payload definition and leaves byte encoding to
+an explicit `encode` call. `arguments [payment]` commits the private record in
+layout order. Explicit `disclose` still governs releases from its fields.
+[Readable payment example](../../examples/AggregateSerialization.lean)
+
 Two builds at compiler revision `0ede45d` reproduced all 12 selected compiler
 files, including the generated Rust binding. The authenticated Rust witness
 API completed the provider call, generated the K9 proof for

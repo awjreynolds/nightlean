@@ -23,7 +23,7 @@ structure PrivateStateSchema where
 
 structure ObservationInput where
   name : String
-  ty : Ty
+  type : String
   visibility : Noctium.Visibility
   deriving Repr, Inhabited
 
@@ -51,7 +51,7 @@ private def typeName : Ty → String
   | .foreign kind => kind.sourceName
 
 private def inputJson (input : ObservationInput) : Json := Json.mkObj [
-  ("name", Lean.toJson input.name), ("type", Lean.toJson (typeName input.ty)),
+  ("name", Lean.toJson input.name), ("type", Lean.toJson input.type),
   ("visibility", Lean.toJson (if input.visibility == .public then "public" else "private"))]
 
 def ObservationMetadata.toJson (metadata : ObservationMetadata) : Json := Json.mkObj [
@@ -107,8 +107,11 @@ scoped syntax "elementAt(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "enumTag(" nlexpr ")" : nlexpr
 
 declare_syntax_cat noctium_witness_statement
-scoped syntax "public" ident ":" nltype : noctium_witness_statement
-scoped syntax "private" ident ":" nltype : noctium_witness_statement
+declare_syntax_cat noctium_witness_input_type
+scoped syntax nltype : noctium_witness_input_type
+scoped syntax "Payload" ident : noctium_witness_input_type
+scoped syntax "public" ident ":" noctium_witness_input_type : noctium_witness_statement
+scoped syntax "private" ident ":" noctium_witness_input_type : noctium_witness_statement
 scoped syntax "let" ident (":" nltype)? ":=" nlexpr : noctium_witness_statement
 scoped syntax "read" "private" ident "as" ident : noctium_witness_statement
 scoped syntax "witness" ident "(" nlexpr,* ")" : noctium_witness_statement
@@ -1329,10 +1332,9 @@ private def inputTerm (name : String) (ty : Ty) (visibility : Noctium.Visibility
 
 private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSyntax `term) := do
   let inputs ← metadata.inputs.mapM fun input => do
-    let ty ← tyTerm input.ty
     let visibility ← if input.visibility == .public then `(Noctium.Visibility.public)
       else `(Noctium.Visibility.private)
-    `(Noctium.Authoring.ObservationInput.mk $(stringTerm input.name) $ty $visibility)
+    `(Noctium.Authoring.ObservationInput.mk $(stringTerm input.name) $(stringTerm input.type) $visibility)
   let inputs := inputs.toArray
   let list (values : List String) := (values.map stringTerm).toArray
   let entryText := stringTerm metadata.entryName
@@ -1470,6 +1472,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let mut env : SurfaceEnv := []
     let mut parameters : List Parameter := []
     let mut inputs : List Input := []
+    let mut aggregateInputs : List AggregateInput := []
     let mut inputObservations : List ObservationInput := []
     let mut witnesses : List WitnessSignature := []
     let mut body : List Statement := []
@@ -1489,17 +1492,27 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       if sawOutput && !isOutput then
         throwErrorAt statement "no statements may follow the circuit outputs"
       match statement with
-      | `(noctium_witness_statement| public $id:ident : $type:nltype)
-      | `(noctium_witness_statement| private $id:ident : $type:nltype) => do
+      | `(noctium_witness_statement| public $id:ident : $type:noctium_witness_input_type)
+      | `(noctium_witness_statement| private $id:ident : $type:noctium_witness_input_type) => do
         let valueName := id.getId.toString
         if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
-        let ty ← readScalarTy type
         let visibility := if statement.raw[0].getAtomVal == "public" then Noctium.Visibility.public else Noctium.Visibility.private
-        let term := Noctium.Helpers.Term.ref valueName
-        env := (valueName, .scalar ty, term) :: env
-        parameters := parameters ++ [{name := valueName, ty}]
-        inputs := inputs ++ [{name := valueName, ty, visibility, span := ← spanValue statement}]
-        inputObservations := inputObservations ++ [{name := valueName, ty, visibility}]
+        let span ← spanValue statement
+        match type with
+        | `(noctium_witness_input_type| $scalar:nltype) =>
+          let ty ← readScalarTy scalar
+          env := (valueName, .scalar ty, .ref valueName) :: env
+          parameters := parameters ++ [{name := valueName, ty}]
+          inputs := inputs ++ [{name := valueName, ty, visibility, span}]
+          inputObservations := inputObservations ++ [{name := valueName, type := typeName ty, visibility}]
+        | `(noctium_witness_input_type| Payload $codecName:ident) =>
+          let (codec, _) ← (selectedCodec codecName).run' exprState
+          let result := if codec.payload == .unit then .unit else .composite codec.payload
+          env := (valueName, result, .ref valueName) :: env
+          parameters := parameters ++ [{name := valueName, ty := .native}]
+          aggregateInputs := aggregateInputs ++ [{name := valueName, type := codec.payload, visibility, span}]
+          inputObservations := inputObservations ++ [{name := valueName, type := s!"Payload {codecName.getId}", visibility}]
+        | _ => throwErrorAt type "unsupported readable witness input type"
       | `(noctium_witness_statement| read private $fieldPath:ident as $id:ident) => do
         let (schemaName, fieldName) ← splitSchemaField fieldPath
         let sourceField ← privateStateSchema schemaName fieldPath
@@ -1615,6 +1628,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       match item.value.type with
       | .composite _ => _root_.Bool.true
       | _ => _root_.Bool.false
+    let useOutputViews := hasAggregate || (grouped && !aggregateInputs.isEmpty)
     let compositeFields : List Types.Field := authoredOutputs.map fun item =>
       {name := item.name, type := item.layoutType, span := item.span}
     let declarationSpan ← spanValue stx
@@ -1664,6 +1678,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       { id := declId,
         name := programNameText,
         parameters := parameters,
+        compositeParameters := aggregateInputs.map fun input => (input.name, input.type),
         result := outputType,
         body := body,
         span := declarationSpan }
@@ -1672,6 +1687,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
       { name := exportName,
         target := declId,
         inputs := inputs,
+        compositeInputs := aggregateInputs,
         span := exportSpan }
     let program : Program := {
       declarations := [declaration], exports := [entryExport], composites := compositeEnv, witnesses := witnesses}
@@ -1696,7 +1712,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
         throwErrorAt stx "generated logical output alias name already exists"
       elabCommand (← `(def $(mkIdent aliasName) : Noctium.Expr $(← tyTerm ty) := $value))
       pure aliasName
-    for binding in (if grouped && !hasAggregate then logicalAliasBindings else []) do
+    for binding in (if grouped && !useOutputViews then logicalAliasBindings else []) do
       if logicalEnv.any (fun alias => alias.1 == binding.name) then
         throwErrorAt stx s!"duplicate logical output alias source '{binding.name}'"
       let value ← match binding.source with
@@ -1711,7 +1727,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
             | throwErrorAt stx s!"witness call '{site}' has no scalar result binding"
           `(@Noctium.Expr.ref $(← tyTerm binding.ty) $(stringTerm inputName))
       logicalEnv := logicalEnv ++ [(binding.name, binding.ty, value)]
-    if grouped && !hasAggregate then
+    if grouped && !useOutputViews then
       for item in authoredOutputs do
         let .scalar fieldType := item.value.type
           | throwErrorAt stx "expected a grouped scalar circuit output"
@@ -1737,6 +1753,15 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let statementTerms := statementTerms.toArray
     let inputTerms ← inputs.mapM fun input => inputTerm input.name input.ty input.visibility input.span
     let inputTerms := inputTerms.toArray
+    let compositeParameterTerms ← declaration.compositeParameters.mapM fun (name, type) => do
+      `(($(stringTerm name), $(← compositeTypeTerm type)))
+    let compositeParameterTerms := compositeParameterTerms.toArray
+    let aggregateInputTerms ← aggregateInputs.mapM fun input => do
+      let visibility ← if input.visibility == .public then `(Noctium.Visibility.public)
+        else `(Noctium.Visibility.private)
+      `(Noctium.Helpers.AggregateInput.mk $(stringTerm input.name) $(← compositeTypeTerm input.type)
+        $visibility $(← quoteSpan input.span))
+    let aggregateInputTerms := aggregateInputTerms.toArray
     let declarationSpanTerm ← quoteSpan declaration.span
     let idTerm ← `(Noctium.Helpers.DeclarationId.mk 0 0)
     let declarationResultTerm ← resultTypeTerm declaration.result
@@ -1754,10 +1779,11 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     else
       `({ : Noctium.Types.CompositeEnv })
     let declarationTerm ← `(Noctium.Helpers.Declaration.mk $idTerm $(stringTerm declaration.name)
-      [$parameterTerms,*] [] $declarationResultTerm [$statementTerms,*] _root_.Bool.false $declarationSpanTerm)
+      [$parameterTerms,*] [$compositeParameterTerms,*] $declarationResultTerm
+      [$statementTerms,*] _root_.Bool.false $declarationSpanTerm)
     let exportSpanTerm ← quoteSpan entryExport.span
     let exportTerm ← `(Noctium.Helpers.Export.mk $(stringTerm entryExport.name) $idTerm
-      [$inputTerms,*] [] $exportSpanTerm)
+      [$inputTerms,*] [$aggregateInputTerms,*] $exportSpanTerm)
     let programTerm ← `({
       scopes := [{id := 0}]
       declarations := [$declarationTerm]
@@ -1773,7 +1799,7 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     elabCommand (← `(def $(mkIdent programSyntaxName) : Noctium.Helpers.Program := $programTerm))
     elabCommand (← `(def $(mkIdent observationSyntaxName) : Noctium.Authoring.ObservationMetadata := $metadataTerm))
     let mut registeredAggregates := []
-    if hasAggregate then
+    if useOutputViews then
       let mut remaining := compiled.circuit.outputs.map (·.name)
       for item in authoredOutputs do
         let .ok layout := Types.compileType program.composites item.layoutType

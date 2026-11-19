@@ -78,6 +78,59 @@ fn expected_payment() -> Json {
 
 #[test]
 #[ignore = "requires fresh AggregateSerialization Lean artifacts"]
+fn readable_payload_inputs_bind_layout_and_visibility() -> Result<()> {
+    let root = artifact_root()?;
+    let name = "AggregateSerialization.Codec.reviewPayment";
+    let control: Json = serde_json::from_slice(&fs::read(
+        root.join(format!("{name}.witness.control.json")),
+    )?)?;
+    let binding: Json = serde_json::from_str(control["binding"].as_str().unwrap())?;
+    assert_eq!(control["inputs"][0]["name"], "payment");
+    assert_eq!(control["inputs"][0]["visibility"], "private");
+    assert_eq!(control["inputs"][1]["name"], "expected");
+    assert_eq!(control["inputs"][1]["visibility"], "public");
+    let payment = expected_payment();
+    let open = |value| {
+        wire_session(
+            &control,
+            "reviewPayment",
+            BTreeMap::from([
+                ("payment".into(), value),
+                ("expected".into(), payment.clone()),
+            ]),
+        )
+    };
+    let mut session = open(payment.clone())?;
+    assert_eq!(session.advance()?["status"], "completed");
+    let completion = session.private_completion(&binding["nativeRelation"])?;
+    let plan: Plan = serde_json::from_slice(&fs::read(root.join(format!("{name}.impact.json")))?)?;
+    let circuit = IrSource::load(fs::File::open(root.join(format!("{name}.zkir")))?)?;
+    let execution = prepare(
+        &plan,
+        &serde_json::from_value(completion["inputs"].clone())?,
+        &create_state(&plan, &BTreeMap::new())?,
+        &INITIAL_PARAMETERS,
+        ContractAddress::default(),
+    )?;
+    check(&execution, &circuit)?;
+    assert_eq!(execution.preimage.inputs, [300u64, 1, 0, 1, 1, 12, 42].map(Fr::from));
+    assert!(execution.preimage.private_transcript.is_empty());
+    assert_eq!(
+        json!(execution.returns_json()),
+        json!({"approval":true, "memo":"42"})
+    );
+
+    let mut wrong_amount = payment.clone();
+    wrong_amount["fields"][0]["value"]["items"][0]["value"] = json!("299");
+    assert_eq!(open(wrong_amount)?.advance()?["status"], "failed");
+    let mut malformed = payment.clone();
+    malformed["fields"][3]["value"] = bytes(&[12]);
+    assert!(open(malformed).is_err());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires fresh AggregateSerialization Lean artifacts"]
 fn aggregate_wire_matches_compact_reference() -> Result<()> {
     let root = artifact_root()?;
     let name = "AggregateSerialization.Codec.transcode";
