@@ -1694,10 +1694,6 @@ private def makeReadSignature (field : PrivateStateField) : WitnessSignature :=
     let program ← match Helpers.Wire.attach program (codecs.map (·.2)) with
       | .ok value => pure value
       | .error message => throwErrorAt stx message
-    let readTypes := (witnesses.filter (·.operation == "private_state.read.v1")).map (·.result)
-    if let some expected := readTypes.head? then
-      unless readTypes.all (· == expected) do
-        throwErrorAt stx "readable witness circuits currently require private-state fields to share one result type"
     let compiled ← match Witness.compile program exportName programNameText with
       | .error diagnostic => throwErrorAt stx s!"readable witness compilation failed: {diagnostic.message}"
       | .ok compiled => pure compiled

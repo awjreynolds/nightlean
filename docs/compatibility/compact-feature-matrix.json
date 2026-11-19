@@ -1164,7 +1164,7 @@
       "layer": "private-runtime",
       "surface": "Private-state initialization and evolution",
       "noctiumStatus": "subset",
-      "notes": "Source scalar private stages and transactional native journals are qualified subsets. Storage truth and persistence remain host assumptions.",
+      "notes": "Source scalar private stages and transactional native journals are qualified subsets. One readable circuit can use different cell types under the same private-state capability. The focused UInt8 and Bool case verifies request types, malformed reply rejection, staged values and native rejection of an altered flag. Storage truth and persistence remain host assumptions.",
       "source": [
         "reference"
       ],
@@ -1176,7 +1176,9 @@
       "observedEvidence": [
         "docs/development/typed-witnesses.md",
         "docs/development/typed-witness-qualification.md",
-        "tests/witness62-public/qualification-evidence.json"
+        "tests/witness62-public/qualification-evidence.json",
+        "tests/PrivateStateMixed.lean",
+        "runtime/tests/witness_control.rs"
       ],
       "equivalence": "unverified",
       "implementationUpdate": {

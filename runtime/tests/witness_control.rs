@@ -543,7 +543,11 @@ fn source_context(signatures: &[WitnessSignature], attempt_id: &str) -> Context 
                 previous.argument_schema,
                 operations[&signature.operation].argument_schema
             );
-            assert_eq!(previous.result_schema, signature.result_type);
+            if signature.operation == host::READ && previous.result_schema != signature.result_type {
+                operations.get_mut(host::READ).unwrap().result_schema = host::SOURCE_CELL_TYPE.into();
+            } else {
+                assert_eq!(previous.result_schema, signature.result_type);
+            }
         }
         let prefix = signature
             .private_key
@@ -983,6 +987,98 @@ fn readable_private_state_source_binds_callbacks_stages_and_native_constraints()
         execution.preimage.private_transcript[0] = Fr::from(9u64);
         assert!(check(&execution, &circuit).is_err());
     }
+}
+
+#[cfg(feature = "zkir-321")]
+#[test]
+#[ignore = "requires fresh PrivateStateMixed Lean artifacts"]
+fn typed_private_cells_bind_distinct_read_types() {
+    use coin_structure::contract::ContractAddress;
+    use ledger::structure::INITIAL_PARAMETERS;
+    use noctium_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
+    use std::{fs, path::PathBuf};
+    use transient_crypto::curve::Fr;
+
+    let root = PathBuf::from(std::env::var_os("NOCTIUM_MIXED_PRIVATE_STATE_ARTIFACTS").unwrap());
+    let stem = "PrivateStateMixed.Meter.advance";
+    let control: Json = serde_json::from_slice(
+        &fs::read(root.join(format!("{stem}.witness.control.json"))).unwrap(),
+    )
+    .unwrap();
+    let attempt = "e".repeat(64);
+    let mut context = source_context(&signatures(&control), &attempt);
+    context
+        .capabilities
+        .iter_mut()
+        .find(|c| c.id == "commit")
+        .unwrap()
+        .key_prefix = "noctium/PrivateStateMixed.Wallet/".into();
+    let pin = hex::encode(Sha256::digest(
+        control["binding"].as_str().unwrap().as_bytes(),
+    ));
+    let mut session = Session::from_json_with_invocation_target(
+        control.clone(),
+        BTreeMap::from([("expected".into(), json!("2"))]),
+        context,
+        Some(&pin),
+        Some(InvocationTarget {
+            contract_address: "a".repeat(64),
+            entrypoint: "advance".into(),
+        }),
+    )
+    .unwrap();
+    for (key, schema, response, invalid) in [
+        ("saved", "UIntRange<256>", json!("1"), json!(true)),
+        ("enabled", "Bool", json!(true), json!("1")),
+    ] {
+        let pending = session.advance().unwrap();
+        let request = &pending["request"];
+        assert_eq!(request["operation"], host::READ);
+        assert_eq!(request["schema"], schema);
+        assert_eq!(
+            session.private_request().unwrap()["arguments"]["key"],
+            format!("noctium/PrivateStateMixed.Wallet/{key}")
+        );
+        assert!(
+            session
+                .resume_typed(reply(request, &attempt, "value", Some(invalid)))
+                .is_err()
+        );
+        assert_eq!(session.advance().unwrap(), pending);
+        session
+            .resume_typed(reply(request, &attempt, "value", Some(response)))
+            .unwrap();
+    }
+    assert_eq!(session.advance().unwrap()["status"], "completed");
+    let completed = session
+        .private_completion(&binding(&control)["nativeRelation"])
+        .unwrap();
+    assert_eq!(
+        completed["hostWrites"]["noctium/PrivateStateMixed.Wallet/saved"]["value"],
+        "2"
+    );
+    assert_eq!(
+        completed["hostWrites"]["noctium/PrivateStateMixed.Wallet/enabled"]["value"],
+        false
+    );
+    let plan: Plan =
+        serde_json::from_slice(&fs::read(root.join(format!("{stem}.impact.json"))).unwrap())
+            .unwrap();
+    let circuit =
+        IrSource::load(fs::File::open(root.join(format!("{stem}.zkir"))).unwrap()).unwrap();
+    let state = create_state(&plan, &BTreeMap::from([("count".into(), json!("1"))])).unwrap();
+    let mut execution = prepare(
+        &plan,
+        &serde_json::from_value(completed["inputs"].clone()).unwrap(),
+        &state,
+        &INITIAL_PARAMETERS,
+        ContractAddress::default(),
+    )
+    .unwrap();
+    check(&execution, &circuit).unwrap();
+    assert_eq!(execution.preimage.private_transcript, [Fr::from(1u64); 2]);
+    execution.preimage.private_transcript[1] = Fr::from(0u64);
+    assert!(check(&execution, &circuit).is_err());
 }
 
 fn pair_value(amount: &str) -> Json {

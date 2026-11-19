@@ -12,6 +12,8 @@ use zeroize::Zeroize;
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const READ: &str = "private_state.read.v1";
+/// A typed read uses its source signature's exact result schema.
+pub const SOURCE_CELL_TYPE: &str = "SourceCellType";
 pub const STAGE: &str = "private_state.stage.v1";
 pub const CAS: &str = "private_state.compare_exchange.v1";
 pub const CAS_SCHEMA: &str = "PrivateStateCasResult/v1";
@@ -345,7 +347,10 @@ impl Runtime {
                     && !matches!(descriptor.operation.as_str(), STAGE | CAS)
                     && names.insert(descriptor.operation.clone())
                     && descriptor.argument_schema.len() <= 8
-                    && typed_token_valid(&descriptor.result_schema, registry),
+                    && (typed_token_valid(&descriptor.result_schema, registry)
+                        || (registry.is_some()
+                            && descriptor.operation == READ
+                            && descriptor.result_schema == SOURCE_CELL_TYPE)),
                 Error::Descriptor,
             )?;
             for (name, ty) in &descriptor.argument_schema {
@@ -400,6 +405,7 @@ impl Runtime {
             )?;
             require(
                 private_inputs[&provider.input] == descriptor.result_schema
+                    && (descriptor.result_schema != SOURCE_CELL_TYPE || typed_read)
                     && if typed_inputs.contains(&provider.input) {
                         typed_provider_arguments_valid
                     } else {
@@ -521,8 +527,16 @@ impl Runtime {
             self.lifecycle.phase() == Phase::Open && self.pending.is_none(),
             Error::State,
         )?;
+        let provider = self.provider(input);
+        if let Some(provider) = provider {
+            require(
+                self.descriptor(&provider.operation)?.result_schema != SOURCE_CELL_TYPE,
+                Error::Descriptor,
+            )?;
+        }
+        let has_provider = provider.is_some();
         self.count_request()?;
-        if self.provider(input).is_some() {
+        if has_provider {
             self.pending = Some(Pending::Provider {
                 id,
                 input: input.to_owned(),
@@ -588,7 +602,8 @@ impl Runtime {
         )?;
         let descriptor = self.descriptor(&signature.operation)?;
         require(
-            descriptor.result_schema == signature.result_type,
+            descriptor.result_schema == signature.result_type
+                || (private_read && descriptor.result_schema == SOURCE_CELL_TYPE),
             Error::Descriptor,
         )?;
         require(

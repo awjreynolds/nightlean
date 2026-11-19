@@ -18,9 +18,13 @@ This source form supports Native, Bool, bounded UInt and Bytes32 values, with Un
 callback results. Typed callbacks also accept and return JubjubScalar and JubjubPoint values. Its `.observations.json` records authored proof conditions separately
 from generated validity checks. The summary is source review material and is
 not yet a verified bundle artifact. Composite curve schemas, curve private-state cells and structured source branches remain separate work.
-Private reads within one plan currently share one scalar result type because
-the host protocol declares one result schema per read operation. Mixed-type
-private reads require a protocol extension, tracked with [the remaining type work](https://github.com/awjreynolds/noctium/issues/69).
+One circuit can read private cells of different supported scalar types. To opt
+in, register `private_state.read.v1` with `argumentSchema` set to `{"key":"Key"}`
+and `resultSchema` set to `"SourceCellType"`. Use the authenticated witness
+plan to register each read's name, capability and exact key. Each request
+reports its declared type, such as `Bool` or `UIntRange<256>`, and the runtime
+validates the response against it. A host that supplies a concrete result
+schema still restricts reads to that type. [Mixed-cell example](../../tests/PrivateStateMixed.lean)
 
 Declarations describe access requests. The host still grants storage permissions.
 Generated keys use `noctium/<qualified-schema>/<field>`. Grant a schema with

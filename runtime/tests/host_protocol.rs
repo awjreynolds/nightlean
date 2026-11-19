@@ -374,6 +374,11 @@ fn host_descriptor_scopes_and_private_buffer_limits_reject_without_partial_effec
             json!("Bool"),
             INVALID_ARGUMENT,
         ),
+        (
+            "/hostContext/operations/0/resultSchema",
+            json!("SourceCellType"),
+            INVALID_ARGUMENT,
+        ),
     ] {
         let mut value_envelope = envelope('3');
         *value_envelope.pointer_mut(pointer).unwrap() = value;
