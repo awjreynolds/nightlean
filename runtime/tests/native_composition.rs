@@ -441,6 +441,18 @@ fn composed_intent_attaches_both_proofs_against_installed_keys() {
 #[test]
 #[ignore = "spends only the public development wallet on the explicit isolated Midnight localnet"]
 fn composed_intent_finalizes_both_contract_states_on_localnet() {
+    run_local_composition(false);
+}
+
+#[cfg(feature = "localnet")]
+#[test]
+#[ignore = "uses the isolated development wallet and the three registry operation bundles"]
+fn registry_rotation_routes_two_finalized_calls_without_redeploying() {
+    run_local_composition(true);
+}
+
+#[cfg(feature = "localnet")]
+fn run_local_composition(registry: bool) {
     use base_crypto::time::Timestamp;
     use futures::{executor::block_on, future::pending};
     use noctium_runtime::{
@@ -481,7 +493,6 @@ fn composed_intent_finalizes_both_contract_states_on_localnet() {
         .unwrap();
         let dust = cache.dust().await.unwrap();
         let dust_srs = cache.parameters(dust.k()).await.unwrap();
-        let pair = Pair::load();
         eprintln!("sync localnet");
         let snapshot = node.sync().unwrap();
         let submit = async |intent: &ProvedNativeIntent| -> FinalizedReceipt {
@@ -520,16 +531,15 @@ fn composed_intent_finalizes_both_contract_states_on_localnet() {
         };
 
         let ttl = snapshot.block.tblock.to_secs() + 1800;
-        let mut deployment_receipts = Vec::new();
-        for operation in [&pair.caller, &pair.callee] {
+        let deploy = async |deployment: &ContractDeploy<Db>| {
             let intent = NativeIntent::empty(&mut OsRng, Timestamp::from_secs(ttl))
-                .add_deploy(operation.deploy.clone());
+                .add_deploy(deployment.clone());
             let provider = builtin_zkir::LocalProvingProvider {
                 rng: StdRng::from_entropy(),
                 resolver: &dust,
                 params: &dust_srs,
             };
-            let (_, deploy) = intent
+            let (_, deployment) = intent
                 .prove(
                     CONTRACT_SEGMENT,
                     provider,
@@ -537,7 +547,16 @@ fn composed_intent_finalizes_both_contract_states_on_localnet() {
                 )
                 .await
                 .unwrap();
-            deployment_receipts.push(submit(&deploy).await);
+            submit(&deployment).await
+        };
+        if registry {
+            qualify_registry(&node, deploy, submit).await;
+            return;
+        }
+        let pair = Pair::load();
+        let mut deployment_receipts = Vec::new();
+        for operation in [&pair.caller, &pair.callee] {
+            deployment_receipts.push(deploy(&operation.deploy).await);
         }
         let live = node.sync().unwrap();
         let intent = pair.intent(&live.state, live.block.tblock.to_secs() + 1800);
@@ -586,4 +605,239 @@ fn composed_intent_finalizes_both_contract_states_on_localnet() {
             })
         );
     });
+}
+
+#[cfg(feature = "localnet")]
+async fn qualify_registry(
+    node: &noctium_runtime::localnet::Node,
+    deploy: impl AsyncFn(&ContractDeploy<Db>) -> noctium_runtime::client::FinalizedReceipt,
+    submit: impl AsyncFn(
+        &noctium_runtime::proof::ProvedNativeIntent,
+    ) -> noctium_runtime::client::FinalizedReceipt,
+) {
+    use futures::future::pending;
+    use noctium_runtime::field_decimal;
+    use transient_crypto::hash::transient_hash;
+
+    let callee = Operation::load(
+        "callee",
+        "store",
+        BTreeMap::from([("stored".into(), json!("1"))]),
+    );
+    let first = callee.deploy.address();
+    let replacement = ContractDeploy::new(&mut OsRng, callee.deploy.initial_state.clone());
+    let second = replacement.address();
+    assert_ne!(first, second);
+    let authority = Fr::from(42u64);
+    let config = |route: ContractAddress| {
+        BTreeMap::from([
+            ("route".into(), bytes32(route.0)),
+            (
+                "adminCommitment".into(),
+                json!(field_decimal(transient_hash(&[authority]))),
+            ),
+        ])
+    };
+    let mut caller = Operation::load("caller", "claim", config(first));
+    let rotate = Operation::load("rotate", "rotateRoute", config(first));
+    let extra = rotate
+        .deploy
+        .initial_state
+        .operations
+        .get(&rotate.entry)
+        .unwrap();
+    let mut state = caller.deploy.initial_state.clone();
+    state.operations = state
+        .operations
+        .insert(rotate.entry.clone(), (*extra).clone());
+    caller.deploy = ContractDeploy::new(&mut OsRng, state);
+    let caller_address = caller.deploy.address();
+    let mut deployments = Vec::new();
+    for deployment in [&callee.deploy, &replacement, &caller.deploy] {
+        deployments.push(deploy(deployment).await);
+    }
+
+    let prove = async |intent, state: &LedgerState<Db>, selected: &[CompositionMaterial<'_>]| {
+        let prepared = PreparedComposition::from_intent(intent, state, selected).unwrap();
+        let proved = prepared.prove_locally(OsRng, pending()).await.unwrap();
+        submit(proved.native()).await
+    };
+    let mut field_bytes = [0u8; 32];
+    field_bytes[0] = 9;
+    let callee_inputs = BTreeMap::from([
+        ("aux".into(), json!("7")),
+        ("flag".into(), json!(true)),
+        ("score".into(), json!("200")),
+        (
+            "payload".into(),
+            json!({"kind":"bytes", "values":(0..33).collect::<Vec<u8>>()}),
+        ),
+        ("empty".into(), json!({"kind":"bytes", "values":[]})),
+        ("scalar".into(), json!({"kind":"jubjubScalar", "value":"1"})),
+        (
+            "point".into(),
+            json!({"kind":"jubjubPoint", "x":"0", "y":"1"}),
+        ),
+        (
+            "field".into(),
+            json!({"kind":"foreign", "type":"Secp256k1Base", "bytes":field_bytes}),
+        ),
+    ]);
+    let call = |ledger: &LedgerState<Db>,
+                ttl,
+                target: ContractAddress,
+                role: EntryPointBuf,
+                opening: u64| {
+        let mut inputs = callee_inputs.clone();
+        inputs.remove("aux");
+        inputs.extend([
+            ("opening".into(), json!(opening.to_string())),
+            ("emptyAccepted".into(), json!(true)),
+            ("expectedTail".into(), json!("32")),
+            ("expectedScore".into(), json!("200")),
+            ("expectedApproval".into(), json!(true)),
+        ]);
+        let caller_data = ledger.contract.get(&caller_address).unwrap().data.clone();
+        let callee_data = ledger.contract.get(&target).unwrap().data.clone();
+        let parent = prepare(
+            &caller.plan,
+            &inputs,
+            &caller_data,
+            &ledger.parameters,
+            caller_address,
+        )
+        .unwrap();
+        let child = prepare(
+            &callee.plan,
+            &callee_inputs,
+            &callee_data,
+            &ledger.parameters,
+            target,
+        )
+        .unwrap();
+        assemble_checked_calls(
+            &[
+                checked_call(
+                    &parent,
+                    &caller.circuit,
+                    caller_data,
+                    caller_address,
+                    caller.entry.clone(),
+                    Fr::from(opening + 1),
+                ),
+                checked_call(
+                    &child,
+                    &callee.circuit,
+                    callee_data,
+                    target,
+                    role,
+                    Fr::from(opening),
+                ),
+            ],
+            &ledger.parameters,
+            ttl,
+            &mut OsRng,
+        )
+    };
+    let selected = [caller.proof_selection(), callee.proof_selection()];
+    let live = node.sync().unwrap();
+    let ttl = live.block.tblock.to_secs() + 1800;
+    assert!(
+        call(
+            &live.state,
+            ttl,
+            first,
+            EntryPointBuf(b"other".to_vec()),
+            101
+        )
+        .is_err()
+    );
+    let intent = call(&live.state, ttl, first, callee.entry.clone(), 101).unwrap();
+    assert!(
+        PreparedComposition::from_intent(
+            intent.clone(),
+            &live.state,
+            &[caller.proof_selection(), rotate.proof_selection()]
+        )
+        .is_err()
+    );
+    let first_call = prove(intent, &live.state, &selected).await;
+
+    let live = node.sync().unwrap();
+    let ttl = live.block.tblock.to_secs() + 1800;
+    let data = live
+        .state
+        .contract
+        .get(&caller_address)
+        .unwrap()
+        .data
+        .clone();
+    let update = prepare(
+        &rotate.plan,
+        &BTreeMap::from([
+            ("newTarget".into(), bytes32(second.0)),
+            ("authority".into(), json!(field_decimal(authority))),
+        ]),
+        &data,
+        &live.state.parameters,
+        caller_address,
+    )
+    .unwrap();
+    let intent = assemble_checked_calls(
+        &[checked_call(
+            &update,
+            &rotate.circuit,
+            data,
+            caller_address,
+            rotate.entry.clone(),
+            Fr::from(99u64),
+        )],
+        &live.state.parameters,
+        ttl,
+        &mut OsRng,
+    )
+    .unwrap();
+    let rotated = prove(intent, &live.state, &[rotate.proof_selection()]).await;
+    let live = node.sync().unwrap();
+    assert_eq!(
+        live.state.contract.get(&caller_address).unwrap().data,
+        create_state(&caller.plan, &config(second)).unwrap()
+    );
+    let ttl = live.block.tblock.to_secs() + 1800;
+    assert!(call(&live.state, ttl, first, callee.entry.clone(), 103).is_err());
+    let intent = call(&live.state, ttl, second, callee.entry.clone(), 103).unwrap();
+    let second_call = prove(intent, &live.state, &selected).await;
+
+    let verify = |receipt: &noctium_runtime::client::FinalizedReceipt, address: ContractAddress| {
+        let key = hex::encode(address.0.0);
+        assert_eq!(receipt.contract_address, hex::encode(caller_address.0.0));
+        assert_eq!(receipt.secondary_states.len(), 1);
+        let bytes = &receipt.secondary_states[&key];
+        let state =
+            serialize::tagged_deserialize::<ContractState<Db>>(&mut bytes.as_slice()).unwrap();
+        assert_eq!(
+            state.data,
+            create_state(
+                &callee.plan,
+                &BTreeMap::from([("stored".into(), json!("200"))])
+            )
+            .unwrap()
+        );
+    };
+    verify(&first_call, first);
+    verify(&second_call, second);
+    assert_eq!(first_call.contract_state, deployments[2].contract_state);
+    assert_eq!(second_call.contract_state, rotated.contract_state);
+    eprintln!(
+        "{}",
+        json!({
+            "genesis": first_call.chain.genesis, "profile": first_call.chain.profile,
+            "deployments": deployments.iter().map(|r| json!({"address":r.contract_address,"height":r.height,"blockHash":r.block_hash,"transactionId":r.transaction_id})).collect::<Vec<_>>(),
+            "caller": hex::encode(caller_address.0.0),
+            "firstCall": {"callee":hex::encode(first.0.0), "height":first_call.height,"blockHash":first_call.block_hash,"transactionId":first_call.transaction_id,"extrinsicHash":first_call.extrinsic_hash},
+            "rotation": {"height":rotated.height,"blockHash":rotated.block_hash,"transactionId":rotated.transaction_id,"extrinsicHash":rotated.extrinsic_hash},
+            "secondCall": {"callee":hex::encode(second.0.0),"height":second_call.height,"blockHash":second_call.block_hash,"transactionId":second_call.transaction_id,"extrinsicHash":second_call.extrinsic_hash},
+            "rejected": ["wrong selector", "wrong callee bundle", "stale registry route"], "stored": "200"
+        })
+    );
 }

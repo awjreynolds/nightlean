@@ -80,8 +80,15 @@ domain and emits a literal selector. The runtime checks the address from the
 current registry cell, the selector and the call commitment together. The
 native case checks the selector against `EntryPointBuf::ep_hash`, runs a
 secret-authorized registry rotation, assembles a call to the second deployment
-address and rejects the stale address and a wrong operation. These checks use
-the pinned native runtime in process. [Midnight selector implementation](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-state/src/state.rs#L912-L918) · [SHA-256 standard](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)
+address and rejects the stale address and a wrong operation. [Midnight selector implementation](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-state/src/state.rs#L912-L918) · [SHA-256 standard](https://csrc.nist.gov/pubs/fips/180-4/upd1/final)
+
+On localnet, the first routed call finalized at block 28361, the registry
+update at 28364, and the second routed call at 28367. The caller used one
+deployment throughout. Each composed transaction updated its selected callee's
+`stored` cell to 200. The native proof SDK checked each selected bundle against
+the verifier installed at its address and operation. A wrong selector, a
+wrong callee bundle and the stale address all rejected before proving.
+[Registry qualification receipt](native-registry-receipt.json)
 
 ## Assemble a native call forest
 
@@ -183,4 +190,17 @@ endpoint, then run:
 cargo test --manifest-path runtime/Cargo.toml --locked \
   --no-default-features --features zkir-321,localnet --test native_composition \
   composed_intent_finalizes_both_contract_states_on_localnet -- --ignored --nocapture
+```
+
+For the registry case, compile `tests/TypedCallArguments.lean` with the same
+profile. Build `caller-bundle` for `TypedCaller.claim`, `rotate-bundle` for
+`TypedCaller.rotateRoute` and `callee-bundle` for `TypedCallArguments.store`.
+Pin each manifest as above, using `NOCTIUM_COMPOSITION_ROTATE_SHA256` for the
+rotation bundle. The route and callee use K11, and the rotation uses K8. Pin the
+rotation parameters with `NOCTIUM_COMPOSITION_ROTATE_SRS_SHA256`.
+
+```sh
+cargo test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321,localnet --test native_composition \
+  registry_rotation_routes_two_finalized_calls_without_redeploying -- --ignored --nocapture
 ```

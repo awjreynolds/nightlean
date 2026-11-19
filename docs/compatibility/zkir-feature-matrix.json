@@ -5521,7 +5521,7 @@
       "scope": "Direct callInputs selects ordered private Native, Bool, bounded UInt, fixed Bytes, Jubjub and supported foreign values. Bytes bind FAB chunks from high to low and Bytes0 contributes no fields. Foreign values retain their native header type. Raw inputs replace the selected private transcript witness slots and bind to the communication commitment with the output fields.",
       "checks": "The mixed source/native case verifies raw field order, state and returns, leaves one independent private witness in the transcript, and rejects a reordered header or an out-of-range byte chunk with a recomputed commitment. Source checks reject unauthorized disclosure and expanded field overflow. Native-only argument and checked two-call assembly regressions pass.",
       "newOpcodes": 0,
-      "limits": "256 logical arguments and 256 physical fields. Direct scalar and byte arguments only. Composite and hosted arguments and automatic runtime target resolution remain open. Selected checker evidence without fresh key, proof or deployment qualification."
+      "limits": "256 logical arguments and 256 physical fields. Direct scalar and byte arguments only. Composite and hosted arguments remain open. The native registry case records separate proof and localnet execution evidence for a mixed-type call."
     },
     "nativeCallClaims": {
       "checkedOn": "2026-11-18",
@@ -5532,6 +5532,17 @@
       "checks": "Source disclosure guards reject private address, hash, commitment and control. The native intent case passes a caller, its callee and an independent root. It checks the address order, raw Native argument and exact claimed target, accepts a standalone inactive caller and rejects a missing target, reversed order, wrong address, duplicate commitments and preloaded effects. A fresh caller/callee test rejects an incorrect installed verifier and attaches real k9/k8 proofs. The sealed transaction passes native in-process verification with fee balancing disabled. The funded Rust case finalized both calls in one localnet transaction at block 27627 and matched both full contract states. The callee balance is 13 and count is 1. A direct typed caller derives commitment packing from its declared callee. The checked mixed-type intent accepts matching payloads and rejects a changed expected result. Source type and arity mismatches reject.",
       "newOpcodes": 0,
       "limits": "Applications supply initial contexts and authenticate the ledger snapshot. Funded localnet qualification covers one caller and leaf callee in the Rust client. Composed private-journal recovery, foreign SDK submission and wider source call authoring remain open. The reference interpreter rejects active claims."
+    },
+    "nativeRegistryRouting": {
+      "checkedOn": "2026-11-19",
+      "source": "../../tests/TypedCallArguments.lean",
+      "native": "../../runtime/tests/native_composition.rs",
+      "documentation": "../development/native-call-claims.md#bind-the-entrypoint-and-read-the-address-from-a-registry",
+      "receipt": "../development/native-registry-receipt.json",
+      "scope": "The two-argument typed claim derives the entrypoint selector in Lean from the declared operation. The caller reads a Bytes32 route from ledger state and checks the selected address, entrypoint and mixed scalar and byte payload against its callee. The Rust proof SDK matches selected bundle keys to the operations installed on the ledger.",
+      "checks": "Native selector match, authorized rotation, and two composed localnet calls through one caller. The first call, rotation and second call finalized at blocks 28361, 28364 and 28367. Both callee states matched the expected value. A stale address, wrong selector and wrong bundle rejected before proving.",
+      "newOpcodes": 0,
+      "limits": "The host supplies source bundles and trusted proving parameters. This case covers an isolated localnet and direct entrypoints. General bundle discovery and cross-host composition remain open."
     }
   }
 }

@@ -1,0 +1,80 @@
+{
+  "caller": "fc6f8744fc7d90cb89d1b1fdb85b3a4fdef6ef05da7af6cd376c1bbe09fd1476",
+  "deployments": [
+    {
+      "address": "66d65daf4e38711a3b301bcaf38e340bee0557a49de055ff0ad257e40099a04f",
+      "blockHash": "6209b92d96ea559abfff9ac0fd55b92c017d1d725e88e603baca2a7054c3785f",
+      "height": 28352,
+      "transactionId": "2cc6ea170db58c587a526be60a7a741357c5ee00fde2c8896f2c2bcbdae1c838"
+    },
+    {
+      "address": "fa30b126ab378eadaa8172e8f6539a0eee3cc522f7ca9a671139ccf319dd6a98",
+      "blockHash": "a6410c371c4bb89699497bfb31ba5f1ca102b16644f02814324cb5299e7eca4d",
+      "height": 28355,
+      "transactionId": "5ef663bd660701d2a070591fdb91708cfecdcdf9439ab3c94e23735372be6579"
+    },
+    {
+      "address": "fc6f8744fc7d90cb89d1b1fdb85b3a4fdef6ef05da7af6cd376c1bbe09fd1476",
+      "blockHash": "25e51e700af2b7ae12eb8bd0fd8fa2ffbdb076786cbe5323c8ec6701b107d11f",
+      "height": 28358,
+      "transactionId": "f84423a5d09f7893ed6bc8613cf252c70f0d7d34f99408edda0b925c57d0dccb"
+    }
+  ],
+  "firstCall": {
+    "blockHash": "b594877cbfd69a00aea459926526ef638fbf287cbda573655b6ebaec310b7e38",
+    "callee": "66d65daf4e38711a3b301bcaf38e340bee0557a49de055ff0ad257e40099a04f",
+    "extrinsicHash": "cc3f70a017a73ba4095e094033fb91670f7992b3c9fbab82f33cc3d9a24b6a29",
+    "height": 28361,
+    "transactionId": "fa9beeff60e60486f363ce93243fbaea25f9713639c7c2d9a30b47d650e0c8f9"
+  },
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "harnessSha256": "5ce90fb0addad0dd7a4abcf72311578c7305a3a6d0b205ee3c66070ead867b87",
+  "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+  "localnetTestSeconds": 137.03,
+  "operations": {
+    "callee": {
+      "bundleManifestSha256": "2d978e9c5a404ce5c32079c20a3a37429c3219754bd75eb1475220b4e5a48645",
+      "k": 11,
+      "operation": "TypedCallArguments.store",
+      "rows": 1381
+    },
+    "caller": {
+      "bundleManifestSha256": "e0c29527bef6a0eee25088e0c301c0cead6e362ece9687ad33ce96e51479ed7a",
+      "k": 11,
+      "operation": "TypedCaller.claim",
+      "rows": 1612
+    },
+    "rotate": {
+      "bundleManifestSha256": "87f316755882e2bf45bfd12ee534dd97783f178b33b84da5626dbed7133b0b78",
+      "k": 8,
+      "operation": "TypedCaller.rotateRoute",
+      "rows": 147
+    }
+  },
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "rejected": [
+    "wrong selector",
+    "wrong callee bundle",
+    "stale registry route"
+  ],
+  "rotation": {
+    "blockHash": "2b156903ee80d2b348c755337a872b687c4da81e3df3f99624947a6dd5b8ddc8",
+    "extrinsicHash": "4c899d3edfdf42597a656852cbe2fb9a97d6696b8327a9160c5e0f4748863532",
+    "height": 28364,
+    "transactionId": "b5517cde47006f8ebd066bb4d026bcf6bb4b346c8894493d8b9b87be39848076"
+  },
+  "secondCall": {
+    "blockHash": "34edf7e7009b31cad244a13b32eeb20d78c60ec17e68eaea82d344b363d81355",
+    "callee": "fa30b126ab378eadaa8172e8f6539a0eee3cc522f7ca9a671139ccf319dd6a98",
+    "extrinsicHash": "c72be80d58373057f8c601473b33ff5c7277e3728303eacfd2ca065a5b5c9178",
+    "height": 28367,
+    "transactionId": "0248b5def1ce49e2667288c0eadfbee5e7f8da7aa037ae2ebd72097aede4717b"
+  },
+  "sourceRevision": "30c905098f2f2518c915be39b5f420f2cca01e82",
+  "sourceSha256": "8c0fc70495fe115c7f852d1cec496027441c065fdf16423932d89c04a35ac716",
+  "specVersion": 2001100,
+  "stored": "200",
+  "transactionVersion": 4,
+  "zkirBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+  "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
+}
