@@ -2158,6 +2158,7 @@ fn validate_relation_inputs(
     relation: &Json,
     circuit_inputs: &BTreeMap<String, (String, String)>,
     input_order: &[(String, String)],
+    call_inputs: &[String],
 ) -> Result<()> {
     let version = field(relation, "version")?;
     ensure!(
@@ -2167,6 +2168,27 @@ fn validate_relation_inputs(
     );
     let instructions = list(relation, "instructions")?;
     let relation_input_names = native_relation_input_names(instructions)?;
+    let header = if call_inputs.is_empty() {
+        Vec::new()
+    } else {
+        let inputs: Vec<_> = circuit_inputs
+            .iter()
+            .map(|(name, (ty, visibility))| crate::Input {
+                name: name.clone(),
+                ty: ty.clone(),
+                visibility: visibility.clone(),
+            })
+            .collect();
+        crate::call_input_header(&inputs, call_inputs)?
+    };
+    crate::validate_call_input_header_json(&header, relation)?;
+    ensure!(
+        header.iter().all(|(name, _)| {
+            name.strip_prefix("%input_")
+                .is_some_and(|field| !relation_input_names.contains(field))
+        }),
+        "native call input collides with a transcript input"
+    );
     let mut physical_inputs = BTreeMap::new();
     let mut physical_order = Vec::new();
     let mut byte_constraints = Vec::new();
@@ -2175,6 +2197,12 @@ fn validate_relation_inputs(
             .get(name)
             .ok_or_else(|| anyhow!("unknown native circuit input"))?;
         let scalar = ScalarType::parse(token)?;
+        if call_inputs.contains(name) {
+            if let Some(length) = scalar.bytes_length() {
+                byte_constraints.extend(crate::call_byte_input_fields(name, length));
+            }
+            continue;
+        }
         let names = if scalar == ScalarType::JubjubPoint {
             vec![format!("{name}_x"), format!("{name}_y")]
         } else if let Some(length) = scalar.bytes_length() {
@@ -2204,6 +2232,7 @@ fn validate_relation_inputs(
     let mut declared = BTreeMap::new();
     let mut declared_order = Vec::new();
     let mut bit_constraints = BTreeMap::<String, Vec<u64>>::new();
+    let mut zero_constraints = BTreeSet::new();
     let mut aliases = BTreeMap::<String, String>::new();
     let mut pending_constraints = Vec::new();
     for instruction in instructions {
@@ -2241,6 +2270,14 @@ fn validate_relation_inputs(
                 instruction.get("bits").and_then(Json::as_u64),
             ) {
                 pending_constraints.push((input.to_owned(), bits));
+            }
+        } else if operation == "constrain_eq" {
+            let zero_operand = match (text(instruction, "a")?, text(instruction, "b")?) {
+                ("0x00", value) | (value, "0x00") => value,
+                _ => continue,
+            };
+            if let Some(input) = zero_operand.strip_prefix("%input_") {
+                zero_constraints.insert(input);
             }
         } else if operation == "cond_select" {
             let selected = match instruction.get("bit").and_then(Json::as_str) {
@@ -2289,7 +2326,14 @@ fn validate_relation_inputs(
         let required_bits = match ScalarType::parse(type_token)? {
             ScalarType::Native => None,
             ScalarType::Bool => Some(1),
-            ScalarType::UInt(maximum) => Some(maximum.bits().max(1)),
+            ScalarType::UInt(maximum) if maximum.bits() == 0 => {
+                ensure!(
+                    zero_constraints.contains(name.as_str()),
+                    "native zero-bound input lacks equality to zero"
+                );
+                None
+            }
+            ScalarType::UInt(maximum) => Some(maximum.bits()),
             ScalarType::Bytes32 | ScalarType::Bytes(_) => None,
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => None,
             #[cfg(feature = "zkir-321")]
@@ -2508,6 +2552,7 @@ fn validate_native_binding(
 ) -> Result<Vec<Json>> {
     let has_ledger_inputs = binding.get("ledgerInputs").is_some();
     let has_ledger_calls = binding.get("ledgerCalls").is_some();
+    let call_inputs = crate::call_input_names(binding)?;
     let binding_version = native_binding_version(binding)?;
     ensure!(
         binding_version == 1 || binding_version == 2,
@@ -2532,6 +2577,9 @@ fn validate_native_binding(
     }
     if has_ledger_calls {
         fields.push("ledgerCalls");
+    }
+    if binding.get("callInputs").is_some() {
+        fields.push("callInputs");
     }
     shape(binding, &fields, false)?;
     ensure!(
@@ -2585,6 +2633,10 @@ fn validate_native_binding(
     ensure!(
         target_kind != "standalone" || !has_ledger_inputs,
         "standalone native witness binding cannot declare ledger inputs"
+    );
+    ensure!(
+        target_kind == "entrypoint" || call_inputs.is_empty(),
+        "standalone native witness binding cannot declare call inputs"
     );
 
     let mut circuit_inputs = BTreeMap::new();
@@ -2671,6 +2723,7 @@ fn validate_native_binding(
         .map(|(name, (ty, _))| (name.clone(), ty.clone()))
         .collect::<BTreeMap<_, _>>();
     let mut source_input_names = BTreeSet::new();
+    let mut private_parameters = BTreeSet::new();
     let input_bindings = list(binding, "inputBindings")?;
     ensure!(
         input_bindings.len() == source_inputs.len(),
@@ -2687,6 +2740,14 @@ fn validate_native_binding(
         );
         let expected_leaf_types = registry.leaf_types(source_type)?;
         let bound_names = list(input_binding, "inputs")?;
+        if !call_inputs.is_empty()
+            && *is_private
+            && ScalarType::parse(source_type).is_ok()
+            && bound_names.len() == 1
+            && bound_names[0].as_str() == Some(source_name)
+        {
+            private_parameters.insert(source_name.as_str());
+        }
         ensure!(
             bound_names.len() == expected_leaf_types.len(),
             "native source input leaf count"
@@ -2716,6 +2777,10 @@ fn validate_native_binding(
             );
         }
     }
+    ensure!(
+        call_inputs.iter().all(|name| private_parameters.contains(name.as_str())),
+        "native call inputs must name private scalar source parameters"
+    );
     let mut witness_slot_ordinals = BTreeMap::new();
     for (ordinal, call) in calls.iter().enumerate() {
         if binding_version == 2 {
@@ -2884,6 +2949,7 @@ fn validate_native_binding(
         field(binding, "nativeRelation")?,
         &relation_inputs,
         &relation_input_order,
+        &call_inputs,
     )?;
     Ok(calls.to_vec())
 }
@@ -3882,6 +3948,10 @@ pub(crate) fn validate_witness_artifacts(
     ensure!(
         field(binding, "circuitInputs")? == field(field(impact_plan, "circuit")?, "inputs")?,
         "selected Impact plan source input mismatch"
+    );
+    ensure!(
+        crate::call_input_names(binding)? == crate::call_input_names(impact_plan)?,
+        "selected Impact plan call input order mismatch"
     );
     let actual_ledger_inputs: &[Json] = match binding.get("ledgerInputs") {
         Some(value) => value
@@ -7043,14 +7113,14 @@ mod completed_invocation_tests {
                 ("empty".to_owned(), "public".to_owned()),
                 ("probe".to_owned(), "public".to_owned()),
             ];
-            super::validate_relation_inputs(&relation, &inputs, &order).unwrap();
+            super::validate_relation_inputs(&relation, &inputs, &order, &[]).unwrap();
             assert_eq!(
                 super::public_byte_relation_abis(&binding, &relation).unwrap(),
                 abi
             );
 
             relation["instructions"][1]["bits"] = json!(high_bits + 1);
-            assert!(super::validate_relation_inputs(&relation, &inputs, &order).is_err());
+            assert!(super::validate_relation_inputs(&relation, &inputs, &order, &[]).is_err());
         }
     }
 
@@ -7135,7 +7205,7 @@ mod completed_invocation_tests {
             "version":{"major":3,"minor":2},
             "instructions":instructions
         });
-        super::validate_relation_inputs(&relation, &relation_inputs, &input_order).unwrap();
+        super::validate_relation_inputs(&relation, &relation_inputs, &input_order, &[]).unwrap();
 
         let wrong_width = input_order
             .iter()
@@ -7157,7 +7227,7 @@ mod completed_invocation_tests {
             }
         }
         assert!(
-            super::validate_relation_inputs(&bad_relation, &relation_inputs, &input_order).is_err()
+            super::validate_relation_inputs(&bad_relation, &relation_inputs, &input_order, &[]).is_err()
         );
 
         let read_index = reads

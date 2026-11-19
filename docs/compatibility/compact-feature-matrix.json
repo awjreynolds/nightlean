@@ -1316,7 +1316,7 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-19",
-        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. Direct Lean calls accept named aggregate results in the checked layout order. An accepted funded Ledger 9 call commits two aggregate returns alongside a Bool and fixed bytes. The partitioner rejects a claim with a changed field. The Rust path qualifies registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Aggregate arguments, foreign SDK bindings, durable recovery and complete equivalence remain open.",
+        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. Direct Lean calls accept named aggregate results in the checked layout order. An accepted funded Ledger 9 call commits two aggregate returns alongside a Bool and fixed bytes. The partitioner rejects a claim with a changed field. Readable hosted witness circuits commit scalar and fixed-byte source parameters through the same header while retaining the original typed provider inputs. The Rust path qualifies registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Aggregate arguments, foreign SDK bindings, durable recovery and complete equivalence remain open.",
         "evidence": [
           "Noctium/Backend/Impact.lean",
           "runtime/src/proof/composition.rs",

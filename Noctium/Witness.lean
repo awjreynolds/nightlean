@@ -156,7 +156,7 @@ def compile (program : Program) (entryName : String) (circuitName : String := ""
 /-- Bind the same source invocation to the actual ledger call relation, rather
 than substituting the standalone relation's public-return convention. -/
 def bindEntrypoint (compiled : Compiled) (relation : Json) (contractName entrypoint nativeCircuitFile targetProfile : String)
-    (ledgerInputs : List (String × Ty) := []) :
+    (ledgerInputs : List (String × Ty) := []) (callInputs : List String := []) :
     Except Diagnostic Compiled := do
   let mut binding ← setField compiled.binding "nativeRelation" relation
   unless ledgerInputs.isEmpty do
@@ -165,6 +165,8 @@ def bindEntrypoint (compiled : Compiled) (relation : Json) (contractName entrypo
     binding ← setField binding "ledgerInputs" (toJson (ledgerInputs.map fun (name, ty) =>
       Json.mkObj [("name", toJson name), ("type", toJson (scalarName ty)),
         ("visibility", toJson ("public" : String))]))
+  unless callInputs.isEmpty do
+    binding ← setField binding "callInputs" (toJson callInputs)
   binding ← setField binding "target" (Json.mkObj [("kind", toJson ("entrypoint" : String)),
     ("contractName", toJson contractName), ("entrypoint", toJson entrypoint),
     ("nativeCircuitFile", toJson nativeCircuitFile), ("targetProfile", toJson targetProfile)])

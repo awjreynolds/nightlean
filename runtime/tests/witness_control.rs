@@ -9,6 +9,100 @@ use std::collections::{BTreeMap, BTreeSet};
 
 #[cfg(feature = "zkir-321")]
 #[test]
+#[ignore = "requires fresh TypedCallArguments Lean artifacts"]
+fn hosted_arguments_move_to_the_native_header_without_changing_provider_inputs() {
+    use coin_structure::contract::ContractAddress;
+    use ledger::structure::INITIAL_PARAMETERS;
+    use noctium_runtime::{Plan, check, create_state, prepare, zkir::IrSource};
+    use std::{fs, path::PathBuf};
+    use transient_crypto::curve::Fr;
+
+    let root = PathBuf::from(std::env::var_os("NOCTIUM_HOSTED_CALL_ARTIFACTS").unwrap());
+    let stem = "HostedCallArguments.review";
+    let control = fs::read_to_string(root.join(format!("{stem}.witness.control.json"))).unwrap();
+    let plan: Plan =
+        serde_json::from_slice(&fs::read(root.join(format!("{stem}.impact.json"))).unwrap())
+            .unwrap();
+    let relation_bytes = fs::read(root.join(format!("{stem}.zkir"))).unwrap();
+    let circuit = IrSource::load(relation_bytes.as_slice()).unwrap();
+    let relation = serde_json::from_slice(&relation_bytes).unwrap();
+    let payload: Vec<u8> = (0..33).collect();
+    let byte_input = json!({"kind":"bytes","values":payload});
+    let inputs = BTreeMap::from([
+        ("amount".into(), json!("32")),
+        ("payload".into(), byte_input.clone()),
+        ("zeroBound".into(), json!("0")),
+        ("emptyPayload".into(), json!({"kind":"bytes","values":[]})),
+        ("salt".into(), json!("7")),
+    ]);
+    let attempt = "e".repeat(64);
+    let (mut session, plan_json) = bound_session(&control, inputs.clone(), &attempt);
+    let pending = session.advance().unwrap();
+    assert_eq!(pending["status"], "need_host");
+    let private = session.private_request().unwrap();
+    assert_eq!(private["arguments"]["payload"], byte_input);
+    assert_eq!(private["arguments"]["amount"], "32");
+    session
+        .resume_typed(reply(&pending["request"], &attempt, "value", Some(json!(true))))
+        .unwrap();
+    let done = session.advance().unwrap();
+    assert_eq!(done["status"], "completed");
+    let completion = session.private_completion(&relation).unwrap();
+    let native_inputs = serde_json::from_value(completion["inputs"].clone()).unwrap();
+    let state = create_state(&plan, &BTreeMap::new()).unwrap();
+    let mut execution = prepare(
+        &plan,
+        &native_inputs,
+        &state,
+        &INITIAL_PARAMETERS,
+        ContractAddress::default(),
+    )
+    .unwrap();
+    check(&execution, &circuit).unwrap();
+    let mut low = [0; 32];
+    low[..31].copy_from_slice(&payload[..31]);
+    assert_eq!(
+        execution.preimage.inputs,
+        [
+            Fr::from(31 + 32 * 256u64),
+            Fr::from_le_bytes(&low).unwrap(),
+            Fr::from(32u64),
+            Fr::from(0u64),
+        ],
+    );
+    assert_eq!(
+        execution.preimage.private_transcript,
+        [Fr::from(7u64), Fr::from(1u64)]
+    );
+    assert_eq!(execution.returns_json()["approval"], true);
+    execution.preimage.inputs[2] = Fr::from(31u64);
+    assert!(check(&execution, &circuit).is_err());
+
+    let mut reordered = binding(&plan_json);
+    reordered["callInputs"].as_array_mut().unwrap().swap(0, 1);
+    let mut altered = plan_json;
+    let binding_text = reordered.to_string();
+    let digest = hex::encode(Sha256::digest(binding_text.as_bytes()));
+    altered["binding"] = json!(binding_text);
+    let context = source_context(&signatures(&altered), &attempt);
+    let result = Session::from_json_with_invocation_target(
+        altered,
+        inputs,
+        context,
+        Some(&digest),
+        Some(InvocationTarget {
+            contract_address: "a".repeat(64),
+            entrypoint: "review".into(),
+        }),
+    );
+    let Err(error) = result else {
+        panic!("reordered call header accepted")
+    };
+    assert!(error.to_string().contains("native circuit inputs"), "{error:#}");
+}
+
+#[cfg(feature = "zkir-321")]
+#[test]
 fn byte_witness_state_and_hash_helpers_bind_account_ciphertext_and_memo() {
     use noctium_runtime::{
         Plan, canonical_field, check, create_state, field_decimal, field_value, prepare,

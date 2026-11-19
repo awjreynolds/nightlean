@@ -1814,6 +1814,14 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
     Ok(())
 }
 
+fn call_byte_input_fields(name: &str, length: usize) -> impl Iterator<Item = (String, u64)> + '_ {
+    let chunks = length.div_ceil(31);
+    (0..chunks).map(move |index| {
+        let width = (length - (chunks - 1 - index) * 31).min(31);
+        (format!("{name}_call_chunk_{index}"), (width * 8) as u64)
+    })
+}
+
 fn call_input_header(inputs: &[Input], call_inputs: &[String]) -> Result<Vec<(String, Json)>> {
     ensure!(call_inputs.len() <= 256, "too many native call inputs");
     let native = Json::String("Scalar<BLS12-381>".into());
@@ -1837,9 +1845,10 @@ fn call_input_header(inputs: &[Input], call_inputs: &[String]) -> Result<Vec<(St
         field_count += ty.call_return_fields();
         ensure!(field_count <= 256, "too many native call argument fields");
         if let Some(length) = ty.bytes_length() {
-            for index in 0..length.div_ceil(31) {
-                header.push((format!("%input_{name}_call_chunk_{index}"), native.clone()));
-            }
+            header.extend(
+                call_byte_input_fields(name, length)
+                    .map(|(field, _)| (format!("%input_{field}"), native.clone())),
+            );
         } else {
             match ty {
                 ScalarType::JubjubPoint => {
@@ -1894,9 +1903,9 @@ fn validate_call_input_header_json(expected: &[(String, Json)], circuit: &Json) 
     Ok(())
 }
 
-pub(crate) fn validate_call_inputs_json(plan: &Json, circuit: &Json) -> Result<()> {
-    let call_inputs = match plan.get("callInputs") {
-        None => Vec::new(),
+fn call_input_names(metadata: &Json) -> Result<Vec<String>> {
+    match metadata.get("callInputs") {
+        None => Ok(Vec::new()),
         Some(Json::Array(inputs)) if inputs.len() <= 256 => inputs
             .iter()
             .map(|input| {
@@ -1905,9 +1914,13 @@ pub(crate) fn validate_call_inputs_json(plan: &Json, circuit: &Json) -> Result<(
                     .map(str::to_owned)
                     .ok_or_else(|| anyhow!("native call input name must be a string"))
             })
-            .collect::<Result<Vec<_>>>()?,
+            .collect(),
         _ => bail!("invalid native call input list"),
-    };
+    }
+}
+
+pub(crate) fn validate_call_inputs_json(plan: &Json, circuit: &Json) -> Result<()> {
+    let call_inputs = call_input_names(plan)?;
     let inputs = plan
         .get("circuit")
         .and_then(|value| value.get("inputs"))

@@ -24,6 +24,8 @@ structure CircuitInfo where
   logicalOutputs : List (String × Ty × Name) := []
   /-- The declared aggregate label and its checked return schema. -/
   aggregateOutputs : List (String × Name × List String) := []
+  /-- Hosted call arguments are selected from source parameters, never callback slots. -/
+  witnessCallArguments? : Option (List String) := none
   sourceProgram? : Option (Name × String) := none
   /-- Structured ledger bodies are rebuilt from their typed source at export. -/
   stateProgram? : Option (Name × String) := none
@@ -2180,6 +2182,10 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         let fullName := (← getCurrNamespace) ++ circuit.getId
         let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
           | throwErrorAt circuit "entrypoint requires a registered Noctium circuit"
+        if let some allowed := info.witnessCallArguments? then
+          for argument in args.getElems do
+            unless allowed.contains argument.getId.toString do
+              throwErrorAt argument "hosted call argument must name a scalar source parameter"
         let env ← addReferences [] (info.inputs ++ info.outputs)
         let env ← addLogicalReferences env info.logicalOutputs
         let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw) ++
@@ -2395,6 +2401,8 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
       logicalOutputs,
       aggregateOutputs,
+      witnessCallArguments? := some ((program.exports.find? (·.name == exportName)).toList.flatMap
+        fun exported => exported.inputs.map (·.name)),
       sourceProgram? := some (sourceName, exportName)}
     modifyEnv fun env => witnessRegistry.addEntry env {
       circuitName := fullName, sourceName, exportName, outputName, observationArtifact?}

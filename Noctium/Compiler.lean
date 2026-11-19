@@ -678,7 +678,8 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       if let some compiled := compiledWitness? then
         let compiled ← match Witness.bindEntrypoint compiled json name.toString ep.name
             (nativeCircuitFile name ep) profile.name
-            ((plan.reads.drop (Backend.Impact.publicInputReadCount ep.circuit.inputs)).flatMap (·.bindings)) with
+            ((plan.reads.drop (Backend.Impact.publicInputReadCount ep.circuit.inputs)).flatMap (·.bindings))
+            ep.callInputs with
           | .ok value => pure value
           | .error diagnostic => failDiagnostic diagnostic
         let witnessPrefix := artifactName name ++ "." ++ ep.name

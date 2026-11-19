@@ -176,9 +176,10 @@ release.
 
 The result is a private, unbalanced intent. Applications supply the initial
 contexts. [Committed scalar and fixed byte arguments](committed-returns.md#native-call-arguments)
-use the native input ABI. Composite arguments, automatic bundle discovery,
-and helper or hosted-witness statement authoring remain open. The reference state interpreter
-rejects active call claims.
+use the native input ABI, including private source parameters from readable
+hosted witness circuits. Composite arguments, automatic bundle discovery, and
+claim statements inside helper bodies remain open. The reference state
+interpreter rejects active call claims.
 
 ## Prove a composed intent
 

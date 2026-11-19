@@ -124,3 +124,23 @@ private def wideBindingSequence : Noctium.Expr .native :=
 #guard match (Noctium.NativeExpression.toJson wideBindingSequence).getObjVal? "bindings" with
   | .ok (.arr bindings) => bindings.size == 150
   | _ => Bool.false
+
+noctium_witness approvePayload(payload : Bytes 33, amount : UInt 8) : Bool
+
+noctium_witness_circuit hostedCallInput where
+  private amount : UInt 8
+  private payload : Bytes 33
+  private zeroBound : UIntRange 1
+  private emptyPayload : Bytes 0
+  private salt : Native
+  let approved := witness approvePayload(payload, amount)
+  prove eq(approved, eq(byteAt(payload, 32), amount))
+  prove eq(salt, 7)
+  output result : Bool := disclose(approved)
+end
+
+noctium_contract HostedCallArguments where
+  entry review uses hostedCallInput arguments [payload, amount, zeroBound, emptyPayload] where
+    return approval : Bool := result
+  end
+end

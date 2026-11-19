@@ -67,8 +67,17 @@ Jubjub canonicality checks still run in the circuit.
 
 The compiler and bundle reader require exact header names, types and order.
 Unknown, duplicate or public selections reject. Limits are 256 logical
-arguments and 256 physical fields after encoding. Composite arguments and
-hosted-witness authoring for committed arguments remain open.
+arguments and 256 physical fields after encoding. Readable hosted witness
+circuits use the same `arguments` clause. Select private scalar or fixed-byte
+source parameters. Provider responses stay in their private transcript slots.
+The witness sidecar authenticates the argument order against the native header
+and the Impact plan. The host still passes each logical parameter to the witness
+program using its original type. [Hosted call fixture](../../tests/TypedCallArguments.lean)
+
+The focused host/native case commits a Bytes33 value, a UInt8, a zero-bound UInt
+and Bytes0. It checks exact header fields in declared argument order, the
+remaining salt and provider reply, and rejection after changing an argument
+or reordering the sidecar binding. Composite arguments remain open.
 The [typed argument example](../../tests/TypedCallArguments.lean) exercises mixed
 input types, an independent private witness and the field order through the
 native checker. A reordered header or an out-of-range byte chunk rejects even
