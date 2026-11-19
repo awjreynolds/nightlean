@@ -276,6 +276,11 @@ def bytesByteAtTerm (length : Nat) (bytes : Term) (index : Nat) : Term :=
   if length == 32 then bytes32ByteAtTerm bytes index
   else .unary s!"bytes_byte_at:{length}:{index}" bytes
 
+/-- A Native widened from a range-checked byte has 31 zero high bytes. -/
+def isWidenedByte : Expr ty → Bool
+  | .cast .native (.cast (source := .native) (.uint 255) _) => true
+  | _ => false
+
 /-- Typed Bool constants and bridges stay distinct from Native field values. -/
 def typedBoolConstantTerm (value : Nat) : Term := .unary "bool_constant" (.constant value)
 
@@ -433,9 +438,14 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
   | .sliceBytes (length := length) value start end_ => do
     let normalized ← normalize env value
     unless start ≤ end_ && end_ ≤ length do throw "byte slice is out of range"
-    let chunks ← bytesChunksTerm length normalized.term
-    let term := if start == end_ then Term.bytes [] else
-      sliceBytesTerm length start end_ (bytesFromChunksTerm length chunks)
+    let term ← if start == end_ then pure (Term.bytes []) else
+      match normalized.term with
+      | .bytes bytes => do
+        unless bytes.length == length do throw "byte source term has wrong length"
+        pure (.bytes ((bytes.drop start).take (end_ - start)))
+      | packed => do
+        let chunks ← bytesChunksTerm length packed
+        pure (sliceBytesTerm length start end_ (bytesFromChunksTerm length chunks))
     pure {normalized with term}
   | .concatBytes (leftLength := leftLength) (rightLength := rightLength) left right => do
     let left ← normalize env left
@@ -485,6 +495,8 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     pure {normalized with term := reverseBytes32Term bytes}
   | .toBytes32 (source := source) value => do
     let normalized ← normalize env value
+    if isWidenedByte value then
+      return {normalized with term := .bytes (normalized.term :: List.replicate 31 (.constant 0))}
     let opcode := match source with
       | .native => "to_bytes32_native"
       | .jubjubScalar => "to_bytes32_jubjub_scalar"

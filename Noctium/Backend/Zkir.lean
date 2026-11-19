@@ -585,6 +585,10 @@ private def lowerFixedSlice (length start end_ : Nat) (value : ByteOperands) : L
     rejectLowering "byte slice is out of range"
     return {values := []}
   if start == end_ then return {values := []}
+  if !value.packed then
+    if value.values.length != length then
+      rejectLowering "byte leaf count mismatch"
+    return {values := (value.values.drop start).take (end_ - start)}
   let input ← lowerFixedBytesFromChunks length (← byteChunks length value)
   let key : ExpressionKey := ("slice:" ++ toString start, [input], some (end_ - start))
   let output ← match (← get).expressions.lookup key with
@@ -799,6 +803,8 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
     lowerForeignToBytes kind (← lowerExpr value)
   | .toBytes32 value => do
     let input ← lowerExpr value
+    if Native.isWidenedByte value then
+      return {values := input :: List.replicate 31 "0x00"}
     let (low, high) ← lowerToBytes32 input
     pure {values := [low, high], packed := true}
   | .reverseBytes32 value => do

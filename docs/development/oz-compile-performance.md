@@ -78,6 +78,27 @@ The byte packer starts from the highest byte in each nonempty chunk. Previously 
 
 The comparison starts at `b8b469c`, with `--emit ledger --emit witness` and the default range-pass setting. Pinned `mock-compile` reported fewer rows in 14 of 16 token relations. All Impact plans matched byte for byte. The native byte pack test accepted the regenerated relation and rejected a forged result. The scalar CSE fixture emitted identical bytes. A single token compile in each mode took 4.70 s and 4.68 s. This establishes a small circuit-size reduction. Proof time and funded deployment fall outside this measurement. [Byte packing test](../../runtime/tests/native_byte_packing.rs) · [Issue 74](https://github.com/awjreynolds/noctium/issues/74)
 
+## Reuse existing byte leaves
+
+Static slices select byte leaves directly when the inputs already use that
+representation. The two-byte result in `inspectPayment` also avoids serializing
+each range-checked byte as a full field. Pinned ZKIR 3.2.1 `mock-compile` measured
+the following changes.
+
+| Entrypoint | Rows before | Rows after | K before → after |
+| --- | ---: | ---: | ---: |
+| `NativeBytes.inspect` | 1,137 | 1,067 | 11 → 11 |
+| `readPayment` | 298 | 275 | 9 → 9 |
+| `inspectPayment` | 1,545 | 1,194 | 11 → 11 |
+| `inspectPayment` with range deduplication | 1,194 | 730 | 11 → 10 |
+
+The last row compares the optimized compiler with the existing
+`--dedup-range-checks` option off and on. The native tests check exact return
+values and reject altered inputs or results. The optimized circuit still
+emits 65 bounded comparisons for two distinct operand/width combinations.
+Reusing their results while preserving checks and assertions is a follow-up
+under [issue 74](https://github.com/awjreynolds/noctium/issues/74).
+
 ## Selected ledger outputs
 
 One serial run per mode on the same host compared a full compile with `--emit ledger --emit witness`. Both runs used the same executable, source and ZKIR 3.2.1 profile.

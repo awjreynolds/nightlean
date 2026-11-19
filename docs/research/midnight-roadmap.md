@@ -26,4 +26,4 @@ One localnet run called deployment A, rotated the registry and called deployment
 
 ## Next work on the current pin
 
-The separate-owner composition path has cross-process Rust evidence. Foreign SDK integration and durable recovery for composed calls remain open on the current pin. [Native composition ticket](https://github.com/awjreynolds/noctium/issues/50)
+The separate-owner composition path has cross-process Rust evidence. Foreign SDK integration and durable recovery for composed calls remain open on the current pin. Typed aggregate call interfaces also fit the pinned protocol. Each side can use the same ordered Native fields already used for aggregate returns, then authenticate the corresponding logical schema with the entrypoint metadata. This still needs compiler and SDK integration. Private arguments and return transport between owners need a released protocol or a separately specified application protocol. [Committed results](../development/committed-returns.md) · [Native composition ticket](https://github.com/awjreynolds/noctium/issues/50)

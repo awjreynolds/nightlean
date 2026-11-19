@@ -167,7 +167,8 @@ private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toStrin
 private partial def quoteByteLeaves : List String → CommandElabM (TSyntax `term)
   | [] => `(Noctium.Expr.bytesLiteral 0 [])
   | [name] => `(Noctium.Expr.sliceBytes
-      (Noctium.Expr.toBytes32 (@Noctium.Expr.ref Noctium.Ty.native $(stringTerm name))) 0 1)
+      (Noctium.Expr.toBytes32 (Noctium.Expr.cast Noctium.Ty.native
+        (Noctium.Expr.cast (Noctium.Ty.uint 255) (@Noctium.Expr.ref Noctium.Ty.native $(stringTerm name))))) 0 1)
   | names => do
     let (left, right) := names.splitAt (names.length / 2)
     `(Noctium.Expr.concatBytes $(← quoteByteLeaves left) $(← quoteByteLeaves right))

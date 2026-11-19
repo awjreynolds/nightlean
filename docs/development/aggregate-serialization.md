@@ -62,7 +62,7 @@ Using direct byte reads for the memo reduced the circuit from 1,025 to 987 rows 
 | Deploy | 31155 | `3c4a54af494cf956a776d86a932dca9dd13278ff100ce1fc9e2175bda2d5cb66` |
 | Call | 31158 | `897f87eb33d07d0627c0534cd6977283307c9027d9ee9600ca72a513a2b515d1` |
 
-The `readPayment` entrypoint returns the decoded record through `return payment`. Noctium's authenticated host and native call reconstruct the same record that the pinned Compact evaluator returns. The selected native relation uses K9 and 298 rows. [Named aggregate returns](committed-returns.md)
+The `readPayment` entrypoint returns the decoded record through `return payment`. Noctium's authenticated host and native call reconstruct the same record that the pinned Compact evaluator returns. The funded relation used K9 and 298 rows. Static byte slicing now reduces it to 275 rows at K9. [Named aggregate returns](committed-returns.md) · [Circuit sizes](oz-compile-performance.md#reuse-existing-byte-leaves)
 
 The `inspectPayment` circuit emits a record, a vector, a Bool and a fixed byte string. Its entrypoint commits them in a different order and the Rust SDK returns each value by name. The native checker rejects changing the private frame under the original commitment. Payload-carrying wire enum variants and wider host qualification remain open.
 

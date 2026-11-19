@@ -38,6 +38,10 @@ Typed entrypoint results preserve the logical byte value in the host and commit
 the corresponding fields in the circuit. A final partial chunk receives its
 exact range bound.
 
+The ZKIR lowerer slices existing byte leaves by position. Packed values still
+use the native slice instruction. Widening a checked byte to a 32-byte value
+keeps its eight-bit range check and supplies 31 zero high bytes.
+
 The pinned native ZKIR type excludes zero-length bytes. Source `Bytes 0` has one
 possible value and no native fields. Empty operations preserve operand evaluation,
 assertions and failures while omitting an unsupported native zero-byte value.
