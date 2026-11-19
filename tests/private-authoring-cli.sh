@@ -37,6 +37,7 @@ grep -F "unsupported binding target 'kotlin'" "$scratch/error" > /dev/null
 test ! -e "$scratch/unsupported-host"
 
 python3 - "$scratch/generated" "$scratch/ledger" "$scratch/rust" "$binding" <<'PY'
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -52,13 +53,16 @@ expected = {
 }
 assert {path.name for path in selected.iterdir()} == set(expected) | {"noctium.json"}
 meta = json.loads((selected / "noctium.json").read_text())
-assert meta["schemaVersion"] == 2
+assert meta["schemaVersion"] == 3
+assert meta["circuits"] == []
 assert {row["file"]: row["role"] for row in meta["artifacts"]} == expected
 for name in expected:
     if name.endswith(".impact.json"):
         plan = json.loads((selected / name).read_text())
         original = json.loads((full / name).read_text())
-        assert meta["circuits"] == [plan["circuit"]]
+        entrypoint = meta["contracts"][0]["entrypoints"][0]
+        assert entrypoint["nativePlanFile"] == name
+        assert entrypoint["nativePlanSha256"] == hashlib.sha256((selected / name).read_bytes()).hexdigest()
         del original["circuit"]["file"]
         assert plan == original
     else:

@@ -1021,7 +1021,7 @@ fn validate_payloads(payloads: &Payloads, omit_prover_key: bool) -> Result<()> {
         ],
     )?;
     require(
-        matches!(metadata["schemaVersion"].as_u64(), Some(1 | 2))
+        matches!(metadata["schemaVersion"].as_u64(), Some(1 | 2 | 3))
             && metadata["target"] == crate::profile::NAME
             && metadata["targetProfile"] == profile,
         "profile_mismatch",
@@ -1111,15 +1111,25 @@ fn validate_payloads(payloads: &Payloads, omit_prover_key: bool) -> Result<()> {
     let circuits = metadata["circuits"]
         .as_array()
         .ok_or_else(|| error("plan_mismatch", "metadata lacks circuit schemas"))?;
-    require(
-        circuits
-            .iter()
-            .filter(|value| **value == plan["circuit"])
-            .count()
-            == 1,
-        "plan_mismatch",
-        "plan circuit schema differs from compiler metadata",
-    )?;
+    if metadata["schemaVersion"] == 3 {
+        require(
+            circuits.is_empty()
+                && plan["circuit"].get("file").is_none()
+                && matched[0]["nativePlanSha256"].as_str() == Some(digest(plan_bytes).as_str()),
+            "plan_mismatch",
+            "plan bytes differ from compiler metadata",
+        )?;
+    } else {
+        require(
+            circuits
+                .iter()
+                .filter(|value| **value == plan["circuit"])
+                .count()
+                == 1,
+            "plan_mismatch",
+            "plan circuit schema differs from compiler metadata",
+        )?;
+    }
     validate_witness_payloads(payloads, &metadata, &plan, &circuit, circuit_name)?;
     let (abi_name, abi_bytes) = one(payloads, Role::Abi)?;
     if abi_name.ends_with(".h") {

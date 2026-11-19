@@ -53,7 +53,7 @@ Use `Noctium.Frontend`, the `Noctium` scope and `noctium_*` declarations. Native
 
 ## OpenZeppelin benchmark
 
-The confidential-token port compiled in 4.65 s with Noctium and 0.274 s with Compact 0.36.1 on the same M3 Max. The builds emit different artifact sets. Noctium used fewer rows on seven paired circuits and more on eight. [Full measurements and reproduction](docs/development/oz-compile-performance.md)
+The latest Noctium confidential-token build took 4.59 s and emitted 4.33 MiB. Compact 0.36.1 took 0.274 s on the same M3 Max with a different artifact set. Noctium used fewer rows on seven paired circuits and more on eight. [Full measurements and reproduction](docs/development/oz-compile-performance.md)
 
 [![Noctium and Compact comparison for each of 16 OpenZeppelin entrypoints, with compile times, artifact sizes, K, rows and row differences](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
 

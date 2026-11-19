@@ -18,13 +18,13 @@
 <rect x="734" y="281" width="634" height="225" rx="16" fill="url(#surface)" stroke="#31455f"/>
 <text x="100" y="325" font-size="21" fill="#77efd6" font-weight="700" text-anchor="start" letter-spacing="1.8">NOCTIUM · LEAN 4</text>
 <text x="762" y="325" font-size="21" fill="#b3c9ff" font-weight="700" text-anchor="start" letter-spacing="1.8">COMPACT 0.36.1</text>
-<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">4.65 s</text>
+<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">4.59 s</text>
 <text x="762" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">0.274 s</text>
 <text x="100" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Ledger and witness output · Range deduplication on</text>
 <text x="762" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">JavaScript, types and ZKIR · --skip-zk</text>
-<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files  ·  5.54 MiB total  ·  741 KiB ZKIR</text>
+<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files  ·  4.33 MiB total  ·  741 KiB ZKIR</text>
 <text x="762" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">20 files  ·  506 KiB total  ·  164 KiB ZKIR</text>
-<text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Historical Noctium full export took 61.81 s. Timings exclude keys and proofs.</text>
+<text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium plan digests cut output bytes by 22%. Timings exclude keys and proofs.</text>
 <text x="72" y="622" font-size="38" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-0.6">Circuit size by entrypoint</text>
 <text x="1368" y="619" font-size="22" fill="#afc1d7" font-weight="500" text-anchor="end" letter-spacing="0">7 use fewer rows  ·  8 use more</text>
 <rect x="72" y="646" width="1296" height="942" rx="12" fill="#101c2e" stroke="#31455f"/>
@@ -178,7 +178,7 @@
 <text x="73" y="1665" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Comparable operations with different ABI, state handling and generated artifacts.</text>
 <text x="73" y="1698" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">K and rows measure circuit size. Proving latency was outside this benchmark.</text>
 <path d="M72 1717L1368 1717" stroke="#31455f" stroke-width="1"/>
-<text x="72" y="1743" font-size="21" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium 61c0568 · Compact 0.36.1 · OpenZeppelin f85f1a2</text>
+<text x="72" y="1743" font-size="21" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Circuit baseline 61c0568 · Compact 0.36.1 · OpenZeppelin f85f1a2</text>
 <text x="1368" y="1743" font-size="20" fill="#afc1d7" font-weight="600" text-anchor="end" letter-spacing="1.4">19 NOV 2026</text>
 <text x="72" y="1776" font-size="22" fill="#77efd6" font-weight="600" text-anchor="start" letter-spacing="0">github.com/awjreynolds/noctium</text>
 </g></svg>

@@ -20,7 +20,7 @@ private def rotateRight (word amount : UInt32) : UInt32 :=
 private def bigEndian (width value : Nat) : List Nat :=
   (List.range width).reverse.map fun index => (value >>> (8 * index)) &&& 255
 
--- FIPS 180-4 SHA-256, used only for compile-time public operation names.
+-- FIPS 180-4 SHA-256 for compile-time public artifacts and operation names.
 private def sha256 (input : Array Nat) : List Nat := Id.run do
   let zeros := (119 - input.size % 64) % 64
   let message := input.push 128 ++ (List.replicate zeros 0).toArray ++ (bigEndian 8 (input.size * 8)).toArray
@@ -57,6 +57,11 @@ private def sha256 (input : Array Nat) : List Nat := Id.run do
       work := #[temp + large0 + majority, a, b, c, d + temp, e, f, g]
     state := (state.zip work).map fun (x, y) => x + y
   return state.toList.flatMap (bigEndian 4 ·.toNat)
+
+def sha256Hex (bytes : ByteArray) : String :=
+  let digits := "0123456789abcdef".toList.toArray
+  String.ofList <| (sha256 (bytes.data.map UInt8.toNat)).flatMap fun byte =>
+    [digits[byte / 16]!, digits[byte % 16]!]
 
 /-- Midnight hashes a 32-byte domain followed by the exact UTF-8 entrypoint bytes. -/
 def hash (operation : String) : List Nat :=

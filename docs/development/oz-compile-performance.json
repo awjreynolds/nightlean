@@ -347,6 +347,23 @@
     "First Noctium run has no peak RSS sample.",
     "The first Noctium sample overlapped a small native sizing process; subsequent two source runs and all Compact source runs ran without concurrent benchmark synthesis."
   ],
+  "ledgerPlanDigestFollowup": {
+    "baseRevision": "e4fe439",
+    "files": 53,
+    "unchangedFiles": 52,
+    "base": {
+      "wallSeconds": [4.43, 4.38, 4.30],
+      "userCpuSeconds": [3.46, 3.46, 3.45],
+      "artifactBytes": 5805683,
+      "manifestBytes": 1348540
+    },
+    "planDigests": {
+      "wallSeconds": [6.00, 4.59, 4.58],
+      "userCpuSeconds": [3.70, 3.71, 3.67],
+      "artifactBytes": 4542348,
+      "manifestBytes": 85205
+    }
+  },
   "currentComparison": {
     "checkedOn": "2026-11-19",
     "noctiumRevision": "61c05685d0f52454b0c0192dc4c0e31ab818b47a",

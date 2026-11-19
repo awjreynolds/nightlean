@@ -251,9 +251,12 @@ fn selected_compiler_inventory_binds_ledger_and_witness_files() {
     let mut metadata: Value = serde_json::from_slice(&fs::read(&metadata_path).unwrap()).unwrap();
     let mut plan: Value = serde_json::from_slice(&fs::read(&plan_path).unwrap()).unwrap();
     plan["circuit"].as_object_mut().unwrap().remove("file");
-    fs::write(plan_path, plan.to_string()).unwrap();
-    metadata["schemaVersion"] = json!(2);
-    metadata["circuits"][0] = plan["circuit"].clone();
+    let plan_text = plan.to_string();
+    fs::write(&plan_path, &plan_text).unwrap();
+    metadata["schemaVersion"] = json!(3);
+    metadata["circuits"] = json!([]);
+    metadata["contracts"][0]["entrypoints"][0]["nativePlanSha256"] =
+        json!(artifacts::digest(plan_text.as_bytes()));
     metadata["artifacts"] = json!([
         {"file":"Contract.call.zkir","role":"ledger"},
         {"file":"Contract.call.impact.json","role":"ledger"},
@@ -262,6 +265,16 @@ fn selected_compiler_inventory_binds_ledger_and_witness_files() {
     ]);
     fs::write(&metadata_path, metadata.to_string()).unwrap();
     artifacts::assemble(recipe, &fixture.path("selected")).unwrap();
+
+    fs::write(&plan_path, format!("{plan_text}\n")).unwrap();
+    assert_eq!(
+        failure(artifacts::assemble(
+            witness_recipe(&fixture),
+            &fixture.path("wrong-plan")
+        )),
+        "plan_mismatch"
+    );
+    fs::write(&plan_path, plan_text).unwrap();
 
     metadata["artifacts"][0]["role"] = json!("standalone");
     fs::write(metadata_path, metadata.to_string()).unwrap();

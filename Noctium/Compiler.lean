@@ -1,6 +1,7 @@
 import Noctium.NativeExpression
 import Noctium.Frontend
 import Noctium.Backend.Zkir
+import Noctium.EntryPointHash
 import Noctium.Target
 import Noctium.ArtifactRole
 import Noctium.RustBinding
@@ -607,9 +608,11 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
   let (circuits, contracts, hosted) ← unsafe inspectWithModules moduleOutputs dedupRangeChecks
   let emit := fun role => roles.isEmpty || roles.contains role
   let contracts := if emit .ledger then contracts else #[]
+  let bindPlanBytes := !(emit .standalone) && !contracts.isEmpty
   let entryCircuits := contracts.toList.flatMap fun (_, contract) => contract.entrypoints.map (·.circuit.name)
   -- Lower and validate the requested products before publishing files.
   let mut lowered : Array (ArtifactRole × String × String) := #[]
+  let mut planDigests : Std.HashMap String String := {}
   let sourceEnv ← getEnv
   let controls := if emit .control then
     (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·) else #[]
@@ -703,7 +706,11 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
           ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
           ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
       let planJson := nativePlanJson profile name contract.state contract.constructor ep plan (emit .standalone)
-      lowered := lowered.push (.ledger, nativePlanFile name ep, planJson.pretty)
+      let file := nativePlanFile name ep
+      let content := planJson.pretty
+      if bindPlanBytes then
+        planDigests := planDigests.insert file (EntryPointHash.sha256Hex (content ++ "\n").toUTF8)
+      lowered := lowered.push (.ledger, file, content)
   if lowered.isEmpty then throwError "source has no artifacts for the selected roles"
   if rustBindings && !(lowered.any (·.1 == .rustBinding)) then
     throwError "--bindings rust requires a ledger entrypoint with a host witness"
@@ -727,7 +734,9 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
           ("expression", nativeExpressionJson returned.value)]))]
       let returnViewFields : List (String × Json) := if ep.returnViews.isEmpty then [] else [
         ("returnViews", returnViewsJson ep.returnViews)]
-      pure (Json.mkObj (baseFields ++ callInputFields ++ returnFields ++ returnViewFields))
+      let digestFields := (planDigests[nativePlanFile name ep]?).toList.map fun digest =>
+        ("nativePlanSha256", toJson digest)
+      pure (Json.mkObj (baseFields ++ digestFields ++ callInputFields ++ returnFields ++ returnViewFields))
     let constructorFields := match contract.constructor with
       | none => []
       | some ctor => [("constructor", constructorJson ctor)]
@@ -743,9 +752,10 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
   let explicitSelection := !roles.isEmpty || rustBindings
   let inventory := if !explicitSelection then [] else [("artifacts", Json.arr (lowered.map fun (role, file, _) =>
     Json.mkObj [("role", toJson role.label), ("file", toJson file)]))]
-  let circuitSchemas := circuits.filter fun (name, _) => emit .standalone || entryCircuits.contains name.toString
+  let circuitSchemas := if emit .standalone then circuits else #[]
+  let schemaVersion : Nat := if bindPlanBytes then 3 else if explicitSelection then 2 else 1
   let metadata := Json.mkObj ([
-    ("schemaVersion", toJson (if explicitSelection then 2 else 1 : Nat)), ("target", toJson profile.name),
+    ("schemaVersion", toJson schemaVersion), ("target", toJson profile.name),
     ("targetProfile", toJson profile),
     ("qualification", toJson ("unqualified-relation-and-state-description" : String)),
     ("deployable", toJson Bool.false),
