@@ -84,6 +84,11 @@ result fields, with schema selection supplied by the source interface and truste
 callee bundle. Aggregate arguments and helper-body call authoring remain open.
 [Payment example](../../examples/AggregateSerialization.lean) · [Native test](../../runtime/tests/aggregate_serialization.rs)
 
+The funded payment example attached two K9 proofs and finalized in one
+localnet transaction at block 31967. The Rust client checked one call event
+per address and matched both finalized states to their exact deployment
+bytes. Two compiles reproduced all 27 selected files. [Aggregate composition receipt](native-aggregate-composition-receipt.json)
+
 ### Bind the entrypoint and read the address from a registry
 
 The two-argument form derives the entrypoint selector from the same declared

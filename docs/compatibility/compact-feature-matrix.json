@@ -1308,6 +1308,7 @@
       ],
       "observedEvidence": [
         "docs/development/native-composition-receipt.json",
+        "docs/development/native-aggregate-composition-receipt.json",
         "docs/development/native-caller-receipt.json",
         "docs/development/independent-composition-receipt.json",
         "docs/development/composition-transport-receipt.json"
@@ -1315,7 +1316,7 @@
       "equivalence": "unverified",
       "implementationUpdate": {
         "checkedOn": "2026-11-19",
-        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. Direct Lean calls accept named aggregate results in the checked layout order. The pinned native checker and partitioner accept a mixed two-aggregate result and reject a changed field. The Rust path qualifies a caller and callee, registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Aggregate arguments, foreign SDK bindings, durable recovery and complete equivalence remain open.",
+        "scope": "Typed calls bind their installed verifier, target, argument and return commitments. Direct Lean calls accept named aggregate results in the checked layout order. An accepted funded Ledger 9 call commits two aggregate returns alongside a Bool and fixed bytes. The partitioner rejects a claim with a changed field. The Rust path qualifies registry routing and checked parent addresses. Two Rust processes exchange canonical public offers, rebuild the shared draft and prove separate calls. Aggregate arguments, foreign SDK bindings, durable recovery and complete equivalence remain open.",
         "evidence": [
           "Noctium/Backend/Impact.lean",
           "runtime/src/proof/composition.rs",
