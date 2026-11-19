@@ -67,9 +67,15 @@ private def error (message : String) : IO UInt32 := do
   (← IO.getStderr).putStrLn s!"noctium: error: {message}"
   return 1
 
-private def runFrontend (input source command : String) : IO IO.Process.Output :=
+private def runFrontend (input source command : String) : IO IO.Process.Output := do
+  -- Only load a library Lake considers current for this workspace.
+  let shared ← IO.Process.output {cmd := "lake", args := #["--no-build", "-J", "query", "Noctium:shared"]}
+  let mut args := #["env", "lean"]
+  if shared.exitCode == 0 then
+    if let .ok (.str path) := Lean.Json.parse shared.stdout then
+      args := args.push ("--load-dynlib=" ++ path)
   IO.Process.output
-    {cmd := "lake", args := #["env", "lean", "-D", "Elab.async=false", "--stdin", input]}
+    {cmd := "lake", args := args ++ #["-D", "Elab.async=false", "--stdin", input]}
     (some ("import Noctium.Compiler " ++ source ++ "\n" ++ command ++ "\n"))
 
 private def compile (opts : Options) (source profileLiteral : String) : IO IO.Process.Output := do

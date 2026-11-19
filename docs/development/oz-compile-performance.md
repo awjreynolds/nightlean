@@ -1,6 +1,6 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The 2026-11-18 baseline compares Noctium with Compact. The 2026-11-19 follow-up measures the effect of removing a repeated Lean frontend pass.
+The current CLI compiles the token's ledger and witness artifacts in 6.01 s on the measured M3 Max. The 2026-11-18 graphic records the historical baseline. [Current measurement](#precompiled-lean-frontend)
 
 ![Measured compiler performance](../assets/noctium-performance.png)
 
@@ -60,6 +60,17 @@ One serial run per mode on the same host compared a full compile with `--emit le
 | Ledger and witness | 32.21 s | 31.42 s | 0.62 s | 53 | 5,868,886 |
 
 The selected run saved 3.43 seconds (9.6%) and 1,828,676 bytes (23.8%). It retained all 16 entrypoints and ten ledger witness pairs. ZKIR and witness bytes matched. The selected plans removed only the unused standalone file property. The compiler manifest records the emitted paths and roles. [Compiler output roles](portable-artifacts.md#select-compiler-outputs)
+
+## Precompiled Lean frontend
+
+A CPU sample of the OpenZeppelin compile showed Lean's IR interpreter among the busiest active frames. The CLI now loads the native shared library built by Lake when Lake reports a current artifact. The interpreter handles missing and stale builds. Both paths use the same source elaboration and compiler checks. [Lake library builds](https://lean-lang.org/doc/reference/latest/releases/v4.35.0/) · [CLI frontend](../../Noctium/Cli.lean)
+
+| OpenZeppelin port, ZKIR 3.2.1, ledger and witness | Wall | User CPU | System CPU |
+| --- | ---: | ---: | ---: |
+| Before native library loading, `03ebadf` | 32.02 s | 31.20 s | 0.69 s |
+| CLI with Lake-checked native library | 6.01 s | 4.14 s | 0.87 s |
+
+These are two serial runs on the same M3 Max with warm dependencies. All 53 files matched byte for byte, including 16 native relations. The reduction was 81.2% in wall time. The shared library measured 14.6 MB on macOS. Source timing excludes building the compiler, generating keys and producing proofs. The earlier Compact timing used a different output set and appears in the historical baseline above.
 
 ## What the timing includes
 

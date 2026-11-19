@@ -1,6 +1,6 @@
 # Compiler optimisation strategy
 
-The OpenZeppelin workload took 65.94 seconds before removing the extra frontend pass, 41.29 seconds with one pass, and 38.90 seconds with witness compilation reuse. The artifacts match byte for byte. [Optimization issue](https://github.com/awjreynolds/noctium/issues/85) · [Follow-up measurements](../development/oz-compile-performance.md#single-pass-noctium-follow-up)
+Loading the native Lean compiler library reduced the OpenZeppelin port's ledger-and-witness compile from 32.02 s to 6.01 s. All 53 files matched byte for byte. The earlier full-artifact workload took 65.94 seconds before removing the extra frontend pass, 41.29 seconds with one pass and 38.90 seconds with witness compilation reuse. [Optimization issue](https://github.com/awjreynolds/noctium/issues/85) · [Benchmark](../development/oz-compile-performance.md)
 
 When needed, start with one phase profile of the affected compile. Then select the requested artifacts before lowering and remove measured repeated work within one compilation. Repeated range checks on the same immutable operand are a separate circuit candidate. Each change needs a measurable outcome and a small rejection case below.
 

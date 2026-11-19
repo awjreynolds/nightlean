@@ -10,3 +10,4 @@ lean_lib Noctium
 @[default_target]
 lean_exe noctium where
   root := `NoctiumMain
+  needs := #[`@/Noctium:shared]
