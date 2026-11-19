@@ -39,7 +39,7 @@ int32_t noctium_control_begin_from_native_target(uint64_t,const uint8_t*,size_t,
 int32_t noctium_control_advance(uint64_t,uint64_t*);
 int32_t noctium_control_resume(uint64_t,const uint8_t*,size_t,uint64_t*);
 /* V2 typed witness replies use protocolVersion=2, canonical decimal requestId,
-   exact operation/capability/schema and outcome=value with a canonical value,
+   the exact attemptId/operation/capability/schema and outcome=value with a canonical value,
    or outcome=error with error.code=provider_failed. */
 int32_t noctium_control_resume_typed(uint64_t,const uint8_t*,size_t,uint64_t*);
 /* External/manual staging is supported for legacy v1 plans only. V2 writes

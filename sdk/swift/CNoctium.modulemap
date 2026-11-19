@@ -1,0 +1,4 @@
+module CNoctium {
+    header "noctium_control.h"
+    export *
+}

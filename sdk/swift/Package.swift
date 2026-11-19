@@ -1,0 +1,21 @@
+// swift-tools-version: 6.0
+import PackageDescription
+
+let package = Package(
+    name: "Noctium",
+    platforms: [.iOS(.v16), .macOS(.v13)],
+    products: [.library(name: "Noctium", targets: ["Noctium"])],
+    targets: [
+        .binaryTarget(name: "CNoctium", path: "CNoctium.xcframework"),
+        .target(
+            name: "Noctium",
+            dependencies: ["CNoctium"],
+            linkerSettings: [
+                .linkedFramework("Security"),
+                .linkedFramework("SystemConfiguration", .when(platforms: [.macOS])),
+                .linkedFramework("IOKit", .when(platforms: [.macOS])),
+            ]
+        ),
+        .testTarget(name: "NoctiumTests", dependencies: ["Noctium"]),
+    ]
+)
