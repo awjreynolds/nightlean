@@ -1,25 +1,36 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The latest Noctium OpenZeppelin build took **4.45 s** and produced **3.54 MiB**. The paired baseline measured **4.65 s** for Noctium and **0.274 s** for Compact 0.36.1. The Noctium run uses range deduplication and emits ledger and witness artifacts. Compact emits its source artifacts with `--skip-zk`. Both exclude keys and proofs.
+The chart compares a median source build of **4.45 s** for Noctium and **0.274 s** for Compact 0.36.1. Noctium uses range deduplication and generates zero SDK bindings. Compact runs with `--skip-zk`. Both timings exclude key generation and proving. Of the 15 paired circuits, Noctium reaches a lower K on three, matches 11, and reaches a higher K on one.
 
-![Noctium and Compact benchmark showing compilation time, artifact sizes, and K and rows for all 16 entrypoints](../assets/noctium-performance.png)
+![Noctium and Compact compilation time and per-entrypoint circuit K and rows](../assets/noctium-performance.png)
 
-## Current compilation and artifact sizes
+## Source compilation
 
-| Compiler output | Three source runs (s) | Median (s) | Output files | Total bytes | ZKIR bytes |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Noctium ledger and witness, minified plans | 4.57 / 4.45 / 4.45 | 4.45 | 53 | 3,707,277 | 704,238 |
-| Noctium ledger and witness, plan digests | 6.00 / 4.59 / 4.58 | 4.59 | 53 | 4,542,348 | 758,817 |
-| Noctium ledger and witness, paired baseline | 4.873 / 4.647 / 4.588 | 4.647 | 53 | 5,805,683 | 758,817 |
-| Compact 0.36.1 with `--skip-zk` | 0.274 / 0.286 / 0.274 | 0.274 | 20 | 518,022 | 167,669 |
+| Compiler output | Three source runs (s) | Median (s) |
+| --- | ---: | ---: |
+| Noctium ledger and witness, minified plans | 4.57 / 4.45 / 4.45 | 4.45 |
+| Noctium ledger and witness, plan digests | 6.00 / 4.59 / 4.58 | 4.59 |
+| Noctium ledger and witness, paired baseline | 4.873 / 4.647 / 4.588 | 4.647 |
+| Compact 0.36.1 with `--skip-zk` | 0.274 / 0.286 / 0.274 | 0.274 |
 
-The paired baseline used three alternating runs on an Apple M3 Max with prebuilt compilers, warm dependencies, fresh processes and new output directories. The Noctium follow-ups ran on the same machine. All three latest runs reproduced the emitted bytes. Byte counts use the files emitted before sizing. The ABI, state handling and artifact sets differ. [Machine-readable measurements and hashes](oz-compile-performance.json)
+The paired baseline used three alternating runs on an Apple M3 Max with prebuilt compilers, warm dependencies, fresh processes and new output directories. The Noctium follow-ups ran on the same machine. All three minified-plan runs reproduced the emitted bytes. The ABI, state handling and artifact sets differ. [Machine-readable measurements and hashes](oz-compile-performance.json)
 
-Noctium emits 16 ZKIR relations, 16 Impact ledger plans, 10 witness bindings,
-10 private execution plans and `noctium.json`. The run emits zero language
-bindings. Compact emits 15 ZKIR relations, one JavaScript module, a source map,
-a TypeScript declaration and two metadata files. `computeAccountId` runs in
-JavaScript in the Compact build.
+### Artifact inventory
+
+| Compiler output | Output files | Total bytes | ZKIR bytes |
+| --- | ---: | ---: | ---: |
+| Noctium ledger and witness, minified plans | 53 | 3,707,277 | 704,238 |
+| Noctium ledger and witness, plan digests | 53 | 4,542,348 | 758,817 |
+| Noctium ledger and witness, paired baseline | 53 | 5,805,683 | 758,817 |
+| Compact 0.36.1 with `--skip-zk` | 20 | 518,022 | 167,669 |
+
+Noctium exports 16 ZKIR relations, 16 Impact ledger plans, 10 witness bindings,
+10 language-neutral witness execution plans and `noctium.json`. The plans and
+their embedded metadata account for most of Noctium's bytes. The timing command
+requests zero SDK bindings. Compact exports 15 ZKIR relations, one JavaScript
+module, a source map, a TypeScript declaration and two metadata files.
+`computeAccountId` runs in JavaScript in the Compact build. Byte counts use the
+files emitted before sizing. The circuit comparison below uses K and rows.
 
 The ledger-only manifest now records each Impact plan's SHA-256 digest. The
 manifest shrank from 1,348,540 to 85,205 bytes, reducing total output by 21.8%.

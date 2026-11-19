@@ -1,12 +1,12 @@
-<p align="center">
-  <img src="docs/assets/noctium-pitch.png" alt="Noctium research preview. Lean 4 contracts and checked specifications compile directly to native Midnight artifacts. Scoped support covers all 40 non-deprecated native instruction names and 15 native type families. Native Rust and C/C++ SDKs, typed helpers, modules, generics, composite values, guarded control and witnesses are implemented. Full native coverage, contract composition and web/mobile SDKs remain goals." width="100%">
-</p>
+# Noctium
+
+Lean 4 contracts and proofs for Midnight. Noctium compiles directly to native ZKIR and Impact ledger plans.
 
 <p align="center">
-  <a href="#try-the-compiler">Quick start</a> ·
+  <a href="docs/compatibility/comparison.md">Capability comparison</a> ·
   <a href="#openzeppelin-benchmark">Benchmark</a> ·
+  <a href="#try-the-compiler">Quick start</a> ·
   <a href="docs/README.md">Documentation</a> ·
-  <a href="docs/assets/noctium-pitch.png">Project pitch</a> ·
   <a href="docs/designs/architecture.md">Architecture &amp; assurance</a> ·
   <a href="https://github.com/awjreynolds/noctium/issues/1">Roadmap</a>
 </p>
@@ -15,7 +15,27 @@
   <a href="https://github.com/awjreynolds/noctium/actions/workflows/ci.yml"><img src="https://github.com/awjreynolds/noctium/actions/workflows/ci.yml/badge.svg" alt="POC compiler checks CI"></a>
 </p>
 
-Noctium is a Lean 4 compiler and proof framework for Midnight private contracts. Define the behavior your contract must satisfy, prove those properties against the actual source, and compile directly to Midnight's native formats.
+## ZKIR v3 and witness targets
+
+The selected ZKIR 3.2.1 profile has 47 instruction names. Noctium registers all 40 non-deprecated opcodes and uses 15 native type families through scoped source and lowering paths. [Full instruction and type lists, grouped against Compact 0.36.1](docs/compatibility/comparison.md)
+
+| Witness host | Noctium | Compact compiler |
+| --- | --- | --- |
+| Rust | ✓ Native | n/a |
+| C / C++ | ✓ Native ABI | n/a |
+| Kotlin / Android | ✓ Native, emulator tested | n/a |
+| Swift / Apple | ✓ Native, macOS and iOS simulator tested | n/a |
+| TypeScript / web | ✓ WASM, Chrome tested | ✓ Generated JavaScript and TypeScript declarations |
+
+The checkmarks cover specific documented workloads. [SDK evidence and scope](docs/compatibility/comparison.md#witness-execution-targets)
+
+## OpenZeppelin benchmark
+
+The Noctium confidential-token build took a median of 4.45 s. Compact 0.36.1 took 0.274 s on the same M3 Max. The builds emit different outputs and both timings exclude key generation and proving. The Noctium run generated zero SDK bindings. Across 15 paired circuits, Noctium reached a lower K on three, matched 11, and reached a higher K on one. [Full measurements and artifact inventory](docs/development/oz-compile-performance.md)
+
+[![Noctium and Compact compilation times and per-entrypoint K and row counts for the OpenZeppelin confidential token](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
+
+## Write and prove a contract
 
 - **Write** circuit constraints and ledger transitions in a typed Lean DSL.
 - **Specify and prove** correctness, invariants and scoped privacy with ordinary Lean theorems and tactics.
@@ -50,12 +70,6 @@ Add `--dedup-range-checks` to reuse earlier range checks and identical bounded c
 For native proofs and transactions, follow the [Rust client guide](docs/development/native-client.md) or [C/C++ client ABI](docs/development/native-client-abi.md), [retained artifact workflow](docs/development/portable-artifacts.md) and [pinned native toolchain setup](docs/development/native-toolchain.md). Those paths add Rust, native build tools, proving parameters and an isolated localnet. The [JavaScript development harness](docs/development/native-contract.md) is an optional reproducibility path.
 
 Use `Noctium.Frontend`, the `Noctium` scope and `noctium_*` declarations. Native hosts use `noctium_*` C symbols and `noctium_*.h` headers. The compiler and runtime now use one [canonical namespace](docs/development/namespaces.md).
-
-## OpenZeppelin benchmark
-
-The latest Noctium confidential-token build took 4.45 s and emitted 3.54 MiB. Compact 0.36.1 took 0.274 s on the same M3 Max with a different artifact set. Noctium used fewer rows on seven paired circuits and more on eight. [Full measurements and reproduction](docs/development/oz-compile-performance.md)
-
-[![Noctium and Compact comparison for each of 16 OpenZeppelin entrypoints, with compile times, artifact sizes, K, rows and row differences](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
 
 ## A small, real example
 

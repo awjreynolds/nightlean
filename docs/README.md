@@ -15,6 +15,7 @@ Write a contract, prove its specified behavior in Lean, and compile for Midnight
 | Review contract correctness | [Actual-source proofs](development/private-claim-proofs.md), [registered obligations and axiom policy](development/proof-registration.md) |
 | Review compilation and trust | [Layered guarantees](designs/architecture.md#assurance-boundaries), [source-to-artifact proof chain](#follow-the-proof-chain) |
 | Review scope and contribute | [Capability goal](compatibility/GOAL.md), [public issue map](https://github.com/awjreynolds/noctium/issues/1), [contributing](../CONTRIBUTING.md) |
+| Compare Noctium and Compact | [ZKIR v3 inventory and witness targets](compatibility/comparison.md), [OpenZeppelin benchmark](development/oz-compile-performance.md) |
 | Follow the complex-contract POC | [OpenZeppelin token port and feature dependencies](development/openzeppelin-port.md) |
 
 ## Reproduce native evidence
@@ -85,8 +86,8 @@ Older spike and packaging reports preserve historical evidence. Use the current 
 
 The [Verity comparison](research/verity-lessons.md) records lessons for compiler proof structure, theorem scope and audit reporting, with immutable upstream sources.
 
-## Project visual
+## Benchmark graphic
 
-The [1600 × 900 project pitch](assets/noctium-pitch.png) and [editable SVG](assets/noctium-pitch.svg) give one shareable view of Noctium. The graphic separates scoped implementation counts and Lean features from full-coverage, composition and web/mobile SDK goals. Assets use the repository's [MIT license](../LICENSE).
+The [OpenZeppelin benchmark graphic](assets/noctium-performance.png) shows compile times and circuit K and rows across the 16 entrypoints. [Editable SVG](assets/noctium-performance.svg) · [Measurements](development/oz-compile-performance.md)
 
-The [OpenZeppelin benchmark graphic](assets/noctium-performance.png) compares all 16 entrypoints, source compile times and emitted artifact sizes. [Editable SVG](assets/noctium-performance.svg) · [Measurements](development/oz-compile-performance.md)
+The [earlier project pitch](assets/noctium-pitch.png) records the initial research preview. [Editable SVG](assets/noctium-pitch.svg) · [MIT license](../LICENSE)
