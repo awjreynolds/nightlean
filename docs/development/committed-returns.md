@@ -157,4 +157,19 @@ variants from the pinned Compact comparison. The native checker rejects a
 changed memo byte under the original commitment. The runtime rejects a
 reordered field map. [Focused Rust test](../../runtime/tests/aggregate_serialization.rs)
 
+Two fresh compilations reproduced all 21 ledger and witness files byte for
+byte. The empty-vector example compiled with one logical view and zero physical
+fields.
+
+The selected `readPayment` entrypoint at compiler revision `d470fa2` used K9
+and 298 rows. Its fresh native proof finalized on the Ledger 9.1.0.1 localnet.
+The Rust client funded both transactions and checked the exact finalized state.
+The authenticated bundle manifest digest was
+`ebd3bb550d1be33f3cf6c691f7e979bcef5d76a8f0b9f30a3c447f03016f043c`.
+
+| Action | Finalized block | Transaction ID |
+| --- | ---: | --- |
+| Deploy | 31695 | `93def8d638e89909ff83c4b5bed5c617695b587d4b0567d3cdc10fe42e78390d` |
+| Call | 31698 | `60e77ad6397c52625ecb4871841b3b8843561862110b978a62db4cff7690dd4c` |
+
 See the [native call protocol](native-call-claims.md) for composition evidence.
