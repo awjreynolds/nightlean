@@ -129,6 +129,8 @@ The [source proof-audit foundation](../development/proof-registration.md) provid
 
 Swift also generated K9 proofs for the original one-time claim from explicit private inputs and finalized both calls. The native checker rejected replay on the exact exported states. [Original claim receipts](../development/swift-private-claim-receipts.json)
 
+[Kotlin witness sessions](../development/android-witness-sdk.md) run on an arm64 Android 35 emulator. The AAR uses the shared native runtime and the same Lean-generated typed host-control plan. The instrumentation test covers five callbacks, private staged values, reply correlation and cancellation. Android proof and transaction integration remain open.
+
 [Explicit typed copy](../development/native-copy.md) closes the remaining non-deprecated opcode name in the pinned registry. The compiler registers all 40 non-deprecated names across the scoped source paths. The upstream enum also lists seven deprecated names. Full type and overload coverage, compiler assurance and application flows remain separate gates.
 
 [Typed committed call arguments](../development/committed-returns.md#native-call-arguments) now cover scalar families and bounded bytes in direct entrypoints. The Rust checker exercises mixed ordered fields, preserves an independent private witness, and rejects a reordered header and malformed short byte chunk. Direct typed call declarations, full argument overload qualification and hosted argument authoring remain open.
