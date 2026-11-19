@@ -1,6 +1,6 @@
 # Swift witness SDK
 
-Swift applications run Noctium host-control plans through the same Rust runtime as C and C++. The package links that runtime as a static XCFramework. It needs no Node process or Compact installation.
+Swift applications run Noctium witnesses and generate and verify native proofs through the same Rust runtime as C and C++. The package links that runtime as a static XCFramework. It needs no Node process or Compact installation.
 
 ## Build and import
 
@@ -28,6 +28,22 @@ let step = try session.advance()
 
 On `need_host`, call `privateRequest()`, run the registered provider, then pass the correlated reply to `resume(_:typed:)`. Use `typed: true` for the v2 reply format. Call `advance()` again until completion or rejection. `cancel()` invalidates the pending request. Keep step data, provider arguments, replies and staged values inside the trusted application. The Rust ABI frees each temporary result token before Swift returns its own copy. Your application owns any copies or logs it creates.
 
+## Prove a native witness locally
+
+Select an authenticated entrypoint bundle and the matching public proof parameters. Pass the native target descriptor, initial state as `{"state":{...}}`, raw parameters and exact retained `witness.control.json` bytes. The begin envelope supplies inputs and host capabilities. The exact plan goes in the separate `plan` argument. Use the same provider loop on the bound session. [Native descriptor formats](../../runtime/include/noctium_native.h) · [Build an entrypoint bundle](portable-artifacts.md#build-and-use)
+
+```swift
+let invocation = try NativeWitness(
+    targetDescriptor: descriptor, initialState: state, parameters: srs,
+    plan: controlPlan, begin: beginEnvelope
+)
+// Drive invocation.session through its host requests until completion.
+let proof = try invocation.prepareProof(descriptor: proofDescriptor)
+let publicIntent = try proof.proveLocally()
+```
+
+Proof preparation consumes the exact completed witness and its target on success. The SDK obtains fresh entropy from Apple Security. It generates and verifies the proof in Rust and returns the proved public intent projection. Private transcript bytes stay in the runtime during proving. Run synchronous proving on a worker and use each session serially. Funding and submission are separate operations.
+
 ## Qualification
 
 ```sh
@@ -38,7 +54,11 @@ NOCTIUM_SWIFT_PLAN="$PWD/build/swift-witness-plans/TypedWitness.scalarHost.contr
   swift test --package-path build/noctium-swift
 ```
 
-The typed smoke case exercises five callbacks, reads a staged private value across callback boundaries, rejects a crossed attempt ID without advancing, and returns 14. It also checks that cancellation invalidates a pending private request. The same test passed on Apple Silicon macOS and the arm64 iOS 27.0 simulator. The arm64 iPhone slice linked with a minimum deployment target of iOS 16. Physical-device execution, proof generation, transaction submission and durable private-store commits remain open. [Swift smoke test](../../sdk/swift/Tests/NoctiumTests/WitnessSessionTests.swift) · [Control ABI](../../runtime/include/noctium_control.h)
+The typed smoke case exercises five callbacks, reads a staged private value across callback boundaries, rejects a crossed attempt ID without advancing, and returns 14. It also checks that cancellation invalidates a pending private request.
+
+The native test uses the `TypedWitness.ScalarWitness.claim` ledger entrypoint from the same Lean source. It rejects altered control bytes and an incomplete witness, generates and verifies a K7 proof, and checks the consumed session rejects further use. To run the opt-in proof test, set `NOCTIUM_SWIFT_PROOF_FIXTURE` to a directory containing `target.json` with the authenticated target descriptor and `srs` with the exact matching K7 proof parameters. Assemble the bundle with the selected profile, current compiler artifacts, matched keys and ledger parameters. Use `TEST_RUNNER_NOCTIUM_SWIFT_PROOF_FIXTURE` for the same test under Xcode.
+
+Both tests passed on Apple Silicon macOS and the arm64 iOS 27.0 simulator. The iPhone slice linked for iOS 16. Physical-device execution, transaction submission and durable private-store commits remain open. [Swift smoke tests](../../sdk/swift/Tests/NoctiumTests/WitnessSessionTests.swift) · [Follow-up issue](https://github.com/awjreynolds/noctium/issues/87)
 
 To repeat the simulator test, run the package scheme against a booted simulator ID.
 

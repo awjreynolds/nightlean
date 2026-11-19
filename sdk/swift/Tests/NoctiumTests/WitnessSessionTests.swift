@@ -10,6 +10,62 @@ final class WitnessSessionTests: XCTestCase {
         )
         let plan = try decode(Data(contentsOf: URL(fileURLWithPath: fixture)))
         let attemptID = String(repeating: "b", count: 64)
+        var fields = try beginFields(attemptID: attemptID)
+        fields["plan"] = plan
+        let begin = try encode(fields)
+        let session = try WitnessSession(begin: begin)
+        try complete(session, attemptID: attemptID)
+
+        let cancelled = try WitnessSession(begin: begin)
+        _ = try cancelled.advance()
+        XCTAssertEqual(try decode(cancelled.cancel())["status"] as? String, "cancelled")
+        XCTAssertThrowsError(try cancelled.privateRequest())
+    }
+
+    func testAuthenticatedWitnessProvesLocally() throws {
+        guard let directory = ProcessInfo.processInfo.environment["NOCTIUM_SWIFT_PROOF_FIXTURE"] else {
+            throw XCTSkip("Set NOCTIUM_SWIFT_PROOF_FIXTURE to the native proof fixture directory")
+        }
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        let targetDescriptor = try Data(contentsOf: root.appendingPathComponent("target.json"))
+        let descriptor = try decode(targetDescriptor)
+        let bundle = try XCTUnwrap(descriptor["bundleDirectory"] as? String)
+        let control = URL(fileURLWithPath: bundle).appendingPathComponent("witness/entrypoint.control.json")
+        let plan = try Data(contentsOf: control)
+        let parameters = try Data(contentsOf: root.appendingPathComponent("srs"))
+        let attemptID = String(repeating: "d", count: 64)
+        let begin = try encode(beginFields(attemptID: attemptID))
+        let state = Data(#"{"state":{"total":"0"}}"#.utf8)
+        var options = descriptor
+        options.removeValue(forKey: "bundleDirectory")
+        options["proofServiceCapability"] = "host.prover"
+        options["maxResponseBytes"] = 1_048_576
+        let proofDescriptor = try encode(options)
+
+        XCTAssertThrowsError(try NativeWitness(
+            targetDescriptor: targetDescriptor, initialState: state, parameters: parameters,
+            plan: plan + Data([10]), begin: begin
+        ))
+        let target = try NativeWitness(
+            targetDescriptor: targetDescriptor, initialState: state, parameters: parameters,
+            plan: plan, begin: begin
+        )
+        XCTAssertEqual(try decode(target.targetInfo)["entrypoint"] as? String, "claim")
+        XCTAssertThrowsError(try target.prepareProof(descriptor: proofDescriptor)) {
+            XCTAssertEqual($0 as? WitnessSession.Failure, .nativeStatus(3))
+        }
+        try complete(target.session, attemptID: attemptID)
+        let proof = try target.prepareProof(descriptor: proofDescriptor)
+        XCTAssertThrowsError(try target.session.advance())
+        XCTAssertThrowsError(try target.prepareProof(descriptor: proofDescriptor))
+        let intent = try decode(proof.proveLocally())
+        XCTAssertEqual(intent["status"] as? String, "proved")
+        XCTAssertEqual(intent["funded"] as? Bool, false)
+        XCTAssertEqual(intent["submitted"] as? Bool, false)
+        XCTAssertFalse(try XCTUnwrap(intent["publicIntentHex"] as? String).isEmpty)
+    }
+
+    private func beginFields(attemptID: String) throws -> [String: Any] {
         let context = try decode(Data("""
             {
               "protocolVersion":1,"namespace":"noctium","baseRevision":"fixture-r0",
@@ -30,10 +86,10 @@ final class WitnessSessionTests: XCTestCase {
               "commitCapability":"private","limits":{"requests":64,"writes":64,"privateBytes":65536}
             }
             """.utf8))
-        let begin = try encode([
-            "abiVersion": 1, "plan": plan, "inputs": ["expected": "14", "seed": "7"], "hostContext": context,
-        ])
-        let session = try WitnessSession(begin: begin)
+        return ["abiVersion": 1, "inputs": ["expected": "14", "seed": "7"], "hostContext": context]
+    }
+
+    private func complete(_ session: WitnessSession, attemptID: String) throws {
         for (index, name) in ["cache", "cache", "lookup", "cache", "lookup"].enumerated() {
             let pending = try session.advance()
             let step = try decode(pending)
@@ -63,11 +119,6 @@ final class WitnessSessionTests: XCTestCase {
         let finished = try decode(session.advance())
         XCTAssertEqual(finished["status"] as? String, "completed")
         XCTAssertEqual(finished["result"] as? String, "14")
-
-        let cancelled = try WitnessSession(begin: begin)
-        _ = try cancelled.advance()
-        XCTAssertEqual(try decode(cancelled.cancel())["status"] as? String, "cancelled")
-        XCTAssertThrowsError(try cancelled.privateRequest())
     }
 
     private func decode(_ bytes: Data) throws -> [String: Any] {

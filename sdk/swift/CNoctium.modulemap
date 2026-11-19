@@ -1,4 +1,5 @@
 module CNoctium {
     header "noctium_control.h"
+    header "noctium_native.h"
     export *
 }

@@ -7,22 +7,36 @@ public final class WitnessSession {
     public enum Failure: Error, Equatable {
         case nativeStatus(Int32)
         case invalidResult
+        case entropyUnavailable(Int32)
     }
 
-    private let handle: UInt64
+    private var handle: UInt64?
 
     /// Accepts the Control ABI's UTF-8 JSON envelope with plan, inputs and hostContext.
     public init(begin: Data) throws {
         var session: UInt64 = 0
-        let status = begin.withUnsafeBytes { bytes in
-            noctium_control_begin(bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, &session)
+        let status = begin.withBytePointer { pointer, count in
+            noctium_control_begin(pointer, count, &session)
         }
         try Self.check(status)
         handle = session
     }
 
+    init(handle: UInt64) {
+        self.handle = handle
+    }
+
     deinit {
-        _ = noctium_control_free(handle)
+        if let handle { _ = noctium_control_free(handle) }
+    }
+
+    func activeHandle() throws -> UInt64 {
+        guard let handle else { throw Failure.nativeStatus(Int32(NOCTIUM_CONTROL_INVALID_HANDLE)) }
+        return handle
+    }
+
+    func markConsumed() {
+        handle = nil
     }
 
     /// Advances until completion, rejection or a host callback. A pending request
@@ -35,8 +49,8 @@ public final class WitnessSession {
     public func resume(_ response: Data, typed: Bool) throws -> Data {
         let resume = typed ? noctium_control_resume_typed : noctium_control_resume
         return try result { session, token in
-            response.withUnsafeBytes { bytes in
-                resume(session, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, token)
+            response.withBytePointer { pointer, count in
+                resume(session, pointer, count, token)
             }
         }
     }
@@ -51,7 +65,7 @@ public final class WitnessSession {
         try result(noctium_control_cancel)
     }
 
-    private static func check(_ status: Int32) throws {
+    static func check(_ status: Int32) throws {
         guard status == NOCTIUM_CONTROL_OK else { throw Failure.nativeStatus(status) }
     }
 
@@ -60,20 +74,39 @@ public final class WitnessSession {
         privateResult: Bool = false
     ) throws -> Data {
         var token: UInt64 = 0
-        try Self.check(operation(handle, &token))
-        let free = privateResult ? noctium_control_private_free : noctium_control_result_free
-        let length = privateResult ? noctium_control_private_length : noctium_control_result_length
-        let copy = privateResult ? noctium_control_private_copy : noctium_control_result_copy
-        defer { _ = free(token) }
-        var count = 0
-        try Self.check(length(token, &count))
-        var data = Data(count: count)
-        var written = 0
-        let status = data.withUnsafeMutableBytes { bytes in
-            copy(token, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, &written)
-        }
-        try Self.check(status)
-        guard written == count else { throw Failure.invalidResult }
-        return data
+        try Self.check(operation(try activeHandle(), &token))
+        return try takeResult(
+            token,
+            length: privateResult ? noctium_control_private_length : noctium_control_result_length,
+            copy: privateResult ? noctium_control_private_copy : noctium_control_result_copy,
+            free: privateResult ? noctium_control_private_free : noctium_control_result_free
+        )
     }
+}
+
+extension Data {
+    func withBytePointer<T>(_ body: (UnsafePointer<UInt8>?, Int) throws -> T) rethrows -> T {
+        try withUnsafeBytes { bytes in
+            try body(bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count)
+        }
+    }
+}
+
+func takeResult(
+    _ token: UInt64,
+    length: (UInt64, UnsafeMutablePointer<Int>?) -> Int32,
+    copy: (UInt64, UnsafeMutablePointer<UInt8>?, Int, UnsafeMutablePointer<Int>?) -> Int32,
+    free: (UInt64) -> Int32
+) throws -> Data {
+    defer { _ = free(token) }
+    var count = 0
+    try WitnessSession.check(length(token, &count))
+    var data = Data(count: count)
+    var written = 0
+    let status = data.withUnsafeMutableBytes { bytes in
+        copy(token, bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, &written)
+    }
+    try WitnessSession.check(status)
+    guard written == count else { throw WitnessSession.Failure.invalidResult }
+    return data
 }

@@ -19,7 +19,7 @@ stage="$(mktemp -d "$(dirname "$output")/.noctium-swift.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 mkdir "$stage/headers" "$stage/package"
 cp "$sdk/CNoctium.modulemap" "$stage/headers/module.modulemap"
-cp "$repo/runtime/include/noctium_control.h" "$stage/headers/"
+cp "$repo/runtime/include/noctium_control.h" "$repo/runtime/include/noctium_native.h" "$stage/headers/"
 cp "$sdk/Package.swift" "$repo/LICENSE" "$stage/package/"
 cp -R "$sdk/Sources" "$sdk/Tests" "$stage/package/"
 

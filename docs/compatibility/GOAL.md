@@ -125,7 +125,7 @@ The [source proof-audit foundation](../development/proof-registration.md) provid
 
 [Generated Rust witness modules](../development/typed-witnesses.md#generate-a-rust-witness-module) are available on request for ledger entrypoints. The private-state counter exercised the generated inputs and provider replies through an authenticated bundle and native K7 proof preparation. The generated Rust layer relies on the same witness scheduler and capability checks as the shared SDK.
 
-[Swift witness sessions](../development/swift-witness-sdk.md) run compiler-generated host-control plans through the shared Rust C ABI, with explicit provider replies, private callback arguments and cancellation. The package generates the requested Apple Silicon, iOS device and iOS simulator slices. Swift proof and transaction interfaces, durable private commits, Kotlin and TypeScript/WASM remain open.
+[Swift witness sessions](../development/swift-witness-sdk.md) run compiler-generated host-control plans through the shared Rust C ABI. The authenticated witness path generates and verifies a K7 Midnight proof locally on macOS and the iOS simulator. The iPhone slice links. Swift transactions, durable private commits, physical-device execution, Kotlin and TypeScript/WASM remain open.
 
 [Explicit typed copy](../development/native-copy.md) closes the remaining non-deprecated opcode name in the pinned registry. The compiler registers all 40 non-deprecated names across the scoped source paths. The upstream enum also lists seven deprecated names. Full type and overload coverage, compiler assurance and application flows remain separate gates.
 
