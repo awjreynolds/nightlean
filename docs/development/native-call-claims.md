@@ -81,7 +81,7 @@ and fixed bytes. Changing the amount from 300 to 299 produces a checked caller
 whose claim fails to match the callee. Bundle selection still needs a trusted
 manifest and the deployed verifier. The ledger commitment authenticates the
 result fields, with schema selection supplied by the source interface and trusted
-callee bundle. Aggregate arguments and helper-body call authoring remain open.
+callee bundle. Helper-body call authoring remains open.
 [Payment example](../../examples/AggregateSerialization.lean) · [Native test](../../runtime/tests/aggregate_serialization.rs)
 
 The funded payment example attached two K9 proofs and finalized in one
@@ -177,9 +177,11 @@ release.
 The result is a private, unbalanced intent. Applications supply the initial
 contexts. [Committed scalar and fixed byte arguments](committed-returns.md#native-call-arguments)
 use the native input ABI, including private source parameters from readable
-hosted witness circuits. Composite arguments, automatic bundle discovery, and
-claim statements inside helper bodies remain open. The reference state
-interpreter rejects active call claims.
+hosted witness circuits. Checked aggregate parameters from structured witness
+sources also use the ABI. The caller names the argument group and supplies each
+leaf in layout order. The callee binds the group to its typed provider input.
+Automatic bundle discovery and claim statements inside helper bodies remain
+open. The reference state interpreter rejects active call claims.
 
 ## Prove a composed intent
 

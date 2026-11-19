@@ -77,7 +77,16 @@ program using its original type. [Hosted call fixture](../../tests/TypedCallArgu
 The focused host/native case commits a Bytes33 value, a UInt8, a zero-bound UInt
 and Bytes0. It checks exact header fields in declared argument order, the
 remaining salt and provider reply, and rejection after changing an argument
-or reordering the sidecar binding. Composite arguments remain open.
+or reordering the sidecar binding.
+
+A hosted helper also accepts a private aggregate parameter in its entirety.
+Select its name in `arguments [request]`. The caller supplies
+`request := fields(amount, okay)` in the argument list of `callCommitment`.
+The compiler expands the declared layout into adjacent Native slots in checked
+order. The host passes the original typed record to the provider. The witness
+validator rejects partial or reordered aggregate groups. Empty aggregates still
+take a label in the call interface and contribute zero fields.
+[Aggregate argument fixture](../../tests/WitnessSource.lean)
 
 Two builds at compiler revision `0ede45d` reproduced all 12 selected compiler
 files, including the generated Rust binding. The authenticated Rust witness

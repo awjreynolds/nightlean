@@ -198,6 +198,11 @@ structure ReturnView where
   fields : List String
   deriving Repr
 
+structure CallInputView where
+  name : String
+  fields : List (String × Ty)
+  deriving Repr
+
 /-- Recursive ledger value descriptions. Scalar leaves use the existing typed
 scalar surface. Maps retain their key type and recursively describe values. -/
 inductive LedgerValueType where
@@ -457,6 +462,8 @@ structure Entrypoint where
   /-- Private Native circuit inputs promoted to the ledger call argument ABI.
   Names retain their order in the call's aligned input value. -/
   callInputs : List String := []
+  /-- Logical arguments expanded to Native slots in the call header. -/
+  callInputViews : List CallInputView := []
   effects : List Effect := []
   /-- Proof-bound public values returned with the entrypoint call. -/
   returns : List Output := []
@@ -955,6 +962,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
   e.circuit.validate caps
   validateCallArguments e.circuit.inputs e.callInputs e.span
+  unless e.callInputViews.length ≤ 256 && uniqueNames (e.callInputViews.map (·.name)) do
+    throw {span := e.span, message := "invalid logical call argument list"}
+  let mut groupedInputs := []
+  for view in e.callInputViews do
+    let fields := view.fields.map Prod.fst
+    unless !view.name.isEmpty && uniqueNames fields && !fields.any groupedInputs.contains do
+      throw {span := e.span, message := "invalid aggregate call argument fields"}
+    if let some first := fields.head? then
+      unless ((e.callInputs.dropWhile (· != first)).take fields.length) == fields do
+        throw {span := e.span, message := "aggregate call argument fields must remain adjacent in layout order"}
+    unless fields.all (fun name => e.circuit.inputs.any (fun input => input.name == name && input.ty == .native)) do
+      throw {span := e.span, message := "aggregate call argument fields must use Native"}
+    groupedInputs := groupedInputs ++ fields
   unless e.effectGuards.isEmpty || e.effectGuards.length == e.effects.length do
     throw {span := e.span, message := "effect guard metadata length mismatch"}
   -- Typing permits private operands. Mandatory disclosure analysis decides

@@ -76,6 +76,31 @@ noctium_contract PairWitness where
   end
 end
 
+noctium_contract PairCallArguments where
+  cell total : UInt 8
+  entry claim uses pairRelation arguments [request] where
+    write total := cast(UInt 8, result.amount)
+    return amount : UInt 8 := cast(UInt 8, result.amount)
+  end
+end
+
+noctium_circuit pairClaimInputs where
+  private opening : Native
+  private requestAmount : UInt 8
+  private requestOkay : Bool
+  private expected : UInt 8
+end
+
+noctium_contract PairCaller where
+  cell route : Bytes32
+  entry forward uses pairClaimInputs where
+    read route as target
+    claimContractCall(target,
+      disclose(callCommitment(PairCallArguments, "claim", opening,
+        [request := fields(requestAmount, requestOkay)], [expected])))
+  end
+end
+
 def emptyProgram : Program := {
   composites := {structures := [{id := "TypedWitness.Empty", fields := []}]}
   witnesses := [

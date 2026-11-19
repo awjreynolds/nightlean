@@ -985,17 +985,21 @@ fn readable_private_state_source_binds_callbacks_stages_and_native_constraints()
     }
 }
 
-#[test]
-fn fixed_composite_arguments_and_results_keep_component_types_and_private_leaves() {
-    let attempt = "f".repeat(64);
-    let request = json!({
+fn pair_value(amount: &str) -> Json {
+    json!({
         "kind":"struct",
         "id":"TypedWitness.Pair",
         "fields":[
-            {"name":"amount","value":{"kind":"uint","maximum":"255","value":"7"}},
+            {"name":"amount","value":{"kind":"uint","maximum":"255","value":amount}},
             {"name":"okay","value":{"kind":"bool","value":true}}
         ]
-    });
+    })
+}
+
+#[test]
+fn fixed_composite_arguments_and_results_keep_component_types_and_private_leaves() {
+    let attempt = "f".repeat(64);
+    let request = pair_value("7");
     let inputs = BTreeMap::from([
         ("expected".into(), json!("14")),
         ("request".into(), request.clone()),
@@ -1011,14 +1015,7 @@ fn fixed_composite_arguments_and_results_keep_component_types_and_private_leaves
         session.private_request().unwrap()["arguments"]["request"],
         request
     );
-    let result = json!({
-        "kind":"struct",
-        "id":"TypedWitness.Pair",
-        "fields":[
-            {"name":"amount","value":{"kind":"uint","maximum":"255","value":"14"}},
-            {"name":"okay","value":{"kind":"bool","value":true}}
-        ]
-    });
+    let result = pair_value("14");
     session
         .resume_typed(reply(&pending["request"], &attempt, "value", Some(result)))
         .unwrap();
@@ -1033,6 +1030,145 @@ fn fixed_composite_arguments_and_results_keep_component_types_and_private_leaves
     assert_eq!(completion["inputs"]["$helper7"], "14");
     assert_eq!(completion["inputs"]["$helper8"], "1");
     assert_eq!(completion["hostWrites"]["cache/last"]["value"], "14");
+}
+
+#[cfg(feature = "zkir-321")]
+#[test]
+#[ignore = "requires fresh WitnessSource Lean artifacts"]
+fn aggregate_argument_binds_hosted_callee_and_typed_caller() {
+    use base_crypto::hash::HashOutput;
+    use coin_structure::contract::ContractAddress;
+    use ledger::structure::INITIAL_PARAMETERS;
+    use noctium_runtime::{
+        Plan,
+        assembly::{CheckedNativeCall, assemble_checked_calls},
+        create_state, prepare,
+        zkir::IrSource,
+    };
+    use onchain_runtime::{context::QueryContext, state::EntryPointBuf};
+    use rand::rngs::OsRng;
+    use std::{fs, path::PathBuf};
+    use transient_crypto::curve::Fr;
+
+    let artifacts = PathBuf::from(std::env::var_os("NOCTIUM_AGGREGATE_ARGUMENT_ARTIFACTS").unwrap());
+    let load = |stem: &str| {
+        let plan = serde_json::from_slice::<Plan>(
+            &fs::read(artifacts.join(format!("{stem}.impact.json"))).unwrap(),
+        )
+        .unwrap();
+        let circuit =
+            IrSource::load(fs::File::open(artifacts.join(format!("{stem}.zkir"))).unwrap())
+                .unwrap();
+        (plan, circuit)
+    };
+    let callee_stem = "TypedWitness.PairCallArguments.claim";
+    let (callee_plan, callee_circuit) = load(callee_stem);
+    let (caller_plan, caller_circuit) = load("TypedWitness.PairCaller.forward");
+    let control =
+        fs::read_to_string(artifacts.join(format!("{callee_stem}.witness.control.json"))).unwrap();
+    let request = pair_value("7");
+    let inputs = BTreeMap::from([
+        ("expected".into(), json!("14")),
+        ("request".into(), request.clone()),
+    ]);
+    let attempt = "f".repeat(64);
+    let (mut session, control) = bound_session(&control, inputs.clone(), &attempt);
+    let pending = session.advance().unwrap();
+    assert_eq!(session.private_request().unwrap()["arguments"]["request"], request);
+    session
+        .resume_typed(reply(&pending["request"], &attempt, "value", Some(pair_value("14"))))
+        .unwrap();
+    assert_eq!(session.advance().unwrap()["status"], "completed");
+    let handoff = session
+        .private_completion(&binding(&control)["nativeRelation"])
+        .unwrap();
+    let callee_address = ContractAddress(HashOutput([9; 32]));
+    let caller_address = ContractAddress(HashOutput([8; 32]));
+    let callee_state =
+        create_state(&callee_plan, &BTreeMap::from([("total".into(), json!("1"))])).unwrap();
+    let callee = prepare(
+        &callee_plan,
+        &serde_json::from_value(handoff["inputs"].clone()).unwrap(),
+        &callee_state,
+        &INITIAL_PARAMETERS,
+        callee_address,
+    )
+    .unwrap();
+    assert_eq!(callee.preimage.inputs, [Fr::from(7u64), Fr::from(1u64)]);
+    assert_eq!(callee.preimage.private_transcript, [Fr::from(14u64), Fr::from(1u64)]);
+    assert_eq!(callee.returns_json()["amount"], "14");
+    let caller_state = create_state(
+        &caller_plan,
+        &BTreeMap::from([("route".into(), json!({"kind":"bytes", "values":callee_address.0.0}))]),
+    )
+    .unwrap();
+    let assemble = |amount: &str| {
+        let caller = prepare(
+            &caller_plan,
+            &BTreeMap::from([
+                ("opening".into(), json!("101")),
+                ("requestAmount".into(), json!(amount)),
+                ("requestOkay".into(), json!(true)),
+                ("expected".into(), json!("14")),
+            ]),
+            &caller_state,
+            &INITIAL_PARAMETERS,
+            caller_address,
+        )
+        .unwrap();
+        assemble_checked_calls(
+            &[
+                CheckedNativeCall {
+                    execution: &caller,
+                    circuit: &caller_circuit,
+                    initial_context: QueryContext::new(caller_state.clone(), caller_address),
+                    entry_point: EntryPointBuf(b"forward".to_vec()),
+                    communication_commitment_rand: Fr::from(53u64),
+                },
+                CheckedNativeCall {
+                    execution: &callee,
+                    circuit: &callee_circuit,
+                    initial_context: QueryContext::new(callee_state.clone(), callee_address),
+                    entry_point: EntryPointBuf(b"claim".to_vec()),
+                    communication_commitment_rand: Fr::from(101u64),
+                },
+            ],
+            &INITIAL_PARAMETERS,
+            1_800_000_000,
+            &mut OsRng,
+        )
+    };
+    let intent = assemble("7").unwrap();
+    let mut calls = intent.calls();
+    assert!(calls.next().unwrap().calls(calls.next().unwrap()));
+    assert!(assemble("6").is_err());
+
+    for fields in [
+        json!(["request.okay", "request.amount"]),
+        json!(["request.amount"]),
+    ] {
+        let mut changed = binding(&control);
+        changed["callInputs"] = fields;
+        let text = changed.to_string();
+        let digest = hex::encode(Sha256::digest(text.as_bytes()));
+        let context = source_context(&signatures(&control), &attempt);
+        let mut altered = control.clone();
+        altered["binding"] = json!(text);
+        let rejected = Session::from_json_with_invocation_target(
+            altered,
+            inputs.clone(),
+            context,
+            Some(&digest),
+            Some(InvocationTarget {
+                contract_address: "a".repeat(64),
+                entrypoint: "claim".into(),
+            }),
+        );
+        let Err(error) = rejected else {
+            panic!("invalid aggregate call arguments were accepted")
+        };
+        assert!(error.to_string().contains("all leaves in layout order"), "{error:#}");
+    }
 }
 
 #[test]

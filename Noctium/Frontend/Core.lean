@@ -26,6 +26,7 @@ structure CircuitInfo where
   aggregateOutputs : List (String × Name × List String) := []
   /-- Hosted call arguments are selected from source parameters, never callback slots. -/
   witnessCallArguments? : Option (List String) := none
+  aggregateInputs : List CallInputView := []
   sourceProgram? : Option (Name × String) := none
   /-- Structured ledger bodies are rebuilt from their typed source at export. -/
   stateProgram? : Option (Name × String) := none
@@ -46,7 +47,8 @@ initialize contractRegistry : SimplePersistentEnvExtension Name (Array Name) ←
 private structure CallInterface where
   contract : Name
   operation : String
-  argumentTypes : List Ty
+  argumentFields : List (String × Ty)
+  argumentViews : List (String × List (String × Ty))
   resultFields : List (String × Ty)
   resultViews : List (String × List (String × Ty))
   deriving Inhabited
@@ -187,11 +189,11 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
-declare_syntax_cat nlcallresult
-scoped syntax nlexpr : nlcallresult
-scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallresult
+declare_syntax_cat nlcallvalue
+scoped syntax nlexpr : nlcallvalue
+scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallvalue
 scoped syntax "callCommitment(" ident "," str "," nlexpr ","
-  "[" nlexpr,* "]" "," "[" nlcallresult,* "]" ")" : nlexpr
+  "[" nlcallvalue,* "]" "," "[" nlcallvalue,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
@@ -489,35 +491,36 @@ private def spanTerm (stx : Syntax) : CommandElabM (TSyntax `term) := do
 
 private abbrev Bindings := List (String × Ty × TSyntax `term)
 
-private def callResultExpressions (interface : CallInterface)
-    (results : Array (TSyntax `nlcallresult)) (site : Syntax) :
+private def callExpressions (role : String) (ordered : List (String × Ty))
+    (groups : List (String × List (String × Ty)))
+    (values : Array (TSyntax `nlcallvalue)) (site : Syntax) :
     CommandElabM (List (TSyntax `nlexpr × Ty)) := do
-  let mut views := interface.resultViews
+  let mut views := groups
   let grouped := views.flatMap fun (_, fields) => fields.map Prod.fst
-  let mut scalars := interface.resultFields.filter fun (name, _) => !grouped.contains name
+  let mut scalars := ordered.filter fun (name, _) => !grouped.contains name
   let mut supplied := []
-  for result in results do
+  for result in values do
     match result with
-    | `(nlcallresult| $label:ident := fields($values,*)) =>
+    | `(nlcallvalue| $label:ident := fields($values,*)) =>
       let labelName := label.getId.toString
       let some fields := views.lookup labelName
-        | throwErrorAt label "unknown or repeated aggregate call result '{labelName}'"
+        | throwErrorAt label "unknown or repeated aggregate call {role} '{labelName}'"
       if fields.length != values.getElems.size then
-        throwErrorAt result "callCommitment field count does not match aggregate result '{labelName}'"
+        throwErrorAt result "callCommitment field count does not match aggregate {role} '{labelName}'"
       supplied := supplied ++ ((fields.zip values.getElems.toList).map fun ((name, ty), expr) =>
         (name, expr, ty))
       views := views.filter (·.1 != labelName)
-    | `(nlcallresult| $value:nlexpr) =>
+    | `(nlcallvalue| $value:nlexpr) =>
       let (name, ty) :: rest := scalars
-        | throwErrorAt site "callCommitment result count does not match the callee"
+        | throwErrorAt site "callCommitment {role} count does not match the callee"
       supplied := (name, value, ty) :: supplied
       scalars := rest
-    | _ => throwErrorAt result "unsupported call result"
+    | _ => throwErrorAt result "unsupported call value"
   unless views.isEmpty && scalars.isEmpty do
-    throwErrorAt site "callCommitment result count does not match the callee"
-  interface.resultFields.mapM fun (name, _) => do
+    throwErrorAt site "callCommitment {role} count does not match the callee"
+  ordered.mapM fun (name, _) => do
     let some value := supplied.lookup name
-      | throwErrorAt site "missing committed return field '{name}'"
+      | throwErrorAt site "missing committed {role} field '{name}'"
     pure value
 
 private def coerceExpression (stx : Syntax) (found target : Ty) (value : TSyntax `term) :
@@ -574,11 +577,12 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| callCommitment($_:ident, $_:str, $opening, [$inputs,*], [$outputs,*])) =>
-    hasPartialScalar opening || inputs.getElems.any hasPartialScalar || outputs.getElems.any (fun result =>
-      match result with
-      | `(nlcallresult| $value:nlexpr) => hasPartialScalar value
-      | `(nlcallresult| $_:ident := fields($values,*)) => values.getElems.any hasPartialScalar
-      | _ => Bool.true)
+    let partialValue (value : TSyntax `nlcallvalue) :=
+      match value with
+      | `(nlcallvalue| $value:nlexpr) => hasPartialScalar value
+      | `(nlcallvalue| $_:ident := fields($values,*)) => values.getElems.any hasPartialScalar
+      | _ => Bool.true
+    hasPartialScalar opening || inputs.getElems.any partialValue || outputs.getElems.any partialValue
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentHashPoint($point)) => hasPartialScalar point
@@ -914,12 +918,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let some interface := interfaces.find? (fun item =>
         item.contract == contract && item.operation == entrypoint.getString)
       | throwErrorAt entrypoint "callCommitment requires a declared callee entrypoint"
-    unless inputs.getElems.size == interface.argumentTypes.length do
-      throwErrorAt stx "callCommitment argument count does not match the callee"
-    let results ← callResultExpressions interface outputs.getElems stx
-    let payload := [(opening, Ty.native)] ++
-      (inputs.getElems.toList.zip interface.argumentTypes) ++
-      results
+    let arguments ← callExpressions "argument" interface.argumentFields interface.argumentViews inputs.getElems stx
+    let results ← callExpressions "result" interface.resultFields interface.resultViews outputs.getElems stx
+    let payload := [(opening, Ty.native)] ++ arguments ++ results
     let mut bindings := []
     let mut fields : Array (TSyntax `term) := #[]
     for ((part, ty), index) in payload.zipIdx do
@@ -1254,7 +1255,8 @@ private unsafe def checkGeneratedContract (name : Name) : CommandElabM Unit := d
           pure (view.name, view.fields.zip (callViewLeafTypes checked.value))
         modifyEnv fun env => callInterfaceRegistry.addEntry env {
           contract := name, operation := entrypoint.name
-          argumentTypes := entrypoint.callArguments.map (·.ty)
+          argumentFields := entrypoint.callArguments.map fun input => (input.name, input.ty)
+          argumentViews := entrypoint.callInputViews.map fun view => (view.name, view.fields)
           resultFields := entrypoint.returns.map fun result => (result.name, result.ty)
           resultViews
         }
@@ -2182,10 +2184,24 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         let fullName := (← getCurrNamespace) ++ circuit.getId
         let some info := registry.find? (fun i => i.declName == fullName || i.declName == circuit.getId)
           | throwErrorAt circuit "entrypoint requires a registered Noctium circuit"
-        if let some allowed := info.witnessCallArguments? then
-          for argument in args.getElems do
-            unless allowed.contains argument.getId.toString do
-              throwErrorAt argument "hosted call argument must name a scalar source parameter"
+        unless args.getElems.size ≤ 256 && uniqueNames (args.getElems.toList.map (·.getId.toString)) do
+          throwErrorAt id "invalid logical call argument list"
+        let mut callInputTerms : Array (TSyntax `term) := #[]
+        let mut callInputViews : Array (TSyntax `term) := #[]
+        for argument in args.getElems do
+          let labelName := argument.getId.toString
+          if let some view := info.aggregateInputs.find? (·.name == labelName) then
+            let fields ← view.fields.mapM fun (field, ty) => do
+              let typeTerm ← tyTerm ty
+              `(($(stringTerm field), $typeTerm))
+            let fields := fields.toArray
+            callInputTerms := callInputTerms ++ (view.fields.map (stringTerm ∘ Prod.fst)).toArray
+            callInputViews := callInputViews.push (← `(Noctium.CallInputView.mk $(stringTerm labelName) [$fields,*]))
+          else
+            if let some allowed := info.witnessCallArguments? then
+              unless allowed.contains labelName do
+                throwErrorAt argument "hosted call argument must name a scalar or private aggregate source parameter"
+            callInputTerms := callInputTerms.push (stringTerm labelName)
         let env ← addReferences [] (info.inputs ++ info.outputs)
         let env ← addLogicalReferences env info.logicalOutputs
         let reserved := statements.toList.flatMap (fun statement => syntaxIdentifiers statement.raw) ++
@@ -2194,11 +2210,10 @@ private def elaborateConstructor (source : TSyntax `nlstate)
         let lowered ← elaborateStatements schema none 0 statements initial
         let lowered ← elaborateReturns returns info lowered
         let circuitTerm := mkIdent info.declName
-        let callInputTerms := args.getElems.map fun argument => stringTerm argument.getId.toString
         let entryName := stringTerm id.getId.toString
         let entrySpan ← spanTerm entryStx
         entryTerms := entryTerms.push (← `(Noctium.Entrypoint.mk $entryName $circuitTerm
-          [$callInputTerms,*] [$lowered.terms,*] [$lowered.returns,*] [$lowered.returnViews,*] $entrySpan
+          [$callInputTerms,*] [$callInputViews,*] [$lowered.terms,*] [$lowered.returns,*] [$lowered.returnViews,*] $entrySpan
           [$lowered.spans,*] [$lowered.guards,*]))
       | `(nlentry| entry $id:ident uses $circuit:ident where $statements:nlstatement* $returns:nlreturn* end) =>
         if entryNames.contains id.getId then throwErrorAt id "duplicate Noctium entrypoint"
@@ -2394,6 +2409,14 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       | .ok value => value.circuit
       | .error _ => {name := $fullNameTerm, inputs := [], outputs := [], constraints := []}))
     unsafe checkGeneratedCircuit fullName
+    let some exported := program.exports.find? (·.name == exportName)
+      | throwErrorAt name "unknown witness entrypoint"
+    let aggregateInputs ← (exported.compositeInputs.filter (·.visibility == .private)).mapM fun input => do
+      let checked ← match Types.checkedLayout {} program.composites input.type input.span with
+        | .ok checked => pure checked
+        | .error diagnostic => throwError diagnostic.message
+      let fields := (Helpers.sourceLeafPaths checked.value input.name).zip (callViewLeafTypes checked.value)
+      pure (CallInputView.mk input.name fields)
     modifyEnv fun env => circuitRegistry.addEntry env {
       declName := fullName,
       inputs := compiled.circuit.inputs.map fun input => (input.name, input.ty),
@@ -2401,8 +2424,8 @@ unsafe def registerWitnessCircuit (name : Syntax) (sourceName : Name) (exportNam
       outputs := compiled.circuit.outputs.map fun value => (value.name, value.ty),
       logicalOutputs,
       aggregateOutputs,
-      witnessCallArguments? := some ((program.exports.find? (·.name == exportName)).toList.flatMap
-        fun exported => exported.inputs.map (·.name)),
+      witnessCallArguments? := some (exported.inputs.map (·.name)),
+      aggregateInputs,
       sourceProgram? := some (sourceName, exportName)}
     modifyEnv fun env => witnessRegistry.addEntry env {
       circuitName := fullName, sourceName, exportName, outputName, observationArtifact?}

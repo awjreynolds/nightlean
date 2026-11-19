@@ -2740,14 +2740,6 @@ fn validate_native_binding(
         );
         let expected_leaf_types = registry.leaf_types(source_type)?;
         let bound_names = list(input_binding, "inputs")?;
-        if !call_inputs.is_empty()
-            && *is_private
-            && ScalarType::parse(source_type).is_ok()
-            && bound_names.len() == 1
-            && bound_names[0].as_str() == Some(source_name)
-        {
-            private_parameters.insert(source_name.as_str());
-        }
         ensure!(
             bound_names.len() == expected_leaf_types.len(),
             "native source input leaf count"
@@ -2776,10 +2768,34 @@ fn validate_native_binding(
                 "native source leaf does not match its circuit input"
             );
         }
+        if !call_inputs.is_empty() && *is_private {
+            if ScalarType::parse(source_type).is_ok()
+                && bound_names.len() == 1
+                && bound_names[0].as_str() == Some(source_name)
+            {
+                private_parameters.insert(source_name.as_str());
+            } else if matches!(parse_type(source_type, registry)?, Type::Aggregate(_)) {
+                let members: Vec<_> = bound_names.iter().filter_map(Json::as_str).collect();
+                if call_inputs.iter().any(|input| members.contains(&input.as_str())) {
+                    let start = call_inputs
+                        .iter()
+                        .position(|input| Some(input.as_str()) == members.first().copied());
+                    ensure!(
+                        start
+                            .and_then(|start| call_inputs.get(start..start + members.len()))
+                            .is_some_and(|fields| {
+                                fields.iter().map(String::as_str).eq(members.iter().copied())
+                            }),
+                        "native aggregate call input must commit all leaves in layout order"
+                    );
+                    private_parameters.extend(members);
+                }
+            }
+        }
     }
     ensure!(
         call_inputs.iter().all(|name| private_parameters.contains(name.as_str())),
-        "native call inputs must name private scalar source parameters"
+        "native call inputs must come from private source parameters"
     );
     let mut witness_slot_ordinals = BTreeMap::new();
     for (ordinal, call) in calls.iter().enumerate() {
