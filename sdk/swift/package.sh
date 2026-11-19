@@ -1,8 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+features=zkir-321
+if [[ ${1:-} == --localnet ]]; then
+  features+=,localnet
+  shift
+fi
 if (( $# < 2 )); then
-  echo "usage: bash sdk/swift/package.sh NEW_DIRECTORY RUST_TARGET [RUST_TARGET ...]" >&2
+  echo "usage: bash sdk/swift/package.sh [--localnet] NEW_DIRECTORY RUST_TARGET [RUST_TARGET ...]" >&2
   exit 2
 fi
 
@@ -22,6 +27,9 @@ cp "$sdk/CNoctium.modulemap" "$stage/headers/module.modulemap"
 cp "$repo/runtime/include/noctium_control.h" "$repo/runtime/include/noctium_native.h" "$stage/headers/"
 cp "$sdk/Package.swift" "$repo/LICENSE" "$stage/package/"
 cp -R "$sdk/Sources" "$sdk/Tests" "$stage/package/"
+if [[ $features == *,localnet ]]; then
+  sed -i '' 's/let localnet = false/let localnet = true/' "$stage/package/Package.swift"
+fi
 
 targets=()
 for target in "$@"; do
@@ -34,7 +42,7 @@ done
 archives="$(
   MACOSX_DEPLOYMENT_TARGET=13.0 IPHONEOS_DEPLOYMENT_TARGET=16.0 \
     cargo +1.100.0 build --locked --lib --manifest-path "$repo/runtime/Cargo.toml" \
-      --no-default-features --features zkir-321 "${targets[@]}" \
+      --no-default-features --features "$features" "${targets[@]}" \
       --message-format=json-render-diagnostics |
     python3 -c '
 import json

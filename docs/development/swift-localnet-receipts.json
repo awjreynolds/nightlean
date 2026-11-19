@@ -1,0 +1,82 @@
+{
+  "bundleManifestSha256": "f612d124364a7af5d4073cf063460093fd93ba0efab68f94c23021a07fe59726",
+  "circuitSha256": "2633a900cefbc639c58b1fea4b8b003c145f637854543239ac832c243a45a0f7",
+  "compilerRevision": "58e702d5b3f8ebce7b7bec982f9dd3bf5e15767f",
+  "date": "2026-11-19",
+  "entrypoint": "TypedWitness.ScalarWitness.claim",
+  "k": 7,
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "proofParametersSha256": "e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d",
+  "runs": [
+    {
+      "call": {
+        "blockHash": "32b9ec71a209de40303e93d7df136e966ffacf854773c1de181b8c87f9eb43d4",
+        "contractAddress": "ada1d7b173348177d373477e02fa2c1a28611a5ed419abba94500f241133ce0f",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "f9b24f4480110e62fe9333e5c3be687073922bd24b0935fbd62c0eb1b699c600",
+        "event": "Call",
+        "extrinsicHash": "329637e0607d7a8e1e80107956bc5a2e2fdffc671120010b4ed6c293d7052fff",
+        "extrinsicIndex": 4,
+        "finalizedHash": "32b9ec71a209de40303e93d7df136e966ffacf854773c1de181b8c87f9eb43d4",
+        "finalizedHeight": "28964",
+        "height": "28964",
+        "intentId": "fa559ff13b0c2aafe1b521c02c83d4c73e9e0dc281d3c0cbb8496076034eeda5",
+        "transactionId": "0d1c212cb2176ba66b842693afff3dee143f8c1028811f0842338b882772eba3"
+      },
+      "deployment": {
+        "blockHash": "687ecb18ab0937006c6e7401bd9a71962d7b75db68532b3fb5e0f9431bd5b169",
+        "contractAddress": "ada1d7b173348177d373477e02fa2c1a28611a5ed419abba94500f241133ce0f",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "affbcd6f2b192893bb0d5b777a01446dffdb097b48af27f5aa0f2539a9cbfd4e",
+        "event": "Deploy",
+        "extrinsicHash": "b249e4f989b88d0b035f3c8f5ef410eff834d380417b8d635c5194be1e560a2c",
+        "extrinsicIndex": 4,
+        "finalizedHash": "687ecb18ab0937006c6e7401bd9a71962d7b75db68532b3fb5e0f9431bd5b169",
+        "finalizedHeight": "28961",
+        "height": "28961",
+        "intentId": "14fd333950f0288bc5d1c139fb95d91f5568f4fc5258297c61b9e701baa25577",
+        "transactionId": "9b4eb5d3ee20dde8f7d9085186a5cf7e055d9b4e812b9bb10d054c32dcea5dab"
+      },
+      "platform": "macOS arm64",
+      "privateStateAcknowledged": true,
+      "recoveredSealedBytesMatched": true,
+      "seedlessRecovery": true
+    },
+    {
+      "call": {
+        "blockHash": "067bdb421eca54d8dde5b12b482f3756be4525872d3e8de9c9dacfd8f9471f0f",
+        "contractAddress": "460a6f23058ea4bfa58b597f4ae9546aa4b9e99930f6667c45a10f46e567446f",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "f9b24f4480110e62fe9333e5c3be687073922bd24b0935fbd62c0eb1b699c600",
+        "event": "Call",
+        "extrinsicHash": "7b7c95a1379261a8394208d4f0217dd700b3691db2e93773aede195ea4a22b3f",
+        "extrinsicIndex": 4,
+        "finalizedHash": "067bdb421eca54d8dde5b12b482f3756be4525872d3e8de9c9dacfd8f9471f0f",
+        "finalizedHeight": "28980",
+        "height": "28980",
+        "intentId": "dc21a8a9d91c854dbbaba096d4a45e0865eee8adb0f848a99e974c8605e6faf1",
+        "transactionId": "7c3a6e9eacb976cca814bf789b8f9be0933ff5132031903bf552ca8724d71bb4"
+      },
+      "deployment": {
+        "blockHash": "9e4dad33935ab5d0ef6944933fdb2d79d4f2d8b27e2d5578bbb0918f4a3fdd31",
+        "contractAddress": "460a6f23058ea4bfa58b597f4ae9546aa4b9e99930f6667c45a10f46e567446f",
+        "contractStateBytes": 1482,
+        "contractStateSha256": "affbcd6f2b192893bb0d5b777a01446dffdb097b48af27f5aa0f2539a9cbfd4e",
+        "event": "Deploy",
+        "extrinsicHash": "66142717539724917753eae5272d88736c40d84b8f749098a59c7e270dd5c919",
+        "extrinsicIndex": 4,
+        "finalizedHash": "9e4dad33935ab5d0ef6944933fdb2d79d4f2d8b27e2d5578bbb0918f4a3fdd31",
+        "finalizedHeight": "28977",
+        "height": "28977",
+        "intentId": "f10780c1e0d21c5ef82968f09b1ee194978e45e4ff9c9b1bd768511984167f9b",
+        "transactionId": "d763997444411269bbc1594f25d1c386e98e6780c961da8ff19a58682b767255"
+      },
+      "platform": "iOS 27.0 simulator arm64",
+      "privateStateAcknowledged": true,
+      "recoveredSealedBytesMatched": true,
+      "seedlessRecovery": true
+    }
+  ],
+  "schemaVersion": 1,
+  "source": "tests/WitnessSource.lean"
+}

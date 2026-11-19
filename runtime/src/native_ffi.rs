@@ -1593,6 +1593,35 @@ pub unsafe extern "C" fn noctium_client_receipt_state(client: u64, out_result: *
     unsafe { client_bytes(client, out_result, true) }
 }
 
+/// # Safety
+/// out_private must reference writable memory. The context contains private host data.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn noctium_client_recovery_context(client: u64, out_private: *mut u64) -> i32 {
+    guard(|| {
+        unsafe { output(out_private)? };
+        registry(|r| {
+            if r.private.len() >= MAX_PRIVATE {
+                return Err(LIMIT);
+            }
+            let token = r.token()?;
+            let context = r
+                .clients
+                .get(&client)
+                .ok_or(INVALID_HANDLE)?
+                .as_ref()
+                .and_then(crate::native_client::Driver::recovery_context)
+                .ok_or(INVALID_STATE)?;
+            if context.len() > MAX_RECOVERY_CONTEXT {
+                return Err(LIMIT);
+            }
+            let bytes = Zeroizing::new(context.to_vec());
+            r.private.insert(token, Private { bytes, owner: client });
+            unsafe { out_private.write(token) };
+            Ok(())
+        })
+    })
+}
+
 #[cfg(feature = "localnet")]
 pub(crate) fn service_public_bytes(bytes: Vec<u8>) -> Result<u64, i32> {
     registry(|r| r.result(bytes))

@@ -205,6 +205,9 @@ int32_t noctium_client_service_free(uint64_t);
 int32_t noctium_client_detach(uint64_t);
 int32_t noctium_client_transaction(uint64_t,uint64_t*);
 int32_t noctium_client_receipt_state(uint64_t,uint64_t*);
+/* Export the idle client's exact private input to recover. Use the native
+   private result API and retain bytes securely before submission. */
+int32_t noctium_client_recovery_context(uint64_t,uint64_t*);
 
 /* Explicit qualification helper, linked only with feature localnet. It restricts
    execution to the qualified isolated development genesis and loopback endpoint.

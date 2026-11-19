@@ -1,6 +1,9 @@
 // swift-tools-version: 6.0
 import PackageDescription
 
+let localnet = false
+let features: [SwiftSetting] = localnet ? [.define("NOCTIUM_LOCALNET")] : []
+
 let package = Package(
     name: "Noctium",
     platforms: [.iOS(.v16), .macOS(.v13)],
@@ -10,12 +13,13 @@ let package = Package(
         .target(
             name: "Noctium",
             dependencies: ["CNoctium"],
+            swiftSettings: features,
             linkerSettings: [
                 .linkedFramework("Security"),
                 .linkedFramework("SystemConfiguration", .when(platforms: [.macOS])),
                 .linkedFramework("IOKit", .when(platforms: [.macOS])),
             ]
         ),
-        .testTarget(name: "NoctiumTests", dependencies: ["Noctium"]),
+        .testTarget(name: "NoctiumTests", dependencies: ["Noctium"], swiftSettings: features),
     ]
 )

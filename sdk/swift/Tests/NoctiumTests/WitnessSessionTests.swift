@@ -1,6 +1,9 @@
 import Foundation
 import Noctium
 import XCTest
+#if NOCTIUM_LOCALNET
+import CryptoKit
+#endif
 
 final class WitnessSessionTests: XCTestCase {
     func testTypedWitnessAndCancellation() throws {
@@ -27,14 +30,137 @@ final class WitnessSessionTests: XCTestCase {
             throw XCTSkip("Set NOCTIUM_SWIFT_PROOF_FIXTURE to the native proof fixture directory")
         }
         let root = URL(fileURLWithPath: directory, isDirectory: true)
-        let targetDescriptor = try Data(contentsOf: root.appendingPathComponent("target.json"))
-        let descriptor = try decode(targetDescriptor)
+        let proof = try prepareFixture(root: root, attemptID: String(repeating: "d", count: 64))
+        let intent = try decode(proof.proveLocally())
+        XCTAssertEqual(intent["status"] as? String, "proved")
+        XCTAssertEqual(intent["funded"] as? Bool, false)
+        XCTAssertEqual(intent["submitted"] as? Bool, false)
+        XCTAssertFalse(try XCTUnwrap(intent["publicIntentHex"] as? String).isEmpty)
+    }
+
+#if NOCTIUM_LOCALNET
+    func testDevelopmentTransactionRecoversTypedPrivateCommit() throws {
+        guard let directory = ProcessInfo.processInfo.environment["NOCTIUM_SWIFT_LOCALNET_FIXTURE"] else {
+            throw XCTSkip("Set NOCTIUM_SWIFT_LOCALNET_FIXTURE for an isolated development run")
+        }
+        let root = URL(fileURLWithPath: directory, isDirectory: true)
+        var config = try decode(Data(contentsOf: root.appendingPathComponent("localnet.json")))
+        let descriptor = try Data(contentsOf: root.appendingPathComponent("client.json"))
+        let attemptID = freshAttempt()
+        let namespace = "swift-witness-\(attemptID.prefix(16))"
+        config["journalDirectory"] = root.appendingPathComponent("journal-\(attemptID)").path
+        let localnet = try DevelopmentLocalnet(
+            configuration: encode(config), developmentSeed: Data(repeating: 0, count: 31) + Data([1])
+        )
+        let chain = try decode(localnet.context())
+        let chainTime = try XCTUnwrap(UInt64(try XCTUnwrap(chain["blockTime"] as? String)))
+        let proof = try prepareFixture(
+            root: root, attemptID: attemptID, namespace: namespace, revision: "r0", ttl: chainTime + 1800
+        )
+        XCTAssertEqual(try decode(proof.proveLocally())["status"] as? String, "proved")
+
+        let deployNamespace = "\(namespace)-deployment"
+        let deploymentSetup = try encode([
+            "hostContext": [
+                "protocolVersion": 1, "namespace": deployNamespace, "baseRevision": "r0",
+                "attemptId": freshAttempt(), "operations": [], "providers": [],
+                "commitCapability": "store",
+                "capabilities": [["id": "store", "namespace": deployNamespace, "keyPrefix": "fixture/",
+                    "operations": ["private_state.stage.v1", "private_state.compare_exchange.v1"]]],
+            ] as [String: Any],
+            "stages": [],
+        ])
+        let deploy = try proof.startDevelopmentDeployment(descriptor: descriptor, setup: deploymentSetup)
+        let initial = try deploy.send(.prepare)
+        XCTAssertThrowsError(try deploy.close())
+        try drive(deploy, on: localnet, from: initial)
+        try drive(deploy, on: localnet, from: deploy.send(.submit))
+        let deploymentReceipt = try observe(deploy, on: localnet)
+        XCTAssertEqual(deploymentReceipt["event"] as? String, "Deploy")
+        try drive(deploy, on: localnet, from: deploy.send(.commit))
+        try deploy.close()
+
+        let call = try proof.startDevelopmentCall(descriptor: descriptor)
+        XCTAssertThrowsError(try proof.startDevelopmentCall(descriptor: descriptor))
+        try drive(call, on: localnet, from: call.send(.prepare))
+        let recovery = try call.recoveryContext()
+        let sealed = try call.sealedTransaction()
+        XCTAssertEqual(try localnet.privateValue(namespace: namespace, key: "cache/last"), Data("null".utf8))
+        try drive(call, on: localnet, from: call.send(.submit))
+        try call.close()
+
+        for key in ["parameterCache", "parameterSource", "dustSrsSha256"] {
+            config.removeValue(forKey: key)
+        }
+        let recoveryHost = try DevelopmentLocalnet(configuration: encode(config))
+        let resumed = try DevelopmentTransaction.recover(descriptor: descriptor, context: recovery)
+        try drive(resumed, on: recoveryHost, from: resumed.advance())
+        XCTAssertEqual(try resumed.sealedTransaction(), sealed)
+        let callReceipt = try observe(resumed, on: recoveryHost)
+        XCTAssertEqual(callReceipt["event"] as? String, "Call")
+        XCTAssertEqual(callReceipt["contractAddress"] as? String, deploymentReceipt["contractAddress"] as? String)
+        let finalState = try resumed.finalizedState()
+        let digest = SHA256.hash(data: finalState).map { String(format: "%02x", $0) }.joined()
+        XCTAssertEqual(digest, "f9b24f4480110e62fe9333e5c3be687073922bd24b0935fbd62c0eb1b699c600")
+        XCTAssertEqual(callReceipt["contractStateSha256"] as? String, digest)
+        let committed = try drive(resumed, on: recoveryHost, from: resumed.send(.commit))
+        XCTAssertEqual(committed["phase"] as? String, "Committed")
+        XCTAssertEqual(committed["privateAcknowledged"] as? Bool, true)
+        let saved = try decode(recoveryHost.privateValue(namespace: namespace, key: "cache/last"))
+        XCTAssertEqual(saved["value"] as? String, "14")
+        try resumed.close()
+        let receipts = try encode(["deployment": deploymentReceipt, "call": callReceipt])
+        print("NOCTIUM_SWIFT_RECEIPTS \(String(decoding: receipts, as: UTF8.self))")
+    }
+
+    @discardableResult
+    private func drive(
+        _ transaction: DevelopmentTransaction, on localnet: DevelopmentLocalnet, from initial: Data
+    ) throws -> [String: Any] {
+        var pending = initial
+        for _ in 0..<128 {
+            let step = try decode(pending)
+            guard step["status"] as? String == "need_host" else {
+                XCTAssertEqual(step["status"] as? String, "step_done", step["error"] as? String ?? "")
+                return step
+            }
+            let sign = step["operation"] as? String == "approval.sign.v1"
+            if sign {
+                var crossed = step
+                crossed["requestId"] = "1"
+                XCTAssertThrowsError(try transaction.resolve(encode(crossed), using: localnet, approveSigning: true))
+            }
+            pending = try transaction.resolve(pending, using: localnet, approveSigning: sign)
+        }
+        throw WitnessSession.Failure.invalidResult
+    }
+
+    private func observe(_ transaction: DevelopmentTransaction, on localnet: DevelopmentLocalnet) throws -> [String: Any] {
+        for _ in 0..<180 {
+            let observed = try drive(transaction, on: localnet, from: transaction.send(.observe))
+            if let receipt = observed["receipt"] as? [String: Any] { return receipt }
+            Thread.sleep(forTimeInterval: 0.5)
+        }
+        throw WitnessSession.Failure.invalidResult
+    }
+
+    private func freshAttempt() -> String {
+        (UUID().uuidString + UUID().uuidString).replacingOccurrences(of: "-", with: "").lowercased()
+    }
+#endif
+
+    private func prepareFixture(
+        root: URL, attemptID: String, namespace: String = "noctium",
+        revision: String = "fixture-r0", ttl: UInt64? = nil
+    ) throws -> NativeProof {
+        var descriptor = try decode(Data(contentsOf: root.appendingPathComponent("target.json")))
+        if let ttl { descriptor["ttl"] = ttl }
+        let targetDescriptor = try encode(descriptor)
         let bundle = try XCTUnwrap(descriptor["bundleDirectory"] as? String)
         let control = URL(fileURLWithPath: bundle).appendingPathComponent("witness/entrypoint.control.json")
         let plan = try Data(contentsOf: control)
         let parameters = try Data(contentsOf: root.appendingPathComponent("srs"))
-        let attemptID = String(repeating: "d", count: 64)
-        let begin = try encode(beginFields(attemptID: attemptID))
+        let begin = try encode(beginFields(attemptID: attemptID, namespace: namespace, revision: revision))
         let state = Data(#"{"state":{"total":"0"}}"#.utf8)
         var options = descriptor
         options.removeValue(forKey: "bundleDirectory")
@@ -58,22 +184,20 @@ final class WitnessSessionTests: XCTestCase {
         let proof = try target.prepareProof(descriptor: proofDescriptor)
         XCTAssertThrowsError(try target.session.advance())
         XCTAssertThrowsError(try target.prepareProof(descriptor: proofDescriptor))
-        let intent = try decode(proof.proveLocally())
-        XCTAssertEqual(intent["status"] as? String, "proved")
-        XCTAssertEqual(intent["funded"] as? Bool, false)
-        XCTAssertEqual(intent["submitted"] as? Bool, false)
-        XCTAssertFalse(try XCTUnwrap(intent["publicIntentHex"] as? String).isEmpty)
+        return proof
     }
 
-    private func beginFields(attemptID: String) throws -> [String: Any] {
+    private func beginFields(
+        attemptID: String, namespace: String = "noctium", revision: String = "fixture-r0"
+    ) throws -> [String: Any] {
         let context = try decode(Data("""
             {
-              "protocolVersion":1,"namespace":"noctium","baseRevision":"fixture-r0",
+              "protocolVersion":1,"namespace":"\(namespace)","baseRevision":"\(revision)",
               "attemptId":"\(attemptID)",
               "capabilities":[
-                {"id":"private","namespace":"noctium","keyPrefix":"cache/",
+                {"id":"private","namespace":"\(namespace)","keyPrefix":"cache/",
                  "operations":["private_state.read.v1","private_state.stage.v1","private_state.compare_exchange.v1"]},
-                {"id":"lookup","namespace":"noctium","keyPrefix":"lookup/","operations":["noctium.lookup.v1"]}
+                {"id":"lookup","namespace":"\(namespace)","keyPrefix":"lookup/","operations":["noctium.lookup.v1"]}
               ],
               "operations":[
                 {"operation":"private_state.read.v1","argumentSchema":{"key":"Key"},"resultSchema":"UIntRange<256>"},

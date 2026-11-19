@@ -1126,6 +1126,9 @@ impl Driver {
             .as_ref()
             .is_none_or(|s| s.attempt.is_none() || s.durable)
     }
+    pub fn recovery_context(&self) -> Option<&[u8]> {
+        self.state.as_ref().map(|state| state.context.as_slice())
+    }
     pub fn transaction(&self) -> Result<Vec<u8>, client::Error> {
         Ok(self
             .state

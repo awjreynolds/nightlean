@@ -31,7 +31,7 @@ public final class NativeWitness {
             try WitnessSession.check(status)
         }
         do {
-            targetInfo = try takeProofResult(result)
+            targetInfo = try takeNativeResult(result)
             var control: UInt64 = 0
             let status = plan.withBytePointer { planBytes, planSize in
                 begin.withBytePointer { config, configSize in
@@ -79,7 +79,7 @@ public final class NativeWitness {
 
 /// An authenticated proof session. Local proving runs synchronously on the caller's thread.
 public final class NativeProof {
-    private let handle: UInt64
+    let handle: UInt64
 
     fileprivate init(handle: UInt64) {
         self.handle = handle
@@ -98,7 +98,7 @@ public final class NativeProof {
         }
         var result: UInt64 = 0
         try WitnessSession.check(noctium_native_advance(handle, &result))
-        let request = try JSONDecoder().decode(Reply.self, from: takeProofResult(result))
+        let request = try JSONDecoder().decode(Reply.self, from: takeNativeResult(result))
         let reply = try JSONEncoder().encode(request)
         var payload: UInt64 = 0
         try WitnessSession.check(noctium_native_private_request(handle, &payload))
@@ -106,14 +106,14 @@ public final class NativeProof {
         try withEntropy { entropy, size in
             try WitnessSession.check(noctium_native_local_prove(payload, entropy, size, &result))
         }
-        let response = try takeProofResult(result)
+        let response = try takeNativeResult(result)
         let status = reply.withBytePointer { metadata, metadataSize in
             response.withBytePointer { proof, proofSize in
                 noctium_native_resume(handle, metadata, metadataSize, proof, proofSize, &result)
             }
         }
         try WitnessSession.check(status)
-        return try takeProofResult(result)
+        return try takeNativeResult(result)
     }
 
     public func cancel() throws {
@@ -121,14 +121,16 @@ public final class NativeProof {
     }
 }
 
-private func takeProofResult(_ token: UInt64) throws -> Data {
+func takeNativeResult(_ token: UInt64, privateResult: Bool = false) throws -> Data {
     try takeResult(
-        token, length: noctium_native_result_length, copy: noctium_native_result_copy,
-        free: noctium_native_result_free
+        token,
+        length: privateResult ? noctium_native_private_length : noctium_native_result_length,
+        copy: privateResult ? noctium_native_private_copy : noctium_native_result_copy,
+        free: privateResult ? noctium_native_private_free : noctium_native_result_free
     )
 }
 
-private func withEntropy<T>(_ body: (UnsafePointer<UInt8>?, Int) throws -> T) throws -> T {
+func withEntropy<T>(_ body: (UnsafePointer<UInt8>?, Int) throws -> T) throws -> T {
     try withUnsafeTemporaryAllocation(of: UInt8.self, capacity: 32) { bytes in
         let pointer = bytes.baseAddress!
         defer { pointer.update(repeating: 0, count: bytes.count) }

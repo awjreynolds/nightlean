@@ -1385,7 +1385,7 @@
       "layer": "artifact-runtime",
       "surface": "Portable execution and value ABI",
       "noctiumStatus": "subset",
-      "notes": "Qualified Rust and linked C/C++ source-witness/proof/client subsets run without Node. Swift runs host-control plans and proves one authenticated native witness locally on macOS and the iOS simulator. Swift transactions, physical-device execution, Kotlin, TypeScript/WASM and full ABI equivalence remain open.",
+      "notes": "Qualified Rust, C/C++ and Swift source-witness/proof/client subsets run without Node. Swift proved one authenticated native witness, finalized its transaction and recovered its private journal on macOS and the iOS simulator. Physical-device execution, Kotlin, TypeScript/WASM and full ABI equivalence remain open.",
       "source": [
         "reference"
       ],

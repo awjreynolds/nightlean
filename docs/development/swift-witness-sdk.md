@@ -44,6 +44,23 @@ let publicIntent = try proof.proveLocally()
 
 Proof preparation consumes the exact completed witness and its target on success. The SDK obtains fresh entropy from Apple Security. It generates and verifies the proof in Rust and returns the proved public intent projection. Private transcript bytes stay in the runtime during proving. Run synchronous proving on a worker and use each session serially. Funding and submission are separate operations.
 
+## Fund and submit on the development localnet
+
+Build an opt-in Swift package for your selected Apple targets with `--localnet`. This links the Rust adapter that verifies the pinned public development genesis and accepts only loopback endpoints. The default package still supplies witness and proof execution. [Isolated development stack](../../scripts/localnet/README.md) · [Localnet adapter configuration](../../runtime/include/noctium_native.h)
+
+```sh
+bash sdk/swift/package.sh --localnet build/noctium-swift-localnet \
+  aarch64-apple-darwin aarch64-apple-ios-sim
+```
+
+Open `DevelopmentLocalnet` with the localnet configuration and a funded public development seed. Use the completed `NativeProof` to start the retained deployment or the matching witness call. A call takes ownership of the source invocation's staged private writes.
+
+- Send `.prepare` and resolve each returned `need_host` request. Use the exact returned bytes for `resolve`. Inspect the `approval.sign.v1` request before setting `approveSigning: true`. Requests default to no signing approval.
+- Save the result of `recoveryContext()` privately before submission. Then send `.submit`. The Rust client journals the sealed transaction before broadcast. If a service cannot return a trustworthy result, use `reportServiceFailure` to leave the correct reconciliation state.
+- Drive `.observe` until the client verifies a finalized receipt. Use `.commit` to apply staged private writes and record the acknowledgement. Call `close()` once the runtime accepts detach.
+
+To resume, reopen the same journal, call `DevelopmentTransaction.recover` with the client descriptor and previously saved context, then drive the initial load request with `advance()` and `resolve`. Recovery needs no wallet seed or proving material. Keep the recovery context and journal private. Use a worker and retain the transaction object until unsettled requests and durable acknowledgements are resolved.
+
 ## Qualification
 
 ```sh
@@ -58,7 +75,13 @@ The typed smoke case exercises five callbacks, reads a staged private value acro
 
 The native test uses the `TypedWitness.ScalarWitness.claim` ledger entrypoint from the same Lean source. It rejects altered control bytes and an incomplete witness, generates and verifies a K7 proof, and checks the consumed session rejects further use. To run the opt-in proof test, set `NOCTIUM_SWIFT_PROOF_FIXTURE` to a directory containing `target.json` with the authenticated target descriptor and `srs` with the exact matching K7 proof parameters. Assemble the bundle with the selected profile, current compiler artifacts, matched keys and ledger parameters. Use `TEST_RUNNER_NOCTIUM_SWIFT_PROOF_FIXTURE` for the same test under Xcode.
 
-Both tests passed on Apple Silicon macOS and the arm64 iOS 27.0 simulator. The iPhone slice linked for iOS 16. Physical-device execution, transaction submission and durable private-store commits remain open. [Swift smoke tests](../../sdk/swift/Tests/NoctiumTests/WitnessSessionTests.swift) · [Follow-up issue](https://github.com/awjreynolds/noctium/issues/87)
+Both tests passed on Apple Silicon macOS and the arm64 iOS 27.0 simulator. The iPhone slice linked for iOS 16.
+
+The development transaction test uses the same K7 source witness. It deploys and calls the contract on the isolated chain, rejects an altered signing request, and requires durable detach. It reopens the journal with a fresh client and adapter using no wallet seed, checks the exact recovered sealed bytes, and commits staged private state after finality. Both runs match all 1,482 finalized contract-state bytes by SHA-256 with the reference typed-witness run. The macOS deployment and call finalized at blocks 28961 and 28964. The iOS simulator deployment and call finalized at 28977 and 28980. [Public receipts](swift-localnet-receipts.json)
+
+To run this test, build with `--localnet`. Set `NOCTIUM_SWIFT_LOCALNET_FIXTURE` to the proof fixture directory with additional `client.json` and `localnet.json` files in the native header's formats. The test uses the funded public development seed and creates its own journal under the fixture directory. Use `TEST_RUNNER_NOCTIUM_SWIFT_LOCALNET_FIXTURE` with Xcode. Execute funded integration tests against the same seed serially.
+
+Physical-device execution and production wallet adapters remain open. [Swift smoke tests](../../sdk/swift/Tests/NoctiumTests/WitnessSessionTests.swift) · [Follow-up issue](https://github.com/awjreynolds/noctium/issues/87)
 
 To repeat the simulator test, run the package scheme against a booted simulator ID.
 
