@@ -1,6 +1,6 @@
 # OpenZeppelin confidential-token compilation benchmark
 
-The latest Noctium OpenZeppelin build took **4.59 s** and produced **4.33 MiB**. The paired baseline measured **4.65 s** for Noctium and **0.274 s** for Compact 0.36.1. The Noctium run uses range deduplication and emits ledger and witness artifacts. Compact emits its source artifacts with `--skip-zk`. Both exclude keys and proofs.
+The latest Noctium OpenZeppelin build took **4.45 s** and produced **3.54 MiB**. The paired baseline measured **4.65 s** for Noctium and **0.274 s** for Compact 0.36.1. The Noctium run uses range deduplication and emits ledger and witness artifacts. Compact emits its source artifacts with `--skip-zk`. Both exclude keys and proofs.
 
 ![Noctium and Compact benchmark showing compilation time, artifact sizes, and K and rows for all 16 entrypoints](../assets/noctium-performance.png)
 
@@ -8,11 +8,12 @@ The latest Noctium OpenZeppelin build took **4.59 s** and produced **4.33 MiB**.
 
 | Compiler output | Three source runs (s) | Median (s) | Output files | Total bytes | ZKIR bytes |
 | --- | ---: | ---: | ---: | ---: | ---: |
+| Noctium ledger and witness, minified plans | 4.57 / 4.45 / 4.45 | 4.45 | 53 | 3,707,277 | 704,238 |
 | Noctium ledger and witness, plan digests | 6.00 / 4.59 / 4.58 | 4.59 | 53 | 4,542,348 | 758,817 |
 | Noctium ledger and witness, paired baseline | 4.873 / 4.647 / 4.588 | 4.647 | 53 | 5,805,683 | 758,817 |
 | Compact 0.36.1 with `--skip-zk` | 0.274 / 0.286 / 0.274 | 0.274 | 20 | 518,022 | 167,669 |
 
-The paired baseline used three alternating runs on an Apple M3 Max with prebuilt compilers, warm dependencies, fresh processes and new output directories. The plan-digest follow-up ran on the same machine. Byte counts use the files emitted before sizing. The ABI, state handling and artifact sets differ. [Machine-readable measurements and hashes](oz-compile-performance.json)
+The paired baseline used three alternating runs on an Apple M3 Max with prebuilt compilers, warm dependencies, fresh processes and new output directories. The Noctium follow-ups ran on the same machine. All three latest runs reproduced the emitted bytes. Byte counts use the files emitted before sizing. The ABI, state handling and artifact sets differ. [Machine-readable measurements and hashes](oz-compile-performance.json)
 
 Noctium emits 16 ZKIR relations, 16 Impact ledger plans, 10 witness bindings,
 10 private execution plans and `noctium.json`. The run emits zero language
@@ -156,6 +157,13 @@ One serial run per mode on the same host compared a full compile with `--emit le
 | Ledger and witness | 32.21 s | 31.42 s | 0.62 s | 53 | 5,868,886 |
 
 The selected run saved 3.43 seconds (9.6%) and 1,828,676 bytes (23.8%). It retained all 16 entrypoints and ten ledger witness pairs. ZKIR and witness bytes matched. The selected plans removed only the unused standalone file property. The compiler manifest records the emitted paths and roles. [Compiler output roles](portable-artifacts.md#select-compiler-outputs)
+
+The ledger export now writes minified Impact JSON when the build omits
+standalone circuits. On the OpenZeppelin port the 16 plans shrank from
+1,842,372 to 1,165,676 bytes. Total output dropped from 4,383,973 to 3,707,277
+bytes (15.4%). All decoded plans matched, each digest matched the exact emitted
+bytes, and all 36 ZKIR and witness files matched byte for byte. The build
+still emits 53 files.
 
 ## Precompiled Lean frontend
 

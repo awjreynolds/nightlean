@@ -707,7 +707,7 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
           ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
       let planJson := nativePlanJson profile name contract.state contract.constructor ep plan (emit .standalone)
       let file := nativePlanFile name ep
-      let content := planJson.pretty
+      let content := if bindPlanBytes then planJson.compress else planJson.pretty
       if bindPlanBytes then
         planDigests := planDigests.insert file (EntryPointHash.sha256Hex (content ++ "\n").toUTF8)
       lowered := lowered.push (.ledger, file, content)

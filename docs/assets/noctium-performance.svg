@@ -18,13 +18,13 @@
 <rect x="734" y="281" width="634" height="225" rx="16" fill="url(#surface)" stroke="#31455f"/>
 <text x="100" y="325" font-size="21" fill="#77efd6" font-weight="700" text-anchor="start" letter-spacing="1.8">NOCTIUM · LEAN 4</text>
 <text x="762" y="325" font-size="21" fill="#b3c9ff" font-weight="700" text-anchor="start" letter-spacing="1.8">COMPACT 0.36.1</text>
-<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">4.59 s</text>
+<text x="100" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">4.45 s</text>
 <text x="762" y="394" font-size="63" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-1.8">0.274 s</text>
 <text x="100" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Ledger and witness output · Range deduplication on</text>
 <text x="762" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">JavaScript, types and ZKIR · --skip-zk</text>
-<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files  ·  4.33 MiB total  ·  741 KiB ZKIR</text>
+<text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files  ·  3.54 MiB total  ·  688 KiB ZKIR</text>
 <text x="762" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">20 files  ·  506 KiB total  ·  164 KiB ZKIR</text>
-<text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium plan digests cut output bytes by 22%. Timings exclude keys and proofs.</text>
+<text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium output is 36% smaller than its first paired benchmark. Timings exclude keys and proofs.</text>
 <text x="72" y="622" font-size="38" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-0.6">Circuit size by entrypoint</text>
 <text x="1368" y="619" font-size="22" fill="#afc1d7" font-weight="500" text-anchor="end" letter-spacing="0">7 use fewer rows  ·  8 use more</text>
 <rect x="72" y="646" width="1296" height="942" rx="12" fill="#101c2e" stroke="#31455f"/>

@@ -364,6 +364,17 @@
       "manifestBytes": 85205
     }
   },
+  "minifiedImpactFollowup": {
+    "baseRevision": "43fd427",
+    "files": 53,
+    "newWallSeconds": [4.57, 4.45, 4.45],
+    "newUserCpuSeconds": [3.58, 3.54, 3.57],
+    "baseArtifactBytes": 4383973,
+    "newArtifactBytes": 3707277,
+    "baseImpactBytes": 1842372,
+    "newImpactBytes": 1165676,
+    "zkirBytes": 704238
+  },
   "currentComparison": {
     "checkedOn": "2026-11-19",
     "noctiumRevision": "61c05685d0f52454b0c0192dc4c0e31ab818b47a",
