@@ -2,6 +2,7 @@ import Noctium.NativeExpression
 import Noctium.Frontend
 import Noctium.Backend.Zkir
 import Noctium.Target
+import Noctium.ArtifactRole
 import Noctium.Types.ValueSchema
 
 namespace Noctium.Compiler
@@ -356,15 +357,17 @@ private def constructorJson (ctor : Constructor) : Json := Json.mkObj [
     ("type", toJson (constructorTypeName initializer.type)),
     ("value", constructorValueJson initializer.value)]))]
 
-private def circuitSchemaJson (name : Name) (circuit : Circuit) : Json :=
-  Json.mkObj [("name", toJson name.toString), ("file", toJson (name.toString ++ ".zkir")),
+private def circuitSchemaJson (name : Name) (circuit : Circuit)
+    (standaloneFile : _root_.Bool := Bool.true) : Json :=
+  let files := if standaloneFile then [("file", toJson (name.toString ++ ".zkir"))] else []
+  Json.mkObj ([("name", toJson name.toString)] ++ files ++ [
     ("inputs", toJson (circuit.inputs.map fun input => Json.mkObj [
       ("name", toJson input.name), ("type", toJson (typeName input.ty)),
       ("visibility", toJson (if input.visibility == .«public» then "public" else "private"))])),
     ("outputs", toJson (circuit.outputs.map fun out => Json.mkObj [
       ("name", toJson out.name), ("type", toJson (typeName out.ty)),
       ("visibility", toJson ("public" : String)), ("expression", nativeExpressionJson out.value)])),
-    ("constraints", toJson (circuit.constraints.map nativeExpressionJson))]
+    ("constraints", toJson (circuit.constraints.map nativeExpressionJson))])
 
 private def failDiagnostic (d : Diagnostic) : CommandElabM α :=
   throwError "{d.span.file}:{d.span.line}:{d.span.column}: {d.message}"
@@ -487,7 +490,8 @@ private def returnViewsJson (views : List ReturnView) : Json :=
 also gives proof modules a kernel-visible artifact boundary. -/
 def nativePlanJson (profile : TargetProfile) (contractName : Name)
     (state : List StateDecl) (ctor : Option Constructor)
-    (ep : Entrypoint) (plan : Backend.Impact.Plan) : Json := Id.run do
+    (ep : Entrypoint) (plan : Backend.Impact.Plan)
+    (standaloneFile : _root_.Bool := Bool.true) : Json := Id.run do
   let publicReadCount := Backend.Impact.publicInputReadCount ep.circuit.inputs
   let reads := plan.reads.zipIdx.map fun (indexedRead : Backend.Impact.Read × Nat) =>
     let item := indexedRead.1
@@ -528,7 +532,7 @@ def nativePlanJson (profile : TargetProfile) (contractName : Name)
     ("contractName", toJson contractName.toString),
     ("entrypoint", toJson ep.name), ("nativeCircuitFile", toJson (nativeCircuitFile contractName ep)),
     ("state", toJson (state.map stateJson)),
-    ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit),
+    ("circuit", circuitSchemaJson ep.circuit.name.toName ep.circuit standaloneFile),
     ("operations", toJson (plan.operations.zipIdx.map fun (operation, index) =>
       operationJson (plan.activityGuards[index]?.getD none) operation)),
     ] ++ constructorFields ++ callInputFields ++ returnFields ++ returnViewFields ++ [
@@ -576,67 +580,76 @@ elab "#noctium_check_target" profileJson:str : command => do
   unsafe checkTarget profile
 
 private def compileArtifacts (directory : String) (profile : TargetProfile)
-    (displayDirectory : String := directory) : CommandElabM Unit := do
+    (displayDirectory : String := directory) (roles : List ArtifactRole := []) : CommandElabM Unit := do
   let moduleOutputs ← unsafe rebuildModuleOutputs
   let (circuits, contracts) ← unsafe inspectWithModules moduleOutputs
-  -- Lower everything before creating output files. Unsupported circuits cannot leave partial output.
-  let mut lowered := #[]
+  let emit := fun role => roles.isEmpty || roles.contains role
+  let contracts := if emit .ledger then contracts else #[]
+  let entryCircuits := contracts.toList.flatMap fun (_, contract) => contract.entrypoints.map (·.circuit.name)
+  -- Lower and validate the requested products before publishing files.
+  let mut lowered : Array (ArtifactRole × String × String) := #[]
   let sourceEnv ← getEnv
-  let controls := (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·)
+  let controls := if emit .control then
+    (controlRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·) else #[]
   let witnesses := (witnessRegistry.getState sourceEnv).filter (!sourceEnv.isImportedConst ·.circuitName)
   let mut witnessMetadata : Array Json := #[]
   let mut standaloneWitnesses : Array (String × Witness.Compiled) := #[]
   for name in controls do
     validateArtifactName name
     let plan ← unsafe evalConstCheck Json ``Lean.Json name
-    lowered := lowered.push (artifactName name ++ ".control.json", plan.pretty)
-  for (name, circuit) in circuits do
+    lowered := lowered.push (.control, artifactName name ++ ".control.json", plan.pretty)
+  for (name, circuit) in (if emit .standalone then circuits else #[]) do
     match Backend.Zkir.lowerCircuit circuit with
     | .error d => failDiagnostic d
-    | .ok json => lowered := lowered.push (artifactName name ++ ".zkir", json.pretty)
-  for (name, _) in circuits do
+    | .ok json => lowered := lowered.push (.standalone, artifactName name ++ ".zkir", json.pretty)
+  for (name, _) in (if emit .specialization then circuits else #[]) do
     let some info := circuitRegistry.getState (← getEnv) |>.find? (·.declName == name)
       | throwError "missing circuit registry entry for '{name}'"
     if let some fresh := moduleCircuitFor moduleOutputs name then
-      lowered := lowered.push (artifactName name ++ ".specialization.json",
+      lowered := lowered.push (.specialization, artifactName name ++ ".specialization.json",
         (Lean.toJson fresh.signatureArtifact).pretty)
     else if let some text := info.specializationArtifact? then
       let artifact ← match Helpers.Specialization.parseSignatureArtifactText text with
         | .ok artifact => pure artifact
         | .error message => throwError "invalid generic specialization signature artifact: {message}"
-      lowered := lowered.push (artifactName name ++ ".specialization.json", (Lean.toJson artifact).pretty)
+      lowered := lowered.push (.specialization, artifactName name ++ ".specialization.json", (Lean.toJson artifact).pretty)
   for info in witnesses do
-    let program ← match moduleWitnessProgramFor moduleOutputs info with
-      | some fresh => pure fresh
-      | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
-    let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName with
-      | .ok value => pure value
-      | .error diagnostic => failDiagnostic diagnostic
     let witnessPrefix := artifactName info.circuitName
-    standaloneWitnesses := standaloneWitnesses.push (info.circuitName.toString, compiled)
-    lowered := lowered.push (witnessPrefix ++ ".witness.json", compiled.binding.compress)
-    lowered := lowered.push (witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
-    if let some text := info.observationArtifact? then
-      let observation ← match Json.parse text with
+    if emit .witness && (emit .standalone || entryCircuits.contains info.circuitName.toString) then
+      let program ← match moduleWitnessProgramFor moduleOutputs info with
+        | some fresh => pure fresh
+        | none => unsafe evalConstCheck Helpers.Program ``Helpers.Program info.sourceName
+      let compiled ← match Witness.compile program info.exportName info.circuitName.toString info.outputName with
         | .ok value => pure value
-        | .error message => throwError "invalid source observation artifact: {message}"
-      lowered := lowered.push (witnessPrefix ++ ".observations.json", observation.pretty)
-    witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson info.circuitName.toString),
-      ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
-      ("target", toJson ("standalone" : String)), ("nativeWitnessQualified", toJson Bool.false)])
+        | .error diagnostic => failDiagnostic diagnostic
+      standaloneWitnesses := standaloneWitnesses.push (info.circuitName.toString, compiled)
+      if emit .standalone then
+        lowered := lowered.push (.witness, witnessPrefix ++ ".witness.json", compiled.binding.compress)
+        lowered := lowered.push (.witness, witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
+        witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson info.circuitName.toString),
+          ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
+          ("target", toJson ("standalone" : String)), ("nativeWitnessQualified", toJson Bool.false)])
+    if emit .observations then
+      if let some text := info.observationArtifact? then
+        let observation ← match Json.parse text with
+          | .ok value => pure value
+          | .error message => throwError "invalid source observation artifact: {message}"
+        lowered := lowered.push (.observations, witnessPrefix ++ ".observations.json", observation.pretty)
   for (name, contract) in contracts do
     match Contract.validate sourceCapabilities contract with
     | .error diagnostic => failDiagnostic diagnostic
     | .ok _ => pure ()
     for ep in contract.entrypoints do
       let ep := Passes.pruneEntrypoint ep
+      if !(emit .witness) && witnesses.any (·.circuitName.toString == ep.circuit.name) then
+        throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
       let plan ← match Backend.Impact.lower contract.state ep with
         | .error d => failDiagnostic d
         | .ok plan => pure plan
       match Backend.Zkir.lowerEntrypoint contract.state ep with
       | .error d => failDiagnostic d
       | .ok json =>
-        lowered := lowered.push (nativeCircuitFile name ep, json.pretty)
+        lowered := lowered.push (.ledger, nativeCircuitFile name ep, json.pretty)
         let compiledWitness? ← if let some (_, compiled) :=
             standaloneWitnesses.find? (fun (circuitName, _) => circuitName == ep.circuit.name) then
             pure (some compiled)
@@ -648,6 +661,8 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
               | .ok value => pure value
               | .error diagnostic => failDiagnostic diagnostic
             if needsHost then
+              unless emit .witness do
+                throwError "ledger entrypoint '{name}.{ep.name}' requires --emit witness"
               match Witness.compileLedger program exportName contract.state ep.circuit.name with
               | .ok value => pure (some value.witness)
               | .error diagnostic => failDiagnostic diagnostic
@@ -660,15 +675,16 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
             | .ok value => pure value
             | .error diagnostic => failDiagnostic diagnostic
           let witnessPrefix := artifactName name ++ "." ++ ep.name
-          lowered := lowered.push (witnessPrefix ++ ".witness.json", compiled.binding.compress)
-          lowered := lowered.push (witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
+          lowered := lowered.push (.witness, witnessPrefix ++ ".witness.json", compiled.binding.compress)
+          lowered := lowered.push (.witness, witnessPrefix ++ ".witness.control.json", compiled.plan.pretty)
           witnessMetadata := witnessMetadata.push (Json.mkObj [("circuit", toJson ep.circuit.name),
             ("bindingFile", toJson (witnessPrefix ++ ".witness.json")), ("controlFile", toJson (witnessPrefix ++ ".witness.control.json")),
             ("target", toJson ("entrypoint" : String)), ("contract", toJson name.toString),
             ("entrypoint", toJson ep.name), ("nativeWitnessQualified", toJson Bool.false)])
-      let planJson := nativePlanJson profile name contract.state contract.constructor ep plan
-      lowered := lowered.push (nativePlanFile name ep, planJson.pretty)
-  unless uniqueNames (lowered.toList.map (·.1)) do
+      let planJson := nativePlanJson profile name contract.state contract.constructor ep plan (emit .standalone)
+      lowered := lowered.push (.ledger, nativePlanFile name ep, planJson.pretty)
+  if lowered.isEmpty then throwError "source has no artifacts for the selected roles"
+  unless uniqueNames (lowered.toList.map (·.2.1)) do
     throwError "generated artifact filenames collide; rename the circuit or contract entrypoint"
   let contractMetadata := contracts.map fun (name, contract) =>
     let entrypoints := contract.entrypoints.map fun ep => Id.run do
@@ -701,29 +717,44 @@ private def compileArtifacts (directory : String) (profile : TargetProfile)
       ("name", toJson name.toString), ("file", toJson (artifactName name ++ ".control.json")),
       ("nativeGuardQualified", toJson Bool.false)]))]
   let witnessFields := if witnessMetadata.isEmpty then [] else [("hostWitnessPlans", Json.arr witnessMetadata)]
+  let inventory := if roles.isEmpty then [] else [("artifacts", Json.arr (lowered.map fun (role, file, _) =>
+    Json.mkObj [("role", toJson role.label), ("file", toJson file)]))]
+  let circuitSchemas := circuits.filter fun (name, _) => emit .standalone || entryCircuits.contains name.toString
   let metadata := Json.mkObj ([
-    ("schemaVersion", toJson (1 : Nat)), ("target", toJson profile.name),
+    ("schemaVersion", toJson (if roles.isEmpty then 1 else 2 : Nat)), ("target", toJson profile.name),
     ("targetProfile", toJson profile),
     ("qualification", toJson ("unqualified-relation-and-state-description" : String)),
     ("deployable", toJson Bool.false),
     ("contracts", Json.arr contractMetadata),
-    ("circuits", toJson (circuits.map fun (name, circuit) => circuitSchemaJson name circuit))] ++ controlFields ++ witnessFields)
+    ("circuits", toJson (circuitSchemas.map fun (name, circuit) => circuitSchemaJson name circuit (emit .standalone)))] ++
+    controlFields ++ witnessFields ++ inventory)
   let path : System.FilePath := directory
   liftIO <| IO.FS.createDirAll path
-  for (name, content) in lowered do
+  for (_, name, content) in lowered do
     liftIO <| IO.FS.writeFile (path / name) (content ++ "\n")
   liftIO <| IO.FS.writeFile (path / "noctium.json") (metadata.pretty ++ "\n")
   let nativeCount : Nat := contracts.foldl (fun total (_, contract) => total + contract.entrypoints.length) 0
+  let standaloneCount := if emit .standalone then circuits.size else 0
   if controls.isEmpty then
-    logInfo m!"emitted {circuits.size} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {displayDirectory}; not a deployable contract bundle"
+    logInfo m!"emitted {standaloneCount} circuit relation(s), {nativeCount} native entrypoint relation(s), and state metadata to {displayDirectory}; not a deployable contract bundle"
   else
-    logInfo m!"emitted {controls.size} host-only control plan(s), {circuits.size} circuit relation(s), and {nativeCount} native entrypoint relation(s) to {displayDirectory}; structured native guards unavailable"
+    logInfo m!"emitted {controls.size} host-only control plan(s), {standaloneCount} circuit relation(s), and {nativeCount} native entrypoint relation(s) to {displayDirectory}; structured native guards unavailable"
 
 elab "#noctium_compile" directory:str : command =>
   compileArtifacts directory.getString TargetProfile.sourceBaseline
 
-elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(str)? : command => do
+elab "#noctium_compile_target" directory:str profileJson:str displayDirectory:(str)? selection:(str)? : command => do
   let profile ← parseTargetProfile profileJson.getString
-  compileArtifacts directory.getString profile ((displayDirectory.map (·.getString)).getD directory.getString)
+  let selection ← match selection with
+    | none => pure []
+    | some value =>
+      match Json.parse value.getString >>= fromJson? >>= List.mapM ArtifactRole.parse with
+      | .ok roles => pure roles
+      | .error message => throwError "{message}"
+  match ArtifactRole.validateSelection selection with
+  | .ok _ =>
+    let display := (displayDirectory.map (·.getString)).getD directory.getString
+    compileArtifacts directory.getString profile display selection
+  | .error message => throwError "{message}"
 
 end Noctium.Compiler

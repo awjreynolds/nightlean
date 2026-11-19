@@ -23,7 +23,7 @@ impl Fixture {
         let root = fs::canonicalize(root).unwrap();
         let fixture = Self { root };
         fs::write(fixture.path("Contract.lean"), b"import Noctium\n").unwrap();
-        fs::write(fixture.path("entry.zkir"), json!({"version":{"major":3,"minor":2},"do_communications_commitment":true,"instructions":[]}).to_string()).unwrap();
+        fs::write(fixture.path("entry.zkir"), json!({"version":{"major":3,"minor":2},"do_communications_commitment":true,"instructions":[],"inputs":[],"outputs":[]}).to_string()).unwrap();
         let circuit = json!({"name":"relation","file":"relation.zkir","inputs":[],"outputs":[],"constraints":[]});
         fs::write(fixture.path("entry.impact.json"), json!({"schemaVersion":1,"nativeCircuitFile":"Contract.call.zkir","contractName":"Contract","entrypoint":"call","operations":[],"reads":[],"state":[],"circuit":circuit}).to_string()).unwrap();
         let profile = noctium_runtime::profile::target_json();
@@ -139,7 +139,9 @@ impl Fixture {
                 json!({
                     "version":{"major":3,"minor":2},
                     "do_communications_commitment":true,
-                    "instructions":[]
+                    "instructions":[],
+                    "inputs":[],
+                    "outputs":[]
                 })
                 .to_string(),
             )
@@ -238,6 +240,36 @@ fn retained_typed_witness_pair_is_selected_and_checked() {
         fs::read(fixture.path("call.witness.control.json")).unwrap()
     );
     assert_eq!(manifest.entries.last().unwrap().role, Role::WitnessControl);
+}
+
+#[test]
+fn selected_compiler_inventory_binds_ledger_and_witness_files() {
+    let fixture = Fixture::new();
+    let recipe = witness_recipe(&fixture);
+    let metadata_path = fixture.path("noctium.json");
+    let plan_path = fixture.path("entry.impact.json");
+    let mut metadata: Value = serde_json::from_slice(&fs::read(&metadata_path).unwrap()).unwrap();
+    let mut plan: Value = serde_json::from_slice(&fs::read(&plan_path).unwrap()).unwrap();
+    plan["circuit"].as_object_mut().unwrap().remove("file");
+    fs::write(plan_path, plan.to_string()).unwrap();
+    metadata["schemaVersion"] = json!(2);
+    metadata["circuits"][0] = plan["circuit"].clone();
+    metadata["artifacts"] = json!([
+        {"file":"Contract.call.zkir","role":"ledger"},
+        {"file":"Contract.call.impact.json","role":"ledger"},
+        {"file":"Contract.call.witness.json","role":"witness"},
+        {"file":"Contract.call.witness.control.json","role":"witness"}
+    ]);
+    fs::write(&metadata_path, metadata.to_string()).unwrap();
+    artifacts::assemble(recipe, &fixture.path("selected")).unwrap();
+
+    metadata["artifacts"][0]["role"] = json!("standalone");
+    fs::write(metadata_path, metadata.to_string()).unwrap();
+    let altered = witness_recipe(&fixture);
+    assert_eq!(
+        failure(artifacts::assemble(altered, &fixture.path("wrong-role"))),
+        "plan_mismatch"
+    );
 }
 
 #[test]

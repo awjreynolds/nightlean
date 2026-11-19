@@ -30,6 +30,29 @@ Each manifest entry records its role, logical name, fixed relative path, byte si
 
 A selected typed-witness entrypoint requires both optional witness roles. Their logical names preserve the compiler's `.witness.json` and `.witness.control.json` filenames. Verification checks the exact embedded sidecar bytes, source input and signature schemas, ordered fresh-input bindings, actual CALL relation and selected target identity. Unreferenced, incomplete or mismatched pairs reject. Existing bundles without typed witnesses retain the same canonical bytes. See [typed source witnesses](typed-witnesses.md).
 
+## Select compiler outputs
+
+```sh
+lake exe noctium compile examples/PrivateStateCounter.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --emit witness --output build/private-counter
+```
+
+Repeat `--emit` to select artifact roles. The target profile still selects the ledger and ZKIR versions. The compiler checks the full source and emits the selected products into a new or empty directory.
+
+| Compiler role | Files |
+| --- | --- |
+| `ledger` | Entrypoint `.zkir` and `.impact.json` |
+| `standalone` | Standalone `.zkir` |
+| `witness` | `.witness.json` and `.witness.control.json` for selected ledger or standalone relations |
+| `control` | Host-only `.control.json` |
+| `specialization` | `.specialization.json` |
+| `observations` | `.observations.json` |
+
+Ledger entrypoints with host witnesses require `--emit witness`. Without explicit roles the compiler emits all applicable files. An explicit selection uses compiler metadata schema 2. The `artifacts` list records each emitted file and its role, with `noctium.json` as the inventory itself. Ledger-only schemas omit the standalone `file` property in both the plan and metadata. The Rust bundler checks the selected paths and roles against the inventory and still requires exact plan and metadata schemas. The public bundle has its own version 1 manifest.
+
+The witness files provide a language-neutral interface for the Rust runtime and C/C++ ABI. Per-contract language generators remain tracked under [issue 85](https://github.com/awjreynolds/noctium/issues/85).
+
 ## Build and use
 
 Build the runtime with its pinned Rust toolchain and lockfile:

@@ -27,6 +27,17 @@ The combined changes saved 27.04 seconds (41%) in one matched run per version on
 
 An isolated `transferFrom` sizing experiment under [issue 74](https://github.com/awjreynolds/noctium/issues/74) removed 41 of 183 identical-operand, identical-width `constrain_bits` instructions. Pinned `mock-compile` measured 63,125 to 61,813 rows (2.1% fewer), with K16 in both cases. The compiler still emits every original range check.
 
+## Selected ledger outputs
+
+One serial run per mode on the same host compared a full compile with `--emit ledger --emit witness`. Both runs used the same executable, source and ZKIR 3.2.1 profile.
+
+| Compiler outputs | Wall | User CPU | System CPU | Files | Bytes |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| All | 35.64 s | 34.79 s | 0.68 s | 93 | 7,697,562 |
+| Ledger and witness | 32.21 s | 31.42 s | 0.62 s | 53 | 5,868,886 |
+
+The selected run saved 3.43 seconds (9.6%) and 1,828,676 bytes (23.8%). It retained all 16 entrypoints and ten ledger witness pairs. ZKIR and witness bytes matched. The selected plans removed only the unused standalone file property. The compiler manifest records the emitted paths and roles. [Compiler output roles](portable-artifacts.md#select-compiler-outputs)
+
 ## What the timing includes
 
 The older Noctium baseline ran two complete Lean frontend passes. The first checked the source. The second elaborated it again and exported artifacts. The follow-up times these workflows end to end.

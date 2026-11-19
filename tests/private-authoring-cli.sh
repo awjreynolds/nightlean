@@ -11,6 +11,52 @@ for fixture in runtime/tests/fixtures/private-authoring/321/*; do
   cmp "$fixture" "$scratch/generated/${fixture##*/}"
 done
 
+profile=profiles/midnight-ledger-9-zkir-3.2.1-target.json
+"$cli" compile examples/PrivateStateCounter.lean --target "$profile" \
+  --emit ledger --emit witness --output "$scratch/ledger"
+if "$cli" compile examples/PrivateStateCounter.lean --target "$profile" \
+  --emit ledger --output "$scratch/missing-witness" > "$scratch/error" 2>&1; then
+  echo "expected a hosted ledger entrypoint to require its witness artifacts" >&2
+  exit 1
+fi
+grep -F 'requires --emit witness' "$scratch/error" > /dev/null
+test ! -e "$scratch/missing-witness"
+if "$cli" compile examples/PrivateStateCounter.lean --bindings kotlin \
+  --output "$scratch/unsupported-host" > "$scratch/error" 2>&1; then
+  echo "expected an unsupported binding target to fail" >&2
+  exit 1
+fi
+grep -F 'no per-contract language binding generators are available' "$scratch/error" > /dev/null
+test ! -e "$scratch/unsupported-host"
+
+python3 - "$scratch/generated" "$scratch/ledger" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+full, selected = map(Path, sys.argv[1:])
+entry = "NoctiumExamples.PrivateStateCounter.advance"
+expected = {
+    entry + ".zkir": "ledger",
+    entry + ".impact.json": "ledger",
+    entry + ".witness.json": "witness",
+    entry + ".witness.control.json": "witness",
+}
+assert {path.name for path in selected.iterdir()} == set(expected) | {"noctium.json"}
+meta = json.loads((selected / "noctium.json").read_text())
+assert meta["schemaVersion"] == 2
+assert {row["file"]: row["role"] for row in meta["artifacts"]} == expected
+for name in expected:
+    if name.endswith(".impact.json"):
+        plan = json.loads((selected / name).read_text())
+        original = json.loads((full / name).read_text())
+        assert meta["circuits"] == [plan["circuit"]]
+        del original["circuit"]["file"]
+        assert plan == original
+    else:
+        assert (selected / name).read_bytes() == (full / name).read_bytes()
+PY
+
 cat > "$scratch/private-release.lean" <<'LEAN'
 import Noctium.Frontend
 open scoped Noctium

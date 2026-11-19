@@ -1,4 +1,5 @@
 import Noctium.Target
+import Noctium.ArtifactRole
 
 namespace Noctium.Cli
 
@@ -8,7 +9,9 @@ def usage : String := "Noctium " ++ version ++ "\n\
 Usage: noctium --version\n\
        noctium profiles\n\
        noctium check <file> [--target <manifest>]\n\
-       noctium compile <file> [--target <manifest>] [--output <new-or-empty-directory>]\n\
+       noctium compile <file> [--target <manifest>] [--emit <role>]... [--output <new-or-empty-directory>]\n\
+Artifact roles: ledger, standalone, witness, control, specialization, observations.\n\
+Omit --emit to generate all applicable roles.\n\
 Default target: profiles/midnight-ledger-9.json\n\
 The selectable ZKIR 3.2.1 profile qualifies a selected native subset only."
 
@@ -16,6 +19,7 @@ structure Options where
   input : String
   target : String := "profiles/midnight-ledger-9.json"
   output : String := "build/noctium"
+  emit : List ArtifactRole := []
   deriving Repr
 
 private def parseOptions (input : String) (args : List String) (compiling : Bool) :
@@ -24,7 +28,9 @@ where
   go (opts : Options) (args : List String) (hasTarget hasOutput : Bool) :
       Except String Options :=
     match args with
-    | [] => .ok opts
+    | [] => do
+      ArtifactRole.validateSelection opts.emit
+      pure opts
     | "--target" :: value :: rest =>
       if hasTarget then .error "duplicate --target option"
       else if value.startsWith "--" then .error "--target requires a manifest path"
@@ -34,8 +40,15 @@ where
       else if hasOutput then .error "duplicate --output option"
       else if value.startsWith "--" then .error "--output requires a directory"
       else go { opts with output := value } rest hasTarget true
+    | "--emit" :: value :: rest => do
+      unless compiling do throw "--emit is only supported by compile"
+      let role ← ArtifactRole.parse value
+      if opts.emit.contains role then throw s!"duplicate artifact role '{value}'"
+      go { opts with emit := role :: opts.emit } rest hasTarget hasOutput
+    | "--bindings" :: _ => .error "no per-contract language binding generators are available"
     | ["--target"] => .error "--target requires a manifest path"
     | ["--output"] => .error "--output requires a directory"
+    | ["--emit"] => .error "--emit requires an artifact role"
     | arg :: _ => .error s!"unexpected argument '{arg}'"
 
 private def error (message : String) : IO UInt32 := do
@@ -63,8 +76,9 @@ private def compile (opts : Options) (source profileLiteral : String) : IO IO.Pr
   let result ← try
     let directory := (Lean.toJson stage.toString).compress
     let display := (Lean.toJson opts.output).compress
+    let roles := (Lean.toJson (Lean.toJson (opts.emit.map ArtifactRole.label)).compress).compress
     let result ← runFrontend opts.input source
-      s!"#noctium_compile_target {directory} {profileLiteral} {display}"
+      s!"#noctium_compile_target {directory} {profileLiteral} {display} {roles}"
     if result.exitCode == 0 then
       unless ← (stage / "noctium.json").pathExists do
         throw (IO.userError "Lean exited before producing Noctium artifacts")

@@ -824,6 +824,69 @@ fn one(payloads: &Payloads, role: Role) -> Result<(&str, &[u8])> {
     )?;
     Ok((&values[0].0, &values[0].1))
 }
+
+fn validate_compiler_inventory(metadata: &Value, plan: &Value, payloads: &Payloads) -> Result<()> {
+    if metadata["schemaVersion"] == 1 {
+        return require(
+            metadata.get("artifacts").is_none(),
+            "unsupported_schema",
+            "compiler metadata version 1 has no artifact inventory",
+        );
+    }
+    let files = metadata["artifacts"]
+        .as_array()
+        .ok_or_else(|| error("unsupported_schema", "compiler metadata lacks artifact inventory"))?;
+    let mut roles = BTreeMap::new();
+    for row in files {
+        only_fields(row, &["file", "role"])?;
+        let file = row["file"]
+            .as_str()
+            .ok_or_else(|| error("unsupported_schema", "artifact inventory lacks file name"))?;
+        let role = row["role"].as_str().unwrap_or_default();
+        let suffix_ok = match role {
+            "ledger" => file.ends_with(".zkir") || file.ends_with(".impact.json"),
+            "standalone" => file.ends_with(".zkir"),
+            "witness" => {
+                file.ends_with(".witness.json") || file.ends_with(".witness.control.json")
+            }
+            "control" => file.ends_with(".control.json"),
+            "specialization" => file.ends_with(".specialization.json"),
+            "observations" => file.ends_with(".observations.json"),
+            _ => false,
+        };
+        require(
+            !file.contains(['/', '\\', '\0']) && suffix_ok && roles.insert(file, role).is_none(),
+            "unsupported_schema",
+            "invalid or duplicate compiler artifact inventory entry",
+        )?;
+    }
+    for (payload_role, compiler_role) in [
+        (Role::Circuit, "ledger"),
+        (Role::Plan, "ledger"),
+        (Role::WitnessBinding, "witness"),
+        (Role::WitnessControl, "witness"),
+    ] {
+        if payloads.contains_key(&payload_role) {
+            let (file, _) = one(payloads, payload_role)?;
+            require(
+                roles.get(file) == Some(&compiler_role),
+                "plan_mismatch",
+                "selected artifact differs from the compiler inventory",
+            )?;
+        }
+    }
+    if let Some(standalone) = plan["circuit"].get("file") {
+        require(
+            standalone
+                .as_str()
+                .is_some_and(|file| roles.get(file) == Some(&"standalone")),
+            "plan_mismatch",
+            "plan standalone file differs from the compiler inventory",
+        )?;
+    }
+    Ok(())
+}
+
 fn validate_payloads(payloads: &Payloads) -> Result<()> {
     require(
         payloads
@@ -949,15 +1012,17 @@ fn validate_payloads(payloads: &Payloads) -> Result<()> {
             "circuits",
             "hostWitnessPlans",
             "hostControlPlans",
+            "artifacts",
         ],
     )?;
     require(
-        metadata["schemaVersion"] == 1
+        matches!(metadata["schemaVersion"].as_u64(), Some(1 | 2))
             && metadata["target"] == crate::profile::NAME
             && metadata["targetProfile"] == profile,
         "profile_mismatch",
         "compiler metadata does not match the target profile",
     )?;
+    validate_compiler_inventory(&metadata, &plan, payloads)?;
     let contracts = metadata["contracts"]
         .as_array()
         .ok_or_else(|| error("plan_mismatch", "compiler metadata lacks contracts"))?;
