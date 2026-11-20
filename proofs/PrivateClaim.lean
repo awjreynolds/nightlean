@@ -6,7 +6,31 @@ namespace Noctium.PrivateClaimProofs
 def claimEntry : Entrypoint :=
   PrivateClaim.entrypoints.headD {name := "missing", circuit := {name := "missing"}}
 
-theorem entry_disclosure_valid : Disclosure.entrypoint claimEntry = .ok () := by rfl
+theorem claim_entry_guards_all_none :
+    claimEntry.effectGuards = List.replicate claimEntry.effects.length none := by
+  with_unfolding_all rfl
+
+theorem runEffectsWithGuardsAndEnv_all_none (ctx : EvalContext) (effects : List Effect)
+    (guards : List (Option (Expr .bool))) (env : EvalEnv) (state : LedgerState)
+    (hlen : guards.isEmpty || guards.length = effects.length)
+    (hnone : guards.all Option.isNone) :
+    runEffectsWithGuardsAndEnv ctx effects guards env state = runEffectsWithEnv ctx effects env state := by
+  cases guards with
+  | nil => simp [runEffectsWithGuardsAndEnv]
+  | cons head tail =>
+    have hlen' : (head :: tail).length = effects.length := by simpa using hlen
+    have hnone' : (head :: tail).all Option.isNone = Bool.true := by simpa using hnone
+    simp [runEffectsWithGuardsAndEnv, hlen', hnone']
+
+theorem claim_entry_run_effects (ctx : EvalContext) (env : EvalEnv) (state : LedgerState) :
+    runEffectsWithGuardsAndEnv ctx claimEntry.effects claimEntry.effectGuards env state =
+      runEffectsWithEnv ctx claimEntry.effects env state := by
+  apply runEffectsWithGuardsAndEnv_all_none
+  · with_unfolding_all decide
+  · with_unfolding_all decide
+
+theorem entry_disclosure_valid : Disclosure.entrypoint claimEntry = .ok () := by
+  with_unfolding_all rfl
 
 def typedEntries (values : List (Nat × _root_.Bool)) : List (Value × Value) :=
   values.map fun (key, value) => (.native key, .bool value)
@@ -29,12 +53,6 @@ def recordValues (nullifier : Nat) (values : List (Nat × _root_.Bool)) : List (
 
 @[simp] private theorem native_bne (a b : Nat) :
     (Value.native a != Value.native b) = (!(a == b)) := by rfl
-
-@[simp] private theorem type_beq_self (ty : Ty) : (ty == ty) = Bool.true := by
-  cases ty with
-  | native => rfl
-  | bool => rfl
-  | uint maximum => change (maximum == maximum) = Bool.true; simp
 
 private theorem native_ref_eval (ctx : EvalContext) (env : EvalEnv) (name : String)
     (value : Nat) (h : env.lookup name = some (.native value)) (hc : value < ctx.modulus) :
@@ -63,14 +81,16 @@ theorem effects_accept_unspent (ctx : EvalContext) (env : EvalEnv)
     (hcRoot : root < ctx.modulus) (hcCampaign : campaign < ctx.modulus)
     (hcNullifier : nullifier < ctx.modulus)
     (hAbsent : (typedEntries values).lookup (.native nullifier) = none) :
-    runEffects ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
-      (state root campaign values) = .ok (recorded root campaign nullifier values) := by
+    runEffectsWithEnv ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
+      (state root campaign values) = .ok
+        ([ ("storedCampaign", .native campaign), ("storedRoot", .native root),
+           ("nullifier", .native nullifier) ] ++ env, recorded root campaign nullifier values) := by
   have hr : ¬ ctx.modulus ≤ root := Nat.not_le.mpr hcRoot
   have hc : ¬ ctx.modulus ≤ campaign := Nat.not_le.mpr hcCampaign
   have hn : ¬ ctx.modulus ≤ nullifier := Nat.not_le.mpr hcNullifier
-  simp! [runEffects, claimEntry, PrivateClaim, state, recorded,
-    Expr.eval, Value.as, Value.pack, hRoot, hCampaign, hcRoot, hcCampaign, hcNullifier,
-    hr, hc, hn, hAbsent, Except.pure, Except.bind, Except.map]
+  simp! [runEffectsWithEnv, claimEntry, PrivateClaim, state, recorded,
+    Expr.eval, Value.as, Value.pack, hRoot, hCampaign, hcRoot, hcCampaign,
+    hcNullifier, hr, hc, hn, hAbsent, Except.pure, Except.bind, Except.map]
   dsimp only [Bind.bind, Except.bind]
   rw [typedEntries_forIn]
   rfl
@@ -171,7 +191,7 @@ theorem effects_reject_recorded (ctx : EvalContext) (env : EvalEnv)
     (hCampaign : env.lookup "campaign" = some (.native campaign))
     (hcRoot : root < ctx.modulus) (hcCampaign : campaign < ctx.modulus)
     (hcNullifier : nullifier < ctx.modulus) :
-    runEffects ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
+    runEffectsWithEnv ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
       (recorded root campaign nullifier values) = .error "state map key already present" := by
   have hr : ¬ ctx.modulus ≤ root := Nat.not_le.mpr hcRoot
   have hc : ¬ ctx.modulus ≤ campaign := Nat.not_le.mpr hcCampaign
@@ -179,7 +199,7 @@ theorem effects_reject_recorded (ctx : EvalContext) (env : EvalEnv)
   have hSelf : (Value.native nullifier == Value.native nullifier) = Bool.true := by
     change (nullifier == nullifier) = Bool.true
     simp
-  simp! [runEffects, claimEntry, PrivateClaim, state, recorded,
+  simp! [runEffectsWithEnv, claimEntry, PrivateClaim, state, recorded,
     Expr.eval, Value.as, Value.pack, hRoot, hCampaign, hcRoot, hcCampaign, hcNullifier,
     hr, hc, hn, Claim.markSpent, hSelf, Except.pure, Except.bind, Except.map]
   rfl
@@ -202,7 +222,7 @@ theorem accepted_claim_transition (ctx : EvalContext) (env : EvalEnv)
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
   simp only [List.cons_append, List.nil_append]
-  rw [effects_accept_unspent ctx env root campaign nullifier values hRoot hCampaign
+  rw [claim_entry_run_effects, effects_accept_unspent ctx env root campaign nullifier values hRoot hCampaign
     hcRoot hcCampaign hcNullifier hAbsent]
   rfl
 
@@ -222,7 +242,7 @@ theorem recorded_claim_rejects_replay (ctx : EvalContext) (env : EvalEnv)
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
   simp only [List.cons_append, List.nil_append]
-  rw [effects_reject_recorded ctx env root campaign nullifier values hRoot hCampaign
+  rw [claim_entry_run_effects, effects_reject_recorded ctx env root campaign nullifier values hRoot hCampaign
     hcRoot hcCampaign hcNullifier]
 
 theorem wrong_root_effects_rejected (ctx : EvalContext) (env : EvalEnv)
@@ -230,11 +250,11 @@ theorem wrong_root_effects_rejected (ctx : EvalContext) (env : EvalEnv)
     (hRoot : env.lookup "root" = some (.native publicRoot))
     (hcStored : storedRoot < ctx.modulus) (hcPublic : publicRoot < ctx.modulus)
     (hMismatch : storedRoot ≠ publicRoot) :
-    runEffects ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
+    runEffectsWithEnv ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
       (state storedRoot campaign values) = .error "state transition guard failed" := by
   have hs : ¬ ctx.modulus ≤ storedRoot := Nat.not_le.mpr hcStored
   have hp : ¬ ctx.modulus ≤ publicRoot := Nat.not_le.mpr hcPublic
-  simp! [runEffects, claimEntry, PrivateClaim, state, Expr.eval, Value.as, Value.pack,
+  simp! [runEffectsWithEnv, claimEntry, PrivateClaim, state, Expr.eval, Value.as, Value.pack,
     hRoot, hcStored, hcPublic, hs, hp, hMismatch, Except.pure, Except.bind, Except.map]
   rfl
 
@@ -251,7 +271,7 @@ theorem wrong_root_claim_rejected (ctx : EvalContext) (env : EvalEnv)
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
   simp only [List.cons_append, List.nil_append]
-  rw [wrong_root_effects_rejected ctx env storedRoot publicRoot campaign nullifier values hRoot
+  rw [claim_entry_run_effects, wrong_root_effects_rejected ctx env storedRoot publicRoot campaign nullifier values hRoot
     hcStored hcPublic hMismatch]
 
 theorem wrong_campaign_effects_rejected (ctx : EvalContext) (env : EvalEnv)
@@ -260,12 +280,12 @@ theorem wrong_campaign_effects_rejected (ctx : EvalContext) (env : EvalEnv)
     (hCampaign : env.lookup "campaign" = some (.native publicCampaign))
     (hcRoot : root < ctx.modulus) (hcStored : storedCampaign < ctx.modulus)
     (hcPublic : publicCampaign < ctx.modulus) (hMismatch : storedCampaign ≠ publicCampaign) :
-    runEffects ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
+    runEffectsWithEnv ctx claimEntry.effects (("nullifier", .native nullifier) :: env)
       (state root storedCampaign values) = .error "state transition guard failed" := by
   have hr : ¬ ctx.modulus ≤ root := Nat.not_le.mpr hcRoot
   have hs : ¬ ctx.modulus ≤ storedCampaign := Nat.not_le.mpr hcStored
   have hp : ¬ ctx.modulus ≤ publicCampaign := Nat.not_le.mpr hcPublic
-  simp! [runEffects, claimEntry, PrivateClaim, state, Expr.eval, Value.as, Value.pack,
+  simp! [runEffectsWithEnv, claimEntry, PrivateClaim, state, Expr.eval, Value.as, Value.pack,
     hRoot, hCampaign, hcRoot, hcStored, hcPublic, hr, hs, hp, hMismatch,
     Except.pure, Except.bind, Except.map]
   rfl
@@ -284,7 +304,7 @@ theorem wrong_campaign_claim_rejected (ctx : EvalContext) (env : EvalEnv)
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
   simp only [List.cons_append, List.nil_append]
-  rw [wrong_campaign_effects_rejected ctx env root storedCampaign publicCampaign nullifier values
+  rw [claim_entry_run_effects, wrong_campaign_effects_rejected ctx env root storedCampaign publicCampaign nullifier values
     hRoot hCampaign hcRoot hcStored hcPublic hMismatch]
 
 /-- State-transition specification. Circuit eligibility is an explicit premise;
@@ -399,14 +419,14 @@ private theorem equal_values_eval (ctx : EvalContext) (env : EvalEnv)
   rfl
 
 theorem source_circuit_validate (ctx : EvalContext) (hDomain : 3 < ctx.modulus) :
-    claimEntry.circuit.validate {nativeModulus := ctx.modulus, poseidon2 := Bool.true} = .ok () := by
+    claimEntry.circuit.validate (evaluationCapabilities ctx) = .ok () := by
   have hd1 : ¬ ctx.modulus ≤ 1 := by omega
   have hd2 : ¬ ctx.modulus ≤ 2 := by omega
   have hd3 : ¬ ctx.modulus ≤ 3 := Nat.not_le.mpr hDomain
   have hNames : (["root", "campaign", "suppliedNullifier", "secret", "sibling0", "sibling1",
       "direction0", "direction1"] : List String).eraseDups.length = 8 := by decide
   have hOutputs : (["nullifier"] : List String).eraseDups.length = 1 := by decide
-  simp! [claimEntry, PrivateClaim, claimRelation, Circuit.validate, Ty.validate,
+  simp! [claimEntry, PrivateClaim, claimRelation, Circuit.validate, evaluationCapabilities, Ty.validate,
     ScalarPolicy.validate, validateConstraints, Expr.validate, uniqueNames,
     hNames, hOutputs, hd1, hd2, hd3, Except.pure, Except.bind, Except.map]
   rfl
@@ -774,7 +794,8 @@ theorem fixture_hash_trace : HashTrace fixtureContext fixtureValues 0 0 := by
 /-- A kernel-computed non-vacuity witness for the abstract semantics. Its
 constant-zero hash oracle is deliberately not a qualified cryptographic oracle. -/
 theorem fixture_circuit_accepts :
-    claimEntry.circuit.run fixtureContext fixtureInputs = .ok [("nullifier", .native 0)] := by rfl
+    claimEntry.circuit.run fixtureContext fixtureInputs = .ok [("nullifier", .native 0)] := by
+  with_unfolding_all rfl
 
 theorem fixture_preconditions : Preconditions fixtureContext fixtureInputs 0 0 0 [] := by
   constructor
@@ -812,7 +833,8 @@ theorem second_fixture_canonical : CanonicalInputs fixtureContext secondFixtureV
 
 theorem second_fixture_success :
     claimEntry.run fixtureContext (inputEnvironment secondFixtureValues) (state 0 0 []) =
-      .ok ([("nullifier", .native 0)], recorded 0 0 0 []) := by rfl
+      .ok ([("nullifier", .native 0)], recorded 0 0 0 []) := by
+  with_unfolding_all rfl
 
 theorem fixture_private_values_differ : fixtureValues.secret ≠ secondFixtureValues.secret := by decide
 
