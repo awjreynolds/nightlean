@@ -112,12 +112,23 @@ private def caps : Capabilities := {stateCells := true, stateMaps := true, posei
 
 private def privateControl : Disclosure.Origins := [{name := "flag", kind := .parameter, span := originSpan}]
 private def futureSink : Disclosure.Sink := {description := "future guarded public write", span := sinkSpan}
--- NL-DISC-GUARD-CONSTANT. Structured source guards are unsupported, but the
--- control interface already rejects writing a constant under a private guard.
+-- NL-DISC-GUARD-CONSTANT. A constant payload still exposes the operation's activity.
 #guard rejected (Disclosure.checkSink futureSink [] privateControl)
 #guard rejected (Disclosure.entrypoint (entry [.writeCell "cell" .native (.native 1)]) privateControl)
 #guard rejected (Disclosure.entrypoint (entry [
   .writeCell "cell" .native (.disclose releaseSpan (.native 1))]) privateControl)
+
+-- An inherited guard also controls operations without their own guard expression.
+#guard match Disclosure.entrypoint (entry [.readContractAddress "self"]) privateControl with
+  | .error diagnostic => has diagnostic.message "private control" &&
+      has diagnostic.message "public contract address read"
+  | _ => false
+#guard accepted (Backend.Zkir.lowerEntrypoint [] (entry [.readContractAddress "self"]))
+
+-- Proof-only predicates check their origin bindings and keep their private guards.
+#guard accepted (Disclosure.entrypoint {
+  entry [.require (.eq (.ref "secret" : Expr .native) (.native 7))] with
+    effectGuards := [some (.ref "flag")]})
 
 -- Public backend entrypoints cannot bypass the mandatory pass through typed IR.
 #guard rejected (Backend.Zkir.lowerCircuit (relation (.ref "secret" : Expr .native)))

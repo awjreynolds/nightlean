@@ -1,8 +1,8 @@
-# Scalar disclosure policy
+# Disclosure policy
 
 Noctium rejects undisclosed private value and control origins at the current public source sinks. The executable policy lives in `Noctium/Disclosure.lean`. The Lean compiler checks source declarations, checks again before artifact emission, and applies the policy at the public typed-IR ZKIR and Impact lowering entrypoints.
 
-This is DF-00, the current scalar-language policy. Composite values, source functions, structured guarded effects, general providers and native-wide propagation require their own rules. Structured `if` statements remain unsupported. This pass does not establish timing, failure-channel or whole-program noninterference.
+The scalar policy shares the public-sink checks with [component-aware helpers](component-disclosure.md) and [typed witnesses](typed-witnesses.md). The compiler tracks source value origins separately from accumulated control origins.
 
 ## Values and authorization
 
@@ -24,19 +24,35 @@ end
 
 `select(flag, disclose(1), 0)` still carries a private `flag` origin and rejects at a public output or write. `select(disclose(flag), 1, 0)` authorizes the predicate value used by that expression. Disclosing the whole selected result also authorizes that result. Another occurrence of the original private flag stays private.
 
-The analysis keeps active control origins separate from payload origins through `checkSink` and the entrypoint control-context argument. A disclosed payload never clears the surrounding control context. Future structured guards must accumulate and pass their predicate origins. No current source syntax creates structured guarded effects.
+The analysis keeps active control origins separate from payload origins through `checkSink` and the entrypoint control-context argument. Structured guards accumulate their predicate origins. Each public effect checks the inherited control alongside its own guard, including effects with no local condition.
 
 ## Public sinks and origin fixtures
 
-All circuit outputs are public sinks. Entrypoint checks cover public cell writes, map keys and values, membership/absence queries, map read paths, and the control context of public reads. A public ledger read binds a public result only after its path and control checks pass. Current native lowering still rejects unsupported map value reads.
+All circuit outputs and entrypoint returns are public sinks. The exhaustive `Disclosure.describeEffect` registry classifies ledger effects by public transcript family, guard policy, selectors, payloads and result bindings. The checker validates public activity, paths and payloads before adding any read results to the public environment. Proof-only predicates keep their private origins.
 
 Assertions and `require` represent the intended proof relation. Their private predicates receive propagation analysis but do not act as ordinary public value-flow sinks. Proof success, failed assertions, invalid casts, rejected transactions, callback failures and execution timing require a separate information-release model.
 
-DF-00 provider and private-state fixtures label declared inputs through `Circuit.privateOrigins`. These labels only strengthen privacy. They never clear private visibility. Duplicate labels, undeclared names, duplicate input names, or privately labeled public inputs reject. The labels model scalar provenance for tests. They do not implement provider persistence or private-state lifecycle operations.
+Provider and private-state origins label declared inputs through `Circuit.privateOrigins`. The checker rejects duplicate labels, undeclared names, duplicate input names and privately labeled public inputs. The [typed private state route](typed-witnesses.md#private-state) retains the private read and stage boundaries. Arbitrary private-state effects inside reusable helper bodies remain gated by the helper compiler.
 
 Source entrypoint operands include private circuit parameters so an explicit release is expressible. Type checking alone grants no permission to disclose them. The mandatory disclosure gates decide whether a public use is authorized. `Entrypoint.run` also applies the policy before its reference ledger transition.
 
 Source-generated entrypoints retain one source span per effect. Nonempty `effectSpans` metadata must match the effect count exactly. Older hand-built typed IR with no per-effect metadata uses its entrypoint span. Diagnostics identify the originating private value, origin location, public sink and sink location.
+
+## Pinned native descriptors
+
+The [machine inventory](../compatibility/zkir-feature-matrix.json) records the ZKIR 3.2.1 opcode and value-type privacy rules and the Ledger 9 Impact VM roles. The producer reads operation descriptors to match input visibility, public read guards, Impact bindings and returns to the independently derived source statement. Value-type rows cover qualified representations. In particular, typed Bool, Byte and Bytes intermediates have narrower routes than the public source ABI.
+
+Enabled rows have a descriptor for their scoped route. Gated rows omit source emission, including the seven deprecated opcodes. An unavailable capability requires an absent pinned implementation. Raw Impact instructions remain internal to compiler-generated transcripts. Their results, selectors, payloads and activity bind to the checked source plan.
+
+Call descriptors check the public address, entrypoint hash, communication commitment and activity. The selected scalar composition commits private argument and return data in the native communication binding. The published commitment requires explicit authorization. [Native call claims](native-call-claims.md)
+
+Event descriptors check payload and activity independently. The [guarded event fixture](../../tests/disclosure/authorized-event-guard.lean) explicitly releases both. The native checker validates both activity branches and rejects a changed public transcript. The CLI fixture independently removes each release and verifies rejection before creating the artifact directory.
+
+## Failure and observer scope
+
+The public-sink policy covers returned values and the payload, selection and activity of public effects on successful execution. A failed assertion or rejected proof exposes a success or failure outcome to anyone allowed to observe that attempt. A finalized transaction exposes its public acceptance and failure classification. These outcomes belong to the observer's model alongside the explicitly released data.
+
+Compile diagnostics report static source names and spans. The native host, proof and client interfaces return bounded error categories and public receipt information. Provider arguments, replies, private keys and staged writes use the private host channels. Host logging, callback side effects, timing, termination and resource usage remain outside this guarantee. [Native proof errors](native-proof-api.md) · [Native client recovery](native-client.md#host-boundaries-and-recovery) · [Private claim observer](private-claim-native-privacy-proofs.md#exact-policy-and-observer)
 
 ## Checked invariants
 
@@ -60,7 +76,18 @@ bash tests/disclosure-cli.sh
 bash tests/uint-cli.sh
 ```
 
-The disclosure CLI cases reject direct private data, hashes, private selection predicates, payload-only permission, unrelated later uses, private map paths and private-dependent writes before creating an artifact directory. They also reject unsupported structured guards and compile explicitly authorized examples. The unit cases exercise provider/private-state labels, active control fixtures, metadata validation and direct backend entrypoints.
+The disclosure CLI cases reject direct private data, hashes, private selection predicates, payload-only permission, unrelated later uses, private map paths and private-dependent effects before creating an artifact directory. They also compile explicitly authorized examples. The unit cases exercise provider and private-state labels, inherited control, metadata validation and direct backend entrypoints.
+
+Run the guarded event's native checker with fresh 3.2.1 artifacts.
+
+```sh
+out="$PWD/build/experiments/private-event-guard"
+.lake/build/bin/noctium compile tests/disclosure/authorized-event-guard.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json --emit ledger --output "$out"
+NOCTIUM_EVENT_ARTIFACTS="$out" cargo test --manifest-path runtime/Cargo.toml \
+  --locked --no-default-features --features zkir-321 --test standard_events \
+  standard_events_bind_payload_order_and_activity -- --ignored
+```
 
 Intentional releases in the scalar conformance sources now use explicit annotations. All 17 generated scalar artifact files match the pre-policy files byte for byte. The existing private-claim source already returns public input values and keeps its accepted native circuit hash unchanged. The explicit release example in `examples/Disclosure.lean` supplies the native checker/prover qualification fixture.
 

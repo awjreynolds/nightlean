@@ -41,6 +41,7 @@ jobs:
           lake env lean examples/PrivateClaim.lean
           lake env lean examples/BoundedScalars.lean
           lake env lean examples/Disclosure.lean
+          lake env lean tests/Disclosure.lean
           lake env lean examples/NoctiumPrivateClaim.lean
           lake env lean examples/PrivateStateCounter.lean
           lake env lean tests/Issue68MapReads.lean
@@ -133,4 +134,6 @@ jobs:
           lake build Noctium.Verification
           lake env lean tests/Verification.lean
       - name: Check readable private state source and disclosure
-        run: bash tests/private-authoring-cli.sh
+        run: |
+          bash tests/private-authoring-cli.sh
+          bash tests/disclosure-cli.sh
