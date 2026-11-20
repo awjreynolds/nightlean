@@ -20,7 +20,7 @@ The [Source fixture](../../tests/GuardedWitness.lean) uses `noctium_witness_circ
 
 Use `Witness.compile` for declared typed providers. Ordinary `Helpers.compile` retains its conservative guarded-witness gate. Untyped private witness placeholders do not acquire provider bindings through this format. Host-only `noctium_control` plans keep their separate qualification boundary.
 
-The separate [structured state entry](structured-cells.md) route supports native cell and map statements inside helper bodies. Combining those statements with provider scheduling, broader ledger effects, complete structured native proof/ledger qualification and compiler preservation remains under issues [43](https://github.com/awjreynolds/noctium/issues/43) and [21](https://github.com/awjreynolds/noctium/issues/21). Guarded witness binding is tracked in [issue 84](https://github.com/awjreynolds/noctium/issues/84).
+The separate [structured state entry](structured-cells.md) route supports native cell and map statements inside helper bodies. A [nested scalar fixture](structured-cells.md#nested-hosted-branches-on-ledger-9) combines provider scheduling and private staging with native proving and finalized state checks. Broader ledger effects and compiler preservation have separate evidence requirements. [Guarded witness binding](https://github.com/awjreynolds/noctium/issues/84) · [Compiler preservation](https://github.com/awjreynolds/noctium/issues/21)
 
 ## Evidence boundary
 

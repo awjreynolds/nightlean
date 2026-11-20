@@ -48,6 +48,10 @@ grep -F 'public contract event' "$scratch/private-event-payload-error" > /dev/nu
 "$cli" compile "$event_source" --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
   --emit ledger --output "$scratch/authorized-event-guard"
 
+sed 's/\.branch (\.disclose {} (\.ref "outer"))/\.branch (\.ref "outer")/' \
+  tests/GuardedLedgerLocalnet.lean > "$scratch/private-nested-ledger-guard.lean"
+reject private-nested-ledger-guard "undisclosed private control from parameter 'outer'"
+
 cat > "$scratch/private-predicate.lean" <<'LEAN'
 import Noctium.Frontend
 open scoped Noctium

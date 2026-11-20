@@ -1,0 +1,26 @@
+pragma language_version 0.28;
+
+export ledger balance: Field;
+export ledger mark: Field;
+witness derive(balanceBefore: Field): Field;
+
+constructor() {
+  balance = 3 as Field;
+}
+
+export circuit advance(outer: Boolean, inner: Boolean, bound: Field, expected: Field): Field {
+  if (disclose(outer)) {
+    if (disclose(inner)) {
+      assert((bound as Uint<8>) <= 7, "active narrowing check");
+      mark = 1 as Field;
+      const before = balance;
+      balance = disclose(before + derive(before));
+      assert(balance == expected, "active balance assertion");
+    } else {
+      mark = 2 as Field;
+    }
+  } else {
+    mark = 3 as Field;
+  }
+  return balance;
+}
