@@ -181,6 +181,14 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("op", toJson ("listLength" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
       ("expression", nativeExpressionJson expression)]
+  | .mapSize slot keys expression => Json.mkObj [
+      ("op", toJson ("mapSize" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("expression", nativeExpressionJson expression)]
+  | .mapIsEmpty slot keys destination => Json.mkObj [
+      ("op", toJson ("mapIsEmpty" : String)), ("slot", toJson slot),
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
+      ("destination", toJson destination)]
   | .listHead slot keys schema expressions => Json.mkObj [
       ("op", toJson ("listHead" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
@@ -431,6 +439,17 @@ private def effectJson : Effect → Json
       ("destination", toJson destination), ("type", toJson (typeName (.uint (2 ^ 64 - 1)))),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value))]
+  | .mapIsEmpty state destination keys => Json.mkObj [
+      ("op", toJson ("mapIsEmpty" : String)), ("state", toJson state),
+      ("destination", toJson destination),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
+  | .mapSize state destination keys => Json.mkObj [
+      ("op", toJson ("mapSize" : String)), ("state", toJson state),
+      ("destination", toJson destination),
+      ("type", toJson (typeName (.uint (2 ^ 64 - 1)))),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
   | .listHead state destination keys _ destinations => Json.mkObj [
       ("op", toJson ("listHead" : String)), ("state", toJson state),
       ("destination", toJson destination),
@@ -472,6 +491,10 @@ private def effectJson : Effect → Json
       ("op", toJson ("emptyMapPath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value))]
+  | .setInsert state keys => Json.mkObj [
+      ("op", toJson ("setInsert" : String)), ("state", toJson state),
+      ("keys", toJson (keys.map fun key => match key with
+        | .mk _ value => expressionJson value))]
   | .removePath state keys => Json.mkObj [
       ("op", toJson ("removePath" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
@@ -494,6 +517,7 @@ private def stateJson (state : StateDecl) : Json :=
   let rec treeJson : LedgerValueType → Json
     | .scalar ty => Json.mkObj [("scalar", toJson (typeName ty))]
     | .map keyTy value => Json.mkObj [("map", toJson [toJson (typeName keyTy), treeJson value])]
+    | .set keyTy => Json.mkObj [("set", toJson (typeName keyTy))]
     | .composite environment type => Json.mkObj [("composite", compositeSchema environment type)]
     | .list environment type => Json.mkObj [("list", Json.mkObj [
         ("composite", compositeSchema environment type)])]

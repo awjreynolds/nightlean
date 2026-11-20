@@ -54,6 +54,7 @@ def Value.pack : (ty : Ty) → ty.Denote → Value
 
 /-- Recursive semantic form used by the nested-map source effects. -/
 inductive LedgerValue where
+  | null
   | scalar (value : Value)
   | map (entries : List (Value × LedgerValue))
   | composite (type : Types.CompositeType) (leaves : List Nat)
@@ -849,6 +850,7 @@ private def treeLookup (root : LedgerValue) : List Value → Option LedgerValue
   | [] => some root
   | key :: rest => match root with
     | .scalar _ => none
+    | .null => none
     | .composite .. => none
     | .list _ => none
     | .merkleTree .. | .merkleTreeKnown .. |
@@ -871,6 +873,7 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
   | key :: rest =>
     match root with
     | .scalar _ => none
+    | .null => none
     | .composite .. => none
     | .list _ => none
     | .merkleTree .. | .merkleTreeKnown .. |
@@ -923,6 +926,57 @@ private def treeRemove (root : LedgerValue) : List Value → Option LedgerValue
       let updated ← treeRemove child rest
       pure (.map (updateAssoc key updated entries))
     | _ => none
+
+private def mapSizeAt (state : LedgerState) (name : String) (keys : List Value) :
+    Except String Value := do
+  let size ← if keys.isEmpty then
+      match state.maps.lookup name with
+      | some entries => pure entries.length
+      | none => do
+        let selected := (state.trees.lookup name).bind fun root => treeLookup root keys
+        let some (.map entries) := selected
+          | throw s!"size path does not address a map or set '{name}'"
+        pure entries.length
+    else do
+      let selected := (state.trees.lookup name).bind fun root => treeLookup root keys
+      let some (.map entries) := selected
+        | throw s!"size path does not address a map or set '{name}'"
+      pure entries.length
+  let maximum := 2 ^ 64 - 1
+  if size > maximum then throw "map or set size exceeds u64"
+  pure (.uint maximum size)
+
+private def mapIsEmptyAt (state : LedgerState) (name : String) (keys : List Value) :
+    Except String Bool := do
+  let .uint _ size ← mapSizeAt state name keys
+    | throw s!"map emptiness path does not address a map or set '{name}'"
+  pure (size == 0)
+
+private def resetMapAt (state : LedgerState) (name : String) (keys : List Value) :
+    Except String LedgerState := do
+  if keys.isEmpty && (state.maps.lookup name).isSome then
+    return {state with maps := updateAssoc name [] state.maps}
+  let some root := state.trees.lookup name | throw s!"missing state map or set '{name}'"
+  let some updated := treeSet root keys (.map [])
+    | throw s!"nested map or set parent is missing or not a map '{name}'"
+  pure {state with trees := updateAssoc name updated state.trees}
+
+private def removeMapAt (state : LedgerState) (name : String) (keys : List Value) :
+    Except String LedgerState := do
+  if let ([key], some entries) := (keys, state.maps.lookup name) then
+    let retained := entries.filter fun (oldKey, _) => oldKey != key
+    return {state with maps := updateAssoc name retained state.maps}
+  let some root := state.trees.lookup name | throw s!"missing state map or set '{name}'"
+  let some updated := treeRemove root keys
+    | throw s!"nested map or set parent is missing or not a map '{name}'"
+  pure {state with trees := updateAssoc name updated state.trees}
+
+private def insertSetAt (state : LedgerState) (name : String) (keys : List Value) :
+    Except String LedgerState := do
+  let some root := state.trees.lookup name | throw s!"missing set state '{name}'"
+  let some updated := treeSet root keys .null
+    | throw s!"set parent is missing or not a map '{name}'"
+  pure {state with trees := updateAssoc name updated state.trees}
 
 private def counterValueAt (ctx : EvalContext) (root : LedgerValue)
     (keys : List Value) : Except String Nat := do
@@ -1070,6 +1124,12 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let evaluated ← evaluatePath ctx env keys
       let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
       env := (destination, .bool (← treeMember root evaluated)) :: env
+    | .mapIsEmpty name destination keys => do
+      let empty ← mapIsEmptyAt next name (← evaluatePath ctx env keys)
+      env := (destination, .bool empty) :: env
+    | .mapSize name destination keys => do
+      let size ← mapSizeAt next name (← evaluatePath ctx env keys)
+      env := (destination, size) :: env
     | .counterRead name destination keys => do
       let evaluated ← evaluatePath ctx env keys
       let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
@@ -1235,16 +1295,11 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       next := {next with trees := updateAssoc name updated next.trees}
     | .emptyMapPath name keys => do
       let evaluated ← evaluatePath ctx env keys
-      let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
-      let some updated := treeSet root evaluated (.map [])
-        | throw s!"nested map parent is missing or not a map '{name}'"
-      next := {next with trees := updateAssoc name updated next.trees}
+      next ← resetMapAt next name evaluated
+    | .setInsert name keys => do
+      next ← insertSetAt next name (← evaluatePath ctx env keys)
     | .removePath name keys => do
-      let evaluated ← evaluatePath ctx env keys
-      let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
-      let some updated := treeRemove root evaluated
-        | throw s!"nested map parent is missing or not a map '{name}'"
-      next := {next with trees := updateAssoc name updated next.trees}
+      next ← removeMapAt next name (← evaluatePath ctx env keys)
   pure (env, next)
 
 /-- Execute ordered effects while preserving the historical state-only result. -/
@@ -1273,9 +1328,10 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. | .require .. |
             .readTokenBalance .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
-            .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
+            .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .setInsert .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
-            .merkleTreeIsFull .. | .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
+            .mapIsEmpty .. | .mapSize .. | .merkleTreeIsFull .. |
+            .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
             .merkleTreeInsertHashIndex .. | .merkleTreeReset .. | .merkleTreeResetHistory .. |
             .merkleTreeIsFullAt .. | .merkleTreeCheckRootAt .. |
             .merkleTreeInsertHashAt .. | .merkleTreeInsertHashIndexAt .. |
@@ -1372,6 +1428,12 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let evaluated ← evaluatePath ctx env keys
           let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
           env := (destination, .bool (← treeMember root evaluated)) :: env
+        | .mapIsEmpty name destination keys => do
+          let empty ← mapIsEmptyAt next name (← evaluatePath ctx env keys)
+          env := (destination, .bool empty) :: env
+        | .mapSize name destination keys => do
+          let size ← mapSizeAt next name (← evaluatePath ctx env keys)
+          env := (destination, size) :: env
         | .counterRead name destination keys => do
           let evaluated ← evaluatePath ctx env keys
           let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
@@ -1503,16 +1565,11 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next := {next with trees := updateAssoc name updated next.trees}
         | .emptyMapPath name keys => do
           let evaluated ← evaluatePath ctx env keys
-          let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
-          let some updated := treeSet root evaluated (.map [])
-            | throw s!"nested map parent is missing or not a map '{name}'"
-          next := {next with trees := updateAssoc name updated next.trees}
+          next ← resetMapAt next name evaluated
+        | .setInsert name keys =>
+          next ← insertSetAt next name (← evaluatePath ctx env keys)
         | .removePath name keys => do
-          let evaluated ← evaluatePath ctx env keys
-          let some root := next.trees.lookup name | throw s!"missing recursive state map '{name}'"
-          let some updated := treeRemove root evaluated
-            | throw s!"nested map parent is missing or not a map '{name}'"
-          next := {next with trees := updateAssoc name updated next.trees}
+          next ← removeMapAt next name (← evaluatePath ctx env keys)
       else
         match effect with
         | .readCell _ destination ty =>
@@ -1552,7 +1609,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .requireContractCaller .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
-            .listPopFront .. | .listReset .. | .removePath .. => pure ()
+            .listPopFront .. | .listReset .. | .setInsert .. | .removePath .. => pure ()
         | .readPath _ destination _ ty =>
           let zero : ty.Denote := match ty with
             | .native => 0
@@ -1569,6 +1626,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .readCaller destinations =>
           env := (← callerValues destinations none) ++ env
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
+        | .mapIsEmpty _ destination _ => env := (destination, .bool false) :: env
+        | .mapSize _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination |
             .merkleTreeIsFullAt _ _ destination | .merkleTreeCheckRootAt _ _ _ destination =>

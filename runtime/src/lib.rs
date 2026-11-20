@@ -1093,6 +1093,19 @@ pub enum Instruction {
         keys: Vec<PathPart>,
         expression: Expr,
     },
+    #[serde(rename = "mapSize")]
+    MapSize {
+        slot: u32,
+        keys: Vec<PathPart>,
+        expression: Expr,
+    },
+    #[serde(rename = "mapIsEmpty")]
+    MapIsEmpty {
+        slot: u32,
+        keys: Vec<PathPart>,
+        destination: String,
+    },
+
     #[serde(rename = "merkleTreeIsFull")]
     MerkleTreeIsFull {
         slot: u32,
@@ -1276,11 +1289,35 @@ fn path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result<usize> 
     Ok(fields)
 }
 
+fn ledger_key_type(value: &Json) -> Result<ScalarType> {
+    let ty = ScalarType::parse(
+        value
+            .as_str()
+            .ok_or_else(|| anyhow!("invalid ledger key schema"))?,
+    )?;
+    reject_unqualified_foreign_storage(&ty)?;
+    reject_jubjub_map_key(&ty)?;
+    ensure!(
+        !matches!(&ty, ScalarType::Bytes(_)),
+        "only Bytes32 byte map keys are supported"
+    );
+    Ok(ty)
+}
+
 fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usize>> {
     Ok(match instruction {
         Instruction::ListLength { slot, keys, .. } => {
             vec![1, path_field_count(plan, *slot, keys)?, 4, 4]
         }
+        Instruction::MapSize { slot, keys, .. } => {
+            validate_map_size_path(plan, *slot, keys.len())?;
+            vec![1, path_field_count(plan, *slot, keys)?, 1, 4]
+        }
+        Instruction::MapIsEmpty { slot, keys, .. } => {
+            validate_map_size_path(plan, *slot, keys.len())?;
+            vec![1, path_field_count(plan, *slot, keys)?, 1, 5, 1, 4]
+        }
+
         Instruction::MerkleTreeIsFull {
             slot, keys, depth, ..
         } => {
@@ -1455,6 +1492,8 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         }
         Instruction::IndexPath { slot, keys, .. } => path_field_count(plan, *slot, keys)?,
         Instruction::ListLength { .. }
+        | Instruction::MapSize { .. }
+        | Instruction::MapIsEmpty { .. }
         | Instruction::MerkleTreeIsFull { .. }
         | Instruction::MerkleTreeCheckRoot { .. }
         | Instruction::MerkleTreeInsertHash { .. }
@@ -1577,23 +1616,18 @@ fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<Scalar
     }
     if let Some(mut schema) = state.kind.get("tree") {
         let mut types = Vec::with_capacity(count);
-        for _ in 0..count {
+        for index in 0..count {
+            if let Some(key) = schema.get("set") {
+                ensure!(index + 1 == count, "a set key must end its path");
+                types.push(ledger_key_type(key)?);
+                break;
+            }
             let parts = schema
                 .get("map")
                 .and_then(Json::as_array)
                 .filter(|parts| parts.len() == 2)
                 .ok_or_else(|| anyhow!("map path exceeds declared schema"))?;
-            let key = parts[0]
-                .as_str()
-                .ok_or_else(|| anyhow!("invalid map key schema"))?;
-            let key = ScalarType::parse(key)?;
-            reject_unqualified_foreign_storage(&key)?;
-            reject_jubjub_map_key(&key)?;
-            ensure!(
-                !matches!(key, ScalarType::Bytes(_)),
-                "only Bytes32 byte map keys are supported"
-            );
-            types.push(key);
+            types.push(ledger_key_type(&parts[0])?);
             schema = &parts[1];
         }
         return Ok(types);
@@ -1605,18 +1639,7 @@ fn map_path_key_types(plan: &Plan, slot: u32, count: usize) -> Result<Vec<Scalar
         .and_then(Json::as_array)
         .filter(|parts| parts.len() == 2)
         .ok_or_else(|| anyhow!("invalid map key schema"))?;
-    let key = ScalarType::parse(
-        parts[0]
-            .as_str()
-            .ok_or_else(|| anyhow!("invalid map key schema"))?,
-    )?;
-    reject_unqualified_foreign_storage(&key)?;
-    reject_jubjub_map_key(&key)?;
-    ensure!(
-        !matches!(key, ScalarType::Bytes(_)),
-        "only Bytes32 byte map keys are supported"
-    );
-    Ok(vec![key])
+    Ok(vec![ledger_key_type(&parts[0])?])
 }
 
 fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
@@ -1660,6 +1683,10 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
     }
     if let Some(schema) = fields.get("composite") {
         checked_record_schema(schema)?;
+        return Ok(());
+    }
+    if let Some(key) = fields.get("set") {
+        ledger_key_type(key)?;
         return Ok(());
     }
     let parts = fields
@@ -2666,6 +2693,33 @@ fn list_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
         .ok_or_else(|| anyhow!("path does not select a Native-record List"))
 }
 
+fn validate_map_size_path(plan: &Plan, slot: u32, depth: usize) -> Result<()> {
+    let kind = &plan
+        .state
+        .get(slot as usize)
+        .ok_or_else(|| anyhow!("state slot out of range"))?
+        .kind;
+    let schema = match kind.get("tree") {
+        Some(_) => tree_schema_at_path(plan, slot, depth)?,
+        None => {
+            ensure!(depth == 0, "scalar map size does not take a key");
+            kind
+        }
+    };
+    if let Some(key) = schema.get("set") {
+        ledger_key_type(key)?;
+        return Ok(());
+    }
+    ensure!(
+        schema
+            .get("map")
+            .and_then(Json::as_array)
+            .is_some_and(|parts| parts.len() == 2),
+        "size path must select a Map"
+    );
+    Ok(())
+}
+
 fn empty_native_list() -> StateValue<Db> {
     StateValue::Array(
         vec![
@@ -3212,6 +3266,9 @@ fn probe_instruction(
         Instruction::ListLength { keys, .. } | Instruction::ListHead { keys, .. } => {
             probe_paths(keys, plan, env, deferred_outputs)
         }
+        Instruction::MapSize { keys, .. } | Instruction::MapIsEmpty { keys, .. } => {
+            probe_paths(keys, plan, env, deferred_outputs)
+        }
         Instruction::MerkleTreeIsFull { keys, .. }
         | Instruction::MerkleTreeReset { keys, .. }
         | Instruction::MerkleTreeResetHistory { keys, .. } => {
@@ -3618,6 +3675,8 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::AddImmediate { .. }
                 | Instruction::SubImmediate { .. }
                 | Instruction::ListLength { .. }
+                | Instruction::MapSize { .. }
+                | Instruction::MapIsEmpty { .. }
                 | Instruction::ListHead { .. }
                 | Instruction::ListPushFront { .. }
                 | Instruction::ListPopFront { .. }
@@ -3942,6 +4001,8 @@ impl PreparationCursor {
                             | Instruction::AddImmediate { .. }
                             | Instruction::SubImmediate { .. }
                             | Instruction::ListLength { .. }
+                            | Instruction::MapSize { .. }
+                            | Instruction::MapIsEmpty { .. }
                             | Instruction::ListHead { .. }
                             | Instruction::ListPushFront { .. }
                             | Instruction::ListPopFront { .. }
@@ -4123,16 +4184,36 @@ impl PreparationCursor {
                         }
                         read_index += 1;
                     }
+                    if let Instruction::MapIsEmpty { destination, .. } = operation.as_ref() {
+                        let read = plan
+                            .reads
+                            .get(read_index)
+                            .ok_or_else(|| anyhow!("missing inactive map emptiness read"))?;
+                        ensure!(
+                            read.name == destination.as_str()
+                                && read.ty == "Bool"
+                                && read.guard.as_ref() == Some(guard)
+                                && read.components.is_empty()
+                                && read.projections.is_none()
+                                && read.schema.is_none()
+                                && !env.contains_key(destination),
+                            "inactive map emptiness read schema mismatch"
+                        );
+                        env.insert(destination.clone(), Value::Bool(false));
+                        event = Some(read_event(read, false, env, vec![destination.clone()]));
+                        read_index += 1;
+                    }
                     match operation.as_ref() {
-                        Instruction::ListLength { expression, .. } => {
+                        Instruction::ListLength { expression, .. }
+                        | Instruction::MapSize { expression, .. } => {
                             let read = plan
                                 .reads
                                 .get(read_index)
-                                .ok_or_else(|| anyhow!("missing inactive List length read"))?;
+                                .ok_or_else(|| anyhow!("missing inactive cardinality read"))?;
                             ensure!(
                                 read.guard.as_ref() == Some(guard)
                                     && read.ty == "UIntRange<18446744073709551616>",
-                                "inactive List length read schema mismatch"
+                                "inactive cardinality read schema mismatch"
                             );
                             ensure!(
                                 matches!(expression, Expr::Reference { name } if name == &read.name),
@@ -4140,7 +4221,7 @@ impl PreparationCursor {
                             );
                             ensure!(
                                 !env.contains_key(&read.name),
-                                "List length shadows an existing value"
+                                "cardinality shadows an existing value"
                             );
                             env.insert(read.name.clone(), inactive_read_value(&read.ty)?);
                             event = Some(read_event(read, false, env, vec![read.name.clone()]));
@@ -4204,6 +4285,8 @@ impl PreparationCursor {
             && matches!(
                 instruction,
                 Instruction::ListLength { .. }
+                    | Instruction::MapSize { .. }
+                    | Instruction::MapIsEmpty { .. }
                     | Instruction::ListHead { .. }
                     | Instruction::ListPushFront { .. }
                     | Instruction::ListPopFront { .. }
@@ -4561,6 +4644,101 @@ impl PreparationCursor {
                 Op::Popeq {
                     cached: false,
                     result: length.into(),
+                }
+            }
+            Instruction::MapSize {
+                slot,
+                keys,
+                expression,
+            } => {
+                validate_map_size_path(plan, *slot, keys.len())?;
+                let (index, values) = native_index(plan, *slot, keys, false, &env)?;
+                let read = plan
+                    .reads
+                    .get(read_index)
+                    .ok_or_else(|| anyhow!("missing map size read"))?;
+                ensure!(
+                    read.guard.as_ref() == instruction_guard
+                        && read.ty == "UIntRange<18446744073709551616>",
+                    "map size read schema mismatch"
+                );
+                ensure!(
+                    matches!(expression, Expr::Reference { name } if name == &read.name),
+                    "map size must bind its declared read"
+                );
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let StateValue::Map(ref map) = read_state_value(read_context, *slot, &values)?
+                else {
+                    bail!("size path does not address a map")
+                };
+                let size = u64::try_from(map.size())?;
+                ensure!(
+                    !env.contains_key(&read.name),
+                    "map size shadows an existing value"
+                );
+                env.insert(
+                    read.name.clone(),
+                    Value::UInt {
+                        number: size.into(),
+                        maximum: u64::MAX.into(),
+                    },
+                );
+                event = Some(read_event(read, true, env, vec![read.name.clone()]));
+                read_index += 1;
+                program.extend([Op::Dup { n: 0 }, index, Op::Size]);
+                Op::Popeq {
+                    cached: false,
+                    result: size.into(),
+                }
+            }
+            Instruction::MapIsEmpty {
+                slot,
+                keys,
+                destination,
+            } => {
+                validate_map_size_path(plan, *slot, keys.len())?;
+                let (index, values) = native_index(plan, *slot, keys, false, &env)?;
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let StateValue::Map(ref map) = read_state_value(read_context, *slot, &values)?
+                else {
+                    bail!("isEmpty path does not address a map")
+                };
+                let result = map.is_empty();
+                let read = plan
+                    .reads
+                    .get(read_index)
+                    .ok_or_else(|| anyhow!("missing map emptiness read"))?;
+                ensure!(
+                    read.name == destination.as_str()
+                        && read.ty == "Bool"
+                        && read.guard.as_ref() == instruction_guard
+                        && read.components.is_empty()
+                        && read.projections.is_none()
+                        && read.schema.is_none()
+                        && !env.contains_key(destination),
+                    "map emptiness read schema mismatch"
+                );
+                env.insert(destination.clone(), Value::Bool(result));
+                event = Some(read_event(read, true, env, vec![destination.clone()]));
+                read_index += 1;
+                program.extend([
+                    Op::Dup { n: 0 },
+                    index,
+                    Op::Size,
+                    push_native_state(StateValue::Cell(Sp::new(AlignedValue::from(0u64))), false)?,
+                    Op::Eq,
+                ]);
+                Op::Popeq {
+                    cached: true,
+                    result: result.into(),
                 }
             }
             Instruction::MerkleTreeIsFull {

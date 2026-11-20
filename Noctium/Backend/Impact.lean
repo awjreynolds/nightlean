@@ -51,6 +51,8 @@ inductive Op where
   | addImmediate (amount : Nat)
   | subImmediate (amount : Nat)
   | listLength (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
+  | mapSize (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
+  | mapIsEmpty (slot : Nat) (keys : List Aligned) (destination : String)
   | merkleTreeIsFull (slot depth : Nat) (destination : String)
   | merkleTreeCheckRoot (slot depth : Nat) (expected : Expr .native) (destination : String)
   | merkleTreeInsertHash (slot depth : Nat) (hash : Expr (.bytes 32))
@@ -146,6 +148,12 @@ private def indexPathFields (slot : Nat) (pushPath : Bool) (keys : List Aligned)
 
 private def listIndexFields (index : Nat) : List Scalar :=
   [.native 0x50, .native 1, .native 1, .native index]
+
+private def mapIsEmptyFieldGroups (slot : Nat) (keys : List Aligned)
+    (destination : String) : List (List Scalar) :=
+  [[.native 0x30], indexPathFields slot false keys, [.native 0x04],
+    [.native 0x10, .native 1] ++ (Aligned.counter (.uint (2 ^ 64 - 1) 0)).fields,
+    [.native 0x02], [.native 0x0d] ++ (Aligned.bitExpr (.ref destination)).fields]
 
 private def merkleTreeIndexFields (index : Nat) (pushPath : Bool) : List Scalar :=
   [.native (if pushPath then 0x70 else 0x50), .native 1, .native 1, .native index]
@@ -390,6 +398,12 @@ def Op.fields : Op → List Scalar
   | .listLength slot keys value =>
       [.native 0x30] ++ indexPathFields slot false keys ++
       listIndexFields 2 ++ [.native 0x0c] ++ (Aligned.counter value).fields
+  | .mapSize slot keys value =>
+      [.native 0x30] ++ indexPathFields slot false keys ++
+      [.native 0x04, .native 0x0c] ++ (Aligned.counter value).fields
+  | .mapIsEmpty slot keys destination =>
+      (mapIsEmptyFieldGroups slot keys destination).flatten
+
   | .merkleTreeIsFull slot depth destination =>
       (merkleTreeIsFullFieldGroups slot depth destination).flatten
   | .merkleTreeCheckRoot slot _ expected destination =>
@@ -477,6 +491,12 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .listLength slot keys value =>
       [[.native 0x30], indexPathFields slot false keys, listIndexFields 2,
         [.native 0x0c] ++ (Aligned.counter value).fields]
+  | .mapSize slot keys value =>
+      [[.native 0x30], indexPathFields slot false keys, [.native 0x04],
+        [.native 0x0c] ++ (Aligned.counter value).fields]
+  | .mapIsEmpty slot keys destination =>
+      mapIsEmptyFieldGroups slot keys destination
+
   | .merkleTreeIsFull slot depth destination =>
       merkleTreeIsFullFieldGroups slot depth destination
   | .merkleTreeCheckRoot slot _ expected destination =>
@@ -772,15 +792,12 @@ private def splitPath (keys : List Aligned) : Except String (List Aligned × Ali
   let some finalKey := keys.getLast? | throw "nested map path must contain at least one key"
   pure (keys.take (keys.length - 1), finalKey)
 
-private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : Option Op)
+private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : List Op)
     : Except String (List Op) := do
   let (parents, finalKey) ← splitPath keys
   let levels := keys.length + 1
   if levels >= 16 then throw "nested map insertion exceeds native Ins depth"
-  let newValue := match value with
-    | some value => [.push finalKey, value]
-    | none => [.push finalKey, .push (.field (.native 2)), .newMap]
-  pure ([.indexPath slot true parents] ++ newValue ++ [.insert levels])
+  pure ([.indexPath slot true parents, .push finalKey] ++ value ++ [.insert levels])
 
 private def pathWriteCompositeOps (slot : Nat) (keys : List Aligned)
     (schema : Lean.Json) (values : List Scalar) : Except String (List Op) := do
@@ -813,6 +830,39 @@ private def resolveListState (state : List StateDecl) (name : String)
   let some declaration := state.find? (·.name == name) | throw s!"unknown List state '{name}'"
   let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
   schema.listPath keys
+
+private def mapSizeOp (state : List StateDecl) (name destination : String)
+    (keys : List PathKey) : Except String Op := do
+  let slot ← stateSlot state name
+  let some declaration := state[slot]? | throw s!"unknown map state '{name}'"
+  declaration.kind.validateCollectionPath keys
+  pure (.mapSize slot (← nativePathKeys keys) (.ref destination))
+
+private def mapIsEmptyOp (state : List StateDecl) (name destination : String)
+    (keys : List PathKey) : Except String Op := do
+  let slot ← stateSlot state name
+  let some declaration := state[slot]? | throw s!"unknown map state '{name}'"
+  declaration.kind.validateCollectionPath keys
+  pure (.mapIsEmpty slot (← nativePathKeys keys) destination)
+
+private def setInsertOps (state : List StateDecl) (name : String)
+    (keys : List PathKey) : Except String (List Op) := do
+  let slot ← stateSlot state name
+  let some {kind := .tree schema, ..} := state[slot]?
+    | throw s!"unknown set state '{name}'"
+  let .set _ ← schema.entryParent keys
+    | throw "set insertion path must select a Set"
+  pathWriteOps slot (← nativePathKeys keys) [.push (.field (.native 1)), .newMap]
+
+private def emptyMapOps (state : List StateDecl) (name : String)
+    (keys : List PathKey) : Except String (List Op) := do
+  let slot ← stateSlot state name
+  let some declaration := state[slot]? | throw s!"unknown map state '{name}'"
+  declaration.kind.validateCollectionPath keys
+  if keys.isEmpty then
+    pure ([.push (.field (.native slot)), .push (.field (.native 2)), .newMap, .insert 1])
+  else
+    pathWriteOps slot (← nativePathKeys keys) [.push (.field (.native 2)), .newMap]
 
 private def merkleTreeSlotAndDepth (state : List StateDecl) (name : String) :
     Except String (Nat × Nat × Bool) := do
@@ -1148,6 +1198,14 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.listLength slot alignedKeys value]
       reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
+  | .mapIsEmpty name destination keys => do
+    pure {plan with
+      operations := plan.operations ++ [← mapIsEmptyOp state name destination keys]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .mapSize name destination keys => do
+    pure {plan with
+      operations := plan.operations ++ [← mapSizeOp state name destination keys]
+      reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
   | .listHead name destination keys type destinations => do
     let slot ← stateSlot state name
     let (environment, foundType, _) ← resolveListState state name keys
@@ -1221,7 +1279,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let value ← match ty with
       | .foreign _ | .jubjubScalar | .jubjubPoint => storageWriteValue ty value
       | _ => pure (.push (← nativeAligned ty value) true)
-    let operations ← pathWriteOps slot keys (some value)
+    let operations ← pathWriteOps slot keys [value]
     pure {plan with operations := plan.operations ++ operations}
   | .writeCompositePath name keys type values => do
     let slot ← stateSlot state name
@@ -1251,13 +1309,12 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     else
       let alignedKeys ← nativePathKeys keys
       let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
-      let operations ← pathWriteOps slot alignedKeys (some (.push (.counter value) true))
+      let operations ← pathWriteOps slot alignedKeys [.push (.counter value) true]
       pure {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
-    let slot ← stateSlot state name
-    let keys ← nativePathKeys keys
-    let operations ← pathWriteOps slot keys none
-    pure {plan with operations := plan.operations ++ operations}
+    pure {plan with operations := plan.operations ++ (← emptyMapOps state name keys)}
+  | .setInsert name keys =>
+    pure {plan with operations := plan.operations ++ (← setInsertOps state name keys)}
 
 def appendEffects (state : List StateDecl) (effects : List Effect)
     (initial : Plan) : Except String Plan :=
@@ -1344,6 +1401,10 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.counterReset name (totalizePathKeys condition keys))
     | some condition, .listLength name destination keys =>
       pure (.listLength name destination (totalizePathKeys condition keys))
+    | some condition, .mapIsEmpty name destination keys =>
+      pure (.mapIsEmpty name destination (totalizePathKeys condition keys))
+    | some condition, .mapSize name destination keys =>
+      pure (.mapSize name destination (totalizePathKeys condition keys))
     | some condition, .listHead name destination keys type destinations =>
       pure (.listHead name destination (totalizePathKeys condition keys) type destinations)
     | some condition, .listPushFront name keys type values =>
@@ -1401,6 +1462,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (values.map (totalizeActivityValue condition avoid)))
     | some condition, .emptyMapPath name keys =>
       pure (.emptyMapPath name (totalizePathKeys condition keys))
+    | some condition, .setInsert name keys =>
+      pure (.setInsert name (totalizePathKeys condition keys))
     | some _, .readCell .. | some _, .readContractAddress .. |
         some _, .merkleTreeIsFull .. => pure effect
     | some condition, .require required =>
@@ -1423,9 +1486,9 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
   | some condition, .readContractAddress .. | some condition, .readPath .. | some condition, .readCompositePath .. |
       some condition, .memberPath .. | some condition, .counterRead .. |
       some condition, .listLength .. | some condition, .listHead .. |
+      some condition, .readTokenBalance .. | some condition, .mapSize .. | some condition, .mapIsEmpty .. |
       some condition, .merkleTreeIsFull .. | some condition, .merkleTreeCheckRoot .. |
-      some condition, .merkleTreeIsFullAt .. | some condition, .merkleTreeCheckRootAt .. |
-      some condition, .readTokenBalance .. =>
+      some condition, .merkleTreeIsFullAt .. | some condition, .merkleTreeCheckRootAt .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -1448,12 +1511,13 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .writeCompositePath .. | some condition, .emptyMapPath .. |
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
-      some condition, .listReset .. | some condition, .merkleTreeInsertHash .. |
+      some condition, .listReset .. | some condition, .removePath .. |
+      some condition, .setInsert .. |
+      some condition, .merkleTreeInsertHash .. | some condition, .merkleTreeReset .. |
       some condition, .merkleTreeInsertHashIndex .. |
-      some condition, .merkleTreeReset .. | some condition, .merkleTreeResetHistory .. |
+      some condition, .merkleTreeResetHistory .. |
       some condition, .merkleTreeInsertHashAt .. | some condition, .merkleTreeInsertHashIndexAt .. |
       some condition, .merkleTreeResetAt .. | some condition, .merkleTreeResetHistoryAt .. |
-      some condition, .removePath .. |
       some condition, .claimContractCall .. | some condition, .mintShielded .. |
       some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs .. |
       some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend .. |
@@ -1730,6 +1794,14 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.listLength slot alignedKeys value]
       reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
+  | .mapIsEmpty name destination keys => do
+    plan := {plan with
+      operations := plan.operations ++ [← mapIsEmptyOp state name destination keys]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .mapSize name destination keys => do
+    plan := {plan with
+      operations := plan.operations ++ [← mapSizeOp state name destination keys]
+      reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
   | .listHead name destination keys type destinations => do
     let slot ← stateSlot state name
     let (environment, foundType, _) ← resolveListState state name keys
@@ -1794,7 +1866,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let value ← match ty with
       | .foreign _ | .jubjubScalar | .jubjubPoint => storageWriteValue ty value
       | _ => pure (.push (← nativeAligned ty value) true)
-    let operations ← pathWriteOps slot keys (some value)
+    let operations ← pathWriteOps slot keys [value]
     plan := {plan with operations := plan.operations ++ operations}
   | .writeCompositePath name keys type values => do
     let slot ← stateSlot state name
@@ -1824,13 +1896,12 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     else
       let alignedKeys ← nativePathKeys keys
       let value : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
-      let operations ← pathWriteOps slot alignedKeys (some (.push (.counter value) true))
+      let operations ← pathWriteOps slot alignedKeys [.push (.counter value) true]
       plan := {plan with operations := plan.operations ++ operations}
   | .emptyMapPath name keys => do
-    let slot ← stateSlot state name
-    let keys ← nativePathKeys keys
-    let operations ← pathWriteOps slot keys none
-    plan := {plan with operations := plan.operations ++ operations}
+    plan := {plan with operations := plan.operations ++ (← emptyMapOps state name keys)}
+  | .setInsert name keys =>
+    plan := {plan with operations := plan.operations ++ (← setInsertOps state name keys)}
   | .removePath name keys => do
     let slot ← stateSlot state name
     let some declaration := state.find? (·.name == name)
@@ -1901,9 +1972,10 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
             .memberPath _ destination .. | .counterRead _ destination .. |
+            .mapSize _ destination .. |
             .readContractAddress destination | .readTokenBalance destination .. |
-            .listLength _ destination .. | .merkleTreeIsFull _ destination |
-            .merkleTreeCheckRoot _ _ destination |
+            .mapIsEmpty _ destination .. | .listLength _ destination .. |
+            .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination |
             .merkleTreeIsFullAt _ _ destination | .merkleTreeCheckRootAt _ _ _ destination => [destination]
         | .readCaller destinations => destinations.types.map Prod.fst
         | .readCompositePath _ _ _ _ destinations => destinations
@@ -2009,6 +2081,8 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
     pure (Lean.Json.mkObj [("listLength", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length),
       ("value", Lean.toJson (← value.eval ctx env))])])
+  | .mapSize .. => throw "mapSize uses its dedicated native-plan operation JSON"
+  | .mapIsEmpty .. => throw "mapIsEmpty uses its dedicated native-plan operation JSON"
   | .merkleTreeIsFull .. | .merkleTreeIsFullAt .. =>
     throw "merkleTreeIsFull uses its dedicated native-plan operation JSON"
   | .merkleTreeCheckRoot .. | .historicMerkleTreeCheckRoot .. | .merkleTreeCheckRootAt .. =>

@@ -67,6 +67,35 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
 
+## Use a ledger set
+
+A set stores each member as a key with a native `Null` value. Declare a
+top-level set with `set registered : Bytes32`, or a map of sets with
+`tree groups : Native => Set Bytes32`. Use ordinary keyed `insert`,
+`member` and `remove`. Read the cardinality with `size`, test emptiness with
+`isEmpty`, and clear the selected set with `reset`.
+
+Inserting a member twice preserves cardinality. Removing an absent member
+preserves the set. A nested call must initialize its parent path first.
+Resetting one nested set leaves neighboring sets intact. A guarded
+inactive read uses the usual zero or false value without traversing
+the guarded path. As with map keys, explicitly disclose any private
+input used to select a public ledger key.
+
+The [Lean example](../../tests/NativeSet.lean) and
+[Compact oracle](../../tests/compact/native-set.mjs) cover Bytes32
+members under a Native/Field parent key.
+[Midnight Set reference](https://docs.midnight.network/compact/reference/ledger-adt#setvalue_type)
+
+The native VM and ZKIR checker replayed the Compact transitions with fresh
+Lean artifacts. The read-only `isEmpty` case produced the same public
+transcript for two different nonempty cardinalities. The Rust SDK
+finalized a first insertion into both sets at Ledger 9.1.0.1 localnet
+block 151. The observed state matched the exact prediction, and the
+relation measured K9 and 467 rows. The remaining differential cases ran
+off chain. Shielded coin insertion and SDK host enumeration remain
+separate. [Native fixture](../../runtime/tests/native_set.rs) · [Localnet receipt](native-set-localnet-receipt.json)
+
 ## Read the ledger caller
 
 `readCaller as (present, isContract, contractId, userId)` binds two
