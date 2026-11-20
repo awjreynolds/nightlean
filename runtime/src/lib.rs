@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
 use base_crypto::hash::HashOutput;
 use base_crypto::repr::BinaryHashRepr;
-use coin_structure::coin::PublicAddress;
+use coin_structure::coin::{PublicAddress, UserAddress};
 use coin_structure::contract::ContractAddress;
 use ledger::{
     construct::{PreTranscript, partition_transcripts},
@@ -1114,6 +1114,13 @@ pub enum Instruction {
     RequireContractCaller {
         address: Expr,
     },
+    #[serde(rename = "readCaller", rename_all = "camelCase")]
+    ReadCaller {
+        present: String,
+        is_contract: String,
+        contract_address: String,
+        user_address: String,
+    },
     #[serde(rename = "emitEvent")]
     EmitEvent {
         tag: u8,
@@ -1205,6 +1212,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ClaimContractCall { .. } => vec![1, 4, 1, 1, 11, 2, 2, 1, 1],
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
+        Instruction::ReadCaller { .. } => vec![1, 4, 1, 1, 5, 1, 2, 5, 1, 2, 2, 1, 13, 12],
         Instruction::EmitEvent { tag, .. } => {
             vec![13 + event_payload_length(*tag)?.div_ceil(31), 1]
         }
@@ -1228,6 +1236,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
         Instruction::RequireContractCaller { .. } => 15,
+        Instruction::ReadCaller { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
@@ -2786,6 +2795,7 @@ fn probe_instruction(
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
+        Instruction::ReadCaller { .. } => Ok(None),
         Instruction::EmitEvent { tag, payload } => {
             event_payload_length(*tag)?;
             probe_expression(payload, plan, env, deferred_outputs)
@@ -2825,6 +2835,96 @@ fn consume_contract_caller_reads(
     }
     *index += 5;
     Ok(())
+}
+
+fn bind_caller_reads(
+    plan: &Plan,
+    index: &mut usize,
+    guard: Option<&Expr>,
+    destinations: [&str; 4],
+    active: bool,
+    caller: Option<PublicAddress>,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let zero = [0; 32];
+    let (contract, user) = match caller {
+        Some(PublicAddress::Contract(address)) => (address.0.0, zero),
+        Some(PublicAddress::User(address)) => (zero, address.0.0),
+        None => (zero, zero),
+    };
+    let returned = [
+        Value::Bool(caller.is_some()),
+        Value::Bool(matches!(caller, Some(PublicAddress::Contract(_)))),
+        Value::Bytes(contract.to_vec()),
+        Value::Bytes(user.to_vec()),
+    ];
+    let mut values = BTreeMap::new();
+    for (destination, value) in destinations.into_iter().zip(returned) {
+        let read = plan
+            .reads
+            .get(*index)
+            .ok_or_else(|| anyhow!("missing caller read"))?;
+        ensure!(
+            read.name == destination
+                && ScalarType::parse(&read.ty)? == value.scalar_type()
+                && read.guard.as_ref() == guard
+                && !env.contains_key(destination),
+            "caller read schema mismatch"
+        );
+        if matches!(value, Value::Bytes(_)) {
+            validate_byte_read_projections(read, &ScalarType::Bytes32)?;
+        } else {
+            ensure!(
+                read.schema.is_none() && read.components.is_empty() && read.projections.is_none(),
+                "caller flag has unexpected read projections"
+            );
+        }
+        env.insert(destination.to_owned(), value.clone());
+        values.insert(destination.to_owned(), value);
+        *index += 1;
+    }
+    Ok(PreparationRead {
+        name: destinations[0].to_owned(),
+        active,
+        values,
+    })
+}
+
+fn append_caller_read(
+    program: &mut Program,
+    caller: Option<PublicAddress>,
+) -> Result<Op<ResultModeVerify, Db>> {
+    let absent = AlignedValue::concat([
+        &false.into(),
+        &PublicAddress::User(UserAddress(HashOutput([0; 32]))).into(),
+    ]);
+    let result = match caller {
+        Some(address) => AlignedValue::concat([&true.into(), &address.into()]),
+        None => absent.clone(),
+    };
+    let push_one = push_native_state(StateValue::Cell(Sp::new(1u8.into())), false)?;
+    program.extend([
+        Op::Dup { n: 2 },
+        list_index(6),
+        Op::Dup { n: 0 },
+        Op::Type,
+        push_one.clone(),
+        Op::Eq,
+        Op::Branch { skip: 4 },
+        push_one,
+        Op::Swap { n: 0 },
+        Op::Concat {
+            cached: false,
+            n: 66,
+        },
+        Op::Jmp { skip: 2 },
+        Op::Pop,
+        push_native_state(StateValue::Cell(Sp::new(absent)), false)?,
+    ]);
+    Ok(Op::Popeq {
+        cached: false,
+        result,
+    })
 }
 
 fn read_event(
@@ -2890,6 +2990,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::MapRemove { .. }
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::RequireContractCaller { .. }
+                | Instruction::ReadCaller { .. }
                 | Instruction::EmitEvent { .. }
         ),
         "guarded native operation has an unsupported shape"
@@ -3200,6 +3301,7 @@ impl PreparationCursor {
                             | Instruction::MapRemove { .. }
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::RequireContractCaller { .. }
+                            | Instruction::ReadCaller { .. }
                             | Instruction::EmitEvent { .. }
                     ),
                     "guarded native operation has an unsupported shape"
@@ -3216,6 +3318,23 @@ impl PreparationCursor {
                         Instruction::RequireContractCaller { .. }
                     ) {
                         consume_contract_caller_reads(plan, &mut read_index, Some(guard))?;
+                    }
+                    if let Instruction::ReadCaller {
+                        present,
+                        is_contract,
+                        contract_address,
+                        user_address,
+                    } = operation.as_ref()
+                    {
+                        event = Some(bind_caller_reads(
+                            plan,
+                            &mut read_index,
+                            Some(guard),
+                            [present, is_contract, contract_address, user_address],
+                            false,
+                            None,
+                            env,
+                        )?);
                     }
                     if let Instruction::Popeq {
                         expression,
@@ -3948,6 +4067,24 @@ impl PreparationCursor {
                     cached: false,
                     result: AlignedValue::from(expected),
                 }
+            }
+            Instruction::ReadCaller {
+                present,
+                is_contract,
+                contract_address,
+                user_address,
+            } => {
+                let caller = context.call_context.caller;
+                event = Some(bind_caller_reads(
+                    plan,
+                    &mut read_index,
+                    instruction_guard,
+                    [present, is_contract, contract_address, user_address],
+                    true,
+                    caller,
+                    env,
+                )?);
+                append_caller_read(program, caller)?
             }
             Instruction::EmitEvent { tag, payload } => {
                 let bytes = evaluated_bytes(payload, event_payload_length(*tag)?, &env)?;

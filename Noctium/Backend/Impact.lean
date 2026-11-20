@@ -58,6 +58,7 @@ inductive Op where
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | requireContractCaller (address : Expr (.bytes 32))
+  | readCaller (destinations : CallerBindings)
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
 
 private def claimContractCallFieldGroups
@@ -108,6 +109,21 @@ private def requireContractCallerFieldGroups (address : Expr (.bytes 32)) : List
 
 private def listU8CellPushFields (index : Nat) : List Scalar :=
   [.native 0x10, .native 1, .native 1, .native 1, .native index]
+
+private def callerFieldGroups (names : CallerBindings) : List (List Scalar) :=
+  -- Slot 6 holds either Null or an aligned public address. Normalize it to one cell.
+  let layout : List Scalar := [.native 4, .native 1, .native 1, .native 32, .native 32]
+  let contract : Expr (.bytes 32) := .ref names.contractAddress
+  let user : Expr (.bytes 32) := .ref names.userAddress
+  let result := [.native 0x0c] ++ layout ++ [
+    .select (.ref names.present) (.native 1) (.native 0),
+    .select (.ref names.isContract) (.native 1) (.native 0),
+    .bytesField contract 0, .bytesField contract 1, .bytesField user 0, .bytesField user 1]
+  [[.native 0x32], listIndexFields 6, [.native 0x30], [.native 0x03],
+    listU8CellPushFields 1, [.native 0x02], [.native 0x12, .native 4],
+    listU8CellPushFields 1, [.native 0x40], [.native 0x16, .native 66], [.native 0x13, .native 2],
+    [.native 0x0b], [.native 0x10, .native 1] ++ layout ++ List.replicate 6 (.native 0),
+    result]
 
 private def listNodePushFields (values : List Scalar) : List Scalar :=
   [.native 0x11, .native 51, .native 1, .native values.length] ++
@@ -181,6 +197,7 @@ def Op.fields : Op → List Scalar
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .readCaller destinations => (callerFieldGroups destinations).flatten
   | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
@@ -224,6 +241,7 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
   | .requireContractCaller address => requireContractCallerFieldGroups address
+  | .readCaller destinations => callerFieldGroups destinations
   | .emitEvent kind payload => eventFieldGroups kind payload
   | operation => [operation.fields]
 
@@ -600,6 +618,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readCaller destinations =>
+    pure {plan with
+      operations := plan.operations ++ [.readCaller destinations]
+      reads := plan.reads ++ destinations.types.map (fun (name, ty) => {name, ty})}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -800,6 +822,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
       pure (.requireContractCaller (totalizeActivityValue condition (expressionNames address) address))
+    | some _, .readCaller .. => pure effect
     | some condition, .readMap name destination keyTy valueTy key =>
       pure (.readMap name destination keyTy valueTy
         (totalizeActivityValue condition (expressionNames key) key))
@@ -879,7 +902,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
-  | some condition, .requireContractCaller .. =>
+  | some condition, .requireContractCaller .. | some condition, .readCaller .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     let reads := plan.reads ++ ((result.reads.drop plan.reads.length).map fun read =>
@@ -1033,6 +1056,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readCaller destinations =>
+    plan := {plan with
+      operations := plan.operations ++ [.readCaller destinations]
+      reads := plan.reads ++ destinations.types.map (fun (name, ty) => {name, ty})}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -1266,6 +1293,7 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
             .readMember _ destination .. | .readPath _ destination .. |
             .memberPath _ destination .. | .counterRead _ destination .. |
             .listLength _ destination .. => [destination]
+        | .readCaller destinations => destinations.types.map Prod.fst
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
         | _ => [])
@@ -1387,6 +1415,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .readCaller .. => throw "caller read uses its dedicated native-plan operation JSON"
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do

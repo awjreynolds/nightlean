@@ -185,6 +185,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .removePath ..
       | some condition, .listLength .. | some condition, .listHead ..
       | some condition, .listPushFront .. | some condition, .listPopFront ..
+      | some condition, .readCaller ..
       | some condition, .listReset .. =>
         expression env span condition
       | some condition, .require _ =>
@@ -230,6 +231,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
+    | .readCaller destinations =>
+      checkSink {description := "public caller read guard", span} [] activeControl
+      env := env ++ destinations.types.map (fun (name, _) => (name, []))
     | .emitEvent _ payload =>
       checkSink {description := "public contract event", span}
         (← expression env span payload) activeControl

@@ -66,3 +66,23 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Read the ledger caller
+
+`readCaller as (present, isContract, contractId, userId)` binds two
+Boolean flags and two `Bytes32` addresses. A contract caller sets both
+flags and fills `contractId`. A user caller sets only `present` and
+fills `userId`. An absent caller or inactive guard yields false flags
+and zero bytes. A private guard needs disclosure.
+
+The native ledger context supplies the caller. The Impact plan checks
+the presence, tag and active address against the ZKIR statement. A
+different ledger caller fails the same transcript check. The Rust SDK
+ordinary-call path prepares an absent caller. Midnight derives a
+top-level user caller only in the relevant unshielded-input context, and
+support for deriving that value during SDK preparation needs separate
+qualification. [Midnight caller semantics](https://docs.midnight.network/compact/reference/ledger-adt#caller)
+
+[Lean fixture](../../tests/NativeCaller.lean) ·
+[Compact oracle](../../tests/compact/caller.mjs) ·
+[Native checker](../../runtime/tests/native_caller.rs)

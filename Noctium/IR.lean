@@ -417,6 +417,17 @@ def EventKind.fields : EventKind → List (String × EventFieldType)
 def EventKind.payloadSize (kind : EventKind) : Nat :=
   kind.fields.foldl (fun size field => size + field.2.width) 0
 
+structure CallerBindings where
+  present : String
+  isContract : String
+  contractAddress : String
+  userAddress : String
+  deriving Repr
+
+def CallerBindings.types (names : CallerBindings) : List (String × Ty) :=
+  [(names.present, .bool), (names.isContract, .bool),
+    (names.contractAddress, .bytes 32), (names.userAddress, .bytes 32)]
+
 /-- State effects are ordered transaction instructions, not circuit nodes.
 A read binds a typed name for later guards/writes. Outputs are bound explicitly
 by an entrypoint. The backend must bind these values into the accepted transcript. -/
@@ -433,6 +444,7 @@ inductive Effect where
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | requireContractCaller (address : Expr (.bytes 32))
+  | readCaller (destinations : CallerBindings)
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
@@ -1000,7 +1012,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
-          .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. => pure ()
+          .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
+          .readCaller .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on ledger reads, writes, and require effects"}
@@ -1031,6 +1044,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .requireContractCaller address => do
         address.validate caps env
         pure []
+      | .readCaller destinations => do
+        (.bytes 32 : Ty).validate caps
+        pure destinations.types
       | .emitEvent _ payload =>
         payload.validate caps env
         pure []
