@@ -1,0 +1,62 @@
+{
+  "compilerRevision": "9c8bede7de74a75e3dbe409c05e67758a001feb9",
+  "nodeImage": "midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a",
+  "sourceSha256": "1a615986a4594787058f23369ce1ba8710148fcc1b4f5e09aef7792e34c117f0",
+  "compilerBinarySha256": "ac2f4cab95e67c30519ea276657198111f29d39c82dae3d2e7786959495fb788",
+  "ledgerParametersSha256": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+  "proofParametersSha256": "b9009f1098bcefffec3c461ab3a5e3a17f7e5599f0f08c70fcdc55a89227bcbd",
+  "equalNativeArtifactsForDirectAndQualifiedCalls": true,
+  "exactPredictedStateAccepted": true,
+  "artifacts": {
+    "caller": {
+      "contract": "AggregateSerialization.PaymentCaller",
+      "operation": "claim",
+      "circuitSha256": "daa55e5d43005d92ce0c7ac3ecd0d739f6e9ebfb2b5e840ee826a755d6f17bd4",
+      "planSha256": "9f596a7dce0920b4223e5e218c5f7fda0d89f9fe41cf86c2acb1cbfcc562c7f7",
+      "bundleManifestSha256": "a0b033278b928a8e978a1445f83209f07fd3b0e3eeea00ce4f9148b2482f4fc3",
+      "k": 9,
+      "rows": 337
+    },
+    "callee": {
+      "contract": "AggregateSerialization.Codec",
+      "operation": "inspectPayment",
+      "circuitSha256": "22798cfb9674cb36d6d5d3b782aaaae6f1c7d988ca1b6f9614faedf1e7a91e76",
+      "planSha256": "5ce8179c6db794a388ad61f5fcb59a239f02fb1ac535ebcf241e7991921c54b8",
+      "bundleManifestSha256": "2ecdb284671f48e12559d5f2971b41e75348c0015280add9d026f605a179e1ae",
+      "k": 9,
+      "rows": 352
+    }
+  },
+  "blockHash": "c874dae52e46634cc191cefb6c132d4a743a2d89907ded7eb99429780aea64ca",
+  "callee": {
+    "address": "d8880fb3c451de1852f3c8bcce5f55ddf39b3a4ce18ac92e418f4e81d1f05f7e",
+    "stateSha256": "38771111e0672cc0ba2e7eb4ac0c1133f3b2f40d45ec145b002c06b5b886bdb5"
+  },
+  "caller": {
+    "address": "89cc5db18941a67c261cddbd62073c6684b6c3547249d9d9a4a236c47200be49",
+    "stateSha256": "dc0da2ee70570ec460b0b2703fb1ce98c4fc5c6b2b10ef6156a626e65eb0e0c7"
+  },
+  "deployments": [
+    {
+      "address": "89cc5db18941a67c261cddbd62073c6684b6c3547249d9d9a4a236c47200be49",
+      "blockHash": "49647aa55a92cbf26f09176b895dc125e6fe8a78ef01560077c87ca1b24e291a",
+      "height": 4,
+      "transactionId": "eb74f095b57999dd894a4595e1fe471b736c5e734aa2d4bf2d42cf27ae4f4c87"
+    },
+    {
+      "address": "d8880fb3c451de1852f3c8bcce5f55ddf39b3a4ce18ac92e418f4e81d1f05f7e",
+      "blockHash": "b793f33326f3c3d39caa67718428aa913f6265f42bd01c5b599986361b54a67a",
+      "height": 7,
+      "transactionId": "800c622363713a166a1803c6a653c55a42c32fa3195df8d5120d87e04ba0d8e1"
+    }
+  ],
+  "extrinsicHash": "86406ab63babe938a7768585e198d243e25cbb228d4e3aea8014b8b382214da8",
+  "extrinsicIndex": 4,
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "height": 10,
+  "independentProvers": false,
+  "intentId": "c5d38dea4e1c2aacd1cf22484a61e0cf6f5c386f3c807fb201fe2596309db310",
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "publicExchange": null,
+  "transactionId": "92459573b0ff1d2387188d8ba2fb2dcd4cc05121609abae89e09b2261a8880dc"
+}

@@ -126,6 +126,12 @@ Run `python3 tests/compact/contract-interfaces.py /path/to/compactc` with
 Compact 0.36.1.
 [Compact contract types](https://docs.midnight.network/compact/reference/compact-reference#contract-types)
 
+The qualified payment caller and callee emitted byte-identical ZKIR and
+Impact plans to the direct-call version. Both proofs finalized in one
+Ledger 9 localnet transaction at height 10. The native client matched
+both finalized state byte strings to their expected values.
+[Named-interface composition receipt](named-interface-composition-receipt.json)
+
 ### Bind the entrypoint and read the address from a registry
 
 The two-argument form derives the entrypoint selector from the same declared

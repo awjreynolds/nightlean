@@ -1295,7 +1295,8 @@
         "tests/ContractInterfaces.lean",
         "tests/compact/contract-interfaces.py",
         "examples/AggregateSerialization.lean",
-        "runtime/tests/aggregate_serialization.rs"
+        "runtime/tests/aggregate_serialization.rs",
+        "docs/development/named-interface-composition-receipt.json"
       ],
       "equivalence": "unverified"
     },
