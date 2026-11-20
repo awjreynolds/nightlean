@@ -2763,8 +2763,8 @@
       "id": "C-ADT-HISTORICMERKLETREE-CHECKROOT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.checkRoot",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level membership sees roots retained by earlier writes, including writes in the same call. Private expected roots require disclosure.",
       "source": [
         "adt"
       ],
@@ -2773,15 +2773,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insert",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level Field appends use the canonical mdn:lh leaf digest. The depth-two cursor and retained roots match Compact.",
       "source": [
         "adt"
       ],
@@ -2790,15 +2794,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTHASH",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertHash",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level Bytes32 digest appends retain both previous roots and the updated root.",
       "source": [
         "adt"
       ],
@@ -2807,15 +2815,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTHASHINDEX",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertHashIndex",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level prehashed indexed writes preserve the highest append cursor, record the new root and reject out-of-range indices.",
       "source": [
         "adt"
       ],
@@ -2824,15 +2836,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEX",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndex",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level Field writes support sparse indices and replacement at capacity. Both retain the resulting root.",
       "source": [
         "adt"
       ],
@@ -2841,15 +2857,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEXDEFAULT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndexDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "For root-level Field leaves, write zero at the selected index. The Compact oracle compares this operation with insertIndexDefault.",
       "source": [
         "adt"
       ],
@@ -2858,15 +2878,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-ISFULL",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.isFull",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level fullness follows the append cursor, including after sparse writes and replacement at capacity.",
       "source": [
         "adt"
       ],
@@ -2875,15 +2899,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-RESETHISTORY",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.resetHistory",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level resetHistory keeps the current root and append cursor. The guarded read observes the reset when active.",
       "source": [
         "adt"
       ],
@@ -2892,15 +2920,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level full reset restores an empty tree, cursor zero and the initial root in history.",
       "source": [
         "adt"
       ],
@@ -2909,7 +2941,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

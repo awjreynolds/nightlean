@@ -189,7 +189,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .merkleTreeCheckRoot ..
       | some condition, .merkleTreeInsertHash ..
       | some condition, .merkleTreeInsertHashIndex ..
-      | some condition, .merkleTreeReset .. =>
+      | some condition, .merkleTreeReset .. | some condition, .merkleTreeResetHistory .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
@@ -306,7 +306,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
         (← expression env span hash) activeControl
       checkSink {description := s!"public MerkleTree index '{state}'", span}
         (← expression env span index) activeControl
-    | .merkleTreeReset state =>
+    | .merkleTreeReset state | .merkleTreeResetHistory state =>
       checkSink {description := s!"public MerkleTree mutation guard '{state}'", span}
         [] activeControl
     | .insertPath state keys _ payload | .writePath state keys _ payload =>

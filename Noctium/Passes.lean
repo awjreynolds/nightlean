@@ -112,7 +112,7 @@ theorem pruneEntrypoint_validate (caps : Capabilities) (state : List StateDecl) 
     (pruneEntrypoint entry).validate caps state = entry.validate caps state := by
   unfold Entrypoint.validate
   dsimp only [pruneEntrypoint]
-  rw [pruneCircuit_validate]
+  simp only [pruneCircuit_validate]
   rfl
 
 theorem pruneEntrypoint_run (ctx : EvalContext) (env : EvalEnv)

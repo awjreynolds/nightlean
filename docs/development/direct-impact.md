@@ -171,3 +171,41 @@ The native client finalized deployment at height 5 and an indexed Field write
 at height 8 on Ledger 9 localnet. It matched the predicted state bytes for both
 receipts. The indexed Field relation used k=13 and 2176 rows.
 [Localnet receipt](indexed-ordinary-merkle-localnet-receipt.json)
+
+## Retain and clear Merkle root history
+
+Declare `historicMerkleTree claims : 2` in a contract to retain historical
+roots. Use the regular Merkle append and indexed write syntax. Choose
+`insertHash` for a prehashed Bytes32 leaf or `insertField` for a Field.
+Each write records the resulting root. `checkRoot` tests membership in the
+retained history, including a root recorded earlier in the same call.
+
+```lean
+insertField claims := disclose(leaf)
+checkRoot claims against disclose(expectedRoot) as knownRoot
+resetHistory claims
+```
+
+`resetHistory` keeps the current root and cursor. The full `reset` restores
+the empty tree, cursor zero and the empty root in history. For a root-level
+Field tree, writing an explicit zero at an index matches the Field default
+operation in Compact. [Midnight ledger data types](https://docs.midnight.network/compact/reference/ledger-adt#historicmerkletreenat-value_type)
+
+The [Lean fixture](../../tests/HistoricMerkle.lean) and
+[Compact oracle](../../tests/compact/historic-merkle.mjs) cover the two
+resets, membership across writes, sparse insertion, and replacement at
+capacity. The native checker validates the generated relation and rejects a
+changed membership result.
+
+```sh
+lake build noctium Noctium:shared
+mkdir -p build/experiments
+scratch=$(mktemp -d "$PWD/build/experiments/historic-merkle.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+.lake/build/bin/noctium compile tests/HistoricMerkle.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output "$scratch/contract"
+NOCTIUM_NATIVE_TEST_ARTIFACTS="$scratch/contract" \
+  cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+    --no-default-features --features zkir-321 --test merkle_history -- --ignored
+```
