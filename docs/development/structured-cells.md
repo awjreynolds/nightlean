@@ -38,7 +38,7 @@ Assertions and partial computations retain guarded evaluation. Active invalid ca
 
 This route supports the existing scalar value types: Native, Bool, bounded UInt, fixed bytes, Jubjub scalar/point and the registered foreign field/curve families. Key types follow the existing ledger validation. The native map cases exercise Bytes32 keys with Native and Bytes33 values. The helper resource policy bounds the owning schema to 256 declarations, and results are scalar or Unit.
 
-Typed providers and private staging now share the same structured body with ordered state effects. Aggregate values, nested ledger trees and complete proof/ledger qualification remain under [structured native control](https://github.com/awjreynolds/noctium/issues/43). Existing contract effect blocks retain broader state operations. Ordinary `Helpers.compile` and portable host-control plans reject ledger statements. `stage` retains its private journal meaning.
+Typed providers and private staging share the same structured body with ordered state effects. The nested scalar example below has native proof and finalized Ledger 9 evidence. Aggregate values and nested ledger trees through helper statements remain open. Existing contract effect blocks retain broader state operations. Ordinary `Helpers.compile` and portable host-control plans reject ledger statements. `stage` retains its private journal meaning.
 
 ## Focused evidence
 
@@ -76,6 +76,38 @@ The focused Rust case covers balance 3, provider result 7, updated balance/retur
 This source integration uses scalar cell/map values and scalar or Unit results. Native and typed byte/curve cases have scoped runtime evidence below. Aggregate state bodies, portable bindings and general source-preservation proofs need separate evidence. No new opcode, key, proof or deployment accompanies this slice.
 
 State-dependent witness implementation revision: `4b3b37e018ed5f8406caa3a91bcbf3428d9925a5`. Four focused runtime cases pass in 0.02 seconds. Two existing guarded-witness cases pass in 0.01 seconds. The compiler and source export pass.
+
+## Nested hosted branches on Ledger 9
+
+The [guarded fixture](../../tests/GuardedLedgerLocalnet.lean) explicitly releases two private activity flags. The active path narrows an input, writes a marker, reads the balance for a typed provider, writes and rereads the balance, and stages the provider result. The other branches mark their selection and skip the provider and stage.
+
+The native bundle validator now observes the ordered scope of grouped `let` bindings in witness guards. Each initializer sees the earlier bindings. A reference to a later binding remains a free reference and must resolve to an available input.
+
+The [Compact oracle](../../tests/compact/GuardedLedger.compact) and [runner](../../tests/compact/guarded-ledger.mjs) exercise the same three public state transitions and two active failures using Compact 0.36.1 and runtime 0.21.0. The Rust fixture uses Noctium's Lean artifacts, native prover and transaction SDK.
+
+The pinned Ledger 9 node finalized the deployment and all three calls at one address. The SDK matched the full predicted contract bytes at each inclusion block. The active call committed its staged private write after finality. The two inactive calls staged zero writes.
+
+| Finalized block | Outer guard | Inner guard | Balance | Mark | Provider calls |
+| ---: | --- | --- | ---: | ---: | ---: |
+| 75 | Deployment | | 3 | 0 | 0 |
+| 78 | True | True | 10 | 1 | 1 |
+| 81 | True | False | 10 | 2 | 0 |
+| 84 | False | True | 10 | 3 | 0 |
+
+The active native transcript wrote the mark, read the original balance, wrote the updated balance, then read it for the assertion and the return. Inactive calls only wrote the mark and read the balance for the return. The fixture also rejects an active narrowing overflow, a failed active assertion, and a changed proof transcript. The compiled relation uses K9 and 282 rows. [Retained localnet receipts](guarded-ledger-localnet-receipts.json)
+
+Compile the guarded fixture with `--emit ledger --emit witness` and the 3.2.1 target profile. Assemble its authenticated bundle with the native keys, live ledger parameters and both witness sidecars. [Bundle workflow](portable-artifacts.md#build-and-use)
+
+```sh
+NOCTIUM_GUARD_BUNDLE=/path/to/bundle \
+NOCTIUM_GUARD_MANIFEST_SHA256=MANIFEST_SHA256 \
+NOCTIUM_GUARD_PARAMETER_CACHE=/path/to/verified/parameters \
+NOCTIUM_GUARD_NODE=http://127.0.0.1:19944 \
+NOCTIUM_GUARD_JOURNAL=/absolute/path/to/development-journal \
+cargo test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321,localnet \
+  --test guarded_ledger_localnet -- --ignored --nocapture
+```
 
 ## Typed byte and curve state
 

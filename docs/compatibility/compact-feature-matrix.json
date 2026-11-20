@@ -618,7 +618,7 @@
       "layer": "language",
       "surface": "Conditional expressions and branches",
       "noctiumStatus": "subset",
-      "notes": "select evaluates both arms in Noctium. This does not establish Compact branch/short-circuit equivalence.",
+      "notes": "Eager select evaluates both arms. Structured nested branches skip inactive effects and typed callbacks. One scalar guarded workload matches the pinned Compact oracle and finalized on Ledger 9.",
       "source": [
         "reference"
       ],
@@ -628,7 +628,8 @@
       ],
       "observedEvidence": [
         "Noctium/Semantics.lean",
-        "scripts/zkir/native-runtime.mjs"
+        "scripts/zkir/native-runtime.mjs",
+        "docs/development/guarded-ledger-localnet-receipts.json"
       ],
       "equivalence": "unverified",
       "nativeBranchUpdate": {
@@ -1080,7 +1081,7 @@
       "layer": "private-runtime",
       "surface": "Witness declarations and callbacks",
       "noctiumStatus": "subset",
-      "notes": "Finite scalar/composite typed source calls now use the native resumable Rust/C++ runtime. Broader witness-language coverage remains open.",
+      "notes": "Typed source calls use the native resumable Rust/C++ runtime. The nested scalar guarded ledger fixture finalized with skipped callbacks and private-state commit after finality through the Rust SDK.",
       "source": [
         "reference"
       ],
@@ -1092,7 +1093,8 @@
       "observedEvidence": [
         "docs/development/typed-witnesses.md",
         "docs/development/typed-witness-qualification.md",
-        "tests/witness62-public/qualification-evidence.json"
+        "tests/witness62-public/qualification-evidence.json",
+        "docs/development/guarded-ledger-localnet-receipts.json"
       ],
       "equivalence": "unverified",
       "implementationUpdate": {

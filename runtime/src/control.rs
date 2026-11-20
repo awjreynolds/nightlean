@@ -2428,6 +2428,22 @@ fn guard_references(
             guard_references(field(value, "body")?, scope, references)?;
             scope.pop();
         }
+        Json::Object(object) if object.get("tag").and_then(Json::as_str) == Some("lets") => {
+            let outer = scope.len();
+            for binding in list(value, "bindings")? {
+                let Some([name, initializer]) = binding.as_array().map(Vec::as_slice) else {
+                    bail!("invalid native witness guard binding");
+                };
+                guard_references(initializer, scope, references)?;
+                let name = name
+                    .as_str()
+                    .ok_or_else(|| anyhow!("invalid native witness guard binding name"))?;
+                scope.push(name.to_owned());
+            }
+            let result = guard_references(field(value, "body")?, scope, references);
+            scope.truncate(outer);
+            result?;
+        }
         Json::Object(object) => {
             for child in object.values() {
                 guard_references(child, scope, references)?;
@@ -2440,6 +2456,26 @@ fn guard_references(
         }
         Json::Null | Json::Bool(_) | Json::Number(_) | Json::String(_) => {}
     }
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn grouped_guard_bindings_only_scope_later_expressions() -> Result<()> {
+    let reference = |name: &str| json!({"tag": "reference", "name": name});
+    let guard = json!({
+        "tag": "lets",
+        "bindings": [
+            ["first", reference("input")],
+            ["second", reference("first")],
+            ["third", reference("later")],
+            ["later", reference("second")]
+        ],
+        "body": reference("third")
+    });
+    let mut references = BTreeSet::new();
+    guard_references(&guard, &mut Vec::new(), &mut references)?;
+    assert_eq!(references, BTreeSet::from(["input".into(), "later".into()]));
     Ok(())
 }
 
