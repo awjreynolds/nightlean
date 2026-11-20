@@ -99,6 +99,62 @@ The current SDK checks a finalized receipt against the full predicted state.
 Reconciliation for a finalized guaranteed-prefix outcome requires its own
 receipt and private-journal handling. [Prefix-only receipt tracking](https://github.com/awjreynolds/noctium/issues/134)
 
+## Use a ledger set
+
+A set stores each member as a key with a native `Null` value. Declare a
+top-level set with `set registered : Bytes32`, or a map of sets with
+`tree groups : Native => Set Bytes32`. Use ordinary keyed `insert`,
+`member` and `remove`. Read the cardinality with `size`, test emptiness with
+`isEmpty`, and clear the selected set with `reset`.
+
+Inserting a member twice preserves cardinality. Removing an absent member
+preserves the set. A nested call must initialize its parent path first.
+Resetting one nested set leaves neighboring sets intact. A guarded
+inactive read uses the usual zero or false value without traversing
+the guarded path. As with map keys, explicitly disclose any private
+input used to select a public ledger key.
+
+The [Lean example](../../tests/NativeSet.lean) and
+[Compact oracle](../../tests/compact/native-set.mjs) cover Bytes32
+members under a Native/Field parent key.
+[Midnight Set reference](https://docs.midnight.network/compact/reference/ledger-adt#setvalue_type)
+
+The native VM and ZKIR checker replayed the Compact transitions with fresh
+Lean artifacts. The read-only `isEmpty` case produced the same public
+transcript for two different nonempty cardinalities. The Rust SDK
+finalized a first insertion into both sets at Ledger 9.1.0.1 localnet
+block 151. The observed state matched the exact prediction, and the
+relation measured K9 and 467 rows. The remaining differential cases ran
+off chain. Shielded coin insertion and SDK host enumeration remain
+separate. [Native fixture](../../runtime/tests/native_set.rs) · [Localnet receipt](native-set-localnet-receipt.json)
+
+## Read the ledger caller
+
+`readCaller as (present, isContract, contractId, userId)` binds two
+Boolean flags and two `Bytes32` addresses. A contract caller sets both
+flags and fills `contractId`. A user caller sets only `present` and
+fills `userId`. An absent caller or inactive guard yields false flags
+and zero bytes. A private guard needs disclosure.
+
+The native ledger context supplies the caller. The Impact plan checks
+the presence, tag and active address against the ZKIR statement. A
+different ledger caller fails the same transcript check. The Rust SDK
+ordinary-call path prepares an absent caller. Midnight derives a
+top-level user caller only in the relevant unshielded-input context, and
+support for deriving that value during SDK preparation needs separate
+qualification. [Midnight caller semantics](https://docs.midnight.network/compact/reference/ledger-adt#caller)
+
+[Lean fixture](../../tests/NativeCaller.lean) ·
+[Compact oracle](../../tests/compact/caller.mjs) ·
+[Native checker](../../runtime/tests/native_caller.rs)
+
+The Rust SDK finalized the deployment at Ledger 9.1.0.1 localnet block
+67 and the active top-level call at block 70. Exact state bytes matched
+the prediction. A separate decoder verified that the `recorded` cell
+changed from true to false. The relation measured K9 and 312 rows. The
+contract and user variants ran in the native VM and Compact runtime.
+[Localnet receipt](native-caller-localnet-receipt.json)
+
 ## Reset a ledger cell
 
 `reset cellName` writes the canonical default of the cell's declared scalar
@@ -195,6 +251,37 @@ The [localnet receipt](native-token-balance-localnet-receipt.json) records a
 finalized ordinary call for an absent unshielded token. The call wrote zero
 over the previous recorded value of 17. Shielded and nonzero cases use
 simulated starting balances with the pinned native checker.
+## Compare the block time
+
+`blockTimeBefore(deadline) as before` and `blockTimeAfter(deadline) as after`
+compare the ledger block time against a `UInt 64` deadline in Unix seconds.
+Both are false at equality. A guarded inactive comparison supplies false
+without reading the clock. A private deadline or activity condition needs
+an explicit disclosure because the native transcript exposes the comparison
+operands and activity. [Midnight kernel reference](https://docs.midnight.network/compact/reference/ledger-adt#blocktimelessthan)
+
+The compiler emits native Impact operations to fetch the block time and
+bind the Boolean result to the ZKIR statement. The native VM re-evaluates
+the comparison against its execution context. If the clock crosses the
+deadline and changes a bound result, the transcript fails. The caller
+must prepare a new proof for the changed result.
+
+Use `PreparedProof::from_config_in_block` with a prospective ledger
+`BlockContext` in the Rust SDK. The native localnet client takes this
+context from its checked node snapshot. The low-level
+`prepare_with_context` also accepts an explicit query context.
+An active comparison fails preparation when no clock is supplied.
+The [source fixture](../../tests/NativeBlockTime.lean),
+[Compact oracle](../../tests/compact/block-time.mjs) and
+[native checker fixture](../../runtime/tests/native_block_time.rs)
+check the strict boundaries. A hosted SDK path that does not provide a
+block context still requires integration.
+
+On Ledger 9.1.0.1 localnet, the Rust SDK finalized deployment at block 67
+and a call using both strict predicates at block 70. The exact observed
+contract state matched the SDK prediction at both blocks. Native sizing
+reported K8 and 126 rows. The deadline-crossing rejection was checked in
+native VM replay. [Localnet receipt](native-block-time-localnet-receipt.json)
 
 ## Settle tagged token inputs and outputs
 

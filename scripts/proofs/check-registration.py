@@ -125,7 +125,10 @@ def main() -> int:
         audit(model, proofs, "0" * 64, expected_error="model_pin_mismatch")
 
         # Same module and declaration names, valid changed specification/proofs.
-        build(source.replace("outputs = [] ∧ after = before", "after = before ∧ outputs = []"))
+        original_postcondition = "outputs = [] ∧ after = withoutSettlementEffects before"
+        changed_postcondition = "after = withoutSettlementEffects before ∧ outputs = []"
+        assert source.count(original_postcondition) == 1, "registration fixture postcondition mutation target changed"
+        build(source.replace(original_postcondition, changed_postcondition))
         changed_model = export("changed-model.ndjson", MODEL_ROOTS)
         changed_proofs = export("changed-proofs.ndjson", ["VerificationFixture.functional", "VerificationFixture.privacy"])
         audit(changed_model, changed_proofs, pin, privacy=True, expected_error="model_pin_mismatch")

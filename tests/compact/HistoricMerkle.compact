@@ -1,0 +1,45 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger claims: HistoricMerkleTree<2, Field>;
+
+export circuit appendHash(hash: Bytes<32>): [] {
+  claims.insertHash(disclose(hash));
+}
+
+export circuit appendField(value: Field): [] {
+  claims.insert(disclose(value));
+}
+
+export circuit writeHashIndex(index: Uint<64>, hash: Bytes<32>): [] {
+  claims.insertHashIndex(disclose(hash), disclose(index));
+}
+
+export circuit writeFieldIndex(index: Uint<64>, value: Field): [] {
+  claims.insertIndex(disclose(value), disclose(index));
+}
+
+export circuit restoreDefaultField(index: Uint<64>): [] {
+  claims.insertIndexDefault(disclose(index));
+}
+
+export circuit checkDigest(digest: MerkleTreeDigest): Boolean {
+  return claims.checkRoot(disclose(digest));
+}
+
+export circuit appendAndCheck(hash: Bytes<32>, digest: MerkleTreeDigest): Boolean {
+  claims.insertHash(disclose(hash));
+  return claims.checkRoot(disclose(digest));
+}
+
+export circuit fullStatus(): Boolean {
+  return claims.isFull();
+}
+
+export circuit clearHistory(): [] {
+  claims.resetHistory();
+}
+
+export circuit resetTree(): [] {
+  claims.resetToDefault();
+}

@@ -110,6 +110,9 @@ fn default_value(decl: &StateDecl) -> Result<Json> {
         if schema.get("counter") == Some(&Json::Bool(true)) {
             return Ok(json!("0"));
         }
+        if schema.get("set").is_some() {
+            return Ok(json!([]));
+        }
         if let Some(ty) = schema.get("scalar").and_then(Json::as_str) {
             return scalar_zero(ty);
         }
@@ -120,7 +123,7 @@ fn default_value(decl: &StateDecl) -> Result<Json> {
             )?);
         }
     }
-    // create_state validates map/List schemas and requires these defaults to be empty.
+    // create_state validates collection schemas and requires these defaults to be empty.
     Ok(json!([]))
 }
 

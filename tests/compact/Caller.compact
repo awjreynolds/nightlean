@@ -1,0 +1,13 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger recorded: Boolean;
+
+export circuit lookup(enabled: Boolean): Maybe<PublicAddress> {
+  if (disclose(enabled)) {
+    const caller = kernel.caller();
+    recorded = caller.is_some;
+    return caller;
+  }
+  return none<PublicAddress>();
+}

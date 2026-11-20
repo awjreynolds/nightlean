@@ -4,7 +4,8 @@ use crate::artifacts::{Role, VerifiedBundle};
 use crate::create_state;
 use crate::zkir::IrSource;
 use crate::{
-    Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare_with_context,
+    Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value,
+    prepare_with_context_and_block_time,
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::time::Timestamp;
@@ -16,7 +17,7 @@ use ledger::{
     },
 };
 use onchain_runtime::{
-    context::QueryContext,
+    context::{BlockContext, QueryContext},
     result_mode::ResultModeVerify,
     state::{ContractMaintenanceAuthority, ContractOperation, ContractState, EntryPointBuf},
     transcript::Transcript,
@@ -602,7 +603,7 @@ fn build(
     ttl: u64,
 ) -> Result<Built> {
     build_with_rng(
-        plan, config, parameters, operation, circuit, ttl, &mut OsRng,
+        plan, config, parameters, operation, circuit, ttl, None, &mut OsRng,
     )
 }
 fn build_with_rng(
@@ -612,13 +613,14 @@ fn build_with_rng(
     operation: ContractOperation,
     circuit: &IrSource,
     ttl: u64,
+    block: Option<&BlockContext>,
     mut rng: &mut (impl Rng + CryptoRng),
 ) -> Result<Built> {
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     let (initial, entry) = contract_initial_state(plan, &config.state, &operation)?;
     let deployment = ContractDeploy::new(&mut rng, initial.clone());
     build_for_deployment(
-        plan, config, parameters, operation, circuit, ttl, initial, entry, deployment, None,
+        plan, config, parameters, operation, circuit, ttl, initial, entry, deployment, None, block,
         &mut rng,
     )
 }
@@ -634,14 +636,28 @@ fn build_for_deployment(
     entry: EntryPointBuf,
     deployment: ContractDeploy<Db>,
     retained_intent: Option<&NativeIntent>,
+    block: Option<&BlockContext>,
     rng: &mut (impl Rng + CryptoRng),
 ) -> Result<Built> {
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     let address = deployment.address();
     let mut context = QueryContext::new(initial.data.clone(), address);
     context.call_context.balance = initial.balance.clone();
-    // Repartition the evaluated program for the actual communication commitment.
-    let evaluated = prepare_with_context(plan, &config.inputs, context.clone(), parameters)?;
+    // prepare's zero-randomness preimage is diagnostic only. Reuse only its
+    // evaluated program and private fields, then repartition for this commitment.
+    if let Some(block) = block {
+        context.call_context.tblock = block.tblock;
+        context.call_context.tblock_err = block.tblock_err;
+        context.call_context.parent_block_hash = block.parent_block_hash;
+        context.call_context.last_block_time = block.last_block_time;
+    }
+    let evaluated = prepare_with_context_and_block_time(
+        plan,
+        &config.inputs,
+        context.clone(),
+        parameters,
+        block.is_some(),
+    )?;
     let call_input = evaluated.call_input()?;
     let call_output = evaluated.call_output()?;
     let randomness = nonzero_random(rng)?;
@@ -789,6 +805,7 @@ pub(crate) fn prepare_call_for_target(
         entry,
         (**deployment).clone(),
         Some(&target.intent),
+        None,
         rng,
     )?;
     Ok(built.call)
@@ -886,6 +903,7 @@ pub(crate) fn prepare_call_for_ready_state(
         entry,
         (**deployment).clone(),
         Some(target.intent()),
+        None,
         rng,
     )?;
     ensure!(
@@ -903,6 +921,7 @@ pub(crate) fn prepare_call(
     verifier: VerifierKey,
     circuit: &IrSource,
     ttl: u64,
+    block: Option<&BlockContext>,
     rng: &mut (impl Rng + CryptoRng),
 ) -> Result<(NativeIntent, NativeIntent)> {
     let built = build_with_rng(
@@ -912,6 +931,7 @@ pub(crate) fn prepare_call(
         ContractOperation::new(Some(verifier), None),
         circuit,
         ttl,
+        block,
         rng,
     )?;
     Ok((built.deploy, built.call))
@@ -1140,6 +1160,7 @@ mod tests {
                 ContractOperation::new(None, None),
                 &circuit,
                 2_000_000_000,
+                None,
                 &mut rng,
             )
             .err()

@@ -307,6 +307,7 @@ scoped syntax "constructor" "(" nlconstructorparam,* ")" "where" nlconstructorin
 scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
 scoped syntax "counter" ident : nlstate
 scoped syntax "merkleTree" ident ":" num : nlstate
+scoped syntax "historicMerkleTree" ident ":" num : nlstate
 declare_syntax_cat nlcompositefield
 scoped syntax ident ":" nltype : nlcompositefield
 scoped syntax "tree" ident ":" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
@@ -316,6 +317,13 @@ scoped syntax "tree" ident ":" nltype "=>" ident "struct" ident "{" nlcompositef
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" ident "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "Counter" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" "Counter" : nlstate
+scoped syntax "set" ident ":" nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" "Set" nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "Set" nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "MerkleTree" num : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "HistoricMerkleTree" num : nlstate
+scoped syntax "tree" ident ":" nltype "=>" "MerkleTree" num : nlstate
+scoped syntax "tree" ident ":" nltype "=>" "HistoricMerkleTree" num : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 
 declare_syntax_cat nlleaves
@@ -351,6 +359,8 @@ scoped syntax "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax ident nlpath "as" ident : nleffect
+scoped syntax "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
+scoped syntax "when" nlexpr "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
 scoped syntax "increment" ident "by" num : nleffect
 scoped syntax "increment" ident "[" nlexpr "]" "by" num : nleffect
 scoped syntax "increment" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
@@ -358,7 +368,9 @@ scoped syntax "decrement" ident "by" num : nleffect
 scoped syntax "decrement" ident "[" nlexpr "]" "by" num : nleffect
 scoped syntax "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
 scoped syntax "reset" nlpath : nleffect
+scoped syntax "resetHistory" nlpath : nleffect
 scoped syntax "insertHash" nlpath ":=" nlexpr : nleffect
+scoped syntax "insertField" nlpath ":=" nlexpr : nleffect
 scoped syntax "require" nlexpr : nleffect
 scoped syntax "absent" ident "[" nlexpr "]" : nleffect
 scoped syntax "write" ident ":=" nlexpr : nleffect
@@ -373,6 +385,9 @@ scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffe
 scoped syntax "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "popFront" nlpath : nleffect
 scoped syntax "remove" nlpath : nleffect
+scoped syntax "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
+scoped syntax "blockTimeAfter(" nlexpr ")" "as" ident : nleffect
+scoped syntax "insert" nlpath : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
@@ -391,7 +406,9 @@ scoped syntax "when" nlexpr "decrement" ident "by" num : nleffect
 scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "by" num : nleffect
 scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
 scoped syntax "when" nlexpr "reset" nlpath : nleffect
+scoped syntax "when" nlexpr "resetHistory" nlpath : nleffect
 scoped syntax "when" nlexpr "insertHash" nlpath ":=" nlexpr : nleffect
+scoped syntax "when" nlexpr "insertField" nlpath ":=" nlexpr : nleffect
 scoped syntax "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
@@ -399,6 +416,9 @@ scoped syntax "when" nlexpr "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : 
 scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
 scoped syntax "when" nlexpr "remove" nlpath : nleffect
+scoped syntax "when" nlexpr "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
+scoped syntax "when" nlexpr "blockTimeAfter(" nlexpr ")" "as" ident : nleffect
+scoped syntax "when" nlexpr "insert" nlpath : nleffect
 
 declare_syntax_cat nlstatement
 scoped syntax nleffect : nlstatement
@@ -1318,9 +1338,11 @@ private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
   match schema, keys with
   | value, [] => pure ([], value)
   | .scalar _, _ :: _ => throwError "nested map path continues through a scalar value"
+  | .set _, _ :: _ => throwError "set members have no readable value"
   | .counter, _ :: _ => throwError "nested map path continues through a Counter value"
   | .composite .., _ :: _ => throwError "nested map path continues through a composite value"
   | .«list» .., _ :: _ => throwError "nested map path continues through a list value"
+  | .merkleTree .., _ :: _ => throwError "nested map path continues through a MerkleTree value"
   | .map keyTy child, key :: rest => do
     let lowered ← checkedExpression env key keyTy
     let (tail, result) ← lowerTreePath env child rest
@@ -1329,6 +1351,17 @@ private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
 private def pathKeysTerm (keys : List (TSyntax `term)) : CommandElabM (TSyntax `term) := do
   let list ← pathKeyListTerm keys
   `(($list : List Noctium.PathKey))
+
+private def lowerCollectionEntryPath (env : Bindings) (schema : LedgerValueType)
+    (keys : List (TSyntax `nlexpr)) :
+    CommandElabM (TSyntax `term × LedgerValueType) := do
+  let some finalKey := keys.getLast? | throwError "map or set operation requires a key"
+  let (parents, parent) ← lowerTreePath env schema (keys.take (keys.length - 1))
+  let some keyTy := parent.collectionKey?
+    | throwErrorAt finalKey "entry path must select a map or set"
+  let value ← checkedExpression env finalKey keyTy
+  let key ← `(Noctium.PathKey.mk $(← tyTerm keyTy) $value)
+  pure (← pathKeysTerm (parents ++ [key]), parent)
 
 private partial def sourcePathParts (path : TSyntax `nlpath) :
     CommandElabM (TSyntax `ident × List (TSyntax `nlexpr)) := do
@@ -1339,22 +1372,45 @@ private partial def sourcePathParts (path : TSyntax `nlpath) :
     pure (storage, keys ++ [key])
   | _ => throwErrorAt path "invalid recursive state path"
 
-private def lowerMerkleTreeRoot (schema : List (String × StateKind))
-    (path : TSyntax `nlpath) : CommandElabM (TSyntax `ident × Nat) := do
-  let (storage, keys) ← sourcePathParts path
-  let some (.merkleTree depth) := schema.lookup storage.getId.toString
-    | throwErrorAt storage "MerkleTree operation requires a root MerkleTree state"
-  unless keys.isEmpty do
-    throwErrorAt path "root MerkleTree operations do not accept a key path"
-  unless 2 ≤ depth && depth ≤ 32 do
-    throwErrorAt path "MerkleTree depth must be between 2 and 32"
-  pure (storage, depth)
+private def lowerMerkleTreePath (schema : List (String × StateKind)) (env : Bindings)
+    (path : TSyntax `nlpath) :
+    CommandElabM (TSyntax `ident × TSyntax `term × Nat × _root_.Bool × _root_.Bool) := do
+  let (storage, sourceKeys) ← sourcePathParts path
+  match schema.lookup storage.getId.toString with
+  | some (.merkleTree depth) => do
+    unless sourceKeys.isEmpty do
+      throwErrorAt path "root MerkleTree operations do not accept a key path"
+    unless 2 ≤ depth && depth ≤ 32 do
+      throwErrorAt path "MerkleTree depth must be between 2 and 32"
+    pure (storage, ← pathKeysTerm [], depth, Bool.false, Bool.false)
+  | some (.historicMerkleTree depth) => do
+    unless sourceKeys.isEmpty do
+      throwErrorAt path "root HistoricMerkleTree operations do not accept a key path"
+    unless 2 ≤ depth && depth ≤ 32 do
+      throwErrorAt path "MerkleTree depth must be between 2 and 32"
+    pure (storage, ← pathKeysTerm [], depth, Bool.true, Bool.false)
+  | some (.tree treeSchema) => do
+    unless 1 ≤ sourceKeys.length && sourceKeys.length ≤ 12 do
+      throwErrorAt path "nested MerkleTree paths require one to twelve map keys"
+    let (keys, selected) ← lowerTreePath env treeSchema sourceKeys
+    let .merkleTree depth historic := selected
+      | throwErrorAt path "nested path does not select a MerkleTree"
+    unless 2 ≤ depth && depth ≤ 32 do
+      throwErrorAt path "MerkleTree depth must be between 2 and 32"
+    pure (storage, ← pathKeysTerm keys, depth, historic, Bool.true)
+  | _ => throwErrorAt storage "MerkleTree operation requires a MerkleTree leaf or state"
 
 private def treeStateSchema (schema : List (String × StateKind)) (storage : TSyntax `ident) :
     CommandElabM LedgerValueType := do
   match schema.lookup storage.getId.toString with
   | some (.tree value) => pure value
   | _ => throwErrorAt storage "nested path requires a declared recursive tree state"
+
+private def statePathSchema (schema : List (String × StateKind)) (storage : TSyntax `ident) :
+    CommandElabM LedgerValueType := do
+  let some value := (schema.lookup storage.getId.toString).bind StateKind.pathSchema
+    | throwErrorAt storage "state path requires a declared map or recursive tree"
+  pure value
 
 private def lowerListPath (schema : List (String × StateKind)) (env : Bindings)
     (path : TSyntax `nlpath) :
@@ -1532,12 +1588,18 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr reset $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr resetHistory $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr insertField $_path:nlpath := $_leaf:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertHash $_path:nlpath := $_hash:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertHashIndex $_path:nlpath at $_index:nlexpr := $_hash:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr insertFieldIndex $_path:nlpath at $_index:nlexpr := $_leaf:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlleaves) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr blockTimeBefore($_deadline:nlexpr) as $_dest:ident)
+  | `(nleffect| when $condition:nlexpr blockTimeAfter($_deadline:nlexpr) as $_dest:ident) =>
+    some condition
+  | `(nleffect| when $condition:nlexpr readCaller as ($_present:ident, $_isContract:ident, $_contract:ident, $_user:ident)) => some condition
   | _ => none
 
 private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
@@ -1604,6 +1666,15 @@ private def elaborateTokenBalanceRead (state : EntryEffects) (depth : Nat)
   let term ← `(Noctium.Effect.readTokenBalance $(stringTerm readName) $color $tag $query)
   let updated := {updated with terms := updated.terms.push term}
   bindReadName updated destination.getId.toString readName resultTy
+private def elaborateBlockTimeRead (state : EntryEffects) (depth : Nat)
+    (destination : TSyntax `ident) (before : _root_.Bool) (deadline : TSyntax `nlexpr) :
+    CommandElabM EntryEffects := do
+  let value ← checkedExpression state.env deadline (.uint (2 ^ 64 - 1))
+  let (name, updated) ← freshReadName depth state destination
+  let direction ← if before then `(Bool.true) else `(Bool.false)
+  let term ← `(Noctium.Effect.blockTimeCompare $(stringTerm name) $direction $value)
+  bindReadName {updated with terms := updated.terms.push term}
+    destination.getId.toString name .bool
 
 private def elaborateTreeRead (storage destination : TSyntax `ident)
     (keys : List (TSyntax `nlexpr))
@@ -1643,7 +1714,9 @@ private def elaborateTreeRead (storage destination : TSyntax `ident)
     pure {updated with terms := updated.terms.push term}
   | .composite .. => throwErrorAt destination "native composite ledger reads require a named structure"
   | .map .. => throwErrorAt destination "nested map read must select a scalar or composite value"
+  | .set _ => throwErrorAt destination "Set members do not have readable values"
   | .«list» .. => throwErrorAt destination "List reads require head or length"
+  | .merkleTree .. => throwErrorAt destination "MerkleTree values are read through their operations"
   | .counter => do
     let (readName, updated) ← freshReadName depth state destination
     let pathTerm ← pathKeysTerm path
@@ -1732,7 +1805,7 @@ private def elaborateListPopFront (schema : List (String × StateKind))
 private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax `nlpath)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
-  if let some (.merkleTree depth) := schema.lookup storage.getId.toString then
+  if let some depth := (schema.lookup storage.getId.toString).bind StateKind.merkleTreeDepth? then
     unless sourceKeys.isEmpty do
       throwErrorAt path "root MerkleTree reset does not accept a key path"
     unless 2 ≤ depth && depth ≤ 32 do
@@ -1745,7 +1818,7 @@ private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax
     let value ← `(Noctium.GuardedExpression.zeroValue $type)
     let term ← `(Noctium.Effect.writeCell $(stringTerm storage.getId.toString) $type $value)
     return {state with terms := state.terms.push term}
-  let treeSchema ← treeStateSchema schema storage
+  let treeSchema ← statePathSchema schema storage
   let (keys, value) ← lowerTreePath state.env treeSchema sourceKeys
   let keys ← pathKeysTerm keys
   match value with
@@ -1756,7 +1829,19 @@ private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax
     let _ ← lowerListPath schema state.env path
     let term ← `(Noctium.Effect.listReset $(stringTerm storage.getId.toString) $keys)
     pure {state with terms := state.terms.push term}
-  | _ => throwErrorAt path "reset requires a Counter or List value"
+  | .map .. | .set _ => do
+    let term ← `(Noctium.Effect.emptyMapPath $(stringTerm storage.getId.toString) $keys)
+    pure {state with terms := state.terms.push term}
+  | .merkleTree treeDepth historic => do
+    unless 1 ≤ sourceKeys.length && sourceKeys.length ≤ 12 do
+      throwErrorAt path "nested MerkleTree paths require one to twelve map keys"
+    unless 2 ≤ treeDepth && treeDepth ≤ 32 do
+      throwErrorAt path "MerkleTree depth must be between 2 and 32"
+    let historyTerm ← if historic then `(Bool.true) else `(Bool.false)
+    let term ← `(Noctium.Effect.merkleTreeResetAt
+      $(stringTerm storage.getId.toString) $keys $(natTerm treeDepth) $historyTerm)
+    pure {state with terms := state.terms.push term}
+  | _ => throwErrorAt path "reset requires a Counter, List, Map, Set or MerkleTree value"
 
 private def elaborateCompositePathWrite (schema : List (String × StateKind))
     (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
@@ -1788,17 +1873,18 @@ private def elaborateCompositePathWrite (schema : List (String × StateKind))
 private def elaborateMapRemove (schema : List (String × StateKind))
     (path : TSyntax `nlpath) (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
-  let some finalKey := sourceKeys.getLast?
-    | throwErrorAt path "remove requires at least one map key"
-  let treeSchema ← treeStateSchema schema storage
-  let parents := sourceKeys.take (sourceKeys.length - 1)
-  let (parentTerms, parentSchema) ← lowerTreePath state.env treeSchema parents
-  let .map keyTy _ := parentSchema
-    | throwErrorAt path "remove parent path must select a map"
-  let loweredFinalKey ← checkedExpression state.env finalKey keyTy
-  let finalTerm ← `(Noctium.PathKey.mk $(← tyTerm keyTy) $loweredFinalKey)
-  let keys ← pathKeysTerm (parentTerms ++ [finalTerm])
+  let stateSchema ← statePathSchema schema storage
+  let (keys, _) ← lowerCollectionEntryPath state.env stateSchema sourceKeys
   let term ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keys)
+  pure {state with terms := state.terms.push term}
+
+private def elaborateSetInsert (schema : List (String × StateKind))
+    (path : TSyntax `nlpath) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let (storage, sourceKeys) ← sourcePathParts path
+  let stateSchema ← statePathSchema schema storage
+  let (keys, parent) ← lowerCollectionEntryPath state.env stateSchema sourceKeys
+  let .set _ := parent | throwErrorAt path "insert without a value requires a Set"
+  let term ← `(Noctium.Effect.setInsert $(stringTerm storage.getId.toString) $keys)
   pure {state with terms := state.terms.push term}
 
 private def elaborateNamedPathRead (schema : List (String × StateKind))
@@ -1807,12 +1893,42 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
   let (storage, sourceKeys) ← sourcePathParts path
   match operation with
   | "length" => elaborateListLength schema path destination depth state
+  | "isEmpty" => do
+    unless sourceKeys.length < 16 do
+      throwErrorAt path "map or set emptiness path exceeds the native index limit"
+    let valueType ← statePathSchema schema storage
+    let (keys, selected) ← lowerTreePath state.env valueType sourceKeys
+    unless selected.collectionKey?.isSome do
+      throwErrorAt path "isEmpty path must select a Map or Set"
+    let (readName, updated) ← freshReadName depth state destination
+    let pathTerm ← pathKeysTerm keys
+    let term ← `(Noctium.Effect.mapIsEmpty
+      $(stringTerm storage.getId.toString) $(stringTerm readName) $pathTerm)
+    let updated := {updated with terms := updated.terms.push term}
+    bindReadName updated destination.getId.toString readName .bool
+  | "size" => do
+    unless sourceKeys.length < 16 do
+      throwErrorAt path "map or set size path exceeds the native index limit"
+    let valueType ← statePathSchema schema storage
+    let (keys, selected) ← lowerTreePath state.env valueType sourceKeys
+    unless selected.collectionKey?.isSome do
+      throwErrorAt path "size path must select a Map or Set"
+    let (readName, updated) ← freshReadName depth state destination
+    let pathTerm ← pathKeysTerm keys
+    let term ← `(Noctium.Effect.mapSize
+      $(stringTerm storage.getId.toString) $(stringTerm readName) $pathTerm)
+    let updated := {updated with terms := updated.terms.push term}
+    bindReadName updated destination.getId.toString readName (.uint (2 ^ 64 - 1))
   | "head" => elaborateListHead schema path destination depth state
   | "isFull" => do
-    let (treeState, _) ← lowerMerkleTreeRoot schema path
+    let (treeState, keys, _, _, nested) ← lowerMerkleTreePath schema state.env path
     let (readName, updated) ← freshReadName depth state destination
-    let term ← `(Noctium.Effect.merkleTreeIsFull
-      $(stringTerm treeState.getId.toString) $(stringTerm readName))
+    let term ← if nested then
+      `(Noctium.Effect.merkleTreeIsFullAt
+        $(stringTerm treeState.getId.toString) $keys $(stringTerm readName))
+    else
+      `(Noctium.Effect.merkleTreeIsFull
+        $(stringTerm treeState.getId.toString) $(stringTerm readName))
     bindReadName {updated with terms := updated.terms.push term}
       destination.getId.toString readName .bool
   | "read" =>
@@ -1853,9 +1969,8 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
     | some (.tree treeSchema) => do
       unless sourceKeys.length > 0 do
         throwErrorAt path "tree membership requires at least one key"
-      let (keys, _) ← lowerTreePath state.env treeSchema sourceKeys
+      let (keys, _) ← lowerCollectionEntryPath state.env treeSchema sourceKeys
       let (readName, updated) ← freshReadName depth state destination
-      let keys ← pathKeysTerm keys
       let term ← `(Noctium.Effect.memberPath
         $(stringTerm storage.getId.toString) $(stringTerm readName) $keys)
       let updated := {updated with terms := updated.terms.push term}
@@ -2010,6 +2125,18 @@ private def elaborateEffect (schema : List (String × StateKind))
     let condition ← checkedExpression state.env value .bool
     let term ← `(Noctium.Effect.require $condition)
     state := {state with terms := state.terms.push term}
+  | `(nleffect| readCaller as ($presentName:ident, $isContractName:ident, $contractName:ident, $userName:ident))
+  | `(nleffect| when $_:nlexpr readCaller as ($presentName:ident, $isContractName:ident, $contractName:ident, $userName:ident)) => do
+    let mut names := []
+    for (destination, ty) in [(presentName, Ty.bool), (isContractName, .bool),
+        (contractName, .bytes 32), (userName, .bytes 32)] do
+      let (name, updated) ← freshReadName depth state destination
+      state ← bindReadName updated destination.getId.toString name ty
+      names := names ++ [stringTerm name]
+    let term ← `(Noctium.Effect.readCaller {
+      present := $(names[0]!), isContract := $(names[1]!),
+      contractAddress := $(names[2]!), userAddress := $(names[3]!)})
+    state := {state with terms := state.terms.push term}
   | `(nleffect| tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident)
   | `(nleffect| when $_:nlexpr tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident) =>
     state ← elaborateTokenBalanceRead state depth destination color tag none
@@ -2031,13 +2158,23 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| member $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr member $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "member" path destination depth state
+  | `(nleffect| blockTimeBefore($deadline) as $destination:ident)
+  | `(nleffect| when $_:nlexpr blockTimeBefore($deadline) as $destination:ident) =>
+    state := ← elaborateBlockTimeRead state depth destination Bool.true deadline
+  | `(nleffect| blockTimeAfter($deadline) as $destination:ident)
+  | `(nleffect| when $_:nlexpr blockTimeAfter($deadline) as $destination:ident) =>
+    state := ← elaborateBlockTimeRead state depth destination Bool.false deadline
   | `(nleffect| checkRoot $path:nlpath against $expected:nlexpr as $destination:ident)
   | `(nleffect| when $_:nlexpr checkRoot $path:nlpath against $expected:nlexpr as $destination:ident) => do
-    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let (storage, keys, _, _, nested) ← lowerMerkleTreePath schema state.env path
     let loweredExpected ← checkedExpression state.env expected .native
     let (readName, updated) ← freshReadName depth state destination
-    let term ← `(Noctium.Effect.merkleTreeCheckRoot
-      $(stringTerm storage.getId.toString) $loweredExpected $(stringTerm readName))
+    let term ← if nested then
+      `(Noctium.Effect.merkleTreeCheckRootAt
+        $(stringTerm storage.getId.toString) $keys $loweredExpected $(stringTerm readName))
+    else
+      `(Noctium.Effect.merkleTreeCheckRoot
+        $(stringTerm storage.getId.toString) $loweredExpected $(stringTerm readName))
     state := ← bindReadName {updated with terms := updated.terms.push term}
       destination.getId.toString readName .bool
   | `(nleffect| $operation:ident $path:nlpath as $destination:ident)
@@ -2053,27 +2190,51 @@ private def elaborateEffect (schema : List (String × StateKind))
     state := {state with terms := state.terms.push term}
   | `(nleffect| insertHash $path:nlpath := $hash:nlexpr)
   | `(nleffect| when $_:nlexpr insertHash $path:nlpath := $hash:nlexpr) => do
-    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let (storage, keys, _, _, nested) ← lowerMerkleTreePath schema state.env path
     let loweredHash ← checkedExpression state.env hash (.bytes 32)
-    let term ← `(Noctium.Effect.merkleTreeInsertHash
-      $(stringTerm storage.getId.toString) $loweredHash)
+    let term ← if nested then
+      `(Noctium.Effect.merkleTreeInsertHashAt
+        $(stringTerm storage.getId.toString) $keys $loweredHash)
+    else
+      `(Noctium.Effect.merkleTreeInsertHash
+        $(stringTerm storage.getId.toString) $loweredHash)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| insertField $path:nlpath := $leaf:nlexpr)
+  | `(nleffect| when $_:nlexpr insertField $path:nlpath := $leaf:nlexpr) => do
+    let (storage, keys, _, _, nested) ← lowerMerkleTreePath schema state.env path
+    let loweredLeaf ← checkedExpression state.env leaf .native
+    let leafHash ← merkleFieldLeafHash loweredLeaf
+    let term ← if nested then
+      `(Noctium.Effect.merkleTreeInsertHashAt
+        $(stringTerm storage.getId.toString) $keys $leafHash)
+    else
+      `(Noctium.Effect.merkleTreeInsertHash
+        $(stringTerm storage.getId.toString) $leafHash)
     state := {state with terms := state.terms.push term}
   | `(nleffect| insertHashIndex $path:nlpath at $index:nlexpr := $hash:nlexpr)
   | `(nleffect| when $_:nlexpr insertHashIndex $path:nlpath at $index:nlexpr := $hash:nlexpr) => do
-    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let (storage, keys, _, _, nested) ← lowerMerkleTreePath schema state.env path
     let loweredIndex ← checkedExpression state.env index (.uint (2 ^ 64 - 1))
     let loweredHash ← checkedExpression state.env hash (.bytes 32)
-    let term ← `(Noctium.Effect.merkleTreeInsertHashIndex
-      $(stringTerm storage.getId.toString) $loweredHash $loweredIndex)
+    let term ← if nested then
+      `(Noctium.Effect.merkleTreeInsertHashIndexAt
+        $(stringTerm storage.getId.toString) $keys $loweredHash $loweredIndex)
+    else
+      `(Noctium.Effect.merkleTreeInsertHashIndex
+        $(stringTerm storage.getId.toString) $loweredHash $loweredIndex)
     state := {state with terms := state.terms.push term}
   | `(nleffect| insertFieldIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr)
   | `(nleffect| when $_:nlexpr insertFieldIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr) => do
-    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let (storage, keys, _, _, nested) ← lowerMerkleTreePath schema state.env path
     let loweredIndex ← checkedExpression state.env index (.uint (2 ^ 64 - 1))
     let loweredLeaf ← checkedExpression state.env leaf .native
     let leafHash ← merkleFieldLeafHash loweredLeaf
-    let term ← `(Noctium.Effect.merkleTreeInsertHashIndex
-      $(stringTerm storage.getId.toString) $leafHash $loweredIndex)
+    let term ← if nested then
+      `(Noctium.Effect.merkleTreeInsertHashIndexAt
+        $(stringTerm storage.getId.toString) $keys $leafHash $loweredIndex)
+    else
+      `(Noctium.Effect.merkleTreeInsertHashIndex
+        $(stringTerm storage.getId.toString) $leafHash $loweredIndex)
     state := {state with terms := state.terms.push term}
   | `(nleffect| insert $storage:ident [ $key:nlexpr ] := $value:nlexpr)
   | `(nleffect| when $_:nlexpr insert $storage:ident [ $key:nlexpr ] := $value:nlexpr) => do
@@ -2136,9 +2297,22 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| remove $path:nlpath)
   | `(nleffect| when $_:nlexpr remove $path:nlpath) =>
     state := ← elaborateMapRemove schema path state
+  | `(nleffect| insert $path:nlpath)
+  | `(nleffect| when $_:nlexpr insert $path:nlpath) =>
+    state := ← elaborateSetInsert schema path state
   | `(nleffect| reset $path:nlpath)
   | `(nleffect| when $_:nlexpr reset $path:nlpath) =>
     state := ← elaborateReset schema path state
+  | `(nleffect| resetHistory $path:nlpath)
+  | `(nleffect| when $_:nlexpr resetHistory $path:nlpath) => do
+    let (storage, keys, _, historic, nested) ← lowerMerkleTreePath schema state.env path
+    unless historic do throwErrorAt path "resetHistory requires a declared HistoricMerkleTree"
+    let term ← if nested then
+      `(Noctium.Effect.merkleTreeResetHistoryAt
+        $(stringTerm storage.getId.toString) $keys)
+    else
+      `(Noctium.Effect.merkleTreeResetHistory $(stringTerm storage.getId.toString))
+    state := {state with terms := state.terms.push term}
   | `(nleffect| absent $storage:ident [ $key:nlexpr ]) => do
     if depth > 0 then throwErrorAt effect "absent queries inside if/else blocks are unsupported"
     let some (.map keyTy _) := schema.lookup storage.getId.toString
@@ -2357,6 +2531,31 @@ private def elaborateConstructor (source : TSyntax `nlstate)
           let k ← readTy key
           let v ← readTy value
           pure (id, StateKind.map k v, ← `(Noctium.StateKind.map $(← tyTerm k) $(← tyTerm v)))
+        | `(nlstate| set $id:ident : $key:nltype) => do
+          let keyTy ← readTy key
+          pure (id, StateKind.tree (.set keyTy), ← `(Noctium.StateKind.tree
+            (Noctium.LedgerValueType.set $(← tyTerm keyTy))))
+        | `(nlstate| tree $id:ident : $key:nltype => Set $memberType:nltype) => do
+          let mapKeyTy ← readTy key
+          let memberTy ← readTy memberType
+          let mapKeyTerm ← tyTerm mapKeyTy
+          let memberTerm ← tyTerm memberTy
+          let valueSchema := LedgerValueType.map mapKeyTy (.set memberTy)
+          let valueTerm ← `(Noctium.LedgerValueType.map $mapKeyTerm
+            (Noctium.LedgerValueType.set $memberTerm))
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => Set $memberType:nltype) => do
+          let outerTy ← readTy outer
+          let innerTy ← readTy inner
+          let memberTy ← readTy memberType
+          let outerTerm ← tyTerm outerTy
+          let innerTerm ← tyTerm innerTy
+          let memberTerm ← tyTerm memberTy
+          let valueSchema := LedgerValueType.map outerTy (.map innerTy (.set memberTy))
+          let valueTerm ← `(Noctium.LedgerValueType.map $outerTerm
+            (Noctium.LedgerValueType.map $innerTerm
+              (Noctium.LedgerValueType.set $memberTerm)))
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
         | `(nlstate| counter $id:ident) =>
           pure (id, StateKind.tree .counter, ← `(Noctium.StateKind.tree Noctium.LedgerValueType.counter))
         | `(nlstate| merkleTree $id:ident : $depthStx:num) => do
@@ -2365,6 +2564,12 @@ private def elaborateConstructor (source : TSyntax `nlstate)
             throwErrorAt depthStx "MerkleTree depth must be between 2 and 32"
           pure (id, StateKind.merkleTree depth,
             ← `(Noctium.StateKind.merkleTree $(natTerm depth)))
+        | `(nlstate| historicMerkleTree $id:ident : $depthStx:num) => do
+          let depth := depthStx.getNat
+          unless 2 ≤ depth && depth ≤ 32 do
+            throwErrorAt depthStx "HistoricMerkleTree depth must be between 2 and 32"
+          pure (id, StateKind.historicMerkleTree depth,
+            ← `(Noctium.StateKind.historicMerkleTree $(natTerm depth)))
         | `(nlstate| tree $id:ident : $key:nltype => Counter) => do
           let keyTy ← readTy key
           let keyTerm ← tyTerm keyTy
@@ -2380,6 +2585,54 @@ private def elaborateConstructor (source : TSyntax `nlstate)
           pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree
             (Noctium.LedgerValueType.map $outerTerm
               (Noctium.LedgerValueType.map $innerTerm Noctium.LedgerValueType.counter))))
+        | `(nlstate| tree $id:ident : $key:nltype => MerkleTree $depthStx:num) => do
+          let keyTy ← readTy key
+          let depth := depthStx.getNat
+          unless 2 ≤ depth && depth ≤ 32 do
+            throwErrorAt depthStx "MerkleTree depth must be between 2 and 32"
+          let keyTerm ← tyTerm keyTy
+          let valueSchema := LedgerValueType.map keyTy (.merkleTree depth Bool.false)
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree
+            (Noctium.LedgerValueType.map $keyTerm
+              (Noctium.LedgerValueType.merkleTree $(natTerm depth) Bool.false))))
+        | `(nlstate| tree $id:ident : $key:nltype => HistoricMerkleTree $depthStx:num) => do
+          let keyTy ← readTy key
+          let depth := depthStx.getNat
+          unless 2 ≤ depth && depth ≤ 32 do
+            throwErrorAt depthStx "HistoricMerkleTree depth must be between 2 and 32"
+          let keyTerm ← tyTerm keyTy
+          let valueSchema := LedgerValueType.map keyTy (.merkleTree depth Bool.true)
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree
+            (Noctium.LedgerValueType.map $keyTerm
+              (Noctium.LedgerValueType.merkleTree $(natTerm depth) Bool.true))))
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => MerkleTree $depthStx:num) => do
+          let outerTy ← readTy outer
+          let innerTy ← readTy inner
+          let depth := depthStx.getNat
+          unless 2 ≤ depth && depth ≤ 32 do
+            throwErrorAt depthStx "MerkleTree depth must be between 2 and 32"
+          let outerTerm ← tyTerm outerTy
+          let innerTerm ← tyTerm innerTy
+          let valueSchema := LedgerValueType.map outerTy
+            (.map innerTy (.merkleTree depth Bool.false))
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree
+            (Noctium.LedgerValueType.map $outerTerm
+              (Noctium.LedgerValueType.map $innerTerm
+                (Noctium.LedgerValueType.merkleTree $(natTerm depth) Bool.false)))))
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => HistoricMerkleTree $depthStx:num) => do
+          let outerTy ← readTy outer
+          let innerTy ← readTy inner
+          let depth := depthStx.getNat
+          unless 2 ≤ depth && depth ≤ 32 do
+            throwErrorAt depthStx "HistoricMerkleTree depth must be between 2 and 32"
+          let outerTerm ← tyTerm outerTy
+          let innerTerm ← tyTerm innerTy
+          let valueSchema := LedgerValueType.map outerTy
+            (.map innerTy (.merkleTree depth Bool.true))
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree
+            (Noctium.LedgerValueType.map $outerTerm
+              (Noctium.LedgerValueType.map $innerTerm
+                (Noctium.LedgerValueType.merkleTree $(natTerm depth) Bool.true)))))
         | `(nlstate| tree $id:ident : $key:nltype => struct $record:ident { $recordFields:nlcompositefield* }) => do
           let keyTy ← readTy key
           let contractName := (← getCurrNamespace) ++ name.getId

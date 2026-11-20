@@ -1263,8 +1263,8 @@
       "id": "C-STATE-NESTED",
       "layer": "language-ledger",
       "surface": "Nested ledger ADTs",
-      "noctiumStatus": "missing",
-      "notes": "Map value nesting and typed ledger paths need explicit layout and operation semantics.",
+      "noctiumStatus": "subset",
+      "notes": "Depth-two ordinary and historic Merkle values under Bytes32 and Field map keys match Compact for setup, writes, reads and resets. Independent owner and bucket paths retain their exact state. Other nested value and path combinations require separate evidence.",
       "source": [
         "reference",
         "adt"
@@ -1273,7 +1273,12 @@
         "SEM",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NestedMerkle.lean",
+        "runtime/tests/merkle_nested.rs",
+        "tests/compact/nested-merkle.mjs",
+        "docs/development/nested-merkle-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -1637,8 +1642,8 @@
       "id": "C-ADT-KERNEL-BLOCKTIMEGREATERTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.blockTimeGreaterThan",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Strict UInt64 Unix-second comparison through the native ledger context. Focused checks cover equal and unequal cutoffs, guard outcomes, replay across a changed result and explicit disclosure. The native Rust client passes a checked prospective block context. Hosted client and composition qualification remain separate.",
       "source": [
         "adt"
       ],
@@ -1647,15 +1652,21 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeBlockTime.lean",
+        "tests/compact/block-time.mjs",
+        "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-BLOCKTIMELESSTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.blockTimeLessThan",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Strict UInt64 Unix-second comparison through the native ledger context. Focused checks cover equal and unequal cutoffs, guard outcomes, replay across a changed result and explicit disclosure. The native Rust client passes a checked prospective block context. Hosted client and composition qualification remain separate.",
       "source": [
         "adt"
       ],
@@ -1664,15 +1675,21 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeBlockTime.lean",
+        "tests/compact/block-time.mjs",
+        "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-CALLER",
       "layer": "language-ledger",
       "surface": "Kernel.caller",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Typed optional caller from the ledger context, with absent, contract and user cases and both guard outcomes. The Rust SDK ordinary call covers a top-level absent caller. User inference during unshielded funding and live composed caller qualification remain open.",
       "source": [
         "adt"
       ],
@@ -1681,7 +1698,13 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCaller.lean",
+        "tests/compact/caller.mjs",
+        "runtime/tests/native_caller.rs",
+        "docs/development/native-contract.md",
+        "docs/development/native-caller-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2108,8 +2131,8 @@
       "id": "C-ADT-SET-INSERT",
       "layer": "language-ledger",
       "surface": "Set.insert",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Duplicate insertion preserves cardinality. Native members store Null.",
       "source": [
         "adt"
       ],
@@ -2118,7 +2141,13 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md",
+        "docs/development/native-set-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2142,8 +2171,8 @@
       "id": "C-ADT-SET-ISEMPTY",
       "layer": "language-ledger",
       "surface": "Set.isEmpty",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. The native comparison binds the Boolean predicate. An inactive read skips the selected path.",
       "source": [
         "adt"
       ],
@@ -2152,15 +2181,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-MEMBER",
       "layer": "language-ledger",
       "surface": "Set.member",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Reads selected member presence through the recursive ledger path.",
       "source": [
         "adt"
       ],
@@ -2169,15 +2203,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-REMOVE",
       "layer": "language-ledger",
       "surface": "Set.remove",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Removing an absent member preserves the set.",
       "source": [
         "adt"
       ],
@@ -2186,15 +2225,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Set.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Clearing a nested set preserves sibling collections.",
       "source": [
         "adt"
       ],
@@ -2203,15 +2247,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-SIZE",
       "layer": "language-ledger",
       "surface": "Set.size",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Reads the number of distinct members as UInt64.",
       "source": [
         "adt"
       ],
@@ -2220,7 +2269,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2314,8 +2368,8 @@
       "id": "C-ADT-MAP-ISEMPTY",
       "layer": "language-ledger",
       "surface": "Map.isEmpty",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Native Boolean collection emptiness. The guarded Set fixture also checks the empty and populated outer Native-keyed map in Lean, Compact 0.36.1 and the native runtime.",
       "source": [
         "adt"
       ],
@@ -2324,7 +2378,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2600,7 +2658,7 @@
       "layer": "language-ledger",
       "surface": "MerkleTree.checkRoot",
       "noctiumStatus": "subset",
-      "notes": "Ordinary root-only checks compare a Field against the current Merkle root. The guarded read returns false when skipped. Depth-two native results match Compact for empty, populated and same-call append cases. Nested state remains open.",
+      "notes": "Ordinary root-only checks compare a Field against the current Merkle root. The guarded read returns false when skipped. Depth-two native results match Compact for empty, populated and same-call append cases. The nested ledger ADT row covers the depth-two typed path fixtures.",
       "source": [
         "adt"
       ],
@@ -2639,7 +2697,7 @@
       "layer": "language-ledger",
       "surface": "MerkleTree.insertHash",
       "noctiumStatus": "subset",
-      "notes": "Root-only Bytes32 digest append. Depth-two roots and cursors match the pinned Compact fixture. Nested paths and other insert methods require separate evidence.",
+      "notes": "Root-only Bytes32 digest append. Depth-two roots and cursors match the pinned Compact fixture. The nested ledger ADT row covers prehashed append at a typed path.",
       "source": [
         "adt"
       ],
@@ -2682,7 +2740,7 @@
       "layer": "language-ledger",
       "surface": "MerkleTree.insertIndex",
       "noctiumStatus": "subset",
-      "notes": "Ordinary root writes accept disclosed Field leaves and UInt64 indices. The compiler hashes the canonical Field bytes in the mdn:lh domain. Focused depth-two native roots and cursors match Compact. Other leaf layouts and nested trees remain open.",
+      "notes": "Ordinary root writes accept disclosed Field leaves and UInt64 indices. The compiler hashes the canonical Field bytes in the mdn:lh domain. Focused depth-two native roots and cursors match Compact. The nested ledger ADT row covers the depth-two Field case. Other leaf layouts remain open.",
       "source": [
         "adt"
       ],
@@ -2827,8 +2885,8 @@
       "id": "C-ADT-HISTORICMERKLETREE-CHECKROOT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.checkRoot",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level membership sees roots retained by earlier writes, including writes in the same call. Private expected roots require disclosure.",
       "source": [
         "adt"
       ],
@@ -2837,15 +2895,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs",
+        "docs/development/historic-merkle-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insert",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level Field appends use the canonical mdn:lh leaf digest. The depth-two cursor and retained roots match Compact.",
       "source": [
         "adt"
       ],
@@ -2854,15 +2917,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTHASH",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertHash",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level Bytes32 digest appends retain both previous roots and the updated root.",
       "source": [
         "adt"
       ],
@@ -2871,15 +2938,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs",
+        "docs/development/historic-merkle-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTHASHINDEX",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertHashIndex",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level prehashed indexed writes preserve the highest append cursor, record the new root and reject out-of-range indices.",
       "source": [
         "adt"
       ],
@@ -2888,15 +2960,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEX",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndex",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level Field writes support sparse indices and replacement at capacity. Both retain the resulting root.",
       "source": [
         "adt"
       ],
@@ -2905,15 +2981,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-INSERTINDEXDEFAULT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndexDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "For root-level Field leaves, write zero at the selected index. The Compact oracle compares this operation with insertIndexDefault.",
       "source": [
         "adt"
       ],
@@ -2922,15 +3002,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-ISFULL",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.isFull",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level fullness follows the append cursor, including after sparse writes and replacement at capacity.",
       "source": [
         "adt"
       ],
@@ -2939,15 +3023,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-RESETHISTORY",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.resetHistory",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level resetHistory keeps the current root and append cursor. The guarded read observes the reset when active.",
       "source": [
         "adt"
       ],
@@ -2956,15 +3044,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-level full reset restores an empty tree, cursor zero and the initial root in history.",
       "source": [
         "adt"
       ],
@@ -2973,7 +3065,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/HistoricMerkle.lean",
+        "runtime/tests/merkle_history.rs",
+        "tests/compact/historic-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

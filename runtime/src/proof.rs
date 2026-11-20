@@ -14,6 +14,7 @@ use ledger::structure::{
 };
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
 use midnight_zk_stdlib::{MidnightPK, Relation, ZkStdLib, ZkStdLibArch};
+use onchain_runtime::context::BlockContext;
 use onchain_runtime::state::{
     ContractMaintenanceAuthority, ContractMaintenanceVerifyingKey, ContractOperation,
     ContractState, EntryPointBuf,
@@ -1217,7 +1218,7 @@ fn preparation_cursor(
     ));
     let mut context = onchain_runtime::context::QueryContext::new(state.data.clone(), address);
     context.call_context.balance = state.balance.clone();
-    crate::PreparationCursor::from_context(&plan, inputs, context, &parameters)
+    crate::PreparationCursor::from_context(&plan, inputs, context, &parameters, false)
         .map_err(|_| Error::InvalidPrivateInput)
 }
 
@@ -1537,6 +1538,28 @@ impl PreparedProof {
         ttl: u64,
         rng: &mut (impl Rng + CryptoRng),
     ) -> Result<Self> {
+        Self::from_config_with_context(bundle, private_config, ttl, None, rng)
+    }
+
+    /// Prepare using an explicit prospective block context from the host.
+    /// Ledger execution rechecks any clock predicate in the resulting transcript.
+    pub fn from_config_in_block(
+        bundle: &VerifiedBundle,
+        private_config: &[u8],
+        ttl: u64,
+        block: &BlockContext,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
+        Self::from_config_with_context(bundle, private_config, ttl, Some(block), rng)
+    }
+
+    fn from_config_with_context(
+        bundle: &VerifiedBundle,
+        private_config: &[u8],
+        ttl: u64,
+        block: Option<&BlockContext>,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<Self> {
         let material = Material::retained(bundle)?;
         if private_config.len() > 1_048_576 {
             return Err(Error::Limit);
@@ -1556,6 +1579,7 @@ impl PreparedProof {
             material.verifier.clone(),
             &material.circuit,
             ttl,
+            block,
             rng,
         )
         .map_err(|_| Error::InvalidPrivateInput)?;
