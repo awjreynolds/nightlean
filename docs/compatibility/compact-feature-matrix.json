@@ -2548,7 +2548,8 @@
       "observedEvidence": [
         "tests/MerkleTree.lean",
         "runtime/tests/ordinary_merkle.rs",
-        "tests/compact/ordinary-merkle.mjs"
+        "tests/compact/ordinary-merkle.mjs",
+        "docs/development/ordinary-merkle-root-check-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },

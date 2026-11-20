@@ -118,6 +118,11 @@ The ordinary Merkle fixture above checks the empty root, a stale root and a
 root written in the same call. The native checker rejects a changed comparison
 result.
 
+The native client finalized deployment at height 4 and the combined append
+and root check at height 7 on Ledger 9 localnet. Both receipts matched the
+predicted state bytes. The combined relation used k=8 and 232 rows.
+[Localnet receipt](ordinary-merkle-root-check-localnet-receipt.json)
+
 ## Write an ordinary Merkle tree at an index
 
 A root Merkle tree accepts both a prehashed Bytes32 leaf and a Field leaf at a
