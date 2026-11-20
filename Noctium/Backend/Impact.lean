@@ -1716,9 +1716,9 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
             .memberPath _ destination .. | .counterRead _ destination .. |
+            .readContractAddress destination | .readTokenBalance destination .. |
             .listLength _ destination .. | .merkleTreeIsFull _ destination |
             .merkleTreeCheckRoot _ _ destination => [destination]
-        | .readContractAddress destination | .readTokenBalance destination .. => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
         | _ => [])
