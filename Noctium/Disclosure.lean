@@ -174,9 +174,12 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     let activityControl ← match value.effectGuardAt index, effect with
       | none, _ => pure []
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
+      | some condition, .readContractAddress ..
       | some condition, .writeCell .. | some condition, .writeMap ..
       | some condition, .claimContractCall .. | some condition, .requireContractCaller ..
       | some condition, .checkpoint | some condition, .emitEvent ..
+      | some condition, .readTokenBalance .. | some condition, .mintShielded ..
+      | some condition, .mintUnshielded ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .insertPath .. | some condition, .writePath ..
       | some condition, .readCompositePath .. | some condition, .writeCompositePath ..
@@ -211,6 +214,10 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       checkSink {description := s!"public map membership path '{state}'", span}
         (← expression env span key) activeControl
       env := env ++ [(destination, [])]
+    | .readContractAddress destination =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := "public contract address read guard", span} [] activeControl
+      env := env ++ [(destination, [])]
     | .require condition => discard (expression env span condition)
     | .writeCell state _ payload =>
       checkSink {description := s!"public cell write '{state}'", span}
@@ -227,11 +234,26 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
         (← expression env span entryPointHash) activeControl
       checkSink {description := "contract-call claim commitment", span}
         (← expression env span commitment) activeControl
+    | .mintShielded domain amount =>
+      let sink := {description := "public shielded mint", span}
+      checkSink sink (← expression env span domain) activeControl
+      checkSink sink (← expression env span amount) activeControl
+    | .mintUnshielded domain amount =>
+      let sink := {description := "public unshielded mint", span}
+      checkSink sink (← expression env span domain) activeControl
+      checkSink sink (← expression env span amount) activeControl
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
     | .checkpoint =>
       checkSink {description := "public ledger checkpoint", span} [] activeControl
+    | .readTokenBalance destination color isUnshielded query =>
+      let sink := {description := "public token balance read", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+      if let .compare _ limit := query then
+        checkSink sink (← expression env span limit) activeControl
+      env := env ++ [(destination, [])]
     | .emitEvent _ payload =>
       checkSink {description := "public contract event", span}
         (← expression env span payload) activeControl

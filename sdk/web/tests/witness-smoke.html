@@ -6,17 +6,46 @@
 <script type="module">
     const script = new URL("./witness-smoke.js", location.href)
     script.search = location.search
-    const worker = new Worker(script, { type: "module" })
-    worker.onmessage = ({ data }) => {
+    const localnet = script.searchParams.has("localnet")
+    const runId = localnet ? crypto.randomUUID().replaceAll("-", "") : null
+    script.searchParams.delete("resume")
+    if (runId) script.searchParams.set("runId", runId)
+
+    function cleanup() {
+        if (runId) indexedDB.deleteDatabase("noctium-localnet-" + runId)
+    }
+
+    function finish(data) {
+        cleanup()
         document.body.dataset.result = data.passed ? "passed" : "failed"
         document.body.textContent = JSON.stringify(data)
-        worker.terminate()
+        if (localnet && script.searchParams.has("report")) {
+            void fetch("./result", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ ...data, workerRestarted: document.body.dataset.workerRestarted === "true" }),
+            })
+        }
     }
-    worker.onerror = () => {
-        document.body.dataset.result = "failed"
-        document.body.textContent = "Witness worker failed to load"
-        worker.terminate()
+
+    function start(resume) {
+        if (resume) script.searchParams.set("resume", "1")
+        const worker = new Worker(script, { type: "module" })
+        worker.onmessage = ({ data }) => {
+            worker.terminate()
+            if (data.restart && localnet && !resume) {
+                document.body.dataset.workerRestarted = "true"
+                start(true)
+            } else {
+                finish(data.restart ? { passed: false, error: "Unexpected repeat worker restart" } : data)
+            }
+        }
+        worker.onerror = () => {
+            worker.terminate()
+            finish({ passed: false, error: "Witness worker failed to load" })
+        }
     }
+    start(false)
 </script>
 </body>
 </html>

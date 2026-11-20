@@ -95,6 +95,22 @@ noctium_contract Codec where
   end
 end
 
+noctium_interface PaymentInspection where
+  entry inspectPayment accepts [] yields [
+    checks := fields(primary : Bool, secondary : Bool),
+    approval : Bool,
+    receipt := fields(value : UIntRange 301, confirmed : Bool, left : Bool, right : Bool,
+      kind : UInt 1, firstByte : UInt 8, secondByte : UInt 8),
+    tag : Bytes 2
+  ]
+  entry reviewPayment accepts [
+    proposal := fields(value : UIntRange 301, confirmed : Bool, left : Bool, right : Bool,
+      kind : UInt 1, firstByte : UInt 8, secondByte : UInt 8)
+  ] yields [confirmed : Bool, trailingByte : UInt 8]
+end
+
+noctium_implements Codec implements PaymentInspection
+
 noctium_circuit paymentClaim where
   private opening : Native
   private amount : UIntRange 301
@@ -107,10 +123,10 @@ noctium_contract PaymentCaller where
   entry claim uses paymentClaim where
     read route as target
     claimContractCall(target,
-      disclose(callCommitment(Codec, "inspectPayment", opening, [],
-        [payment := fields(amount, approved, false, true, 1,
+      disclose(callCommitment(Codec, PaymentInspection, "inspectPayment", opening, [],
+        [receipt := fields(amount, approved, false, true, 1,
           byteAt(expectedMemo, 0), byteAt(expectedMemo, 1)),
-         approved, expectedMemo, flags := fields(false, true)])))
+         approved, expectedMemo, checks := fields(false, true)])))
   end
 end
 

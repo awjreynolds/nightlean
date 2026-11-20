@@ -95,6 +95,51 @@ int32_t noctium_native_private_length(uint64_t,size_t*);
 int32_t noctium_native_private_copy(uint64_t,uint8_t*,size_t,size_t*);
 int32_t noctium_native_private_free(uint64_t);
 
+/* Read a bounded JSON page or a Merkle path from a native Merkle tree snapshot.
+   Request UTF-8 JSON (unknown fields reject):
+     {"abiVersion":1,"planSha256":"<lowercase SHA-256>",
+      "stateSha256":"<lowercase SHA-256>","name":"<state name>",
+      "keys":[{"type":"<Noctium scalar type>","value":<canonical JSON>}],
+      "offset":0,"limit":32}
+   Plan is the exact UTF-8 plan JSON. Snapshot is the exact canonical tagged
+   ContractState<Db> serialization. Supply the plan digest independently from a
+   verified plan manifest and the state digest from a matching finalized public
+   receipt. This function checks both exact byte digests, but the caller remains
+   responsible for pairing the plan and snapshot with the right chain provenance.
+   No network access occurs. Keep the same snapshot and digests for every page of
+   one read. Offsets scan from the beginning of the collection. Result JSON has
+   abiVersion, kind, entries, and nextOffset (integer or null).
+   Merkle pages also have root and firstFree as decimal strings. The merkleTree kind has
+   empty entries. historicMerkleTree entries contain history root digests as
+   decimal strings in unspecified order. Use the native result token calls to
+   read and free the response.
+
+   For a Merkle path, replace offset and limit with "merklePath":
+     {"leaf":{"kind":"field","value":"<canonical Field decimal>"},"index":"3"}
+   Omit index to search for a stored match. An index is a decimal UInt64.
+   Leaf alternatives are {"kind":"prehashed","value":[<32 bytes>]} and
+   {"kind":"structured","schemaJson":"<schema JSON>","valueJson":"<value JSON>"}.
+   Curve leaves use the native witness forms jubjubScalar, jubjubPoint, and
+   foreign (ZKIR 3.2.1), with the same typed values. A fab leaf takes a
+   value object with native FAB value atoms and alignment.
+   A Merkle path result has abiVersion, kind (merklePath), snapshotRoot,
+   candidateRoot, and steps [{sibling,goesLeft}] in leaf-to-root order.
+   Digests and siblings are decimal strings. A missing search match has null
+   candidateRoot and steps. Equal roots confirm that the indexed path
+   reconstructs the snapshot root. Use a search to require a stored match.
+   A missing or out-of-capacity indexed branch returns an error.
+
+   Request is limited to 64KiB, plan and snapshot to 1MiB each, 12 path keys,
+   offset 0..=1048576, and page size 1..=64. The state root and plan schema each
+   support up to 16 entries. Returned JSON is limited to 1MiB. Errors contain no
+   input values. */
+int32_t noctium_ledger_collection_page(
+  const uint8_t *request, size_t request_len,
+  const uint8_t *plan, size_t plan_len,
+  const uint8_t *snapshot, size_t snapshot_len,
+  uint64_t *out_result);
+
+
 /* Typed source witness handoff, additive to phase A. Prepare a target before source
    providers run. The helper authenticates the selected bundle and SRS, reads only
    private initial contract state, creates the deployment nonce once, and retains
