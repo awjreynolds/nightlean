@@ -94,3 +94,9 @@ NOCTIUM_NATIVE_TEST_ARTIFACTS="$scratch/contract" \
   cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
     --no-default-features --features zkir-321 --test ordinary_merkle -- --ignored
 ```
+
+On the isolated Ledger 9.1.0.1 localnet, the native client finalized deployment
+at height 4 and the first append at height 7. The receipt state bytes matched
+the native runtime prediction at both steps. The pinned ZKIR 3.2.1 tool
+reported k=8 and 231 rows for the append relation.
+[Localnet receipt](ordinary-merkle-localnet-receipt.json)
