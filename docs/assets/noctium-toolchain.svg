@@ -38,7 +38,7 @@
 
     <rect x="28" y="318" width="764" height="60" rx="6" fill="#20333d"/>
     <text x="45" y="344" font-size="20" font-weight="700">Private host</text>
-    <text x="45" y="366" fill="#d3dcdd" font-size="16">Native, web and mobile SDKs run witnesses, stage private state and prepare transactions.</text>
+    <text x="45" y="366" fill="#d3dcdd" font-size="16">Native, web and mobile SDKs run witnesses, stage private writes and prove calls.</text>
     <path d="M410 378v18" fill="none" stroke="#829da9" stroke-width="1.6" marker-end="url(#arrow)"/>
     <rect x="28" y="401" width="764" height="60" rx="6" fill="#20333d"/>
     <text x="45" y="427" font-size="20" font-weight="700">Midnight ledger</text>
