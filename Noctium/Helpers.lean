@@ -463,6 +463,9 @@ private def checkLedgerSchema (span : SourceSpan) (ledger : List StateDecl) : Ex
       liftError state.span (keyTy.validate Capabilities.source)
       liftError state.span (valueTy.validate Capabilities.source)
     | .tree schema => liftError state.span (schema.validate Capabilities.source)
+    | .merkleTree depth =>
+      unless 2 ≤ depth && depth ≤ 32 do
+        fail state.span "MerkleTree depth must be between 2 and 32"
     | .opaqueString =>
       unless state.sealed do fail state.span "OpaqueString state must be sealed"
 
