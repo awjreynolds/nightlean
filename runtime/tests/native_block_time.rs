@@ -6,7 +6,7 @@ fn block_time_comparisons_are_strict_and_bind_the_native_result() {
     use base_crypto::time::Timestamp;
     use coin_structure::contract::ContractAddress;
     use noctium_runtime::{
-        Plan, check, create_state, prepare, prepare_with_context, zkir::IrSource,
+        Plan, PreparationCursor, check, create_state, prepare, prepare_with_context, zkir::IrSource,
     };
     use onchain_runtime::context::QueryContext;
     use serde_json::{Value as Json, json};
@@ -93,6 +93,16 @@ fn block_time_comparisons_are_strict_and_bind_the_native_result() {
         .expect("active time comparison requires an explicit context");
     assert!(
         error
+            .to_string()
+            .contains("requires explicit block context")
+    );
+    let mut cursor =
+        PreparationCursor::new(&plan, &inputs(10, true), &state, params, address).unwrap();
+    let cursor_error = (0..plan.operations.len())
+        .find_map(|_| cursor.step().err())
+        .expect("cursor time comparison requires an explicit context");
+    assert!(
+        cursor_error
             .to_string()
             .contains("requires explicit block context")
     );

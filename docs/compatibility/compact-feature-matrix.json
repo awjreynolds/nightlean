@@ -1629,6 +1629,7 @@
         "tests/NativeBlockTime.lean",
         "tests/compact/block-time.mjs",
         "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
         "docs/development/native-contract.md"
       ],
       "equivalence": "unverified"
@@ -1651,6 +1652,7 @@
         "tests/NativeBlockTime.lean",
         "tests/compact/block-time.mjs",
         "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
         "docs/development/native-contract.md"
       ],
       "equivalence": "unverified"

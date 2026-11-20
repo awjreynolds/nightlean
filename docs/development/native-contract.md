@@ -92,3 +92,9 @@ The [source fixture](../../tests/NativeBlockTime.lean),
 [native checker fixture](../../runtime/tests/native_block_time.rs)
 check the strict boundaries. A hosted SDK path that does not provide a
 block context still requires integration.
+
+On Ledger 9.1.0.1 localnet, the Rust SDK finalized deployment at block 67
+and a call using both strict predicates at block 70. The exact observed
+contract state matched the SDK prediction at both blocks. Native sizing
+reported K8 and 126 rows. The deadline-crossing rejection was checked in
+native VM replay. [Localnet receipt](native-block-time-localnet-receipt.json)
