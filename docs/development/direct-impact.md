@@ -145,3 +145,8 @@ compactc --skip-zk tests/compact/IndexedMerkle.compact "$scratch/compact"
 cp tests/compact/indexed-merkle.mjs "$scratch/"
 node "$scratch/indexed-merkle.mjs"
 ```
+
+The native client finalized deployment at height 5 and an indexed Field write
+at height 8 on Ledger 9 localnet. It matched the predicted state bytes for both
+receipts. The indexed Field relation used k=13 and 2176 rows.
+[Localnet receipt](indexed-ordinary-merkle-localnet-receipt.json)

@@ -2625,7 +2625,8 @@
       "observedEvidence": [
         "tests/MerkleIndexed.lean",
         "runtime/tests/ordinary_merkle.rs",
-        "tests/compact/indexed-merkle.mjs"
+        "tests/compact/indexed-merkle.mjs",
+        "docs/development/indexed-ordinary-merkle-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
