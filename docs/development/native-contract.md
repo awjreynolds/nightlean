@@ -84,3 +84,8 @@ its own ledger effects and transaction outputs.
 The [Lean fixture](../../tests/NativeStandaloneMints.lean) and
 [Compact reference fixture](../../tests/compact/StandaloneMints.compact)
 exercise guarded minting, separate effects and the accumulation limit.
+
+The [localnet receipt](native-standalone-mints-localnet-receipt.json) records
+an active call with two mint amounts, 17 and 2, in each namespace. Ledger
+9.1.0.1 finalized the call with the predicted contract state. The transaction
+settled no tokens to a recipient.
