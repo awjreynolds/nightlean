@@ -198,19 +198,26 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .merkleTreeIsFull slot depth destination => Json.mkObj [
       ("op", toJson ("merkleTreeIsFull" : String)), ("slot", toJson slot),
       ("depth", toJson depth), ("destination", toJson destination)]
-  | .merkleTreeCheckRoot slot depth expected destination => Json.mkObj [
+  | .merkleTreeCheckRoot slot depth expected destination
+  | .historicMerkleTreeCheckRoot slot depth expected destination => Json.mkObj [
       ("op", toJson ("merkleTreeCheckRoot" : String)), ("slot", toJson slot),
       ("depth", toJson depth), ("expected", nativeExpressionJson expected),
       ("destination", toJson destination)]
-  | .merkleTreeInsertHash slot depth hash => Json.mkObj [
+  | .merkleTreeInsertHash slot depth hash
+  | .historicMerkleTreeInsertHash slot depth hash => Json.mkObj [
       ("op", toJson ("merkleTreeInsertHash" : String)), ("slot", toJson slot),
       ("depth", toJson depth), ("hash", nativeExpressionJson hash)]
-  | .merkleTreeInsertHashIndex slot depth hash idx => Json.mkObj [
+  | .merkleTreeInsertHashIndex slot depth hash idx
+  | .historicMerkleTreeInsertHashIndex slot depth hash idx => Json.mkObj [
       ("op", toJson ("merkleTreeInsertHashIndex" : String)), ("slot", toJson slot),
       ("depth", toJson depth), ("hash", nativeExpressionJson hash),
       ("index", nativeExpressionJson idx)]
-  | .merkleTreeReset slot depth => Json.mkObj [
+  | .merkleTreeReset slot depth
+  | .historicMerkleTreeReset slot depth => Json.mkObj [
       ("op", toJson ("merkleTreeReset" : String)), ("slot", toJson slot),
+      ("depth", toJson depth)]
+  | .merkleTreeResetHistory slot depth => Json.mkObj [
+      ("op", toJson ("merkleTreeResetHistory" : String)), ("slot", toJson slot),
       ("depth", toJson depth)]
   | .mapRemove slot keys => Json.mkObj [
       ("op", toJson ("mapRemove" : String)), ("slot", toJson slot),
@@ -361,6 +368,8 @@ private def effectJson : Effect → Json
       ("index", expressionJson index)]
   | .merkleTreeReset state => Json.mkObj [
       ("op", toJson ("merkleTreeReset" : String)), ("state", toJson state)]
+  | .merkleTreeResetHistory state => Json.mkObj [
+      ("op", toJson ("merkleTreeResetHistory" : String)), ("state", toJson state)]
   | .listLength state destination keys => Json.mkObj [
       ("op", toJson ("listLength" : String)), ("state", toJson state),
       ("destination", toJson destination), ("type", toJson (typeName (.uint (2 ^ 64 - 1)))),
@@ -438,6 +447,8 @@ private def stateJson (state : StateDecl) : Json :=
     | .map kt vt => Json.mkObj [("map", toJson [typeName kt, typeName vt])]
     | .tree value => Json.mkObj [("tree", treeJson value)]
     | .merkleTree depth => Json.mkObj [("merkleTree", toJson depth)]
+    | .historicMerkleTree depth => Json.mkObj [
+        ("merkleTree", toJson depth), ("historic", toJson Bool.true)]
     | .opaqueString => Json.mkObj [("opaqueString", toJson Bool.true)]
   Json.mkObj ([("name", toJson state.name), ("kind", kind)] ++
     (if state.sealed then [("sealed", toJson Bool.true)] else []))
