@@ -1,6 +1,10 @@
 # Noctium
 
+![From Lean to Midnight finality. Noctium compiled Lean 4 to native ZKIR and Impact. Chrome proved the call locally in WASM. After a worker restart, the Ledger 9 localnet call finalized and the client committed private state once.](docs/assets/noctium-browser-finality.jpg)
+
 Lean 4 contracts and proofs for Midnight. Noctium compiles directly to native ZKIR and Impact ledger plans.
+
+In the Chrome fixture, the Ledger 9 node reported the call pending at the restart checkpoint. A new worker recovered the call without reproving, verified the finalized state at height 7 and committed `cache/last = 14` once. [Localnet receipt](docs/development/web-localnet-receipt.json) · [Reproduce the run](docs/development/web-witness-sdk.md#run-the-localnet-fixture)
 
 <p align="center">
   <a href="docs/compatibility/comparison.md">Capability comparison</a> ·
