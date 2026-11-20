@@ -268,6 +268,9 @@ scoped syntax "tree" ident ":" nltype "=>" ident "struct" ident "{" nlcompositef
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" ident "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "Counter" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" "Counter" : nlstate
+scoped syntax "set" ident ":" nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" "Set" nltype : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "Set" nltype : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" nltype : nlstate
 
 declare_syntax_cat nlleaves
@@ -313,6 +316,7 @@ scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffe
 scoped syntax "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "popFront" nlpath : nleffect
 scoped syntax "remove" nlpath : nleffect
+scoped syntax "insert" nlpath : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
@@ -329,6 +333,7 @@ scoped syntax "when" nlexpr "reset" nlpath : nleffect
 scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
 scoped syntax "when" nlexpr "remove" nlpath : nleffect
+scoped syntax "when" nlexpr "insert" nlpath : nleffect
 
 declare_syntax_cat nlstatement
 scoped syntax nleffect : nlstatement
@@ -1181,6 +1186,7 @@ private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
   match schema, keys with
   | value, [] => pure ([], value)
   | .scalar _, _ :: _ => throwError "nested map path continues through a scalar value"
+  | .set _, _ :: _ => throwError "set members have no readable value"
   | .counter, _ :: _ => throwError "nested map path continues through a Counter value"
   | .composite .., _ :: _ => throwError "nested map path continues through a composite value"
   | .«list» .., _ :: _ => throwError "nested map path continues through a list value"
@@ -1192,6 +1198,17 @@ private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
 private def pathKeysTerm (keys : List (TSyntax `term)) : CommandElabM (TSyntax `term) := do
   let list ← pathKeyListTerm keys
   `(($list : List Noctium.PathKey))
+
+private def lowerCollectionEntryPath (env : Bindings) (schema : LedgerValueType)
+    (keys : List (TSyntax `nlexpr)) :
+    CommandElabM (TSyntax `term × LedgerValueType) := do
+  let some finalKey := keys.getLast? | throwError "map or set operation requires a key"
+  let (parents, parent) ← lowerTreePath env schema (keys.take (keys.length - 1))
+  let some keyTy := parent.collectionKey?
+    | throwErrorAt finalKey "entry path must select a map or set"
+  let value ← checkedExpression env finalKey keyTy
+  let key ← `(Noctium.PathKey.mk $(← tyTerm keyTy) $value)
+  pure (← pathKeysTerm (parents ++ [key]), parent)
 
 private partial def sourcePathParts (path : TSyntax `nlpath) :
     CommandElabM (TSyntax `ident × List (TSyntax `nlexpr)) := do
@@ -1207,6 +1224,12 @@ private def treeStateSchema (schema : List (String × StateKind)) (storage : TSy
   match schema.lookup storage.getId.toString with
   | some (.tree value) => pure value
   | _ => throwErrorAt storage "nested path requires a declared recursive tree state"
+
+private def statePathSchema (schema : List (String × StateKind)) (storage : TSyntax `ident) :
+    CommandElabM LedgerValueType := do
+  let some value := (schema.lookup storage.getId.toString).bind StateKind.pathSchema
+    | throwErrorAt storage "state path requires a declared map or recursive tree"
+  pure value
 
 private def lowerListPath (schema : List (String × StateKind)) (env : Bindings)
     (path : TSyntax `nlpath) :
@@ -1462,6 +1485,7 @@ private def elaborateTreeRead (storage destination : TSyntax `ident)
     pure {updated with terms := updated.terms.push term}
   | .composite .. => throwErrorAt destination "native composite ledger reads require a named structure"
   | .map .. => throwErrorAt destination "nested map read must select a scalar or composite value"
+  | .set _ => throwErrorAt destination "Set members do not have readable values"
   | .«list» .. => throwErrorAt destination "List reads require head or length"
   | .counter => do
     let (readName, updated) ← freshReadName depth state destination
@@ -1551,7 +1575,7 @@ private def elaborateListPopFront (schema : List (String × StateKind))
 private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax `nlpath)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
-  let treeSchema ← treeStateSchema schema storage
+  let treeSchema ← statePathSchema schema storage
   let (keys, value) ← lowerTreePath state.env treeSchema sourceKeys
   let keys ← pathKeysTerm keys
   match value with
@@ -1562,7 +1586,10 @@ private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax
     let _ ← lowerListPath schema state.env path
     let term ← `(Noctium.Effect.listReset $(stringTerm storage.getId.toString) $keys)
     pure {state with terms := state.terms.push term}
-  | _ => throwErrorAt path "reset requires a Counter or List value"
+  | .map .. | .set _ => do
+    let term ← `(Noctium.Effect.emptyMapPath $(stringTerm storage.getId.toString) $keys)
+    pure {state with terms := state.terms.push term}
+  | _ => throwErrorAt path "reset requires a Counter, List, Map or Set value"
 
 private def elaborateCompositePathWrite (schema : List (String × StateKind))
     (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
@@ -1594,17 +1621,18 @@ private def elaborateCompositePathWrite (schema : List (String × StateKind))
 private def elaborateMapRemove (schema : List (String × StateKind))
     (path : TSyntax `nlpath) (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
-  let some finalKey := sourceKeys.getLast?
-    | throwErrorAt path "remove requires at least one map key"
-  let treeSchema ← treeStateSchema schema storage
-  let parents := sourceKeys.take (sourceKeys.length - 1)
-  let (parentTerms, parentSchema) ← lowerTreePath state.env treeSchema parents
-  let .map keyTy _ := parentSchema
-    | throwErrorAt path "remove parent path must select a map"
-  let loweredFinalKey ← checkedExpression state.env finalKey keyTy
-  let finalTerm ← `(Noctium.PathKey.mk $(← tyTerm keyTy) $loweredFinalKey)
-  let keys ← pathKeysTerm (parentTerms ++ [finalTerm])
+  let stateSchema ← statePathSchema schema storage
+  let (keys, _) ← lowerCollectionEntryPath state.env stateSchema sourceKeys
   let term ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keys)
+  pure {state with terms := state.terms.push term}
+
+private def elaborateSetInsert (schema : List (String × StateKind))
+    (path : TSyntax `nlpath) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let (storage, sourceKeys) ← sourcePathParts path
+  let stateSchema ← statePathSchema schema storage
+  let (keys, parent) ← lowerCollectionEntryPath state.env stateSchema sourceKeys
+  let .set _ := parent | throwErrorAt path "insert without a value requires a Set"
+  let term ← `(Noctium.Effect.setInsert $(stringTerm storage.getId.toString) $keys)
   pure {state with terms := state.terms.push term}
 
 private def elaborateNamedPathRead (schema : List (String × StateKind))
@@ -1613,6 +1641,32 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
   let (storage, sourceKeys) ← sourcePathParts path
   match operation with
   | "length" => elaborateListLength schema path destination depth state
+  | "isEmpty" => do
+    unless sourceKeys.length < 16 do
+      throwErrorAt path "map or set emptiness path exceeds the native index limit"
+    let valueType ← statePathSchema schema storage
+    let (keys, selected) ← lowerTreePath state.env valueType sourceKeys
+    unless selected.collectionKey?.isSome do
+      throwErrorAt path "isEmpty path must select a Map or Set"
+    let (readName, updated) ← freshReadName depth state destination
+    let pathTerm ← pathKeysTerm keys
+    let term ← `(Noctium.Effect.mapIsEmpty
+      $(stringTerm storage.getId.toString) $(stringTerm readName) $pathTerm)
+    let updated := {updated with terms := updated.terms.push term}
+    bindReadName updated destination.getId.toString readName .bool
+  | "size" => do
+    unless sourceKeys.length < 16 do
+      throwErrorAt path "map or set size path exceeds the native index limit"
+    let valueType ← statePathSchema schema storage
+    let (keys, selected) ← lowerTreePath state.env valueType sourceKeys
+    unless selected.collectionKey?.isSome do
+      throwErrorAt path "size path must select a Map or Set"
+    let (readName, updated) ← freshReadName depth state destination
+    let pathTerm ← pathKeysTerm keys
+    let term ← `(Noctium.Effect.mapSize
+      $(stringTerm storage.getId.toString) $(stringTerm readName) $pathTerm)
+    let updated := {updated with terms := updated.terms.push term}
+    bindReadName updated destination.getId.toString readName (.uint (2 ^ 64 - 1))
   | "head" => elaborateListHead schema path destination depth state
   | "read" =>
     match schema.lookup storage.getId.toString with
@@ -1652,9 +1706,8 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
     | some (.tree treeSchema) => do
       unless sourceKeys.length > 0 do
         throwErrorAt path "tree membership requires at least one key"
-      let (keys, _) ← lowerTreePath state.env treeSchema sourceKeys
+      let (keys, _) ← lowerCollectionEntryPath state.env treeSchema sourceKeys
       let (readName, updated) ← freshReadName depth state destination
-      let keys ← pathKeysTerm keys
       let term ← `(Noctium.Effect.memberPath
         $(stringTerm storage.getId.toString) $(stringTerm readName) $keys)
       let updated := {updated with terms := updated.terms.push term}
@@ -1851,6 +1904,9 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| remove $path:nlpath)
   | `(nleffect| when $_:nlexpr remove $path:nlpath) =>
     state := ← elaborateMapRemove schema path state
+  | `(nleffect| insert $path:nlpath)
+  | `(nleffect| when $_:nlexpr insert $path:nlpath) =>
+    state := ← elaborateSetInsert schema path state
   | `(nleffect| reset $path:nlpath)
   | `(nleffect| when $_:nlexpr reset $path:nlpath) =>
     state := ← elaborateReset schema path state
@@ -2072,6 +2128,31 @@ private def elaborateConstructor (source : TSyntax `nlstate)
           let k ← readTy key
           let v ← readTy value
           pure (id, StateKind.map k v, ← `(Noctium.StateKind.map $(← tyTerm k) $(← tyTerm v)))
+        | `(nlstate| set $id:ident : $key:nltype) => do
+          let keyTy ← readTy key
+          pure (id, StateKind.tree (.set keyTy), ← `(Noctium.StateKind.tree
+            (Noctium.LedgerValueType.set $(← tyTerm keyTy))))
+        | `(nlstate| tree $id:ident : $key:nltype => Set $memberType:nltype) => do
+          let mapKeyTy ← readTy key
+          let memberTy ← readTy memberType
+          let mapKeyTerm ← tyTerm mapKeyTy
+          let memberTerm ← tyTerm memberTy
+          let valueSchema := LedgerValueType.map mapKeyTy (.set memberTy)
+          let valueTerm ← `(Noctium.LedgerValueType.map $mapKeyTerm
+            (Noctium.LedgerValueType.set $memberTerm))
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
+        | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => Set $memberType:nltype) => do
+          let outerTy ← readTy outer
+          let innerTy ← readTy inner
+          let memberTy ← readTy memberType
+          let outerTerm ← tyTerm outerTy
+          let innerTerm ← tyTerm innerTy
+          let memberTerm ← tyTerm memberTy
+          let valueSchema := LedgerValueType.map outerTy (.map innerTy (.set memberTy))
+          let valueTerm ← `(Noctium.LedgerValueType.map $outerTerm
+            (Noctium.LedgerValueType.map $innerTerm
+              (Noctium.LedgerValueType.set $memberTerm)))
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
         | `(nlstate| counter $id:ident) =>
           pure (id, StateKind.tree .counter, ← `(Noctium.StateKind.tree Noctium.LedgerValueType.counter))
         | `(nlstate| tree $id:ident : $key:nltype => Counter) => do

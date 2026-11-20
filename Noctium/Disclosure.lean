@@ -178,11 +178,13 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .claimContractCall .. | some condition, .requireContractCaller ..
       | some condition, .emitEvent ..
       | some condition, .readPath .. | some condition, .memberPath ..
+      | some condition, .mapIsEmpty .. | some condition, .mapSize ..
       | some condition, .insertPath .. | some condition, .writePath ..
       | some condition, .readCompositePath .. | some condition, .writeCompositePath ..
       | some condition, .emptyMapPath .. | some condition, .counterRead ..
       | some condition, .counterAdjust .. | some condition, .counterReset ..
       | some condition, .removePath ..
+      | some condition, .setInsert ..
       | some condition, .listLength .. | some condition, .listHead ..
       | some condition, .listPushFront .. | some condition, .listPopFront ..
       | some condition, .listReset .. =>
@@ -254,6 +256,18 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       checkSink {description := s!"public nested map membership path '{state}'", span}
         (← pathExpression env span keys) activeControl
       env := env ++ [(destination, [])]
+    | .mapIsEmpty state destination keys =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public map or set emptiness guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public map or set emptiness path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ [(destination, [])]
+    | .mapSize state destination keys =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public map or set size guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public map or set size path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ [(destination, [])]
     | .counterRead state destination keys =>
       if value.effectGuardAt index |>.isSome then
         checkSink {description := s!"public Counter read guard '{state}'", span} [] activeControl
@@ -297,6 +311,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
           (← expression env span payload) activeControl
     | .emptyMapPath state keys =>
       checkSink {description := s!"public empty-map path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+    | .setInsert state keys =>
+      checkSink {description := s!"public set insertion path '{state}'", span}
         (← pathExpression env span keys) activeControl
     | .removePath state keys =>
       checkSink {description := s!"public nested map removal path '{state}'", span}

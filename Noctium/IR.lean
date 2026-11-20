@@ -208,6 +208,7 @@ scalar surface. Maps retain their key type and recursively describe values. -/
 inductive LedgerValueType where
   | scalar (ty : Ty)
   | map (keyTy : Ty) (value : LedgerValueType)
+  | set (keyTy : Ty)
   | composite (environment : Types.CompositeEnv) (type : Types.CompositeType)
   | list (environment : Types.CompositeEnv) (type : Types.CompositeType)
   | counter
@@ -232,6 +233,7 @@ def LedgerValueType.resolvePath (schema : LedgerValueType) : List PathKey →
     | .map expected value =>
       unless keyTy == expected do throw "nested map key type mismatch"
       value.resolvePath rest
+    | .set _ => throw "set members have no readable value"
     | .composite .. => throw "nested map path continues through a composite value"
     | .list .. => throw "nested map path continues through a list value"
 
@@ -244,17 +246,24 @@ def LedgerValueType.counterPath (schema : LedgerValueType) (keys : List PathKey)
     let .counter ← schema.resolvePath keys
       | throw "counter path must select a Counter value"
 
-/-- A removal path names the complete entry path. Its final key selects an
-entry inside a map, while earlier keys select the parent map. -/
+def LedgerValueType.collectionKey? : LedgerValueType → Option Ty
+  | .map ty _ | .set ty => some ty
+  | _ => none
+
+/-- The final key addresses an entry in the selected parent map or set. -/
+def LedgerValueType.entryParent (schema : LedgerValueType) (keys : List PathKey) :
+    Except String LedgerValueType := do
+  let some key := keys.getLast? | throw "map or set operation requires a key"
+  if keys.length > 14 then throw "map or set path exceeds the native insertion depth"
+  let parent ← schema.resolvePath (keys.take (keys.length - 1))
+  let some expected := parent.collectionKey? | throw "entry path must select a map or set"
+  unless key.ty == expected do throw "map or set key type mismatch"
+  pure parent
+
+/-- A removal path names the complete entry path in a map or set. -/
 def LedgerValueType.removalPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String Unit := do
-  if keys.isEmpty then throw "map removal requires at least one key"
-  if keys.length > 14 then throw "map removal path exceeds the native insertion depth"
-  let parents := keys.take (keys.length - 1)
-  let .map keyTy _ ← schema.resolvePath parents
-    | throw "map removal parent path must select a map"
-  let some finalKey := keys.getLast? | throw "map removal requires at least one key"
-  unless finalKey.ty == keyTy do throw "map removal key type mismatch"
+  discard (schema.entryParent keys)
 
 private def checkedNativeRecord (environment : Types.CompositeEnv)
     (type : Types.CompositeType) : Except String (Types.CheckedLayout Types.defaultLimits) := do
@@ -320,6 +329,18 @@ inductive StateKind where
   /-- UTF-8 FAB state metadata. This value is host/deployment-only and never a circuit Ty. -/
   | opaqueString
   deriving Repr, BEq, DecidableEq
+
+def StateKind.pathSchema : StateKind → Option LedgerValueType
+  | .map keyTy valueTy => some (.map keyTy (.scalar valueTy))
+  | .tree schema => some schema
+  | _ => none
+
+def StateKind.validateCollectionPath (kind : StateKind) (keys : List PathKey) :
+    Except String Unit := do
+  if keys.length >= 16 then throw "collection path exceeds the native index limit"
+  let some schema := kind.pathSchema | throw "path must select a Map or Set"
+  unless (← schema.resolvePath keys).collectionKey?.isSome do
+    throw "path must select a Map or Set"
 
 structure StateDecl where
   name : String
@@ -436,6 +457,8 @@ inductive Effect where
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
+  | mapIsEmpty (state destination : String) (keys : List PathKey)
+  | mapSize (state destination : String) (keys : List PathKey)
   | counterRead (state destination : String) (keys : List PathKey)
   | counterAdjust (state : String) (keys : List PathKey) (subtract : Bool) (amount : Nat)
   | counterReset (state : String) (keys : List PathKey)
@@ -453,6 +476,7 @@ inductive Effect where
   | listPopFront (state : String) (keys : List PathKey)
   | listReset (state : String) (keys : List PathKey)
   | emptyMapPath (state : String) (keys : List PathKey)
+  | setInsert (state : String) (keys : List PathKey)
   | removePath (state : String) (keys : List PathKey)
   deriving Repr
 
@@ -794,6 +818,9 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
     validateLedgerMapKeyType keyTy
     keyTy.validate caps
     value.validate caps
+  | .set keyTy => do
+    validateLedgerMapKeyType keyTy
+    keyTy.validate caps
   | .composite environment type => do
     let _ ← checkedNativeRecord environment type
     pure ()
@@ -876,7 +903,7 @@ private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
-    .emptyMapPath state .. | .removePath state .. => some state
+    .emptyMapPath state .. | .setInsert state .. | .removePath state .. => some state
   | _ => none
 
 /-- Preserve first constraint diagnostic and source span in list order. -/
@@ -997,7 +1024,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
           .claimContractCall .. | .requireContractCaller .. | .emitEvent .. |
-          .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
+          .readPath .. | .memberPath .. | .mapIsEmpty .. | .mapSize .. |
+          .insertPath .. | .writePath .. | .emptyMapPath .. | .setInsert .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. => pure ()
@@ -1064,8 +1092,26 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .memberPath state destination keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
-        discard (resolveTreeState decls state keys)
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        let some schema := decl.kind.pathSchema
+          | throw s!"state '{state}' is not a map or set"
+        discard (schema.entryParent keys)
         pure [(destination, .bool)]
+      | .mapIsEmpty state destination keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        decl.kind.validateCollectionPath keys
+        pure [(destination, .bool)]
+      | .mapSize state destination keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        decl.kind.validateCollectionPath keys
+        pure [(destination, .uint (2 ^ 64 - 1))]
       | .counterRead state destination keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
@@ -1143,16 +1189,27 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .emptyMapPath state keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
-        let .map _ _ ← resolveTreeState decls state keys
-          | throw "emptyMap assignment must select a map value"
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        decl.kind.validateCollectionPath keys
+        pure []
+      | .setInsert state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown set state '{state}'"
+        let some schema := decl.kind.pathSchema
+          | throw s!"state '{state}' is not a set"
+        let .set _ ← schema.entryParent keys
+          | throw "set insertion path must select a Set"
         pure []
       | .removePath state keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
         let some decl := decls.find? (·.name == state)
-          | throw s!"unknown tree state '{state}'"
-        let .tree schema := decl.kind
-          | throw s!"state '{state}' is not a recursive map"
+          | throw s!"unknown map or set state '{state}'"
+        let some schema := decl.kind.pathSchema
+          | throw s!"state '{state}' is not a map or set"
         schema.removalPath keys
         pure []
     match result with

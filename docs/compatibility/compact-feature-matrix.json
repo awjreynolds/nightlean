@@ -2044,8 +2044,8 @@
       "id": "C-ADT-SET-INSERT",
       "layer": "language-ledger",
       "surface": "Set.insert",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Duplicate insertion preserves cardinality. Native members store Null.",
       "source": [
         "adt"
       ],
@@ -2054,7 +2054,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2078,8 +2083,8 @@
       "id": "C-ADT-SET-ISEMPTY",
       "layer": "language-ledger",
       "surface": "Set.isEmpty",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. The native comparison binds the Boolean predicate. An inactive read skips the selected path.",
       "source": [
         "adt"
       ],
@@ -2088,15 +2093,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-MEMBER",
       "layer": "language-ledger",
       "surface": "Set.member",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Reads selected member presence through the recursive ledger path.",
       "source": [
         "adt"
       ],
@@ -2105,15 +2115,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-REMOVE",
       "layer": "language-ledger",
       "surface": "Set.remove",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Removing an absent member preserves the set.",
       "source": [
         "adt"
       ],
@@ -2122,15 +2137,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "Set.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Clearing a nested set preserves sibling collections.",
       "source": [
         "adt"
       ],
@@ -2139,15 +2159,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-SET-SIZE",
       "layer": "language-ledger",
       "surface": "Set.size",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary top-level and map-nested Set, with scoped Bytes32 member and Native/Field parent conformance. Reads the number of distinct members as UInt64.",
       "source": [
         "adt"
       ],
@@ -2156,7 +2181,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2250,8 +2280,8 @@
       "id": "C-ADT-MAP-ISEMPTY",
       "layer": "language-ledger",
       "surface": "Map.isEmpty",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Native Boolean collection emptiness. The guarded Set fixture also checks the empty and populated outer Native-keyed map in Lean, Compact 0.36.1 and the native runtime.",
       "source": [
         "adt"
       ],
@@ -2260,7 +2290,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeSet.lean",
+        "tests/compact/native-set.mjs",
+        "runtime/tests/native_set.rs"
+      ],
       "equivalence": "unverified"
     },
     {
