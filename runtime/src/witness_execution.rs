@@ -65,7 +65,7 @@ impl fmt::Display for Error {
     }
 }
 impl std::error::Error for Error {}
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// Exact public witness control expected by a generated Rust entrypoint module.
 pub struct GeneratedBinding {
@@ -946,6 +946,37 @@ pub struct WitnessClient {
     driver: Driver,
 }
 impl WitnessClient {
+    /// Restore a client from the exact private context in its trusted journal domain.
+    pub fn recover(descriptor_json: &[u8], context: &[u8]) -> Result<Self> {
+        let descriptor: Descriptor =
+            serde_json::from_slice(descriptor_json).map_err(|_| Error::InvalidClientDescriptor)?;
+        let driver = Driver::recover(descriptor, context).map_err(Error::Client)?;
+        Ok(Self { driver })
+    }
+
+    pub fn recovery_context(&self) -> Result<&[u8]> {
+        self.driver.recovery_context().ok_or(Error::State)
+    }
+
+    /// Return request metadata without materializing its private arguments.
+    pub fn request_metadata(&self) -> Result<Option<Json>> {
+        let Some(request) = self.driver.request() else {
+            return Ok(None);
+        };
+        let mut metadata = request.metadata();
+        if let native_client::RequestData::Persist {
+            record,
+            expected_revision,
+        } = &request.data
+        {
+            metadata["expectedRevision"] =
+                serde_json::json!(expected_revision.map(|revision| revision.to_string()));
+            metadata["immutableDigest"] =
+                Json::String(record.immutable_digest().map_err(Error::Client)?);
+        }
+        Ok(Some(metadata))
+    }
+
     pub fn status(&self) -> Json {
         self.driver.status()
     }

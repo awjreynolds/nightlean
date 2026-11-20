@@ -1,0 +1,13 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export struct CurveLeaf {
+  point: JubjubPoint;
+  scalar: Secp256k1Scalar;
+}
+
+export ledger leaves: MerkleTree<2, CurveLeaf>;
+
+export circuit append(leaf: CurveLeaf): [] {
+  leaves.insert(disclose(leaf));
+}

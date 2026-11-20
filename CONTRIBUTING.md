@@ -2,6 +2,8 @@
 
 Start with the [public issue map](https://github.com/awjreynolds/noctium/issues/1). GitHub Issues track decisions, research, implementation and dependencies. Open or join an issue before substantial work so the proposed scope and required evidence are clear.
 
+Follow the [issue review and claim workflow](docs/agents/issue-tracker.md#review-and-claim-implementation-issues) when choosing or splitting work.
+
 ## Development checks
 
 Follow the [POC workflow](AGENTS.md) for shared build directories, temporary-output cleanup and focused validation.

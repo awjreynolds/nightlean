@@ -53,6 +53,10 @@ private structure CallInterface where
   resultViews : List (String × List (String × Ty))
   deriving Inhabited
 
+/-- A named Lean declaration whose source metadata defines a checked contract ABI. -/
+inductive ContractInterface where
+  | declared
+
 private partial def callViewLeafTypes : Types.Layout → List Ty
   | .unit => []
   | .scalar .nativeField => [.native]
@@ -66,6 +70,47 @@ private partial def callViewLeafTypes : Types.Layout → List Ty
   | .enumeration _ _ maximum payloadLeaves _ _ => .uint maximum :: List.replicate payloadLeaves .native
 
 initialize callInterfaceRegistry : SimplePersistentEnvExtension CallInterface (Array CallInterface) ←
+  registerSimplePersistentEnvExtension {
+    addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
+    addEntryFn := Array.push
+  }
+
+private inductive CallAbiPart where
+  | scalar (type : Ty)
+  | view (fields : List (Nat × Ty))
+  | viewField
+  deriving BEq
+
+-- Keep physical field positions in the ABI shape independently of source labels.
+private def callAbiShape (fields : List (String × Ty))
+    (views : List (String × List (String × Ty))) : List CallAbiPart :=
+  let fieldNames := fields.map Prod.fst
+  fields.map fun (name, type) =>
+    match views.find? (fun (_, members) => members.any (·.1 == name)) with
+    | none => .scalar type
+    | some (_, members) =>
+      if members.head?.map Prod.fst == some name then
+        .view (members.map fun (member, type) => (fieldNames.idxOf member, type))
+      else .viewField
+
+private def sameCallInterfaceShape (expected actual : CallInterface) : Bool :=
+  expected.argumentViews.length == actual.argumentViews.length &&
+  expected.resultViews.length == actual.resultViews.length &&
+  callAbiShape expected.argumentFields expected.argumentViews ==
+    callAbiShape actual.argumentFields actual.argumentViews &&
+  callAbiShape expected.resultFields expected.resultViews ==
+    callAbiShape actual.resultFields actual.resultViews
+
+private def interfaceMethods (name : Name) : CommandElabM (Array CallInterface) := do
+  pure ((callInterfaceRegistry.getState (← getEnv)).filter (·.contract == name))
+
+private structure InterfaceImplementation where
+  contract : Name
+  interface : Name
+  deriving Inhabited
+
+initialize interfaceImplementationRegistry : SimplePersistentEnvExtension
+    InterfaceImplementation (Array InterfaceImplementation) ←
   registerSimplePersistentEnvExtension {
     addImportedFn := fun entries => entries.foldl (init := #[]) (· ++ ·)
     addEntryFn := Array.push
@@ -198,6 +243,8 @@ scoped syntax nlexpr : nlcallvalue
 scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallvalue
 scoped syntax "callCommitment(" ident "," str "," nlexpr ","
   "[" nlcallvalue,* "]" "," "[" nlcallvalue,* "]" ")" : nlexpr
+scoped syntax "callCommitment(" ident "," ident "," str "," nlexpr ","
+  "[" nlcallvalue,* "]" "," "[" nlcallvalue,* "]" ")" : nlexpr
 scoped syntax "persistentHashPoint(" nlexpr ")" : nlexpr
 scoped syntax "hashToCurve(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "toBytes32(" nlexpr ")" : nlexpr
@@ -281,6 +328,11 @@ scoped syntax nlpath "[" nlexpr "]" : nlpath
 declare_syntax_cat nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "claimUnshieldedCoinSpend" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
 declare_syntax_cat nleventfield
 scoped syntax ident ":=" nlexpr : nleventfield
@@ -291,7 +343,11 @@ declare_syntax_cat nleffect
 scoped syntax nlupdate : nleffect
 scoped syntax "when" nlexpr nlupdate : nleffect
 scoped syntax "read" nlpath "as" ident : nleffect
+scoped syntax "readSelf" "as" ident : nleffect
 scoped syntax "member" nlpath "as" ident : nleffect
+scoped syntax "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax ident nlpath "as" ident : nleffect
 scoped syntax "increment" ident "by" num : nleffect
 scoped syntax "increment" ident "[" nlexpr "]" "by" num : nleffect
@@ -319,7 +375,11 @@ scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
 scoped syntax "when" nlexpr "read" nlpath "as" ident : nleffect
+scoped syntax "when" nlexpr "readSelf" "as" ident : nleffect
 scoped syntax "when" nlexpr "member" nlpath "as" ident : nleffect
+scoped syntax "when" nlexpr "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "when" nlexpr "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "when" nlexpr "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "when" nlexpr ident nlpath "as" ident : nleffect
 scoped syntax "when" nlexpr "increment" ident "by" num : nleffect
 scoped syntax "when" nlexpr "increment" ident "[" nlexpr "]" "by" num : nleffect
@@ -350,6 +410,18 @@ scoped syntax "entry" ident "uses" ident "where" nlstatement* nlreturn* "end" : 
 scoped syntax "entry" ident "uses" ident ident "[" ident,* "]" "where" nlstatement* nlreturn* "end" : nlentry
 scoped syntax "entry" ident "from" ident "entry" str "end" : nlentry
 scoped syntax (name := contractCommand) "noctium_contract" ident "where" nlstate* nlentry* "end" : command
+
+declare_syntax_cat nlinterfacefield
+scoped syntax ident ":" nltype : nlinterfacefield
+declare_syntax_cat nlinterfacevalue
+scoped syntax nlinterfacefield : nlinterfacevalue
+scoped syntax ident ":=" "fields(" nlinterfacefield,* ")" : nlinterfacevalue
+declare_syntax_cat nlinterfaceentry
+scoped syntax "entry" ident "accepts" "[" nlinterfacevalue,* "]"
+  "yields" "[" nlinterfacevalue,* "]" : nlinterfaceentry
+scoped syntax (name := interfaceCommand) "noctium_interface" ident "where"
+  nlinterfaceentry* "end" : command
+scoped syntax (name := implementsCommand) "noctium_implements" ident "implements" ident : command
 
 open scoped Noctium
 
@@ -401,6 +473,40 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .foreign (.base .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.curve25519))
   | .foreign (.scalar .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.scalar Noctium.Foreign.Curve.curve25519))
   | .foreign (.point .curve25519) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.point Noctium.Foreign.Curve.curve25519))
+
+private def elaborateInterfaceValues (values : Array (TSyntax `nlinterfacevalue)) :
+    CommandElabM (List (String × Ty) × List (String × List (String × Ty))) := do
+  let mut fields : List (String × Ty) := []
+  let mut views : List (String × List (String × Ty)) := []
+  let mut labels : List String := []
+  for value in values do
+    let (label, members, isView) ← match value with
+      | `(nlinterfacevalue| $field:nlinterfacefield) =>
+        match field with
+        | `(nlinterfacefield| $name:ident : $type:nltype) =>
+          pure (name.getId.toString, [(name.getId.toString, ← readTy type)], Bool.false)
+        | _ => throwErrorAt field "invalid contract interface field"
+      | `(nlinterfacevalue| $label:ident := fields($items:nlinterfacefield,*)) => do
+        unless items.getElems.size > 0 do
+          throwErrorAt value "contract interface views must contain at least one field"
+        let members : List (String × Ty) ← items.getElems.toList.mapM fun
+            (item : TSyntax `nlinterfacefield) => do
+          let `(nlinterfacefield| $name:ident : $type:nltype) := item
+            | throwErrorAt item "invalid contract interface view field"
+          pure (name.getId.toString, ← readTy type)
+        pure (label.getId.toString, members, Bool.true)
+      | _ => throwErrorAt value "invalid contract interface value"
+    if labels.contains label then
+      throwErrorAt value s!"duplicate contract interface value '{label}'"
+    let memberNames := members.map Prod.fst
+    unless uniqueNames memberNames do
+      throwErrorAt value "duplicate contract interface field"
+    if memberNames.any (fun name => fields.any (·.1 == name)) then
+      throwErrorAt value "contract interface fields must have unique names"
+    labels := label :: labels
+    fields := fields ++ members
+    if isView then views := views ++ [(label, members)]
+  pure (fields, views)
 
 private def foreignCurveTerm : Foreign.Curve → CommandElabM (TSyntax `term)
   | .secp256k1 => `(Noctium.Foreign.Curve.secp256k1)
@@ -587,7 +693,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashNativeVector([$values,*])) =>
     values.getElems.toList.any hasPartialScalar
-  | `(nlexpr| callCommitment($_:ident, $_:str, $opening, [$inputs,*], [$outputs,*])) =>
+  | `(nlexpr| callCommitment($_:ident, $_:str, $opening, [$inputs,*], [$outputs,*]))
+  | `(nlexpr| callCommitment($_:ident, $_:ident, $_:str, $opening, [$inputs,*], [$outputs,*])) =>
     let partialValue (value : TSyntax `nlcallvalue) :=
       match value with
       | `(nlcallvalue| $value:nlexpr) => hasPartialScalar value
@@ -923,33 +1030,29 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
       throwErrorAt stx "persistentHashNativeVector requires 1 to 32 Native fields"
     let valueList ← nativeExprListTerm expressions
     pure (.bytes 32, ← `(Noctium.Expr.persistentHashNativeVector $valueList))
+  | `(nlexpr| callCommitment($callee:ident, $interface:ident, $entrypoint:str,
+      $opening, [$inputs,*], [$outputs,*])) => do
+    let contract ← liftCoreM <| resolveGlobalConstNoOverload callee
+    let interfaceName ← liftCoreM <| resolveGlobalConstNoOverload interface
+    let implementations := interfaceImplementationRegistry.getState (← getEnv)
+    unless implementations.any (fun item =>
+        item.contract == contract && item.interface == interfaceName) do
+      throwErrorAt interface s!"contract '{contract}' does not implement interface '{interfaceName}'"
+    let interfaces := callInterfaceRegistry.getState (← getEnv)
+    let some interface := interfaces.find? (fun item =>
+        item.contract == interfaceName && item.operation == entrypoint.getString)
+      | throwErrorAt entrypoint s!"interface '{interfaceName}' has no entry '{entrypoint.getString}'"
+    commitmentHash env interface opening inputs.getElems outputs.getElems stx
   | `(nlexpr| callCommitment($callee:ident, $entrypoint:str, $opening, [$inputs,*], [$outputs,*])) => do
     let contract ← liftCoreM <| resolveGlobalConstNoOverload callee
-    let interfaces := callInterfaceRegistry.getState (← getEnv)
+    let envState ← getEnv
+    unless (contractRegistry.getState envState).contains contract do
+      throwErrorAt callee "callCommitment requires a declared callee contract"
+    let interfaces := callInterfaceRegistry.getState envState
     let some interface := interfaces.find? (fun item =>
         item.contract == contract && item.operation == entrypoint.getString)
       | throwErrorAt entrypoint "callCommitment requires a declared callee entrypoint"
-    let arguments ← callExpressions "argument" interface.argumentFields interface.argumentViews inputs.getElems stx
-    let results ← callExpressions "result" interface.resultFields interface.resultViews outputs.getElems stx
-    let payload := [(opening, Ty.native)] ++ arguments ++ results
-    let mut bindings := []
-    let mut fields : Array (TSyntax `term) := #[]
-    for ((part, ty), index) in payload.zipIdx do
-      let value ← expected env part ty
-      -- Pick a local name outside the incoming environment before expanding ABI projections.
-      let name := ((List.range (env.length + 1)).map fun suffix =>
-        s!"_noctium_call_{index}_{suffix}").find? fun name =>
-          !env.any (fun binding => binding.1 == name)
-      let some name := name | throwErrorAt part "cannot allocate call commitment binding"
-      let nameTerm := stringTerm name
-      let typeTerm ← tyTerm ty
-      let ref ← `(Noctium.Expr.ref (ty := $typeTerm) $nameTerm)
-      fields := fields.push (← `(Noctium.Expr.nativeCallFields $ref))
-      bindings := (nameTerm, value) :: bindings
-    let body ← `(Noctium.Expr.transientHash (List.flatten [$fields,*]))
-    let result ← bindings.foldlM (init := body) fun body (name, value) =>
-      `(Noctium.Expr.letE $name $value $body)
-    pure (.native, result)
+    commitmentHash env interface opening inputs.getElems outputs.getElems stx
   | `(nlexpr| transientHashNativeVector([$values,*])) => do
     let sourceValues := values.getElems.toList
     unless sourceValues.length ≤ Types.defaultLimits.maxVectorLength do
@@ -1145,6 +1248,30 @@ where
         return ← `(Noctium.Expr.uint $(natTerm maximum) $n)
     let (found, value) ← expression env stx
     coerceExpression stx found ty value
+  commitmentHash (env : Bindings) (interface : CallInterface)
+      (opening : TSyntax `nlexpr) (inputs outputs : Array (TSyntax `nlcallvalue))
+      (stx : TSyntax `nlexpr) : CommandElabM (Ty × TSyntax `term) := do
+    let arguments ← callExpressions "argument" interface.argumentFields interface.argumentViews inputs stx
+    let results ← callExpressions "result" interface.resultFields interface.resultViews outputs stx
+    let payload := [(opening, Ty.native)] ++ arguments ++ results
+    let mut bindings := []
+    let mut fields : Array (TSyntax `term) := #[]
+    for ((part, ty), index) in payload.zipIdx do
+      let value ← expected env part ty
+      -- Pick a local name outside the incoming environment before expanding ABI projections.
+      let name := ((List.range (env.length + 1)).map fun suffix =>
+        s!"_noctium_call_{index}_{suffix}").find? fun name =>
+          !env.any (fun binding => binding.1 == name)
+      let some name := name | throwErrorAt part "cannot allocate call commitment binding"
+      let nameTerm := stringTerm name
+      let typeTerm ← tyTerm ty
+      let ref ← `(Noctium.Expr.ref (ty := $typeTerm) $nameTerm)
+      fields := fields.push (← `(Noctium.Expr.nativeCallFields $ref))
+      bindings := (nameTerm, value) :: bindings
+    let body ← `(Noctium.Expr.transientHash (List.flatten [$fields,*]))
+    let result ← bindings.foldlM (init := body) fun body (name, value) =>
+      `(Noctium.Expr.letE $name $value $body)
+    pure (.native, result)
   arithmetic (env : Bindings) (stx : Syntax) (op : ScalarPolicy.Binary)
       (left right : TSyntax `nlexpr) : CommandElabM (Ty × TSyntax `term) := do
     let (lt, left) ← expression env left
@@ -1387,7 +1514,11 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr insert $_state:ident [ $_key:nlexpr ] := $_value:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr require $_value:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr read $_path:nlpath as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr readSelf as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr member $_path:nlpath as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr tokenBalance($_:nlexpr, $_:nlexpr) as $_:ident)
+  | `(nleffect| when $condition:nlexpr tokenBalanceLt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident)
+  | `(nleffect| when $condition:nlexpr tokenBalanceGt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident) => some condition
   | `(nleffect| when $condition:nlexpr $_operation:ident $_path:nlpath as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr increment $_state:ident by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr increment $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
@@ -1451,6 +1582,23 @@ private def bindReadName (state : EntryEffects) (sourceName internalName : Strin
   let env ← if sourceName == internalName then addReferences state.env [(sourceName, ty)]
     else addReferenceAs state.env sourceName internalName ty
   pure {state with env}
+
+private def elaborateTokenBalanceRead (state : EntryEffects) (depth : Nat)
+    (destination : TSyntax `ident) (color tag : TSyntax `nlexpr)
+    (comparison : Option (_root_.Bool × TSyntax `nlexpr)) :
+    CommandElabM EntryEffects := do
+  let (readName, updated) ← freshReadName depth state destination
+  let color ← checkedExpression updated.env color (.bytes 32)
+  let tag ← checkedExpression updated.env tag .bool
+  let (resultTy, query) ← match comparison with
+    | none => pure (.uint balanceMaximum, ← `(Noctium.BalanceQuery.exact))
+    | some (less, source) => do
+      let limit ← checkedExpression updated.env source (.uint balanceMaximum)
+      let direction ← if less then `(Bool.true) else `(Bool.false)
+      pure (.bool, ← `(Noctium.BalanceQuery.compare $direction $limit))
+  let term ← `(Noctium.Effect.readTokenBalance $(stringTerm readName) $color $tag $query)
+  let updated := {updated with terms := updated.terms.push term}
+  bindReadName updated destination.getId.toString readName resultTy
 
 private def elaborateTreeRead (storage destination : TSyntax `ident)
     (keys : List (TSyntax `nlexpr))
@@ -1707,6 +1855,8 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
 private partial def typedClaimOperation (value : TSyntax `nlexpr) : Option String :=
   match value with
   | `(nlexpr| callCommitment($_:ident, $operation:str, $_, [$_,*], [$_,*])) => some operation.getString
+  | `(nlexpr| callCommitment($_:ident, $_:ident, $operation:str, $_, [$_,*], [$_,*])) =>
+    some operation.getString
   | `(nlexpr| disclose($inner)) => typedClaimOperation inner
   | _ => none
 
@@ -1796,6 +1946,38 @@ private def elaborateEffect (schema : List (String × StateKind))
       let commitment ← checkedExpression state.env commitment .native
       let term ← `(Noctium.Effect.claimContractCall $address $entryPointHash $commitment)
       state := {state with terms := state.terms.push term}
+    | `(nlupdate| mintShielded($domain:nlexpr, $amount:nlexpr)) => do
+      let domain ← checkedExpression state.env domain (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
+      let term ← `(Noctium.Effect.mintShielded $domain $amount)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| mintUnshielded($domain:nlexpr, $amount:nlexpr)) => do
+      let domain ← checkedExpression state.env domain (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
+      let term ← `(Noctium.Effect.mintUnshielded $domain $amount)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| incUnshieldedInputs($color:nlexpr, $amount:nlexpr, $isUnshielded:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let isUnshielded ← checkedExpression state.env isUnshielded .bool
+      let term ← `(Noctium.Effect.incUnshieldedInputs $color $amount $isUnshielded)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| incUnshieldedOutputs($color:nlexpr, $amount:nlexpr, $isUnshielded:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let isUnshielded ← checkedExpression state.env isUnshielded .bool
+      let term ← `(Noctium.Effect.incUnshieldedOutputs $color $amount $isUnshielded)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| claimUnshieldedCoinSpend($color:nlexpr, $amount:nlexpr,
+        $isUnshielded:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let isUnshielded ← checkedExpression state.env isUnshielded .bool
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let term ← `(Noctium.Effect.claimUnshieldedCoinSpend
+        $color $amount $isUnshielded $isContract $recipient)
+      state := {state with terms := state.terms.push term}
     | `(nlupdate| requireContractCaller($address:nlexpr)) => do
       let address ← checkedExpression state.env address (.bytes 32)
       let term ← `(Noctium.Effect.requireContractCaller $address)
@@ -1815,9 +1997,24 @@ private def elaborateEffect (schema : List (String × StateKind))
     let condition ← checkedExpression state.env value .bool
     let term ← `(Noctium.Effect.require $condition)
     state := {state with terms := state.terms.push term}
+  | `(nleffect| tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident)
+  | `(nleffect| when $_:nlexpr tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident) =>
+    state ← elaborateTokenBalanceRead state depth destination color tag none
+  | `(nleffect| tokenBalanceLt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident)
+  | `(nleffect| when $_:nlexpr tokenBalanceLt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident) =>
+    state ← elaborateTokenBalanceRead state depth destination color tag (some (Bool.true, limit))
+  | `(nleffect| tokenBalanceGt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident)
+  | `(nleffect| when $_:nlexpr tokenBalanceGt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident) =>
+    state ← elaborateTokenBalanceRead state depth destination color tag (some (Bool.false, limit))
   | `(nleffect| read $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr read $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "read" path destination depth state
+  | `(nleffect| readSelf as $destination:ident)
+  | `(nleffect| when $_:nlexpr readSelf as $destination:ident) => do
+    let (readName, updated) ← freshReadName depth state destination
+    let term ← `(Noctium.Effect.readContractAddress $(stringTerm readName))
+    state := ← bindReadName {updated with terms := updated.terms.push term}
+      destination.getId.toString readName (.bytes 32)
   | `(nleffect| member $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr member $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "member" path destination depth state
@@ -2343,6 +2540,71 @@ private def elaborateConstructor (source : TSyntax `nlstate)
       $(stringTerm fullName.toString) [$stateTerms,*] $constructorTerm [$entryTerms,*] $span))
     unsafe checkGeneratedContract fullName
     modifyEnv fun e => contractRegistry.addEntry e fullName
+  | _ => throwUnsupportedSyntax
+
+@[command_elab interfaceCommand] def elabContractInterface : CommandElab := fun stx => do
+  match stx with
+  | `(noctium_interface $name:ident where $entries:nlinterfaceentry* end) => do
+    let interfaceName := (← getCurrNamespace) ++ name.getId
+    unless (← interfaceMethods interfaceName).isEmpty do
+      throwErrorAt name s!"contract interface '{interfaceName}' is already declared"
+    unless entries.size > 0 do
+      throwErrorAt name "contract interfaces require at least one entry"
+    let mut methods : Array CallInterface := #[]
+    for methodDecl in entries do
+      let `(nlinterfaceentry| entry $operation:ident accepts [$arguments,*]
+          yields [$results,*]) := methodDecl
+        | throwErrorAt methodDecl "invalid contract interface entry"
+      let operationName := operation.getId.toString
+      if methods.any (·.operation == operationName) then
+        throwErrorAt operation s!"duplicate contract interface entry '{operationName}'"
+      let (argumentFields, argumentViews) ← elaborateInterfaceValues arguments
+      let (resultFields, resultViews) ← elaborateInterfaceValues results
+      let argumentCount := (argumentFields.map (Ty.nativeCallFieldCount ∘ Prod.snd)).sum
+      let resultCount := (resultFields.map (Ty.nativeCallFieldCount ∘ Prod.snd)).sum
+      unless argumentCount ≤ 256 && resultCount ≤ maxEntrypointReturnFields do
+        throwErrorAt methodDecl "contract interface ABI exceeds 256 fields"
+      methods := methods.push {
+        contract := interfaceName
+        operation := operationName
+        argumentFields
+        argumentViews
+        resultFields
+        resultViews
+      }
+    elabCommand (← `(def $name : Noctium.ContractInterface := Noctium.ContractInterface.declared))
+    modifyEnv fun env => methods.foldl callInterfaceRegistry.addEntry env
+  | _ => throwUnsupportedSyntax
+
+@[command_elab implementsCommand] def elabContractImplementation : CommandElab := fun stx => do
+  match stx with
+  | `(noctium_implements $contract:ident implements $interface:ident) => do
+    let contractName ← liftCoreM <| resolveGlobalConstNoOverload contract
+    unless (contractRegistry.getState (← getEnv)).contains contractName do
+      throwErrorAt contract s!"'{contractName}' is not a declared Noctium contract"
+    let interfaceName ← liftCoreM <| resolveGlobalConstNoOverload interface
+    let some interfaceDeclaration := (← getEnv).find? interfaceName
+      | throwErrorAt interface s!"'{interfaceName}' is not a declared Noctium contract interface"
+    unless interfaceDeclaration.type == mkConst ``Noctium.ContractInterface do
+      throwErrorAt interface s!"'{interfaceName}' is not a declared Noctium contract interface"
+    let declarations ← interfaceMethods interfaceName
+    if declarations.isEmpty then
+      throwErrorAt interface s!"'{interfaceName}' is not a declared Noctium contract interface"
+    let implementations := interfaceImplementationRegistry.getState (← getEnv)
+    if implementations.any (fun item =>
+        item.contract == contractName && item.interface == interfaceName) then
+      throwErrorAt interface s!"contract '{contractName}' already implements '{interfaceName}'"
+    let contractEntries := callInterfaceRegistry.getState (← getEnv)
+    for expected in declarations do
+      let some actual := contractEntries.find? (fun item =>
+          item.contract == contractName && item.operation == expected.operation)
+        | throwErrorAt contract s!"contract '{contractName}' has no entry '{expected.operation}' required by '{interfaceName}'"
+      unless sameCallInterfaceShape expected actual do
+        throwErrorAt contract s!"entry '{expected.operation}' does not match interface '{interfaceName}'"
+    modifyEnv fun env => interfaceImplementationRegistry.addEntry env {
+      contract := contractName
+      interface := interfaceName
+    }
   | _ => throwUnsupportedSyntax
 
 /-- Structured source declarations support forward references and lexical IDs.

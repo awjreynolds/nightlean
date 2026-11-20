@@ -4,28 +4,37 @@ import Noctium.Verification
 namespace Noctium.PrivateClaimVerification
 open PrivateClaimProofs Verification
 
+private theorem entrypointSuccessHasCircuitSuccess (ctx : EvalContext) (target : Entrypoint)
+    (env : EvalEnv) (state : LedgerState) (outputs : EvalEnv) (after : LedgerState)
+    (valid : Disclosure.entrypoint target = .ok ())
+    (success : target.run ctx env state = .ok (outputs, after)) :
+    ∃ circuitOutputs, target.circuit.run ctx env = .ok circuitOutputs := by
+  unfold Entrypoint.run at success
+  rw [valid] at success
+  dsimp only [Bind.bind, Except.bind, Except.pure] at success
+  cases hCircuit : target.circuit.run ctx env with
+  | error message => rw [hCircuit] at success; contradiction
+  | ok circuitOutputs => exact ⟨circuitOutputs, rfl⟩
+
 /-- Accepted executions establish authorization even when Pre does not assume it. -/
 theorem accepted_circuit (ctx : EvalContext) (input : InputValues)
     (canonical : CanonicalInputs ctx input) (before after : LedgerState) (outputs : EvalEnv)
     (success : claimEntry.run ctx (inputEnvironment input) before = .ok (outputs, after)) :
     claimEntry.circuit.run ctx (inputEnvironment input) = .ok [("nullifier", .native input.nullifier)] := by
-  have run := success
-  simp only [Entrypoint.run, entry_disclosure_valid] at run
-  dsimp only [Bind.bind, Except.bind, Except.pure] at run
-  cases result : claimEntry.circuit.run ctx (inputEnvironment input) with
-  | error message => rw [result] at run; contradiction
-  | ok circuitOutputs =>
-    exact congrArg Except.ok (successful_source_output ctx input canonical circuitOutputs result)
+  obtain ⟨circuitOutputs, result⟩ := entrypointSuccessHasCircuitSuccess ctx claimEntry
+    (inputEnvironment input) before outputs after entry_disclosure_valid success
+  exact result.trans (congrArg Except.ok
+    (successful_source_output ctx input canonical circuitOutputs result))
 
 theorem effects_reject_existing (ctx : EvalContext) (input : InputValues)
     (values : List (Nat × _root_.Bool)) (canonical : CanonicalInputs ctx input)
     (value : Value) (present : (typedEntries values).lookup (.native input.nullifier) = some value) :
-    runEffects ctx claimEntry.effects (("nullifier", .native input.nullifier) :: inputEnvironment input)
+    runEffectsWithEnv ctx claimEntry.effects (("nullifier", .native input.nullifier) :: inputEnvironment input)
       (state input.root input.campaign values) = .error "state map key already present" := by
   have hr := Nat.not_le.mpr canonical.root
   have hc := Nat.not_le.mpr canonical.campaign
   have hn := Nat.not_le.mpr canonical.nullifier
-  simp! [runEffects, claimEntry, PrivateClaim, state, Expr.eval, Value.as, Value.pack,
+  simp! [runEffectsWithEnv, claimEntry, PrivateClaim, state, Expr.eval, Value.as, Value.pack,
     inputEnvironment, canonical.root, canonical.campaign, canonical.nullifier,
     hr, hc, hn, present, Except.pure, Except.bind, Except.map]
   rfl
@@ -64,11 +73,12 @@ theorem accepted_authorized (ctx : EvalContext) (input : InputValues)
   | some value =>
     have rejected : claimEntry.run ctx (inputEnvironment input) (state input.root input.campaign values) =
         .error "state map key already present" := by
-      simp only [Entrypoint.run, entry_disclosure_valid]
+      simp only [Entrypoint.run, entry_disclosure_valid, clear_settlement_state]
       dsimp only [Bind.bind, Except.bind, Except.pure]
       rw [circuit]
       dsimp only [Bind.bind, Except.bind]
       simp only [List.cons_append, List.nil_append]
+      rw [claim_entry_run_effects]
       rw [effects_reject_existing ctx input values canonical value present]
     rw [success] at rejected
     contradiction
@@ -120,8 +130,8 @@ private theorem transport_invariant (ctx : EvalContext) (hmod : ctx.modulus = Fi
   · simpa only [hmod, fixtureContext] using old.2.1
   · constructor
     · exact old.2.2.uniqueKeys
-    · intro item member
-      simpa only [hmod, fixtureContext] using old.2.2.canonicalKeys item member
+    · intro item membership
+      simpa only [hmod, fixtureContext] using old.2.2.canonicalKeys item membership
     · exact old.2.2.allMarked
 
 private theorem restore_invariant (ctx : EvalContext) (hmod : ctx.modulus = Field.modulus)
@@ -132,8 +142,8 @@ private theorem restore_invariant (ctx : EvalContext) (hmod : ctx.modulus = Fiel
   · simpa only [hmod, fixtureContext] using old.2.1
   · constructor
     · exact old.2.2.uniqueKeys
-    · intro item member
-      simpa only [hmod, fixtureContext] using old.2.2.canonicalKeys item member
+    · intro item membership
+      simpa only [hmod, fixtureContext] using old.2.2.canonicalKeys item membership
     · exact old.2.2.allMarked
 
 theorem functional : FunctionalObligation policy := by

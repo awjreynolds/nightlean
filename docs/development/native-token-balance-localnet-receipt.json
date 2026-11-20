@@ -1,0 +1,47 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "nodeImage": "midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "specVersion": 2001100,
+  "transactionVersion": 4,
+  "entrypoint": "NativeTokenBalance.inspect",
+  "compilerRevision": "04ebb42c333e16defce6e9fb4266a873b3e5b423",
+  "artifactSha256": {
+    "source": "177db4ed71c3ac7a0a3ced4f6480a87194ade90c87e1b22141b0a239ba336c6f",
+    "circuit": "cae49cfd2d59181c9070a5ba60d6a138f767726ff21791b053bed9b134f81527",
+    "plan": "e711ebf45e56d1df0613f874dde93e201bef735fe2ae7eb539eae7b5db06e54e",
+    "verifierKey": "b219ac4ac9d9d214879b192a2733bcfeba9e26dc2e1a3f9fc5874ae32703e91d",
+    "ledgerParameters": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+    "bundleManifest": "c37c055ef53215976f486f8e2461758108ceb76866232a3aff5f67006ce0d9ff"
+  },
+  "tokenNamespace": "unshielded",
+  "comparisonLimit": "1",
+  "startingTokenBalance": "0",
+  "recordedAfterDeployment": "17",
+  "recordedAfterCall": "0",
+  "exactPredictedStateAccepted": true,
+  "receipts": [
+    {
+      "event": "Deploy",
+      "height": 54,
+      "blockHash": "17b951a7caf703fb68f013d728d6c1f8384e1e3833ca674dc54932c70f0c417c",
+      "contractAddress": "9e2516d38ed4fcd8dabdcd863847ab269faaf497502fd223acb39d06d5de49ec",
+      "transactionId": "fd410949e459889b2d968a59e877fbdf6f2c15efa2bfa1e2ab91293c6eee53fc",
+      "stateBytes": 1484,
+      "stateSha256": "0ef929071e12dcea5b7ebfb87ebcf7a761b355262770e81314ab43051ef1f1cc"
+    },
+    {
+      "event": "Call",
+      "height": 57,
+      "blockHash": "b2b398d70e5b290e810babc2787b053868591ea9c7211791444e818de04a3e8c",
+      "contractAddress": "9e2516d38ed4fcd8dabdcd863847ab269faaf497502fd223acb39d06d5de49ec",
+      "transactionId": "b53c141c08d40d3921cf4e0b8cd3dddf569c86a749513783a40c7a4760fa9487",
+      "stateBytes": 1484,
+      "stateSha256": "40e06636b9879f7d9f609bdc0054ea353bb89a18f1131918c24b0081ecaa7ed7"
+    }
+  ],
+  "circuit": {
+    "k": 9,
+    "rows": 403
+  }
+}
