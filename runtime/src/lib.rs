@@ -316,6 +316,10 @@ pub enum Expr {
         length: usize,
         value: Box<Expr>,
     },
+    Sha256 {
+        length: usize,
+        value: Box<Expr>,
+    },
     Sha512 {
         length: usize,
         value: Box<Expr>,
@@ -780,6 +784,10 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             bytes.reverse();
             Value::Bytes(bytes)
         }
+        Expr::Sha256 { length, value } => {
+            let bytes = zeroize::Zeroizing::new(evaluated_bytes(value, *length, env)?);
+            Value::Bytes(Sha256::digest(bytes.as_slice()).to_vec())
+        }
         Expr::Sha512 { length, value } => {
             Value::Bytes(sha2::Sha512::digest(evaluated_bytes(value, *length, env)?).to_vec())
         }
@@ -1097,6 +1105,13 @@ pub enum Instruction {
         depth: u8,
         hash: Expr,
     },
+    #[serde(rename = "merkleTreeInsertHashIndex")]
+    MerkleTreeInsertHashIndex {
+        slot: u32,
+        depth: u8,
+        hash: Expr,
+        index: Expr,
+    },
     #[serde(rename = "merkleTreeReset")]
     MerkleTreeReset {
         slot: u32,
@@ -1243,6 +1258,10 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             ensure_merkle_tree_depth(plan, *slot, *depth)?;
             vec![4, 4, 1, 4, 6, 1, 1, 4, 2, 1]
         }
+        Instruction::MerkleTreeInsertHashIndex { slot, depth, .. } => {
+            ensure_merkle_tree_depth(plan, *slot, *depth)?;
+            vec![4, 4, 5, 6, 1, 4, 5, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1]
+        }
         Instruction::MerkleTreeReset { slot, depth } => {
             ensure_merkle_tree_depth(plan, *slot, *depth)?;
             vec![5, 1 + merkle_tree_default_state(*depth).field_size(), 1]
@@ -1362,6 +1381,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::ListLength { .. }
         | Instruction::MerkleTreeIsFull { .. }
         | Instruction::MerkleTreeInsertHash { .. }
+        | Instruction::MerkleTreeInsertHashIndex { .. }
         | Instruction::MerkleTreeReset { .. }
         | Instruction::ListHead { .. }
         | Instruction::ListPushFront { .. }
@@ -3062,6 +3082,9 @@ fn probe_instruction(
         Instruction::MerkleTreeInsertHash { hash, .. } => {
             probe_expression(hash, plan, env, deferred_outputs)
         }
+        Instruction::MerkleTreeInsertHashIndex { hash, index, .. } => {
+            probe_expressions([hash, index], plan, env, deferred_outputs)
+        }
         Instruction::ListPushFront {
             keys, expressions, ..
         } => {
@@ -3360,6 +3383,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::MapRemove { .. }
                 | Instruction::MerkleTreeIsFull { .. }
                 | Instruction::MerkleTreeInsertHash { .. }
+                | Instruction::MerkleTreeInsertHashIndex { .. }
                 | Instruction::MerkleTreeReset { .. }
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::MintShielded { .. }
@@ -3680,6 +3704,7 @@ impl PreparationCursor {
                             | Instruction::MapRemove { .. }
                             | Instruction::MerkleTreeIsFull { .. }
                             | Instruction::MerkleTreeInsertHash { .. }
+                            | Instruction::MerkleTreeInsertHashIndex { .. }
                             | Instruction::MerkleTreeReset { .. }
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::MintShielded { .. }
@@ -3919,6 +3944,7 @@ impl PreparationCursor {
                     | Instruction::ListReset { .. }
                     | Instruction::MerkleTreeIsFull { .. }
                     | Instruction::MerkleTreeInsertHash { .. }
+                    | Instruction::MerkleTreeInsertHashIndex { .. }
             )
         {
             advance_native_state_prefix(
@@ -4350,6 +4376,75 @@ impl PreparationCursor {
                 has_written = true;
                 Op::Ins { cached: true, n: 2 }
             }
+            Instruction::MerkleTreeInsertHashIndex {
+                slot,
+                depth,
+                hash,
+                index,
+            } => {
+                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+                let root_index = merkle_tree_root_index(*slot, true)?;
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let tree_state = read_state_value(read_context, *slot, &[])?;
+                merkle_tree_count(&tree_state, *depth)?;
+                let capacity = 1u64 << depth;
+
+                let index_value = evaluate(index, &env)?;
+                let Value::UInt { number, maximum } = &index_value else {
+                    bail!("MerkleTree insertion index must be UInt64")
+                };
+                ensure!(
+                    *maximum == u64::MAX.into(),
+                    "MerkleTree insertion index must be UInt64"
+                );
+                let index_value_u64: u64 = number.clone().try_into()?;
+                ensure!(
+                    index_value_u64 < capacity,
+                    "MerkleTree insertion index exceeds its capacity"
+                );
+                let index_value = aligned(&index_value, "u64")?;
+
+                let hash = evaluate(hash, &env)?;
+                let Value::Bytes(ref bytes) = hash else {
+                    bail!("MerkleTree inserted hash must be Bytes32")
+                };
+                ensure!(
+                    bytes.len() == 32,
+                    "MerkleTree inserted hash must be Bytes32"
+                );
+                let aligned_hash = aligned_bytes(&hash)?;
+                program.extend([
+                    root_index,
+                    merkle_tree_index(0, true),
+                    push_native_state(StateValue::Cell(Sp::new(index_value.clone())), false)?,
+                    push_native_state(StateValue::Cell(Sp::new(aligned_hash)), true)?,
+                    Op::Ins {
+                        cached: false,
+                        n: 2,
+                    },
+                    merkle_tree_index(1, true),
+                    push_native_state(StateValue::Cell(Sp::new(index_value)), false)?,
+                    Op::Addi { immediate: 1 },
+                    Op::Dup { n: 1 },
+                    Op::Dup { n: 1 },
+                    Op::Lt,
+                    Op::Branch { skip: 2 },
+                    Op::Pop,
+                    Op::Jmp { skip: 2 },
+                    Op::Swap { n: 0 },
+                    Op::Pop,
+                    Op::Ins {
+                        cached: false,
+                        n: 1,
+                    },
+                ]);
+                has_written = true;
+                Op::Ins { cached: true, n: 1 }
+            }
             Instruction::ListHead {
                 slot,
                 keys,
@@ -4765,6 +4860,7 @@ impl PreparationCursor {
             instruction,
             Instruction::Insert { .. }
                 | Instruction::MerkleTreeInsertHash { .. }
+                | Instruction::MerkleTreeInsertHashIndex { .. }
                 | Instruction::MerkleTreeReset { .. }
                 | Instruction::ListPushFront { .. }
                 | Instruction::ListPopFront { .. }
