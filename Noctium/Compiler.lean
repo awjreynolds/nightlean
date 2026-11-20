@@ -202,6 +202,14 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("commitment", nativeExpressionJson commitment)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
+  | .readTokenBalance destination color isUnshielded query => Json.mkObj (
+      [("op", toJson ("readTokenBalance" : String)),
+        ("destination", toJson destination), ("color", nativeExpressionJson color),
+        ("isUnshielded", nativeExpressionJson isUnshielded)] ++ match query with
+      | .exact => []
+      | .compare less limit =>
+        [("comparison", Json.mkObj [
+          (if less then "lessThan" else "greaterThan", nativeExpressionJson limit)])])
 
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
@@ -234,6 +242,14 @@ private def effectJson : Effect → Json
       ("commitment", expressionJson commitment)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
+  | .readTokenBalance destination color isUnshielded query => Json.mkObj (
+      [("op", toJson ("readTokenBalance" : String)),
+        ("destination", toJson destination), ("color", expressionJson color),
+        ("isUnshielded", expressionJson isUnshielded)] ++ match query with
+      | .exact => []
+      | .compare less limit =>
+        [("comparison", Json.mkObj [
+          (if less then "lessThan" else "greaterThan", expressionJson limit)])])
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
       ("payload", expressionJson payload)]

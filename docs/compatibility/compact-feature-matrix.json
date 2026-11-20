@@ -1564,8 +1564,8 @@
       "id": "C-ADT-KERNEL-BALANCE",
       "layer": "language-ledger",
       "surface": "Kernel.balance",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Tagged UInt128 starting-balance read for either token namespace. A missing token reads zero.",
       "source": [
         "adt"
       ],
@@ -1574,15 +1574,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTokenBalance.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-BALANCEGREATERTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.balanceGreaterThan",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Tagged strict greater-than predicate. Active comparisons follow the pinned VM's UInt64 operand boundary.",
       "source": [
         "adt"
       ],
@@ -1591,15 +1595,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTokenBalance.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-BALANCELESSTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.balanceLessThan",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Tagged strict less-than predicate. Active comparisons follow the pinned VM's UInt64 operand boundary.",
       "source": [
         "adt"
       ],
@@ -1608,7 +1616,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTokenBalance.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs"
+      ],
       "equivalence": "unverified"
     },
     {

@@ -66,3 +66,28 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Read a token balance
+
+Use a 32-byte color and a Boolean tag. `true` selects the unshielded balance and
+`false` selects the shielded balance for the same color.
+
+```lean
+tokenBalance(color, isUnshielded) as amount
+tokenBalanceLt(color, isUnshielded, limit) as below
+tokenBalanceGt(color, isUnshielded, limit) as above
+```
+
+These operations read the balance at the start of the call. A missing token has
+balance zero. Exact reads return `UInt 128`. Both strict comparisons accept a
+`UInt 128` limit at the source boundary. The pinned Impact VM requires the
+actual balance and limit to fit in `UInt 64` when the comparison runs.
+
+Color, tag, comparison limit and any `when` guard are public or explicitly
+disclosed. A skipped exact read binds zero. A skipped comparison binds
+`false`. The comparison binds its Boolean result to the native transcript.
+Use the exact read when the application needs the amount.
+
+The [Lean fixture](../../tests/NativeTokenBalance.lean) and
+[Compact reference fixture](../../tests/compact/TokenBalance.compact) use the
+same inputs and guards.

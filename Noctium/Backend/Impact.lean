@@ -58,6 +58,8 @@ inductive Op where
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | requireContractCaller (address : Expr (.bytes 32))
+  | readTokenBalance (destination : String) (color : Expr (.bytes 32))
+      (isUnshielded : Expr .bool) (query : BalanceQuery)
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
 
 private def claimContractCallFieldGroups
@@ -127,6 +129,39 @@ private def eventFieldGroups (kind : EventKind)
   [[.native 0x10, .native 0x33, .native 1, .native 1, .native 4, .native 1,
     .native 1, .native 1, .native 1, .native kind.tag, .native 1] ++ data, [.native 0x09]]
 
+private def tokenChoiceValues (color : Expr (.bytes 32)) (isUnshielded : Expr .bool) :
+    List Scalar :=
+  [.select isUnshielded (.native 1) (.native 0),
+    .select isUnshielded (.bytesField color 0) (.native 0),
+    .select isUnshielded (.bytesField color 1) (.native 0),
+    .select isUnshielded (.native 0) (.bytesField color 0),
+    .select isUnshielded (.native 0) (.bytesField color 1)]
+
+private def balanceAmountFields (value : Expr (.uint balanceMaximum)) : List Scalar :=
+  [.native 1, .native 16, .cast .native value]
+
+private def pushBalanceAmount (value : Expr (.uint balanceMaximum)) : List Scalar :=
+  [.native 0x10, .native 1] ++ balanceAmountFields value
+
+private def balanceFieldGroupsForToken (destination : String) (token : List Scalar)
+    (query : BalanceQuery) : List (List Scalar) :=
+  let load depth := [[.native (0x30 + depth)], listIndexFields 5,
+    [.native 0x30], [.native 0x10, .native 1] ++ token,
+    [.native 0x18], [.native 0x12, .native 3], [.native 0x0b],
+    pushBalanceAmount (.uint balanceMaximum 0), [.native 0x13, .native 1], [.native 0x50] ++ token]
+  match query with
+  | .exact => load 2 ++ [[.native 0x0c] ++ balanceAmountFields (.ref destination)]
+  | .compare less limit =>
+    let operands := if less then load 2 ++ [pushBalanceAmount limit]
+      else pushBalanceAmount limit :: load 3
+    operands ++ [[.native 0x01], [.native 0x0c] ++ (Aligned.bitExpr (.ref destination)).fields]
+
+private def taggedBalanceFieldGroups (destination : String) (color : Expr (.bytes 32))
+    (isUnshielded : Expr .bool) (query : BalanceQuery) : List (List Scalar) :=
+  let token := [.native 3, .native 1, .native 32, .native 32] ++
+    tokenChoiceValues color isUnshielded
+  balanceFieldGroupsForToken destination token query
+
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
   | .index slot pushPath => [.native (if pushPath then 0x70 else 0x50)] ++
@@ -181,6 +216,8 @@ def Op.fields : Op → List Scalar
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .readTokenBalance destination color isUnshielded query =>
+      (taggedBalanceFieldGroups destination color isUnshielded query).flatten
   | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
@@ -224,6 +261,8 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
   | .requireContractCaller address => requireContractCallerFieldGroups address
+  | .readTokenBalance destination color isUnshielded query =>
+      taggedBalanceFieldGroups destination color isUnshielded query
   | .emitEvent kind payload => eventFieldGroups kind payload
   | operation => [operation.fields]
 
@@ -600,6 +639,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readTokenBalance destination color isUnshielded query =>
+    pure {plan with
+      operations := plan.operations ++ [.readTokenBalance destination color isUnshielded query]
+      reads := plan.reads ++ [{name := destination, ty := query.resultType}]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -800,6 +843,17 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
       pure (.requireContractCaller (totalizeActivityValue condition (expressionNames address) address))
+    | some condition, .readTokenBalance destination color isUnshielded query =>
+      let limitNames := match query with
+        | .exact => []
+        | .compare _ limit => expressionNames limit
+      let avoid := expressionNames color ++ expressionNames isUnshielded ++ limitNames
+      let query := match query with
+        | .exact => .exact
+        | .compare less limit => .compare less (totalizeActivityValue condition avoid limit)
+      pure (.readTokenBalance destination
+        (totalizeActivityValue condition avoid color)
+        (totalizeActivityValue condition avoid isUnshielded) query)
     | some condition, .readMap name destination keyTy valueTy key =>
       pure (.readMap name destination keyTy valueTy
         (totalizeActivityValue condition (expressionNames key) key))
@@ -866,7 +920,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       activityGuards := priorGuards ++ List.replicate added (some condition)}
   | some condition, .readPath .. | some condition, .readCompositePath .. |
       some condition, .memberPath .. | some condition, .counterRead .. |
-      some condition, .listLength .. | some condition, .listHead .. =>
+      some condition, .listLength .. | some condition, .listHead .. |
+      some condition, .readTokenBalance .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -1033,6 +1088,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readTokenBalance destination color isUnshielded query =>
+    plan := {plan with
+      operations := plan.operations ++ [.readTokenBalance destination color isUnshielded query]
+      reads := plan.reads ++ [{name := destination, ty := query.resultType}]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -1265,6 +1324,7 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
             .memberPath _ destination .. | .counterRead _ destination .. |
+            .readTokenBalance destination .. |
             .listLength _ destination .. => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
@@ -1387,6 +1447,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .readTokenBalance .. => throw "readTokenBalance uses its dedicated native-plan operation JSON"
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do
