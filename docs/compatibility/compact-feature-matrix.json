@@ -1263,8 +1263,8 @@
       "id": "C-STATE-NESTED",
       "layer": "language-ledger",
       "surface": "Nested ledger ADTs",
-      "noctiumStatus": "missing",
-      "notes": "Map value nesting and typed ledger paths need explicit layout and operation semantics.",
+      "noctiumStatus": "subset",
+      "notes": "Depth-two ordinary and historic Merkle values under Bytes32 and Field map keys match Compact for setup, writes, reads and resets. Independent owner and bucket paths retain their exact state. Other nested value and path combinations require separate evidence.",
       "source": [
         "reference",
         "adt"
@@ -1273,7 +1273,12 @@
         "SEM",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NestedMerkle.lean",
+        "runtime/tests/merkle_nested.rs",
+        "tests/compact/nested-merkle.mjs",
+        "docs/development/nested-merkle-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2594,7 +2599,7 @@
       "layer": "language-ledger",
       "surface": "MerkleTree.checkRoot",
       "noctiumStatus": "subset",
-      "notes": "Ordinary root-only checks compare a Field against the current Merkle root. The guarded read returns false when skipped. Depth-two native results match Compact for empty, populated and same-call append cases. Nested state remains open.",
+      "notes": "Ordinary root-only checks compare a Field against the current Merkle root. The guarded read returns false when skipped. Depth-two native results match Compact for empty, populated and same-call append cases. The nested ledger ADT row covers the depth-two typed path fixtures.",
       "source": [
         "adt"
       ],
@@ -2633,7 +2638,7 @@
       "layer": "language-ledger",
       "surface": "MerkleTree.insertHash",
       "noctiumStatus": "subset",
-      "notes": "Root-only Bytes32 digest append. Depth-two roots and cursors match the pinned Compact fixture. Nested paths and other insert methods require separate evidence.",
+      "notes": "Root-only Bytes32 digest append. Depth-two roots and cursors match the pinned Compact fixture. The nested ledger ADT row covers prehashed append at a typed path.",
       "source": [
         "adt"
       ],
@@ -2676,7 +2681,7 @@
       "layer": "language-ledger",
       "surface": "MerkleTree.insertIndex",
       "noctiumStatus": "subset",
-      "notes": "Ordinary root writes accept disclosed Field leaves and UInt64 indices. The compiler hashes the canonical Field bytes in the mdn:lh domain. Focused depth-two native roots and cursors match Compact. Other leaf layouts and nested trees remain open.",
+      "notes": "Ordinary root writes accept disclosed Field leaves and UInt64 indices. The compiler hashes the canonical Field bytes in the mdn:lh domain. Focused depth-two native roots and cursors match Compact. The nested ledger ADT row covers the depth-two Field case. Other leaf layouts remain open.",
       "source": [
         "adt"
       ],
