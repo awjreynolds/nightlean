@@ -208,6 +208,8 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("amount", nativeExpressionJson amount)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
+  | .readContractAddress destination => Json.mkObj [
+      ("op", toJson ("readContractAddress" : String)), ("destination", toJson destination)]
 
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
@@ -246,6 +248,8 @@ private def effectJson : Effect → Json
       ("amount", expressionJson amount)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
+  | .readContractAddress destination => Json.mkObj [
+      ("op", toJson ("readContractAddress" : String)), ("destination", toJson destination)]
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
       ("payload", expressionJson payload)]

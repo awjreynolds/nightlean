@@ -121,6 +121,8 @@ structure EvalContext where
     fun _ => .error "qualified Jubjub byte-decoding oracle is unavailable"
   /-- Address of an immediate contract caller, supplied by the execution context. -/
   contractCaller : Option (List Nat) := none
+  /-- Address of the contract executing this entrypoint. -/
+  ownContractAddress : Option (List Nat) := none
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
@@ -141,6 +143,12 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .jubjubPoint => v.1 < ctx.modulus && v.2 < ctx.modulus &&
       (ctx.jubjub.pointValid v).isOk
   | .foreign kind => kind.canonical v
+
+private def contractAddressValue (ctx : EvalContext) : Except String Value := do
+  let some address := ctx.ownContractAddress | throw "missing execution contract address"
+  unless address.length == 32 && address.all (· < 256) do
+    throw "invalid execution contract address"
+  pure (.bytes 32 address)
 
 /-- Public reduction equation for input-admission and preservation proofs. -/
 theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
@@ -793,6 +801,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
         if !canonical ctx keyTy keyValue || !canonical ctx valueTy value then
           throw s!"noncanonical state map entry '{name}'"
       env := (destination, Value.bool (entries.lookup key).isSome) :: env
+    | .readContractAddress destination =>
+      env := (destination, ← contractAddressValue ctx) :: env
     | .require condition =>
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .claimContractCall .. =>
@@ -960,7 +970,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
       let guard := guards[index]?.getD none
       if guard.isSome then
         match effect with
-        | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. |
+        | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. | .require .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
@@ -977,6 +987,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some value := raw.as ty | throw s!"state cell type mismatch '{name}'"
           if !canonical ctx ty value then throw s!"noncanonical state cell '{name}'"
           env := (destination, Value.pack ty value) :: env
+        | .readContractAddress destination =>
+          env := (destination, ← contractAddressValue ctx) :: env
         | .readMap name destination keyTy valueTy key =>
           let key := Value.pack keyTy (← key.eval ctx env)
           let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
@@ -1161,6 +1173,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
+        | .readContractAddress destination =>
+          env := (destination, .bytes 32 (List.replicate 32 0)) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
             .mintShielded .. | .mintUnshielded .. |
             .requireContractCaller .. | .emitEvent .. |

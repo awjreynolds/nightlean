@@ -174,6 +174,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     let activityControl ← match value.effectGuardAt index, effect with
       | none, _ => pure []
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
+      | some condition, .readContractAddress ..
       | some condition, .writeCell .. | some condition, .writeMap ..
       | some condition, .claimContractCall .. | some condition, .mintShielded ..
       | some condition, .mintUnshielded .. | some condition, .requireContractCaller ..
@@ -211,6 +212,10 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
         checkSink {description := s!"public map membership guard '{state}'", span} [] activeControl
       checkSink {description := s!"public map membership path '{state}'", span}
         (← expression env span key) activeControl
+      env := env ++ [(destination, [])]
+    | .readContractAddress destination =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := "public contract address read guard", span} [] activeControl
       env := env ++ [(destination, [])]
     | .require condition => discard (expression env span condition)
     | .writeCell state _ payload =>
