@@ -1,0 +1,56 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger ordinary: Map<Bytes<32>, Map<Field, MerkleTree<2, Field>>>;
+export ledger archives: Map<Bytes<32>, Map<Field, HistoricMerkleTree<2, Field>>>;
+
+export circuit setup(owner: Bytes<32>, bucket: Field): [] {
+  const o = disclose(owner);
+  const b = disclose(bucket);
+  if (!ordinary.member(o)) { ordinary.insertDefault(o); }
+  if (!archives.member(o)) { archives.insertDefault(o); }
+  ordinary.lookup(o).lookup(b).resetToDefault();
+  archives.lookup(o).lookup(b).resetToDefault();
+}
+
+export circuit setupAndAppend(owner: Bytes<32>, bucket: Field, hash: Bytes<32>, leaf: Field): [] {
+  const o = disclose(owner);
+  const b = disclose(bucket);
+  if (!ordinary.member(o)) { ordinary.insertDefault(o); }
+  if (!archives.member(o)) { archives.insertDefault(o); }
+  ordinary.lookup(o).lookup(b).resetToDefault();
+  archives.lookup(o).lookup(b).resetToDefault();
+  ordinary.lookup(o).lookup(b).insertHash(disclose(hash));
+  archives.lookup(o).lookup(b).insert(disclose(leaf));
+}
+
+export circuit append(owner: Bytes<32>, bucket: Field, hash: Bytes<32>, leaf: Field): [] {
+  const o = disclose(owner);
+  const b = disclose(bucket);
+  ordinary.lookup(o).lookup(b).insertHash(disclose(hash));
+  archives.lookup(o).lookup(b).insert(disclose(leaf));
+}
+
+export circuit setIndex(owner: Bytes<32>, bucket: Field, hash: Bytes<32>, leaf: Field, position: Uint<64>): [] {
+  const o = disclose(owner);
+  const b = disclose(bucket);
+  ordinary.lookup(o).lookup(b).insertIndex(disclose(leaf), 2);
+  archives.lookup(o).lookup(b).insertHashIndex(disclose(hash), disclose(position));
+}
+
+export circuit readTrees(owner: Bytes<32>, bucket: Field, root: MerkleTreeDigest): [Boolean, Boolean, Boolean, Boolean] {
+  const o = disclose(owner);
+  const b = disclose(bucket);
+  const r = disclose(root);
+  return [ordinary.lookup(o).lookup(b).checkRoot(r), archives.lookup(o).lookup(b).checkRoot(r),
+    ordinary.lookup(o).lookup(b).isFull(), archives.lookup(o).lookup(b).isFull()];
+}
+
+export circuit clear(owner: Bytes<32>, bucket: Field): [] {
+  archives.lookup(disclose(owner)).lookup(disclose(bucket)).resetHistory();
+}
+
+export circuit resetTrees(owner: Bytes<32>, bucket: Field): [] {
+  ordinary.lookup(disclose(owner)).lookup(disclose(bucket)).resetToDefault();
+  archives.lookup(disclose(owner)).lookup(disclose(bucket)).resetToDefault();
+}

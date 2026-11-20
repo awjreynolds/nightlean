@@ -214,3 +214,30 @@ On Ledger 9 localnet, deployment finalized at height 4. The combined
 append and past-root membership call finalized at height 7. Both
 receipts matched the predicted state bytes. The combined relation used
 k=8 and 245 rows. [Localnet receipt](historic-merkle-localnet-receipt.json)
+
+## Store Merkle trees inside a map
+
+A typed map path selects an ordinary or historic tree. Create the parent maps
+before resetting the final tree slot. A reset creates the empty tree at the
+final key. Reads and writes require the tree to exist.
+
+```lean
+tree archives : Bytes32 => Native => HistoricMerkleTree 2
+```
+
+```lean
+reset archives[disclose(owner)][disclose(bucket)]
+insertField archives[disclose(owner)][disclose(bucket)] := disclose(leaf)
+checkRoot archives[disclose(owner)][disclose(bucket)] against disclose(digest) as knownRoot
+```
+
+Declare the release for each private path key, leaf or root used by the
+operation. The same call sees its earlier map initialization and writes.
+Resetting one tree preserves both adjacent buckets and trees under another
+owner.
+
+The [Lean fixture](../../tests/NestedMerkle.lean) and
+[Compact oracle](../../tests/compact/nested-merkle.mjs) check initialization,
+sparse insertion, replacement at capacity, root membership and both resets.
+The native fixture checks exact roots, cursors and retained history. It also
+checks a missing parent, an invalid index and a tampered read result.
