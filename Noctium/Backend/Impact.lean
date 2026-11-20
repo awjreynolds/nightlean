@@ -58,6 +58,7 @@ inductive Op where
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | requireContractCaller (address : Expr (.bytes 32))
+  | readContractAddress (destination : String)
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
 
 private def claimContractCallFieldGroups
@@ -105,6 +106,11 @@ private def requireContractCallerFieldGroups (address : Expr (.bytes 32)) : List
   [[.native 0x32], listIndexFields 6,
     [.native 0x0c, .native 3, .native 1, .native 32, .native 32,
       .native 1, .bytesField address 0, .bytesField address 1, .native 0, .native 0]]
+
+private def contractAddressFieldGroups (destination : String) : List (List Scalar) :=
+  -- Query context is two stack slots down. Context slot zero holds this contract's address.
+  [[.native 0x32], listIndexFields 0,
+    [.native 0x0c] ++ (Aligned.bytes32 (.ref destination)).fields]
 
 private def listU8CellPushFields (index : Nat) : List Scalar :=
   [.native 0x10, .native 1, .native 1, .native 1, .native index]
@@ -181,6 +187,7 @@ def Op.fields : Op → List Scalar
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .readContractAddress destination => (contractAddressFieldGroups destination).flatten
   | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
@@ -224,6 +231,7 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
   | .requireContractCaller address => requireContractCallerFieldGroups address
+  | .readContractAddress destination => contractAddressFieldGroups destination
   | .emitEvent kind payload => eventFieldGroups kind payload
   | operation => [operation.fields]
 
@@ -600,6 +608,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readContractAddress destination =>
+    pure {plan with
+      operations := plan.operations ++ [.readContractAddress destination]
+      reads := plan.reads ++ [{name := destination, ty := .bytes 32}]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -847,6 +859,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some condition, .emptyMapPath name keys =>
       pure (.emptyMapPath name (totalizePathKeys condition keys))
     | some _, .readCell .. => pure effect
+    | some _, .readContractAddress .. => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
     | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
@@ -864,7 +877,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     pure {result with
       reads := reads
       activityGuards := priorGuards ++ List.replicate added (some condition)}
-  | some condition, .readPath .. | some condition, .readCompositePath .. |
+  | some condition, .readContractAddress .. | some condition, .readPath .. | some condition, .readCompositePath .. |
       some condition, .memberPath .. | some condition, .counterRead .. |
       some condition, .listLength .. | some condition, .listHead .. =>
     let readIndex := plan.reads.length
@@ -1033,6 +1046,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readContractAddress destination =>
+    plan := {plan with
+      operations := plan.operations ++ [.readContractAddress destination]
+      reads := plan.reads ++ [{name := destination, ty := .bytes 32}]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -1265,7 +1282,7 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
             .memberPath _ destination .. | .counterRead _ destination .. |
-            .listLength _ destination .. => [destination]
+            .listLength _ destination .. | .readContractAddress destination => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
         | _ => [])
@@ -1387,6 +1404,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .readContractAddress .. => throw "contract address read uses its dedicated native-plan operation JSON"
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do

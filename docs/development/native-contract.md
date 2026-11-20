@@ -66,3 +66,18 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Read the current contract address
+
+`readSelf as own` binds the executing contract's `Bytes32` address.
+`when enabled readSelf as own` produces zero bytes when inactive. A
+private guard needs disclosure before it controls this public read.
+The compiler encodes the query-context address as a native Impact read
+and binds its two byte limbs in ZKIR. [Midnight self reference](https://docs.midnight.network/compact/reference/ledger-adt#self)
+
+The address comes from the contract execution context. This allows a
+caller-dependent entrypoint to use the callee's own address alongside
+the separate caller value. Native replay against a different address
+fails the equality check. [Lean fixture](../../tests/NativeContractAddress.lean) ·
+[Compact oracle](../../tests/compact/contract-address.mjs) ·
+[Native checker](../../runtime/tests/native_contract_address.rs)

@@ -1114,6 +1114,10 @@ pub enum Instruction {
     RequireContractCaller {
         address: Expr,
     },
+    #[serde(rename = "readContractAddress")]
+    ReadContractAddress {
+        destination: String,
+    },
     #[serde(rename = "emitEvent")]
     EmitEvent {
         tag: u8,
@@ -1205,6 +1209,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ClaimContractCall { .. } => vec![1, 4, 1, 1, 11, 2, 2, 1, 1],
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
+        Instruction::ReadContractAddress { .. } => vec![1, 4, 5],
         Instruction::EmitEvent { tag, .. } => {
             vec![13 + event_payload_length(*tag)?.div_ceil(31), 1]
         }
@@ -1228,6 +1233,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
         Instruction::RequireContractCaller { .. } => 15,
+        Instruction::ReadContractAddress { .. } => 10,
         Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
@@ -2786,6 +2792,7 @@ fn probe_instruction(
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
+        Instruction::ReadContractAddress { .. } => Ok(None),
         Instruction::EmitEvent { tag, payload } => {
             event_payload_length(*tag)?;
             probe_expression(payload, plan, env, deferred_outputs)
@@ -2825,6 +2832,35 @@ fn consume_contract_caller_reads(
     }
     *index += 5;
     Ok(())
+}
+
+fn bind_contract_address(
+    read: Option<&Read>,
+    guard: Option<&Expr>,
+    destination: &str,
+    address: Option<ContractAddress>,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let read = read.ok_or_else(|| anyhow!("missing contract address read"))?;
+    ensure!(
+        read.name == destination
+            && ScalarType::parse(&read.ty)? == ScalarType::Bytes32
+            && read.guard.as_ref() == guard,
+        "contract address read schema mismatch"
+    );
+    validate_byte_read_projections(read, &ScalarType::Bytes32)?;
+    ensure!(
+        !env.contains_key(destination),
+        "contract address read shadows an existing value"
+    );
+    let value = Value::Bytes(address.map_or_else(|| vec![0; 32], |address| address.0.0.to_vec()));
+    env.insert(destination.to_owned(), value);
+    Ok(read_event(
+        read,
+        address.is_some(),
+        env,
+        vec![destination.to_owned()],
+    ))
 }
 
 fn read_event(
@@ -2890,6 +2926,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::MapRemove { .. }
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::RequireContractCaller { .. }
+                | Instruction::ReadContractAddress { .. }
                 | Instruction::EmitEvent { .. }
         ),
         "guarded native operation has an unsupported shape"
@@ -3200,6 +3237,7 @@ impl PreparationCursor {
                             | Instruction::MapRemove { .. }
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::RequireContractCaller { .. }
+                            | Instruction::ReadContractAddress { .. }
                             | Instruction::EmitEvent { .. }
                     ),
                     "guarded native operation has an unsupported shape"
@@ -3216,6 +3254,16 @@ impl PreparationCursor {
                         Instruction::RequireContractCaller { .. }
                     ) {
                         consume_contract_caller_reads(plan, &mut read_index, Some(guard))?;
+                    }
+                    if let Instruction::ReadContractAddress { destination } = operation.as_ref() {
+                        event = Some(bind_contract_address(
+                            plan.reads.get(read_index),
+                            Some(guard),
+                            destination,
+                            None,
+                            env,
+                        )?);
+                        read_index += 1;
                     }
                     if let Instruction::Popeq {
                         expression,
@@ -3947,6 +3995,22 @@ impl PreparationCursor {
                 Op::Popeq {
                     cached: false,
                     result: AlignedValue::from(expected),
+                }
+            }
+            Instruction::ReadContractAddress { destination } => {
+                let address = context.address;
+                event = Some(bind_contract_address(
+                    plan.reads.get(read_index),
+                    instruction_guard,
+                    destination,
+                    Some(address),
+                    env,
+                )?);
+                read_index += 1;
+                program.extend([Op::Dup { n: 2 }, list_index(0)]);
+                Op::Popeq {
+                    cached: false,
+                    result: AlignedValue::from(address),
                 }
             }
             Instruction::EmitEvent { tag, payload } => {

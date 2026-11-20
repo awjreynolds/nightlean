@@ -424,6 +424,7 @@ inductive Effect where
   | readCell (state destination : String) (ty : Ty)
   | readMap (state destination : String) (keyTy valueTy : Ty) (key : Expr keyTy)
   | readMember (state destination : String) (keyTy valueTy : Ty) (key : Expr keyTy)
+  | readContractAddress (destination : String)
   | require (condition : Expr .bool)
   | writeCell (state : String) (ty : Ty) (value : Expr ty)
   | writeMap (state : String) (keyTy valueTy : Ty) (key : Expr keyTy) (value : Expr valueTy)
@@ -995,7 +996,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span, message}
       | .ok _ => pure ()
       match effect with
-      | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
+      | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. |
           .claimContractCall .. | .requireContractCaller .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
@@ -1020,6 +1021,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         requireState decls state (.map keyTy valueTy)
         key.validate caps env
         pure [(destination, .bool)]
+      | .readContractAddress destination => do
+        (.bytes 32 : Ty).validate caps
+        pure [(destination, .bytes 32)]
       | .require condition =>
         condition.validate caps env
         pure []
