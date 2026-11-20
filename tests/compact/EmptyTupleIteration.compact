@@ -7,9 +7,9 @@ witness empty(slot: Field): [];
 witness callback(): Field;
 
 export circuit update(): Field {
-  const sum = fold((acc: Field, mapped: Field, right: Boolean): Field => acc + callback(),
+  const sum = fold((acc, mapped, right) => acc + callback(),
     seed(),
-    map((left: Field, right: Boolean): Field => callback(), empty(1 as Field), empty(2 as Field)),
+    map((left, right) => callback(), empty(1 as Field), empty(2 as Field)),
     empty(3 as Field));
   total = disclose(sum);
   return disclose(sum);
