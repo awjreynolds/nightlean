@@ -1,0 +1,18 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger recorded: Uint<128>;
+
+export circuit inspect(color: Bytes<32>, isUnshielded: Boolean, limit: Uint<128>,
+                       enabled: Boolean, readExact: Boolean): [Uint<128>, Boolean, Boolean] {
+  const token = disclose(isUnshielded)
+    ? left<Bytes<32>, Bytes<32>>(disclose(color))
+    : right<Bytes<32>, Bytes<32>>(disclose(color));
+  const amount = disclose(readExact) ? kernel.balance(token) : 0;
+  const below = disclose(enabled) ? kernel.balanceLessThan(token, disclose(limit)) : false;
+  const above = disclose(enabled) ? kernel.balanceGreaterThan(token, disclose(limit)) : false;
+  if (disclose(readExact)) {
+    recorded = amount;
+  }
+  return [amount, below, above];
+}

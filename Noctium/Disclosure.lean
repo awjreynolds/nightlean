@@ -176,6 +176,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
       | some condition, .readContractAddress ..
       | some condition, .writeCell .. | some condition, .writeMap ..
+      | some condition, .readTokenBalance ..
       | some condition, .claimContractCall .. | some condition, .mintShielded ..
       | some condition, .mintUnshielded .. | some condition, .requireContractCaller ..
       | some condition, .emitEvent ..
@@ -244,6 +245,13 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
+    | .readTokenBalance destination color isUnshielded query =>
+      let sink := {description := "public token balance read", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+      if let .compare _ limit := query then
+        checkSink sink (← expression env span limit) activeControl
+      env := env ++ [(destination, [])]
     | .emitEvent _ payload =>
       checkSink {description := "public contract event", span}
         (← expression env span payload) activeControl

@@ -111,3 +111,33 @@ prediction, and a separate decoder matched the stored `lastAddress`
 cell to the actual deployment address. Native sizing reported K8 and
 146 rows. The guarded skip and wrong-address replay ran in the native
 VM. [Localnet receipt](native-contract-address-localnet-receipt.json)
+
+## Read a token balance
+
+Use a 32-byte color and a Boolean tag. `true` selects the unshielded balance and
+`false` selects the shielded balance for the same color.
+
+```lean
+tokenBalance(color, isUnshielded) as amount
+tokenBalanceLt(color, isUnshielded, limit) as below
+tokenBalanceGt(color, isUnshielded, limit) as above
+```
+
+These operations read the balance at the start of the call. A missing token has
+balance zero. Exact reads return `UInt 128`. Both strict comparisons accept a
+`UInt 128` limit at the source boundary. The pinned Impact VM requires the
+actual balance and limit to fit in `UInt 64` when the comparison runs.
+
+Color, tag, comparison limit and any `when` guard are public or explicitly
+disclosed. A skipped exact read binds zero. A skipped comparison binds
+`false`. The comparison binds its Boolean result to the native transcript.
+Use the exact read when the application needs the amount.
+
+The [Lean fixture](../../tests/NativeTokenBalance.lean) and
+[Compact reference fixture](../../tests/compact/TokenBalance.compact) use the
+same inputs and guards.
+
+The [localnet receipt](native-token-balance-localnet-receipt.json) records a
+finalized ordinary call for an absent unshielded token. The call wrote zero
+over the previous recorded value of 17. Shielded and nonzero cases use
+simulated starting balances with the pinned native checker.

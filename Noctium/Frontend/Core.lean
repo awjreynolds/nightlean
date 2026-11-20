@@ -341,6 +341,9 @@ scoped syntax "when" nlexpr nlupdate : nleffect
 scoped syntax "read" nlpath "as" ident : nleffect
 scoped syntax "readSelf" "as" ident : nleffect
 scoped syntax "member" nlpath "as" ident : nleffect
+scoped syntax "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax ident nlpath "as" ident : nleffect
 scoped syntax "increment" ident "by" num : nleffect
 scoped syntax "increment" ident "[" nlexpr "]" "by" num : nleffect
@@ -369,6 +372,9 @@ scoped syntax "when" nlexpr "require" nlexpr : nleffect
 scoped syntax "when" nlexpr "read" nlpath "as" ident : nleffect
 scoped syntax "when" nlexpr "readSelf" "as" ident : nleffect
 scoped syntax "when" nlexpr "member" nlpath "as" ident : nleffect
+scoped syntax "when" nlexpr "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "when" nlexpr "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
+scoped syntax "when" nlexpr "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "when" nlexpr ident nlpath "as" ident : nleffect
 scoped syntax "when" nlexpr "increment" ident "by" num : nleffect
 scoped syntax "when" nlexpr "increment" ident "[" nlexpr "]" "by" num : nleffect
@@ -1489,6 +1495,9 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr read $_path:nlpath as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr readSelf as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr member $_path:nlpath as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr tokenBalance($_:nlexpr, $_:nlexpr) as $_:ident)
+  | `(nleffect| when $condition:nlexpr tokenBalanceLt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident)
+  | `(nleffect| when $condition:nlexpr tokenBalanceGt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident) => some condition
   | `(nleffect| when $condition:nlexpr $_operation:ident $_path:nlpath as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr increment $_state:ident by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr increment $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
@@ -1542,6 +1551,23 @@ private def bindReadName (state : EntryEffects) (sourceName internalName : Strin
   let env ← if sourceName == internalName then addReferences state.env [(sourceName, ty)]
     else addReferenceAs state.env sourceName internalName ty
   pure {state with env}
+
+private def elaborateTokenBalanceRead (state : EntryEffects) (depth : Nat)
+    (destination : TSyntax `ident) (color tag : TSyntax `nlexpr)
+    (comparison : Option (_root_.Bool × TSyntax `nlexpr)) :
+    CommandElabM EntryEffects := do
+  let (readName, updated) ← freshReadName depth state destination
+  let color ← checkedExpression updated.env color (.bytes 32)
+  let tag ← checkedExpression updated.env tag .bool
+  let (resultTy, query) ← match comparison with
+    | none => pure (.uint balanceMaximum, ← `(Noctium.BalanceQuery.exact))
+    | some (less, source) => do
+      let limit ← checkedExpression updated.env source (.uint balanceMaximum)
+      let direction ← if less then `(Bool.true) else `(Bool.false)
+      pure (.bool, ← `(Noctium.BalanceQuery.compare $direction $limit))
+  let term ← `(Noctium.Effect.readTokenBalance $(stringTerm readName) $color $tag $query)
+  let updated := {updated with terms := updated.terms.push term}
+  bindReadName updated destination.getId.toString readName resultTy
 
 private def elaborateTreeRead (storage destination : TSyntax `ident)
     (keys : List (TSyntax `nlexpr))
@@ -1904,6 +1930,15 @@ private def elaborateEffect (schema : List (String × StateKind))
     let condition ← checkedExpression state.env value .bool
     let term ← `(Noctium.Effect.require $condition)
     state := {state with terms := state.terms.push term}
+  | `(nleffect| tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident)
+  | `(nleffect| when $_:nlexpr tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident) =>
+    state ← elaborateTokenBalanceRead state depth destination color tag none
+  | `(nleffect| tokenBalanceLt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident)
+  | `(nleffect| when $_:nlexpr tokenBalanceLt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident) =>
+    state ← elaborateTokenBalanceRead state depth destination color tag (some (Bool.true, limit))
+  | `(nleffect| tokenBalanceGt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident)
+  | `(nleffect| when $_:nlexpr tokenBalanceGt($color:nlexpr, $tag:nlexpr, $limit:nlexpr) as $destination:ident) =>
+    state ← elaborateTokenBalanceRead state depth destination color tag (some (Bool.false, limit))
   | `(nleffect| read $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr read $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "read" path destination depth state
