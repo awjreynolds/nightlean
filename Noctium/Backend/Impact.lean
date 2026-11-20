@@ -90,6 +90,7 @@ inductive Op where
   | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
+  | checkpoint
   | readCaller (destinations : CallerBindings)
   | readContractAddress (destination : String)
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
@@ -488,6 +489,7 @@ def Op.fields : Op → List Scalar
   | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
       (standaloneSpendClaimFieldGroups color amount isUnshielded isContract recipient).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .checkpoint => [.native 0xff]
   | .readCaller destinations => (callerFieldGroups destinations).flatten
   | .readContractAddress destination => (contractAddressFieldGroups destination).flatten
   | .readTokenBalance destination color isUnshielded query =>
@@ -1119,6 +1121,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     pure {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .checkpoint => pure {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
   | .mintUnshielded domain amount =>
@@ -1485,7 +1488,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some condition, .setInsert name keys =>
       pure (.setInsert name (totalizePathKeys condition keys))
     | some _, .readCell .. | some _, .readContractAddress .. |
-        some _, .merkleTreeIsFull .. => pure effect
+        some _, .merkleTreeIsFull .. | some _, .checkpoint => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
     | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
@@ -1542,7 +1545,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .claimContractCall .. | some condition, .mintShielded .. |
       some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs .. |
       some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend .. |
-      some condition, .emitEvent .. =>
+      some condition, .emitEvent .. | some condition, .checkpoint =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -1723,6 +1726,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     plan := {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .checkpoint => plan := {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
   | .mintUnshielded domain amount =>
@@ -2143,6 +2147,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .incUnshieldedOutputs .. => throw "unshielded output accumulation uses its dedicated native-plan operation JSON"
   | .claimUnshieldedCoinSpend .. => throw "unshielded spend claim uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .checkpoint => pure (Lean.toJson ("ckpt" : String))
   | .readCaller .. => throw "caller read uses its dedicated native-plan operation JSON"
   | .readContractAddress .. => throw "contract address read uses its dedicated native-plan operation JSON"
   | .readTokenBalance .. => throw "readTokenBalance uses its dedicated native-plan operation JSON"

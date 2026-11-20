@@ -1082,6 +1082,7 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       next ← mintShielded ctx env next domain amount
     | .mintUnshielded domain amount =>
       next ← mintUnshielded ctx env next domain amount
+    | .checkpoint => pure () -- Native transcript partitioning leaves successful source state unchanged.
     | .incUnshieldedInputs color amount isUnshielded =>
       next ← incUnshieldedInputs ctx env next color amount isUnshielded
     | .incUnshieldedOutputs color amount isUnshielded =>
@@ -1350,7 +1351,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. |
             .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
             .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
-            .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. | .readCaller .. => pure ()
+            .requireContractCaller .. | .checkpoint | .blockTimeCompare .. |
+            .emitEvent .. | .readCaller .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -1390,6 +1392,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next ← mintShielded ctx env next domain amount
         | .mintUnshielded domain amount =>
           next ← mintUnshielded ctx env next domain amount
+        | .checkpoint => pure ()
         | .incUnshieldedInputs color amount isUnshielded =>
           next ← incUnshieldedInputs ctx env next color amount isUnshielded
         | .incUnshieldedOutputs color amount isUnshielded =>
@@ -1618,9 +1621,9 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .compare .. => Value.bool false
           env := (destination, value) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
-            .mintShielded .. | .mintUnshielded .. | .incUnshieldedInputs .. |
-            .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
-            .requireContractCaller .. | .emitEvent .. |
+            .requireContractCaller .. | .checkpoint | .mintShielded .. |
+            .mintUnshielded .. | .incUnshieldedInputs .. | .incUnshieldedOutputs .. |
+            .claimUnshieldedCoinSpend .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
             .listPopFront .. | .listReset .. | .setInsert .. | .removePath .. => pure ()

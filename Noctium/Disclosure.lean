@@ -176,12 +176,12 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
       | some condition, .readContractAddress ..
       | some condition, .writeCell .. | some condition, .writeMap ..
-      | some condition, .readTokenBalance ..
-      | some condition, .claimContractCall .. | some condition, .mintShielded ..
+      | some condition, .claimContractCall .. | some condition, .requireContractCaller ..
+      | some condition, .checkpoint | some condition, .emitEvent ..
+      | some condition, .readTokenBalance .. | some condition, .mintShielded ..
       | some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs ..
       | some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend ..
-      | some condition, .requireContractCaller .. | some condition, .blockTimeCompare ..
-      | some condition, .emitEvent ..
+      | some condition, .blockTimeCompare ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .mapIsEmpty .. | some condition, .mapSize ..
       | some condition, .insertPath .. | some condition, .writePath ..
@@ -274,6 +274,8 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
+    | .checkpoint =>
+      checkSink {description := "public ledger checkpoint", span} [] activeControl
     | .readCaller destinations =>
       checkSink {description := "public caller read guard", span} [] activeControl
       env := env ++ destinations.types.map (fun (name, _) => (name, []))

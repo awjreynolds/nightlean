@@ -342,6 +342,7 @@ scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupd
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimUnshieldedCoinSpend" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
+scoped syntax "checkpoint" : nlupdate
 declare_syntax_cat nleventfield
 scoped syntax ident ":=" nlexpr : nleventfield
 scoped syntax "emitEvent" "(" ident ")" : nlupdate
@@ -2107,6 +2108,8 @@ private def elaborateEffect (schema : List (String × StateKind))
       let address ← checkedExpression state.env address (.bytes 32)
       let term ← `(Noctium.Effect.requireContractCaller $address)
       state := {state with terms := state.terms.push term}
+    | `(nlupdate| checkpoint) =>
+      state := {state with terms := state.terms.push (← `(Noctium.Effect.checkpoint))}
     | `(nlupdate| emitEvent($event:ident)) => do
       let term ← elaborateEvent state.env event #[]
       state := {state with terms := state.terms.push term}

@@ -514,6 +514,8 @@ inductive Effect where
   | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
+  /-- Candidate boundary for the native guaranteed and fallible transcripts. -/
+  | checkpoint
   | readCaller (destinations : CallerBindings)
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
       (isUnshielded : Expr .bool) (query : BalanceQuery)
@@ -1122,16 +1124,16 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span, message}
       | .ok _ => pure ()
       match effect with
-      | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. |
-          .readTokenBalance .. | .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+      | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
+          .claimContractCall .. | .requireContractCaller .. | .checkpoint | .emitEvent .. |
+          .readContractAddress .. | .readTokenBalance .. | .mintShielded .. | .mintUnshielded .. |
           .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
-          .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .mapIsEmpty .. | .mapSize .. |
           .insertPath .. | .writePath .. | .emptyMapPath .. | .setInsert .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
-          .readCaller .. | .merkleTreeIsFull .. | .merkleTreeCheckRoot .. |
+          .readCaller .. | .blockTimeCompare .. | .merkleTreeIsFull .. | .merkleTreeCheckRoot .. |
           .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. | .merkleTreeReset .. |
           .merkleTreeResetHistory .. | .merkleTreeIsFullAt .. |
           .merkleTreeCheckRootAt .. | .merkleTreeInsertHashAt .. |
@@ -1187,6 +1189,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .requireContractCaller address => do
         address.validate caps env
         pure []
+      | .checkpoint => pure []
       | .readCaller destinations => do
         (.bytes 32 : Ty).validate caps
         pure destinations.types
