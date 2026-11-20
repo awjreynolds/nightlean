@@ -2244,8 +2244,7 @@ mutual
       let state ← get
       if state.guardActive then
         for (inputName, type) in inputs.zip leafTypes do
-          let some zero := GuardedExpression.zeroValue type
-            | liftD (fail span "native witness result has no canonical default")
+          let zero := GuardedExpression.zeroValue type
           let equal ← scalarEquality (.ref inputName) zero
           modify fun state => {state with witnessConstraints := state.witnessConstraints ++
             [Expr.select callGuard (.bool true) equal]}

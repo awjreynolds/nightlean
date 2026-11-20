@@ -66,3 +66,19 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Reset a ledger cell
+
+`reset cellName` writes the canonical default of the cell's declared scalar
+type. Use `when flag reset cellName` for a conditional reset. The usual
+public-state disclosure and sealed-cell checks apply, and a following read
+sees the reset when execution takes the guard. The compiler lowers the reset
+as a typed write through the existing Impact path.
+
+[The Lean fixture](../../tests/NativeCellReset.lean) and
+[the Compact fixture](../../tests/compact/CellReset.compact) exercise seeded
+UInt64, Native/Field, Boolean and Bytes4 cells. Run the
+[native checker fixture](../../runtime/tests/native_cell_reset.rs) with
+`NOCTIUM_CELL_RESET_DIR` pointing to fresh Lean ZKIR 3.2.1 ledger outputs.
+The scalar fixture covers both guard outcomes. Aggregate Cell defaults and
+other type combinations need separate equivalence evidence.
