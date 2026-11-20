@@ -1,8 +1,9 @@
 # Noctium
 
-Lean 4 contracts and proofs for Midnight. Noctium compiles directly to native ZKIR and Impact ledger plans.
+Noctium is a Lean 4 contract compiler for Midnight. Its goal is to let a contract author prove a property in Lean and an independent auditor trace the proof to the exact deployed operation.
 
 <p align="center">
+  <a href="https://github.com/awjreynolds/noctium/issues/94">Assurance roadmap</a> ·
   <a href="docs/compatibility/comparison.md">Capability comparison</a> ·
   <a href="#openzeppelin-benchmark">Benchmark</a> ·
   <a href="#try-the-compiler">Quick start</a> ·
@@ -15,11 +16,13 @@ Lean 4 contracts and proofs for Midnight. Noctium compiles directly to native ZK
   <a href="https://github.com/awjreynolds/noctium/actions/workflows/ci.yml"><img src="https://github.com/awjreynolds/noctium/actions/workflows/ci.yml/badge.svg" alt="POC compiler checks CI"></a>
 </p>
 
-## OpenZeppelin benchmark
+[![Toolchain goal. Authors prove properties of the source. The typed compiler lowers the contract to ZKIR v3 circuits and Impact ledger plans. Private hosts prepare proofs and ledger operations. Midnight verifies calls and finalizes public state. Validation requires differential tests, localnet checks and reproducible builds. An auditor checks the source theorems, artifact bytes, verifier key, finalized operation and assumptions.](docs/assets/noctium-toolchain.png)](docs/assets/noctium-toolchain.svg)
 
-[![OpenZeppelin confidential-token benchmark showing median source compilation time, output sizes, and K and synthesis rows for 15 entrypoints paired by name](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
+The [assurance roadmap](https://github.com/awjreynolds/noctium/issues/94) starts with an ordinary Lean specification beside the contract. The planned workbench gives authors reusable proofs and points to unmet obligations in their source. An auditor gets a redacted bundle to check offline, with the exact operation, permitted disclosures and assumptions behind each guarantee. [Planned proof workbench](https://github.com/awjreynolds/noctium/issues/103)
 
-Three runs per compiler on an Apple M3 Max. The ports use different ABIs, state paths and output formats. Timings exclude key generation and proving. [Method and artifact inventory](docs/development/oz-compile-performance.md) · [Raw data](docs/development/oz-compile-performance.json)
+The [six delivery gates](docs/compatibility/GOAL.md#delivery-goals-and-exit-gates) cover the full pinned ZKIR v3 and native ledger surface, including composed contracts and private witnesses across native, web and mobile SDKs. Qualification calls for comparing source and native behavior, testing accepted and rejected calls on localnet, and reproducing the deployed artifacts independently.
+
+**Evidence today.** The historical one-time claim links a Lean proof of replay rejection to the exact circuit bytes, regenerated verifier key and finalized localnet operation at its recorded revision. A separate funded transaction finalized a caller and callee together and checked both resulting states. General compiler and ledger preservation is still open. [Claim proofs](docs/development/private-claim-proofs.md) · [Deployment audit](docs/development/private-claim-deployment-audit.md) · [Two-contract receipt](docs/development/native-composition-receipt.json)
 
 ## ZKIR v3 and witness targets
 
@@ -107,6 +110,14 @@ Lean theorems establish specified contract properties. Runtime zero-knowledge pr
 | [Native integration tests](docs/development/native-client.md#retained-qualification) | Real ZK proofs, funded transactions, finalized state checks and recovery on both 3.2.0 and 3.2.1 profiles. [Bounded scalar tests](docs/development/unsigned-localnet.md) add 34 adversarial witness cases. |
 
 Native cryptography, parser/VM agreement, host behavior and authenticated authority inputs remain [trusted boundaries](docs/designs/architecture.md#assurance-boundaries). Localnet receipts provide integration evidence. They do not establish generic compiler correctness or production readiness.
+
+## OpenZeppelin benchmark
+
+Across 15 entrypoints paired by name, the Noctium port has the same proving-domain exponent (K) as Compact on 11, a lower K on three and a higher K on one. The chart also reports synthesis rows and source build times.
+
+[![OpenZeppelin confidential-token benchmark showing median source compilation time, output sizes, and K and synthesis rows for 15 entrypoints paired by name](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
+
+Three runs per compiler on an Apple M3 Max. The ports use different ABIs, state paths and output formats. Timings exclude key generation and proving. [Method and artifact inventory](docs/development/oz-compile-performance.md) · [Raw data](docs/development/oz-compile-performance.json)
 
 ## Direction and contributions
 

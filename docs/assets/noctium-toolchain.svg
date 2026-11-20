@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="649" viewBox="0 0 820 649" role="img" aria-labelledby="title desc">
+  <title id="title">Noctium toolchain goal: from Lean source to an auditable Midnight operation</title>
+  <desc id="desc">Authors specify and prove contract properties in Lean. The typed compiler emits ZKIR v3 circuits and Impact ledger plans. A private host computes witnesses and prepares a proof and transaction. Midnight checks the proof and applies ledger operations. Qualification requires differential tests, localnet acceptance and rejection, and reproducible builds. The goal is a per-operation audit bundle linking the source theorems, exact bytes, verifier key and finalized operation, with explicit assumptions.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M1 1l7 4-7 4" fill="none" stroke="#829da9" stroke-width="1.5"/>
+    </marker>
+  </defs>
+  <rect width="820" height="649" rx="12" fill="#10202a"/>
+  <g font-family="Inter, Arial, sans-serif" fill="#f6f5ee">
+    <text x="29" y="34" fill="#9ddfc9" font-size="14" font-weight="700" letter-spacing="1.6">NOCTIUM  /  TOOLCHAIN GOAL</text>
+    <text x="28" y="80" font-size="40" font-weight="700" letter-spacing="-1.5">From Lean 4 to Midnight</text>
+
+    <rect x="28" y="102" width="764" height="63" rx="6" fill="#20333d"/>
+    <g stroke="#a2e4d0" stroke-width="2.1" fill="none" stroke-linecap="round" stroke-linejoin="round">
+      <path d="m54 123-9 10 9 10m13-20 9 10-9 10m-7-22-4 24"/>
+    </g>
+    <text x="92" y="129" font-size="21" font-weight="700">Lean 4 contract and specification</text>
+    <text x="92" y="152" fill="#d3dcdd" font-size="16">Prove state invariants and permitted disclosures against the source.</text>
+
+    <g fill="none" stroke="#829da9" stroke-width="1.6">
+      <path d="M410 165v12"/>
+      <path d="M273 187h-58v23" marker-end="url(#arrow)"/>
+      <path d="M547 187h58v23" marker-end="url(#arrow)"/>
+    </g>
+    <text x="410" y="193" text-anchor="middle" fill="#b7c9cf" font-size="16" font-weight="600">Typed IR · Direct lowering in Lean</text>
+    <g>
+      <rect x="28" y="215" width="374" height="70" rx="6" fill="#173932" stroke="#4a8174"/>
+      <rect x="418" y="215" width="374" height="70" rx="6" fill="#28354b" stroke="#586e91"/>
+      <text x="45" y="245" fill="#b4f1d9" font-size="22" font-weight="700">ZKIR v3 circuits</text>
+      <text x="45" y="270" fill="#d6e7e1" font-size="16">Full pinned instruction and type coverage.</text>
+      <text x="435" y="245" fill="#d2ddff" font-size="22" font-weight="700">Impact ledger plans</text>
+      <text x="435" y="270" fill="#e0e4ed" font-size="16">Ordered state reads, writes and call effects.</text>
+    </g>
+    <g fill="none" stroke="#829da9" stroke-width="1.6">
+      <path d="M215 285v14h390v-14M410 299v14" marker-end="url(#arrow)"/>
+    </g>
+
+    <rect x="28" y="318" width="764" height="60" rx="6" fill="#20333d"/>
+    <text x="45" y="344" font-size="20" font-weight="700">Private host</text>
+    <text x="45" y="366" fill="#d3dcdd" font-size="16">Native, web and mobile SDKs run witnesses, stage private state and prepare transactions.</text>
+    <path d="M410 378v18" fill="none" stroke="#829da9" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <rect x="28" y="401" width="764" height="60" rx="6" fill="#20333d"/>
+    <text x="45" y="427" font-size="20" font-weight="700">Midnight ledger</text>
+    <text x="45" y="449" fill="#d3dcdd" font-size="16">Verify the call proof, execute ledger operations and finalize composed state changes.</text>
+
+    <text x="29" y="495" fill="#a6dccc" font-size="16" font-weight="700">Validation</text>
+    <text x="122" y="495" fill="#e0e6e4" font-size="16">Source/native differential tests · Localnet acceptance and rejection · Reproducible builds</text>
+    <g transform="translate(0 40)">
+      <rect x="0" y="481" width="820" height="128" rx="12" fill="#e8eee5"/>
+      <path d="M0 481h820v12H0z" fill="#e8eee5"/>
+      <text x="29" y="508" fill="#2c6457" font-size="14" letter-spacing="1.6" font-weight="700">AUDITOR DELIVERABLE</text>
+      <text x="28" y="542" fill="#142c2b" font-size="27" font-weight="700" letter-spacing="-.6">An independently checkable bundle for each operation</text>
+      <text x="29" y="570" fill="#304b46" font-size="16">Replay its Lean theorems. Rebuild the exact bytes. Match the verifier key to the finalized operation.</text>
+      <text x="29" y="591" fill="#304b46" font-size="16">Read which disclosures the policy permits and which assumptions the proofs require.</text>
+    </g>
+  </g>
+</svg>
