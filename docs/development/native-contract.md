@@ -82,3 +82,9 @@ UInt64, Native/Field, Boolean and Bytes4 cells. Run the
 `NOCTIUM_CELL_RESET_DIR` pointing to fresh Lean ZKIR 3.2.1 ledger outputs.
 The scalar fixture covers both guard outcomes. Aggregate Cell defaults and
 other type combinations need separate equivalence evidence.
+
+The Rust SDK deployed the seeded cells on Ledger 9.1.0.1 localnet at
+height 104 and finalized the active reset at height 107. The finalized
+contract bytes matched the predicted bytes at both heights. Native sizing
+reported K8 and 192 rows for `clear`. The inactive case was checked in the
+pinned native VM and Compact runtime. [Localnet receipt](native-cell-reset-localnet-receipt.json)
