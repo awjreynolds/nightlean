@@ -4,7 +4,7 @@ use anyhow::{Result, anyhow, ensure};
 use futures::{executor::block_on, future::pending};
 use noctium_runtime::{
     artifacts::{self, Recipe, Role, Selection},
-    client::{BoundTransaction, SubmissionAttempt},
+    client::{BoundTransaction, ObservedReceipt, SubmissionAttempt},
     deployment_audit::{self as audit, DeploymentRecord, ObservedTransaction, Specification},
     funding::FeePolicy,
     host,
@@ -153,7 +153,10 @@ async fn submit(
     let deadline = Instant::now() + Duration::from_secs(90);
     let receipt = loop {
         if let Some(value) = attempt.observe_once(&mut runtime, node, store).await? {
-            break value;
+            let ObservedReceipt::Full(receipt) = value else {
+                return Err(anyhow!("expected_full_acceptance_for_audit"));
+            };
+            break receipt;
         }
         if Instant::now() >= deadline {
             let _ = attempt.deadline(&mut runtime, store).await;

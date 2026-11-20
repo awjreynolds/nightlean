@@ -1712,7 +1712,7 @@
       "layer": "language-ledger",
       "surface": "Kernel.checkpoint",
       "noctiumStatus": "subset",
-      "notes": "Guarded checkpoint emits a native marker between ledger writes. The scalar fixture matches Compact on marker presence and proves the ordered transcript. The pinned VM separates the guaranteed prefix from the continuation under a bounded dismissal budget.",
+      "notes": "Guarded checkpoint emits a native marker between ledger writes. The scalar fixture matches Compact on marker presence and proves the ordered transcript. The native Rust SDK checks an actual finalized Ledger 9 prefix-only result for one timed call and keeps the private write staged through recovery.",
       "source": [
         "adt"
       ],
@@ -1725,7 +1725,9 @@
         "tests/NativeCheckpoint.lean",
         "runtime/tests/native_checkpoint.rs",
         "tests/compact/checkpoint.mjs",
-        "docs/development/native-checkpoint-localnet-receipt.json"
+        "docs/development/native-checkpoint-localnet-receipt.json",
+        "runtime/tests/native_checkpoint_partial.rs",
+        "docs/development/native-checkpoint-partial-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },

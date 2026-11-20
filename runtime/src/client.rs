@@ -15,7 +15,7 @@ use ledger::{
     },
     verify::WellFormedStrictness,
 };
-use onchain_runtime::context::BlockContext;
+use onchain_runtime::{context::BlockContext, ops::Op};
 use serde::{Deserialize, Serialize};
 use serialize::{Serializable, Tagged, tagged_deserialize, tagged_serialize};
 use sha2::{Digest, Sha256};
@@ -183,6 +183,17 @@ pub struct FinalizedReceipt {
     /// Canonical states at the inclusion block, keyed by other called addresses.
     pub secondary_states: BTreeMap<String, Vec<u8>>,
 }
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PartialReceipt {
+    pub receipt: FinalizedReceipt,
+    pub segments: BTreeMap<u16, bool>,
+    pub entrypoint: Vec<u8>,
+}
+pub enum ObservedReceipt {
+    Full(FinalizedReceipt),
+    Partial(PartialReceipt),
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Submission {
     Broadcast,
@@ -193,11 +204,13 @@ pub enum Observation {
     Pending,
     Rejected,
     Finalized(FinalizedReceipt),
+    Partial(PartialReceipt),
 }
 #[derive(Clone, Copy, Debug)]
 pub struct HostFailure;
 /// The adapter verifies canonical finalized ancestry, exact extrinsic payload and event shape.
 /// Maintenance has no contract-specific event, so its finalized state supplies the second check.
+/// For partial success, the adapter also verifies the segment outcomes against finalized execution.
 /// Credentials, endpoints, transport limits and deadlines stay in the host adapter.
 #[allow(async_fn_in_trait)]
 pub trait ChainAdapter {
@@ -244,6 +257,51 @@ fn public_intent<B: storage::Storable<Db> + PedersenDowngradeable<Db>>(
 }
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CheckpointPrefix {
+    entrypoint: Vec<u8>,
+    segments: BTreeMap<u16, bool>,
+    state: Vec<u8>,
+}
+
+fn checkpoint_call(
+    transaction: &SealedTransaction,
+) -> Option<(String, Vec<u8>, BTreeMap<u16, bool>)> {
+    let Transaction::Standard(signed) = transaction else {
+        return None;
+    };
+    let contract = signed.intents.get(&CONTRACT_SEGMENT)?;
+    if contract.actions.len() != 1 {
+        return None;
+    }
+    let ContractAction::Call(call) = contract.actions.iter_deref().next()? else {
+        return None;
+    };
+    if call.guaranteed_transcript.as_ref()?.program.is_empty()
+        || !matches!(
+            call.fallible_transcript
+                .as_ref()?
+                .program
+                .iter_deref()
+                .next(),
+            Some(Op::Ckpt)
+        )
+    {
+        return None;
+    }
+    let segments = signed
+        .segments()
+        .into_iter()
+        .map(|segment| (segment, segment != CONTRACT_SEGMENT))
+        .collect();
+    Some((
+        hex::encode(call.address.0.0),
+        call.entry_point.0.clone(),
+        segments,
+    ))
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct BoundData {
     policy: NetworkPolicy,
     transaction: Vec<u8>,
@@ -252,6 +310,8 @@ struct BoundData {
     contract_address: String,
     event: ContractEvent,
     expected_state: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    checkpoint: Option<CheckpointPrefix>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     call_counts: BTreeMap<String, usize>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -384,7 +444,27 @@ impl BoundTransaction {
             block_context: snapshot.block.clone(),
             whitelist: None,
         };
-        let (predicted, outcome) = snapshot.state.apply(&verified, &context);
+        let guaranteed = snapshot
+            .state
+            .apply_guaranteed_only(verified, &context)
+            .map_err(|_| Error::InvalidTransaction)?;
+        let checkpoint = checkpoint_call(&approved)
+            .map(|(_, entrypoint, segments)| {
+                let state = encode(
+                    &*guaranteed
+                        .contract
+                        .get(&address)
+                        .ok_or(Error::InvalidTransaction)?,
+                )?;
+                require(state.len() <= MAX_STATE, Error::InvalidTransaction)?;
+                Ok(CheckpointPrefix {
+                    entrypoint,
+                    segments,
+                    state,
+                })
+            })
+            .transpose()?;
+        let (predicted, outcome) = guaranteed.apply_fallible(&context);
         require(
             matches!(outcome, TransactionResult::Success(_)),
             Error::InvalidTransaction,
@@ -446,6 +526,7 @@ impl BoundTransaction {
                 contract_address: hex::encode(address.0.0),
                 event,
                 expected_state,
+                checkpoint,
                 call_counts,
                 secondary_states,
                 after_height: snapshot.height,
@@ -476,6 +557,12 @@ impl BoundTransaction {
     pub fn expected_state(&self) -> &[u8] {
         &self.data.expected_state
     }
+    pub fn checkpoint_entrypoint(&self) -> Option<&[u8]> {
+        self.data
+            .checkpoint
+            .as_ref()
+            .map(|prefix| prefix.entrypoint.as_slice())
+    }
     /// Predicted canonical states for the other called addresses.
     pub fn secondary_states(&self) -> &BTreeMap<String, Vec<u8>> {
         &self.data.secondary_states
@@ -489,6 +576,25 @@ impl BoundTransaction {
         }
     }
     pub fn check_receipt(&self, receipt: &FinalizedReceipt) -> Result<()> {
+        self.check_receipt_identity(receipt)?;
+        require(
+            receipt.contract_state == self.data.expected_state
+                && receipt.secondary_states == self.data.secondary_states,
+            Error::Receipt,
+        )
+    }
+    pub fn check_partial_receipt(&self, partial: &PartialReceipt) -> Result<()> {
+        let prefix = self.data.checkpoint.as_ref().ok_or(Error::Receipt)?;
+        self.check_receipt_identity(&partial.receipt)?;
+        require(
+            partial.segments == prefix.segments
+                && partial.entrypoint == prefix.entrypoint
+                && partial.receipt.contract_state == prefix.state
+                && partial.receipt.secondary_states.is_empty(),
+            Error::Receipt,
+        )
+    }
+    fn check_receipt_identity(&self, receipt: &FinalizedReceipt) -> Result<()> {
         self.data.policy.check(&receipt.chain)?;
         require(
             receipt.height > self.data.after_height && receipt.height <= receipt.finalized_height,
@@ -501,9 +607,7 @@ impl BoundTransaction {
                 && receipt.transaction_id == self.data.transaction_id
                 && receipt.intent_id == self.data.intent_id
                 && receipt.contract_address == self.data.contract_address
-                && receipt.event == self.data.event
-                && receipt.contract_state == self.data.expected_state
-                && receipt.secondary_states == self.data.secondary_states,
+                && receipt.event == self.data.event,
             Error::Receipt,
         )
     }
@@ -601,6 +705,7 @@ impl PublicTransactionReference {
                 contract_address: hex::encode(address.0.0),
                 event,
                 expected_state: expected_state.to_vec(),
+                checkpoint: None,
                 call_counts: BTreeMap::new(),
                 secondary_states: BTreeMap::new(),
                 after_height,
@@ -648,6 +753,7 @@ enum DurablePhase {
     Submitted,
     Uncertain,
     Accepted,
+    PartiallyAccepted,
     Rejected,
     Committed,
     Conflicted,
@@ -662,6 +768,8 @@ pub struct RecoveryRecord {
     journal: Vec<u8>,
     phase: DurablePhase,
     cas: Option<CasReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    partial_receipt: Option<PartialReceipt>,
 }
 impl Drop for RecoveryRecord {
     fn drop(&mut self) {
@@ -675,6 +783,7 @@ impl RecoveryRecord {
             DurablePhase::Submitted => Phase::Submitted,
             DurablePhase::Uncertain => Phase::Uncertain,
             DurablePhase::Accepted => Phase::AwaitingCas,
+            DurablePhase::PartiallyAccepted => Phase::PartiallyAccepted,
             DurablePhase::Rejected => Phase::Rejected,
             DurablePhase::Committed => Phase::Committed,
             DurablePhase::Conflicted => Phase::Conflicted,
@@ -683,6 +792,9 @@ impl RecoveryRecord {
     }
     pub fn cas_receipt(&self) -> Option<&CasReceipt> {
         self.cas.as_ref()
+    }
+    pub fn partial_receipt(&self) -> Option<&PartialReceipt> {
+        self.partial_receipt.as_ref()
     }
     pub fn identity(&self) -> &JournalIdentity {
         &self.identity
@@ -779,6 +891,7 @@ impl SubmissionAttempt {
             journal: serde_json::to_vec(&journal).map_err(|_| Error::Persistence)?,
             phase: DurablePhase::Prepared,
             cas: None,
+            partial_receipt: None,
         };
         let attempt = Self {
             record,
@@ -854,12 +967,34 @@ impl SubmissionAttempt {
                 ) == record.bound.intent_id,
             Error::Identity,
         )?;
+        if let Some(prefix) = &record.bound.checkpoint {
+            let (address, entrypoint, segments) =
+                checkpoint_call(&transaction).ok_or(Error::Identity)?;
+            require(
+                record.bound.event == ContractEvent::Call
+                    && record.bound.contract_address == address
+                    && prefix.entrypoint == entrypoint
+                    && prefix.segments == segments
+                    && prefix.state.len() <= MAX_STATE,
+                Error::Identity,
+            )?;
+        }
         let attempt = Self {
             record,
             store_revision: Some(revision),
             observed: false,
         };
         attempt.model()?;
+        match (attempt.record.phase, &attempt.record.partial_receipt) {
+            (DurablePhase::PartiallyAccepted, Some(receipt)) => {
+                require(attempt.record.cas.is_none(), Error::Persistence)?;
+                attempt.transaction().check_partial_receipt(receipt)?;
+            }
+            (DurablePhase::PartiallyAccepted, None) | (_, Some(_)) => {
+                return Err(Error::Persistence);
+            }
+            _ => {}
+        }
         Ok(attempt)
     }
     pub fn record(&self) -> &RecoveryRecord {
@@ -902,6 +1037,7 @@ impl SubmissionAttempt {
             DurablePhase::Submitted
                 | DurablePhase::Uncertain
                 | DurablePhase::Accepted
+                | DurablePhase::PartiallyAccepted
                 | DurablePhase::Rejected
                 | DurablePhase::Committed
                 | DurablePhase::Conflicted
@@ -939,6 +1075,15 @@ impl SubmissionAttempt {
             let (transaction_id, attempt_id) = ids();
             model
                 .apply(Event::Rejected {
+                    transaction_id,
+                    attempt_id,
+                })
+                .map_err(|_| Error::State)?;
+        }
+        if self.record.phase == DurablePhase::PartiallyAccepted {
+            let (transaction_id, attempt_id) = ids();
+            model
+                .apply(Event::PartiallyAccepted {
                     transaction_id,
                     attempt_id,
                 })
@@ -1026,6 +1171,7 @@ impl SubmissionAttempt {
             DurablePhase::Submitted
                 | DurablePhase::Uncertain
                 | DurablePhase::Accepted
+                | DurablePhase::PartiallyAccepted
                 | DurablePhase::Committed
                 | DurablePhase::Conflicted
                 | DurablePhase::Rejected
@@ -1043,6 +1189,9 @@ impl SubmissionAttempt {
         }
         if self.record.phase == DurablePhase::Rejected {
             self.notify(runtime, "rejected")?;
+        }
+        if self.record.phase == DurablePhase::PartiallyAccepted {
+            self.notify(runtime, "partially_accepted")?;
         }
         if self.record.phase == DurablePhase::Cancelled {
             runtime.cancel().map_err(|_| Error::State)?;
@@ -1098,11 +1247,18 @@ impl SubmissionAttempt {
         runtime: &mut host::Runtime,
         chain: &impl ChainAdapter,
         store: &impl JournalStore,
-    ) -> Result<Option<FinalizedReceipt>> {
+    ) -> Result<Option<ObservedReceipt>> {
         self.check_runtime_identity(runtime)?;
+        if let Some(receipt) = self.record.partial_receipt.clone() {
+            // Retry the durable acknowledgement after an interrupted observation.
+            self.persist(store).await?;
+            self.notify(runtime, "partially_accepted")?;
+            return Ok(Some(ObservedReceipt::Partial(receipt)));
+        }
+        let phase = self.phase()?;
         require(
             matches!(
-                self.phase()?,
+                phase,
                 Phase::Submitted
                     | Phase::Uncertain
                     | Phase::AwaitingCas
@@ -1119,9 +1275,7 @@ impl SubmissionAttempt {
             Observation::Pending => Ok(None),
             Observation::Rejected => {
                 require(
-                    self.phase()? != Phase::Committed
-                        && self.phase()? != Phase::Conflicted
-                        && self.phase()? != Phase::AwaitingCas,
+                    matches!(phase, Phase::Submitted | Phase::Uncertain),
                     Error::Receipt,
                 )?;
                 self.record.phase = DurablePhase::Rejected;
@@ -1132,12 +1286,24 @@ impl SubmissionAttempt {
             Observation::Finalized(receipt) => {
                 self.transaction().check_receipt(&receipt)?;
                 self.observed = true;
-                if !matches!(self.phase()?, Phase::Committed | Phase::Conflicted) {
+                if !matches!(phase, Phase::Committed | Phase::Conflicted) {
                     self.record.phase = DurablePhase::Accepted;
                     self.notify(runtime, "accepted")?;
                     self.persist(store).await?;
                 }
-                Ok(Some(receipt))
+                Ok(Some(ObservedReceipt::Full(receipt)))
+            }
+            Observation::Partial(receipt) => {
+                require(
+                    matches!(phase, Phase::Submitted | Phase::Uncertain),
+                    Error::Receipt,
+                )?;
+                self.transaction().check_partial_receipt(&receipt)?;
+                self.record.phase = DurablePhase::PartiallyAccepted;
+                self.record.partial_receipt = Some(receipt.clone());
+                self.persist(store).await?;
+                self.notify(runtime, "partially_accepted")?;
+                Ok(Some(ObservedReceipt::Partial(receipt)))
             }
         }
     }
@@ -1358,6 +1524,7 @@ pub(crate) mod tests {
                 contract_address: address,
                 event: ContractEvent::Deploy,
                 expected_state: vec![1, 2, 3],
+                checkpoint: None,
                 call_counts: BTreeMap::new(),
                 secondary_states: BTreeMap::new(),
                 after_height: 20,
@@ -1391,6 +1558,7 @@ pub(crate) mod tests {
         identity: RefCell<ChainIdentity>,
         submission: Cell<Submission>,
         sent: RefCell<Vec<Vec<u8>>>,
+        partial: RefCell<Option<PartialReceipt>>,
     }
     impl FakeChain {
         fn new() -> Self {
@@ -1398,6 +1566,7 @@ pub(crate) mod tests {
                 identity: RefCell::new(chain_identity()),
                 submission: Cell::new(Submission::Uncertain),
                 sent: RefCell::new(Vec::new()),
+                partial: RefCell::new(None),
             }
         }
     }
@@ -1439,7 +1608,12 @@ pub(crate) mod tests {
             &self,
             tx: &BoundTransaction,
         ) -> std::result::Result<Observation, HostFailure> {
-            Ok(Observation::Finalized(receipt(tx)))
+            Ok(self
+                .partial
+                .borrow()
+                .clone()
+                .map(Observation::Partial)
+                .unwrap_or_else(|| Observation::Finalized(receipt(tx))))
         }
     }
     #[derive(Default)]
@@ -1584,6 +1758,125 @@ pub(crate) mod tests {
         multi.check_receipt(&composed).unwrap();
         composed.secondary_states.remove(&callee);
         assert_eq!(multi.check_receipt(&composed), Err(Error::Receipt));
+    }
+    #[test]
+    fn partial_checkpoint_restores_receipt_and_staged_writes_without_resubmission_or_cas() {
+        use ledger::structure::{ContractCall, ProofVersioned};
+        use onchain_runtime::{state::EntryPointBuf, transcript::Transcript};
+        use transient_crypto::{curve::Fr, proofs::Proof};
+
+        block_on(async {
+            let mut rng = StdRng::from_seed([7; 32]);
+            let transcript = |program: Vec<_>| {
+                Sp::new(Transcript {
+                    gas: Default::default(),
+                    effects: Default::default(),
+                    program: program.into(),
+                    version: None,
+                })
+            };
+            let call = ContractCall {
+                address: Default::default(),
+                entry_point: EntryPointBuf(b"claim".to_vec()),
+                guaranteed_transcript: Some(transcript(vec![Op::Ckpt])),
+                fallible_transcript: Some(transcript(vec![Op::Ckpt])),
+                communication_commitment: Fr::from(0u64),
+                proof: ProofVersioned::V3(Proof(Vec::new())),
+            };
+            let contract = Intent {
+                actions: vec![ContractAction::Call(Sp::new(call))].into(),
+                guaranteed_unshielded_offer: None,
+                fallible_unshielded_offer: None,
+                dust_actions: None,
+                binding_commitment: rng.r#gen(),
+                ttl: Timestamp::from_secs(2_000_000_000),
+            };
+            let sealed =
+                crate::funding::one_intent("undeployed", CONTRACT_SEGMENT, contract).seal(rng);
+            let mut tx = PublicTransactionReference::from_bytes(
+                policy(),
+                &encode(&sealed).unwrap(),
+                20,
+                &[1, 2, 3],
+            )
+            .unwrap()
+            .bound_view();
+            let (_, entrypoint, segments) = checkpoint_call(&sealed).unwrap();
+            let mut partial = PartialReceipt {
+                receipt: receipt(&tx),
+                entrypoint,
+                segments,
+            };
+            partial.receipt.contract_state = vec![1, 2];
+            tx.data.checkpoint = Some(CheckpointPrefix {
+                entrypoint: partial.entrypoint.clone(),
+                segments: partial.segments.clone(),
+                state: partial.receipt.contract_state.clone(),
+            });
+            assert_eq!(tx.check_receipt(&partial.receipt), Err(Error::Receipt));
+            tx.check_partial_receipt(&partial).unwrap();
+            for alter in [
+                |p: &mut PartialReceipt| p.receipt.transaction_id = "f".repeat(64),
+                |p: &mut PartialReceipt| p.receipt.contract_state.push(3),
+                |p: &mut PartialReceipt| p.entrypoint.push(0),
+                |p: &mut PartialReceipt| {
+                    p.segments.insert(CONTRACT_SEGMENT, true);
+                },
+            ] {
+                let mut wrong = partial.clone();
+                alter(&mut wrong);
+                assert_eq!(tx.check_partial_receipt(&wrong), Err(Error::Receipt));
+            }
+            let address = tx.contract_address().to_owned();
+            let id = "a".repeat(64);
+            let mut staged = runtime('a', &address, "42");
+            let mut attempt = SubmissionAttempt::new(tx, &id, &mut staged).unwrap();
+            let chain = FakeChain::new();
+            let store = MemoryStore::default();
+            attempt
+                .submit_once(&mut staged, &chain, &store)
+                .await
+                .unwrap();
+            chain.partial.replace(Some(partial));
+            assert!(matches!(
+                attempt
+                    .observe_once(&mut staged, &chain, &store)
+                    .await
+                    .unwrap(),
+                Some(ObservedReceipt::Partial(_))
+            ));
+            assert_eq!(staged.public_status()["phase"], "partially_accepted");
+            drop(attempt);
+            let mut recovered = SubmissionAttempt::recover(&store, &id).await.unwrap();
+            let mut restored = runtime('a', &address, "42");
+            recovered.restore_runtime(&mut restored).unwrap();
+            assert_eq!(recovered.phase().unwrap(), Phase::PartiallyAccepted);
+            assert_eq!(
+                restored.private_journal().unwrap()["writes"]["claims/used"]["value"],
+                "42"
+            );
+            chain.partial.replace(None);
+            assert!(matches!(
+                recovered
+                    .observe_once(&mut restored, &chain, &store)
+                    .await
+                    .unwrap(),
+                Some(ObservedReceipt::Partial(_))
+            ));
+            assert_eq!(
+                recovered.submit_once(&mut restored, &chain, &store).await,
+                Err(Error::State)
+            );
+            assert_eq!(
+                recovered
+                    .commit_private(&mut restored, &store, 1)
+                    .await
+                    .err(),
+                Some(Error::State)
+            );
+            assert_eq!(chain.sent.borrow().len(), 1);
+            assert_eq!(store.cas_calls.get(), 0);
+        });
     }
     #[test]
     fn uncertain_restart_retries_exact_bytes_and_deduplicates_private_cas() {
