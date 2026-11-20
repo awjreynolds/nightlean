@@ -1021,6 +1021,7 @@ pub enum Instruction {
         operation: Box<Instruction>,
     },
     Dup,
+    Checkpoint,
     Index {
         slot: u32,
         #[serde(rename = "pushPath")]
@@ -1229,7 +1230,11 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::ClaimContractCall { .. } => 24,
         Instruction::RequireContractCaller { .. } => 15,
         Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
-        Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
+        Instruction::Dup
+        | Instruction::Checkpoint
+        | Instruction::Member
+        | Instruction::Insert { .. }
+        | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
         Instruction::Index {
             slot, key: Some(_), ..
@@ -2794,6 +2799,7 @@ fn probe_instruction(
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
         | Instruction::Dup
+        | Instruction::Checkpoint
         | Instruction::New
         | Instruction::Member
         | Instruction::Insert { .. }
@@ -2863,6 +2869,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
         matches!(
             operation,
             Instruction::Dup
+                | Instruction::Checkpoint
                 | Instruction::Index {
                     push_path: false,
                     ..
@@ -3169,41 +3176,7 @@ impl PreparationCursor {
         let mut instruction_guard = None;
         let instruction = match i {
             Instruction::Guarded { guard, operation } => {
-                ensure!(
-                    matches!(
-                        operation.as_ref(),
-                        Instruction::Dup
-                            | Instruction::Index {
-                                push_path: false,
-                                ..
-                            }
-                            | Instruction::Push { storage: false, .. }
-                            | Instruction::Popeq { .. }
-                            | Instruction::Member
-                            | Instruction::Index {
-                                push_path: true,
-                                ..
-                            }
-                            | Instruction::Push { .. }
-                            | Instruction::Insert { .. }
-                            | Instruction::IndexPath { .. }
-                            | Instruction::New
-                            | Instruction::PushFields { .. }
-                            | Instruction::PopeqFields { .. }
-                            | Instruction::AddImmediate { .. }
-                            | Instruction::SubImmediate { .. }
-                            | Instruction::ListLength { .. }
-                            | Instruction::ListHead { .. }
-                            | Instruction::ListPushFront { .. }
-                            | Instruction::ListPopFront { .. }
-                            | Instruction::ListReset { .. }
-                            | Instruction::MapRemove { .. }
-                            | Instruction::ClaimContractCall { .. }
-                            | Instruction::RequireContractCaller { .. }
-                            | Instruction::EmitEvent { .. }
-                    ),
-                    "guarded native operation has an unsupported shape"
-                );
+                validate_guarded_shape(operation)?;
                 let active = evaluate(guard, &env)?.boolean()?;
                 if !active {
                     activity_schedule.extend(
@@ -3401,6 +3374,7 @@ impl PreparationCursor {
                 bail!("nested guarded native operation is unsupported")
             }
             Instruction::Dup => Op::Dup { n: 0 },
+            Instruction::Checkpoint => Op::Ckpt,
             Instruction::Index {
                 slot,
                 push_path,

@@ -1666,8 +1666,8 @@
       "id": "C-ADT-KERNEL-CHECKPOINT",
       "layer": "language-ledger",
       "surface": "Kernel.checkpoint",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Guarded checkpoint emits a native marker between ledger writes. The scalar fixture matches Compact on marker presence and proves the ordered transcript. The pinned VM separates the guaranteed prefix from the continuation under a bounded dismissal budget.",
       "source": [
         "adt"
       ],
@@ -1676,7 +1676,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCheckpoint.lean",
+        "runtime/tests/native_checkpoint.rs",
+        "tests/compact/checkpoint.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

@@ -58,6 +58,7 @@ inductive Op where
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | requireContractCaller (address : Expr (.bytes 32))
+  | checkpoint
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
 
 private def claimContractCallFieldGroups
@@ -181,6 +182,7 @@ def Op.fields : Op → List Scalar
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .checkpoint => [.native 0xff]
   | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
@@ -594,6 +596,7 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     pure {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .checkpoint => pure {plan with operations := plan.operations ++ [.checkpoint]}
   | .emitEvent kind payload =>
     pure {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -846,7 +849,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (values.map (totalizeActivityValue condition avoid)))
     | some condition, .emptyMapPath name keys =>
       pure (.emptyMapPath name (totalizePathKeys condition keys))
-    | some _, .readCell .. => pure effect
+    | some _, .readCell .. | some _, .checkpoint => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
     | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
@@ -890,7 +893,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
       some condition, .listReset .. | some condition, .removePath .. |
-      some condition, .claimContractCall .. | some condition, .emitEvent .. =>
+      some condition, .claimContractCall .. | some condition, .emitEvent .. |
+      some condition, .checkpoint =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -1027,6 +1031,7 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     plan := {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .checkpoint => plan := {plan with operations := plan.operations ++ [.checkpoint]}
   | .emitEvent kind payload =>
     plan := {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -1387,6 +1392,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .checkpoint => pure (Lean.toJson ("ckpt" : String))
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do

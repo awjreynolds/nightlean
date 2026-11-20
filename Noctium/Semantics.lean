@@ -775,6 +775,7 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .claimContractCall .. =>
       throw "reference evaluator does not execute cross-contract claims"
+    | .checkpoint => pure () -- Native transcript partitioning leaves successful source state unchanged.
     | .emitEvent kind payload =>
       next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
@@ -938,7 +939,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
-            .claimContractCall .. | .requireContractCaller .. | .emitEvent .. => pure ()
+            .claimContractCall .. | .requireContractCaller .. | .checkpoint | .emitEvent .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -970,6 +971,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           if !(← condition.eval ctx env) then throw "state transition guard failed"
         | .claimContractCall .. =>
           throw "reference evaluator does not execute cross-contract claims"
+        | .checkpoint => pure ()
         | .emitEvent kind payload =>
           next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
@@ -1131,7 +1133,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
-            .requireContractCaller .. | .emitEvent .. |
+            .requireContractCaller .. | .checkpoint | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
             .listPopFront .. | .listReset .. | .removePath .. => pure ()

@@ -1,0 +1,10 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+export ledger firstMark: Field;
+export ledger secondMark: Field;
+export circuit apply(enabled: Boolean): Field {
+  firstMark = 1 as Field;
+  if (disclose(enabled)) { kernel.checkpoint(); }
+  secondMark = 2 as Field;
+  return secondMark;
+}

@@ -433,6 +433,8 @@ inductive Effect where
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | requireContractCaller (address : Expr (.bytes 32))
+  /-- Candidate boundary for the native guaranteed and fallible transcripts. -/
+  | checkpoint
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
@@ -996,7 +998,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
-          .claimContractCall .. | .requireContractCaller .. | .emitEvent .. |
+          .claimContractCall .. | .requireContractCaller .. | .checkpoint | .emitEvent .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -1031,6 +1033,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .requireContractCaller address => do
         address.validate caps env
         pure []
+      | .checkpoint => pure []
       | .emitEvent _ payload =>
         payload.validate caps env
         pure []

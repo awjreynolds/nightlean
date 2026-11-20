@@ -66,3 +66,30 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Checkpoint a ledger transcript
+
+Use `checkpoint` between ledger effects. A guarded checkpoint contributes a
+native marker only when its guard is true. Disclose a private guard before
+using it, since the marker changes the public transcript.
+
+```lean
+write firstMark := 1
+when enabled checkpoint
+write secondMark := 2
+```
+
+A successful Lean reference run produces the same final cells with or without
+the marker. The pinned Ledger runtime uses the marker to partition the
+transcript. With the fixture's bounded dismissal budget, the guaranteed
+prefix writes `firstMark` and the fallible continuation starts at the
+checkpoint. [Midnight checkpoint semantics](https://docs.midnight.network/compact/reference/ledger-adt#checkpoint)
+
+The [Compact oracle](../../tests/compact/checkpoint.mjs) checks both guarded
+paths. The [native test](../../runtime/tests/native_checkpoint.rs) reads the
+actual emitted ZKIR and Impact plan, checks the ordered marker and rejects a
+changed marker.
+
+The current SDK checks a finalized receipt against the full predicted state.
+Reconciliation for a finalized guaranteed-prefix outcome requires its own
+receipt and private-journal handling.
