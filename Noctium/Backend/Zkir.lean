@@ -53,7 +53,7 @@ private def checkConstants : Expr ty → Except String Unit
   | .fromBytes32 value => checkConstants value
   | .fromBytes value => checkConstants value
   | .inv value => checkConstants value
-  | .sha512 value | .keccak256 value | .persistentHash32 value => checkConstants value
+  | .sha256 value | .sha512 value | .keccak256 value | .persistentHash32 value => checkConstants value
   | .bytes32Literal _ => pure ()
   | .persistentHashVector32 _ => pure ()
   | .persistentHashNative value => checkConstants value
@@ -769,6 +769,13 @@ private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
     let left ← lowerBytes left
     let right ← lowerBytes right
     lowerFixedConcat leftLength rightLength left right
+  | .sha256 (length := length) value => do
+    let values ← lowerBytes value
+    if length == 32 then
+      let (highByte, low31) ← alignedBytes32Fields values.values
+      pure {values := ← lowerPersistentHash "bytes32" bytes32Alignment [highByte, low31], packed := true}
+    else
+      lowerFixedByteHash "persistent_hash" length 32 values
   | .sha512 (length := length) value => do
     lowerFixedByteHash "sha512" length 64 (← lowerBytes value)
   | .keccak256 (length := length) value => do
@@ -1056,7 +1063,7 @@ def lowerExpr : Expr ty → LowerM String
       ("output", toJson output)]
     modify fun s => {s with expressions := (key, output) :: s.expressions}
     return output
-  | .foreignToBytes _ | .sha512 _ | .keccak256 _
+  | .foreignToBytes _ | .sha256 _ | .sha512 _ | .keccak256 _
   | .bytesLiteral _ _ | .reverseBytes _ | .sliceBytes _ _ _ | .concatBytes _ _
   | .bytes32Literal _ | .persistentHash32 _ | .persistentHashVector32 _
   | .persistentHashNative _ | .persistentHashNativeVector _ | .toBytes32 _ | .reverseBytes32 _ => do

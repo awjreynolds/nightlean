@@ -183,7 +183,8 @@ private def opaqueBytes32Value : Term → Bool
       opcode == "bytes32_from_chunks" || opcode == "reverse_bytes32"
       || opcode.startsWith "bytes_from_chunks:" || opcode.startsWith "reverse_bytes:"
       || opcode.startsWith "slice_bytes:"
-      || opcode.startsWith "sha512_bytes:" || opcode.startsWith "keccak256_bytes:"
+      || opcode.startsWith "persistent_hash_bytes:" || opcode.startsWith "sha512_bytes:"
+      || opcode.startsWith "keccak256_bytes:"
       || opcode.startsWith "foreign_to_bytes:"
   | .binary opcode _ _ => opcode.startsWith "concat_bytes:"
   | _ => false
@@ -456,6 +457,15 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
       concatBytesTerm leftLength rightLength
         (bytesFromChunksTerm leftLength leftChunks) (bytesFromChunksTerm rightLength rightChunks)
     pure {term, bounds := left.bounds ++ right.bounds, assertions := left.assertions ++ right.assertions}
+  | .sha256 (length := length) value => do
+    let normalized ← normalize env value
+    let term ← if length == 32 then do
+      let (highByte, low31) ← alignedBytes32Fields normalized
+      pure (persistentHash32Term highByte low31)
+    else do
+      let chunks ← bytesChunksTerm length normalized.term
+      pure (fixedByteHashTerm "persistent_hash" length chunks.reverse)
+    pure {normalized with term}
   | .sha512 (length := length) value => do
     let normalized ← normalize env value
     let chunks ← bytesChunksTerm length normalized.term
