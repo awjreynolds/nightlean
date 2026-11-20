@@ -30,10 +30,20 @@ private def replay (constants : Std.HashMap Name ConstantInfo) : IO Environment 
         throw <| IO.userError "quotient_declaration_mismatch"
   return .ofKernelEnv checked
 
+private def roleName : Audit.Role → String
+  | .functional => "functional"
+  | .privacy => "privacy"
+
 private def checked (environment : Environment) (policy proof : Name) (role : Audit.Role) : IO Audit.Registration :=
   match Audit.check environment policy proof role with
   | .ok result => pure result
-  | .error error => throw <| IO.userError error
+  | .error error => do
+    if error == "unknown_proof" then
+      throw <| IO.userError s!"unknown_proof: {roleName role}"
+    else if error == "wrong_obligation" then
+      throw <| IO.userError s!"wrong_obligation: {roleName role}"
+    else
+      throw <| IO.userError error
 
 private def parseName (text : String) : IO Name :=
   match Syntax.decodeNameLit ("`" ++ text) with
@@ -52,6 +62,17 @@ private def reduced (environment : Environment) (expression : Lean.Expr) : IO Le
   match Kernel.whnf environment {} expression with
   | .ok result => pure result
   | .error _ => throw <| IO.userError "policy_projection_failed"
+
+private def operationName (environment : Environment) (policy : Name) : IO (Option String) := do
+  let policyExpr := mkConst policy
+  let subject := mkApp (mkConst ``AuditPolicy.subject) policyExpr
+  let contract ← reduced environment (mkApp (mkConst ``Subject.contract) subject)
+  let entry ← reduced environment (mkApp (mkConst ``Subject.entry) subject)
+  let contractName ← reduced environment (mkApp (mkConst ``Contract.name) contract)
+  let entryName ← reduced environment (mkApp (mkConst ``Entrypoint.name) entry)
+  match contractName, entryName with
+  | .lit (.strVal contractName), .lit (.strVal entryName) => pure (some s!"{contractName}.{entryName}")
+  | _, _ => pure none
 
 private def definitionView (environment : Environment) (expression : Lean.Expr) : IO Json := do
   let mut fields := [
@@ -121,6 +142,7 @@ def run (args : List String) : IO UInt32 := do
       | .ok result => pure result
       | .error error => throw <| IO.userError error
     let environment ← replay merged
+    let operation ← try operationName environment policyName catch _ => pure none
     let functional ← checked environment policyName functionalName .functional
     let mut allAxioms := functional.axioms.toList
     if let some privacy := privacyText then
@@ -131,6 +153,7 @@ def run (args : List String) : IO UInt32 := do
       ("status", toJson (if privacyText.isSome then "source-functional-and-scoped-privacy-checked" else "source-functional-only")),
       ("sourceFunctionalChecked", toJson true),
       ("sourcePrivacyChecked", toJson privacyText.isSome),
+      ("operation", toJson operation),
       ("policy", toJson policyText), ("functionalProof", toJson functionalText),
       ("privacyProof", toJson privacyText),
       ("axioms", toJson ((allAxioms.eraseDups.mergeSort Name.lt).map Name.toString)),

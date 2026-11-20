@@ -1,17 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1800" viewBox="0 0 1440 1800" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1834" viewBox="0 0 1440 1834" role="img" aria-labelledby="title desc">
 <title id="title">OpenZeppelin confidential-token port benchmark</title>
 <desc id="desc">Alternating source builds on an Apple M3 Max and circuit K and rows paired by entrypoint name. The Noctium development build includes uncommitted compiler changes and generated zero SDK bindings. Timings exclude key generation and proving.</desc>
 <defs>
   <linearGradient id="background" x2="1" y2="1"><stop stop-color="#131f33"/><stop offset="0.72" stop-color="#0b1526"/><stop offset="1" stop-color="#08111f"/></linearGradient>
   <linearGradient id="surface"><stop stop-color="#15273e"/><stop offset="1" stop-color="#112037"/></linearGradient>
 </defs>
-<rect width="1440" height="1800" fill="url(#background)"/>
+<rect width="1440" height="1834" fill="url(#background)"/>
 <path d="M0 3H1440" stroke="#77efd6" stroke-width="6"/>
 <g font-family="Inter, Arial, Helvetica, sans-serif">
 <text x="72" y="70" font-size="20" fill="#77efd6" font-weight="700" text-anchor="start" letter-spacing="3.0">NOCTIUM  /  MEASUREMENTS</text>
 <text x="1368" y="70" font-size="19" fill="#afc1d7" font-weight="600" text-anchor="end" letter-spacing="1.6">MIDNIGHT LEDGER 9  ·  ZKIR 3.2.1</text>
 <text x="72" y="150" font-size="73" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-2.3">OpenZeppelin token benchmark</text>
-<text x="74" y="202" font-size="31" fill="#afc1d7" font-weight="500" text-anchor="start" letter-spacing="0">Two confidential-token implementations  ·  15 paired entrypoints</text>
+<text x="74" y="202" font-size="31" fill="#afc1d7" font-weight="500" text-anchor="start" letter-spacing="0">Confidential-token port and Compact source  ·  15 entrypoints paired by name</text>
 <text x="72" y="260" font-size="18" fill="#77efd6" font-weight="700" text-anchor="start" letter-spacing="2.2">SOURCE BUILDS  ·  MEDIAN OF THREE ALTERNATING RUNS PER COMPILER</text>
 <text x="1368" y="260" font-size="18" fill="#afc1d7" font-weight="600" text-anchor="end" letter-spacing="1.8">APPLE M3 MAX</text>
 <rect x="72" y="281" width="634" height="225" rx="16" fill="url(#surface)" stroke="#31455f"/>
@@ -24,7 +24,7 @@
 <text x="762" y="439" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">ZKIR, JavaScript, and TypeScript declarations</text>
 <text x="100" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">53 files · 2.60 MB · zero SDK bindings</text>
 <text x="762" y="474" font-size="22" fill="#f2f6fc" font-weight="600" text-anchor="start" letter-spacing="0">20 files · 517 kB · --skip-zk</text>
-<text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Timings cover different compiler outputs. Both exclude key generation and proving.</text>
+<text x="73" y="546" font-size="23" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium emits 16 ZKIR relations. Compact emits 15. Timings exclude key generation and proving.</text>
 <text x="72" y="622" font-size="38" fill="#f2f6fc" font-weight="700" text-anchor="start" letter-spacing="-0.6">Circuit size by entrypoint</text>
 <text x="1368" y="619" font-size="22" fill="#afc1d7" font-weight="500" text-anchor="end" letter-spacing="0">Noctium K  ·  3 lower  ·  11 equal  ·  1 higher</text>
 <rect x="72" y="646" width="1296" height="942" rx="12" fill="#101c2e" stroke="#31455f"/>
@@ -177,8 +177,9 @@
 <text x="73" y="1632" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Δ = Noctium rows minus Compact rows. Percentage uses Compact as the baseline.</text>
 <text x="73" y="1665" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Pairs share entrypoint names. The ports have different ABIs and state paths.</text>
 <text x="73" y="1698" font-size="22" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Both sets use the same ZKIR 3.2.1 sizing tool. Proving latency was outside this benchmark.</text>
-<path d="M72 1717L1368 1717" stroke="#31455f" stroke-width="1"/>
-<text x="72" y="1743" font-size="21" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium development snapshot (base cedb6ef) · OpenZeppelin f85f1a2</text>
-<text x="1368" y="1743" font-size="20" fill="#afc1d7" font-weight="600" text-anchor="end" letter-spacing="1.4">19 NOV 2026</text>
-<text x="72" y="1776" font-size="22" fill="#77efd6" font-weight="600" text-anchor="start" letter-spacing="0">github.com/awjreynolds/noctium</text>
+<text x="73" y="1731" font-size="22" fill="#afc1d7">Unpaired: Compact runs computeAccountId in JavaScript. Noctium emits a K13 circuit (1,993 rows).</text>
+<path d="M72 1751L1368 1751" stroke="#31455f" stroke-width="1"/>
+<text x="72" y="1777" font-size="21" fill="#afc1d7" font-weight="400" text-anchor="start" letter-spacing="0">Noctium base cedb6ef + uncommitted compiler changes · OpenZeppelin f85f1a2</text>
+<text x="1368" y="1777" font-size="20" fill="#afc1d7" font-weight="600" text-anchor="end" letter-spacing="1.4">19 NOV 2026</text>
+<text x="72" y="1810" font-size="22" fill="#77efd6" font-weight="600" text-anchor="start" letter-spacing="0">github.com/awjreynolds/noctium</text>
 </g></svg>

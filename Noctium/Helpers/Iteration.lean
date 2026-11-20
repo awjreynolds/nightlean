@@ -240,47 +240,50 @@ private partial def bodyHasReturn : List Statement → Bool
   | .forRange _ _ _ body :: rest => bodyHasReturn body || bodyHasReturn rest
   | _ :: rest => bodyHasReturn rest
 
-private def commonReturnType (span : SourceSpan) (types : List ResultType) :
-    Except Diagnostic ResultType := do
-  match types with
-  | [] => pure .unit
-  | first :: rest => rest.foldlM (fun common next =>
+private def commonReturnType (span : SourceSpan) (types : List (Option ResultType)) :
+    Except Diagnostic (Option ResultType) := do
+  if types.isEmpty then return some .unit
+  match types.filterMap id with
+  | [] => pure none
+  | first :: rest => some <$> rest.foldlM (fun common next =>
       match Noctium.Helpers.commonType common next with
       | some joined => pure joined
       | none => failAt span "anonymous operator return types have no common type") first
 
-/-- Infer only missing return signatures. The full generated body still passes
-through Helpers.checkDeclarationWithLimits before it is exposed. -/
+/-- Infer missing return signatures before checking the entire callback body. -/
 private partial def inferBodyReturns (limits : Limits) (program : Program) (scope : Nat)
-    (span : SourceSpan) (initial : Environment) (body : List Statement) :
-    Except Diagnostic (List ResultType) := do
+    (span : SourceSpan) (initial : PartialEnvironment) (body : List Statement) :
+    Except Diagnostic (List (Option ResultType)) := do
   let mut env := initial
   let mut returns := []
   for statement in body do
     match statement with
     | .bind name type value => do
-      let actual ← inferType limits program scope env span value
-      unless subtype actual type do failAt span "helper binding type mismatch"
-      env := (name, type) :: env
-    | .return none => returns := returns ++ [.unit]
-    | .return (some value) => returns := returns ++ [← inferType limits program scope env span value]
+      let actual ← Noctium.Helpers.inferPartialWithLimits limits program scope env span value
+      if let some actualType := actual.ty then
+        unless subtype actualType type do failAt span "helper binding type mismatch"
+      env := (name, some type) :: env
+    | .return none => returns := returns ++ [some .unit]
+    | .return (some value) =>
+      let info ← Noctium.Helpers.inferPartialWithLimits limits program scope env span value
+      returns := returns ++ [info.ty]
     | .branch _ yes no => do
       returns := returns ++ (← inferBodyReturns limits program scope span env yes)
       returns := returns ++ (← inferBodyReturns limits program scope span env no)
     | .forRange index _ _ body => do
       if bodyHasReturn body then failAt span "return cannot escape a finite range body"
-      let _ ← inferBodyReturns limits program scope span ((index, .scalar .native) :: env) body
-    | .readCell _ destination type => env := (destination, .scalar type) :: env
-    | .readMap _ destination _ valueType _ => env := (destination, .scalar valueType) :: env
-    | .readMember _ destination _ valueType _ => env := (destination, .scalar valueType) :: env
+      let _ ← inferBodyReturns limits program scope span ((index, some (.scalar .native)) :: env) body
+    | .readCell _ destination type => env := (destination, some (.scalar type)) :: env
+    | .readMap _ destination _ valueType _ => env := (destination, some (.scalar valueType)) :: env
+    | .readMember _ destination _ valueType _ => env := (destination, some (.scalar valueType)) :: env
     | _ => pure ()
   pure returns
 
 private structure MaterializedOperator where
   program : Program
-  name : String
+  name : Option String
   captures : List (String × ResultType)
-  parameters : List ResultType
+  parameters : List (Option ResultType)
   result : ResultType
 
 private def environmentType (env : Environment) (name : String) : Option ResultType :=
@@ -288,11 +291,11 @@ private def environmentType (env : Environment) (name : String) : Option ResultT
 
 private def preflightAnonymousBody (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (specifications : List ParameterSpec)
-    (actualTypes : List ResultType) (body : List Statement) : Except Diagnostic Unit := do
+    (actualTypes : List (Option ResultType)) (body : List Statement) : Except Diagnostic Unit := do
   let used := programNames program env
   let (name, id) ← generatedIdentity limits program scope used
   let parameters := (specifications.zip actualTypes).map fun (specification, type) =>
-    (specification.name, type)
+    (specification.name, type.getD .unit)
   let (scalarParameters, compositeParameters) := declarationParameters parameters
   let probe : Declaration := {
     id, name, parameters := scalarParameters, compositeParameters,
@@ -302,16 +305,17 @@ private def preflightAnonymousBody (limits : Limits) (program : Program) (scope 
 
 private def materializeOperator (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (operator : Operator)
-    (actualTypes : List ResultType) : Except Diagnostic MaterializedOperator := do
+    (actualTypes : List (Option ResultType)) (expectedResult : Option ResultType := none) :
+    Except Diagnostic MaterializedOperator := do
   discard (Noctium.Helpers.syntacticPreflight limits program)
   discard (inferType limits program scope env span .unit)
   match operator with
   | .named name => do
     if (environmentType env name).isSome then
       failAt span s!"helper '{name}' is hidden by a value binding"
-    let declaration ← Noctium.Helpers.resolveWithLimits limits program scope name actualTypes span
-    let parameters := declaration.parameters.map fun parameter => declaration.parameterType parameter
-    pure {program, name, captures := [], parameters, result := declaration.result}
+    let declaration ← Noctium.Helpers.resolveWithPartialTypes limits program scope name actualTypes span
+    let parameters := declaration.parameters.map fun parameter => some (declaration.parameterType parameter)
+    pure {program, name := some name, captures := [], parameters, result := declaration.result}
   | .anonymous specifications resultAnnotation body => do
     if specifications.length != actualTypes.length then
       failAt span "anonymous operator argument count mismatch"
@@ -320,36 +324,46 @@ private def materializeOperator (limits : Limits) (program : Program) (scope : N
     preflightAnonymousBody limits program scope env span specifications actualTypes body
     unless (specifications.map (·.name)).eraseDups.length == specifications.length do
       failAt span "duplicate anonymous operator parameter"
-    let mut parameters := []
-    for (specification, actual) in specifications.zip actualTypes do
-      let type := specification.type.getD actual
-      unless subtype actual type do failAt span "anonymous operator parameter type mismatch"
-      parameters := parameters ++ [(specification.name, type)]
+    let parameters ← (specifications.zip actualTypes).mapM fun (specification, actual) => do
+      let type := specification.type.or actual
+      if let (some actual, some type) := (actual, type) then
+        unless subtype actual type do failAt span "anonymous operator parameter type mismatch"
+      pure (specification.name, type)
     let freeNames := bodyFreeReferences (specifications.map (·.name)) body
     let mut captures : List (String × ResultType) := []
     for name in freeNames do
       if let some type := environmentType env name then
         captures := captures ++ [(name, type)]
-    let parameterEnv := (captures ++ parameters)
+    let parameterEnv : PartialEnvironment := captures.map (fun (name, type) => (name, some type)) ++ parameters
     let returnType ← match resultAnnotation with
       | some result => pure result
       | none => do
         let returns ← inferBodyReturns limits program scope span parameterEnv body
-        commonReturnType span returns
+        let inferred ← commonReturnType span returns
+        let some result := inferred.or expectedResult
+          | failAt span "empty tuple callback result requires an expected type"
+        pure result
     discard (bodyCallsHiddenBy span (env.map Prod.fst) (specifications.map (·.name)) body)
-    let namedParameters := captures ++ parameters
-    if namedParameters.length > limits.maxParameters then
+    if parameterEnv.length > limits.maxParameters then
       failAt span "helper resource limit exceeded: parameters"
     let used := appendMany [programNames program env, statementNames body,
-      specifications.map (·.name), namedParameters.map Prod.fst,
-      namedParameters.flatMap fun (_, type) => resultTypeNames type,
+      specifications.map (·.name), parameterEnv.map Prod.fst,
+      parameterEnv.flatMap fun (_, type) => type.toList.flatMap resultTypeNames,
       resultTypeNames returnType]
     let (name, id) ← generatedIdentity limits program scope used
-    let (declParams, compositeParams) := declarationParameters namedParameters
+    -- The header gives syntax preflight a bounded list of parameter names.
+    -- A missing type is checked only through the partial source environment.
+    let (declParams, compositeParams) := declarationParameters
+      (parameterEnv.map fun (name, type) => (name, type.getD .unit))
     let declaration : Declaration := {
       id, name, parameters := declParams, compositeParameters := compositeParams,
       result := returnType, body, span}
-    let program ← addCheckedDeclaration limits program declaration
+    let (program, name) ← if parameterEnv.all (·.2.isSome) then do
+        let program ← addCheckedDeclaration limits program declaration
+        pure (program, some name)
+      else do
+        discard (Noctium.Helpers.checkPartialDeclarationWithLimits limits program declaration parameterEnv)
+        pure (program, none)
     pure {program, name, captures, parameters := parameters.map Prod.snd, result := returnType}
 
 private def actualArgumentTypes (limits : Limits) (program : Program) (scope : Nat)
@@ -363,9 +377,10 @@ def applyWithLimits (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (operator : Operator) (arguments : List Term) :
     Except Diagnostic (Program × Term) := do
   let argumentTypes ← actualArgumentTypes limits program scope env span arguments
-  let compiled ← materializeOperator limits program scope env span operator argumentTypes
+  let compiled ← materializeOperator limits program scope env span operator (argumentTypes.map some)
+  let some name := compiled.name | failAt span "unresolved operator cannot be called"
   let callArguments := compiled.captures.map fun capture => Term.ref capture.1
-  let term := Term.call compiled.name (callArguments ++ arguments)
+  let term := Term.call name (callArguments ++ arguments)
   discard (inferType limits compiled.program scope env span term)
   pure (compiled.program, term)
 
@@ -466,16 +481,16 @@ private inductive SequenceProjection where
 private structure SequenceDescriptor where
   sourceType : ResultType
   length : Nat
-  elementType : ResultType
+  elementType : Option ResultType
   projection : SequenceProjection
   deriving Repr
 
 private def commonSequenceElementType (span : SourceSpan)
-    (elements : List Types.CompositeType) : Except Diagnostic ResultType := do
+    (elements : List Types.CompositeType) : Except Diagnostic (Option ResultType) := do
   let types := elements.map resultTypeOfComposite
   match types with
-  | [] => failAt span "tuple sequence has no element type"
-  | first :: rest => rest.foldlM (fun common next =>
+  | [] => pure none
+  | first :: rest => some <$> rest.foldlM (fun common next =>
       match Noctium.Helpers.commonType common next with
       | some joined => pure joined
       | none => failAt span "tuple sequence elements have no common type") first
@@ -487,7 +502,7 @@ private def sequenceDescriptor (limits : Limits) (program : Program) (scope : Na
   let descriptor ← match sourceType with
     | .composite (.vector length element) => do
       discard (checkedComposite program span (.vector length element))
-      pure (SequenceDescriptor.mk sourceType length (resultTypeOfComposite element) .vector)
+      pure (SequenceDescriptor.mk sourceType length (some (resultTypeOfComposite element)) .vector)
     | .composite (.tuple elements) => do
       if elements.length > Types.defaultLimits.maxVectorLength then
         failAt span "helper resource limit exceeded: iteration tuple length"
@@ -496,9 +511,9 @@ private def sequenceDescriptor (limits : Limits) (program : Program) (scope : Na
       pure (SequenceDescriptor.mk sourceType elements.length elementType .tuple)
     | .composite (.bytes length) => do
       discard (checkedComposite program span (.bytes length))
-      pure (SequenceDescriptor.mk sourceType length (.scalar (.uint 255)) .compositeBytes)
+      pure (SequenceDescriptor.mk sourceType length (some (.scalar (.uint 255))) .compositeBytes)
     | .scalar (.bytes length) =>
-      pure (SequenceDescriptor.mk sourceType length (.scalar (.uint 255)) .scalarBytes)
+      pure (SequenceDescriptor.mk sourceType length (some (.scalar (.uint 255))) .scalarBytes)
     | _ => failAt span "iteration sequence must be a fixed vector, vector-compatible tuple, or byte vector"
   if descriptor.length > Types.defaultLimits.maxVectorLength then
     failAt span "helper resource limit exceeded: iteration sequence length"
@@ -553,9 +568,11 @@ private def checkGeneratedSourceBudget (limits : Limits) (span : SourceSpan)
 
 /-- Apply an operator once to each element of one or more equal-length fixed
 sequence expressions. Sequence expressions become wrapper arguments, so each
-evaluates once before the wrapper body starts. -/
+evaluates once before the wrapper body starts. `expectedElement` supplies a
+result context when an empty tuple callback still has an unknown return type. -/
 def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
-    (env : Environment) (span : SourceSpan) (sequences : List Term) (operator : Operator) :
+    (env : Environment) (span : SourceSpan) (sequences : List Term) (operator : Operator)
+    (expectedElement : Option ResultType := none) :
     Except Diagnostic (Program × Term) := do
   discard (Noctium.Helpers.syntacticPreflight limits program)
   discard (inferType limits program scope env span .unit)
@@ -568,18 +585,16 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let length := firstSequence.length
   unless typedSequences.all (fun item => item.length == length) do
     failAt span "map sequence lengths must match"
-  let actualTypes := typedSequences.map (·.elementType)
-  let compiled ← materializeOperator limits program scope env span operator actualTypes
+  let compiled ← materializeOperator limits program scope env span operator
+    (typedSequences.map (·.elementType)) expectedElement
   if let .composite (.scalar _) := compiled.result then
     failAt span "map cannot flatten a composite scalar wrapper"
   let outputElementType := mapElementType compiled.result
   let compiledResultType ← checkedComposite compiled.program span outputElementType
   let vectorType := Types.CompositeType.vector length outputElementType
   discard (checkedComposite compiled.program span vectorType)
-  if compiled.captures.length + actualTypes.length > limits.maxParameters then
+  if compiled.captures.length + sequences.length > limits.maxParameters then
     failAt span "helper resource limit exceeded: map operator arguments"
-  if sequences.length + compiled.captures.length > limits.maxParameters then
-    failAt span "helper resource limit exceeded: map wrapper arguments"
   let resultLeaves := compiledResultType.checked.expandedLeaves
   unless resultLeaves ≤ compiledResultType.checked.expandedNodes do
     failAt span "checked map result leaf count exceeds its expansion bound"
@@ -604,10 +619,11 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let wrapperParameters := (sequenceNames.zip typedSequences).map fun (name, typed) =>
     (name, typed.sourceType)
   let wrapperParameters := wrapperParameters ++ compiled.captures
-  let operationCalls := (List.range length).map fun index =>
+  let operationCalls ← (List.range length).mapM fun index => do
+    let some name := compiled.name | failAt span "unresolved operator cannot be called"
     let elements := (sequenceNames.zip typedSequences).map fun (name, descriptor) =>
       projectSequence (.ref name) descriptor index
-    Term.call compiled.name (compiled.captures.map (fun capture => Term.ref capture.1) ++ elements)
+    pure (Term.call name (compiled.captures.map (fun capture => Term.ref capture.1) ++ elements))
   let bindings := resultNames.zip operationCalls |>.map fun (name, value) =>
     Statement.bind name compiled.result value
   let leaves ← (List.range length).mapM fun index =>
@@ -640,24 +656,20 @@ def foldWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let length := firstSequence.length
   unless typedSequences.all (fun item => item.length == length) do
     failAt span "fold sequence lengths must match"
-  let elementTypes := typedSequences.map (·.elementType)
-  let compiled ← materializeOperator limits program scope env span operator (initialType :: elementTypes)
-  let some accumulatorType := compiled.parameters.head?
+  let operator := match operator with
+    | .anonymous (parameter :: rest) (some result) body =>
+      .anonymous ({parameter with type := parameter.type.or (some result)} :: rest) (some result) body
+    | other => other
+  let compiled ← materializeOperator limits program scope env span operator
+    (some initialType :: typedSequences.map (·.elementType))
+  let some (some accumulatorType) := compiled.parameters.head?
     | failAt span "fold operator must accept an accumulator parameter"
-  let operatorElementTypes := compiled.parameters.drop 1
-  unless operatorElementTypes.length == typedSequences.length do
-    failAt span "fold operator must accept the accumulator and one parameter per sequence"
   unless subtype initialType accumulatorType do
     failAt span "fold initial value is incompatible with its accumulator parameter"
   unless compiled.result == accumulatorType do
     failAt span "fold operator result must exactly match its accumulator parameter"
-  for (elementType, operatorElementType) in elementTypes.zip operatorElementTypes do
-    unless subtype elementType operatorElementType do
-      failAt span "fold sequence element type is incompatible with its operator parameter"
   if compiled.captures.length + 1 + sequences.length > limits.maxParameters then
     failAt span "helper resource limit exceeded: fold wrapper arguments"
-  if compiled.captures.length + 1 + elementTypes.length > limits.maxParameters then
-    failAt span "helper resource limit exceeded: fold operator arguments"
   let estimatedNodes := 4 + sequences.length * 2 +
     length * (5 + compiled.captures.length + 2 * sequences.length)
   checkGeneratedSourceBudget limits span estimatedNodes
@@ -673,11 +685,12 @@ def foldWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let wrapperParameters := [(initialName, initialType)] ++ sequenceParameters ++ compiled.captures
   let mut body := [Statement.bind accumulatorNames.head! accumulatorType (.ref initialName)]
   for index in List.range length do
+    let some name := compiled.name | failAt span "unresolved operator cannot be called"
     let accumulator := accumulatorNames[index]!
     let nextAccumulator := accumulatorNames[index + 1]!
     let elementTerms := (sequenceNames.zip typedSequences).map fun (name, descriptor) =>
       projectSequence (.ref name) descriptor index
-    let call := Term.call compiled.name
+    let call := Term.call name
       (compiled.captures.map (fun capture => Term.ref capture.1) ++
         [Term.ref accumulator] ++ elementTerms)
     body := body ++ [Statement.bind nextAccumulator accumulatorType call]

@@ -1,4 +1,5 @@
 import init, { AuthenticatedWitness, WitnessSession } from "./noctium_witness.js"
+import { resumeLocalnet, submitLocalnet } from "./browser-localnet.js"
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json }
 type Request = { requestId: string, operation: string, capability: string, schema: string, name: string }
@@ -57,7 +58,7 @@ async function asset(path: string) {
     return new Uint8Array(await response.arrayBuffer())
 }
 
-async function prove(begin: Uint8Array, attemptId: string) {
+async function prove(begin: Uint8Array, attemptId: string, localnetRun: string | null) {
     const [manifest, target, srs] = await Promise.all([
         asset("./bundle/manifest.json"), asset("./target.json"), asset("./srs"),
     ])
@@ -101,7 +102,8 @@ async function prove(begin: Uint8Array, attemptId: string) {
                 const proofMs = Math.round(performance.now() - start)
                 const publicIntentBytes = proved.publicIntent().byteLength
                 check(publicIntentBytes > 0, "Missing proved public intent")
-                return { k: 7, proofMs, publicIntentBytes }
+                const stats = { k: 7, proofMs, publicIntentBytes }
+                return localnetRun ? await submitLocalnet(proved, localnetRun, attemptId, stats) : stats
             } finally {
                 proved.free()
             }
@@ -115,17 +117,23 @@ async function prove(begin: Uint8Array, attemptId: string) {
 
 async function run() {
     await init()
+    const query = new URLSearchParams(location.search)
+    const localnetRun = query.has("localnet") ? query.get("runId") : null
+    check(!query.has("localnet") || localnetRun, "Missing browser localnet run ID")
+    if (localnetRun && query.has("resume")) return resumeLocalnet(localnetRun)
     const fixture = await fetch("./plan.json")
     check(fixture.ok, "Missing compiled fixture")
     const plan: Json = await fixture.json()
-    const attemptId = "b".repeat(64)
+    const attemptId = localnetRun
+        ? Array.from(crypto.getRandomValues(new Uint8Array(32)), byte => byte.toString(16).padStart(2, "0")).join("")
+        : "b".repeat(64)
     const invocation = {
         abiVersion: 1,
         inputs: { expected: "14", seed: "7" },
         hostContext: {
             protocolVersion: 1,
             namespace: "noctium",
-            baseRevision: "fixture-r0",
+            baseRevision: localnetRun ? "r0" : "fixture-r0",
             attemptId,
             capabilities: [
                 { id: "private", namespace: "noctium", keyPrefix: "cache/",
@@ -166,10 +174,11 @@ async function run() {
     }
     rejects(5, () => new WitnessSession(new Uint8Array(1024 * 1024 + 1)))
     const result = { passed: true, callbacks: 5, result: 14 }
-    if (!new URLSearchParams(location.search).has("proof")) return result
+    if (!query.has("proof") && !localnetRun) return result
     const source = encode(invocation)
     try {
-        return { ...result, ...await prove(source, attemptId) }
+        const proof = await prove(source, attemptId, localnetRun)
+        return "restart" in proof ? proof : { ...result, ...proof }
     } finally {
         source.fill(0)
     }
