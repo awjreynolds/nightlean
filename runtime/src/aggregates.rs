@@ -1074,6 +1074,66 @@ impl Schema {
         Ok(leaves)
     }
 
+    /// Hash a checked structured value using the ledger's FAB leaf encoding.
+    pub(crate) fn merkle_leaf_hash(&self, json: &[u8]) -> Result<[u8; 32]> {
+        use transient_crypto::merkle_tree::LEAF_HASH_DOMAIN_SEP;
+
+        let mut leaves = self.flatten_value(json)?.into_iter();
+        let mut preimage = zeroize::Zeroizing::new(LEAF_HASH_DOMAIN_SEP.to_vec());
+        let mut append = |width: usize| -> Result<()> {
+            let end = preimage.len() + width;
+            ensure!(
+                end <= MAX_SEQUENCE,
+                "Merkle leaf preimage exceeds the source byte limit"
+            );
+            let leaf = leaves
+                .next()
+                .ok_or_else(|| anyhow!("Merkle leaf count mismatch"))?;
+            let bytes = zeroize::Zeroizing::new(leaf.to_bytes_le());
+            ensure!(
+                bytes.len() <= width,
+                "Merkle leaf value exceeds its FAB width"
+            );
+            preimage.extend_from_slice(&bytes);
+            preimage.resize(end, 0);
+            Ok(())
+        };
+
+        let mut pending = vec![self.root];
+        while let Some(index) = pending.pop() {
+            match &self.nodes[index] {
+                LayoutNode::Unit => {}
+                LayoutNode::Scalar(Leaf::Native) => append(32)?,
+                LayoutNode::Scalar(Leaf::Bool) => append(1)?,
+                LayoutNode::Scalar(Leaf::UInt(maximum)) => {
+                    append(maximum.bits().div_ceil(8).max(1) as usize)?;
+                }
+                LayoutNode::Tuple(items) => pending.extend(items.iter().rev().copied()),
+                LayoutNode::Struct { fields, .. } => {
+                    pending.extend(fields.iter().rev().map(|field| field.layout));
+                }
+                LayoutNode::Vector { length, element } => {
+                    pending.extend(std::iter::repeat_n(*element, *length));
+                }
+                LayoutNode::Bytes { length } => {
+                    for _ in 0..*length {
+                        append(1)?;
+                    }
+                }
+                LayoutNode::Enum { variants, .. } => {
+                    ensure!(
+                        variants.iter().all(|variant| variant.fields.is_empty()),
+                        "Merkle leaf requires fieldless enum variants"
+                    );
+                    let width = (usize::BITS - (variants.len() - 1).leading_zeros()).div_ceil(8);
+                    append(width.max(1) as usize)?;
+                }
+            }
+        }
+        ensure!(leaves.next().is_none(), "Merkle leaf count mismatch");
+        Ok(base_crypto::hash::persistent_hash(&preimage).0)
+    }
+
     pub fn validate_value_json(&self, json: &[u8]) -> Result<()> {
         self.flatten_value(json).map(|_| ())
     }

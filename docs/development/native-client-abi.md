@@ -43,3 +43,51 @@ The published implementation is commit `7346401d8521ed32e36727ed42c6659d55dd2923
 Both 3.2.0 and 3.2.1 passed the worker's ordinary Rust suite and six retained-material proof/ABI tests. The linked C++ client deployed the retained contract, made the claim, lost a submission acknowledgement, restarted in a separate process without witness, seed, funding, or signing inputs, and recovered by resubmitting identical sealed bytes. An independent C++ rebuild repeated both profile runs. A stale private writer was rejected before broadcast. The accepted claim committed private state once. A separate development observer matched all eight finalized receipts and full contract-state byte strings against the loopback node. The published source also passed [CI](https://github.com/awjreynolds/noctium/actions/runs/43998040599).
 
 Counts, source hashes, native binary identities, public receipt IDs, full-state digests, and independent qualification records are in [native client ABI evidence](../../tests/native-client-abi-evidence.json). This is an isolated development-network qualification. It does not prove consensus finality, universal compiler correctness, source-effect execution, business-spec correctness, or public-network behavior. The node, proof parameters and keys, entropy, external service policy, signing approval, and durable journal store remain host trust assumptions. Cancellation does not hard-stop in-flight CPU or transport work. The ABI makes no blanket native-memory erasure claim. TypeScript/WASM, Kotlin, and Swift bindings remain future goals.
+
+## Read Merkle snapshots
+
+`noctium_ledger_collection_page` reads ordinary and historic Merkle trees
+from exact tagged `ContractState` bytes. Supply the plan and snapshot hashes
+from trusted artifacts for the same contract. The reader checks the complete
+byte strings, the target profile and the selected path. For a nested tree,
+supply the typed public map keys in traversal order.
+
+Page queries use `offset` and `limit`. Every Merkle page includes a decimal
+`root` and `firstFree`. Historic pages return their stored roots in `entries`
+and a `nextOffset` for subsequent pages. Keep the same snapshot and plan for
+every page. An ordinary tree has no history entries.
+
+Use `merklePath` in place of both pagination fields. Omit the index for a
+stored-leaf search, or supply a canonical decimal UInt64 index for a
+candidate path. Indexed queries return sibling fields and directions in
+leaf-to-root order, plus the snapshot and candidate roots. A candidate path
+reconstructs the snapshot root when those roots match. Use a search to
+require a stored match. An unsuccessful search has null candidate root and
+steps. Sparse branches and indices beyond capacity reject.
+
+Field, structured, typed curve, prehashed and raw FAB leaves all use the
+pinned ledger leaf hash. Foreign curve inputs require ZKIR 3.2.1. The FAB
+form accepts checked nonopaque atoms and bounds the expanded representation
+to 1 MiB. See the request and result fields in the
+[C header](../../runtime/include/noctium_native.h).
+
+The read path uses only the plan header and state declarations. The test
+constructs tagged ledger snapshots with the pinned Rust ledger API, then
+compares Rust and C++ reads to Compact. Emitting Merkle operations from Lean
+and submitting a transaction are separate compiler and runtime work.
+
+```sh
+profile=zkir-321
+cargo +1.100.0 build --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features "$profile" --lib
+mkdir -p build/experiments
+scratch=$(mktemp -d "$PWD/build/experiments/merkle-reads.XXXXXX")
+trap 'rm -r -- "$scratch"' EXIT
+libdir="$(cd runtime/target/debug && pwd)"
+c++ -std=c++17 -Wall -Wextra -Werror -I runtime/include \
+  runtime/tests/collection_cpp_smoke.cpp -L "$libdir" -lnoctium_runtime \
+  -Wl,-rpath,"$libdir" -o "$scratch/merkle-cpp"
+NOCTIUM_COLLECTION_CPP="$scratch/merkle-cpp" \
+  cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+    --no-default-features --features "$profile" --test merkle_reads
+```

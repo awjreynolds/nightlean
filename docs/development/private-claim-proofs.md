@@ -97,3 +97,28 @@ python3 scripts/proofs/check-private-claim-audit.py \
 The regression rejects the actual functional proof against a different policy with a weakened postcondition. It also freshly compiles a source mutation removing the root guard, deliberately pairs the changed relation with stale proof objects and requires `model_declaration_mismatch`. This tests source identity in addition to the six semantic proof-sensitivity mutations. No source files in the checkout change during either regression. The wrong-policy negative runs with the default baseline, which explicitly retains the generated test policy.
 
 A successful audit reports `sourceFunctionalChecked: true`, `sourcePrivacyChecked: true` and `compiledContractVerified: false`. `specificationReviewVerified` and `sourceAuthorizationCorrespondenceProved` stay false. This is checked registration of an exact source statement and source contract, with scoped privacy. Emitted ZKIR/Impact preservation, target hash correspondence, verifier/key identity and deployed artifact binding remain separate open obligations.
+
+### Offline source-proof report
+
+Use report mode for one deterministic JSON result without a wallet, node, proving keys or private inputs. It checks the exact functional and privacy proof roles bound to `PrivateClaim.claim` against the checked-in public model hash pin. With the same source and proof export, repeated runs produce identical report bytes. It uses the cached Lean toolchain and pinned profile.
+
+```sh
+python3 scripts/proofs/check-private-claim-audit.py --report
+```
+
+The report records the source proof checks. Native preservation, artifact identity and deployment sit outside its scope.
+
+```json
+{
+  "schemaVersion": 1,
+  "operation": "PrivateClaim.claim",
+  "status": "source-functional-and-scoped-privacy-checked",
+  "targetProfile": { "name": "midnight-ledger-9-zkir-3.2.1" },
+  "sourceFunctionalChecked": true,
+  "sourcePrivacyChecked": true,
+  "compiledContractVerified": false
+}
+```
+
+Pass `--proof-export PATH` to check a candidate proof export. The checker exits with an error naming `PrivateClaim.claim` and the missing `privacy` role when the candidate lacks that proof. A rejected run writes the diagnostic to stderr and exits with a nonzero status. Pass `--output-dir PATH` to retain exports and checker artifacts for debugging. Report mode removes generated exports when no output directory is supplied.
+Review changes to the exported model before updating `proofs/PrivateClaimVerification.model.sha256`.
