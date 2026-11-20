@@ -86,3 +86,12 @@ The [Lean example](../../tests/NativeSet.lean) and
 [Compact oracle](../../tests/compact/native-set.mjs) cover Bytes32
 members under a Native/Field parent key.
 [Midnight Set reference](https://docs.midnight.network/compact/reference/ledger-adt#setvalue_type)
+
+The native VM and ZKIR checker replayed the Compact transitions with fresh
+Lean artifacts. The read-only `isEmpty` case produced the same public
+transcript for two different nonempty cardinalities. The Rust SDK
+finalized a first insertion into both sets at Ledger 9.1.0.1 localnet
+block 151. The observed state matched the exact prediction, and the
+relation measured K9 and 467 rows. The remaining differential cases ran
+off chain. Shielded coin insertion and SDK host enumeration remain
+separate. [Native fixture](../../runtime/tests/native_set.rs) · [Localnet receipt](native-set-localnet-receipt.json)

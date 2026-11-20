@@ -2058,7 +2058,8 @@
         "tests/NativeSet.lean",
         "tests/compact/native-set.mjs",
         "runtime/tests/native_set.rs",
-        "docs/development/native-contract.md"
+        "docs/development/native-contract.md",
+        "docs/development/native-set-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
