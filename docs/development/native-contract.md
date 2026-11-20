@@ -141,3 +141,24 @@ The [localnet receipt](native-token-balance-localnet-receipt.json) records a
 finalized ordinary call for an absent unshielded token. The call wrote zero
 over the previous recorded value of 17. Shielded and nonzero cases use
 simulated starting balances with the pinned native checker.
+
+## Settle tagged token inputs and outputs
+
+```lean
+incUnshieldedInputs(color, received, isUnshielded)
+incUnshieldedOutputs(color, sent, isUnshielded)
+claimUnshieldedCoinSpend(color, authorized, isUnshielded, isContract, recipient)
+```
+
+Each operation records a separate native effect. The ledger verifies these
+effects against the transaction's other calls and settlement data.
+Use `true` for the unshielded token tag and `false` for the shielded tag.
+The spend's recipient tag distinguishes a contract address from a user
+address with the same bytes. Each operand and any guard is public or
+explicitly disclosed.
+
+A first entry accepts a `UInt 128` amount. An addition to an existing entry
+requires both operands and their sum to fit `UInt 64` in the pinned VM.
+The [Lean fixture](../../tests/NativeTaggedSettlement.lean) and
+[Compact reference fixture](../../tests/compact/TaggedSettlement.compact)
+exercise these bounds and the effects' tagged keys.

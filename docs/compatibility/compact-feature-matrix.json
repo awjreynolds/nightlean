@@ -1715,8 +1715,8 @@
       "id": "C-ADT-KERNEL-CLAIMUNSHIELDEDCOINSPEND",
       "layer": "language-ledger",
       "surface": "Kernel.claimUnshieldedCoinSpend",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Guarded native spend authorization by tagged token and contract or user recipient. Both recipient variants use independent keys.",
       "source": [
         "adt"
       ],
@@ -1725,7 +1725,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTaggedSettlement.lean",
+        "tests/compact/tagged-settlement.mjs",
+        "runtime/tests/native_tagged_settlement.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -1783,8 +1787,8 @@
       "id": "C-ADT-KERNEL-INCUNSHIELDEDINPUTS",
       "layer": "language-ledger",
       "surface": "Kernel.incUnshieldedInputs",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Guarded native input accumulation by tagged token. Single UInt128 values and existing-key UInt64 addition follow the pinned VM.",
       "source": [
         "adt"
       ],
@@ -1793,15 +1797,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTaggedSettlement.lean",
+        "tests/compact/tagged-settlement.mjs",
+        "runtime/tests/native_tagged_settlement.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-INCUNSHIELDEDOUTPUTS",
       "layer": "language-ledger",
       "surface": "Kernel.incUnshieldedOutputs",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Guarded native output accumulation by tagged token. Single UInt128 values and existing-key UInt64 addition follow the pinned VM.",
       "source": [
         "adt"
       ],
@@ -1810,7 +1818,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeTaggedSettlement.lean",
+        "tests/compact/tagged-settlement.mjs",
+        "runtime/tests/native_tagged_settlement.rs"
+      ],
       "equivalence": "unverified"
     },
     {
