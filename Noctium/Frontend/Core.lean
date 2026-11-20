@@ -1721,6 +1721,12 @@ private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax
       throwErrorAt path "MerkleTree depth must be between 2 and 32"
     let term ← `(Noctium.Effect.merkleTreeReset $(stringTerm storage.getId.toString))
     return {state with terms := state.terms.push term}
+  if let some (.cell ty) := schema.lookup storage.getId.toString then
+    unless sourceKeys.isEmpty do throwErrorAt path "cell reset does not accept a key path"
+    let type ← tyTerm ty
+    let value ← `(Noctium.GuardedExpression.zeroValue $type)
+    let term ← `(Noctium.Effect.writeCell $(stringTerm storage.getId.toString) $type $value)
+    return {state with terms := state.terms.push term}
   let treeSchema ← treeStateSchema schema storage
   let (keys, value) ← lowerTreePath state.env treeSchema sourceKeys
   let keys ← pathKeysTerm keys
