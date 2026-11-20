@@ -23,13 +23,11 @@ private def emptyTupleSource : Except Diagnostic Program := do
   let empty := fun slot => Term.witnessCall s!"sequence-{slot}" "empty" [.native slot]
   let (program, mapped) ← Iteration.mapWithLimits {} base 0 [] {}
     [empty 1, empty 2]
-    (.anonymous [{name := "left", type := some nativeType},
-      {name := "right", type := some (.scalar .bool)}] none
+    (.anonymous [{name := "left"}, {name := "right"}] none
       [.return (some (.witnessCall "map-callback" "callback" []))])
   let (program, folded) ← Iteration.foldWithLimits {} program 0 [] {}
     (.witnessCall "fold-initial" "seed" []) [mapped, empty 3]
-    (.anonymous [{name := "acc"}, {name := "mapped"},
-      {name := "value", type := some (.scalar .bool)}] none
+    (.anonymous [{name := "acc"}, {name := "mapped"}, {name := "value"}] none
       [.return (some (.binary .add (.ref "acc") (.witnessCall "fold-callback" "callback" [])))])
   pure {program with declarations := program.declarations.map fun declaration =>
     if declaration.id == ⟨0, 0⟩ then {declaration with body := [
