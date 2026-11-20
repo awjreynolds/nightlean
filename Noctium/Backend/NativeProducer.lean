@@ -305,15 +305,14 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       ensure ((← instruction.getObjVal? "guard") == Json.null)
         "unexpected native input activity guard"
     | some expectedGuard =>
-      ensure (expected.mode == .ledgerCall && opcode == "public_input" &&
-        required.visibility == .«public»)
+      ensure (expected.mode == .ledgerCall && descriptor.privacy.guard == .sourceBoundPublicRead)
         "conditional inputs require a source-bound public ledger read"
       let guard ← nativeOperand state (← stringField instruction "guard")
       requireBoolean guard
       ensure (guard.term == expectedGuard) "native read activity guard mismatch"
     let output ← stringField instruction "output"
     ensure (output == required.identifier &&
-      opcode == (if required.visibility == .«public» then "public_input" else "private_input"))
+      descriptor.privacy.inputVisibility == some required.visibility)
       "native transcript input schema/order mismatch"
     let foreignValid := isForeignType valueType
     let state ← define state output {
@@ -714,6 +713,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     defineResult state instruction (← combine (.hash (values.map (·.term)))
       (Field.modulus - 1) values)
   | "impact" =>
+    ensure (descriptor.privacy == .publicBindingSink) "native Impact lacks a public binding policy"
     let guardText ← stringField instruction "guard"
     let guard ← nativeOperand state guardText
     requireBoolean guard
@@ -729,6 +729,7 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
     ensure (actualTerms == group) "native transcript activity grouping/payload mismatch"
     pure {state with groupCount := state.groupCount + 1}
   | "output" =>
+    ensure (descriptor.privacy == .publicReturn) "native output lacks a public return policy"
     let values ← nativeArguments state instruction "vals"
     ensure (values.map (·.term) == expected.returns) "native return signature/value mismatch"
     pure state

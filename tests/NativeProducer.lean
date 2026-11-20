@@ -72,6 +72,9 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
 #guard valueTypeNames.eraseDups.length == 15
 #guard (instructionNames.filter (fun name => accepted (requireInstruction name))).length == 40
 #guard rejected (requireInstruction "new_native_without_metadata")
+#guard match check [op "div_mod_power_of_two"] with
+  | .error message => message.startsWith "native instruction 1: unsupported native instruction 'div_mod_power_of_two'"
+  | .ok _ => false
 #guard rejected (check [decodeBytes "Scalar<BLS12-381>" "%x"])
 #guard rejected (check [emptyBytes64, decodeBytes "Bool" "%bytes64"])
 #guard rejected (check [emptyBytes64, decodeBytes "Point<Jubjub>" "%bytes64"])
@@ -86,8 +89,9 @@ private def replace (value : Json) (name : String) (replacement : Json) : Json :
   op "transient_hash" [("inputs", toJson (["%s"] : List String)), ("output", toJson ("%h" : String))]])
 #guard accepted (requireInstruction "inv")
 #guard accepted (requireInstruction "copy")
-#guard match valueTypeSupport "Bool" with | .ok (.unsupported _) => true | _ => false
-#guard match valueTypeSupport "Bytes" with | .ok (.unsupported _) => true | _ => false
+#guard valueTypeNames.all fun name => match valueTypeSupport name with
+  | .ok (.supported _) => true
+  | _ => false
 
 private def packedBytes : Fact := {
   term := .input "%bytes"
@@ -281,9 +285,14 @@ example (fact : Fact) (value : Nat) (hmax : fact.maximum ≤ 1) (hvalue : value 
 example (instructions : List Json) : requireFinalOutput instructions = .ok () ↔
     finalOutputShape instructions = true := final_output_required instructions
 
-def main : IO Unit := do
+def main (args : List String) : IO Unit := do
+  let printPrivacy := args == ["--privacy-inventory"]
   let path := "docs/compatibility/zkir-feature-matrix.json"
   let matrix ← IO.ofExcept (Json.parse (← IO.FS.readFile path))
+  let version ← IO.ofExcept (matrix.getObjVal? "privacyDescriptors" >>=
+    (·.getObjVal? "schemaVersion") >>= Json.getNat?)
+  unless version == 1 do
+    throw (IO.userError "native privacy descriptor schema version mismatch")
   let target ← IO.ofExcept (matrix.getObjVal? "target")
   let revision ← IO.ofExcept ((← IO.ofExcept (target.getObjVal? "zkirRevision")).getStr?)
   unless revision == inventoryRevision do
@@ -291,14 +300,32 @@ def main : IO Unit := do
   let rows ← IO.ofExcept ((← IO.ofExcept (matrix.getObjVal? "entries")).getArr?)
   let mut operations := []
   let mut types := []
+  let mut privacyRows := #[]
   for row in rows do
     let kind ← IO.ofExcept ((← IO.ofExcept (row.getObjVal? "kind")).getStr?)
-    if kind == "instruction" then
-      operations := operations ++ [← IO.ofExcept ((← IO.ofExcept (row.getObjVal? "jsonOpcode")).getStr?)]
-    else if kind == "value-type" then
-      types := types ++ [← IO.ofExcept ((← IO.ofExcept (row.getObjVal? "symbol")).getStr?)]
+    let (name, support) ← if kind == "instruction" then do
+      let name ← IO.ofExcept (row.getObjVal? "jsonOpcode" >>= Json.getStr?)
+      pure (name, instructionSupport name)
+    else if kind == "value-type" then do
+      let name ← IO.ofExcept (row.getObjVal? "symbol" >>= Json.getStr?)
+      pure (name, valueTypeSupport name)
+    else continue
+    if kind == "instruction" then operations := operations ++ [name]
+    else types := types ++ [name]
+    let privacy := match ← IO.ofExcept support with
+      | .supported descriptor => descriptor.privacyJson
+      | .unsupported reason => Json.mkObj [("status", toJson ("gated" : String)), ("reason", toJson reason)]
+    if printPrivacy then
+      privacyRows := privacyRows.push (Json.mkObj [("name", toJson name), ("privacy", privacy)])
+    else
+      let recorded ← IO.ofExcept (row.getObjVal? "privacyDescriptor")
+      unless recorded == privacy do
+        throw (IO.userError s!"native privacy descriptor for '{name}' drifted from inventory")
   unless operations == instructionNames && types == valueTypeNames do
     throw (IO.userError "native descriptor registry drifted from pinned 47/15 inventory")
+  if printPrivacy then
+    IO.println (Json.arr privacyRows).pretty
+    return
   let claim ← IO.ofExcept (Claim.contract {})
   let some entry := claim.entrypoints.head? | throw (IO.userError "missing claim")
   discard (IO.ofExcept ((Zkir.lowerEntrypoint claim.state entry).mapError (·.message)))

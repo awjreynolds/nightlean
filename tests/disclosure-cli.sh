@@ -38,6 +38,16 @@ end
 LEAN
 reject private-hash "public output 'digest'"
 
+event_source=tests/disclosure/authorized-event-guard.lean
+sed 's/when disclose(active)/when active/' "$event_source" > "$scratch/private-event-guard.lean"
+reject private-event-guard "undisclosed private control"
+grep -F 'public contract event' "$scratch/private-event-guard-error" > /dev/null
+sed 's/nullifier := disclose(nullifier)/nullifier := nullifier/' "$event_source" > "$scratch/private-event-payload.lean"
+reject private-event-payload "undisclosed private parameter 'nullifier'"
+grep -F 'public contract event' "$scratch/private-event-payload-error" > /dev/null
+"$cli" compile "$event_source" --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output "$scratch/authorized-event-guard"
+
 cat > "$scratch/private-predicate.lean" <<'LEAN'
 import Noctium.Frontend
 open scoped Noctium

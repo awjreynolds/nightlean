@@ -997,6 +997,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1056,6 +1063,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "constraint",
+        "status": "enabled",
+        "rule": "preserveConstraintOrigins",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1118,6 +1132,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1176,6 +1197,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "constraint",
+        "status": "enabled",
+        "rule": "preserveConstraintOrigins",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1235,6 +1263,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "constraint",
+        "status": "enabled",
+        "rule": "preserveConstraintOrigins",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1294,6 +1329,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "constraint",
+        "status": "enabled",
+        "rule": "preserveConstraintOrigins",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1352,6 +1394,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1414,6 +1463,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "transcriptBinding",
+        "status": "enabled",
+        "rule": "publicBindingSink",
+        "release": "explicitSourceDisclosure",
+        "guard": "sourceBoundImpactActivity"
       }
     },
     {
@@ -1470,6 +1526,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1527,6 +1590,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1581,6 +1651,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1637,6 +1714,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1693,6 +1777,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -1749,6 +1840,10 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "status": "gated",
+        "reason": "No safe source typing, encoding, privacy/effect, guard-totalization and native conformance package is registered"
       }
     },
     {
@@ -1805,6 +1900,10 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "status": "gated",
+        "reason": "No safe source typing, encoding, privacy/effect, guard-totalization and native conformance package is registered"
       }
     },
     {
@@ -1859,6 +1958,10 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "status": "gated",
+        "reason": "No safe source typing, encoding, privacy/effect, guard-totalization and native conformance package is registered"
       }
     },
     {
@@ -1914,6 +2017,10 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "status": "gated",
+        "reason": "No safe source typing, encoding, privacy/effect, guard-totalization and native conformance package is registered"
       }
     },
     {
@@ -1970,6 +2077,10 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "status": "gated",
+        "reason": "No safe source typing, encoding, privacy/effect, guard-totalization and native conformance package is registered"
       }
     },
     {
@@ -2025,6 +2136,10 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "status": "gated",
+        "reason": "No safe source typing, encoding, privacy/effect, guard-totalization and native conformance package is registered"
       }
     },
     {
@@ -2080,6 +2195,10 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "status": "gated",
+        "reason": "No safe source typing, encoding, privacy/effect, guard-totalization and native conformance package is registered"
       }
     },
     {
@@ -2137,6 +2256,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2192,6 +2318,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2247,6 +2380,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2306,6 +2446,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2363,6 +2510,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2420,6 +2574,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2477,6 +2638,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2532,6 +2700,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2589,6 +2764,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2647,6 +2829,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2704,6 +2893,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -2768,6 +2964,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "transcriptInput",
+        "status": "enabled",
+        "rule": "publicInputOrigin",
+        "release": "none",
+        "guard": "sourceBoundPublicRead"
       }
     },
     {
@@ -2830,6 +3033,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "transcriptInput",
+        "status": "enabled",
+        "rule": "privateInputOrigin",
+        "release": "none",
+        "guard": "unguardedInputOnly"
       }
     },
     {
@@ -2893,6 +3103,13 @@
         "proofWorkloadObserved": true,
         "ledgerWorkloadObserved": true,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "returnValue",
+        "status": "enabled",
+        "rule": "publicReturn",
+        "release": "explicitSourceDisclosure",
+        "guard": "noGuard"
       }
     },
     {
@@ -2948,6 +3165,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3003,6 +3227,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3058,6 +3289,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3115,6 +3353,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3170,6 +3415,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3224,6 +3476,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3278,6 +3537,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3332,6 +3598,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3388,6 +3661,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3444,6 +3724,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3498,6 +3785,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3554,6 +3848,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3611,6 +3912,13 @@
         "proofWorkloadObserved": false,
         "ledgerWorkloadObserved": false,
         "completeOverloadQualification": false
+      },
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
       }
     },
     {
@@ -3667,7 +3975,14 @@
         "ledgerWorkloadObserved": true,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 0
+      "binaryDiscriminant": 0,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-BOOL",
@@ -3687,8 +4002,8 @@
         "semantics": "Dedicated Boolean type, distinct from constrained Native 0/1. And/Or/Xor require this type. Legacy control operations consume Native bits."
       },
       "safeLeanSourceSupport": {
-        "status": "not-exposed-as-this-zkir-type",
-        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "status": "scoped-native-typed-intermediate",
+        "scope": "Typed Boolean gates and constants use Bool internally. Public and private source inputs use constrained Native projections.",
         "fullyVerified": false
       },
       "requirements": [
@@ -3718,7 +4033,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 13
+      "binaryDiscriminant": 13,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-BYTE",
@@ -3738,8 +4060,8 @@
         "semantics": "Dedicated u8 type, distinct from an eight-bit constrained Native. Byte supports byte APIs rather than field arithmetic."
       },
       "safeLeanSourceSupport": {
-        "status": "not-exposed-as-this-zkir-type",
-        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "status": "scoped-native-typed-intermediate",
+        "scope": "A fixed-byte extraction uses the native Byte intermediate with a checked range before encoding to Native.",
         "fullyVerified": false
       },
       "requirements": [
@@ -3769,7 +4091,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 14
+      "binaryDiscriminant": 14,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-BYTES",
@@ -3789,8 +4118,8 @@
         "semantics": "Fixed length from 1 through 2^24 bytes. Canonical type syntax rejects zero, leading zeros and excessive lengths. Bytes<32> is a parameter case, not an extra IrType variant."
       },
       "safeLeanSourceSupport": {
-        "status": "not-exposed-as-this-zkir-type",
-        "scope": "Lean Bool uses constrained Native 0/1 rather than IrType::Bool. Bounded source integers use constrained Native rather than an additional ZKIR integer type. A source representation alone does not establish disclosure safety.",
+        "status": "scoped-native-typed-intermediate",
+        "scope": "Qualified fixed-byte computation and encoding use native Bytes intermediates. Source transport uses checked Native chunks.",
         "fullyVerified": false
       },
       "requirements": [
@@ -3824,7 +4153,14 @@
         "n=32": 1,
         "other-valid-n": 15
       },
-      "binaryEncodingNote": "Bytes<32> retains legacy tag 1 without a payload. Other valid lengths use tag 15 followed by u32 n. Tag 15 with n=32 is rejected as noncanonical."
+      "binaryEncodingNote": "Bytes<32> retains legacy tag 1 without a payload. Other valid lengths use tag 15 followed by u32 n. Tag 15 with n=32 is rejected as noncanonical.",
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-JUBJUB-POINT",
@@ -3877,7 +4213,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 2
+      "binaryDiscriminant": 2,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-JUBJUB-SCALAR",
@@ -3930,7 +4273,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 3
+      "binaryDiscriminant": 3,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-SECP256K1-POINT",
@@ -3981,7 +4331,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 4
+      "binaryDiscriminant": 4,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-SECP256K1-BASE",
@@ -4032,7 +4389,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 5
+      "binaryDiscriminant": 5,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-SECP256K1-SCALAR",
@@ -4083,7 +4447,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 6
+      "binaryDiscriminant": 6,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-SECP256R1-POINT",
@@ -4134,7 +4505,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 7
+      "binaryDiscriminant": 7,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-SECP256R1-BASE",
@@ -4185,7 +4563,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 8
+      "binaryDiscriminant": 8,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-SECP256R1-SCALAR",
@@ -4236,7 +4621,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 9
+      "binaryDiscriminant": 9,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-CURVE25519-POINT",
@@ -4287,7 +4679,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 10
+      "binaryDiscriminant": 10,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-CURVE25519-BASE",
@@ -4338,7 +4737,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 11
+      "binaryDiscriminant": 11,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     },
     {
       "id": "ZKIR-TYPE-CURVE25519-SCALAR",
@@ -4389,7 +4795,14 @@
         "ledgerWorkloadObserved": false,
         "completeTypeQualification": false
       },
-      "binaryDiscriminant": 12
+      "binaryDiscriminant": 12,
+      "privacyDescriptor": {
+        "transcript": "pure",
+        "status": "enabled",
+        "rule": "propagateAll",
+        "release": "none",
+        "guard": "noGuard"
+      }
     }
   ],
   "nativeLedgerObligations": [
@@ -5555,5 +5968,77 @@
       "newOpcodes": 0,
       "limits": "Authenticates the immediate contract address. The parent entrypoint and user caller proof flow require separate support. The funded case covers direct Rust composition on the isolated localnet."
     }
+  },
+  "privacyDescriptors": {
+    "schemaVersion": 1,
+    "scope": "A registered typed producer route enables its listed scope. Missing or deprecated routes are gated. An unavailable capability requires an absent pinned native implementation.",
+    "ledgerVm": {
+      "revision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+      "source": "onchain-vm/src/ops.rs",
+      "sha256": "0c1a3e17dc37e81ca84e6284a7992aedf4985181c8b76cbb627971b5a5eb47e7",
+      "directSourceStatus": "gated",
+      "binding": "The compiler derives public transcript fields and their activity from typed ledger effects. The native producer checks exact source-derived binding. Raw VM operations have no source-level declassification.",
+      "operationGroups": [
+        {
+          "role": "publicActivity",
+          "operations": [
+            "Noop",
+            "Branch",
+            "Jmp",
+            "Ckpt"
+          ]
+        },
+        {
+          "role": "publicPayload",
+          "operations": [
+            "Push"
+          ]
+        },
+        {
+          "role": "publicStateQuery",
+          "operations": [
+            "Size",
+            "Root",
+            "Popeq",
+            "Member",
+            "Idx"
+          ]
+        },
+        {
+          "role": "publicStateMutation",
+          "operations": [
+            "Rem",
+            "Ins"
+          ]
+        },
+        {
+          "role": "publicEvent",
+          "operations": [
+            "Log"
+          ]
+        },
+        {
+          "role": "transcriptComputation",
+          "operations": [
+            "Lt",
+            "Eq",
+            "Type",
+            "New",
+            "And",
+            "Or",
+            "Neg",
+            "Pop",
+            "Addi",
+            "Subi",
+            "Add",
+            "Sub",
+            "Concat",
+            "Dup",
+            "Swap"
+          ]
+        }
+      ]
+    },
+    "typedLedgerEffects": "Noctium/Disclosure.lean#describeEffect"
   }
 }
