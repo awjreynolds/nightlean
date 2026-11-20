@@ -123,6 +123,8 @@ structure EvalContext where
   contractCaller : Option (List Nat) := none
   /-- Address of the contract executing this entrypoint. -/
   ownContractAddress : Option (List Nat) := none
+  unshieldedBalances : List (List Nat × Nat) := []
+  shieldedBalances : List (List Nat × Nat) := []
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
@@ -771,6 +773,22 @@ private def listPayloadAt (root : LedgerValue) (keys : List Value) :
     | throw "missing or non-list state value"
   pure entries
 
+private def tokenBalanceValue (ctx : EvalContext) (env : EvalEnv)
+    (color : Expr (.bytes 32)) (isUnshielded : Expr .bool)
+    (query : BalanceQuery) : Except String Value := do
+  let color ← color.eval ctx env
+  let unshielded ← isUnshielded.eval ctx env
+  let balances := if unshielded then ctx.unshieldedBalances else ctx.shieldedBalances
+  let amount := (balances.lookup color).getD 0
+  unless amount ≤ balanceMaximum do throw "invalid token balance"
+  match query with
+  | .exact => pure (.uint balanceMaximum amount)
+  | .compare less limit => do
+    let limit ← limit.eval ctx env
+    unless amount < 2 ^ 64 && limit < 2 ^ 64 do
+      throw "native balance comparisons require UInt64 operands"
+    pure (.bool (if less then amount < limit else amount > limit))
+
 /-- Execute ordered effects against a private tentative state and retain the
 ordered read environment for expressions evaluated after the effects. Returning
 an error never exposes that tentative state. -/
@@ -815,6 +833,8 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
       unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
+    | .readTokenBalance destination color isUnshielded query =>
+      env := (destination, ← tokenBalanceValue ctx env color isUnshielded query) :: env
     | .writeCell name ty value =>
       let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
       if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -971,6 +991,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
       if guard.isSome then
         match effect with
         | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. | .require .. |
+            .readTokenBalance .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
@@ -1017,6 +1038,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
           unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
+        | .readTokenBalance destination color isUnshielded query =>
+          env := (destination, ← tokenBalanceValue ctx env color isUnshielded query) :: env
         | .writeCell name ty value =>
           let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
           if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -1175,6 +1198,11 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           env := (destination, .bool false) :: env
         | .readContractAddress destination =>
           env := (destination, .bytes 32 (List.replicate 32 0)) :: env
+        | .readTokenBalance destination _ _ query =>
+          let value := match query with
+            | .exact => Value.uint balanceMaximum 0
+            | .compare .. => Value.bool false
+          env := (destination, value) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
             .mintShielded .. | .mintUnshielded .. |
             .requireContractCaller .. | .emitEvent .. |
