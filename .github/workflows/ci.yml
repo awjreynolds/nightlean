@@ -99,6 +99,7 @@ jobs:
           lake env lean tests/HashWitness.lean
           lake env lean tests/NestedEscrow.lean
           lake env lean tests/NativeCounter.lean
+          lake env lean tests/NativeCellReset.lean
           lake env lean tests/NativeStandaloneMints.lean
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeContractAddress.lean

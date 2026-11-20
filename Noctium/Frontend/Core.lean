@@ -1699,6 +1699,12 @@ private def elaborateListPopFront (schema : List (String × StateKind))
 private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax `nlpath)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
+  if let some (.cell ty) := schema.lookup storage.getId.toString then
+    unless sourceKeys.isEmpty do throwErrorAt path "cell reset does not accept a key path"
+    let type ← tyTerm ty
+    let value ← `(Noctium.GuardedExpression.zeroValue $type)
+    let term ← `(Noctium.Effect.writeCell $(stringTerm storage.getId.toString) $type $value)
+    return {state with terms := state.terms.push term}
   let treeSchema ← treeStateSchema schema storage
   let (keys, value) ← lowerTreePath state.env treeSchema sourceKeys
   let keys ← pathKeysTerm keys
