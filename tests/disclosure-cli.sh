@@ -52,6 +52,10 @@ sed 's/\.branch (\.disclose {} (\.ref "outer"))/\.branch (\.ref "outer")/' \
   tests/GuardedLedgerLocalnet.lean > "$scratch/private-nested-ledger-guard.lean"
 reject private-nested-ledger-guard "undisclosed private control from parameter 'outer'"
 
+sed 's/\.branch (\.disclose {} (\.ref "enabled"))/\.branch (.ref "enabled")/' \
+  tests/FiniteRangeWitness.lean > "$scratch/private-ledger-loop.lean"
+reject private-ledger-loop "undisclosed private control from parameter 'enabled'"
+
 cat > "$scratch/private-predicate.lean" <<'LEAN'
 import Noctium.Frontend
 open scoped Noctium

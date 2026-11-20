@@ -123,6 +123,8 @@ scoped syntax "stage" ident ":=" nlexpr : noctium_witness_statement
 scoped syntax "output" ident (":" nltype)? ":=" nlexpr : noctium_witness_statement
 scoped syntax "for" ident "in" num "..<" num "do" noctium_witness_statement* "end" :
   noctium_witness_statement
+scoped syntax "for" ident (":" nltype)? "in" nlexpr "do" noctium_witness_statement* "end" :
+  noctium_witness_statement
 scoped syntax (name := noctiumAuthoredWitnessCircuitCommand) "noctium_witness_circuit" ident
   ("using" ident,+)? "where" noctium_witness_statement* "end" : command
 
@@ -1765,6 +1767,64 @@ private partial def lowerReadableStatement (programName path : String)
       observation := loop.observation
       nextLet := loop.nextLet
       helperProgram := loop.helperProgram
+      requiresOutputViews := loop.requiresOutputViews}
+  | `(noctium_witness_statement| for $item:ident $[: $annotation:nltype]? in $sequence:nlexpr do
+      $nested:noctium_witness_statement* end) => do
+    let itemName := item.getId.toString
+    if body.env.any (·.1 == itemName) then
+      throwErrorAt item s!"sequence loop variable '{itemName}' conflicts with an enclosing readable witness value"
+    let (sequenceValue, sourceBody) ← body.lower programName path exprState sequence
+    let sourceBody := sourceBody.observe sequenceValue [sequence]
+    let sequenceSpan ← spanValue statement
+    let loopExprState : AuthoringExprState := {
+      exprState with
+      iterationProgram := sourceBody.helperProgram
+      iterationWitnesses := sourceBody.witnesses
+      usedIteration := sourceBody.requiresOutputViews
+      nextLet := sourceBody.nextLet}
+    let ((before, terms, staged), loopExprState) ←
+      (stageIterationValues ("s" ++ path) sourceBody.env sequenceSpan [sequenceValue]).run loopExprState
+    let [sequenceTerm] := terms
+      | throwErrorAt statement "sequence loop must contain one sequence"
+    let helperEnv := iterationEnvironment sourceBody.env staged
+    let (program, _) ← (iterationProgram statement programName sequenceValue.signatures).run loopExprState
+    let inferred ← match Iteration.sequenceElementTypesWithLimits {}
+        program 0 helperEnv sequenceSpan [sequenceTerm] with
+      | .ok [elementType] => pure elementType
+      | .ok _ => throwErrorAt statement "sequence loop type inference failed"
+      | .error diagnostic => throwErrorAt sequence diagnostic.message
+    let elementType ← match annotation with
+      | some type => ResultType.scalar <$> readScalarTy type
+      | none => pure (inferred.getD .unit)
+    let mut loop := {sourceBody with
+      env := (itemName, elementType, .ref itemName) :: sourceBody.env
+      statements := []
+      logicalAliases := []
+      helperProgram := some program
+      nextLet := loopExprState.nextLet}
+    for (child, ordinal) in nested.toList.zipIdx do
+      loop ← lowerReadableStatement programName s!"{path}.{ordinal}" exprState codecTerms loop child
+    let operator := Iteration.Operator.anonymous
+      [{name := itemName, type := some elementType}] (some .unit)
+      (loop.statements ++ [.return none])
+    let callbackState : AuthoringExprState := {
+      exprState with
+      iterationProgram := loop.helperProgram
+      iterationWitnesses := loop.witnesses
+      usedIteration := loop.requiresOutputViews
+      nextLet := loop.nextLet}
+    let (callbackProgram, _) ←
+      (iterationProgram statement programName loop.witnesses).run callbackState
+    let (compiledProgram, term) ← match Iteration.mapWithLimits {}
+        callbackProgram 0 helperEnv sequenceSpan [sequenceTerm] operator with
+      | .ok result => pure result
+      | .error diagnostic => throwErrorAt statement diagnostic.message
+    pure {body with
+      statements := body.statements ++ before ++ [.evaluate term]
+      witnesses := loop.witnesses
+      observation := loop.observation
+      nextLet := loop.nextLet
+      helperProgram := some compiledProgram
       requiresOutputViews := loop.requiresOutputViews}
   | _ => throwErrorAt statement "finite range bodies accept let, prove, witness, private read and stage, and nested for statements"
 

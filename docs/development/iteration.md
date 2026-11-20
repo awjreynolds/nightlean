@@ -21,6 +21,37 @@ first. Each complete sequence then evaluates once in source order, followed by
 the operator once per element. The staged Helpers API accepts full statement
 bodies and explicit types for empty tuples.
 
+Use `for item in values do ... end` when the body performs effects such as
+private reads, witness calls, assertions, or staging. The body sees the inferred
+element type and captures enclosing values. The sequence expression runs once,
+including when empty. The body runs in index order and its bindings stay inside
+each iteration. If an empty tuple's body uses the item as a scalar, give it a
+type such as `for item : UInt 8 in items do`. [Container loop fixture](../../tests/ReadableContainerLoop.lean)
+
+For bytes `[4, 5]`, the native Rust witness executor, the browser WASM control
+session and the Compact 0.36.1 oracle all request the sequence once, read and
+update the private accumulator in order, evaluate the empty sequence once, and
+return 9. The Rust checker accepts the emitted ZKIR 3.2.1 relation and verifies
+ledger total 9. An incorrect second provider reply rejects before the empty
+sequence is evaluated. [Compact oracle](../../tests/compact/ReadableContainerLoop.compact) · [Browser runner](../../sdk/web/tests/readable-container-loop.mjs)
+
+To rerun the browser case, build the web package as described in the
+[web witness SDK guide](web-witness-sdk.md). Emit the host plan, then serve the
+package on loopback as in that guide.
+
+```sh
+.lake/build/bin/noctium compile tests/ReadableContainerLoop.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit control --output build/container-loop-control
+cp build/container-loop-control/readableContainerLoopHost.control.json build/noctium-web/plan.json
+cp sdk/web/tests/readable-container-loop.mjs build/noctium-web/
+printf '%s\n' '<!doctype html><body><script type="module" src="./readable-container-loop.mjs"></script></body>' \
+  > build/noctium-web/container-loop.html
+```
+
+Open `/container-loop.html` on that server. The page reports both the valid
+result and the rejection.
+
 The [hosted fixture](../../tests/ReadableIteration.lean) uses a private seed and
 two-byte witness, maps a provider over the bytes, then folds the results with a
 public offset. Its [Compact oracle](../../tests/compact/ReadableIteration.compact)

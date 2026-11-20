@@ -149,7 +149,7 @@ Structured programs use the same lowering through the Helpers API.
   .stage "private" "loop/last" .native (.ref "delta")]
 ```
 
-The Native index is local to each iteration. Bounds must be ordered constants no greater than `2^248 - 1`. Each range has at most 1,024 iterations. A saturating nested expansion budget rejects oversized bodies before cloning. Empty ranges still typecheck their bodies. Returns inside a loop body reject, including unreachable returns. A called helper retains its own return scope.
+The Native index is local to each iteration. Bounds must be ordered constants no greater than `2^248 - 1`. Noctium caps each range at 1,024 iterations to bound static circuit expansion, including generated host continuations. A separate saturating budget rejects oversized nested bodies before cloning. Compact 0.36.1 accepts the same endpoint and rejects counts above 16,777,216. Both count checks were exercised at one above their respective limits without generating a large circuit. Empty ranges still typecheck their bodies. Returns inside a loop body reject, including unreachable returns. A called helper retains its own return scope. [Compact bound checks](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/compiler/analysis-passes/expand-modules-and-types.ss#L1243)
 
 Circuit loops expand statically. Each cloned witness call receives a distinct site identity. Constant scope branches lower only their selected path, avoiding repeated copies of the remaining iterations. Later effects exclude expired iteration-local bindings. Dynamic branch lowering retains its existing guarded continuation behavior.
 
@@ -157,4 +157,13 @@ The three-iteration fixture initially occupied 1,954,016 bytes for its Impact pl
 
 The [source example](../../tests/FiniteRangeWitness.lean) performs three ordered read/provider/write/stage iterations. Its [native case](../../runtime/src/witness_execution/range_ledger_tests.rs) checks provider inputs `(1,0)`, `(2,1)`, `(3,3)`, final public total 6 and staged private value 3. An inactive outer branch makes no provider calls, stages no writes and preserves total 0. Both completed paths pass the selected native checker.
 
-[Generic ranges](generics.md#generic-finite-ranges) in the Helpers API resolve compile-time Nat expressions through the same preparation path. Readable [map and fold](iteration.md#readable-witness-circuits) share the staged Helpers backend. Container `for` loops, broader preservation and guarded loop ledger evidence remain open under [issue 48](https://github.com/awjreynolds/noctium/issues/48).
+On funded isolated Ledger 9 localnet, the native Rust SDK finalized deployment
+at block 27, the inactive call at block 30, and the active call at block 33.
+The inactive call kept total 0 with zero provider requests and no private
+stage. The active call read and wrote the ledger in order, finalized total 6,
+and committed the last private stage only after the finalized contract state
+matched the predicted bytes. Native key generation reported K8 and 220 rows.
+Removing the guard's explicit disclosure rejects the attempted public state
+access before emission. [Finalized receipts](finite-range-localnet-receipts.json)
+
+[Generic ranges](generics.md#generic-finite-ranges) in the Helpers API resolve compile-time Nat expressions through the same preparation path. Readable [container loops, map and fold](iteration.md#readable-witness-circuits) share the staged Helpers backend.
