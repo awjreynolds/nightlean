@@ -137,3 +137,10 @@ HTTP endpoint, `NOCTIUM_PARAMETERS` to the proving parameter cache and
 cargo +1.100.0 build --locked --manifest-path runtime/Cargo.toml   --no-default-features --features zkir-321,localnet   --example browser_localnet_provider
 python3 sdk/web/tests/run-localnet.py --web build/noctium-web   --provider runtime/target/debug/examples/browser_localnet_provider   --endpoint "$NOCTIUM_LOCALNET_RPC" --parameters "$NOCTIUM_PARAMETERS"   --chrome "$CHROME"
 ```
+
+In Chrome 157.0.8103.79, the K7 fixture finalized deployment at
+height 4 and the call at height 7. The ledger reported the call pending
+at the restart checkpoint. The replacement worker loaded the submitted attempt,
+matched the finalized state byte for byte and committed the synthetic private
+value `cache/last = 14` once. A declined signing request left the call unsubmitted
+and private state unchanged. [Localnet receipt](web-localnet-receipt.json)
