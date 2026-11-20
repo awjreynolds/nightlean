@@ -1,0 +1,52 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "nodeImage": "midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "specVersion": 2001100,
+  "transactionVersion": 4,
+  "entrypoint": "NativeStandaloneMints.record",
+  "compilerRevision": "c0417f2a5c4386c5ed8cf010dfd8aae4b1b89f8a",
+  "mintAmounts": {
+    "shielded": "19",
+    "unshielded": "19"
+  },
+  "settlementOutputs": 0,
+  "finalizedContractStateUnchanged": true,
+  "artifactSha256": {
+    "source": "9175c90fa1648b55dbcb0097a50a1f439e883a57846c176053036a113260f76a",
+    "circuit": "5da7517f6753bf38874c557b250d556a834aef612238bc05bc162cc9d08b3f19",
+    "plan": "882b53bfad130add409b12b3afc1f87d4e2eef48ab757885e11088d9c29f02ef",
+    "metadata": "3b11c3ea351ba3c173268abb768f749146281d0582c1f02d1d2a46288692ffa2",
+    "abi": "9adb028a54398dd7bccc35fae814616829d940ff58c29690bb74e400c2c8787d",
+    "profile": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093",
+    "ledgerParameters": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+    "proverKey": "0bf5d7c4870ce3d187291189c1a539cce360c55bb172125a3948652ed7dbd07e",
+    "verifierKey": "dc2ce78880c5e8afc39dde238c7d5a978ec1cf08ca4386510082116d713ab420",
+    "toolchain": "dccec8838ddd4739ef31f5a3268aef62ea7e8eff498fe8b875ab1ed763dc663b"
+  },
+  "bundleManifestSha256": "07fd9fc1f36f0f80145ddce84768df0e65da15df5ce4dd6da21aa1d641133e87",
+  "circuit": {
+    "k": 9,
+    "rows": 260
+  },
+  "receipts": [
+    {
+      "event": "Deploy",
+      "height": 55,
+      "blockHash": "9d254c009d3b035e41e5c23c3e4d240f25c11d398f378c083460f308a55cc69a",
+      "contractAddress": "c765cf3aba1c43ba6852410630aa029b45dc14b13d9034469ba1fd09696542e3",
+      "transactionId": "6f7b3dd9e38ebb7227f9d4d910e605fb25a9e40ffef8cc21cbbfd2e74f660824",
+      "stateBytes": 1460,
+      "stateSha256": "9721023b8df926643b71fd7205b1f7ed4f1c2632650769815a1e56406cc71172"
+    },
+    {
+      "event": "Call",
+      "height": 58,
+      "blockHash": "1c38530141886e5f5b4e487ebf2e86e3a9200f17df0e5a9a8006e91990781a68",
+      "contractAddress": "c765cf3aba1c43ba6852410630aa029b45dc14b13d9034469ba1fd09696542e3",
+      "transactionId": "2ed30bb285131cbf83462f3c4bdc91834bb31793883248ba577bee5cdec1b0fb",
+      "stateBytes": 1460,
+      "stateSha256": "9721023b8df926643b71fd7205b1f7ed4f1c2632650769815a1e56406cc71172"
+    }
+  ]
+}
