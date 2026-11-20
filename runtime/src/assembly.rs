@@ -4,8 +4,7 @@ use crate::artifacts::{Role, VerifiedBundle};
 use crate::create_state;
 use crate::zkir::IrSource;
 use crate::{
-    Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value,
-    prepare_with_context,
+    Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare_with_context,
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::time::Timestamp;
@@ -677,6 +676,31 @@ fn build_for_deployment(
             .run_transcript(transcript, cost)
             .map_err(|_| anyhow!("native transaction transcript rejected"))?
             .context;
+        ensure!(
+            after.effects == transcript.effects,
+            "native transaction transcript effects mismatch"
+        );
+        // The ledger credits inputs before debiting outputs for each transcript.
+        let balance = &mut after.call_context.balance;
+        for (token, amount) in transcript.effects.unshielded_inputs.clone() {
+            let current = balance.get(&token).map(|value| *value).unwrap_or(0);
+            *balance = balance.insert(
+                token,
+                current
+                    .checked_add(amount)
+                    .context("contract balance overflow")?,
+            );
+        }
+        for (token, amount) in transcript.effects.unshielded_outputs.clone() {
+            let current = balance.get(&token).map(|value| *value).unwrap_or(0);
+            *balance = balance.insert(
+                token,
+                current
+                    .checked_sub(amount)
+                    .context("insufficient contract balance")?,
+            );
+        }
+        after.effects = Default::default();
     }
     let guaranteed_count = guaranteed.as_ref().map_or(0, |t| t.program.len());
     let fallible_count = fallible.as_ref().map_or(0, |t| t.program.len());
@@ -717,6 +741,7 @@ fn build_for_deployment(
     );
     let mut predicted = initial.clone();
     predicted.data = after.state;
+    predicted.balance = after.call_context.balance;
     Ok(Built {
         initial,
         predicted,

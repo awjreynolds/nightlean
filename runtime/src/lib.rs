@@ -1138,6 +1138,26 @@ pub enum Instruction {
         domain: Expr,
         amount: Expr,
     },
+    #[serde(rename = "incUnshieldedOutputs", rename_all = "camelCase")]
+    IncUnshieldedOutputs {
+        color: Expr,
+        amount: Expr,
+        is_unshielded: Expr,
+    },
+    #[serde(rename = "incUnshieldedInputs", rename_all = "camelCase")]
+    IncUnshieldedInputs {
+        color: Expr,
+        amount: Expr,
+        is_unshielded: Expr,
+    },
+    #[serde(rename = "claimUnshieldedCoinSpend", rename_all = "camelCase")]
+    ClaimUnshieldedCoinSpend {
+        color: Expr,
+        amount: Expr,
+        is_unshielded: Expr,
+        is_contract: Expr,
+        recipient: Expr,
+    },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
         address: Expr,
@@ -1252,6 +1272,10 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             MINT_FIELD_COUNTS.to_vec()
         }
+        Instruction::IncUnshieldedOutputs { .. } | Instruction::IncUnshieldedInputs { .. } => {
+            token_accumulation_fields(11).to_vec()
+        }
+        Instruction::ClaimUnshieldedCoinSpend { .. } => token_accumulation_fields(19).to_vec(),
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
         Instruction::ReadCaller { .. } => vec![1, 4, 1, 1, 5, 1, 2, 5, 1, 2, 2, 1, 13, 12],
         Instruction::ReadContractAddress { .. } => vec![1, 4, 5],
@@ -1290,6 +1314,11 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
+            impact_field_counts(instruction, plan)?.into_iter().sum()
+        }
+        Instruction::IncUnshieldedOutputs { .. }
+        | Instruction::IncUnshieldedInputs { .. }
+        | Instruction::ClaimUnshieldedCoinSpend { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
         Instruction::RequireContractCaller { .. } => 15,
@@ -1350,6 +1379,10 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
 }
 
 const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
+
+fn token_accumulation_fields(key_push: usize) -> [usize; 16] {
+    [1, 4, key_push, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1]
+}
 
 fn reject_unqualified_foreign_storage(ty: &ScalarType) -> Result<()> {
     #[cfg(feature = "zkir-321")]
@@ -2470,6 +2503,33 @@ fn mint_amount(amount: &Expr, env: &Environment) -> Result<u64> {
     Ok(number.try_into()?)
 }
 
+fn unshielded_amount(amount: &Expr, env: &Environment) -> Result<u128> {
+    let Value::UInt { number, maximum } = evaluate(amount, env)? else {
+        bail!("unshielded amount must be UInt128");
+    };
+    ensure!(
+        maximum == u128::MAX.into(),
+        "unshielded amount must be UInt128"
+    );
+    Ok(number.try_into()?)
+}
+
+fn append_unshielded_spend_claim(
+    program: &mut Program,
+    token: TokenType,
+    amount: u128,
+    is_contract: bool,
+    recipient: HashOutput,
+) -> Result<Op<ResultModeVerify, Db>> {
+    let address = if is_contract {
+        PublicAddress::Contract(ContractAddress(recipient))
+    } else {
+        PublicAddress::User(UserAddress(recipient))
+    };
+    let key = onchain_runtime::context::ClaimedUnshieldedSpendsKey(token, address);
+    append_token_accumulation(program, 8, key.into(), amount.into())
+}
+
 fn append_token_accumulation(
     program: &mut Program,
     slot: u8,
@@ -2904,6 +2964,28 @@ fn probe_instruction(
         | Instruction::MintUnshielded { domain, amount } => {
             probe_expressions([domain, amount], plan, env, deferred_outputs)
         }
+        Instruction::IncUnshieldedOutputs {
+            color,
+            amount,
+            is_unshielded,
+        }
+        | Instruction::IncUnshieldedInputs {
+            color,
+            amount,
+            is_unshielded,
+        } => probe_expressions([color, amount, is_unshielded], plan, env, deferred_outputs),
+        Instruction::ClaimUnshieldedCoinSpend {
+            color,
+            amount,
+            is_unshielded,
+            is_contract,
+            recipient,
+        } => probe_expressions(
+            [color, amount, is_unshielded, is_contract, recipient],
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
@@ -3242,6 +3324,9 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::MintShielded { .. }
                 | Instruction::MintUnshielded { .. }
+                | Instruction::IncUnshieldedOutputs { .. }
+                | Instruction::IncUnshieldedInputs { .. }
+                | Instruction::ClaimUnshieldedCoinSpend { .. }
                 | Instruction::RequireContractCaller { .. }
                 | Instruction::ReadCaller { .. }
                 | Instruction::ReadContractAddress { .. }
@@ -3557,6 +3642,9 @@ impl PreparationCursor {
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::MintShielded { .. }
                             | Instruction::MintUnshielded { .. }
+                            | Instruction::IncUnshieldedOutputs { .. }
+                            | Instruction::IncUnshieldedInputs { .. }
+                            | Instruction::ClaimUnshieldedCoinSpend { .. }
                             | Instruction::RequireContractCaller { .. }
                             | Instruction::ReadCaller { .. }
                             | Instruction::ReadContractAddress { .. }
@@ -4351,6 +4439,57 @@ impl PreparationCursor {
                 let domain = claim_hash_output(evaluate(domain, &env)?, "unshielded mint domain")?;
                 let amount = mint_amount(amount, &env)?;
                 append_token_accumulation(program, 5, domain.into(), amount.into())?
+            }
+            Instruction::IncUnshieldedOutputs {
+                color,
+                amount,
+                is_unshielded,
+            } => {
+                let color = claim_hash_output(evaluate(color, &env)?, "unshielded output color")?;
+                let amount = unshielded_amount(amount, &env)?;
+                let is_unshielded = evaluate(is_unshielded, &env)?.boolean()?;
+                append_token_accumulation(
+                    program,
+                    7,
+                    token_type(color, is_unshielded).into(),
+                    amount.into(),
+                )?
+            }
+            Instruction::IncUnshieldedInputs {
+                color,
+                amount,
+                is_unshielded,
+            } => {
+                let color = claim_hash_output(evaluate(color, &env)?, "unshielded input color")?;
+                let amount = unshielded_amount(amount, &env)?;
+                let is_unshielded = evaluate(is_unshielded, &env)?.boolean()?;
+                append_token_accumulation(
+                    program,
+                    6,
+                    token_type(color, is_unshielded).into(),
+                    amount.into(),
+                )?
+            }
+            Instruction::ClaimUnshieldedCoinSpend {
+                color,
+                amount,
+                is_unshielded,
+                is_contract,
+                recipient,
+            } => {
+                let color = claim_hash_output(evaluate(color, &env)?, "unshielded spend color")?;
+                let amount = unshielded_amount(amount, &env)?;
+                let is_unshielded = evaluate(is_unshielded, &env)?.boolean()?;
+                let is_contract = evaluate(is_contract, &env)?.boolean()?;
+                let recipient =
+                    claim_hash_output(evaluate(recipient, &env)?, "unshielded recipient")?;
+                append_unshielded_spend_claim(
+                    program,
+                    token_type(color, is_unshielded),
+                    amount,
+                    is_contract,
+                    recipient,
+                )?
             }
             Instruction::ReadTokenBalance {
                 destination,
