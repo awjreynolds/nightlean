@@ -1663,7 +1663,8 @@
         "tests/NativeCaller.lean",
         "tests/compact/caller.mjs",
         "runtime/tests/native_caller.rs",
-        "docs/development/native-contract.md"
+        "docs/development/native-contract.md",
+        "docs/development/native-caller-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },

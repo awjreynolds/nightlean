@@ -86,3 +86,10 @@ qualification. [Midnight caller semantics](https://docs.midnight.network/compact
 [Lean fixture](../../tests/NativeCaller.lean) ·
 [Compact oracle](../../tests/compact/caller.mjs) ·
 [Native checker](../../runtime/tests/native_caller.rs)
+
+The Rust SDK finalized the deployment at Ledger 9.1.0.1 localnet block
+67 and the active top-level call at block 70. Exact state bytes matched
+the prediction. A separate decoder verified that the `recorded` cell
+changed from true to false. The relation measured K9 and 312 rows. The
+contract and user variants ran in the native VM and Compact runtime.
+[Localnet receipt](native-caller-localnet-receipt.json)
