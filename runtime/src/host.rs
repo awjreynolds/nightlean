@@ -898,6 +898,10 @@ impl Runtime {
                 transaction_id: notice.transaction_id,
                 attempt_id: notice.attempt_id,
             },
+            "partially_accepted" => Event::PartiallyAccepted {
+                transaction_id: notice.transaction_id,
+                attempt_id: notice.attempt_id,
+            },
             "rejected" => Event::Rejected {
                 transaction_id: notice.transaction_id,
                 attempt_id: notice.attempt_id,
@@ -1034,7 +1038,11 @@ impl Runtime {
         require(
             matches!(
                 self.lifecycle.phase(),
-                Phase::Prepared | Phase::Submitted | Phase::Uncertain | Phase::AwaitingCas
+                Phase::Prepared
+                    | Phase::Submitted
+                    | Phase::Uncertain
+                    | Phase::AwaitingCas
+                    | Phase::PartiallyAccepted
             ),
             Error::State,
         )?;
@@ -1063,6 +1071,7 @@ impl Runtime {
             Phase::Submitted => "submitted",
             Phase::Uncertain => "uncertain",
             Phase::AwaitingCas => "awaiting_cas",
+            Phase::PartiallyAccepted => "partially_accepted",
             Phase::Committed => "committed",
             Phase::Rejected => "rejected",
             Phase::Cancelled => "cancelled",

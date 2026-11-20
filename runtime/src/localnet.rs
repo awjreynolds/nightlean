@@ -3,13 +3,17 @@
 pub mod journal;
 use crate::{
     Db,
-    client::{ChainIdentity, NetworkPolicy, Snapshot},
+    client::{
+        BoundTransaction, ChainIdentity, FinalizedReceipt, NetworkPolicy, Observation,
+        PartialReceipt, Snapshot,
+    },
 };
 use base_crypto::{
     cost_model::{FixedPoint, SyntheticCost},
     hash::HashOutput,
     time::Timestamp,
 };
+use coin_structure::contract::ContractAddress;
 use frame_metadata::{RuntimeMetadata, RuntimeMetadataPrefixed, v16::RuntimeMetadataV16};
 use ledger::{
     dust::{DustLocalState, DustSecretKey},
@@ -500,12 +504,18 @@ enum ReplayTransaction {
     Native(Vec<u8>),
     System(Vec<u8>),
 }
+#[derive(Clone)]
 struct ReplayCache {
     state: LedgerState<Db>,
     dust: DustLocalState<Db>,
     height: u64,
     hash: String,
     block: BlockContext,
+}
+struct PartialReplay<'a> {
+    transaction: &'a [u8],
+    address: ContractAddress,
+    result: Option<(BTreeMap<u16, bool>, Vec<u8>)>,
 }
 /// Development-node trust is explicit: finalized RPC history is replayed locally and
 /// the resulting native ledger root must match the finalized runtime API root.
@@ -822,6 +832,7 @@ impl Node {
         cache: &mut ReplayCache,
         block: BlockContext,
         transactions: Vec<ReplayTransaction>,
+        mut partial: Option<&mut PartialReplay<'_>>,
     ) -> Result<()> {
         let mut cost = SyntheticCost::ZERO;
         for transaction in transactions {
@@ -859,6 +870,25 @@ impl Node {
                         .cost(&cache.state.parameters, false)
                         .map_err(|_| Error::Replay)?;
                     let (state, outcome) = cache.state.apply(&verified, &context);
+                    if let Some(replay) = partial.as_deref_mut()
+                        && bytes == replay.transaction
+                    {
+                        let TransactionResult::PartialSuccess(segments, _) = &outcome else {
+                            return Err(Error::Replay);
+                        };
+                        check(replay.result.is_none(), Error::Replay)?;
+                        let contract = state.contract.get(&replay.address).ok_or(Error::State)?;
+                        let mut bytes = Vec::new();
+                        serialize::tagged_serialize(&*contract, &mut bytes)
+                            .map_err(|_| Error::State)?;
+                        replay.result = Some((
+                            segments
+                                .iter()
+                                .map(|(&number, value)| (number, value.is_ok()))
+                                .collect(),
+                            bytes,
+                        ));
+                    }
                     let events = match outcome {
                         TransactionResult::Success(events)
                         | TransactionResult::PartialSuccess(_, events) => events,
@@ -896,9 +926,17 @@ impl Node {
     }
     pub fn sync(&self) -> Result<Snapshot> {
         let final_hash = hash_text(&self.rpc.call("chain_getFinalizedHead", json!([]))?)?;
-        let identity = self.rpc.chain_identity(&final_hash, &self.policy.profile)?;
+        self.replay_to(&final_hash, &mut self.cache.borrow_mut(), None)
+    }
+    fn replay_to(
+        &self,
+        final_hash: &str,
+        cache: &mut Option<ReplayCache>,
+        mut partial: Option<&mut PartialReplay<'_>>,
+    ) -> Result<Snapshot> {
+        let identity = self.rpc.chain_identity(final_hash, &self.policy.profile)?;
         self.policy.check(&identity).map_err(|_| Error::Network)?;
-        self.check_runtime(&final_hash)?;
+        self.check_runtime(final_hash)?;
         let header = self
             .rpc
             .call("chain_getHeader", json!([format!("0x{final_hash}")]))?;
@@ -911,7 +949,6 @@ impl Node {
         )
         .map_err(|_| Error::Response)?;
         check(height <= self.max_replay_blocks, Error::Limit)?;
-        let mut cache = self.cache.borrow_mut();
         if cache.is_none() {
             self.check_runtime(&self.policy.genesis)?;
             let properties = self.rpc.call("system_properties", json!([]))?;
@@ -936,6 +973,7 @@ impl Node {
                     ..Default::default()
                 },
                 transactions,
+                None,
             )?;
             replay.state = initial;
             *cache = Some(replay);
@@ -997,7 +1035,12 @@ impl Node {
                     ),
                     last_block_time: replay.block.tblock,
                 };
-                self.apply_block(replay, context, transactions)?;
+                let capture = if heights[index] == height {
+                    partial.as_deref_mut()
+                } else {
+                    None
+                };
+                self.apply_block(replay, context, transactions, capture)?;
                 replay.height = heights[index];
                 replay.hash = hash.clone();
             }
@@ -1024,7 +1067,7 @@ impl Node {
         check(native_bytes(&stored.as_typed_key())? == root, Error::Replay)?;
         Ok(Snapshot {
             chain: identity,
-            finalized_hash: final_hash,
+            finalized_hash: final_hash.into(),
             height,
             state: replay.state.clone(),
             block: replay.block.clone(),
@@ -1033,16 +1076,20 @@ impl Node {
     /// Observe a bound transaction at one canonical finalized block.
     pub fn finalized_receipt(
         &self,
-        transaction: &crate::client::BoundTransaction,
-    ) -> Result<Option<crate::client::FinalizedReceipt>> {
+        transaction: &BoundTransaction,
+    ) -> Result<Option<FinalizedReceipt>> {
+        match self.finalized_observation(transaction)? {
+            Observation::Pending => Ok(None),
+            Observation::Finalized(receipt) => Ok(Some(receipt)),
+            Observation::Rejected | Observation::Partial(_) => Err(Error::Replay),
+        }
+    }
+    fn finalized_observation(&self, transaction: &BoundTransaction) -> Result<Observation> {
+        let final_hash = hash_text(&self.rpc.call("chain_getFinalizedHead", json!([]))?)?;
         transaction
             .policy()
-            .check(&self.rpc.chain_identity(
-                &hash_text(&self.rpc.call("chain_getFinalizedHead", json!([]))?)?,
-                &self.policy.profile,
-            )?)
+            .check(&self.rpc.chain_identity(&final_hash, &self.policy.profile)?)
             .map_err(|_| Error::Network)?;
-        let final_hash = hash_text(&self.rpc.call("chain_getFinalizedHead", json!([]))?)?;
         let header = self
             .rpc
             .call("chain_getHeader", json!([format!("0x{final_hash}")]))?;
@@ -1133,7 +1180,7 @@ impl Node {
                 let ValueDef::Composite(rows) = &decoded.value else {
                     return Err(Error::Metadata);
                 };
-                let mut applied = 0;
+                let mut partial = None;
                 let mut contract = transaction.contract_event_counts();
                 for row in rows.values() {
                     let (phase_name, phase_fields) =
@@ -1150,10 +1197,13 @@ impl Node {
                     }
                     let event = nested.values().next().ok_or(Error::Metadata)?;
                     let (name, _) = variant(event)?;
-                    if matches!(name, "TxPartialSuccess" | "TxRejected") {
+                    if name == "TxRejected" {
                         return Err(Error::Replay);
                     }
-                    if !matches!(name, "TxApplied" | "ContractCall" | "ContractDeploy") {
+                    if !matches!(
+                        name,
+                        "TxApplied" | "TxPartialSuccess" | "ContractCall" | "ContractDeploy"
+                    ) {
                         continue;
                     }
                     let tx_hash = scale_bytes(field(event, "tx_hash").ok_or(Error::Metadata)?)?;
@@ -1161,8 +1211,11 @@ impl Node {
                         hex::encode(tx_hash) == transaction.transaction_id(),
                         Error::Response,
                     )?;
-                    if name == "TxApplied" {
-                        applied += 1;
+                    if matches!(name, "TxApplied" | "TxPartialSuccess") {
+                        check(
+                            partial.replace(name == "TxPartialSuccess").is_none(),
+                            Error::Replay,
+                        )?;
                     } else {
                         let address: coin_structure::contract::ContractAddress = native_decode(
                             &scale_bytes(field(event, "contract_address").ok_or(Error::Metadata)?)?,
@@ -1182,10 +1235,10 @@ impl Node {
                         *count -= 1;
                     }
                 }
-                check(
-                    applied == 1 && contract.values().all(|&count| count == 0),
-                    Error::Replay,
-                )?;
+                let partial = partial.ok_or(Error::Replay)?;
+                if !partial {
+                    check(contract.values().all(|&count| count == 0), Error::Replay)?;
+                }
                 let read_state = |address: &str| {
                     let bytes = hex_bytes(&self.rpc.call(
                         "midnight_contractState",
@@ -1208,7 +1261,7 @@ impl Node {
                 let extrinsic_hash = hex::encode(
                     blake2::Blake2b::<blake2::digest::consts::U32>::digest(&expected),
                 );
-                let receipt = crate::client::FinalizedReceipt {
+                let receipt = FinalizedReceipt {
                     chain: self
                         .rpc
                         .chain_identity(&hashes[offset], &self.policy.profile)?,
@@ -1225,15 +1278,50 @@ impl Node {
                     contract_state: canonical,
                     secondary_states,
                 };
-                transaction
-                    .check_receipt(&receipt)
-                    .map_err(|_| Error::Response)?;
                 check(found.is_none(), Error::Replay)?;
-                found = Some(receipt);
+                found = Some(if partial {
+                    let entrypoint = transaction.checkpoint_entrypoint().ok_or(Error::Replay)?;
+                    let address = ContractAddress(HashOutput(
+                        hex::decode(transaction.contract_address())
+                            .map_err(|_| Error::Response)?
+                            .try_into()
+                            .map_err(|_| Error::Response)?,
+                    ));
+                    let mut replay = PartialReplay {
+                        transaction: transaction.bytes(),
+                        address,
+                        result: None,
+                    };
+                    // The outcome event carries the transaction hash only. Replay the exact
+                    // signed bytes in the canonical block to recover the segment results.
+                    let mut cache = self
+                        .cache
+                        .borrow()
+                        .as_ref()
+                        .filter(|cache| cache.height < receipt.height)
+                        .cloned();
+                    self.replay_to(&receipt.block_hash, &mut cache, Some(&mut replay))?;
+                    let (segments, state) = replay.result.ok_or(Error::Replay)?;
+                    check(state == receipt.contract_state, Error::Replay)?;
+                    let partial = PartialReceipt {
+                        receipt,
+                        segments,
+                        entrypoint: entrypoint.to_vec(),
+                    };
+                    transaction
+                        .check_partial_receipt(&partial)
+                        .map_err(|_| Error::Response)?;
+                    Observation::Partial(partial)
+                } else {
+                    transaction
+                        .check_receipt(&receipt)
+                        .map_err(|_| Error::Response)?;
+                    Observation::Finalized(receipt)
+                });
             }
         }
         validate_finalized_tip(previous.as_deref(), &final_hash)?;
-        Ok(found)
+        Ok(found.unwrap_or(Observation::Pending))
     }
 }
 
@@ -1298,9 +1386,10 @@ impl crate::client::ChainAdapter for Node {
         if let Some(error) = response.get("error") {
             let code = error["code"].as_i64();
             let finalized = matches!(code, Some(1010..=1016))
-                && self
-                    .finalized_receipt(transaction)
-                    .is_ok_and(|receipt| receipt.is_some());
+                && matches!(
+                    self.finalized_observation(transaction),
+                    Ok(Observation::Finalized(_) | Observation::Partial(_))
+                );
             return Ok(pool_submission(code, finalized));
         }
         use blake2::Digest;
@@ -1317,12 +1406,7 @@ impl crate::client::ChainAdapter for Node {
         &self,
         transaction: &crate::client::BoundTransaction,
     ) -> std::result::Result<crate::client::Observation, crate::client::HostFailure> {
-        self.finalized_receipt(transaction)
-            .map(|receipt| {
-                receipt
-                    .map(crate::client::Observation::Finalized)
-                    .unwrap_or(crate::client::Observation::Pending)
-            })
+        self.finalized_observation(transaction)
             .map_err(|_| crate::client::HostFailure)
     }
 }
@@ -1819,6 +1903,9 @@ mod tests {
                         .await
                         .unwrap()
                     {
+                        let crate::client::ObservedReceipt::Full(receipt) = receipt else {
+                            panic!("expected a fully applied transaction");
+                        };
                         let transaction = attempt.transaction();
                         for mutation in [
                             "genesis",

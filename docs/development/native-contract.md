@@ -95,9 +95,36 @@ active-checkpoint call at height 7. Both receipts matched the
 predicted state bytes. The relation used k=7 and 68 rows.
 [Localnet receipt](native-checkpoint-localnet-receipt.json)
 
-The current SDK checks a finalized receipt against the full predicted state.
-Reconciliation for a finalized guaranteed-prefix outcome requires its own
-receipt and private-journal handling. [Prefix-only receipt tracking](https://github.com/awjreynolds/noctium/issues/134)
+### Finalize and recover a checkpoint prefix
+
+The [timed fixture](../../tests/NativeCheckpointPartial.lean) prepares a call
+before its cutoff and submits the signed bytes after the cutoff. Its ordered
+suffix writes make the continuation exceed the live Ledger 9 guaranteed
+budget. The Rust SDK checks the actual split before submitting.
+
+The pinned node finalized `TxPartialSuccess` at block 139. Replay showed
+segment 0 and the funding segment succeeded, and call segment 1 failed.
+`firstMark` advanced to 1 and `secondMark` stayed at 0. The finalized
+contract bytes matched the guaranteed-prefix prediction exactly. Reopening the
+durable journal kept the synthetic private write staged and disallowed both
+resubmission and private CAS.
+[Retained localnet receipt](native-checkpoint-partial-localnet-receipt.json)
+
+For the [opt-in Rust fixture](../../runtime/tests/native_checkpoint_partial.rs),
+emit the timed contract with the 3.2.1 ledger profile and assemble a public
+bundle using the pinned native tools and the live parameters.
+[Artifact workflow](portable-artifacts.md#build-and-use)
+
+```sh
+NOCTIUM_CHECKPOINT_BUNDLE=/path/to/bundle \
+NOCTIUM_CHECKPOINT_MANIFEST_SHA256=MANIFEST_SHA256 \
+NOCTIUM_CHECKPOINT_PARAMETER_CACHE=/path/to/verified/parameter-cache \
+NOCTIUM_CHECKPOINT_NODE=http://127.0.0.1:19944 \
+NOCTIUM_CHECKPOINT_JOURNAL=/absolute/path/to/development-journal \
+cargo test --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321,localnet \
+  --test native_checkpoint_partial -- --ignored --nocapture
+```
 
 ## Use a ledger set
 

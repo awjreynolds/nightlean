@@ -3,8 +3,9 @@ use crate::{
     assembly::NativeIntent,
     client::{
         self, BoundTransaction, CasReceipt, ChainAdapter, FinalizedReceipt, FundingAdapter,
-        HostFailure, JournalStore, NetworkPolicy, Observation, RecoveryRecord, SigningAdapter,
-        Snapshot, StoreAcknowledgement, StoredRecord, Submission, SubmissionAttempt,
+        HostFailure, JournalStore, NetworkPolicy, Observation, ObservedReceipt, RecoveryRecord,
+        SigningAdapter, Snapshot, StoreAcknowledgement, StoredRecord, Submission,
+        SubmissionAttempt,
     },
     funding::{SealedTransaction, UnsealedTransaction},
     host,
@@ -646,7 +647,9 @@ async fn step(
                         if let Some(receipt) =
                             attempt.observe_once(runtime, &adapter, &adapter).await?
                         {
-                            state.receipt = Some(receipt);
+                            if let ObservedReceipt::Full(receipt) = receipt {
+                                state.receipt = Some(receipt);
+                            }
                             if !terminal {
                                 state.durable = true
                             }
@@ -972,6 +975,7 @@ impl Driver {
                     Phase::Submitted
                         | Phase::Uncertain
                         | Phase::AwaitingCas
+                        | Phase::PartiallyAccepted
                         | Phase::Committed
                         | Phase::Conflicted
                 ),
@@ -1112,8 +1116,21 @@ impl Driver {
             if state.cancelled {
                 status["phase"] = json!("Cancelled")
             }
-            if let Some(receipt) = &state.receipt {
+            let partial = state
+                .attempt
+                .as_ref()
+                .and_then(|attempt| attempt.record().partial_receipt());
+            if let Some(receipt) = state
+                .receipt
+                .as_ref()
+                .or(partial.map(|value| &value.receipt))
+            {
                 status["receipt"] = json!({"blockHash":receipt.block_hash,"height":receipt.height.to_string(),"finalizedHash":receipt.finalized_hash,"finalizedHeight":receipt.finalized_height.to_string(),"extrinsicHash":receipt.extrinsic_hash,"extrinsicIndex":receipt.extrinsic_index,"transactionId":receipt.transaction_id,"intentId":receipt.intent_id,"contractAddress":receipt.contract_address,"event":format!("{:?}",receipt.event),"contractStateBytes":receipt.contract_state.len(),"contractStateSha256":crate::artifacts::digest(&receipt.contract_state)})
+            }
+            if let Some(partial) = partial {
+                status["receipt"]["outcome"] = json!("partialSuccess");
+                status["receipt"]["segments"] = json!(partial.segments);
+                status["receipt"]["entrypointHex"] = json!(hex::encode(&partial.entrypoint));
             }
         }
         status
@@ -1140,13 +1157,16 @@ impl Driver {
             .to_vec())
     }
     pub fn receipt_state(&self) -> Result<Vec<u8>, client::Error> {
-        Ok(self
-            .state
+        let state = self.state.as_ref().ok_or(client::Error::State)?;
+        let receipt = state
+            .receipt
             .as_ref()
-            .and_then(|s| s.receipt.as_ref())
-            .ok_or(client::Error::State)?
-            .contract_state
-            .clone())
+            .or_else(|| {
+                let partial = state.attempt.as_ref()?.record().partial_receipt()?;
+                Some(&partial.receipt)
+            })
+            .ok_or(client::Error::State)?;
+        Ok(receipt.contract_state.clone())
     }
 
     pub fn current_state_context(&mut self) -> Result<CurrentStateContext, client::Error> {

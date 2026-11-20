@@ -258,7 +258,11 @@ fn valid_step(old: &str, new: Phase) -> bool {
         "Prepared" => matches!(new, Phase::Prepared | Phase::Submitted | Phase::Cancelled),
         "Submitted" | "Uncertain" => matches!(
             new,
-            Phase::Submitted | Phase::Uncertain | Phase::AwaitingCas | Phase::Rejected
+            Phase::Submitted
+                | Phase::Uncertain
+                | Phase::AwaitingCas
+                | Phase::PartiallyAccepted
+                | Phase::Rejected
         ),
         "AwaitingCas" => matches!(
             new,
@@ -266,6 +270,7 @@ fn valid_step(old: &str, new: Phase) -> bool {
         ),
         "Committed" => new == Phase::Committed,
         "Conflicted" => new == Phase::Conflicted,
+        "PartiallyAccepted" => new == Phase::PartiallyAccepted,
         "Cancelled" => new == Phase::Cancelled,
         "Rejected" => new == Phase::Rejected,
         _ => false,
@@ -296,7 +301,10 @@ impl JournalStore for DirectoryJournal {
         self.with_state(true, |state| {
             let previous = state.attempts.get(&id.attempt_id);
             let revision = if let Some(old) = previous {
-                if old.body != body || !valid_step(&old.phase, record.phase()) {
+                if old.body != body
+                    || !valid_step(&old.phase, record.phase())
+                    || (old.phase == "PartiallyAccepted" && old.digest != digest)
+                {
                     return Err(HostFailure);
                 }
                 if old.digest == digest

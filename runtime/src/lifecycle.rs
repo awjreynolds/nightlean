@@ -16,6 +16,7 @@ pub enum Phase {
     Submitted,
     Uncertain,
     AwaitingCas,
+    PartiallyAccepted,
     Committed,
     Rejected,
     Cancelled,
@@ -63,6 +64,10 @@ pub enum Event {
         attempt_id: String,
     },
     Accepted {
+        transaction_id: String,
+        attempt_id: String,
+    },
+    PartiallyAccepted {
         transaction_id: String,
         attempt_id: String,
     },
@@ -258,7 +263,7 @@ impl Lifecycle {
                     && has_commit
                     && !has_conflict
             }
-            Phase::Rejected => {
+            Phase::PartiallyAccepted | Phase::Rejected => {
                 self.successful_execution
                     && has_transaction
                     && self.persisted
@@ -412,6 +417,20 @@ impl Lifecycle {
                         Ok(Effect::DropJournal)
                     }
                     Phase::Rejected => Ok(Effect::None),
+                    _ => Err(Error::InvalidState),
+                }
+            }
+            Event::PartiallyAccepted {
+                transaction_id,
+                attempt_id,
+            } => {
+                self.validate_identity(&transaction_id, &attempt_id)?;
+                match self.phase {
+                    Phase::Submitted | Phase::Uncertain => {
+                        self.phase = Phase::PartiallyAccepted;
+                        Ok(Effect::None)
+                    }
+                    Phase::PartiallyAccepted => Ok(Effect::None),
                     _ => Err(Error::InvalidState),
                 }
             }

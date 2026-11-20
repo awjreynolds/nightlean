@@ -3,7 +3,7 @@ use anyhow::{Result, anyhow, ensure};
 use futures::{executor::block_on, future::pending};
 use noctium_runtime::{
     artifacts,
-    client::{NetworkPolicy, SubmissionAttempt},
+    client::{NetworkPolicy, ObservedReceipt, SubmissionAttempt},
     funding::FeePolicy,
     host,
     lifecycle::Phase,
@@ -109,7 +109,28 @@ async fn finish(
     let deadline = Instant::now() + wait;
     let receipt = loop {
         if let Some(receipt) = attempt.observe_once(&mut runtime, node, store).await? {
-            break receipt;
+            match receipt {
+                ObservedReceipt::Full(receipt) => break receipt,
+                ObservedReceipt::Partial(partial) => {
+                    let receipt = partial.receipt;
+                    println!(
+                        "{}",
+                        json!({
+                            "attemptId": attempt.record().identity().attempt_id,
+                            "transactionId": receipt.transaction_id,
+                            "contractAddress": receipt.contract_address,
+                            "phase": "PartiallyAccepted",
+                            "blockHash": receipt.block_hash,
+                            "height": receipt.height,
+                            "segments": partial.segments,
+                            "entrypointHex": hex::encode(partial.entrypoint),
+                            "stateSha256": hex::encode(Sha256::digest(&receipt.contract_state)),
+                            "privateCommitted": false
+                        })
+                    );
+                    return Ok(());
+                }
+            }
         }
         if Instant::now() >= deadline {
             let _ = attempt.deadline(&mut runtime, store).await;
