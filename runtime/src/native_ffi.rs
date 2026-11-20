@@ -1622,7 +1622,6 @@ pub unsafe extern "C" fn noctium_client_recovery_context(client: u64, out_privat
     })
 }
 
-#[cfg(feature = "localnet")]
 pub(crate) fn service_public_bytes(bytes: Vec<u8>) -> Result<u64, i32> {
     registry(|r| r.result(bytes))
 }

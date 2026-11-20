@@ -1,0 +1,18 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export circuit record(domain: Bytes<32>, amount: Uint<64>, enabled: Boolean,
+                      addSecond: Boolean): [] {
+  if (disclose(enabled)) {
+    kernel.mintShielded(disclose(domain), disclose(amount));
+  }
+  if (disclose(addSecond)) {
+    kernel.mintShielded(disclose(domain), 2);
+  }
+  if (disclose(enabled)) {
+    kernel.mintUnshielded(disclose(domain), disclose(amount));
+  }
+  if (disclose(addSecond)) {
+    kernel.mintUnshielded(disclose(domain), 2);
+  }
+}

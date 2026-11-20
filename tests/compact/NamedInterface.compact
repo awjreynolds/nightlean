@@ -1,0 +1,21 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+contract AmountService {
+  circuit readAmount(request: Uint<8>): Uint<8>;
+  circuit readPair(payload: [Uint<8>, Boolean]): [Uint<8>, Boolean];
+}
+
+contract implements AmountService;
+
+export ledger saved: Uint<8>;
+
+export circuit readAmount(n: Uint<8>): Uint<8> {
+  saved = disclose(n);
+  return saved;
+}
+
+export circuit readPair([amount, flag]: [Uint<8>, Boolean]): [Uint<8>, Boolean] {
+  saved = disclose(amount);
+  return [saved, disclose(flag)];
+}

@@ -987,8 +987,13 @@ private def compatible (arguments : List ResultType) (declaration : Declaration)
       subtype actual (declaration.parameterType parameter)
 
 private def helperCandidate (scope : Nat) (name : String)
-    (arguments : List ResultType) (declaration : Declaration) : Bool :=
-  declaration.id.scope == scope && declaration.name == name && compatible arguments declaration
+    (arguments : List (Option ResultType)) (declaration : Declaration) : Bool :=
+  declaration.id.scope == scope && declaration.name == name &&
+    arguments.length == declaration.parameters.length &&
+    (arguments.zip declaration.parameters).all fun (actual, parameter) =>
+      match actual with
+      | none => true
+      | some actual => subtype actual (declaration.parameterType parameter)
 
 private def selectCandidates (span : SourceSpan) (name : String) :
     List Declaration → Except Diagnostic (Option Declaration)
@@ -997,7 +1002,8 @@ private def selectCandidates (span : SourceSpan) (name : String) :
   | [] => pure none
 
 /-- Search one lexical group at a time. An ambiguous inner group never falls back. -/
-private def resolveUnchecked (program : Program) (scope : Nat) (name : String) (arguments : List ResultType)
+private def resolveUncheckedPartial (program : Program) (scope : Nat) (name : String)
+    (arguments : List (Option ResultType))
     (span : SourceSpan := {}) : Except Diagnostic Declaration := go (program.scopes.length + 1) scope
 where
   go : Nat → Nat → Except Diagnostic Declaration
@@ -1015,6 +1021,10 @@ where
           | some parent => go fuel parent
           | none => fail span s!"no compatible helper overload '{name}'"
 
+private def resolveUnchecked (program : Program) (scope : Nat) (name : String)
+    (arguments : List ResultType) (span : SourceSpan := {}) : Except Diagnostic Declaration :=
+  resolveUncheckedPartial program scope name (arguments.map some) span
+
 def resolveWithLimits (limits : Limits) (program : Program) (scope : Nat) (name : String)
     (arguments : List ResultType) (span : SourceSpan := {}) : Except Diagnostic Declaration := do
   discard (sourcePreflight limits program)
@@ -1023,12 +1033,23 @@ def resolveWithLimits (limits : Limits) (program : Program) (scope : Nat) (name 
   if arguments.length > limits.maxParameters then resource span "call arguments"
   resolveUnchecked program scope name arguments span
 
+/-- Resolve a helper when some argument types are not known yet. An omitted
+type matches any parameter, while known arguments keep ordinary subtype checks. -/
+def resolveWithPartialTypes (limits : Limits) (program : Program) (scope : Nat) (name : String)
+    (arguments : List (Option ResultType)) (span : SourceSpan := {}) :
+    Except Diagnostic Declaration := do
+  discard (sourcePreflight limits program)
+  spanMetadata span
+  textMetadata name
+  if arguments.length > limits.maxParameters then resource span "call arguments"
+  resolveUncheckedPartial program scope name arguments span
+
 def resolve (program : Program) (scope : Nat) (name : String) (arguments : List ResultType)
     (span : SourceSpan := {}) : Except Diagnostic Declaration :=
   resolveWithLimits {} program scope name arguments span
 
 private theorem helperCandidate_mapDeclarationBody (transform : List Statement → List Statement)
-    (scope : Nat) (name : String) (arguments : List ResultType) (declaration : Declaration) :
+    (scope : Nat) (name : String) (arguments : List (Option ResultType)) (declaration : Declaration) :
     helperCandidate scope name arguments (mapDeclarationBody transform declaration) =
       helperCandidate scope name arguments declaration := by
   cases declaration
@@ -1036,7 +1057,7 @@ private theorem helperCandidate_mapDeclarationBody (transform : List Statement �
 
 private theorem filterHelperCandidates_mapDeclarationBody
     (transform : List Statement → List Statement) (scope : Nat) (name : String)
-    (arguments : List ResultType) (declarations : List Declaration) :
+    (arguments : List (Option ResultType)) (declarations : List Declaration) :
     (declarations.map (mapDeclarationBody transform)).filter
         (helperCandidate scope name arguments) =
       (declarations.filter (helperCandidate scope name arguments)).map
@@ -1058,19 +1079,19 @@ private theorem selectCandidates_mapDeclarationBody
     | nil => rfl
     | cons second tail => rfl
 
-private theorem resolveUnchecked_go_mapDeclarationBodies
+private theorem resolveUncheckedPartial_go_mapDeclarationBodies
     (transform : List Statement → List Statement) (program : Program)
-    (name : String) (arguments : List ResultType) (span : SourceSpan) :
+    (name : String) (arguments : List (Option ResultType)) (span : SourceSpan) :
     ∀ fuel scope,
-      resolveUnchecked.go (mapDeclarationBodies transform program) name arguments span fuel scope =
-        (resolveUnchecked.go program name arguments span fuel scope).map
+      resolveUncheckedPartial.go (mapDeclarationBodies transform program) name arguments span fuel scope =
+        (resolveUncheckedPartial.go program name arguments span fuel scope).map
           (mapDeclarationBody transform) := by
   intro fuel
   induction fuel with
-  | zero => intro scope; simp [resolveUnchecked.go, fail, Except.map]
+  | zero => intro scope; simp [resolveUncheckedPartial.go, fail, Except.map]
   | succ fuel ih =>
       intro scope
-      unfold resolveUnchecked.go
+      unfold resolveUncheckedPartial.go
       rw [mapDeclarationBodies_scopes]
       cases hgroup : program.scopes.find? (fun x => x.id == scope) with
       | none => simp [hgroup, fail, Except.map, Except.bind]
@@ -1107,9 +1128,10 @@ private theorem resolveUnchecked_mapDeclarationBodies
     (scope : Nat) (name : String) (arguments : List ResultType) (span : SourceSpan) :
     resolveUnchecked (mapDeclarationBodies transform program) scope name arguments span =
       (resolveUnchecked program scope name arguments span).map (mapDeclarationBody transform) := by
-  unfold resolveUnchecked
+  unfold resolveUnchecked resolveUncheckedPartial
   rw [mapDeclarationBodies_scopes]
-  exact resolveUnchecked_go_mapDeclarationBodies transform program name arguments span _ _
+  exact resolveUncheckedPartial_go_mapDeclarationBodies transform program name
+    (arguments.map some) span _ _
 
 private theorem sourcePreflight_result_of_admitted (limits : Limits) (program : Program)
     (admitted : syntacticPreflight limits program = .ok ()) :
@@ -1163,6 +1185,7 @@ theorem resolveWithLimits_mapDeclarationBodies
               Functor.discard, Functor.mapConst, Applicative.toFunctor]
 
 abbrev Environment := List (String × ResultType)
+abbrev PartialEnvironment := List (String × Option ResultType)
 
 private def scalar (span : SourceSpan) : ResultType → Except Diagnostic Ty
   | .scalar ty => pure ty
@@ -1193,14 +1216,16 @@ private def lookup (program : Program) (id : DeclarationId) (span : SourceSpan) 
   | some declaration => pure declaration
   | none => fail span "unknown helper declaration identity"
 
-structure TermInfo where
-  ty : ResultType
+structure TermInfo (Ty := ResultType) where
+  ty : Ty
   calls : List DeclarationId := []
   effects : Effects := []
   guarded : Bool := false
   deriving Repr, Inhabited
 
-private def combine (ty : ResultType) (children : List TermInfo) (effects : Effects := []) : TermInfo :=
+private abbrev PartialTermInfo := TermInfo (Option ResultType)
+
+private def combine {Ty : Type} (ty : Ty) (children : List (TermInfo Ty)) (effects : Effects := []) : TermInfo Ty :=
   {ty, calls := children.flatMap (·.calls), effects := (children.flatMap (·.effects) ++ effects).eraseDups, guarded := children.any (·.guarded)}
 
 /-- Validate the source's deliberately narrow foreign literal surface. Base and
@@ -1214,29 +1239,44 @@ private def decodeForeignConstant (kind : Foreign.Kind) (encoding : List Nat) : 
       throw "foreign point literals currently support only the canonical identity"
     pure none
 
-private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Environment) (span : SourceSpan)
-    (value : Term) : Except Diagnostic TermInfo :=
+private def partialSubtype (source : Option ResultType) (target : ResultType) : Bool :=
+  match source with
+  | none => true
+  | some source => subtype source target
+
+private def knownType (span : SourceSpan) : Option ResultType → Except Diagnostic ResultType
+  | some ty => pure ty
+  | none => fail span "unknown helper type cannot be used here"
+
+private def partialCommonType (left right : Option ResultType) : Option (Option ResultType) :=
+  match left, right with
+  | none, right => some right
+  | left, none => some left
+  | some left, some right => (some ·) <$> commonType left right
+
+private def inferPartialTerm (fuel : Nat) (program : Program) (scope : Nat)
+    (env : PartialEnvironment) (span : SourceSpan) (value : Term) : Except Diagnostic PartialTermInfo :=
   match fuel with
   | 0 => resource span "type-analysis depth"
   | fuel + 1 => do
     match value with
-    | .unit => pure {ty := .unit}
+    | .unit => pure {ty := some .unit}
     | .native number =>
       unless number < Field.modulus do fail span "noncanonical helper native constant"
-      pure {ty := .scalar .native}
-    | .bool _ => pure {ty := .scalar .bool}
+      pure {ty := some (.scalar .native)}
+    | .bool _ => pure {ty := some (.scalar .bool)}
     | .uint maximum number =>
       liftError span (ScalarPolicy.validate (.uint maximum))
       unless number ≤ maximum do fail span "helper unsigned constant exceeds declared bound"
-      pure {ty := .scalar (.uint maximum)}
+      pure {ty := some (.scalar (.uint maximum))}
     | .ref name =>
       let some ty := env.lookup name | fail span s!"unknown helper value '{name}'"
       pure {ty}
     | .binary op left right =>
-      let left ← inferTerm fuel program scope env span left
-      let right ← inferTerm fuel program scope env span right
-      let lt ← scalar span left.ty
-      let rt ← scalar span right.ty
+      let left ← inferPartialTerm fuel program scope env span left
+      let right ← inferPartialTerm fuel program scope env span right
+      let lt ← scalar span (← knownType span left.ty)
+      let rt ← scalar span (← knownType span right.ty)
       let result ← liftError span (ScalarPolicy.infer op lt.scalarKind rt.scalarKind)
       let ty ← match result with
         | .native => pure Ty.native
@@ -1246,64 +1286,64 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
         | .jubjubScalar | .jubjubPoint =>
           fail span "Jubjub values require a qualified curve operation"
         | .foreign _ => fail span "foreign values require a qualified curve operation"
-      pure (combine (.scalar ty) [left, right]
+      pure (combine (some (.scalar ty)) [left, right]
         (if op == .sub && lt != .native && rt != .native then [.fallibleCast] else []))
     | .boolAnd left right | .boolOr left right | .boolXor left right =>
-      let left ← inferTerm fuel program scope env span left
-      let right ← inferTerm fuel program scope env span right
-      unless left.ty == .scalar .bool && right.ty == .scalar .bool do
+      let left ← inferPartialTerm fuel program scope env span left
+      let right ← inferPartialTerm fuel program scope env span right
+      unless left.ty == some (.scalar .bool) && right.ty == some (.scalar .bool) do
         fail span "eager Boolean operands require Bool"
-      pure (combine (.scalar .bool) [left, right])
+      pure (combine (some (.scalar .bool)) [left, right])
     | .eq left right =>
-      let left ← inferTerm fuel program scope env span left
-      let right ← inferTerm fuel program scope env span right
-      discard (common span (← scalar span left.ty) (← scalar span right.ty))
-      pure (combine (.scalar .bool) [left, right])
+      let left ← inferPartialTerm fuel program scope env span left
+      let right ← inferPartialTerm fuel program scope env span right
+      discard (common span (← scalar span (← knownType span left.ty)) (← scalar span (← knownType span right.ty)))
+      pure (combine (some (.scalar .bool)) [left, right])
     | .cast target value =>
       if target.isBytes then fail span "byte strings do not support scalar casts"
       liftError span (target.validate {poseidon2 := true})
-      let value ← inferTerm fuel program scope env span value
-      discard (scalar span value.ty)
-      pure (combine (.scalar target) [value] [.fallibleCast])
-    | .disclose _ value => inferTerm fuel program scope env span value
+      let value ← inferPartialTerm fuel program scope env span value
+      discard (scalar span (← knownType span value.ty))
+      pure (combine (some (.scalar target)) [value] [.fallibleCast])
+    | .disclose _ value => inferPartialTerm fuel program scope env span value
     | .select condition yes no =>
-      let condition ← inferTerm fuel program scope env span condition
-      unless condition.ty == .scalar .bool do fail span "helper selector requires Bool"
-      let yes ← inferTerm fuel program scope env span yes
-      let no ← inferTerm fuel program scope env span no
-      let ty ← common span (← scalar span yes.ty) (← scalar span no.ty)
-      pure (combine (.scalar ty) [condition, yes, no])
+      let condition ← inferPartialTerm fuel program scope env span condition
+      unless condition.ty == some (.scalar .bool) do fail span "helper selector requires Bool"
+      let yes ← inferPartialTerm fuel program scope env span yes
+      let no ← inferPartialTerm fuel program scope env span no
+      let ty ← common span (← scalar span (← knownType span yes.ty)) (← scalar span (← knownType span no.ty))
+      pure (combine (some (.scalar ty)) [condition, yes, no])
     | .ite condition yes no =>
-      let condition ← inferTerm fuel program scope env span condition
-      unless condition.ty == .scalar .bool do fail span "helper condition requires Bool"
-      let yes ← inferTerm fuel program scope env span yes
-      let no ← inferTerm fuel program scope env span no
-      let some ty := commonType yes.ty no.ty
+      let condition ← inferPartialTerm fuel program scope env span condition
+      unless condition.ty == some (.scalar .bool) do fail span "helper condition requires Bool"
+      let yes ← inferPartialTerm fuel program scope env span yes
+      let no ← inferPartialTerm fuel program scope env span no
+      let some ty := partialCommonType yes.ty no.ty
         | fail span "conditional branches require a common type"
       pure {combine ty [condition, yes, no] with guarded := true}
     | .andThen left right | .orElse left right =>
-      let left ← inferTerm fuel program scope env span left
-      let right ← inferTerm fuel program scope env span right
-      unless left.ty == .scalar .bool && right.ty == .scalar .bool do
+      let left ← inferPartialTerm fuel program scope env span left
+      let right ← inferPartialTerm fuel program scope env span right
+      unless left.ty == some (.scalar .bool) && right.ty == some (.scalar .bool) do
         fail span "short-circuit operands require Bool"
-      pure {combine (.scalar .bool) [left, right] with guarded := true}
+      pure {combine (some (.scalar .bool)) [left, right] with guarded := true}
     | .witness _ ty =>
       liftError span (ty.validate Capabilities.crypto)
-      pure {ty := .scalar ty, effects := [.witness]}
+      pure {ty := some (.scalar ty), effects := [.witness]}
     | .witnessCall _ name arguments =>
       let signature ← witnessSignature program name span
-      let arguments ← arguments.mapM (inferTerm fuel program scope env span)
+      let arguments ← arguments.mapM (inferPartialTerm fuel program scope env span)
       unless arguments.length == signature.parameters.length do fail span "typed witness argument arity mismatch"
       for (argument, parameter) in arguments.zip signature.parameters do
-        unless subtype argument.ty parameter.type do fail span "typed witness argument type mismatch"
-      pure (combine signature.result arguments [.witness])
+        unless partialSubtype argument.ty parameter.type do fail span "typed witness argument type mismatch"
+      pure (combine (some signature.result) arguments [.witness])
     | .poseidon2 domain left right =>
       unless domain < Field.modulus do fail span "noncanonical helper hash domain"
-      let left ← inferTerm fuel program scope env span left
-      let right ← inferTerm fuel program scope env span right
-      unless subtype left.ty (.scalar .native) && subtype right.ty (.scalar .native) do
+      let left ← inferPartialTerm fuel program scope env span left
+      let right ← inferPartialTerm fuel program scope env span right
+      unless partialSubtype left.ty (.scalar .native) && partialSubtype right.ty (.scalar .native) do
         fail span "helper hash arguments require Native"
-      pure (combine (.scalar .native) [left, right])
+      pure (combine (some (.scalar .native)) [left, right])
     | .curve operation arguments => do
       validateCurveArity span operation arguments
       if arguments.length > curveArgumentLimit ({} : Limits) operation then
@@ -1311,12 +1351,11 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
       let (expected, result) := operation.signature
       unless arguments.length == expected.length do
         fail span s!"{operation.operationName} argument count mismatch"
-      let values ← arguments.mapM (inferTerm fuel program scope env span)
+      let values ← arguments.mapM (inferPartialTerm fuel program scope env span)
       for (value, expectedType) in values.zip expected do
-        let .scalar actualType := value.ty | fail span "curve operation arguments require scalar values"
-        unless actualType == expectedType do
+        unless partialSubtype value.ty (.scalar expectedType) do
           fail span s!"{operation.operationName} argument type mismatch"
-      pure (combine (.scalar result) values
+      pure (combine (some (.scalar result)) values
         (match operation with
           | .fromCoordinates | .foreignUnary (.inv _) | .foreignUnary (.x _) |
             .foreignUnary (.y _) | .foreignBinary (.fromCoordinates _) => [.fallibleCast]
@@ -1324,58 +1363,64 @@ private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Envi
     | .bytes32Literal bytes => do
       unless bytes.length == 32 && bytes.all (· ≤ 255) do
         fail span "Bytes32 literal must contain exactly 32 byte values"
-      pure {ty := .scalar (.bytes 32)}
+      pure {ty := some (.scalar (.bytes 32))}
     | .foreignConstant kind encoding => do
       liftError span ((Ty.foreign kind).validate Capabilities.crypto)
       discard (decodeForeignConstant kind encoding |>.mapError fun message => {span, message})
-      pure {ty := .scalar (.foreign kind)}
+      pure {ty := some (.scalar (.foreign kind))}
     | .bytes operation arguments => do
       let (expected, result) ← (operation.signature arguments.length).mapError fun message =>
         {span, message}
-      let values ← arguments.mapM (inferTerm fuel program scope env span)
+      let values ← arguments.mapM (inferPartialTerm fuel program scope env span)
       for (value, expectedType) in values.zip expected do
-        unless value.ty == .scalar expectedType do
+        unless partialSubtype value.ty (.scalar expectedType) do
           fail span s!"{operation.operationName} argument type mismatch"
-      pure (combine (.scalar result) values
+      pure (combine (some (.scalar result)) values
         (match operation with
           | .foreignFromBytes (.point _) _ | .deserialize .. => [.fallibleCast]
           | _ => []))
     | .bytesAt value index => do
-      let value ← inferTerm fuel program scope env span value
-      let .scalar (.bytes length) := value.ty
+      let value ← inferPartialTerm fuel program scope env span value
+      let .scalar (.bytes length) := (← knownType span value.ty)
         | fail span "byteAt requires a fixed byte-string value"
       unless index < length do
         fail span "byteAt index is outside the byte string"
-      pure (combine (.scalar (.uint 255)) [value])
+      pure (combine (some (.scalar (.uint 255))) [value])
     | .call name arguments =>
       if (env.lookup name).isSome then fail span s!"helper '{name}' is hidden by a value binding"
-      let arguments ← arguments.mapM (inferTerm fuel program scope env span)
-      let declaration ← resolveUnchecked program scope name (arguments.map (·.ty)) span
-      let info := combine declaration.result arguments
+      let arguments ← arguments.mapM (inferPartialTerm fuel program scope env span)
+      let declaration ← resolveUncheckedPartial program scope name (arguments.map (·.ty)) span
+      let info := combine (some declaration.result) arguments
       pure {info with calls := declaration.id :: info.calls}
     | .composite type leaves => do
       let compiled ← checkedComposite program span type
-      let values ← leaves.mapM (inferTerm fuel program scope env span)
+      let values ← leaves.mapM (inferPartialTerm fuel program scope env span)
       let expected := sourceLeafTypes compiled.checked.value
       unless values.length == expected.length do fail span "aggregate source leaf count mismatch"
       for (value, expectedType) in values.zip expected do
-        unless subtype value.ty (.scalar expectedType) do
+        unless partialSubtype value.ty (.scalar expectedType) do
           fail span "aggregate source leaf type mismatch"
-      pure (combine (resultTypeOfComposite type) values)
+      pure (combine (some (resultTypeOfComposite type)) values)
     | .project value projection => do
-      let parent ← inferTerm fuel program scope env span value
-      let .composite type := parent.ty | fail span "aggregate projection requires a composite value"
+      let parent ← inferPartialTerm fuel program scope env span value
+      let .composite type := (← knownType span parent.ty) | fail span "aggregate projection requires a composite value"
       let selected ← projectedType program.composites span type projection
-      pure (combine (resultTypeOfComposite selected) [parent])
+      pure (combine (some (resultTypeOfComposite selected)) [parent])
     | .index value index => do
-      let parent ← inferTerm fuel program scope env span value
-      let index ← inferTerm fuel program scope env span index
-      pure (combine (← indexResultType span parent.ty index.ty) [parent, index])
+      let parent ← inferPartialTerm fuel program scope env span value
+      let index ← inferPartialTerm fuel program scope env span index
+      pure (combine (some (← indexResultType span (← knownType span parent.ty) (← knownType span index.ty))) [parent, index])
     | .effect kind _ result =>
       unless kind.impure do fail span "external helper effects require an external effect category"
-      let result ← inferTerm fuel program scope env span result
+      let result ← inferPartialTerm fuel program scope env span result
       pure (combine result.ty [result] [kind])
-    | .at span value => inferTerm fuel program scope env span value
+    | .at span value => inferPartialTerm fuel program scope env span value
+
+private def inferTerm (fuel : Nat) (program : Program) (scope : Nat) (env : Environment)
+    (span : SourceSpan) (value : Term) : Except Diagnostic TermInfo := do
+  let info ← inferPartialTerm fuel program scope (env.map fun (name, ty) => (name, some ty)) span value
+  let some ty := info.ty | fail span "unknown helper type in typed environment"
+  pure {ty, calls := info.calls, effects := info.effects, guarded := info.guarded}
 
 structure Summary where
   id : DeclarationId
@@ -1425,7 +1470,7 @@ private def checkedMap (program : Program) (span : SourceSpan) (name : String)
   if state.sealed then fail span "only cells can be sealed"
 
 private def checkBody (limits : Limits) (program : Program) (declaration : Declaration)
-    (fuel : Nat) (env : Environment) (body : List Statement)
+    (fuel : Nat) (env : PartialEnvironment) (body : List Statement)
     (locals : List String) : Except Diagnostic BodyInfo :=
   match fuel with
   | 0 => resource declaration.span "statement-analysis depth"
@@ -1439,89 +1484,97 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
         | .bind name ty value => do
           validateResultType program span ty
           if locals.contains name then fail span s!"duplicate helper value '{name}'"
-          let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
-          unless subtype info.ty ty do fail span "helper binding type mismatch"
-          env := (name, ty) :: env
+          let info ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span value
+          unless partialSubtype info.ty ty do fail span "helper binding type mismatch"
+          env := (name, some ty) :: env
           locals := name :: locals
           pure info
-        | .evaluate value => inferTerm limits.maxSourceDepth program declaration.id.scope env span value
+        | .evaluate value => inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span value
         | .assert condition => do
-          let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span condition
-          unless info.ty == .scalar .bool do fail span "helper assertion requires Bool"
+          let info ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span condition
+          unless info.ty == some (.scalar .bool) do fail span "helper assertion requires Bool"
           pure {info with effects := (.assertion :: info.effects).eraseDups}
         | .return value => do
           let info ← match value with
-            | some value => inferTerm limits.maxSourceDepth program declaration.id.scope env span value
-            | none => pure {ty := .unit}
-          unless subtype info.ty declaration.result do fail span "helper return type mismatch"
+            | some value => inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span value
+            | none => pure {ty := some .unit}
+          unless partialSubtype info.ty declaration.result do fail span "helper return type mismatch"
           result := {result with returned := true}
           pure info
         | .branch condition yes no => do
-          let condition ← inferTerm limits.maxSourceDepth program declaration.id.scope env span condition
-          unless condition.ty == .scalar .bool do fail span "helper condition requires Bool"
+          let condition ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span condition
+          unless condition.ty == some (.scalar .bool) do fail span "helper condition requires Bool"
           let yes ← checkBody limits program declaration fuel env yes []
           let no ← checkBody limits program declaration fuel env no []
           result := {result with returned := result.returned || (yes.returned && no.returned)}
-          pure {ty := .unit, calls := condition.calls ++ yes.calls ++ no.calls, effects := (condition.effects ++ yes.effects ++ no.effects).eraseDups, guarded := true}
+          pure {ty := some .unit, calls := condition.calls ++ yes.calls ++ no.calls, effects := (condition.effects ++ yes.effects ++ no.effects).eraseDups, guarded := true}
         | .forRange index start stop loopBody => do
           discard (validateForRange span index start stop)
           rejectLoopReturns span limits.maxSourceNodes loopBody
           let bodyInfo ← checkBody limits program declaration fuel
-            ((index, .scalar .native) :: env) loopBody [index]
-          pure {ty := .unit, calls := bodyInfo.calls, effects := bodyInfo.effects, guarded := bodyInfo.guarded}
+            ((index, some (.scalar .native)) :: env) loopBody [index]
+          pure {ty := some .unit, calls := bodyInfo.calls, effects := bodyInfo.effects, guarded := bodyInfo.guarded}
         | .stage _ _ ty value => do
           liftError span (ty.validate Capabilities.crypto)
-          let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
-          unless subtype info.ty (.scalar ty) do fail span "private stage type mismatch"
+          let info ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span value
+          unless partialSubtype info.ty (.scalar ty) do fail span "private stage type mismatch"
           pure {info with effects := (.privateState :: info.effects).eraseDups}
         | .readCell state destination ty => do
           checkedCell program span state ty false
           if locals.contains destination || (inputNames program declaration.id).contains destination then
             fail span s!"ledger read destination '{destination}' shadows an existing binding"
-          env := (destination, .scalar ty) :: env
+          env := (destination, some (.scalar ty)) :: env
           locals := destination :: locals
-          pure {ty := .unit, effects := [.ledgerRead]}
+          pure {ty := some .unit, effects := [.ledgerRead]}
         | .writeCell state ty value => do
           checkedCell program span state ty true
-          let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
-          unless subtype info.ty (.scalar ty) do fail span "ledger cell write type mismatch"
+          let info ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span value
+          unless partialSubtype info.ty (.scalar ty) do fail span "ledger cell write type mismatch"
           pure {info with effects := (.ledgerWrite :: info.effects).eraseDups}
         | .readMap state destination keyTy valueTy key
         | .readMember state destination keyTy valueTy key => do
           checkedMap program span state keyTy valueTy
-          let info ← inferTerm limits.maxSourceDepth program declaration.id.scope env span key
-          unless subtype info.ty (.scalar keyTy) do fail span "ledger map key type mismatch"
+          let info ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span key
+          unless partialSubtype info.ty (.scalar keyTy) do fail span "ledger map key type mismatch"
           if locals.contains destination || (inputNames program declaration.id).contains destination then
             fail span s!"ledger read destination '{destination}' shadows an existing binding"
           let resultTy := match statement with
             | .readMember .. => Ty.bool
             | _ => valueTy
-          env := (destination, .scalar resultTy) :: env
+          env := (destination, some (.scalar resultTy)) :: env
           locals := destination :: locals
-          pure {info with ty := .unit, effects := (.ledgerRead :: info.effects).eraseDups}
+          pure {info with ty := some .unit, effects := (.ledgerRead :: info.effects).eraseDups}
         | .writeMap state keyTy valueTy key value => do
           checkedMap program span state keyTy valueTy
-          let key ← inferTerm limits.maxSourceDepth program declaration.id.scope env span key
-          unless subtype key.ty (.scalar keyTy) do fail span "ledger map key type mismatch"
-          let value ← inferTerm limits.maxSourceDepth program declaration.id.scope env span value
-          unless subtype value.ty (.scalar valueTy) do fail span "ledger map value type mismatch"
-          pure (combine .unit [key, value] [.ledgerWrite])
+          let key ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span key
+          unless partialSubtype key.ty (.scalar keyTy) do fail span "ledger map key type mismatch"
+          let value ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span value
+          unless partialSubtype value.ty (.scalar valueTy) do fail span "ledger map value type mismatch"
+          pure (combine (some .unit) [key, value] [.ledgerWrite])
       result := {result with
         calls := result.calls ++ info.calls
         effects := (result.effects ++ info.effects).eraseDups
         guarded := result.guarded || info.guarded}
     pure result
 
-private def checkDeclarationUnchecked (limits : Limits) (program : Program) (declaration : Declaration) : Except Diagnostic Summary := do
+private def checkDeclarationWithEnvironmentUnchecked (limits : Limits) (program : Program)
+    (declaration : Declaration) (env : PartialEnvironment) : Except Diagnostic Summary := do
   let span := declaration.span
   unless uniqueNames (declaration.parameters.map (·.name)) do fail span "duplicate helper parameter"
-  let env := declaration.parameters.map fun parameter => (parameter.name, declaration.parameterType parameter)
-  for parameter in declaration.parameters do validateResultType program span (declaration.parameterType parameter)
+  unless env.map (·.1) == declaration.parameters.map (·.name) do
+    fail span "partial helper parameter names do not match declaration"
+  for (_, ty) in env do
+    if let some ty := ty then validateResultType program span ty
   validateResultType program span declaration.result
   let info ← checkBody limits program declaration limits.maxSourceDepth env declaration.body
     (env.map (·.1))
   unless info.returned || declaration.result == .unit do fail span "helper fall-through returns unit, incompatible with declared result"
   pure {id := declaration.id, calls := info.calls, direct := info.effects, guarded := info.guarded}
+
+private def checkDeclarationUnchecked (limits : Limits) (program : Program) (declaration : Declaration) :
+    Except Diagnostic Summary :=
+  checkDeclarationWithEnvironmentUnchecked limits program declaration
+    (declaration.parameters.map fun parameter => (parameter.name, some (declaration.parameterType parameter)))
 
 private def prepareProgramAndSizes (limits : Limits) (program : Program) :
     Except Diagnostic (Program × List (DeclarationId × SourceSize)) := do
@@ -1560,6 +1613,16 @@ def inferWithLimits (limits : Limits) (program : Program) (scope : Nat) (env : E
   for (name, _) in env do textMetadata name
   inferTerm limits.maxSourceDepth program scope env span value
 
+def inferPartialWithLimits (limits : Limits) (program : Program) (scope : Nat)
+    (env : PartialEnvironment) (span : SourceSpan) (value : Term) :
+    Except Diagnostic (TermInfo (Option ResultType)) := do
+  let program ← prepareProgramWithLimits limits program
+  spanMetadata span
+  discard (scanTerms limits span limits.maxSourceNodes [value])
+  if env.length > limits.maxSourceNodes then resource span "type environment"
+  for (name, _) in env do textMetadata name
+  inferPartialTerm limits.maxSourceDepth program scope env span value
+
 def infer (program : Program) (scope : Nat) (env : Environment) (span : SourceSpan)
     (value : Term) : Except Diagnostic TermInfo :=
   inferWithLimits {} program scope env span value
@@ -1570,6 +1633,17 @@ def checkDeclarationWithLimits (limits : Limits) (program : Program) (declaratio
   discard (sourcePreflight limits {program with declarations := [declaration]})
   let declaration := (program.declarations.find? (·.id == declaration.id)).getD declaration
   checkDeclarationUnchecked limits program declaration
+
+def checkPartialDeclarationWithLimits (limits : Limits) (program : Program)
+    (declaration : Declaration) (env : PartialEnvironment) : Except Diagnostic Summary := do
+  let candidate := {program with declarations := program.declarations ++ [declaration]}
+  discard (sourcePreflight limits candidate)
+  let expandedNodes ← expandedSourceNodeCount limits candidate
+  if expandedNodes > limits.maxSourceNodes then resource declaration.span "expanded source nodes"
+  let program ← prepareProgramWithLimits limits program
+  if env.length > limits.maxSourceNodes then resource declaration.span "type environment"
+  for (name, _) in env do textMetadata name
+  checkDeclarationWithEnvironmentUnchecked limits program declaration env
 
 def checkDeclaration (program : Program) (declaration : Declaration) : Except Diagnostic Summary :=
   checkDeclarationWithLimits {} program declaration
@@ -2247,8 +2321,7 @@ mutual
       let state ← get
       if state.guardActive then
         for (inputName, type) in inputs.zip leafTypes do
-          let some zero := GuardedExpression.zeroValue type
-            | liftD (fail span "native witness result has no canonical default")
+          let zero := GuardedExpression.zeroValue type
           let equal ← scalarEquality (.ref inputName) zero
           modify fun state => {state with witnessConstraints := state.witnessConstraints ++
             [Expr.select callGuard (.bool true) equal]}

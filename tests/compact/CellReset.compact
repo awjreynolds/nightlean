@@ -1,0 +1,24 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger amount: Uint<64>;
+export ledger nonce: Field;
+export ledger active: Boolean;
+export ledger memo: Bytes<4>;
+
+export circuit seed(): [] {
+  amount = 42 as Uint<64>;
+  nonce = 17 as Field;
+  active = true;
+  memo = pad(4, "seed");
+}
+
+export circuit clear(enabled: Boolean): [Uint<64>, Field, Boolean, Bytes<4>] {
+  if (disclose(enabled)) {
+    amount.resetToDefault();
+    nonce.resetToDefault();
+    active.resetToDefault();
+    memo.resetToDefault();
+  }
+  return [amount, nonce, active, memo];
+}

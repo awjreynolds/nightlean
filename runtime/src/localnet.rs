@@ -65,6 +65,9 @@ fn hash_text(value: &Json) -> Result<String> {
     Ok(hex::encode(bytes))
 }
 
+pub const DEVELOPMENT_GENESIS: &str =
+    "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d";
+
 pub struct Rpc {
     client: Client,
     endpoint: reqwest::Url,
@@ -583,6 +586,25 @@ impl Node {
         reference: &crate::client::PublicTransactionReference,
     ) -> Result<Option<crate::client::FinalizedReceipt>> {
         self.finalized_receipt(&reference.bound_view())
+    }
+    /// Submit the exact bytes already sealed by the development host's approval service.
+    pub async fn submit_development_reference(
+        &self,
+        reference: &crate::client::PublicTransactionReference,
+        approved: &crate::funding::SealedTransaction,
+    ) -> std::result::Result<crate::client::Submission, crate::client::HostFailure> {
+        use crate::client::HostFailure;
+
+        if self.policy.genesis != DEVELOPMENT_GENESIS {
+            return Err(HostFailure);
+        }
+        let bound = reference.bound_view();
+        let mut sealed = Vec::new();
+        serialize::tagged_serialize(approved, &mut sealed).map_err(|_| HostFailure)?;
+        if bound.policy() != &self.policy || bound.bytes() != sealed.as_slice() {
+            return Err(HostFailure);
+        }
+        crate::client::ChainAdapter::submit(self, &bound).await
     }
     pub fn finalized_contract_state(&self, address: &str) -> Result<FinalizedContractState> {
         check(

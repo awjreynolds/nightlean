@@ -1,0 +1,358 @@
+//! Bounded native ABI for collection pages and paths in a pinned state snapshot.
+use crate::{
+    Db, StateDecl,
+    aggregates::Schema,
+    artifacts,
+    merkle::{MerkleTreeSnapshot, merkle_curve_leaf_hash, merkle_fab_leaf_hash, merkle_tree_at},
+    native_ffi::{self, INTERNAL, INVALID_ARGUMENT, LIMIT, MAX_BYTES, Work},
+};
+use base_crypto::fab::AlignedValue;
+use onchain_runtime::state::{ContractState, StateValue};
+use serde::Deserialize;
+use serde_json::{Value as Json, json};
+use serialize::{tagged_deserialize, tagged_serialize};
+use transient_crypto::merkle_tree::{MerklePathEntry, leaf_hash};
+
+const MAX_REQUEST_BYTES: usize = 65_536;
+const MAX_KEYS: usize = 12;
+const MAX_OFFSET: usize = 1_048_576;
+const MAX_PAGE_SIZE: usize = 64;
+const MAX_ROOT_WIDTH: usize = 16;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Request {
+    abi_version: u32,
+    plan_sha256: String,
+    state_sha256: String,
+    name: String,
+    keys: Vec<Key>,
+    #[serde(default, deserialize_with = "present")]
+    offset: Option<usize>,
+    #[serde(default, deserialize_with = "present")]
+    limit: Option<usize>,
+    #[serde(default, deserialize_with = "present")]
+    merkle_path: Option<MerklePathRequest>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MerklePathRequest {
+    leaf: MerkleLeaf,
+    #[serde(default, deserialize_with = "present")]
+    index: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+enum MerkleLeaf {
+    Field {
+        value: String,
+    },
+    Structured {
+        schema_json: String,
+        value_json: String,
+    },
+    JubjubScalar {
+        value: String,
+    },
+    JubjubPoint {
+        x: String,
+        y: String,
+    },
+    #[cfg(feature = "zkir-321")]
+    Foreign {
+        #[serde(rename = "type")]
+        ty: String,
+        bytes: Vec<u8>,
+    },
+    Fab {
+        value: AlignedValue,
+    },
+    Prehashed {
+        value: [u8; 32],
+    },
+}
+
+fn present<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    T::deserialize(deserializer).map(Some)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Key {
+    #[serde(rename = "type")]
+    ty: String,
+    value: Json,
+}
+
+// A read needs only the state declarations, even if the plan uses newer execution opcodes.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ReadPlan {
+    schema_version: u32,
+    target: Option<String>,
+    target_profile: Option<Json>,
+    state: Vec<StateDecl>,
+}
+
+fn valid_digest(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
+
+fn decode_state(bytes: &[u8]) -> Result<ContractState<Db>, i32> {
+    let state: ContractState<Db> = tagged_deserialize(bytes).map_err(|_| INVALID_ARGUMENT)?;
+    let mut canonical = Vec::new();
+    tagged_serialize(&state, &mut canonical).map_err(|_| INTERNAL)?;
+    if canonical != bytes {
+        return Err(INVALID_ARGUMENT);
+    }
+    Ok(state)
+}
+
+fn canonical_index(value: &str) -> Result<u64, i32> {
+    let index = value.parse::<u64>().map_err(|_| INVALID_ARGUMENT)?;
+    if index.to_string() != value {
+        return Err(INVALID_ARGUMENT);
+    }
+    Ok(index)
+}
+
+fn merkle_leaf_hash(leaf: &MerkleLeaf) -> Result<[u8; 32], i32> {
+    match leaf {
+        MerkleLeaf::Field { value } => {
+            let field = crate::canonical_field(value).map_err(|_| INVALID_ARGUMENT)?;
+            Ok(leaf_hash(&field).0)
+        }
+        MerkleLeaf::Structured {
+            schema_json,
+            value_json,
+        } => {
+            let schema = Schema::from_json(schema_json.as_bytes()).map_err(|_| INVALID_ARGUMENT)?;
+            schema
+                .merkle_leaf_hash(value_json.as_bytes())
+                .map_err(|_| INVALID_ARGUMENT)
+        }
+        MerkleLeaf::JubjubScalar { value } => {
+            let value = crate::jubjub::scalar(value).map_err(|_| INVALID_ARGUMENT)?;
+            merkle_curve_leaf_hash(&crate::Value::JubjubScalar(value)).map_err(|_| INVALID_ARGUMENT)
+        }
+        MerkleLeaf::JubjubPoint { x, y } => {
+            let x = crate::canonical_field(x).map_err(|_| INVALID_ARGUMENT)?;
+            let y = crate::canonical_field(y).map_err(|_| INVALID_ARGUMENT)?;
+            let value = crate::jubjub::point(x, y).map_err(|_| INVALID_ARGUMENT)?;
+            merkle_curve_leaf_hash(&crate::Value::JubjubPoint(value)).map_err(|_| INVALID_ARGUMENT)
+        }
+        #[cfg(feature = "zkir-321")]
+        MerkleLeaf::Foreign { ty, bytes } => {
+            let ty =
+                crate::foreign::ForeignType::parse_source_name(ty).map_err(|_| INVALID_ARGUMENT)?;
+            let value = crate::foreign::ForeignValue::from_bytes(ty, bytes)
+                .map_err(|_| INVALID_ARGUMENT)?;
+            merkle_curve_leaf_hash(&crate::Value::Foreign(value)).map_err(|_| INVALID_ARGUMENT)
+        }
+        MerkleLeaf::Fab { value } => {
+            merkle_fab_leaf_hash(value.clone()).map_err(|_| INVALID_ARGUMENT)
+        }
+        MerkleLeaf::Prehashed { value } => Ok(*value),
+    }
+}
+
+fn path_steps(entries: &[MerklePathEntry]) -> Vec<Json> {
+    entries
+        .iter()
+        .map(|entry| {
+            serde_json::json!({
+                "sibling": crate::field_decimal(entry.sibling.0),
+                "goesLeft": entry.goes_left
+            })
+        })
+        .collect()
+}
+
+fn merkle_path_result(
+    snapshot: &MerkleTreeSnapshot,
+    query: &MerklePathRequest,
+) -> Result<Json, i32> {
+    let view = snapshot.view().map_err(|_| INVALID_ARGUMENT)?;
+    let hash = merkle_leaf_hash(&query.leaf)?;
+    let (candidate_root, steps) = match query.index.as_deref() {
+        Some(index) => {
+            let path = snapshot
+                .indexed_prehashed_path(canonical_index(index)?, hash)
+                .map_err(|_| INVALID_ARGUMENT)?;
+            (
+                Some(crate::field_decimal(path.candidate_root)),
+                Some(path_steps(&path.entries)),
+            )
+        }
+        None => {
+            let path = snapshot
+                .find_prehashed_path(hash)
+                .map_err(|_| INVALID_ARGUMENT)?;
+            match path {
+                Some(path) => (
+                    Some(crate::field_decimal(path.root())),
+                    Some(path_steps(path.entries())),
+                ),
+                None => (None, None),
+            }
+        }
+    };
+    Ok(serde_json::json!({
+        "abiVersion": 1,
+        "kind": "merklePath",
+        "snapshotRoot": crate::field_decimal(view.root),
+        "candidateRoot": candidate_root,
+        "steps": steps
+    }))
+}
+
+fn merkle_page(tree: &MerkleTreeSnapshot, offset: usize, limit: usize) -> Result<Json, i32> {
+    let view = tree.view().map_err(|_| INVALID_ARGUMENT)?;
+    let mut entries = Vec::new();
+    let mut next_offset = None;
+    let kind = if tree.is_historic() {
+        let mut roots = tree.historic_roots().map_err(|_| INVALID_ARGUMENT)?;
+        for _ in 0..offset {
+            if roots
+                .next()
+                .transpose()
+                .map_err(|_| INVALID_ARGUMENT)?
+                .is_none()
+            {
+                break;
+            }
+        }
+        for root in roots.by_ref().take(limit) {
+            entries.push(crate::field_decimal(root.map_err(|_| INVALID_ARGUMENT)?));
+        }
+        if roots
+            .next()
+            .transpose()
+            .map_err(|_| INVALID_ARGUMENT)?
+            .is_some()
+        {
+            next_offset = Some(offset + entries.len());
+        }
+        "historicMerkleTree"
+    } else {
+        "merkleTree"
+    };
+    Ok(json!({
+        "abiVersion": 1,
+        "kind": kind,
+        "root": crate::field_decimal(view.root),
+        "firstFree": view.first_free.to_string(),
+        "entries": entries,
+        "nextOffset": next_offset
+    }))
+}
+
+/// # Safety
+/// Each input pointer must reference readable bytes for its declared length.
+/// `out_result` must point to writable storage for one `u64`.
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_ledger_collection_page(
+    request: *const u8,
+    request_len: usize,
+    plan: *const u8,
+    plan_len: usize,
+    snapshot: *const u8,
+    snapshot_len: usize,
+    out_result: *mut u64,
+) -> i32 {
+    native_ffi::guard(|| {
+        unsafe { native_ffi::output(out_result)? };
+
+        let request: Request = serde_json::from_slice(unsafe {
+            native_ffi::input(request, request_len, MAX_REQUEST_BYTES)?
+        })
+        .map_err(|_| INVALID_ARGUMENT)?;
+        if request.abi_version != 1
+            || request.name.is_empty()
+            || !valid_digest(&request.plan_sha256)
+            || !valid_digest(&request.state_sha256)
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        if request.keys.len() > MAX_KEYS {
+            return Err(LIMIT);
+        }
+        match (request.offset, request.limit, &request.merkle_path) {
+            (Some(offset), Some(limit), None) => {
+                if offset > MAX_OFFSET || limit > MAX_PAGE_SIZE {
+                    return Err(LIMIT);
+                }
+                if limit == 0 {
+                    return Err(INVALID_ARGUMENT);
+                }
+            }
+            (None, None, Some(_)) => {}
+            _ => return Err(INVALID_ARGUMENT),
+        }
+
+        let _work = Work::reserve()?;
+        let plan_bytes = unsafe { native_ffi::input(plan, plan_len, MAX_BYTES)? };
+        let snapshot_bytes = unsafe { native_ffi::input(snapshot, snapshot_len, MAX_BYTES)? };
+        if artifacts::digest(plan_bytes) != request.plan_sha256
+            || artifacts::digest(snapshot_bytes) != request.state_sha256
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+
+        let plan: ReadPlan = serde_json::from_slice(plan_bytes).map_err(|_| INVALID_ARGUMENT)?;
+        if plan.schema_version != 1
+            || !crate::profile::validate_plan(plan.target.as_deref(), plan.target_profile.as_ref())
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        if plan.state.len() > MAX_ROOT_WIDTH {
+            return Err(LIMIT);
+        }
+
+        let keys = request
+            .keys
+            .iter()
+            .map(|key| crate::input_value(&key.ty, &key.value).map_err(|_| INVALID_ARGUMENT))
+            .collect::<Result<Vec<_>, _>>()?;
+        let state = decode_state(snapshot_bytes)?;
+        let StateValue::Array(root) = state.data.get_ref() else {
+            return Err(INVALID_ARGUMENT);
+        };
+        if root.len() > MAX_ROOT_WIDTH {
+            return Err(LIMIT);
+        }
+        if root.len() != plan.state.len() {
+            return Err(INVALID_ARGUMENT);
+        }
+
+        let tree = merkle_tree_at(&plan.state, &state.data, &request.name, &keys)
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let page = if let Some(query) = &request.merkle_path {
+            merkle_path_result(&tree, query)?
+        } else {
+            merkle_page(
+                &tree,
+                request.offset.ok_or(INVALID_ARGUMENT)?,
+                request.limit.ok_or(INVALID_ARGUMENT)?,
+            )?
+        };
+        let result =
+            native_ffi::service_public_bytes(serde_json::to_vec(&page).map_err(|_| INTERNAL)?)?;
+        unsafe { out_result.write(result) };
+        Ok(())
+    })
+}
