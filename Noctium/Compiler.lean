@@ -200,12 +200,28 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("address", nativeExpressionJson address),
       ("entryPointHash", nativeExpressionJson entryPointHash),
       ("commitment", nativeExpressionJson commitment)]
+  | .mintShielded domain amount => Json.mkObj [
+      ("op", toJson ("mintShielded" : String)), ("domain", nativeExpressionJson domain),
+      ("amount", nativeExpressionJson amount)]
+  | .mintUnshielded domain amount => Json.mkObj [
+      ("op", toJson ("mintUnshielded" : String)), ("domain", nativeExpressionJson domain),
+      ("amount", nativeExpressionJson amount)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
   | .readCaller names => Json.mkObj [
       ("op", toJson ("readCaller" : String)),
       ("present", toJson names.present), ("isContract", toJson names.isContract),
       ("contractAddress", toJson names.contractAddress), ("userAddress", toJson names.userAddress)]
+  | .readContractAddress destination => Json.mkObj [
+      ("op", toJson ("readContractAddress" : String)), ("destination", toJson destination)]
+  | .readTokenBalance destination color isUnshielded query => Json.mkObj (
+      [("op", toJson ("readTokenBalance" : String)),
+        ("destination", toJson destination), ("color", nativeExpressionJson color),
+        ("isUnshielded", nativeExpressionJson isUnshielded)] ++ match query with
+      | .exact => []
+      | .compare less limit =>
+        [("comparison", Json.mkObj [
+          (if less then "lessThan" else "greaterThan", nativeExpressionJson limit)])])
 
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
@@ -236,12 +252,28 @@ private def effectJson : Effect → Json
       ("address", expressionJson address),
       ("entryPointHash", expressionJson entryPointHash),
       ("commitment", expressionJson commitment)]
+  | .mintShielded domain amount => Json.mkObj [
+      ("op", toJson ("mintShielded" : String)), ("domain", expressionJson domain),
+      ("amount", expressionJson amount)]
+  | .mintUnshielded domain amount => Json.mkObj [
+      ("op", toJson ("mintUnshielded" : String)), ("domain", expressionJson domain),
+      ("amount", expressionJson amount)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
   | .readCaller names => Json.mkObj [
       ("op", toJson ("readCaller" : String)),
       ("present", toJson names.present), ("isContract", toJson names.isContract),
       ("contractAddress", toJson names.contractAddress), ("userAddress", toJson names.userAddress)]
+  | .readContractAddress destination => Json.mkObj [
+      ("op", toJson ("readContractAddress" : String)), ("destination", toJson destination)]
+  | .readTokenBalance destination color isUnshielded query => Json.mkObj (
+      [("op", toJson ("readTokenBalance" : String)),
+        ("destination", toJson destination), ("color", expressionJson color),
+        ("isUnshielded", expressionJson isUnshielded)] ++ match query with
+      | .exact => []
+      | .compare less limit =>
+        [("comparison", Json.mkObj [
+          (if less then "lessThan" else "greaterThan", expressionJson limit)])])
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
       ("payload", expressionJson payload)]
