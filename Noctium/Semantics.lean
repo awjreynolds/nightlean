@@ -1,5 +1,6 @@
 import Init.Data.Nat.PowMod
 import Noctium.Disclosure
+import Noctium.Merkle
 
 namespace Noctium
 
@@ -57,7 +58,22 @@ inductive LedgerValue where
   | map (entries : List (Value × LedgerValue))
   | composite (type : Types.CompositeType) (leaves : List Nat)
   | list (entries : List (List Nat))
+  | merkleTree (depth count : Nat)
+  | merkleTreeKnown (depth count : Nat) (tree : Noctium.Merkle.Tree)
   deriving Repr, BEq
+
+private def merkleTreeState? : LedgerValue → Option (Nat × Nat × Option Noctium.Merkle.Tree)
+  | .merkleTree depth count => some (depth, count, if count == 0 then some .empty else none)
+  | .merkleTreeKnown depth count tree => some (depth, count, some tree)
+  | _ => none
+
+private def checkedMerkleTreeState (state : LedgerValue) :
+    Except String (Nat × Nat × Option Noctium.Merkle.Tree) := do
+  let some view := merkleTreeState? state | throw "missing or malformed MerkleTree state"
+  let (depth, count, _) := view
+  unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
+  if count > 2 ^ depth then throw "MerkleTree count exceeds its capacity"
+  pure view
 
 abbrev EvalEnv := List (String × Value)
 
@@ -771,6 +787,7 @@ private def treeLookup (root : LedgerValue) : List Value → Option LedgerValue
     | .scalar _ => none
     | .composite .. => none
     | .list _ => none
+    | .merkleTree .. | .merkleTreeKnown .. => none
     | .map entries => (entries.lookup key).bind fun value => treeLookup value rest
 
 private def treeMember (root : LedgerValue) (keys : List Value) : Except String Bool := do
@@ -791,6 +808,7 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
     | .scalar _ => none
     | .composite .. => none
     | .list _ => none
+    | .merkleTree .. | .merkleTreeKnown .. => none
     | .map entries =>
       if rest.isEmpty then
         pure (.map (updateAssoc key value entries))
@@ -1020,6 +1038,23 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let some updated := treeSet root evaluated (.list [])
         | throw s!"nested List parent is missing or not a map '{name}'"
       next := {next with trees := updateAssoc name updated next.trees}
+    | .merkleTreeIsFull name destination => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+      let (depth, count, _) ← checkedMerkleTreeState raw
+      env := (destination, .bool (count == 2 ^ depth)) :: env
+    | .merkleTreeInsertHash name hash => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+      let (depth, count, tree?) ← checkedMerkleTreeState raw
+      let capacity := 2 ^ depth
+      if count == capacity then throw "MerkleTree is full"
+      let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+      let bytes ← hash.eval ctx env
+      let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus depth count bytes tree
+      next := {next with trees := updateAssoc name (.merkleTreeKnown depth (count + 1) updated) next.trees}
+    | .merkleTreeReset name => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+      let (depth, _, _) ← checkedMerkleTreeState raw
+      next := {next with trees := updateAssoc name (.merkleTree depth 0) next.trees}
     | .insertPath name keys ty value | .writePath name keys ty value => do
       let evaluated ← evaluatePath ctx env keys
       let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -1076,6 +1111,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
+            .merkleTreeIsFull .. | .merkleTreeInsertHash .. | .merkleTreeReset .. |
             .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
             .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
             .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. => pure ()
@@ -1234,6 +1270,23 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some updated := treeSet root evaluated (.list [])
             | throw s!"nested List parent is missing or not a map '{name}'"
           next := {next with trees := updateAssoc name updated next.trees}
+        | .merkleTreeIsFull name destination => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+          let (depth, count, _) ← checkedMerkleTreeState raw
+          env := (destination, .bool (count == 2 ^ depth)) :: env
+        | .merkleTreeInsertHash name hash => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+          let (depth, count, tree?) ← checkedMerkleTreeState raw
+          let capacity := 2 ^ depth
+          if count == capacity then throw "MerkleTree is full"
+          let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+          let bytes ← hash.eval ctx env
+          let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus depth count bytes tree
+          next := {next with trees := updateAssoc name (.merkleTreeKnown depth (count + 1) updated) next.trees}
+        | .merkleTreeReset name => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+          let (depth, _, _) ← checkedMerkleTreeState raw
+          next := {next with trees := updateAssoc name (.merkleTree depth 0) next.trees}
         | .insertPath name keys ty value | .writePath name keys ty value => do
           let evaluated ← evaluatePath ctx env keys
           let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -1316,7 +1369,9 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
         | .blockTimeCompare destination .. => env := (destination, .bool false) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
+        | .merkleTreeIsFull _ destination => env := (destination, .bool false) :: env
         | .counterAdjust .. | .counterReset .. => pure ()
+        | .merkleTreeInsertHash .. | .merkleTreeReset .. => pure ()
         | .listLength _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .listHead _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)

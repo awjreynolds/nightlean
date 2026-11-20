@@ -306,6 +306,7 @@ scoped syntax "initialize" ident ":=" str : nlconstructorinit
 scoped syntax "constructor" "(" nlconstructorparam,* ")" "where" nlconstructorinit* "end" : nlstate
 scoped syntax "map" ident ":" nltype "=>" nltype : nlstate
 scoped syntax "counter" ident : nlstate
+scoped syntax "merkleTree" ident ":" num : nlstate
 declare_syntax_cat nlcompositefield
 scoped syntax ident ":" nltype : nlcompositefield
 scoped syntax "tree" ident ":" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
@@ -355,6 +356,7 @@ scoped syntax "decrement" ident "by" num : nleffect
 scoped syntax "decrement" ident "[" nlexpr "]" "by" num : nleffect
 scoped syntax "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
 scoped syntax "reset" nlpath : nleffect
+scoped syntax "insertHash" nlpath ":=" nlexpr : nleffect
 scoped syntax "require" nlexpr : nleffect
 scoped syntax "absent" ident "[" nlexpr "]" : nleffect
 scoped syntax "write" ident ":=" nlexpr : nleffect
@@ -388,6 +390,7 @@ scoped syntax "when" nlexpr "decrement" ident "by" num : nleffect
 scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "by" num : nleffect
 scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
 scoped syntax "when" nlexpr "reset" nlpath : nleffect
+scoped syntax "when" nlexpr "insertHash" nlpath ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
 scoped syntax "when" nlexpr "remove" nlpath : nleffect
@@ -1333,6 +1336,17 @@ private partial def sourcePathParts (path : TSyntax `nlpath) :
     pure (storage, keys ++ [key])
   | _ => throwErrorAt path "invalid recursive state path"
 
+private def lowerMerkleTreeRoot (schema : List (String × StateKind))
+    (path : TSyntax `nlpath) : CommandElabM (TSyntax `ident × Nat) := do
+  let (storage, keys) ← sourcePathParts path
+  let some (.merkleTree depth) := schema.lookup storage.getId.toString
+    | throwErrorAt storage "MerkleTree operation requires a root MerkleTree state"
+  unless keys.isEmpty do
+    throwErrorAt path "root MerkleTree operations do not accept a key path"
+  unless 2 ≤ depth && depth ≤ 32 do
+    throwErrorAt path "MerkleTree depth must be between 2 and 32"
+  pure (storage, depth)
+
 private def treeStateSchema (schema : List (String × StateKind)) (storage : TSyntax `ident) :
     CommandElabM LedgerValueType := do
   match schema.lookup storage.getId.toString with
@@ -1513,6 +1527,7 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr reset $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr insertHash $_path:nlpath := $_hash:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlleaves) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
@@ -1715,6 +1730,19 @@ private def elaborateListPopFront (schema : List (String × StateKind))
 private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax `nlpath)
     (state : EntryEffects) : CommandElabM EntryEffects := do
   let (storage, sourceKeys) ← sourcePathParts path
+  if let some (.merkleTree depth) := schema.lookup storage.getId.toString then
+    unless sourceKeys.isEmpty do
+      throwErrorAt path "root MerkleTree reset does not accept a key path"
+    unless 2 ≤ depth && depth ≤ 32 do
+      throwErrorAt path "MerkleTree depth must be between 2 and 32"
+    let term ← `(Noctium.Effect.merkleTreeReset $(stringTerm storage.getId.toString))
+    return {state with terms := state.terms.push term}
+  if let some (.cell ty) := schema.lookup storage.getId.toString then
+    unless sourceKeys.isEmpty do throwErrorAt path "cell reset does not accept a key path"
+    let type ← tyTerm ty
+    let value ← `(Noctium.GuardedExpression.zeroValue $type)
+    let term ← `(Noctium.Effect.writeCell $(stringTerm storage.getId.toString) $type $value)
+    return {state with terms := state.terms.push term}
   let treeSchema ← treeStateSchema schema storage
   let (keys, value) ← lowerTreePath state.env treeSchema sourceKeys
   let keys ← pathKeysTerm keys
@@ -1778,6 +1806,13 @@ private def elaborateNamedPathRead (schema : List (String × StateKind))
   match operation with
   | "length" => elaborateListLength schema path destination depth state
   | "head" => elaborateListHead schema path destination depth state
+  | "isFull" => do
+    let (treeState, _) ← lowerMerkleTreeRoot schema path
+    let (readName, updated) ← freshReadName depth state destination
+    let term ← `(Noctium.Effect.merkleTreeIsFull
+      $(stringTerm treeState.getId.toString) $(stringTerm readName))
+    bindReadName {updated with terms := updated.terms.push term}
+      destination.getId.toString readName .bool
   | "read" =>
     match schema.lookup storage.getId.toString with
     | some (.cell ty) => do
@@ -2008,6 +2043,13 @@ private def elaborateEffect (schema : List (String × StateKind))
     let loweredValue ← checkedExpression state.env value ty
     let term ← `(Noctium.Effect.writeCell
       $(stringTerm storage.getId.toString) $(← tyTerm ty) $loweredValue)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| insertHash $path:nlpath := $hash:nlexpr)
+  | `(nleffect| when $_:nlexpr insertHash $path:nlpath := $hash:nlexpr) => do
+    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let loweredHash ← checkedExpression state.env hash (.bytes 32)
+    let term ← `(Noctium.Effect.merkleTreeInsertHash
+      $(stringTerm storage.getId.toString) $loweredHash)
     state := {state with terms := state.terms.push term}
   | `(nleffect| insert $storage:ident [ $key:nlexpr ] := $value:nlexpr)
   | `(nleffect| when $_:nlexpr insert $storage:ident [ $key:nlexpr ] := $value:nlexpr) => do
@@ -2293,6 +2335,12 @@ private def elaborateConstructor (source : TSyntax `nlstate)
           pure (id, StateKind.map k v, ← `(Noctium.StateKind.map $(← tyTerm k) $(← tyTerm v)))
         | `(nlstate| counter $id:ident) =>
           pure (id, StateKind.tree .counter, ← `(Noctium.StateKind.tree Noctium.LedgerValueType.counter))
+        | `(nlstate| merkleTree $id:ident : $depthStx:num) => do
+          let depth := depthStx.getNat
+          unless 2 ≤ depth && depth ≤ 32 do
+            throwErrorAt depthStx "MerkleTree depth must be between 2 and 32"
+          pure (id, StateKind.merkleTree depth,
+            ← `(Noctium.StateKind.merkleTree $(natTerm depth)))
         | `(nlstate| tree $id:ident : $key:nltype => Counter) => do
           let keyTy ← readTy key
           let keyTerm ← tyTerm keyTy

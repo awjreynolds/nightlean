@@ -16,6 +16,7 @@ use rand::{
 };
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
     io::Read,
@@ -121,7 +122,7 @@ async fn finish(
     let cas = attempt.commit_private(&mut runtime, store, 1).await?;
     println!(
         "{}",
-        json!({"attemptId":attempt.record().identity().attempt_id,"transactionId":receipt.transaction_id,"contractAddress":receipt.contract_address,"event":format!("{:?}",receipt.event),"blockHash":receipt.block_hash,"height":receipt.height,"privateCommitted":cas.committed,"privateRevision":cas.revision})
+        json!({"attemptId":attempt.record().identity().attempt_id,"transactionId":receipt.transaction_id,"contractAddress":receipt.contract_address,"event":format!("{:?}",receipt.event),"blockHash":receipt.block_hash,"height":receipt.height,"stateBytes":receipt.contract_state.len(),"stateSha256":hex::encode(Sha256::digest(&receipt.contract_state)),"privateCommitted":cas.committed,"privateRevision":cas.revision})
     );
     Ok(())
 }
