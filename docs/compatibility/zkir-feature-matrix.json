@@ -5878,7 +5878,7 @@
         },
         "genericRangeSpecialization": "passed, compile-time Nat substitution, distinct endpoint instances, actual specialized circuit compilation, reversed/oversized/missing-N/index-escape rejection"
       },
-      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable container iteration and anonymous map/fold remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85.",
+      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable container for loops remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85.",
       "readableSource": "../../tests/ReadableFiniteRange.lean",
       "genericSource": "../../tests/GenericSpecialization.lean"
     },
@@ -5888,6 +5888,7 @@
       "contract": "../../tests/IterationWitness.lean",
       "native": "../../runtime/src/witness_execution/iteration_ledger_tests.rs",
       "implementation": "../../Noctium/Helpers/Iteration.lean",
+      "readableSource": "../../tests/ReadableIteration.lean",
       "documentation": "../development/iteration.md",
       "newOpcodes": 0,
       "scope": "Staged Lean apply/map/fold generate ordinary checked Helpers programs. Named helpers and anonymous structured statement bodies use inferred optional signatures and typed lexical captures. Map consumes equal-length fixed vectors, structurally compatible tuples or scalar/composite byte sequence expressions once and returns a vector of checked scalar, Unit, record, tuple, nested-vector, byte or enum results. Enum tags retain their private origins and active payload projections are guarded with canonical zero padding. Fold evaluates initial before its list of equal-length sequences, preserves exact accumulator/result type and accepts a narrower compatible initial value. Generated bodies retain helper/source/type/expansion limits and lexical hiding. Frontend source commands now resolve private constants through Lean name resolution. Unit parameters, captures and root inputs use the existing Unit marker and canonical host value; they retain logical arity and contribute no native fields. Generic Unit specializations use this same path. Shared type joins recurse through equal-shape tuples/vectors; UInt bounds widen or embed in Native. Nominal identities, Bool and byte lengths remain exact. Lean emits explicit checked aggregate casts at typed boundaries, while the runtime keeps implicit aggregate equality and all private taints. Composite helper entrypoint results now emit Native return fields and canonical returnViews; SDK JSON groups those fields without changing native commitment encoding.",

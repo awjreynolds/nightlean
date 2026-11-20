@@ -75,6 +75,7 @@ jobs:
           lake env lean tests/StructuredTypedCells.lean
           lake env lean tests/FiniteRangeWitness.lean
           lake env lean tests/ReadableFiniteRange.lean
+          lake env lean tests/ReadableIteration.lean
           lake env lean tests/IterationWitness.lean
           lake env lean tests/Helpers.lean
           lake env lean tests/Iteration.lean
