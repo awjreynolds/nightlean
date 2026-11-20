@@ -191,6 +191,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .listLength .. | some condition, .listHead ..
       | some condition, .listPushFront .. | some condition, .listPopFront ..
       | some condition, .listReset .. | some condition, .merkleTreeIsFull ..
+      | some condition, .merkleTreeCheckRoot ..
       | some condition, .merkleTreeInsertHash ..
       | some condition, .merkleTreeInsertHashIndex ..
       | some condition, .merkleTreeReset .. =>
@@ -331,6 +332,12 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .merkleTreeIsFull state destination =>
       if value.effectGuardAt index |>.isSome then
         checkSink {description := s!"public MerkleTree fullness guard '{state}'", span} [] activeControl
+      env := env ++ [(destination, [])]
+    | .merkleTreeCheckRoot state expected destination =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public MerkleTree root-check guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public MerkleTree root comparison '{state}'", span}
+        (← expression env span expected) activeControl
       env := env ++ [(destination, [])]
     | .merkleTreeInsertHash state hash =>
       checkSink {description := s!"public MerkleTree inserted hash '{state}'", span}

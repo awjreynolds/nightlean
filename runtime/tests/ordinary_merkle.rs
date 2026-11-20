@@ -89,6 +89,48 @@ fn ordinary_merkle_appends_match_compact_and_reset_exactly() {
     };
     assert!(error.to_string().contains("MerkleTree is full"));
 
+    let (check_current, check_circuit) = fixture("NativeMerkleTree", "checkCurrent");
+    let read_root = |active, expected, state: &ChargedState<Db>| {
+        run(
+            &check_current,
+            &check_circuit,
+            BTreeMap::from([
+                ("active".into(), json!(active)),
+                ("expectedRoot".into(), json!(expected)),
+            ]),
+            state,
+        )
+    };
+    let mut matching_empty = read_root(true, "0", &initial);
+    assert_eq!(matching_empty.returns_json()["isValid"], true);
+    assert_eq!(matching_empty.after.state, initial);
+    assert_eq!(
+        matching_empty.preimage.public_transcript_outputs[0],
+        1u64.into()
+    );
+    matching_empty.preimage.public_transcript_outputs[0] = 0u64.into();
+    assert!(check(&matching_empty, &check_circuit).is_err());
+    assert_eq!(
+        read_root(true, "1", &initial).returns_json()["isValid"],
+        false
+    );
+    let skipped = read_root(false, "0", &initial);
+    assert_eq!(skipped.returns_json()["isValid"], false);
+    assert_eq!(skipped.after.state, initial);
+
+    let (append_and_check, append_check_circuit) = fixture("NativeMerkleTree", "appendAndCheck");
+    let append_check = |expected| {
+        let mut inputs = args(1);
+        inputs.insert("expectedRoot".into(), json!(expected));
+        run(&append_and_check, &append_check_circuit, inputs, &initial)
+    };
+    let appended = append_check(roots[0]);
+    assert_eq!(appended.returns_json()["isValid"], true);
+    assert_eq!(append_check("0").returns_json()["isValid"], false);
+    let unchanged = read_root(true, roots[0], &appended.after.state);
+    assert_eq!(unchanged.returns_json()["isValid"], true);
+    assert_eq!(unchanged.after.state, appended.after.state);
+
     let (reset, reset_circuit) = fixture("NativeMerkleTree", "resetAndCheck");
     let reset_result = run(&reset, &reset_circuit, BTreeMap::new(), &state);
     assert_eq!(reset_result.returns_json()["resetStatus"], false);

@@ -1099,6 +1099,13 @@ pub enum Instruction {
         depth: u8,
         destination: String,
     },
+    #[serde(rename = "merkleTreeCheckRoot")]
+    MerkleTreeCheckRoot {
+        slot: u32,
+        depth: u8,
+        expected: Expr,
+        destination: String,
+    },
     #[serde(rename = "merkleTreeInsertHash")]
     MerkleTreeInsertHash {
         slot: u32,
@@ -1254,6 +1261,10 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             ensure_merkle_tree_depth(plan, *slot, *depth)?;
             vec![1, 4, 4, 5, 1, 1, 4]
         }
+        Instruction::MerkleTreeCheckRoot { slot, depth, .. } => {
+            ensure_merkle_tree_depth(plan, *slot, *depth)?;
+            vec![1, 4, 4, 1, 5, 1, 4]
+        }
         Instruction::MerkleTreeInsertHash { slot, depth, .. } => {
             ensure_merkle_tree_depth(plan, *slot, *depth)?;
             vec![4, 4, 1, 4, 6, 1, 1, 4, 2, 1]
@@ -1380,6 +1391,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::IndexPath { slot, keys, .. } => path_field_count(plan, *slot, keys)?,
         Instruction::ListLength { .. }
         | Instruction::MerkleTreeIsFull { .. }
+        | Instruction::MerkleTreeCheckRoot { .. }
         | Instruction::MerkleTreeInsertHash { .. }
         | Instruction::MerkleTreeInsertHashIndex { .. }
         | Instruction::MerkleTreeReset { .. }
@@ -2372,7 +2384,7 @@ fn merkle_tree_default_state(depth: u8) -> StateValue<Db> {
     )
 }
 
-fn merkle_tree_count(state: &StateValue<Db>, depth: u8) -> Result<u64> {
+fn merkle_tree_parts(state: &StateValue<Db>, depth: u8) -> Result<(&MerkleTree<(), Db>, u64)> {
     let StateValue::Array(node) = state else {
         bail!("MerkleTree state must be an array");
     };
@@ -2397,8 +2409,14 @@ fn merkle_tree_count(state: &StateValue<Db>, depth: u8) -> Result<u64> {
         count <= 1u64 << depth,
         "MerkleTree count exceeds its capacity"
     );
+    Ok((tree, count))
+}
+
+fn merkle_tree_count(state: &StateValue<Db>, depth: u8) -> Result<u64> {
+    let (_, count) = merkle_tree_parts(state, depth)?;
     Ok(count)
 }
+
 fn read_state_value(
     context: &QueryContext<Db>,
     slot: u32,
@@ -3085,6 +3103,9 @@ fn probe_instruction(
         Instruction::MerkleTreeInsertHashIndex { hash, index, .. } => {
             probe_expressions([hash, index], plan, env, deferred_outputs)
         }
+        Instruction::MerkleTreeCheckRoot { expected, .. } => {
+            probe_expression(expected, plan, env, deferred_outputs)
+        }
         Instruction::ListPushFront {
             keys, expressions, ..
         } => {
@@ -3382,6 +3403,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::MerkleTreeIsFull { .. }
+                | Instruction::MerkleTreeCheckRoot { .. }
                 | Instruction::MerkleTreeInsertHash { .. }
                 | Instruction::MerkleTreeInsertHashIndex { .. }
                 | Instruction::MerkleTreeReset { .. }
@@ -3703,6 +3725,7 @@ impl PreparationCursor {
                             | Instruction::ListReset { .. }
                             | Instruction::MapRemove { .. }
                             | Instruction::MerkleTreeIsFull { .. }
+                            | Instruction::MerkleTreeCheckRoot { .. }
                             | Instruction::MerkleTreeInsertHash { .. }
                             | Instruction::MerkleTreeInsertHashIndex { .. }
                             | Instruction::MerkleTreeReset { .. }
@@ -3907,7 +3930,8 @@ impl PreparationCursor {
                             event = Some(read_event(read, false, env, produced));
                             read_index += 1;
                         }
-                        Instruction::MerkleTreeIsFull { destination, .. } => {
+                        Instruction::MerkleTreeIsFull { destination, .. }
+                        | Instruction::MerkleTreeCheckRoot { destination, .. } => {
                             event = Some(bind_context_scalar(
                                 plan.reads.get(read_index),
                                 Some(guard),
@@ -3943,6 +3967,7 @@ impl PreparationCursor {
                     | Instruction::ListPopFront { .. }
                     | Instruction::ListReset { .. }
                     | Instruction::MerkleTreeIsFull { .. }
+                    | Instruction::MerkleTreeCheckRoot { .. }
                     | Instruction::MerkleTreeInsertHash { .. }
                     | Instruction::MerkleTreeInsertHashIndex { .. }
             )
@@ -4330,6 +4355,51 @@ impl PreparationCursor {
                     push_native_state(StateValue::Cell(Sp::new(capacity.into())), false)?,
                     Op::Lt,
                     Op::Neg,
+                ]);
+                Op::Popeq {
+                    cached: true,
+                    result: result.into(),
+                }
+            }
+            Instruction::MerkleTreeCheckRoot {
+                slot,
+                depth,
+                expected,
+                destination,
+            } => {
+                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let tree_state = read_state_value(read_context, *slot, &[])?;
+                let (tree, _) = merkle_tree_parts(&tree_state, *depth)?;
+                let expected_root = evaluate(expected, &env)?.field()?;
+                let actual_root = tree
+                    .root()
+                    .context("MerkleTree state has an unrehashed root")?
+                    .0;
+                let result = actual_root == expected_root;
+                event = Some(bind_context_scalar(
+                    plan.reads.get(read_index),
+                    instruction_guard,
+                    destination,
+                    true,
+                    Value::Bool(result),
+                    env,
+                )?);
+                read_index += 1;
+                program.extend([
+                    Op::Dup { n: 0 },
+                    merkle_tree_root_index(*slot, false)?,
+                    merkle_tree_index(0, false),
+                    Op::Root,
+                    push_native_state(
+                        StateValue::Cell(Sp::new(field_value(expected_root))),
+                        false,
+                    )?,
+                    Op::Eq,
                 ]);
                 Op::Popeq {
                     cached: true,

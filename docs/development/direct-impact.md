@@ -102,6 +102,27 @@ the native runtime prediction at both steps. The pinned ZKIR 3.2.1 tool
 reported k=8 and 231 rows for the append relation.
 [Localnet receipt](ordinary-merkle-localnet-receipt.json)
 
+### Check the current root
+
+```lean
+checkRoot claims against disclose(expectedRoot) as rootMatches
+```
+
+The expected root is a Field. The comparison binds a Boolean and uses the
+state after earlier effects in the call. The operation leaves the tree
+unchanged. If a guard skips the comparison, `rootMatches` is false and the
+runtime skips the ledger read. Declare the release when the expected root or
+guard depends on private data.
+
+The ordinary Merkle fixture above checks the empty root, a stale root and a
+root written in the same call. The native checker rejects a changed comparison
+result.
+
+The native client finalized deployment at height 4 and the combined append
+and root check at height 7 on Ledger 9 localnet. Both receipts matched the
+predicted state bytes. The combined relation used k=8 and 232 rows.
+[Localnet receipt](ordinary-merkle-root-check-localnet-receipt.json)
+
 ## Write an ordinary Merkle tree at an index
 
 A root Merkle tree accepts both a prehashed Bytes32 leaf and a Field leaf at a
