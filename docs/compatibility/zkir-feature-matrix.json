@@ -5878,7 +5878,8 @@
         },
         "genericRangeSpecialization": "passed, compile-time Nat substitution, distinct endpoint instances, actual specialized circuit compilation, reversed/oversized/missing-N/index-escape rejection"
       },
-      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable loop grammar, anonymous functions and container map/fold remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85.",
+      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable container iteration and anonymous map/fold remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85.",
+      "readableSource": "../../tests/ReadableFiniteRange.lean",
       "genericSource": "../../tests/GenericSpecialization.lean"
     },
     "staticOperators": {

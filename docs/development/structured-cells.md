@@ -124,7 +124,20 @@ Typed state implementation revision: `fe73696b64e3d1170aab3e31a17f3ae97b799d6a`.
 
 ## Finite range loops
 
-Structured programs accept a half-open compile-time range:
+Readable witness circuits accept half-open ranges with literal bounds.
+
+```lean
+for i in 1 ..< 3 do
+  read private RangeWallet.last as previous
+  let next : Native := witness rangeStep(i, previous)
+  prove eq(next, add(previous, i))
+  stage RangeWallet.last := next
+end
+```
+
+The [readable example](../../tests/ReadableFiniteRange.lean) uses nested ranges and passes the
+result to a ledger entrypoint. Loop-local values are scoped to the body.
+Structured programs use the same lowering through the Helpers API.
 
 ```lean
 .forRange "index" 1 4 [
@@ -144,4 +157,4 @@ The three-iteration fixture initially occupied 1,954,016 bytes for its Impact pl
 
 The [source example](../../tests/FiniteRangeWitness.lean) performs three ordered read/provider/write/stage iterations. Its [native case](../../runtime/src/witness_execution/range_ledger_tests.rs) checks provider inputs `(1,0)`, `(2,1)`, `(3,3)`, final public total 6 and staged private value 3. An inactive outer branch makes no provider calls, stages no writes and preserves total 0. Both completed paths pass the selected native checker.
 
-This is a structured Helpers API, without new surface loop grammar or native opcodes. [Generic ranges](generics.md#generic-finite-ranges) resolve compile-time Nat expressions through the same preparation path. Anonymous functions, container iteration, map/fold and general loop preservation remain open under [issue 48](https://github.com/awjreynolds/noctium/issues/48). No new keys, proofs, deployments or cross-profile campaign accompany this slice.
+[Generic ranges](generics.md#generic-finite-ranges) in the Helpers API resolve compile-time Nat expressions through the same preparation path. Readable container iteration and anonymous map/fold operators, plus broader preservation and ledger evidence, remain open under [issue 48](https://github.com/awjreynolds/noctium/issues/48).
