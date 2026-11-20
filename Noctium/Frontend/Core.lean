@@ -292,6 +292,7 @@ declare_syntax_cat nleffect
 scoped syntax nlupdate : nleffect
 scoped syntax "when" nlexpr nlupdate : nleffect
 scoped syntax "read" nlpath "as" ident : nleffect
+scoped syntax "readSelf" "as" ident : nleffect
 scoped syntax "member" nlpath "as" ident : nleffect
 scoped syntax ident nlpath "as" ident : nleffect
 scoped syntax "increment" ident "by" num : nleffect
@@ -319,6 +320,7 @@ scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
 scoped syntax "when" nlexpr "read" nlpath "as" ident : nleffect
+scoped syntax "when" nlexpr "readSelf" "as" ident : nleffect
 scoped syntax "when" nlexpr "member" nlpath "as" ident : nleffect
 scoped syntax "when" nlexpr ident nlpath "as" ident : nleffect
 scoped syntax "when" nlexpr "increment" ident "by" num : nleffect
@@ -1371,6 +1373,7 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr insert $_state:ident [ $_key:nlexpr ] := $_value:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr require $_value:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr read $_path:nlpath as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr readSelf as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr member $_path:nlpath as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr $_operation:ident $_path:nlpath as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr increment $_state:ident by $_amount:num) => some condition
@@ -1788,6 +1791,12 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| read $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr read $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "read" path destination depth state
+  | `(nleffect| readSelf as $destination:ident)
+  | `(nleffect| when $_:nlexpr readSelf as $destination:ident) => do
+    let (readName, updated) ← freshReadName depth state destination
+    let term ← `(Noctium.Effect.readContractAddress $(stringTerm readName))
+    state := ← bindReadName {updated with terms := updated.terms.push term}
+      destination.getId.toString readName (.bytes 32)
   | `(nleffect| member $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr member $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "member" path destination depth state
