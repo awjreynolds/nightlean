@@ -119,6 +119,8 @@ scoped syntax "witness" ident "(" nlexpr,* ")" : noctium_witness_statement
 scoped syntax "prove" nlexpr : noctium_witness_statement
 scoped syntax "stage" ident ":=" nlexpr : noctium_witness_statement
 scoped syntax "output" ident (":" nltype)? ":=" nlexpr : noctium_witness_statement
+scoped syntax "for" ident "in" num "..<" num "do" noctium_witness_statement* "end" :
+  noctium_witness_statement
 scoped syntax (name := noctiumAuthoredWitnessCircuitCommand) "noctium_witness_circuit" ident
   ("using" ident,+)? "where" noctium_witness_statement* "end" : command
 
@@ -1304,7 +1306,7 @@ private partial def termTerm : Noctium.Helpers.Term → CommandElabM (TSyntax `t
     `(Noctium.Helpers.Term.at $span $(← termTerm value))
   | _ => throwError "unsupported generated helper term"
 
-private def statementTerm : Statement → CommandElabM (TSyntax `term)
+private partial def statementTerm : Statement → CommandElabM (TSyntax `term)
   | .bind name type value => do
     `(Noctium.Helpers.Statement.bind $(stringTerm name) $(← resultTypeTerm type) $(← termTerm value))
   | .evaluate value => do `(Noctium.Helpers.Statement.evaluate $(← termTerm value))
@@ -1323,7 +1325,10 @@ private def statementTerm : Statement → CommandElabM (TSyntax `term)
     throwError "readable witness source does not support ledger map reads"
   | .writeMap .. => throwError "readable witness source does not support ledger map writes"
   | .branch .. => throwError "readable witness source does not support branch statements yet"
-  | .forRange .. => throwError "readable witness source does not support unexpanded finite loops"
+  | .forRange index start stop body => do
+    let body ← body.toArray.mapM statementTerm
+    `(Noctium.Helpers.Statement.forRange $(stringTerm index) $(natTerm start) $(natTerm stop)
+      [$body,*])
 
 private def inputTerm (name : String) (ty : Ty) (visibility : Noctium.Visibility)
     (span : SourceSpan) : CommandElabM (TSyntax `term) := do
@@ -1441,12 +1446,144 @@ private def observationTerm (metadata : ObservationMetadata) : CommandElabM (TSy
     modifyEnv fun env => noctiumWitnessSignatureRegistry.addEntry env signature
   | _ => throwUnsupportedSyntax
 
-private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TSyntax `nlexpr)
-    (generated : List String) : ObservationMetadata :=
+private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TSyntax `nlexpr) :
+    ObservationMetadata :=
   { metadata with
     explicitReleases := (metadata.explicitReleases ++ disclosedValues stx).eraseDups,
-    authoredProves := (metadata.authoredProves ++ inlineAssertions stx).eraseDups,
-    generatedValidity := (metadata.generatedValidity ++ generated).eraseDups }
+    authoredProves := (metadata.authoredProves ++ inlineAssertions stx).eraseDups }
+
+private structure ReadableBody where
+  env : SurfaceEnv := []
+  statements : List Statement := []
+  witnesses : List WitnessSignature := []
+  observation : ObservationMetadata
+  logicalAliases : List LogicalAliasBinding := []
+  nextLet : Nat := 0
+  deriving Inhabited
+
+private def ReadableBody.lower (body : ReadableBody) (programName path : String)
+    (exprState : AuthoringExprState) (source : TSyntax `nlexpr) :
+    CommandElabM (Lowered × ReadableBody) := do
+  let (value, state) ← (lowerExpr programName ("s" ++ path) body.env source).run
+    {exprState with nextLet := body.nextLet}
+  pure (value, {body with nextLet := state.nextLet})
+
+private def ReadableBody.observe (body : ReadableBody) (value : Lowered)
+    (sources : List (TSyntax `nlexpr)) (extraValidity : List String := [])
+    (typedReplies : _root_.Bool := _root_.Bool.true) : ReadableBody :=
+  let observation := sources.foldl collectExpressionMetadata body.observation
+  let replies := if typedReplies then
+    value.witnessNames.map fun name => s!"typed witness reply: {name}"
+    else []
+  {body with
+    witnesses := uniqueWitnesses (body.witnesses ++ value.signatures)
+    observation := {observation with
+      witnessNames := (observation.witnessNames ++ value.witnessNames).eraseDups
+      generatedValidity :=
+        (observation.generatedValidity ++ value.generatedValidity ++ extraValidity ++ replies).eraseDups}}
+
+private def readableAliasSource (value : Lowered) (source : TSyntax `nlexpr) : LogicalAliasSource :=
+  match value.term with
+  | .witnessCall site .. | .at _ (.witnessCall site ..) => .call site
+  | _ => .expression source
+
+private def lookupPrivateField (fieldPath : TSyntax `ident) : CommandElabM PrivateStateField := do
+  let (schemaName, fieldName) ← splitSchemaField fieldPath
+  let schema ← privateStateSchema schemaName fieldPath
+  let some field := schema.fields.find? (·.name == fieldName)
+    | throwErrorAt fieldPath "schema '{schema.name}' has no field '{fieldName}'"
+  pure field
+
+private partial def lowerReadableStatement (programName path : String)
+    (exprState : AuthoringExprState) (codecTerms : Array (TSyntax `term))
+    (body : ReadableBody) (statement : TSyntax `noctium_witness_statement) :
+    CommandElabM ReadableBody := do
+  match statement with
+  | `(noctium_witness_statement| read private $fieldPath:ident as $id:ident) => do
+    let field ← lookupPrivateField fieldPath
+    let valueName := id.getId.toString
+    if body.env.any (·.1 == valueName) then
+      throwErrorAt id s!"duplicate readable witness value '{valueName}'"
+    let site := s!"{programName}.read.{path}"
+    validIdentity statement site
+    if let some codec := field.codec then
+      unless codecTerms.any (·.raw.getId == codec) do
+        throwErrorAt fieldPath s!"add codec '{privateToUserName codec}' to the circuit's using clause"
+    let signature := field.signature
+    let readTerm := Noctium.Helpers.Term.witnessCall site signature.name []
+    let logicalAliases := match signature.result with
+      | .scalar ty => body.logicalAliases ++ [{name := valueName, ty, source := .call site}]
+      | _ => body.logicalAliases
+    pure {body with
+      env := (valueName, signature.result, .ref valueName) :: body.env
+      statements := body.statements ++ [.bind valueName signature.result (.at (← spanValue statement) readTerm)]
+      witnesses := uniqueWitnesses (body.witnesses ++ [signature])
+      logicalAliases
+      observation := {body.observation with
+        privateReads := (body.observation.privateReads ++ [field.key]).eraseDups
+        generatedValidity :=
+          (body.observation.generatedValidity ++ [s!"typed private-state read reply: {field.key}"]).eraseDups}}
+  | `(noctium_witness_statement| witness $function:ident($args:nlexpr,*)) => do
+    let source ← `(nlexpr| witness $function($args,*))
+    let (value, body) ← body.lower programName path exprState source
+    let .unit := value.type | throwErrorAt statement "standalone witness statements must call a Unit witness"
+    let body := body.observe value args.getElems.toList (typedReplies := _root_.Bool.false)
+    pure {body with statements := body.statements ++ value.before ++ [.evaluate value.term]}
+  | `(noctium_witness_statement| let $id:ident $[: $type:nltype]? := $source:nlexpr) => do
+    let valueName := id.getId.toString
+    if body.env.any (·.1 == valueName) then
+      throwErrorAt id s!"duplicate readable witness value '{valueName}'"
+    let (lowered, body) ← body.lower programName path exprState source
+    let value ← match type with
+      | some annotation => coerce source lowered (← readScalarTy annotation)
+      | none => do
+        if lowered.type == .unit then throwErrorAt id "readable witness let cannot bind Unit"
+        pure lowered
+    let logicalAliases := match value.type with
+      | .scalar ty => body.logicalAliases ++ [{name := valueName, ty, source := readableAliasSource value source}]
+      | _ => body.logicalAliases
+    let body := body.observe value [source]
+    pure {body with
+      env := (valueName, value.type, .ref valueName) :: body.env
+      statements := body.statements ++ value.before ++ [.bind valueName value.type (.at (← spanValue statement) value.term)]
+      logicalAliases}
+  | `(noctium_witness_statement| prove $source:nlexpr) => do
+    let (lowered, body) ← body.lower programName path
+      {exprState with allowAssertThen := _root_.Bool.true} source
+    let value ← coerce source lowered .bool
+    let observation := {body.observation with
+      authoredProves := (body.observation.authoredProves ++ [renderExpr source]).eraseDups}
+    let body := {body with observation}.observe value [source]
+    pure {body with
+      statements := body.statements ++ value.before ++ [.assert (.at (← spanValue statement) value.term)]}
+  | `(noctium_witness_statement| stage $fieldPath:ident := $source:nlexpr) => do
+    let field ← lookupPrivateField fieldPath
+    let .scalar ty := field.signature.result
+      | throwErrorAt fieldPath "private staging currently requires a scalar cell"
+    let (lowered, body) ← body.lower programName path exprState source
+    let value ← coerce source lowered ty
+    let body := body.observe value [source] [s!"typed staged private-state value: {field.key}"]
+    pure {body with
+      statements := body.statements ++ value.before ++ [.stage field.capability field.key ty (.at (← spanValue statement) value.term)]
+      observation := {body.observation with
+        privateStages := (body.observation.privateStages ++ [field.key]).eraseDups}}
+  | `(noctium_witness_statement| for $index:ident in $start:num ..< $stop:num do
+      $nested:noctium_witness_statement* end) => do
+    let indexName := index.getId.toString
+    if body.env.any (·.1 == indexName) then
+      throwErrorAt index s!"finite loop index '{indexName}' conflicts with an enclosing readable witness value"
+    let mut loop := {body with
+      env := (indexName, .scalar .native, .ref indexName) :: body.env
+      statements := []
+      logicalAliases := []}
+    for (child, ordinal) in nested.toList.zipIdx do
+      loop ← lowerReadableStatement programName s!"{path}.{ordinal}" exprState codecTerms loop child
+    pure {body with
+      statements := body.statements ++ [.forRange indexName start.getNat stop.getNat loop.statements]
+      witnesses := loop.witnesses
+      observation := loop.observation
+      nextLet := loop.nextLet}
+  | _ => throwErrorAt statement "finite range bodies accept let, prove, witness, private read and stage, and nested for statements"
 
 @[command_elab noctiumAuthoredWitnessCircuitCommand] unsafe def elabAuthoredWitnessCircuit : CommandElab := fun stx => do
   match stx with
@@ -1475,144 +1612,50 @@ private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TS
       codecTerms := codecTerms.push ⟨mkIdent source⟩
     let composites := Helpers.Wire.compositeEnv {} (codecs.map (·.2))
     let exprState : AuthoringExprState := {codecs, composites}
-    let mut env : SurfaceEnv := []
+    let mut sourceBody : ReadableBody := {observation := {entryName := exportName}}
     let mut parameters : List Parameter := []
     let mut inputs : List Input := []
     let mut aggregateInputs : List AggregateInput := []
-    let mut inputObservations : List ObservationInput := []
-    let mut witnesses : List WitnessSignature := []
-    let mut body : List Statement := []
-    let mut privateReads : List String := []
-    let mut privateStages : List String := []
-    let mut witnessNames : List String := []
-    let mut authoredProves : List String := []
-    let mut explicitReleases : List String := []
-    let mut generatedValidity : List String := []
     let mut outputName := ""
     let mut outputType : ResultType := .unit
-    let mut sawOutput := _root_.Bool.false
     let mut authoredOutputs : List AuthoredOutput := []
-    let mut logicalAliasBindings : List LogicalAliasBinding := []
     for (statement, ordinal) in statements.toList.zip (List.range statements.size) do
+      sourceBody := {sourceBody with nextLet := 0}
       let isOutput := statement.raw[0].getAtomVal == "output"
-      if sawOutput && !isOutput then
+      if !authoredOutputs.isEmpty && !isOutput then
         throwErrorAt statement "no statements may follow the circuit outputs"
       match statement with
       | `(noctium_witness_statement| public $id:ident : $type:noctium_witness_input_type)
       | `(noctium_witness_statement| private $id:ident : $type:noctium_witness_input_type) => do
         let valueName := id.getId.toString
-        if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
+        if sourceBody.env.any (·.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
         let visibility := if statement.raw[0].getAtomVal == "public" then Noctium.Visibility.public else Noctium.Visibility.private
         let span ← spanValue statement
         match type with
         | `(noctium_witness_input_type| $scalar:nltype) =>
           let ty ← readScalarTy scalar
-          env := (valueName, .scalar ty, .ref valueName) :: env
           parameters := parameters ++ [{name := valueName, ty}]
           inputs := inputs ++ [{name := valueName, ty, visibility, span}]
-          inputObservations := inputObservations ++ [{name := valueName, type := typeName ty, visibility}]
+          let input : ObservationInput := {name := valueName, type := typeName ty, visibility}
+          sourceBody := {sourceBody with
+            env := (valueName, .scalar ty, .ref valueName) :: sourceBody.env
+            observation := {sourceBody.observation with inputs := sourceBody.observation.inputs ++ [input]}}
         | `(noctium_witness_input_type| Payload $codecName:ident) =>
           let (codec, _) ← (selectedCodec codecName).run' exprState
           let result := if codec.payload == .unit then .unit else .composite codec.payload
-          env := (valueName, result, .ref valueName) :: env
           parameters := parameters ++ [{name := valueName, ty := .native}]
           aggregateInputs := aggregateInputs ++ [{name := valueName, type := codec.payload, visibility, span}]
-          inputObservations := inputObservations ++ [{name := valueName, type := s!"Payload {codecName.getId}", visibility}]
+          let input : ObservationInput := {name := valueName, type := s!"Payload {codecName.getId}", visibility}
+          sourceBody := {sourceBody with
+            env := (valueName, result, .ref valueName) :: sourceBody.env
+            observation := {sourceBody.observation with inputs := sourceBody.observation.inputs ++ [input]}}
         | _ => throwErrorAt type "unsupported readable witness input type"
-      | `(noctium_witness_statement| read private $fieldPath:ident as $id:ident) => do
-        let (schemaName, fieldName) ← splitSchemaField fieldPath
-        let sourceField ← privateStateSchema schemaName fieldPath
-        let some field := sourceField.fields.find? (·.name == fieldName)
-          | throwErrorAt fieldPath "schema '{sourceField.name}' has no field '{fieldName}'"
-        let valueName := id.getId.toString
-        if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
-        let site := s!"{programNameText}.read.{ordinal}"
-        validIdentity statement site
-        if let some codec := field.codec then
-          unless codecTerms.any (·.raw.getId == codec) do
-            throwErrorAt fieldPath s!"add codec '{privateToUserName codec}' to the circuit's using clause"
-        let signature := field.signature
-        witnesses := uniqueWitnesses (witnesses ++ [signature])
-        let readTerm := Noctium.Helpers.Term.witnessCall site signature.name []
-        body := body ++ [.bind valueName signature.result (.at (← spanValue statement) readTerm)]
-        env := (valueName, signature.result, .ref valueName) :: env
-        if let .scalar ty := signature.result then
-          logicalAliasBindings := logicalAliasBindings ++ [
-            {name := valueName, ty, source := .call site}]
-        privateReads := (privateReads ++ [field.key]).eraseDups
-        generatedValidity := (generatedValidity ++ [s!"typed private-state read reply: {field.key}"]).eraseDups
-      | `(noctium_witness_statement| witness $function:ident($args:nlexpr,*)) => do
-        let callbackExpr ← `(nlexpr| witness $function($args,*))
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env callbackExpr).run' exprState
-        let .unit := lowered.type | throwErrorAt statement "standalone witness statements must call a Unit witness"
-        body := body ++ lowered.before ++ [.evaluate lowered.term]
-        witnesses := uniqueWitnesses (witnesses ++ lowered.signatures)
-        witnessNames := (witnessNames ++ lowered.witnessNames).eraseDups
-        generatedValidity := (generatedValidity ++ lowered.generatedValidity).eraseDups
-        for argument in args.getElems do
-          let observationPart := collectExpressionMetadata {entryName := exportName} argument []
-          authoredProves := (authoredProves ++ observationPart.authoredProves).eraseDups
-          explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
-      | `(noctium_witness_statement| let $id:ident $[: $type:nltype]? := $value:nlexpr) => do
-        let valueName := id.getId.toString
-        if env.any (fun value => value.1 == valueName) then throwErrorAt id s!"duplicate readable witness value '{valueName}'"
-        let sourceExpr := value
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
-        let value ← match type with
-          | some annotation => coerce sourceExpr lowered (← readScalarTy annotation)
-          | none => do
-            if lowered.type == .unit then throwErrorAt id "readable witness let cannot bind Unit"
-            pure lowered
-        body := body ++ value.before ++ [.bind valueName value.type (.at (← spanValue statement) value.term)]
-        env := (valueName, value.type, .ref valueName) :: env
-        if let .scalar ty := value.type then
-          let aliasSource := match value.term with
-            | .witnessCall site .. => LogicalAliasSource.call site
-            | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
-            | _ => LogicalAliasSource.expression sourceExpr
-          logicalAliasBindings := logicalAliasBindings ++ [
-            {name := valueName, ty, source := aliasSource}]
-        witnesses := uniqueWitnesses (witnesses ++ value.signatures)
-        witnessNames := (witnessNames ++ value.witnessNames).eraseDups
-        let observationPart := collectExpressionMetadata {entryName := exportName} sourceExpr value.generatedValidity
-        authoredProves := (authoredProves ++ observationPart.authoredProves).eraseDups
-        explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
-        generatedValidity := (generatedValidity ++ observationPart.generatedValidity ++ value.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
-      | `(noctium_witness_statement| prove $predicate:nlexpr) => do
-        let predicateStx := predicate
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env predicateStx).run'
-          {exprState with allowAssertThen := _root_.Bool.true}
-        let predicate ← coerce predicateStx lowered .bool
-        body := body ++ predicate.before ++ [.assert (.at (← spanValue statement) predicate.term)]
-        witnesses := uniqueWitnesses (witnesses ++ predicate.signatures)
-        witnessNames := (witnessNames ++ predicate.witnessNames).eraseDups
-        authoredProves := (authoredProves ++ [renderExpr predicateStx] ++ inlineAssertions predicateStx).eraseDups
-        explicitReleases := (explicitReleases ++ disclosedValues predicateStx).eraseDups
-        generatedValidity := (generatedValidity ++ predicate.generatedValidity ++ predicate.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
-      | `(noctium_witness_statement| stage $fieldPath:ident := $value:nlexpr) => do
-        let (schemaName, fieldName) ← splitSchemaField fieldPath
-        let sourceField ← privateStateSchema schemaName fieldPath
-        let some field := sourceField.fields.find? (·.name == fieldName)
-          | throwErrorAt fieldPath "schema '{sourceField.name}' has no field '{fieldName}'"
-        let .scalar ty := field.signature.result
-          | throwErrorAt fieldPath "private staging currently requires a scalar cell"
-        let sourceExpr := value
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
-        let value ← coerce sourceExpr lowered ty
-        body := body ++ value.before ++ [.stage field.capability field.key ty (.at (← spanValue statement) value.term)]
-        witnesses := uniqueWitnesses (witnesses ++ value.signatures)
-        witnessNames := (witnessNames ++ value.witnessNames).eraseDups
-        privateStages := (privateStages ++ [field.key]).eraseDups
-        let observationPart := collectExpressionMetadata {entryName := exportName} sourceExpr value.generatedValidity
-        authoredProves := (authoredProves ++ observationPart.authoredProves).eraseDups
-        explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
-        generatedValidity := (generatedValidity ++ observationPart.generatedValidity ++ [s!"typed staged private-state value: {field.key}"] ++ value.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
       | `(noctium_witness_statement| output $id:ident $[: $type:nltype]? := $value:nlexpr) => do
         let valueName := id.getId.toString
-        if env.any (fun value => value.1 == valueName) || authoredOutputs.any (·.name == valueName) then
+        if sourceBody.env.any (·.1 == valueName) || authoredOutputs.any (·.name == valueName) then
           throwErrorAt id s!"duplicate readable witness output '{valueName}'"
         let sourceExpr := value
-        let lowered ← (lowerExpr programNameText s!"s{ordinal}" env sourceExpr).run' exprState
+        let (lowered, updatedBody) ← sourceBody.lower programNameText (toString ordinal) exprState sourceExpr
         let outputSpan ← spanValue statement
         let value ← match type with
           | some annotation => coerce sourceExpr lowered (← readScalarTy annotation)
@@ -1620,19 +1663,14 @@ private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TS
             let .composite _ := lowered.type
               | throwErrorAt id "scalar outputs require a type annotation"
             pure lowered
-        let source := match value.term with
-          | .witnessCall site .. => LogicalAliasSource.call site
-          | .at _ (.witnessCall site ..) => LogicalAliasSource.call site
-          | _ => LogicalAliasSource.expression sourceExpr
+        let source := readableAliasSource value sourceExpr
         authoredOutputs := authoredOutputs ++ [{name := valueName, value, span := outputSpan, ordinal, source}]
-        sawOutput := _root_.Bool.true
-        witnesses := uniqueWitnesses (witnesses ++ value.signatures)
-        witnessNames := (witnessNames ++ value.witnessNames).eraseDups
-        let observationPart := collectExpressionMetadata {entryName := exportName} sourceExpr value.generatedValidity
-        authoredProves := (authoredProves ++ observationPart.authoredProves).eraseDups
-        explicitReleases := (explicitReleases ++ observationPart.explicitReleases).eraseDups
-        generatedValidity := (generatedValidity ++ observationPart.generatedValidity ++ value.witnessNames.map fun witnessName => s!"typed witness reply: {witnessName}").eraseDups
-      | _ => throwErrorAt statement "unsupported readable witness statement"
+        sourceBody := updatedBody.observe value [sourceExpr]
+      | _ =>
+        sourceBody ← lowerReadableStatement programNameText (toString ordinal) exprState codecTerms
+          sourceBody statement
+    let witnesses := sourceBody.witnesses
+    let mut body := sourceBody.statements
     let compositeId := programNameText ++ ".Output"
     let compositeType := Types.CompositeType.structure compositeId
     let grouped := authoredOutputs.length > 1
@@ -1662,7 +1700,7 @@ private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TS
       let mut outputReferences := []
       for item in authoredOutputs do
         let bindingName := s!"__noctium_output_{item.ordinal}_{item.name}"
-        if env.any (fun item => item.1 == bindingName) || authoredOutputs.any (·.name == bindingName) then
+        if sourceBody.env.any (·.1 == bindingName) || authoredOutputs.any (·.name == bindingName) then
           throwErrorAt stx "generated composite output binding collides with a source name"
         body := body ++ item.value.before ++ [
           .bind bindingName item.value.type (.at item.span item.value.term)]
@@ -1679,16 +1717,7 @@ private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TS
           | _ => pure [.ref bindingName]
         outputReferences := outputReferences ++ leaves
       body := body ++ [.return (some (.composite compositeType outputReferences))]
-    let observation : ObservationMetadata := {
-      entryName := exportName,
-      inputs := inputObservations,
-      privateReads := privateReads,
-      privateStages := privateStages,
-      witnessNames := witnessNames,
-      authoredProves := authoredProves,
-      explicitReleases := explicitReleases,
-      generatedValidity := generatedValidity
-    }
+    let observation := sourceBody.observation
     let declId : DeclarationId := ⟨0, 0⟩
     let declaration : Noctium.Helpers.Declaration :=
       { id := declId,
@@ -1722,7 +1751,7 @@ private def collectExpressionMetadata (metadata : ObservationMetadata) (stx : TS
           throwErrorAt stx "generated logical output alias name already exists"
         elabCommand (← `(def $(mkIdent aliasName) : Noctium.Expr $(← tyTerm ty) := $value))
         pure aliasName
-      for binding in (if grouped && !useOutputViews then logicalAliasBindings else []) do
+      for binding in (if grouped && !useOutputViews then sourceBody.logicalAliases else []) do
         if logicalEnv.any (fun alias => alias.1 == binding.name) then
           throwErrorAt stx s!"duplicate logical output alias source '{binding.name}'"
         let value ← match binding.source with
