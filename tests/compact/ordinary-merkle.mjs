@@ -10,6 +10,9 @@ const invoke = (entry, ...args) => contract.circuits[entry](createCircuitContext
   circuitId: entry, contractAddress: dummyContractAddress(), coinPublicKeyOrZswapState: wallet,
   contractState: state, privateState: null,
 }), ...args);
+assert.equal((await invoke('checkCurrent', true, {field: 0n})).result, true);
+assert.equal((await invoke('checkCurrent', true, {field: 1n})).result, false);
+assert.equal((await invoke('checkCurrent', false, {field: 0n})).result, false);
 const roots = [];
 for (let index = 0; index <= 4; index++) {
   const tree = ledger(state).claims;
@@ -28,4 +31,12 @@ assert.equal(reset.result, false);
 const cleared = ledger(reset.context.callContext.currentQueryContext.state).claims;
 assert.equal(cleared.firstFree(), 0n);
 assert.equal(cleared.root().field.toString(), roots[0]);
+state = currentContractState.data;
+const leaf = new Uint8Array(32).fill(1);
+const inserted = await invoke('appendAndCheck', leaf, {field: BigInt(roots[1])});
+assert.equal(inserted.result, true);
+assert.equal((await invoke('appendAndCheck', leaf, {field: 0n})).result, false);
+state = inserted.context.callContext.currentQueryContext.state;
+assert.equal((await invoke('checkCurrent', true, {field: BigInt(roots[1])})).result, true);
+assert.equal((await invoke('checkCurrent', true, {field: 0n})).result, false);
 console.log(JSON.stringify(roots));

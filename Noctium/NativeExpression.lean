@@ -58,6 +58,9 @@ private def nativeExpressionJson : Expr ty → Json
       Json.mkObj [("tag", toJson ("concatBytes" : String)),
         ("leftLength", toJson leftLength), ("rightLength", toJson rightLength),
         ("left", nativeExpressionJson left), ("right", nativeExpressionJson right)]
+  | .sha256 (length := length) value => Json.mkObj [
+      ("tag", toJson ("sha256" : String)), ("length", toJson length),
+      ("value", nativeExpressionJson value)]
   | .sha512 (length := length) value => Json.mkObj [
       ("tag", toJson ("sha512" : String)), ("length", toJson length),
       ("value", nativeExpressionJson value)]

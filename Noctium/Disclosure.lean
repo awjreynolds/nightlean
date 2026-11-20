@@ -44,7 +44,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .reverseBytes value | .sliceBytes value .. => origins env value
   | .concatBytes left right => do
     pure (merge (← origins env left) (← origins env right))
-  | .sha512 value | .keccak256 value => origins env value
+  | .sha256 value | .sha512 value | .keccak256 value => origins env value
   | .reverseBytes32 value => origins env value
   | .persistentHash32 value => origins env value
   | .bytes32Literal _ => pure []
@@ -192,7 +192,10 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .listPushFront .. | some condition, .listPopFront ..
       | some condition, .readCaller ..
       | some condition, .listReset .. | some condition, .merkleTreeIsFull ..
-      | some condition, .merkleTreeInsertHash .. | some condition, .merkleTreeReset .. =>
+      | some condition, .merkleTreeCheckRoot ..
+      | some condition, .merkleTreeInsertHash ..
+      | some condition, .merkleTreeInsertHashIndex ..
+      | some condition, .merkleTreeReset .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
@@ -334,9 +337,20 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       if value.effectGuardAt index |>.isSome then
         checkSink {description := s!"public MerkleTree fullness guard '{state}'", span} [] activeControl
       env := env ++ [(destination, [])]
+    | .merkleTreeCheckRoot state expected destination =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public MerkleTree root-check guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public MerkleTree root comparison '{state}'", span}
+        (← expression env span expected) activeControl
+      env := env ++ [(destination, [])]
     | .merkleTreeInsertHash state hash =>
       checkSink {description := s!"public MerkleTree inserted hash '{state}'", span}
         (← expression env span hash) activeControl
+    | .merkleTreeInsertHashIndex state hash index =>
+      checkSink {description := s!"public MerkleTree indexed hash '{state}'", span}
+        (← expression env span hash) activeControl
+      checkSink {description := s!"public MerkleTree index '{state}'", span}
+        (← expression env span index) activeControl
     | .merkleTreeReset state =>
       checkSink {description := s!"public MerkleTree mutation guard '{state}'", span}
         [] activeControl

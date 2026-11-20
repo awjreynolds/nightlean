@@ -1,0 +1,14 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger claims: MerkleTree<2, Field>;
+
+export circuit writeHashIndex(index: Uint<64>, hash: Bytes<32>): Boolean {
+  claims.insertHashIndex(disclose(hash), disclose(index));
+  return claims.isFull();
+}
+
+export circuit writeFieldIndex(index: Uint<64>, leaf: Field): Boolean {
+  claims.insertIndex(disclose(leaf), disclose(index));
+  return claims.isFull();
+}

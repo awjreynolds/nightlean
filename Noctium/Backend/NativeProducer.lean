@@ -229,6 +229,15 @@ private def fixedByteHashLength (alignment : Json) : Except String Nat := do
   ensure (alignment == canonical) "byte hash requires canonical fixed-byte alignment"
   pure length
 
+private def checkedFixedByteHashTerm (opcode : String) (alignment : Json)
+    (values : List Fact) : Except String Term := do
+  let length ← fixedByteHashLength alignment
+  ensure (values.length == bytesChunkCount length) "byte hash aligned field count mismatch"
+  for (value, index) in values.reverse.zipIdx do
+    ensure (value.maximum ≤ 2 ^ (8 * bytesChunkWidth length index) - 1)
+      "byte hash operand lacks its exact chunk range bound"
+  pure (fixedByteHashTerm opcode length (values.map (·.term)))
+
 private def bytes32FromChunksTerm (low31 highByte : Term) : Term :=
   .unary "bytes32_from_chunks" (.hash [low31, highByte])
 
@@ -482,13 +491,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
       refine state identifier (exclusive - 1)
     else pure state
   | "sha512" | "keccak256" => do
-    let length ← fixedByteHashLength (← instruction.getObjVal? "alignment")
     let values ← nativeArguments state instruction "inputs"
-    ensure (values.length == bytesChunkCount length) "byte hash aligned field count mismatch"
-    for (value, index) in values.reverse.zipIdx do
-      ensure (value.maximum ≤ 2 ^ (8 * bytesChunkWidth length index) - 1)
-        "byte hash operand lacks its exact chunk range bound"
-    let term := fixedByteHashTerm opcode length (values.map (·.term))
+    let term ← checkedFixedByteHashTerm opcode (← instruction.getObjVal? "alignment") values
     let fact ← combine term 0 values
     defineResult state instruction {fact with valueType := byteValueType (if opcode == "sha512" then 64 else 32)}
   | "persistent_hash" => do
@@ -509,6 +513,8 @@ def validateInstruction (expected : Expected) (state : State) (instruction : Jso
           ensure (values.length == atoms.size)
             "Native vector persistent_hash field count differs from its alignment"
           pure (persistentHashNativeVectorTerm (values.map (·.term)))
+        else if atoms.size ≤ 1 then
+          checkedFixedByteHashTerm opcode alignment values
         else do
           ensure (atoms.size ≥ 1 && atoms.size ≤ 32 && atoms.all (· == bytes32Atom))
             "persistent_hash supports only bounded Bytes32 or Native field vectors"

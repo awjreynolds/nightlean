@@ -12,10 +12,12 @@ def Tree.root : Tree → Nat
   | .empty => 0
   | .leaf digest | .branch digest .. => digest
 
-private def insertDigest (hash : List Nat → Except String Nat) (modulus : Nat) :
+private def insertDigest (hash : List Nat → Except String Nat) (modulus : Nat) (replace : Bool) :
     Nat → Nat → Nat → Tree → Except String Tree
   | 0, 0, digest, .empty => pure (.leaf digest)
-  | 0, 0, _, .leaf _ => throw "MerkleTree append does not select an empty leaf"
+  | 0, 0, digest, .leaf _ => do
+    unless replace do throw "MerkleTree append does not select an empty leaf"
+    pure (.leaf digest)
   | 0, _, _, _ => throw "MerkleTree append does not select an empty leaf"
   | height + 1, index, digest, tree => do
     let (left, right) ← match tree with
@@ -24,8 +26,8 @@ private def insertDigest (hash : List Nat → Except String Nat) (modulus : Nat)
       | .leaf _ => throw "MerkleTree shape differs from its depth"
     let half := 2 ^ height
     let (left, right) ← if index < half then
-        pure (← insertDigest hash modulus height index digest left, right)
-      else pure (left, ← insertDigest hash modulus height (index - half) digest right)
+        pure (← insertDigest hash modulus replace height index digest left, right)
+      else pure (left, ← insertDigest hash modulus replace height (index - half) digest right)
     let root ← hash [left.root, right.root]
     unless root < modulus do throw "MerkleTree hash is outside the native field"
     pure (.branch root left right)
@@ -38,6 +40,16 @@ def Tree.insertHash (hash : List Nat → Except String Nat) (modulus depth index
   unless bytes.length == 32 && bytes.all (· < 256) do throw "MerkleTree hash must be Bytes32"
   let digest := (bytes.take 31).foldr (fun byte rest => byte + 256 * rest) 0
   unless digest < modulus do throw "MerkleTree leaf is outside the native field"
-  insertDigest hash modulus depth index digest tree
+  insertDigest hash modulus false depth index digest tree
+
+/-- Set a known leaf, replacing its prior digest when present. -/
+def Tree.setHash (hash : List Nat → Except String Nat) (modulus depth index : Nat)
+    (bytes : List Nat) (tree : Tree) : Except String Tree := do
+  unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
+  unless index < 2 ^ depth do throw "MerkleTree index is outside its capacity"
+  unless bytes.length == 32 && bytes.all (· < 256) do throw "MerkleTree hash must be Bytes32"
+  let digest := (bytes.take 31).foldr (fun byte rest => byte + 256 * rest) 0
+  unless digest < modulus do throw "MerkleTree leaf is outside the native field"
+  insertDigest hash modulus true depth index digest tree
 
 end Noctium.Merkle

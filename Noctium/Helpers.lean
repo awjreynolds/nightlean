@@ -1863,7 +1863,7 @@ private partial def expressionUsesName (name : String) : Expr ty → Bool
   | .native _ | .bool _ | .uint _ _ | .bytesLiteral _ _ | .bytes32Literal _
   | .foreignBase _ _ | .foreignScalar _ _ => false
   | .bytesField value _ | .bytesAt value _ | .reverseBytes value | .sliceBytes value _ _
-  | .sha512 value | .keccak256 value | .persistentHash32 value | .reverseBytes32 value
+  | .sha256 value | .sha512 value | .keccak256 value | .persistentHash32 value | .reverseBytes32 value
   | .persistentHashNative value | .toBytes32 value | .fromBytes32 value | .fromBytes value
   | .jubjubScalarFromNative value | .jubjubScalarToNative value | .jubjubMulGenerator value
   | .jubjubNeg value | .jubjubCoordinate value _ | .foreignEncodedField value _

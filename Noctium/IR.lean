@@ -41,6 +41,8 @@ inductive Expr : Ty → Type where
   /-- Concatenate two fixed-length byte strings. -/
   | concatBytes {leftLength rightLength : Nat} (left : Expr (.bytes leftLength))
       (right : Expr (.bytes rightLength)) : Expr (.bytes (leftLength + rightLength))
+  /-- Internal SHA-256 expression lowered through the pinned persistent-hash path. -/
+  | sha256 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 32)
   /-- SHA-512 over a source byte string, returning its full fixed-width digest. -/
   | sha512 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 64)
   /-- Keccak-256 over a source byte string, returning its full fixed-width digest. -/
@@ -492,7 +494,10 @@ inductive Effect where
   | listPopFront (state : String) (keys : List PathKey)
   | listReset (state : String) (keys : List PathKey)
   | merkleTreeIsFull (state destination : String)
+  | merkleTreeCheckRoot (state : String) (expected : Expr .native) (destination : String)
   | merkleTreeInsertHash (state : String) (hash : Expr (.bytes 32))
+  | merkleTreeInsertHashIndex (state : String) (hash : Expr (.bytes 32))
+      (index : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeReset (state : String)
   | emptyMapPath (state : String) (keys : List PathKey)
   | removePath (state : String) (keys : List PathKey)
@@ -641,6 +646,10 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
     left.validate caps env
     right.validate caps env
+  | .sha256 (length := length) value => do
+    unless caps.persistentHash32 do throw "target lacks qualified SHA-256 support"
+    (Ty.bytes length).validate caps
+    value.validate caps env
   | .sha512 (length := length) value => do
     unless caps.sha512 do throw "target lacks qualified SHA-512 support"
     unless length ≤ maxBytesLength do
@@ -918,7 +927,8 @@ private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
-    .merkleTreeInsertHash state .. | .merkleTreeReset state |
+    .merkleTreeInsertHash state .. | .merkleTreeInsertHashIndex state .. |
+    .merkleTreeReset state |
     .emptyMapPath state .. | .removePath state .. => some state
   | _ => none
 
@@ -1047,8 +1057,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
-          .readCaller .. | .merkleTreeIsFull .. | .merkleTreeInsertHash .. |
-          .merkleTreeReset .. => pure ()
+          .readCaller .. | .merkleTreeIsFull .. | .merkleTreeCheckRoot .. |
+          .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. | .merkleTreeReset .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on ledger reads, writes, and require effects"}
@@ -1196,6 +1206,15 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         unless 2 ≤ depth && depth ≤ 32 do
           throw "MerkleTree depth must be between 2 and 32"
         pure [(destination, .bool)]
+      | .merkleTreeCheckRoot state expected destination => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let some depth := declaration.kind.merkleTreeDepth?
+          | throw s!"unknown MerkleTree state '{state}'"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "MerkleTree depth must be between 2 and 32"
+        expected.validate caps env
+        pure [(destination, .bool)]
       | .merkleTreeInsertHash state hash => do
         let some declaration := decls.find? (·.name == state)
           | throw s!"unknown MerkleTree state '{state}'"
@@ -1204,6 +1223,16 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         unless 2 ≤ depth && depth ≤ 32 do
           throw "MerkleTree depth must be between 2 and 32"
         hash.validate caps env
+        pure []
+      | .merkleTreeInsertHashIndex state hash index => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let some depth := declaration.kind.merkleTreeDepth?
+          | throw s!"unknown MerkleTree state '{state}'"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "MerkleTree depth must be between 2 and 32"
+        hash.validate caps env
+        index.validate caps env
         pure []
       | .merkleTreeReset state => do
         let some declaration := decls.find? (·.name == state)
