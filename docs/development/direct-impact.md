@@ -241,3 +241,8 @@ The [Lean fixture](../../tests/NestedMerkle.lean) and
 sparse insertion, replacement at capacity, root membership and both resets.
 The native fixture checks exact roots, cursors and retained history. It also
 checks a missing parent, an invalid index and a tampered read result.
+
+The Ledger 9 localnet finalized deployment at height 4 and the combined
+setup and append of both trees at height 7. Both receipts matched the
+predicted state bytes. The relation used k=13 and 2651 rows.
+[Localnet receipt](nested-merkle-localnet-receipt.json)

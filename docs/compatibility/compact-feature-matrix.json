@@ -1276,7 +1276,8 @@
       "observedEvidence": [
         "tests/NestedMerkle.lean",
         "runtime/tests/merkle_nested.rs",
-        "tests/compact/nested-merkle.mjs"
+        "tests/compact/nested-merkle.mjs",
+        "docs/development/nested-merkle-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
