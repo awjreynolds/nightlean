@@ -346,6 +346,7 @@ scoped syntax "when" nlexpr nlupdate : nleffect
 scoped syntax "read" nlpath "as" ident : nleffect
 scoped syntax "readSelf" "as" ident : nleffect
 scoped syntax "member" nlpath "as" ident : nleffect
+scoped syntax "checkRoot" nlpath "against" nlexpr "as" ident : nleffect
 scoped syntax "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
@@ -378,6 +379,7 @@ scoped syntax "when" nlexpr "require" nlexpr : nleffect
 scoped syntax "when" nlexpr "read" nlpath "as" ident : nleffect
 scoped syntax "when" nlexpr "readSelf" "as" ident : nleffect
 scoped syntax "when" nlexpr "member" nlpath "as" ident : nleffect
+scoped syntax "when" nlexpr "checkRoot" nlpath "against" nlexpr "as" ident : nleffect
 scoped syntax "when" nlexpr "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "when" nlexpr "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "when" nlexpr "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
@@ -390,6 +392,10 @@ scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "by" num : nleffect
 scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
 scoped syntax "when" nlexpr "reset" nlpath : nleffect
 scoped syntax "when" nlexpr "insertHash" nlpath ":=" nlexpr : nleffect
+scoped syntax "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
+scoped syntax "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
+scoped syntax "when" nlexpr "insertHashIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
+scoped syntax "when" nlexpr "insertFieldIndex" nlpath "at" nlexpr ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
 scoped syntax "when" nlexpr "remove" nlpath : nleffect
@@ -1513,6 +1519,8 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr read $_path:nlpath as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr readSelf as $_dest:ident) => some condition
   | `(nleffect| when $condition:nlexpr member $_path:nlpath as $_dest:ident) => some condition
+  | `(nleffect| when $condition:nlexpr checkRoot $_path:nlpath against $_expected:nlexpr as $_dest:ident) =>
+    some condition
   | `(nleffect| when $condition:nlexpr tokenBalance($_:nlexpr, $_:nlexpr) as $_:ident)
   | `(nleffect| when $condition:nlexpr tokenBalanceLt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident)
   | `(nleffect| when $condition:nlexpr tokenBalanceGt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident) => some condition
@@ -1525,6 +1533,8 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] by $_amount:num) => some condition
   | `(nleffect| when $condition:nlexpr reset $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr insertHash $_path:nlpath := $_hash:nlexpr) => some condition
+  | `(nleffect| when $condition:nlexpr insertHashIndex $_path:nlpath at $_index:nlexpr := $_hash:nlexpr) => some condition
+  | `(nleffect| when $condition:nlexpr insertFieldIndex $_path:nlpath at $_index:nlexpr := $_leaf:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlleaves) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
@@ -1541,6 +1551,13 @@ private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
   | some parent, none => `(some $parent)
   | some parent, some condition =>
     `(some (Noctium.Backend.Impact.activityGuardWithin $parent $condition))
+
+private def merkleFieldLeafHash (loweredLeaf : TSyntax `term) : CommandElabM (TSyntax `term) := do
+  -- Compact's MerkleTree<_, Fr> leaf hash commits to the domain and canonical Fr bytes.
+  let domain ← `(Noctium.Expr.bytesLiteral 6 [109, 100, 110, 58, 108, 104])
+  let fieldBytes ← `(Noctium.Expr.toBytes32 $loweredLeaf)
+  let preimage ← `(Noctium.Expr.concatBytes $domain $fieldBytes)
+  `(Noctium.Expr.sha256 $preimage)
 
 private def chooseBranchLocalName (env : Bindings) (used : List String) (next : Nat) :
     String × Nat := Id.run do
@@ -2014,6 +2031,15 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| member $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr member $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "member" path destination depth state
+  | `(nleffect| checkRoot $path:nlpath against $expected:nlexpr as $destination:ident)
+  | `(nleffect| when $_:nlexpr checkRoot $path:nlpath against $expected:nlexpr as $destination:ident) => do
+    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let loweredExpected ← checkedExpression state.env expected .native
+    let (readName, updated) ← freshReadName depth state destination
+    let term ← `(Noctium.Effect.merkleTreeCheckRoot
+      $(stringTerm storage.getId.toString) $loweredExpected $(stringTerm readName))
+    state := ← bindReadName {updated with terms := updated.terms.push term}
+      destination.getId.toString readName .bool
   | `(nleffect| $operation:ident $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr $operation:ident $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema operation.getId.toString path destination depth state
@@ -2031,6 +2057,23 @@ private def elaborateEffect (schema : List (String × StateKind))
     let loweredHash ← checkedExpression state.env hash (.bytes 32)
     let term ← `(Noctium.Effect.merkleTreeInsertHash
       $(stringTerm storage.getId.toString) $loweredHash)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| insertHashIndex $path:nlpath at $index:nlexpr := $hash:nlexpr)
+  | `(nleffect| when $_:nlexpr insertHashIndex $path:nlpath at $index:nlexpr := $hash:nlexpr) => do
+    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let loweredIndex ← checkedExpression state.env index (.uint (2 ^ 64 - 1))
+    let loweredHash ← checkedExpression state.env hash (.bytes 32)
+    let term ← `(Noctium.Effect.merkleTreeInsertHashIndex
+      $(stringTerm storage.getId.toString) $loweredHash $loweredIndex)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| insertFieldIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr)
+  | `(nleffect| when $_:nlexpr insertFieldIndex $path:nlpath at $index:nlexpr := $leaf:nlexpr) => do
+    let (storage, _) ← lowerMerkleTreeRoot schema path
+    let loweredIndex ← checkedExpression state.env index (.uint (2 ^ 64 - 1))
+    let loweredLeaf ← checkedExpression state.env leaf .native
+    let leafHash ← merkleFieldLeafHash loweredLeaf
+    let term ← `(Noctium.Effect.merkleTreeInsertHashIndex
+      $(stringTerm storage.getId.toString) $leafHash $loweredIndex)
     state := {state with terms := state.terms.push term}
   | `(nleffect| insert $storage:ident [ $key:nlexpr ] := $value:nlexpr)
   | `(nleffect| when $_:nlexpr insert $storage:ident [ $key:nlexpr ] := $value:nlexpr) => do

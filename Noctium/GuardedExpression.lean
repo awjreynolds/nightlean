@@ -83,6 +83,7 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .uint maximum value => .uint maximum value
   | .bytesField value index => .bytesField (totalize guard value) index
   | .bytesAt value index => .bytesAt (totalize guard value) index
+  | .sha256 value => .sha256 (totalize guard value)
   | .sha512 value => .sha512 (totalize guard value)
   | .keccak256 value => .keccak256 (totalize guard value)
   | .persistentHash32 value => .persistentHash32 (totalize guard value)

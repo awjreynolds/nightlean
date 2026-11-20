@@ -16,3 +16,12 @@ export circuit resetAndCheck(): Boolean {
   claims.resetToDefault();
   return claims.isFull();
 }
+
+export circuit checkCurrent(active: Boolean, expectedRoot: MerkleTreeDigest): Boolean {
+  return disclose(active) ? claims.checkRoot(disclose(expectedRoot)) : false;
+}
+
+export circuit appendAndCheck(hash: Bytes<32>, expectedRoot: MerkleTreeDigest): Boolean {
+  claims.insertHash(disclose(hash));
+  return claims.checkRoot(disclose(expectedRoot));
+}

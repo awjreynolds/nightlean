@@ -52,7 +52,10 @@ inductive Op where
   | subImmediate (amount : Nat)
   | listLength (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeIsFull (slot depth : Nat) (destination : String)
+  | merkleTreeCheckRoot (slot depth : Nat) (expected : Expr .native) (destination : String)
   | merkleTreeInsertHash (slot depth : Nat) (hash : Expr (.bytes 32))
+  | merkleTreeInsertHashIndex (slot depth : Nat) (hash : Expr (.bytes 32))
+      (index : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeReset (slot depth : Nat)
   | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
   | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
@@ -139,6 +142,12 @@ private def merkleTreeIsFullFieldGroups (slot depth : Nat) (destination : String
     [.native 0x01], [.native 0x08],
     [.native 0x0d] ++ (Aligned.bitExpr (.ref destination)).fields]
 
+private def merkleTreeCheckRootFieldGroups (slot : Nat) (expected : Expr .native)
+    (destination : String) : List (List Scalar) :=
+  [[.native 0x30], indexPathFields slot false [], merkleTreeIndexFields 0 false,
+    [.native 0x0a], [.native 0x10, .native 1] ++ (Aligned.field expected).fields,
+    [.native 0x02], [.native 0x0d] ++ (Aligned.bitExpr (.ref destination)).fields]
+
 private def merkleTreeInsertHashFieldGroups (slot : Nat) (hash : Expr (.bytes 32)) :
     List (List Scalar) :=
   [ indexPathFields slot true []
@@ -151,6 +160,29 @@ private def merkleTreeInsertHashFieldGroups (slot : Nat) (hash : Expr (.bytes 32
   , merkleTreeIndexFields 1 true
   , [.native 0x0e, .native 1]
   , [.native 0xa2]
+  ]
+
+private def merkleTreeInsertHashIndexFieldGroups (slot : Nat)
+    (hash : Expr (.bytes 32)) (index : Expr (.uint (2 ^ 64 - 1))) :
+    List (List Scalar) :=
+  [ indexPathFields slot true []
+  , merkleTreeIndexFields 0 true
+  , [.native 0x10, .native 1] ++ (Aligned.counter index).fields
+  , [.native 0x11, .native 1] ++ (Aligned.bytes32 hash).fields
+  , [.native 0x92]
+  , merkleTreeIndexFields 1 true
+  , [.native 0x10, .native 1] ++ (Aligned.counter index).fields
+  , [.native 0x0e, .native 1]
+  , [.native 0x31]
+  , [.native 0x31]
+  , [.native 0x01]
+  , [.native 0x12, .native 2]
+  , [.native 0x0b]
+  , [.native 0x13, .native 2]
+  , [.native 0x40]
+  , [.native 0x0b]
+  , [.native 0x91]
+  , [.native 0xa1]
   ]
 
 private def merkleTreeResetFieldGroups (slot depth : Nat) : List (List Scalar) :=
@@ -279,8 +311,12 @@ def Op.fields : Op → List Scalar
       listIndexFields 2 ++ [.native 0x0c] ++ (Aligned.counter value).fields
   | .merkleTreeIsFull slot depth destination =>
       (merkleTreeIsFullFieldGroups slot depth destination).flatten
+  | .merkleTreeCheckRoot slot _ expected destination =>
+      (merkleTreeCheckRootFieldGroups slot expected destination).flatten
   | .merkleTreeInsertHash slot _ hash =>
       (merkleTreeInsertHashFieldGroups slot hash).flatten
+  | .merkleTreeInsertHashIndex slot _ hash idx =>
+      (merkleTreeInsertHashIndexFieldGroups slot hash idx).flatten
   | .merkleTreeReset slot depth =>
       (merkleTreeResetFieldGroups slot depth).flatten
   | .listHead slot keys _schema values =>
@@ -339,8 +375,12 @@ def Op.fieldGroups : Op → List (List Scalar)
         [.native 0x0c] ++ (Aligned.counter value).fields]
   | .merkleTreeIsFull slot depth destination =>
       merkleTreeIsFullFieldGroups slot depth destination
+  | .merkleTreeCheckRoot slot _ expected destination =>
+      merkleTreeCheckRootFieldGroups slot expected destination
   | .merkleTreeInsertHash slot _ hash =>
       merkleTreeInsertHashFieldGroups slot hash
+  | .merkleTreeInsertHashIndex slot _ hash idx =>
+      merkleTreeInsertHashIndexFieldGroups slot hash idx
   | .merkleTreeReset slot depth =>
       merkleTreeResetFieldGroups slot depth
   | .listHead slot keys _schema values =>
@@ -646,34 +686,44 @@ private def resolveListState (state : List StateDecl) (name : String)
   let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
   schema.listPath keys
 
-private def merkleTreeIsFullOp (state : List StateDecl) (name destination : String) :
-    Except String Op := do
+private def merkleTreeSlotAndDepth (state : List StateDecl) (name : String) :
+    Except String (Nat × Nat) := do
   let slot ← stateSlot state name
   let some declaration := state[slot]? | throw s!"unknown MerkleTree state '{name}'"
   let some depth := declaration.kind.merkleTreeDepth?
     | throw s!"unknown MerkleTree state '{name}'"
   unless 2 ≤ depth && depth ≤ 32 do
     throw "MerkleTree depth must be between 2 and 32"
+  pure (slot, depth)
+
+private def merkleTreeIsFullOp (state : List StateDecl) (name destination : String) :
+    Except String Op := do
+  let (slot, depth) ← merkleTreeSlotAndDepth state name
   pure (.merkleTreeIsFull slot depth destination)
+
+private def merkleTreeCheckRootOp (state : List StateDecl) (name : String)
+    (expected : Expr .native) (destination : String) : Except String Op := do
+  let (slot, depth) ← merkleTreeSlotAndDepth state name
+  pure (.merkleTreeCheckRoot slot depth expected destination)
 
 private def merkleTreeInsertHashOp (state : List StateDecl) (name : String)
     (hash : Expr (.bytes 32)) : Except String Op := do
+  let (slot, depth) ← merkleTreeSlotAndDepth state name
+  pure (.merkleTreeInsertHash slot depth hash)
+
+private def merkleTreeInsertHashIndexOp (state : List StateDecl) (name : String)
+    (hash : Expr (.bytes 32)) (index : Expr (.uint (2 ^ 64 - 1))) : Except String Op := do
   let slot ← stateSlot state name
   let some declaration := state[slot]? | throw s!"unknown MerkleTree state '{name}'"
   let some depth := declaration.kind.merkleTreeDepth?
     | throw s!"unknown MerkleTree state '{name}'"
   unless 2 ≤ depth && depth ≤ 32 do
     throw "MerkleTree depth must be between 2 and 32"
-  pure (.merkleTreeInsertHash slot depth hash)
+  pure (.merkleTreeInsertHashIndex slot depth hash index)
 
 private def merkleTreeResetOp (state : List StateDecl) (name : String) :
     Except String Op := do
-  let slot ← stateSlot state name
-  let some declaration := state[slot]? | throw s!"unknown MerkleTree state '{name}'"
-  let some depth := declaration.kind.merkleTreeDepth?
-    | throw s!"unknown MerkleTree state '{name}'"
-  unless 2 ≤ depth && depth ≤ 32 do
-    throw "MerkleTree depth must be between 2 and 32"
+  let (slot, depth) ← merkleTreeSlotAndDepth state name
   pure (.merkleTreeReset slot depth)
 
 private def expressionNames : Expr ty → List String
@@ -682,7 +732,7 @@ private def expressionNames : Expr ty → List String
   | .foreignFromBytes _ value => expressionNames value
   | .foreignBinary _ left right => expressionNames left ++ expressionNames right
   | .bytesField value _ | .bytesAt value _ => expressionNames value
-  | .sha512 value | .keccak256 value | .persistentHash32 value => expressionNames value
+  | .sha256 value | .sha512 value | .keccak256 value | .persistentHash32 value => expressionNames value
   | .bytes32Literal _ | .bytesLiteral _ _ => []
   | .persistentHashVector32 values => values.flatMap expressionNames
   | .persistentHashNative value => expressionNames value
@@ -788,8 +838,16 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [operation]
       reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .merkleTreeCheckRoot name expected destination => do
+    let operation ← merkleTreeCheckRootOp state name expected destination
+    pure {plan with
+      operations := plan.operations ++ [operation]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
   | .merkleTreeInsertHash name hash => do
     let operation ← merkleTreeInsertHashOp state name hash
+    pure {plan with operations := plan.operations ++ [operation]}
+  | .merkleTreeInsertHashIndex name hash index => do
+    let operation ← merkleTreeInsertHashIndexOp state name hash index
     pure {plan with operations := plan.operations ++ [operation]}
   | .merkleTreeReset name => do
     let operation ← merkleTreeResetOp state name
@@ -1096,6 +1154,14 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some condition, .merkleTreeInsertHash name hash =>
       pure (.merkleTreeInsertHash name
         (totalizeActivityValue condition (expressionNames hash) hash))
+    | some condition, .merkleTreeInsertHashIndex name hash index =>
+      let avoid := expressionNames hash ++ expressionNames index
+      pure (.merkleTreeInsertHashIndex name
+        (totalizeActivityValue condition avoid hash)
+        (totalizeActivityValue condition avoid index))
+    | some condition, .merkleTreeCheckRoot name expected destination =>
+      pure (.merkleTreeCheckRoot name
+        (totalizeActivityValue condition (expressionNames expected) expected) destination)
     | some _, .merkleTreeReset .. => pure effect
     | some condition, .removePath name keys =>
       pure (.removePath name (totalizePathKeys condition keys))
@@ -1135,7 +1201,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
   | some condition, .readContractAddress .. | some condition, .readPath .. | some condition, .readCompositePath .. |
       some condition, .memberPath .. | some condition, .counterRead .. |
       some condition, .listLength .. | some condition, .listHead .. |
-      some condition, .merkleTreeIsFull .. | some condition, .readTokenBalance .. =>
+      some condition, .merkleTreeIsFull .. | some condition, .merkleTreeCheckRoot .. |
+      some condition, .readTokenBalance .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -1159,6 +1226,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
       some condition, .listReset .. | some condition, .merkleTreeInsertHash .. |
+      some condition, .merkleTreeInsertHashIndex .. |
       some condition, .merkleTreeReset .. | some condition, .removePath .. |
       some condition, .claimContractCall .. | some condition, .mintShielded .. |
       some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs .. |
@@ -1300,8 +1368,16 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [operation]
       reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .merkleTreeCheckRoot name expected destination => do
+    let operation ← merkleTreeCheckRootOp state name expected destination
+    plan := {plan with
+      operations := plan.operations ++ [operation]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
   | .merkleTreeInsertHash name hash => do
     let operation ← merkleTreeInsertHashOp state name hash
+    plan := {plan with operations := plan.operations ++ [operation]}
+  | .merkleTreeInsertHashIndex name hash index => do
+    let operation ← merkleTreeInsertHashIndexOp state name hash index
     plan := {plan with operations := plan.operations ++ [operation]}
   | .merkleTreeReset name => do
     let operation ← merkleTreeResetOp state name
@@ -1572,7 +1648,8 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
             .readMember _ destination .. | .readPath _ destination .. |
             .memberPath _ destination .. | .counterRead _ destination .. |
             .readContractAddress destination | .readTokenBalance destination .. |
-            .listLength _ destination .. | .merkleTreeIsFull _ destination => [destination]
+            .listLength _ destination .. | .merkleTreeIsFull _ destination |
+            .merkleTreeCheckRoot _ _ destination => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
         | _ => [])
@@ -1678,8 +1755,12 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("value", Lean.toJson (← value.eval ctx env))])])
   | .merkleTreeIsFull .. =>
     throw "merkleTreeIsFull uses its dedicated native-plan operation JSON"
+  | .merkleTreeCheckRoot .. =>
+    throw "merkleTreeCheckRoot uses its dedicated native-plan operation JSON"
   | .merkleTreeInsertHash .. =>
     throw "merkleTreeInsertHash uses its dedicated native-plan operation JSON"
+  | .merkleTreeInsertHashIndex .. =>
+    throw "merkleTreeInsertHashIndex uses its dedicated native-plan operation JSON"
   | .merkleTreeReset .. =>
     throw "merkleTreeReset uses its dedicated native-plan operation JSON"
   | .listHead slot keys schema values => do
