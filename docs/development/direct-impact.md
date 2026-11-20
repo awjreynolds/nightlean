@@ -209,3 +209,8 @@ NOCTIUM_NATIVE_TEST_ARTIFACTS="$scratch/contract" \
   cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
     --no-default-features --features zkir-321 --test merkle_history -- --ignored
 ```
+
+On Ledger 9 localnet, deployment finalized at height 4. The combined
+append and past-root membership call finalized at height 7. Both
+receipts matched the predicted state bytes. The combined relation used
+k=8 and 245 rows. [Localnet receipt](historic-merkle-localnet-receipt.json)

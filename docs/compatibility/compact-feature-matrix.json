@@ -2776,7 +2776,8 @@
       "observedEvidence": [
         "tests/HistoricMerkle.lean",
         "runtime/tests/merkle_history.rs",
-        "tests/compact/historic-merkle.mjs"
+        "tests/compact/historic-merkle.mjs",
+        "docs/development/historic-merkle-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
@@ -2818,7 +2819,8 @@
       "observedEvidence": [
         "tests/HistoricMerkle.lean",
         "runtime/tests/merkle_history.rs",
-        "tests/compact/historic-merkle.mjs"
+        "tests/compact/historic-merkle.mjs",
+        "docs/development/historic-merkle-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
