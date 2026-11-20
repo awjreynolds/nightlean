@@ -2687,8 +2687,8 @@
       "id": "C-ADT-MERKLETREE-FINDPATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.findPathForLeaf",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ find the first stored match and return no path for missing leaves. Pinned Compact fixtures cover Field, Jubjub, all nine foreign curve roles, and structured and aligned FAB leaves. Search handles shared and collapsed tree nodes without expanding repeated branches.",
       "source": [
         "adt"
       ],
@@ -2696,15 +2696,15 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-MERKLETREE-FIRSTFREE",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.firstFree",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ return the append cursor as canonical decimal across root and nested snapshots. Pinned Compact cases cover an empty tree and a sparse write in a two-key map.",
       "source": [
         "adt"
       ],
@@ -2712,15 +2712,15 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-MERKLETREE-PATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.pathForLeaf",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ match Compact candidate roots and siblings for matching and substituted leaves. Indexed reads accept materialized sparse branches, including at the append cursor, and reject missing or out-of-capacity branches.",
       "source": [
         "adt"
       ],
@@ -2728,15 +2728,15 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-MERKLETREE-ROOT",
       "layer": "host-ledger-view",
       "surface": "MerkleTree.root",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ return the same root for named root and nested trees. The pinned Compact oracle qualifies insertion roots for checked Field, curve, structured and aligned FAB leaves.",
       "source": [
         "adt"
       ],
@@ -2744,8 +2744,8 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-CHECKROOT",
@@ -2904,8 +2904,8 @@
       "id": "C-ADT-HISTORICMERKLETREE-FINDPATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.findPathForLeaf",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ reproduce stored-leaf paths for historic trees across the pinned curve and structured corpus. Missing leaves return no path.",
       "source": [
         "adt"
       ],
@@ -2913,15 +2913,15 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-FIRSTFREE",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.firstFree",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ report the historic append cursor, including the full-capacity sentinel after a sparse indexed write. The values match the pinned Compact snapshot.",
       "source": [
         "adt"
       ],
@@ -2929,15 +2929,15 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-HISTORY",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.history",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ page historic digests from the same tagged state. The collected digest set and root agree with the pinned Compact snapshot.",
       "source": [
         "adt"
       ],
@@ -2945,15 +2945,15 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-PATHFORLEAF",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.pathForLeaf",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ return candidate roots separately from the snapshot root, with sibling order matching pinned Compact. Checked lookup requires a stored match.",
       "source": [
         "adt"
       ],
@@ -2961,15 +2961,15 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-ADT-HISTORICMERKLETREE-ROOT",
       "layer": "host-ledger-view",
       "surface": "HistoricMerkleTree.root",
-      "noctiumStatus": "missing",
-      "notes": "Off-chain read API, not callable from Compact circuits.",
+      "noctiumStatus": "equivalent",
+      "notes": "Rust and C++ return the current historic digest from root and nested snapshots. The pinned Compact oracle agrees on append and sparse indexed states.",
       "source": [
         "adt"
       ],
@@ -2977,8 +2977,8 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": ["runtime/src/merkle.rs", "runtime/src/collection_ffi.rs", "runtime/tests/merkle_reads.rs", "runtime/tests/collection_cpp_smoke.cpp", "runtime/tests/fixtures/merkle-curve-leaves/compact-0.36.1.json", "tests/compact/CurveMerkle.compact", "tests/compact/curve-merkle.mjs", "tests/compact/CurveFabMerkle.compact", "tests/compact/curve-fab-merkle.mjs", "tests/compact/NestedMerkle.compact", "tests/compact/nested-merkle.mjs", "tests/compact/MerklePathRootNoLeafHash.compact", "tests/compact/merkle-structured-path.mjs", "docs/development/native-client-abi.md#read-merkle-snapshots"],
+      "equivalence": "verified"
     },
     {
       "id": "C-STDLIB-MAYBE",

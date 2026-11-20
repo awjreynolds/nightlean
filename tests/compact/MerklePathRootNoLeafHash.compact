@@ -1,0 +1,70 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export circuit hashPair(left: Field, right: Field): Field {
+  return disclose(transientHash<Vector<2, Field>>([left, right]));
+}
+
+export circuit digestFromPath(path: MerkleTreePath<2, Bytes<32>>): Field {
+  return disclose(merkleTreePathRootNoLeafHash<2>(path).field);
+}
+
+export circuit checkNativePath(root: Field, path: MerkleTreePath<2, Field>): [] {
+  assert(merkleTreePathRoot<2, Field>(path).field == root, "Merkle path root mismatch");
+}
+
+export enum LeafMarker { Only }
+
+export struct MixedMerkleLeaf {
+  tag: Bytes<3>;
+  details: [Boolean, Uint<16>, LeafMarker];
+}
+
+export circuit checkTypedPath(root: Field, path: MerkleTreePath<2, MixedMerkleLeaf>): [] {
+  assert(merkleTreePathRoot<2, MixedMerkleLeaf>(path).field == root, "Merkle path root mismatch");
+}
+
+export circuit typedPathRoot(path: MerkleTreePath<2, MixedMerkleLeaf>): Field {
+  return disclose(merkleTreePathRoot<2, MixedMerkleLeaf>(path).field);
+}
+
+export ledger claims: MerkleTree<2, MixedMerkleLeaf>;
+export ledger archives: HistoricMerkleTree<2, MixedMerkleLeaf>;
+
+export circuit append(leaf: MixedMerkleLeaf): [] {
+  claims.insert(disclose(leaf));
+}
+
+export circuit appendHistoric(leaf: MixedMerkleLeaf): [] {
+  archives.insert(disclose(leaf));
+}
+
+export circuit setIndex(leaf: MixedMerkleLeaf): [] {
+  claims.insertIndex(disclose(leaf), 3);
+}
+
+export circuit setHistoricIndex(leaf: MixedMerkleLeaf): [] {
+  archives.insertIndex(disclose(leaf), 3);
+}
+
+export circuit setDefault(index: Uint<64>): [] {
+  claims.insertIndexDefault(disclose(index));
+}
+
+export circuit setHistoricDefault(index: Uint<64>): [] {
+  archives.insertIndexDefault(disclose(index));
+}
+
+export struct FabPayload {
+  octets: Bytes<32>;
+  flag: Boolean;
+  counter: Uint<16>;
+  marker: LeafMarker;
+  anchor: Field;
+}
+
+export circuit fabHashes(payload: FabPayload, opening: Bytes<32>, nonce: Field):
+    [Bytes<32>, Bytes<32>, Field, Field] {
+  return [persistentHash<FabPayload>(payload), persistentCommit<FabPayload>(payload, opening),
+          transientHash<FabPayload>(payload), transientCommit<FabPayload>(payload, nonce)];
+}

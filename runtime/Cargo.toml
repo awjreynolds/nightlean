@@ -43,7 +43,7 @@ libc = { version = "0.2", optional = true }
 ledger = { package = "midnight-ledger-v9", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 onchain-runtime = { package = "midnight-onchain-runtime", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 base-crypto = { package = "midnight-base-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
-transient-crypto = { package = "midnight-transient-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
+transient-crypto = { package = "midnight-transient-crypto", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74", features = ["public-internal-structure"] }
 serialize = { package = "midnight-serialize", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
 storage = { package = "midnight-storage", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74", default-features = false }
 coin-structure = { package = "midnight-coin-structure", git = "https://github.com/midnightntwrk/midnight-ledger", rev = "a2b30128ca4b660b73a068e29b56b48ede8c9a74" }
