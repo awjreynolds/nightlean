@@ -1110,6 +1110,16 @@ pub enum Instruction {
         entry_point_hash: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "mintShielded")]
+    MintShielded {
+        domain: Expr,
+        amount: Expr,
+    },
+    #[serde(rename = "mintUnshielded")]
+    MintUnshielded {
+        domain: Expr,
+        amount: Expr,
+    },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
         address: Expr,
@@ -1204,6 +1214,9 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             }
         }
         Instruction::ClaimContractCall { .. } => vec![1, 4, 1, 1, 11, 2, 2, 1, 1],
+        Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
+            MINT_FIELD_COUNTS.to_vec()
+        }
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
         Instruction::EmitEvent { tag, .. } => {
             vec![13 + event_payload_length(*tag)?.div_ceil(31), 1]
@@ -1227,6 +1240,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     Ok(match instruction {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
+        Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
+            impact_field_counts(instruction, plan)?.into_iter().sum()
+        }
         Instruction::RequireContractCaller { .. } => 15,
         Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
@@ -1278,6 +1294,8 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
         .pop()
         .ok_or_else(|| anyhow!("invalid map key schema"))
 }
+
+const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
 
 fn reject_unqualified_foreign_storage(ty: &ScalarType) -> Result<()> {
     #[cfg(feature = "zkir-321")]
@@ -2390,6 +2408,51 @@ fn push_native_state(value: StateValue<Db>, storage: bool) -> Result<Op<ResultMo
     })
 }
 
+fn mint_amount(amount: &Expr, env: &Environment) -> Result<u64> {
+    let Value::UInt { number, maximum } = evaluate(amount, env)? else {
+        bail!("mint amount must be UInt64");
+    };
+    ensure!(maximum == u64::MAX.into(), "mint amount must be UInt64");
+    Ok(number.try_into()?)
+}
+
+fn append_token_accumulation(
+    program: &mut Program,
+    slot: u8,
+    key: AlignedValue,
+    amount: AlignedValue,
+) -> Result<Op<ResultModeVerify, Db>> {
+    program.extend([
+        Op::Swap { n: 0 },
+        Op::Idx {
+            cached: true,
+            push_path: true,
+            path: vec![Key::Value(
+                AlignedValue::from(slot).try_into().expect("u8 index"),
+            )]
+            .try_into()?,
+        },
+        push_native_state(StateValue::Cell(Sp::new(key)), false)?,
+        Op::Dup { n: 1 },
+        Op::Dup { n: 1 },
+        Op::Member,
+        push_native_state(StateValue::Cell(Sp::new(amount)), false)?,
+        Op::Swap { n: 0 },
+        Op::Neg,
+        Op::Branch { skip: 4 },
+        Op::Dup { n: 2 },
+        Op::Dup { n: 2 },
+        Op::Idx {
+            cached: true,
+            push_path: false,
+            path: vec![Key::Stack].try_into()?,
+        },
+        Op::Add,
+        Op::Ins { cached: true, n: 2 },
+    ]);
+    Ok(Op::Swap { n: 0 })
+}
+
 fn record_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
     tree_schema_at_path(plan, slot, depth)?
         .get("composite")
@@ -2783,6 +2846,10 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::MintShielded { domain, amount }
+        | Instruction::MintUnshielded { domain, amount } => {
+            probe_expressions([domain, amount], plan, env, deferred_outputs)
+        }
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
@@ -2889,6 +2956,8 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::ClaimContractCall { .. }
+                | Instruction::MintShielded { .. }
+                | Instruction::MintUnshielded { .. }
                 | Instruction::RequireContractCaller { .. }
                 | Instruction::EmitEvent { .. }
         ),
@@ -3199,6 +3268,8 @@ impl PreparationCursor {
                             | Instruction::ListReset { .. }
                             | Instruction::MapRemove { .. }
                             | Instruction::ClaimContractCall { .. }
+                            | Instruction::MintShielded { .. }
+                            | Instruction::MintUnshielded { .. }
                             | Instruction::RequireContractCaller { .. }
                             | Instruction::EmitEvent { .. }
                     ),
@@ -3932,6 +4003,16 @@ impl PreparationCursor {
                 );
                 program.extend(claim_ops[..8].iter().cloned());
                 claim_ops[8].clone()
+            }
+            Instruction::MintShielded { domain, amount } => {
+                let domain = claim_hash_output(evaluate(domain, &env)?, "shielded mint domain")?;
+                let amount = mint_amount(amount, &env)?;
+                append_token_accumulation(program, 4, domain.into(), amount.into())?
+            }
+            Instruction::MintUnshielded { domain, amount } => {
+                let domain = claim_hash_output(evaluate(domain, &env)?, "unshielded mint domain")?;
+                let amount = mint_amount(amount, &env)?;
+                append_token_accumulation(program, 5, domain.into(), amount.into())?
             }
             Instruction::RequireContractCaller { address } => {
                 consume_contract_caller_reads(plan, &mut read_index, instruction_guard)?;

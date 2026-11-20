@@ -280,6 +280,8 @@ scoped syntax nlpath "[" nlexpr "]" : nlpath
 declare_syntax_cat nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
 declare_syntax_cat nleventfield
 scoped syntax ident ":=" nlexpr : nleventfield
@@ -1753,6 +1755,16 @@ private def elaborateEffect (schema : List (String × StateKind))
       let entryPointHash ← checkedExpression state.env entryPointHash (.bytes 32)
       let commitment ← checkedExpression state.env commitment .native
       let term ← `(Noctium.Effect.claimContractCall $address $entryPointHash $commitment)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| mintShielded($domain:nlexpr, $amount:nlexpr)) => do
+      let domain ← checkedExpression state.env domain (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
+      let term ← `(Noctium.Effect.mintShielded $domain $amount)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| mintUnshielded($domain:nlexpr, $amount:nlexpr)) => do
+      let domain ← checkedExpression state.env domain (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
+      let term ← `(Noctium.Effect.mintUnshielded $domain $amount)
       state := {state with terms := state.terms.push term}
     | `(nlupdate| requireContractCaller($address:nlexpr)) => do
       let address ← checkedExpression state.env address (.bytes 32)

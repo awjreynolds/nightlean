@@ -66,3 +66,21 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Record standalone token mints
+
+```lean
+when enabled mintShielded(domain, disclose(amount))
+when enabled mintUnshielded(domain, disclose(amount))
+```
+
+Both effects take a 32-byte domain and a `UInt 64` amount. The domain, amount
+and guard must be public or explicitly disclosed. Active effects accumulate by
+domain in separate shielded and unshielded mint maps. Accumulation beyond
+`UInt 64` fails. The ledger derives each token type from the issuer address
+and domain. These effects record issuance. A transfer or settlement requires
+its own ledger effects and transaction outputs.
+
+The [Lean fixture](../../tests/NativeStandaloneMints.lean) and
+[Compact reference fixture](../../tests/compact/StandaloneMints.compact)
+exercise guarded minting, separate effects and the accumulation limit.

@@ -432,6 +432,8 @@ inductive Effect where
   transcript slot. The commitment is the native transient input/output hash.
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
+  | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | requireContractCaller (address : Expr (.bytes 32))
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
@@ -996,7 +998,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
-          .claimContractCall .. | .requireContractCaller .. | .emitEvent .. |
+          .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+          .requireContractCaller .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -1027,6 +1030,10 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         address.validate caps env
         entryPointHash.validate caps env
         commitment.validate caps env
+        pure []
+      | .mintShielded domain amount | .mintUnshielded domain amount => do
+        domain.validate caps env
+        amount.validate caps env
         pure []
       | .requireContractCaller address => do
         address.validate caps env

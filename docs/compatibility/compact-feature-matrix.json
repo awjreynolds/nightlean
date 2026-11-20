@@ -1802,8 +1802,8 @@
       "id": "C-ADT-KERNEL-MINTSHIELDED",
       "layer": "language-ledger",
       "surface": "Kernel.mintShielded",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Guarded native shielded mint by Bytes32 domain, with UInt64 amounts and accumulation. Transfer and settlement require separate ledger effects.",
       "source": [
         "adt"
       ],
@@ -1812,15 +1812,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeStandaloneMints.lean",
+        "tests/compact/standalone-mints.mjs",
+        "runtime/tests/native_standalone_mints.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-MINTUNSHIELDED",
       "layer": "language-ledger",
       "surface": "Kernel.mintUnshielded",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Guarded native unshielded mint by Bytes32 domain, with UInt64 amounts and accumulation. Transfer and settlement require separate ledger effects.",
       "source": [
         "adt"
       ],
@@ -1829,7 +1833,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeStandaloneMints.lean",
+        "tests/compact/standalone-mints.mjs",
+        "runtime/tests/native_standalone_mints.rs"
+      ],
       "equivalence": "unverified"
     },
     {

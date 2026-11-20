@@ -175,7 +175,8 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | none, _ => pure []
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
       | some condition, .writeCell .. | some condition, .writeMap ..
-      | some condition, .claimContractCall .. | some condition, .requireContractCaller ..
+      | some condition, .claimContractCall .. | some condition, .mintShielded ..
+      | some condition, .mintUnshielded .. | some condition, .requireContractCaller ..
       | some condition, .emitEvent ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .insertPath .. | some condition, .writePath ..
@@ -227,6 +228,14 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
         (← expression env span entryPointHash) activeControl
       checkSink {description := "contract-call claim commitment", span}
         (← expression env span commitment) activeControl
+    | .mintShielded domain amount =>
+      let sink := {description := "public shielded mint", span}
+      checkSink sink (← expression env span domain) activeControl
+      checkSink sink (← expression env span amount) activeControl
+    | .mintUnshielded domain amount =>
+      let sink := {description := "public unshielded mint", span}
+      checkSink sink (← expression env span domain) activeControl
+      checkSink sink (← expression env span amount) activeControl
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl

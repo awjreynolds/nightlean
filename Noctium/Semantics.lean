@@ -655,11 +655,33 @@ structure LedgerState where
   maps : List (String × List (Value × Value)) := []
   trees : List (String × LedgerValue) := []
   events : List (EventKind × List Nat) := []
+  shieldedMints : List (List Nat × Nat) := []
+  unshieldedMints : List (List Nat × Nat) := []
   deriving Repr, BEq
 
 /-- The source evaluator replaces an entry and places it first in the association list. -/
 def updateAssoc [BEq α] (key : α) (value : β) (entries : List (α × β)) : List (α × β) :=
   (key, value) :: entries.filter (fun item => !(item.1 == key))
+
+private def accumulateMintAmount (entries : List (List Nat × Nat))
+    (domain : List Nat) (amount : Nat) : Except String (List (List Nat × Nat)) := do
+  let total := (entries.lookup domain).getD 0 + amount
+  unless total < 2 ^ 64 do throw "accumulated token effects exceed the native UInt64 sum"
+  pure (updateAssoc domain total entries)
+
+private def mintShielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1))) :
+    Except String LedgerState := do
+  let mints ← accumulateMintAmount state.shieldedMints
+    (← domain.eval ctx env) (← amount.eval ctx env)
+  pure {state with shieldedMints := mints}
+
+private def mintUnshielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1))) :
+    Except String LedgerState := do
+  let mints ← accumulateMintAmount state.unshieldedMints
+    (← domain.eval ctx env) (← amount.eval ctx env)
+  pure {state with unshieldedMints := mints}
 
 private def evaluatePath (ctx : EvalContext) (env : EvalEnv) (keys : List PathKey) :
     Except String (List Value) := keys.mapM fun key => match key with
@@ -775,6 +797,10 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .claimContractCall .. =>
       throw "reference evaluator does not execute cross-contract claims"
+    | .mintShielded domain amount =>
+      next ← mintShielded ctx env next domain amount
+    | .mintUnshielded domain amount =>
+      next ← mintUnshielded ctx env next domain amount
     | .emitEvent kind payload =>
       next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
@@ -938,7 +964,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
-            .claimContractCall .. | .requireContractCaller .. | .emitEvent .. => pure ()
+            .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+            .requireContractCaller .. | .emitEvent .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -970,6 +997,10 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           if !(← condition.eval ctx env) then throw "state transition guard failed"
         | .claimContractCall .. =>
           throw "reference evaluator does not execute cross-contract claims"
+        | .mintShielded domain amount =>
+          next ← mintShielded ctx env next domain amount
+        | .mintUnshielded domain amount =>
+          next ← mintUnshielded ctx env next domain amount
         | .emitEvent kind payload =>
           next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
@@ -1131,6 +1162,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
+            .mintShielded .. | .mintUnshielded .. |
             .requireContractCaller .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
