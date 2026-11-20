@@ -4223,6 +4223,8 @@ pub use artifacts::ContractBundleSet;
 /// Native private transaction artifact assembly.
 pub mod assembly;
 mod composition_wire;
+/// Bounded replies for an explicit browser transaction host.
+pub mod browser_transport;
 
 /// Scoped host providers and private journal transport.
 pub mod host;

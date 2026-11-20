@@ -79,3 +79,7 @@ required-features = ["localnet", "zkir-321"]
 [[example]]
 name = "confidential_token_localnet"
 required-features = ["localnet", "zkir-321"]
+
+[[example]]
+name = "browser_localnet_provider"
+required-features = ["localnet", "zkir-321"]

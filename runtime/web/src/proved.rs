@@ -16,7 +16,11 @@ use serde_json::Value;
 use wasm_bindgen::{JsCast, prelude::*};
 use zeroize::Zeroizing;
 
-use crate::{MAX_BYTES, input};
+use crate::{
+    MAX_BYTES,
+    client::{BrowserClient, MAX_DESCRIPTOR},
+    input,
+};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -234,6 +238,31 @@ pub struct BrowserProvedCall(WitnessProvedCall);
 
 #[wasm_bindgen]
 impl BrowserProvedCall {
+    /// Start the proved call with its original private source Runtime.
+    #[wasm_bindgen(js_name = startCallClient)]
+    pub fn start_call_client(&mut self, descriptor: &Uint8Array) -> Result<BrowserClient, JsValue> {
+        let descriptor = input(descriptor, MAX_DESCRIPTOR)?;
+        self.0
+            .start_call_client(&descriptor)
+            .map(BrowserClient)
+            .map_err(execution_failure)
+    }
+
+    /// Start deployment for the same proved call with a separate host context.
+    #[wasm_bindgen(js_name = startDeploymentClient)]
+    pub fn start_deployment_client(
+        &mut self,
+        descriptor: &Uint8Array,
+        setup: &Uint8Array,
+    ) -> Result<BrowserClient, JsValue> {
+        let descriptor = input(descriptor, MAX_DESCRIPTOR)?;
+        let setup = input(setup, MAX_BYTES)?;
+        self.0
+            .start_deployment_client(&descriptor, &setup)
+            .map(BrowserClient)
+            .map_err(execution_failure)
+    }
+
     /// Public projection of an unsealed call. The source Runtime and opening stay in WASM.
     #[wasm_bindgen(js_name = publicIntent)]
     pub fn public_intent(&self) -> Result<Uint8Array, JsValue> {
