@@ -90,6 +90,11 @@ paths. The [native test](../../runtime/tests/native_checkpoint.rs) reads the
 actual emitted ZKIR and Impact plan, checks the ordered marker and rejects a
 changed marker.
 
+Ledger 9 localnet finalized the deployment at height 4 and the
+active-checkpoint call at height 7. Both receipts matched the
+predicted state bytes. The relation used k=7 and 68 rows.
+[Localnet receipt](native-checkpoint-localnet-receipt.json)
+
 The current SDK checks a finalized receipt against the full predicted state.
 Reconciliation for a finalized guaranteed-prefix outcome requires its own
-receipt and private-journal handling.
+receipt and private-journal handling. [Prefix-only receipt tracking](https://github.com/awjreynolds/noctium/issues/134)

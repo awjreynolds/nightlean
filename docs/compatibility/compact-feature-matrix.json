@@ -1679,7 +1679,8 @@
       "observedEvidence": [
         "tests/NativeCheckpoint.lean",
         "runtime/tests/native_checkpoint.rs",
-        "tests/compact/checkpoint.mjs"
+        "tests/compact/checkpoint.mjs",
+        "docs/development/native-checkpoint-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
