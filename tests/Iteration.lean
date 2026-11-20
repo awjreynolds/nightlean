@@ -491,10 +491,64 @@ private def nominalTupleSequence : Term := .composite
     inferredTupleIdentity)
   "tuple sequence elements have no common type"
 
+private def emptyTupleSequence : Term := .composite (.tuple []) []
+
+private def emptyTupleNamedProgram : Program := {
+  unitMainProgram with declarations := unitMainProgram.declarations ++ [
+    {id := ⟨0, 1⟩, name := "emptyTupleIdentity", parameters := [⟨"value", .native⟩],
+      result := .scalar .native, body := [.return (some (.ref "value"))]},
+    {id := ⟨0, 2⟩, name := "emptyTupleFold", parameters := [⟨"acc", .native⟩, ⟨"value", .native⟩],
+      result := .scalar .native, body := [.return (some (.ref "acc"))]}
+  ]
+}
+
+private def emptyTupleMapOperator : Operator := .anonymous [
+  {name := "value", type := some (.scalar .native)}] none [
+  .return (some (.ref "value"))]
+
+private def emptyTupleFoldOperator : Operator := .anonymous [
+  {name := "acc", type := some (.scalar .native)},
+  {name := "value", type := some (.scalar .native)}] none [
+  .return (some (.ref "acc"))]
+
+-- Empty tuples carry no element type. Explicit callback annotations and named
+-- operator signatures provide the only type evidence for these zero-call cases.
+#guard match Iteration.mapWithLimits {} unitMainProgram 0 [] {}
+    [emptyTupleSequence] emptyTupleMapOperator with
+  | .ok (program, term) =>
+    compilesMain program (.composite (.vector 0 (.scalar .native))) term
+  | .error _ => false
+
+#guard match Iteration.mapWithLimits {} emptyTupleNamedProgram 0 [] {}
+    [emptyTupleSequence] (.named "emptyTupleIdentity") with
+  | .ok (program, term) =>
+    compilesMain program (.composite (.vector 0 (.scalar .native))) term
+  | .error _ => false
+
+#guard match Iteration.foldWithLimits {} unitMainProgram 0 [] {}
+    (.native 5) [emptyTupleSequence] emptyTupleFoldOperator with
+  | .ok (program, term) => compilesMain program (.scalar .native) term
+  | .error _ => false
+
+#guard match Iteration.foldWithLimits {} emptyTupleNamedProgram 0 [] {}
+    (.native 5) [emptyTupleSequence] (.named "emptyTupleFold") with
+  | .ok (program, term) => compilesMain program (.scalar .native) term
+  | .error _ => false
+
 #guard errorContains
   (Iteration.mapWithLimits {} unitMainProgram 0 [] {}
-    [.composite (.tuple []) []] tupleIdentityOperator)
-  "tuple sequence has no element type"
+    [emptyTupleSequence]
+    (.anonymous [{name := "value"}] none [.return (some (.ref "value"))]))
+  "explicit type for operator parameter 'value'"
+
+#guard errorContains
+  (Iteration.mapWithLimits {} {emptyTupleNamedProgram with declarations :=
+    emptyTupleNamedProgram.declarations ++ [{
+      id := ⟨0, 3⟩, name := "emptyTupleIdentity"
+      parameters := [⟨"value", .bool⟩], result := .scalar .bool
+      body := [.return (some (.ref "value"))]}]} 0 [] {}
+    [emptyTupleSequence] (.named "emptyTupleIdentity"))
+  "ambiguous helper overload 'emptyTupleIdentity'"
 
 private def multiSumOperator : Operator := .anonymous [
   {name := "acc", type := some (.scalar .native)},

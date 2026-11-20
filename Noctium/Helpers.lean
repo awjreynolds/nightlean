@@ -984,8 +984,13 @@ private def compatible (arguments : List ResultType) (declaration : Declaration)
       subtype actual (declaration.parameterType parameter)
 
 private def helperCandidate (scope : Nat) (name : String)
-    (arguments : List ResultType) (declaration : Declaration) : Bool :=
-  declaration.id.scope == scope && declaration.name == name && compatible arguments declaration
+    (arguments : List (Option ResultType)) (declaration : Declaration) : Bool :=
+  declaration.id.scope == scope && declaration.name == name &&
+    arguments.length == declaration.parameters.length &&
+    (arguments.zip declaration.parameters).all fun (actual, parameter) =>
+      match actual with
+      | none => true
+      | some actual => subtype actual (declaration.parameterType parameter)
 
 private def selectCandidates (span : SourceSpan) (name : String) :
     List Declaration → Except Diagnostic (Option Declaration)
@@ -994,7 +999,8 @@ private def selectCandidates (span : SourceSpan) (name : String) :
   | [] => pure none
 
 /-- Search one lexical group at a time. An ambiguous inner group never falls back. -/
-private def resolveUnchecked (program : Program) (scope : Nat) (name : String) (arguments : List ResultType)
+private def resolveUncheckedPartial (program : Program) (scope : Nat) (name : String)
+    (arguments : List (Option ResultType))
     (span : SourceSpan := {}) : Except Diagnostic Declaration := go (program.scopes.length + 1) scope
 where
   go : Nat → Nat → Except Diagnostic Declaration
@@ -1012,6 +1018,10 @@ where
           | some parent => go fuel parent
           | none => fail span s!"no compatible helper overload '{name}'"
 
+private def resolveUnchecked (program : Program) (scope : Nat) (name : String)
+    (arguments : List ResultType) (span : SourceSpan := {}) : Except Diagnostic Declaration :=
+  resolveUncheckedPartial program scope name (arguments.map some) span
+
 def resolveWithLimits (limits : Limits) (program : Program) (scope : Nat) (name : String)
     (arguments : List ResultType) (span : SourceSpan := {}) : Except Diagnostic Declaration := do
   discard (sourcePreflight limits program)
@@ -1020,12 +1030,23 @@ def resolveWithLimits (limits : Limits) (program : Program) (scope : Nat) (name 
   if arguments.length > limits.maxParameters then resource span "call arguments"
   resolveUnchecked program scope name arguments span
 
+/-- Resolve a helper when some argument types are not known yet. An omitted
+type matches any parameter, while known arguments keep ordinary subtype checks. -/
+def resolveWithPartialTypes (limits : Limits) (program : Program) (scope : Nat) (name : String)
+    (arguments : List (Option ResultType)) (span : SourceSpan := {}) :
+    Except Diagnostic Declaration := do
+  discard (sourcePreflight limits program)
+  spanMetadata span
+  textMetadata name
+  if arguments.length > limits.maxParameters then resource span "call arguments"
+  resolveUncheckedPartial program scope name arguments span
+
 def resolve (program : Program) (scope : Nat) (name : String) (arguments : List ResultType)
     (span : SourceSpan := {}) : Except Diagnostic Declaration :=
   resolveWithLimits {} program scope name arguments span
 
 private theorem helperCandidate_mapDeclarationBody (transform : List Statement → List Statement)
-    (scope : Nat) (name : String) (arguments : List ResultType) (declaration : Declaration) :
+    (scope : Nat) (name : String) (arguments : List (Option ResultType)) (declaration : Declaration) :
     helperCandidate scope name arguments (mapDeclarationBody transform declaration) =
       helperCandidate scope name arguments declaration := by
   cases declaration
@@ -1033,7 +1054,7 @@ private theorem helperCandidate_mapDeclarationBody (transform : List Statement �
 
 private theorem filterHelperCandidates_mapDeclarationBody
     (transform : List Statement → List Statement) (scope : Nat) (name : String)
-    (arguments : List ResultType) (declarations : List Declaration) :
+    (arguments : List (Option ResultType)) (declarations : List Declaration) :
     (declarations.map (mapDeclarationBody transform)).filter
         (helperCandidate scope name arguments) =
       (declarations.filter (helperCandidate scope name arguments)).map
@@ -1055,19 +1076,19 @@ private theorem selectCandidates_mapDeclarationBody
     | nil => rfl
     | cons second tail => rfl
 
-private theorem resolveUnchecked_go_mapDeclarationBodies
+private theorem resolveUncheckedPartial_go_mapDeclarationBodies
     (transform : List Statement → List Statement) (program : Program)
-    (name : String) (arguments : List ResultType) (span : SourceSpan) :
+    (name : String) (arguments : List (Option ResultType)) (span : SourceSpan) :
     ∀ fuel scope,
-      resolveUnchecked.go (mapDeclarationBodies transform program) name arguments span fuel scope =
-        (resolveUnchecked.go program name arguments span fuel scope).map
+      resolveUncheckedPartial.go (mapDeclarationBodies transform program) name arguments span fuel scope =
+        (resolveUncheckedPartial.go program name arguments span fuel scope).map
           (mapDeclarationBody transform) := by
   intro fuel
   induction fuel with
-  | zero => intro scope; simp [resolveUnchecked.go, fail, Except.map]
+  | zero => intro scope; simp [resolveUncheckedPartial.go, fail, Except.map]
   | succ fuel ih =>
       intro scope
-      unfold resolveUnchecked.go
+      unfold resolveUncheckedPartial.go
       rw [mapDeclarationBodies_scopes]
       cases hgroup : program.scopes.find? (fun x => x.id == scope) with
       | none => simp [hgroup, fail, Except.map, Except.bind]
@@ -1104,9 +1125,10 @@ private theorem resolveUnchecked_mapDeclarationBodies
     (scope : Nat) (name : String) (arguments : List ResultType) (span : SourceSpan) :
     resolveUnchecked (mapDeclarationBodies transform program) scope name arguments span =
       (resolveUnchecked program scope name arguments span).map (mapDeclarationBody transform) := by
-  unfold resolveUnchecked
+  unfold resolveUnchecked resolveUncheckedPartial
   rw [mapDeclarationBodies_scopes]
-  exact resolveUnchecked_go_mapDeclarationBodies transform program name arguments span _ _
+  exact resolveUncheckedPartial_go_mapDeclarationBodies transform program name
+    (arguments.map some) span _ _
 
 private theorem sourcePreflight_result_of_admitted (limits : Limits) (program : Program)
     (admitted : syntacticPreflight limits program = .ok ()) :

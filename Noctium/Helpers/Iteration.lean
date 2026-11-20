@@ -352,6 +352,32 @@ private def materializeOperator (limits : Limits) (program : Program) (scope : N
     let program ← addCheckedDeclaration limits program declaration
     pure {program, name, captures, parameters := parameters.map Prod.snd, result := returnType}
 
+/-- Empty tuples have no element type. An operator signature can supply the
+type needed to check the callback without assigning a fabricated source type. -/
+private def completeOperatorArgumentTypes (limits : Limits) (program : Program) (scope : Nat)
+    (env : Environment) (span : SourceSpan) (operator : Operator)
+    (actualTypes : List (Option ResultType)) :
+    Except Diagnostic (List ResultType) := do
+  if actualTypes.all Option.isSome then
+    return actualTypes.map Option.get!
+  match operator with
+  | .anonymous specifications _ _ => do
+    if specifications.length != actualTypes.length then
+      failAt span "anonymous operator argument count mismatch"
+    (specifications.zip actualTypes).mapM fun (specification, actual) =>
+      match actual, specification.type with
+      | some actual, _ => pure actual
+      | none, some annotated => pure annotated
+      | none, none => failAt span
+          s!"empty tuple sequence requires an explicit type for operator parameter '{specification.name}'"
+  | .named name => do
+    if (environmentType env name).isSome then
+      failAt span s!"helper '{name}' is hidden by a value binding"
+    let declaration ← Noctium.Helpers.resolveWithPartialTypes limits program scope name
+      actualTypes span
+    (actualTypes.zip declaration.parameters).mapM fun (actual, parameter) =>
+      pure (actual.getD (declaration.parameterType parameter))
+
 private def actualArgumentTypes (limits : Limits) (program : Program) (scope : Nat)
     (env : Environment) (span : SourceSpan) (arguments : List Term) :
     Except Diagnostic (List ResultType) := do
@@ -466,16 +492,16 @@ private inductive SequenceProjection where
 private structure SequenceDescriptor where
   sourceType : ResultType
   length : Nat
-  elementType : ResultType
+  elementType : Option ResultType
   projection : SequenceProjection
   deriving Repr
 
 private def commonSequenceElementType (span : SourceSpan)
-    (elements : List Types.CompositeType) : Except Diagnostic ResultType := do
+    (elements : List Types.CompositeType) : Except Diagnostic (Option ResultType) := do
   let types := elements.map resultTypeOfComposite
   match types with
-  | [] => failAt span "tuple sequence has no element type"
-  | first :: rest => rest.foldlM (fun common next =>
+  | [] => pure none
+  | first :: rest => some <$> rest.foldlM (fun common next =>
       match Noctium.Helpers.commonType common next with
       | some joined => pure joined
       | none => failAt span "tuple sequence elements have no common type") first
@@ -487,7 +513,7 @@ private def sequenceDescriptor (limits : Limits) (program : Program) (scope : Na
   let descriptor ← match sourceType with
     | .composite (.vector length element) => do
       discard (checkedComposite program span (.vector length element))
-      pure (SequenceDescriptor.mk sourceType length (resultTypeOfComposite element) .vector)
+      pure (SequenceDescriptor.mk sourceType length (some (resultTypeOfComposite element)) .vector)
     | .composite (.tuple elements) => do
       if elements.length > Types.defaultLimits.maxVectorLength then
         failAt span "helper resource limit exceeded: iteration tuple length"
@@ -496,9 +522,9 @@ private def sequenceDescriptor (limits : Limits) (program : Program) (scope : Na
       pure (SequenceDescriptor.mk sourceType elements.length elementType .tuple)
     | .composite (.bytes length) => do
       discard (checkedComposite program span (.bytes length))
-      pure (SequenceDescriptor.mk sourceType length (.scalar (.uint 255)) .compositeBytes)
+      pure (SequenceDescriptor.mk sourceType length (some (.scalar (.uint 255))) .compositeBytes)
     | .scalar (.bytes length) =>
-      pure (SequenceDescriptor.mk sourceType length (.scalar (.uint 255)) .scalarBytes)
+      pure (SequenceDescriptor.mk sourceType length (some (.scalar (.uint 255))) .scalarBytes)
     | _ => failAt span "iteration sequence must be a fixed vector, vector-compatible tuple, or byte vector"
   if descriptor.length > Types.defaultLimits.maxVectorLength then
     failAt span "helper resource limit exceeded: iteration sequence length"
@@ -568,7 +594,8 @@ def mapWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let length := firstSequence.length
   unless typedSequences.all (fun item => item.length == length) do
     failAt span "map sequence lengths must match"
-  let actualTypes := typedSequences.map (·.elementType)
+  let actualTypes ← completeOperatorArgumentTypes limits program scope env span operator
+    (typedSequences.map (·.elementType))
   let compiled ← materializeOperator limits program scope env span operator actualTypes
   if let .composite (.scalar _) := compiled.result then
     failAt span "map cannot flatten a composite scalar wrapper"
@@ -640,8 +667,10 @@ def foldWithLimits (limits : Limits) (program : Program) (scope : Nat)
   let length := firstSequence.length
   unless typedSequences.all (fun item => item.length == length) do
     failAt span "fold sequence lengths must match"
-  let elementTypes := typedSequences.map (·.elementType)
-  let compiled ← materializeOperator limits program scope env span operator (initialType :: elementTypes)
+  let actualTypes ← completeOperatorArgumentTypes limits program scope env span operator
+    (some initialType :: typedSequences.map (·.elementType))
+  let elementTypes := actualTypes.drop 1
+  let compiled ← materializeOperator limits program scope env span operator actualTypes
   let some accumulatorType := compiled.parameters.head?
     | failAt span "fold operator must accept an accumulator parameter"
   let operatorElementTypes := compiled.parameters.drop 1
