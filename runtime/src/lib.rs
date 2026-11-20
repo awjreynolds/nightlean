@@ -1238,6 +1238,7 @@ pub enum Instruction {
         is_contract: String,
         contract_address: String,
         user_address: String,
+    },
     #[serde(rename = "readContractAddress")]
     ReadContractAddress {
         destination: String,
