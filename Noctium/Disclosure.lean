@@ -178,8 +178,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .writeCell .. | some condition, .writeMap ..
       | some condition, .readTokenBalance ..
       | some condition, .claimContractCall .. | some condition, .mintShielded ..
-      | some condition, .mintUnshielded .. | some condition, .requireContractCaller ..
-      | some condition, .blockTimeCompare ..
+      | some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs ..
+      | some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend ..
+      | some condition, .requireContractCaller .. | some condition, .blockTimeCompare ..
       | some condition, .emitEvent ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .insertPath .. | some condition, .writePath ..
@@ -243,6 +244,23 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       let sink := {description := "public unshielded mint", span}
       checkSink sink (← expression env span domain) activeControl
       checkSink sink (← expression env span amount) activeControl
+    | .incUnshieldedInputs color amount isUnshielded =>
+      let sink := {description := "public unshielded input", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span amount) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+    | .incUnshieldedOutputs color amount isUnshielded =>
+      let sink := {description := "public unshielded output", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span amount) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+    | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      let sink := {description := "public unshielded spend claim", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span amount) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+      checkSink sink (← expression env span isContract) activeControl
+      checkSink sink (← expression env span recipient) activeControl
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl

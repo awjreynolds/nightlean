@@ -329,6 +329,9 @@ scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdat
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "claimUnshieldedCoinSpend" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
 declare_syntax_cat nleventfield
 scoped syntax ident ":=" nlexpr : nleventfield
@@ -1926,6 +1929,28 @@ private def elaborateEffect (schema : List (String × StateKind))
       let domain ← checkedExpression state.env domain (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
       let term ← `(Noctium.Effect.mintUnshielded $domain $amount)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| incUnshieldedInputs($color:nlexpr, $amount:nlexpr, $isUnshielded:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let isUnshielded ← checkedExpression state.env isUnshielded .bool
+      let term ← `(Noctium.Effect.incUnshieldedInputs $color $amount $isUnshielded)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| incUnshieldedOutputs($color:nlexpr, $amount:nlexpr, $isUnshielded:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let isUnshielded ← checkedExpression state.env isUnshielded .bool
+      let term ← `(Noctium.Effect.incUnshieldedOutputs $color $amount $isUnshielded)
+      state := {state with terms := state.terms.push term}
+    | `(nlupdate| claimUnshieldedCoinSpend($color:nlexpr, $amount:nlexpr,
+        $isUnshielded:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let isUnshielded ← checkedExpression state.env isUnshielded .bool
+      let isContract ← checkedExpression state.env isContract .bool
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let term ← `(Noctium.Effect.claimUnshieldedCoinSpend
+        $color $amount $isUnshielded $isContract $recipient)
       state := {state with terms := state.terms.push term}
     | `(nlupdate| requireContractCaller($address:nlexpr)) => do
       let address ← checkedExpression state.env address (.bytes 32)

@@ -172,3 +172,31 @@ and a call using both strict predicates at block 70. The exact observed
 contract state matched the SDK prediction at both blocks. Native sizing
 reported K8 and 126 rows. The deadline-crossing rejection was checked in
 native VM replay. [Localnet receipt](native-block-time-localnet-receipt.json)
+
+## Settle tagged token inputs and outputs
+
+```lean
+incUnshieldedInputs(color, received, isUnshielded)
+incUnshieldedOutputs(color, sent, isUnshielded)
+claimUnshieldedCoinSpend(color, authorized, isUnshielded, isContract, recipient)
+```
+
+Each operation records a separate native effect. The ledger verifies these
+effects against the transaction's other calls and settlement data.
+Use `true` for the unshielded token tag and `false` for the shielded tag.
+The spend's recipient tag distinguishes a contract address from a user
+address with the same bytes. Each operand and any guard is public or
+explicitly disclosed.
+
+A first entry accepts a `UInt 128` amount. An addition to an existing entry
+requires both operands and their sum to fit `UInt 64` in the pinned VM.
+The [Lean fixture](../../tests/NativeTaggedSettlement.lean) and
+[Compact reference fixture](../../tests/compact/TaggedSettlement.compact)
+exercise these bounds and the effects' tagged keys.
+
+The [funded localnet receipt](native-tagged-settlement-localnet-receipt.json)
+records a proof which checks that both starting balances are zero, even after
+the source records receipt effects. The finalized state contains 17
+unshielded-tag units and 23 shielded-tag units of the same color. The native
+assembler predicted both balances. The finalized bytes matched the SDK's
+ledger replay byte for byte.

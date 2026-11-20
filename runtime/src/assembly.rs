@@ -4,8 +4,8 @@ use crate::artifacts::{Role, VerifiedBundle};
 use crate::create_state;
 use crate::zkir::IrSource;
 use crate::{
-    Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value, prepare,
-    prepare_with_context,
+    Config, Db, Execution, LEDGER_REVISION, Plan, ZKIR_REVISION, field_value,
+    prepare_with_context_and_block_time,
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use base_crypto::time::Timestamp;
@@ -645,15 +645,19 @@ fn build_for_deployment(
     context.call_context.balance = initial.balance.clone();
     // prepare's zero-randomness preimage is diagnostic only. Reuse only its
     // evaluated program and private fields, then repartition for this commitment.
-    let evaluated = if let Some(block) = block {
+    if let Some(block) = block {
         context.call_context.tblock = block.tblock;
         context.call_context.tblock_err = block.tblock_err;
         context.call_context.parent_block_hash = block.parent_block_hash;
         context.call_context.last_block_time = block.last_block_time;
-        prepare_with_context(plan, &config.inputs, context.clone(), parameters)?
-    } else {
-        prepare(plan, &config.inputs, &initial.data, parameters, address)?
-    };
+    }
+    let evaluated = prepare_with_context_and_block_time(
+        plan,
+        &config.inputs,
+        context.clone(),
+        parameters,
+        block.is_some(),
+    )?;
     let call_input = evaluated.call_input()?;
     let call_output = evaluated.call_output()?;
     let randomness = nonzero_random(rng)?;
@@ -688,6 +692,31 @@ fn build_for_deployment(
             .run_transcript(transcript, cost)
             .map_err(|_| anyhow!("native transaction transcript rejected"))?
             .context;
+        ensure!(
+            after.effects == transcript.effects,
+            "native transaction transcript effects mismatch"
+        );
+        // The ledger credits inputs before debiting outputs for each transcript.
+        let balance = &mut after.call_context.balance;
+        for (token, amount) in transcript.effects.unshielded_inputs.clone() {
+            let current = balance.get(&token).map(|value| *value).unwrap_or(0);
+            *balance = balance.insert(
+                token,
+                current
+                    .checked_add(amount)
+                    .context("contract balance overflow")?,
+            );
+        }
+        for (token, amount) in transcript.effects.unshielded_outputs.clone() {
+            let current = balance.get(&token).map(|value| *value).unwrap_or(0);
+            *balance = balance.insert(
+                token,
+                current
+                    .checked_sub(amount)
+                    .context("insufficient contract balance")?,
+            );
+        }
+        after.effects = Default::default();
     }
     let guaranteed_count = guaranteed.as_ref().map_or(0, |t| t.program.len());
     let fallible_count = fallible.as_ref().map_or(0, |t| t.program.len());
@@ -728,6 +757,7 @@ fn build_for_deployment(
     );
     let mut predicted = initial.clone();
     predicted.data = after.state;
+    predicted.balance = after.call_context.balance;
     Ok(Built {
         initial,
         predicted,
