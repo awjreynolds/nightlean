@@ -146,6 +146,8 @@ private structure AuthoringExprState where
   usedIteration : _root_.Bool := _root_.Bool.false
   nextCall : Nat := 0
   nextLet : Nat := 0
+  unresolvedIterationRefs : List String := []
+  iterationTypeConstraints : List (String × ResultType) := []
   allowAssertThen : _root_.Bool := _root_.Bool.false
   deriving Inhabited
 
@@ -173,6 +175,82 @@ private def AuthoredOutput.layoutType (item : AuthoredOutput) : Types.CompositeT
   | .composite type => type
 
 private abbrev ExprM := StateT AuthoringExprState CommandElabM
+
+private def freshIterationParameterRef : ExprM String := do
+  let state ← get
+  let name := s!"__noctium:iteration-parameter:{state.nextLet}"
+  modify fun state => {state with nextLet := state.nextLet + 1}
+  pure name
+
+private def unresolvedIterationParameter : ExprM String := do
+  let reference ← freshIterationParameterRef
+  modify fun state => {state with
+    unresolvedIterationRefs := reference :: state.unresolvedIterationRefs}
+  pure reference
+
+private def lowerExpectedIterationRef (env : SurfaceEnv) (expected : ResultType)
+    (stx : TSyntax `nlexpr) : ExprM (Option Lowered) := do
+  let `(nlexpr| $id:ident) := stx | return none
+  let some (_, _, .ref refName) := env.find? (fun value => value.1 == id.getId.toString)
+    | return none
+  let state ← get
+  unless state.unresolvedIterationRefs.contains refName do return none
+  if let some (_, prior) := state.iterationTypeConstraints.find? (·.1 == refName) then
+    unless Helpers.subtype prior expected do
+      throwErrorAt stx s!"empty tuple item '{id.getId}' has conflicting expected types"
+    return some {type := prior, term := .ref refName}
+  modify fun state => {state with
+    iterationTypeConstraints := (refName, expected) :: state.iterationTypeConstraints}
+  pure (some {type := expected, term := .ref refName})
+
+private def resolvedSurfaceEnv (env : SurfaceEnv)
+    (constraints : List (String × ResultType)) : SurfaceEnv :=
+  env.map fun (name, type, term) =>
+    match term with
+    | .ref refName =>
+      match constraints.find? (·.1 == refName) with
+      | some (_, resolved) => (name, resolved, term)
+      | none => (name, type, term)
+    | _ => (name, type, term)
+
+private def resolveIterationParameter (refName : String)
+    (constraints : List (String × ResultType)) : Option ResultType :=
+  (constraints.find? (·.1 == refName)).map (·.2)
+
+private def retainIterationScope (state : AuthoringExprState) (refs : List String) : AuthoringExprState :=
+  {state with
+    unresolvedIterationRefs := state.unresolvedIterationRefs.filter fun refName =>
+      !refs.contains refName
+    iterationTypeConstraints := state.iterationTypeConstraints.filter fun (refName, _) =>
+      !refs.contains refName}
+
+private structure CallbackParameter where
+  surfaceName : String
+  reference : String
+  type : Option ResultType
+
+private def prepareCallbackParameters (parameters : List (TSyntax `ident))
+    (types : List (Option ResultType)) : ExprM (List CallbackParameter) := do
+  let mut bindings : List CallbackParameter := []
+  for (parameter, type) in parameters.zip types do
+    let surfaceName := parameter.getId.toString
+    match type with
+    | some type =>
+      bindings := bindings ++ [⟨surfaceName, surfaceName, some type⟩]
+    | none =>
+      let reference ← unresolvedIterationParameter
+      bindings := bindings ++ [⟨surfaceName, reference, none⟩]
+  pure bindings
+
+private def callbackSurfaceEnv (bindings : List CallbackParameter) : SurfaceEnv :=
+  bindings.map fun binding =>
+    (binding.surfaceName, binding.type.getD .unit, .ref binding.reference)
+
+private def resolveCallbackTypes
+    (bindings : List CallbackParameter) (constraints : List (String × ResultType)) :
+    List (Option ResultType) :=
+  bindings.map fun binding =>
+    binding.type.orElse fun _ => resolveIterationParameter binding.reference constraints
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
@@ -667,7 +745,15 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
   match stx with
   | `(nlexpr| $id:ident) =>
     match env.find? (fun value => value.1 == id.getId.toString) with
-    | some (_, type, term) => pure {type, term}
+    | some (_, type, term) =>
+      if let .ref refName := term then
+        if (← get).unresolvedIterationRefs.contains refName then
+          match resolveIterationParameter refName (← get).iterationTypeConstraints with
+          | some resolvedType => pure {type := resolvedType, term}
+          | none =>
+            throwErrorAt id s!"cannot infer the type of empty tuple item '{id.getId}'. Use a typed binding or loop annotation"
+        else pure {type, term}
+      else pure {type, term}
     | none => throwErrorAt id s!"unknown readable witness value '{id.getId}'"
   | `(nlexpr| $n:num) =>
     if n.getNat ≥ Field.modulus then throwErrorAt n "Native literal is not canonical"
@@ -692,10 +778,6 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
         program 0 helperEnv sourceSpan terms with
       | .ok elementTypes => pure elementTypes
       | .error diagnostic => throwErrorAt stx diagnostic.message
-    let callbackTypes ← elementTypes.mapM fun type =>
-      match type with
-      | some type => pure type
-      | none => throwErrorAt stx "map over an empty tuple needs a callback parameter type"
     let parameterNames := parameters.toList
     unless parameterNames.length == terms.length do
       throwErrorAt stx "map callback parameter count must match its sequence count"
@@ -704,11 +786,20 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     modify fun state => {state with
       iterationProgram := some program
       usedIteration := _root_.Bool.true}
-    let callbackEnv := (parameterNames.zip callbackTypes).map fun (parameter, type) =>
-      (parameter.getId.toString, type, .ref (parameter.getId.toString))
-    let callback ← lowerExpr programName (callPrefix ++ ".map") (callbackEnv ++ env) body
+    let bindings ← prepareCallbackParameters parameterNames elementTypes
+    let callback ← lowerExpr programName (callPrefix ++ ".map")
+      (callbackSurfaceEnv bindings ++ env) body
+    let callbackState ← get
+    let callbackTypes := resolveCallbackTypes bindings callbackState.iterationTypeConstraints
+    modify fun state => retainIterationScope state
+      (bindings.filterMap fun binding => if binding.type.isNone then some binding.reference else none)
+    let resolvedEnv := resolvedSurfaceEnv env callbackState.iterationTypeConstraints
+    let helperEnv := iterationEnvironment resolvedEnv staged
+    let operatorParameters := (bindings.zip callbackTypes).map fun (binding, type) =>
+      {name := binding.reference,
+        type := if binding.type.isSome then none else type}
     let operator := Iteration.Operator.anonymous
-      (parameterNames.map fun parameter => {name := parameter.getId.toString}) none
+      operatorParameters none
       (callback.before ++ [.return (some callback.term)])
     let program ← iterationProgram stx programName
       (values.flatMap (·.signatures) ++ callback.signatures)
@@ -745,24 +836,29 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
         program 0 helperEnv sourceSpan (terms.drop 1) with
       | .ok elementTypes => pure elementTypes
       | .error diagnostic => throwErrorAt stx diagnostic.message
-    let callbackTypes ← elementTypes.mapM fun type =>
-      match type with
-      | some type => pure type
-      | none => throwErrorAt stx "fold over an empty tuple needs a callback parameter type"
     let parameterNames := parameters.toList
-    unless parameterNames.length == callbackTypes.length + 1 do
+    unless parameterNames.length == elementTypes.length + 1 do
       throwErrorAt stx "fold callback needs an accumulator and one parameter per sequence"
     unless (parameterNames.map (·.getId.toString) |>.eraseDups).length == parameterNames.length do
       throwErrorAt stx "duplicate iteration callback parameter"
-    let types := initial.type :: callbackTypes
     modify fun state => {state with
       iterationProgram := some program
       usedIteration := _root_.Bool.true}
-    let callbackEnv := (parameterNames.zip types).map fun (parameter, type) =>
-      (parameter.getId.toString, type, .ref (parameter.getId.toString))
-    let callback ← lowerExpr programName (callPrefix ++ ".fold") (callbackEnv ++ env) body
+    let bindings ← prepareCallbackParameters parameterNames
+      (some initial.type :: elementTypes)
+    let callback ← lowerExpr programName (callPrefix ++ ".fold")
+      (callbackSurfaceEnv bindings ++ env) body
+    let callbackState ← get
+    let types := resolveCallbackTypes bindings callbackState.iterationTypeConstraints
+    modify fun state => retainIterationScope state
+      (bindings.filterMap fun binding => if binding.type.isNone then some binding.reference else none)
+    let resolvedEnv := resolvedSurfaceEnv env callbackState.iterationTypeConstraints
+    let helperEnv := iterationEnvironment resolvedEnv staged
+    let operatorParameters := (bindings.zip types).map fun (binding, type) =>
+      {name := binding.reference,
+        type := if binding.type.isSome then none else type}
     let operator := Iteration.Operator.anonymous
-      (parameterNames.map fun parameter => {name := parameter.getId.toString}) none
+      operatorParameters none
       (callback.before ++ [.return (some callback.term)])
     let program ← iterationProgram stx programName
       (values.flatMap (·.signatures) ++ callback.signatures)
@@ -1133,8 +1229,10 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
       throwErrorAt stx s!"witness '{function.getId}' argument count does not match its declaration"
     let mut loweredArgs := []
     for (argument, parameter) in (args.getElems.toList.zip signature.parameters) do
-      let value ← lowerExpr programName callPrefix env argument
       let .scalar parameterTy := parameter.type | throwErrorAt function "Unit witness parameters are unsupported"
+      let value ← match ← lowerExpectedIterationRef env (.scalar parameterTy) argument with
+        | some value => pure value
+        | none => lowerExpr programName callPrefix env argument
       let value ← coerce argument value parameterTy
       loweredArgs := loweredArgs ++ [value]
     let callNo ← get
@@ -1635,21 +1733,37 @@ private structure ReadableBody where
   nextLet : Nat := 0
   helperProgram : Option Helpers.Program := none
   requiresOutputViews : _root_.Bool := _root_.Bool.false
+  unresolvedIterationRefs : List String := []
+  iterationTypeConstraints : List (String × ResultType) := []
   deriving Inhabited
 
 private def ReadableBody.lower (body : ReadableBody) (programName path : String)
-    (exprState : AuthoringExprState) (source : TSyntax `nlexpr) :
+    (exprState : AuthoringExprState) (source : TSyntax `nlexpr)
+    (expected : Option ResultType := none) :
     CommandElabM (Lowered × ReadableBody) := do
-  let (value, state) ← (lowerExpr programName ("s" ++ path) body.env source).run
+  let action : ExprM Lowered := do
+    match expected with
+    | some type =>
+      match ← lowerExpectedIterationRef body.env type source with
+      | some value => pure value
+      | none => lowerExpr programName ("s" ++ path) body.env source
+    | none => lowerExpr programName ("s" ++ path) body.env source
+  let (value, state) ← action.run
     {exprState with
       iterationProgram := body.helperProgram
       iterationWitnesses := body.witnesses
       usedIteration := body.requiresOutputViews
-      nextLet := body.nextLet}
+      nextLet := body.nextLet
+      unresolvedIterationRefs := body.unresolvedIterationRefs
+      iterationTypeConstraints := body.iterationTypeConstraints}
+  let unresolvedEnv := resolvedSurfaceEnv body.env state.iterationTypeConstraints
   pure (value, {body with
+    env := unresolvedEnv
     nextLet := state.nextLet
     helperProgram := state.iterationProgram
-    requiresOutputViews := state.usedIteration})
+    requiresOutputViews := state.usedIteration
+    unresolvedIterationRefs := state.unresolvedIterationRefs
+    iterationTypeConstraints := state.iterationTypeConstraints})
 
 private def ReadableBody.observe (body : ReadableBody) (value : Lowered)
     (sources : List (TSyntax `nlexpr)) (extraValidity : List String := [])
@@ -1716,9 +1830,13 @@ private partial def lowerReadableStatement (programName path : String)
     let valueName := id.getId.toString
     if body.env.any (·.1 == valueName) then
       throwErrorAt id s!"duplicate readable witness value '{valueName}'"
+    let annotation ← match type with
+      | some annotation => some <$> readScalarTy annotation
+      | none => pure none
     let (lowered, body) ← body.lower programName path exprState source
-    let value ← match type with
-      | some annotation => coerce source lowered (← readScalarTy annotation)
+      (annotation.map ResultType.scalar)
+    let value ← match annotation with
+      | some annotation => coerce source lowered annotation
       | none => do
         if lowered.type == .unit then throwErrorAt id "readable witness let cannot bind Unit"
         pure lowered
@@ -1767,7 +1885,10 @@ private partial def lowerReadableStatement (programName path : String)
       observation := loop.observation
       nextLet := loop.nextLet
       helperProgram := loop.helperProgram
-      requiresOutputViews := loop.requiresOutputViews}
+      requiresOutputViews := loop.requiresOutputViews
+      env := resolvedSurfaceEnv body.env loop.iterationTypeConstraints
+      unresolvedIterationRefs := loop.unresolvedIterationRefs
+      iterationTypeConstraints := loop.iterationTypeConstraints}
   | `(noctium_witness_statement| for $item:ident $[: $annotation:nltype]? in $sequence:nlexpr do
       $nested:noctium_witness_statement* end) => do
     let itemName := item.getId.toString
@@ -1781,42 +1902,70 @@ private partial def lowerReadableStatement (programName path : String)
       iterationProgram := sourceBody.helperProgram
       iterationWitnesses := sourceBody.witnesses
       usedIteration := sourceBody.requiresOutputViews
-      nextLet := sourceBody.nextLet}
+      nextLet := sourceBody.nextLet
+      unresolvedIterationRefs := sourceBody.unresolvedIterationRefs
+      iterationTypeConstraints := sourceBody.iterationTypeConstraints}
     let ((before, terms, staged), loopExprState) ←
       (stageIterationValues ("s" ++ path) sourceBody.env sequenceSpan [sequenceValue]).run loopExprState
     let [sequenceTerm] := terms
       | throwErrorAt statement "sequence loop must contain one sequence"
-    let helperEnv := iterationEnvironment sourceBody.env staged
+    let helperEnv := iterationEnvironment
+      (resolvedSurfaceEnv sourceBody.env sourceBody.iterationTypeConstraints) staged
     let (program, _) ← (iterationProgram statement programName sequenceValue.signatures).run loopExprState
     let inferred ← match Iteration.sequenceElementTypesWithLimits {}
         program 0 helperEnv sequenceSpan [sequenceTerm] with
       | .ok [elementType] => pure elementType
       | .ok _ => throwErrorAt statement "sequence loop type inference failed"
       | .error diagnostic => throwErrorAt sequence diagnostic.message
-    let elementType ← match annotation with
-      | some type => ResultType.scalar <$> readScalarTy type
-      | none => pure (inferred.getD .unit)
+    let knownElementType ← match annotation with
+      | some type => some <$> (ResultType.scalar <$> readScalarTy type)
+      | none => pure inferred
+    let initialLoopState : AuthoringExprState := {
+      exprState with
+      iterationProgram := some program
+      iterationWitnesses := sourceBody.witnesses
+      usedIteration := sourceBody.requiresOutputViews
+      nextLet := loopExprState.nextLet
+      unresolvedIterationRefs := sourceBody.unresolvedIterationRefs
+      iterationTypeConstraints := sourceBody.iterationTypeConstraints}
+    let (elementRef, loopExprState) ← match knownElementType with
+      | some _ => pure (itemName, initialLoopState)
+      | none =>
+        unresolvedIterationParameter.run initialLoopState
+    let placeholderType := knownElementType.getD .unit
     let mut loop := {sourceBody with
-      env := (itemName, elementType, .ref itemName) :: sourceBody.env
+      env := (itemName, placeholderType, .ref elementRef) :: sourceBody.env
       statements := []
       logicalAliases := []
       helperProgram := some program
-      nextLet := loopExprState.nextLet}
+      nextLet := loopExprState.nextLet
+      unresolvedIterationRefs := loopExprState.unresolvedIterationRefs
+      iterationTypeConstraints := loopExprState.iterationTypeConstraints}
     for (child, ordinal) in nested.toList.zipIdx do
       loop ← lowerReadableStatement programName s!"{path}.{ordinal}" exprState codecTerms loop child
+    let elementType := knownElementType.orElse fun _ =>
+      resolveIterationParameter elementRef loop.iterationTypeConstraints
+    let retainedConstraints := loop.iterationTypeConstraints.filter fun (refName, _) =>
+      refName != elementRef
+    let retainedUnresolvedRefs := loop.unresolvedIterationRefs.filter fun refName =>
+      refName != elementRef
+    let resolvedHelperEnv := iterationEnvironment
+      (resolvedSurfaceEnv sourceBody.env retainedConstraints) staged
     let operator := Iteration.Operator.anonymous
-      [{name := itemName, type := some elementType}] (some .unit)
+      [{name := elementRef, type := elementType}] (some .unit)
       (loop.statements ++ [.return none])
     let callbackState : AuthoringExprState := {
       exprState with
       iterationProgram := loop.helperProgram
       iterationWitnesses := loop.witnesses
       usedIteration := loop.requiresOutputViews
-      nextLet := loop.nextLet}
+      nextLet := loop.nextLet
+      unresolvedIterationRefs := retainedUnresolvedRefs
+      iterationTypeConstraints := retainedConstraints}
     let (callbackProgram, _) ←
       (iterationProgram statement programName loop.witnesses).run callbackState
     let (compiledProgram, term) ← match Iteration.mapWithLimits {}
-        callbackProgram 0 helperEnv sequenceSpan [sequenceTerm] operator with
+        callbackProgram 0 resolvedHelperEnv sequenceSpan [sequenceTerm] operator with
       | .ok result => pure result
       | .error diagnostic => throwErrorAt statement diagnostic.message
     pure {body with
@@ -1825,7 +1974,10 @@ private partial def lowerReadableStatement (programName path : String)
       observation := loop.observation
       nextLet := loop.nextLet
       helperProgram := some compiledProgram
-      requiresOutputViews := loop.requiresOutputViews}
+      requiresOutputViews := loop.requiresOutputViews
+      env := resolvedSurfaceEnv body.env retainedConstraints
+      unresolvedIterationRefs := retainedUnresolvedRefs
+      iterationTypeConstraints := retainedConstraints}
   | _ => throwErrorAt statement "finite range bodies accept let, prove, witness, private read and stage, and nested for statements"
 
 @[command_elab noctiumAuthoredWitnessCircuitCommand] unsafe def elabAuthoredWitnessCircuit : CommandElab := fun stx => do
