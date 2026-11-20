@@ -448,6 +448,16 @@ def EventKind.fields : EventKind → List (String × EventFieldType)
 def EventKind.payloadSize (kind : EventKind) : Nat :=
   kind.fields.foldl (fun size field => size + field.2.width) 0
 
+structure CallerBindings where
+  present : String
+  isContract : String
+  contractAddress : String
+  userAddress : String
+  deriving Repr
+
+def CallerBindings.types (names : CallerBindings) : List (String × Ty) :=
+  [(names.present, .bool), (names.isContract, .bool),
+    (names.contractAddress, .bytes 32), (names.userAddress, .bytes 32)]
 /-- Query the starting ledger balance of either native token namespace. -/
 inductive BalanceQuery where
   | exact
@@ -483,6 +493,7 @@ inductive Effect where
   | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
+  | readCaller (destinations : CallerBindings)
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
       (isUnshielded : Expr .bool) (query : BalanceQuery)
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
@@ -1088,8 +1099,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
-          .merkleTreeIsFull .. | .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
-          .merkleTreeInsertHashIndex .. | .merkleTreeReset .. |
+          .readCaller .. | .merkleTreeIsFull .. | .merkleTreeCheckRoot .. |
+          .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. | .merkleTreeReset .. |
           .merkleTreeResetHistory .. | .merkleTreeIsFullAt .. |
           .merkleTreeCheckRootAt .. | .merkleTreeInsertHashAt .. |
           .merkleTreeInsertHashIndexAt .. | .merkleTreeResetAt .. |
@@ -1144,6 +1155,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .requireContractCaller address => do
         address.validate caps env
         pure []
+      | .readCaller destinations => do
+        (.bytes 32 : Ty).validate caps
+        pure destinations.types
       | .readTokenBalance destination color isUnshielded query => do
         color.validate caps env
         isUnshielded.validate caps env

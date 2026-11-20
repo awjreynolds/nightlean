@@ -190,6 +190,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .removePath ..
       | some condition, .listLength .. | some condition, .listHead ..
       | some condition, .listPushFront .. | some condition, .listPopFront ..
+      | some condition, .readCaller ..
       | some condition, .listReset .. | some condition, .merkleTreeIsFull ..
       | some condition, .merkleTreeCheckRoot ..
       | some condition, .merkleTreeInsertHash ..
@@ -271,6 +272,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
+    | .readCaller destinations =>
+      checkSink {description := "public caller read guard", span} [] activeControl
+      env := env ++ destinations.types.map (fun (name, _) => (name, []))
     | .readTokenBalance destination color isUnshielded query =>
       let sink := {description := "public token balance read", span}
       checkSink sink (← expression env span color) activeControl

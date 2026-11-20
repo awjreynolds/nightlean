@@ -67,6 +67,33 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
 
+## Read the ledger caller
+
+`readCaller as (present, isContract, contractId, userId)` binds two
+Boolean flags and two `Bytes32` addresses. A contract caller sets both
+flags and fills `contractId`. A user caller sets only `present` and
+fills `userId`. An absent caller or inactive guard yields false flags
+and zero bytes. A private guard needs disclosure.
+
+The native ledger context supplies the caller. The Impact plan checks
+the presence, tag and active address against the ZKIR statement. A
+different ledger caller fails the same transcript check. The Rust SDK
+ordinary-call path prepares an absent caller. Midnight derives a
+top-level user caller only in the relevant unshielded-input context, and
+support for deriving that value during SDK preparation needs separate
+qualification. [Midnight caller semantics](https://docs.midnight.network/compact/reference/ledger-adt#caller)
+
+[Lean fixture](../../tests/NativeCaller.lean) ·
+[Compact oracle](../../tests/compact/caller.mjs) ·
+[Native checker](../../runtime/tests/native_caller.rs)
+
+The Rust SDK finalized the deployment at Ledger 9.1.0.1 localnet block
+67 and the active top-level call at block 70. Exact state bytes matched
+the prediction. A separate decoder verified that the `recorded` cell
+changed from true to false. The relation measured K9 and 312 rows. The
+contract and user variants ran in the native VM and Compact runtime.
+[Localnet receipt](native-caller-localnet-receipt.json)
+
 ## Reset a ledger cell
 
 `reset cellName` writes the canonical default of the cell's declared scalar

@@ -88,6 +88,7 @@ inductive Op where
   | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
+  | readCaller (destinations : CallerBindings)
   | readContractAddress (destination : String)
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
       (isUnshielded : Expr .bool) (query : BalanceQuery)
@@ -274,6 +275,21 @@ private def contractAddressFieldGroups (destination : String) : List (List Scala
 private def listU8CellPushFields (index : Nat) : List Scalar :=
   [.native 0x10, .native 1, .native 1, .native 1, .native index]
 
+private def callerFieldGroups (names : CallerBindings) : List (List Scalar) :=
+  -- Slot 6 holds either Null or an aligned public address. Normalize it to one cell.
+  let layout : List Scalar := [.native 4, .native 1, .native 1, .native 32, .native 32]
+  let contract : Expr (.bytes 32) := .ref names.contractAddress
+  let user : Expr (.bytes 32) := .ref names.userAddress
+  let result := [.native 0x0c] ++ layout ++ [
+    .select (.ref names.present) (.native 1) (.native 0),
+    .select (.ref names.isContract) (.native 1) (.native 0),
+    .bytesField contract 0, .bytesField contract 1, .bytesField user 0, .bytesField user 1]
+  [[.native 0x32], listIndexFields 6, [.native 0x30], [.native 0x03],
+    listU8CellPushFields 1, [.native 0x02], [.native 0x12, .native 4],
+    listU8CellPushFields 1, [.native 0x40], [.native 0x16, .native 66], [.native 0x13, .native 2],
+    [.native 0x0b], [.native 0x10, .native 1] ++ layout ++ List.replicate 6 (.native 0),
+    result]
+
 private def listNodePushFields (values : List Scalar) : List Scalar :=
   [.native 0x11, .native 51, .native 1, .native values.length] ++
     List.replicate values.length (.native (Field.modulus - 2)) ++ values ++
@@ -448,6 +464,7 @@ def Op.fields : Op → List Scalar
   | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
       (standaloneSpendClaimFieldGroups color amount isUnshielded isContract recipient).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .readCaller destinations => (callerFieldGroups destinations).flatten
   | .readContractAddress destination => (contractAddressFieldGroups destination).flatten
   | .readTokenBalance destination color isUnshielded query =>
       (taggedBalanceFieldGroups destination color isUnshielded query).flatten
@@ -535,6 +552,7 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
       standaloneSpendClaimFieldGroups color amount isUnshielded isContract recipient
   | .requireContractCaller address => requireContractCallerFieldGroups address
+  | .readCaller destinations => callerFieldGroups destinations
   | .readContractAddress destination => contractAddressFieldGroups destination
   | .readTokenBalance destination color isUnshielded query =>
       taggedBalanceFieldGroups destination color isUnshielded query
@@ -1057,6 +1075,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readCaller destinations =>
+    pure {plan with
+      operations := plan.operations ++ [.readCaller destinations]
+      reads := plan.reads ++ destinations.types.map (fun (name, ty) => {name, ty})}
   | .readContractAddress destination =>
     pure {plan with
       operations := plan.operations ++ [.readContractAddress destination]
@@ -1290,6 +1312,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
       pure (.requireContractCaller (totalizeActivityValue condition (expressionNames address) address))
+    | some _, .readCaller .. => pure effect
     | some condition, .readTokenBalance destination color isUnshielded query =>
       let limitNames := match query with
         | .exact => []
@@ -1415,7 +1438,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
-  | some condition, .requireContractCaller .. =>
+  | some condition, .requireContractCaller .. | some condition, .readCaller .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     let reads := plan.reads ++ ((result.reads.drop plan.reads.length).map fun read =>
@@ -1634,6 +1657,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readCaller destinations =>
+    plan := {plan with
+      operations := plan.operations ++ [.readCaller destinations]
+      reads := plan.reads ++ destinations.types.map (fun (name, ty) => {name, ty})}
   | .readContractAddress destination =>
     plan := {plan with
       operations := plan.operations ++ [.readContractAddress destination]
@@ -1878,6 +1905,7 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
             .listLength _ destination .. | .merkleTreeIsFull _ destination |
             .merkleTreeCheckRoot _ _ destination |
             .merkleTreeIsFullAt _ _ destination | .merkleTreeCheckRootAt _ _ _ destination => [destination]
+        | .readCaller destinations => destinations.types.map Prod.fst
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
         | _ => [])
@@ -2016,6 +2044,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .incUnshieldedOutputs .. => throw "unshielded output accumulation uses its dedicated native-plan operation JSON"
   | .claimUnshieldedCoinSpend .. => throw "unshielded spend claim uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .readCaller .. => throw "caller read uses its dedicated native-plan operation JSON"
   | .readContractAddress .. => throw "contract address read uses its dedicated native-plan operation JSON"
   | .readTokenBalance .. => throw "readTokenBalance uses its dedicated native-plan operation JSON"
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"

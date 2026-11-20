@@ -355,6 +355,8 @@ scoped syntax "tokenBalance(" nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax ident nlpath "as" ident : nleffect
+scoped syntax "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
+scoped syntax "when" nlexpr "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
 scoped syntax "increment" ident "by" num : nleffect
 scoped syntax "increment" ident "[" nlexpr "]" "by" num : nleffect
 scoped syntax "increment" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
@@ -1566,6 +1568,7 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlleaves) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr readCaller as ($_present:ident, $_isContract:ident, $_contract:ident, $_user:ident)) => some condition
   | _ => none
 
 private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
@@ -2049,6 +2052,18 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| when $_:nlexpr require $value:nlexpr) =>
     let condition ← checkedExpression state.env value .bool
     let term ← `(Noctium.Effect.require $condition)
+    state := {state with terms := state.terms.push term}
+  | `(nleffect| readCaller as ($presentName:ident, $isContractName:ident, $contractName:ident, $userName:ident))
+  | `(nleffect| when $_:nlexpr readCaller as ($presentName:ident, $isContractName:ident, $contractName:ident, $userName:ident)) => do
+    let mut names := []
+    for (destination, ty) in [(presentName, Ty.bool), (isContractName, .bool),
+        (contractName, .bytes 32), (userName, .bytes 32)] do
+      let (name, updated) ← freshReadName depth state destination
+      state ← bindReadName updated destination.getId.toString name ty
+      names := names ++ [stringTerm name]
+    let term ← `(Noctium.Effect.readCaller {
+      present := $(names[0]!), isContract := $(names[1]!),
+      contractAddress := $(names[2]!), userAddress := $(names[3]!)})
     state := {state with terms := state.terms.push term}
   | `(nleffect| tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident)
   | `(nleffect| when $_:nlexpr tokenBalance($color:nlexpr, $tag:nlexpr) as $destination:ident) =>

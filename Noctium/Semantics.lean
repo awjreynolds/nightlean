@@ -155,6 +155,11 @@ structure ForeignOracle where
   pointFromBytes : Foreign.Curve → List Nat → Except String Foreign.Point :=
     fun _ _ => .error "qualified foreign point-decoding oracle is unavailable"
 
+inductive CallerAddress where
+  | contract (address : List Nat)
+  | user (address : List Nat)
+  deriving Repr, BEq
+
 /-- Crypto oracles have fail-closed defaults. A backend must supply pinned hash
 and Jubjub operations before semantic evaluation can execute those expressions. -/
 structure EvalContext where
@@ -181,12 +186,20 @@ structure EvalContext where
   /-- Pinned strict compressed Jubjub decoder, including subgroup checks. -/
   jubjubFromBytes32 : List Nat → Except String (Nat × Nat) :=
     fun _ => .error "qualified Jubjub byte-decoding oracle is unavailable"
-  /-- Address of an immediate contract caller, supplied by the execution context. -/
+  /-- Caller kind and address supplied by the native execution context. -/
+  caller : Option CallerAddress := none
+  /-- Legacy contract-only caller input. Used when `caller` is unavailable. -/
   contractCaller : Option (List Nat) := none
   /-- Address of the contract executing this entrypoint. -/
   ownContractAddress : Option (List Nat) := none
   unshieldedBalances : List (List Nat × Nat) := []
   shieldedBalances : List (List Nat × Nat) := []
+
+private def contractCallerAddress (ctx : EvalContext) : Option (List Nat) :=
+  match ctx.caller with
+  | some (.contract address) => some address
+  | some (.user _) => none
+  | none => ctx.contractCaller
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
@@ -930,6 +943,19 @@ private def adjustCounter (current amount : Nat) (subtract : Bool) : Except Stri
     if current > maximum - amount then throw "Counter addition overflow"
     pure (current + amount)
 
+private def callerValues (names : CallerBindings) (caller : Option CallerAddress) : Except String EvalEnv := do
+  let blank := List.replicate 32 0
+  let (present, isContract, contract, user) ← match caller with
+    | none => pure (false, false, blank, blank)
+    | some (.contract address) => do
+      unless address.length == 32 && address.all (· ≤ 255) do throw "invalid caller address"
+      pure (true, true, address, blank)
+    | some (.user address) => do
+      unless address.length == 32 && address.all (· ≤ 255) do throw "invalid caller address"
+      pure (true, false, blank, address)
+  pure [(names.present, .bool present), (names.isContract, .bool isContract),
+    (names.contractAddress, .bytes 32 contract), (names.userAddress, .bytes 32 user)]
+
 private def listPayloadAt (root : LedgerValue) (keys : List Value) :
     Except String (List (List Nat)) := do
   let some (.list entries) := treeLookup root keys
@@ -1002,6 +1028,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
       unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
+    | .readCaller destinations =>
+      env := (← callerValues destinations ctx.caller) ++ env
     | .readTokenBalance destination color isUnshielded query =>
       env := (destination, ← tokenBalanceValue ctx env color isUnshielded query) :: env
     | .writeCell name ty value =>
@@ -1254,7 +1282,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. |
             .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
             .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
-            .requireContractCaller .. | .emitEvent .. => pure ()
+            .requireContractCaller .. | .emitEvent .. | .readCaller .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -1302,6 +1330,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
           unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
+        | .readCaller destinations =>
+          env := (← callerValues destinations ctx.caller) ++ env
         | .readTokenBalance destination color isUnshielded query =>
           env := (destination, ← tokenBalanceValue ctx env color isUnshielded query) :: env
         | .writeCell name ty value =>
@@ -1536,6 +1566,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           env := (destination, Value.pack ty zero) :: env
         | .readCompositePath _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)
+        | .readCaller destinations =>
+          env := (← callerValues destinations none) ++ env
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination |

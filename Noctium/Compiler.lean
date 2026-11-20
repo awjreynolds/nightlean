@@ -275,6 +275,10 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("recipient", nativeExpressionJson recipient)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
+  | .readCaller names => Json.mkObj [
+      ("op", toJson ("readCaller" : String)),
+      ("present", toJson names.present), ("isContract", toJson names.isContract),
+      ("contractAddress", toJson names.contractAddress), ("userAddress", toJson names.userAddress)]
   | .readContractAddress destination => Json.mkObj [
       ("op", toJson ("readContractAddress" : String)), ("destination", toJson destination)]
   | .readTokenBalance destination color isUnshielded query => Json.mkObj (
@@ -336,6 +340,10 @@ private def effectJson : Effect → Json
       ("isContract", expressionJson isContract), ("recipient", expressionJson recipient)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
+  | .readCaller names => Json.mkObj [
+      ("op", toJson ("readCaller" : String)),
+      ("present", toJson names.present), ("isContract", toJson names.isContract),
+      ("contractAddress", toJson names.contractAddress), ("userAddress", toJson names.userAddress)]
   | .readContractAddress destination => Json.mkObj [
       ("op", toJson ("readContractAddress" : String)), ("destination", toJson destination)]
   | .readTokenBalance destination color isUnshielded query => Json.mkObj (

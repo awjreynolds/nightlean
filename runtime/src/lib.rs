@@ -1219,6 +1219,13 @@ pub enum Instruction {
     RequireContractCaller {
         address: Expr,
     },
+    #[serde(rename = "readCaller", rename_all = "camelCase")]
+    ReadCaller {
+        present: String,
+        is_contract: String,
+        contract_address: String,
+        user_address: String,
+    },
     #[serde(rename = "readContractAddress")]
     ReadContractAddress {
         destination: String,
@@ -1387,6 +1394,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ClaimUnshieldedCoinSpend { .. } => token_accumulation_fields(19).to_vec(),
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
+        Instruction::ReadCaller { .. } => vec![1, 4, 1, 1, 5, 1, 2, 5, 1, 2, 2, 1, 13, 12],
         Instruction::ReadContractAddress { .. } => vec![1, 4, 5],
         Instruction::ReadTokenBalance { comparison, .. } => {
             let mut counts = vec![1, 4, 1, 11, 1, 2, 1, 5, 2, 10];
@@ -1431,6 +1439,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
         Instruction::RequireContractCaller { .. } => 15,
+        Instruction::ReadCaller { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::ReadContractAddress { .. } => 10,
         Instruction::ReadTokenBalance { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
@@ -3283,6 +3292,7 @@ fn probe_instruction(
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
+        Instruction::ReadCaller { .. } => Ok(None),
         Instruction::ReadContractAddress { .. } => Ok(None),
         Instruction::ReadTokenBalance {
             color,
@@ -3336,6 +3346,96 @@ fn consume_contract_caller_reads(
     }
     *index += 5;
     Ok(())
+}
+
+fn bind_caller_reads(
+    plan: &Plan,
+    index: &mut usize,
+    guard: Option<&Expr>,
+    destinations: [&str; 4],
+    active: bool,
+    caller: Option<PublicAddress>,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let zero = [0; 32];
+    let (contract, user) = match caller {
+        Some(PublicAddress::Contract(address)) => (address.0.0, zero),
+        Some(PublicAddress::User(address)) => (zero, address.0.0),
+        None => (zero, zero),
+    };
+    let returned = [
+        Value::Bool(caller.is_some()),
+        Value::Bool(matches!(caller, Some(PublicAddress::Contract(_)))),
+        Value::Bytes(contract.to_vec()),
+        Value::Bytes(user.to_vec()),
+    ];
+    let mut values = BTreeMap::new();
+    for (destination, value) in destinations.into_iter().zip(returned) {
+        let read = plan
+            .reads
+            .get(*index)
+            .ok_or_else(|| anyhow!("missing caller read"))?;
+        ensure!(
+            read.name == destination
+                && ScalarType::parse(&read.ty)? == value.scalar_type()
+                && read.guard.as_ref() == guard
+                && !env.contains_key(destination),
+            "caller read schema mismatch"
+        );
+        if matches!(value, Value::Bytes(_)) {
+            validate_byte_read_projections(read, &ScalarType::Bytes32)?;
+        } else {
+            ensure!(
+                read.schema.is_none() && read.components.is_empty() && read.projections.is_none(),
+                "caller flag has unexpected read projections"
+            );
+        }
+        env.insert(destination.to_owned(), value.clone());
+        values.insert(destination.to_owned(), value);
+        *index += 1;
+    }
+    Ok(PreparationRead {
+        name: destinations[0].to_owned(),
+        active,
+        values,
+    })
+}
+
+fn append_caller_read(
+    program: &mut Program,
+    caller: Option<PublicAddress>,
+) -> Result<Op<ResultModeVerify, Db>> {
+    let absent = AlignedValue::concat([
+        &false.into(),
+        &PublicAddress::User(UserAddress(HashOutput([0; 32]))).into(),
+    ]);
+    let result = match caller {
+        Some(address) => AlignedValue::concat([&true.into(), &address.into()]),
+        None => absent.clone(),
+    };
+    let push_one = push_native_state(StateValue::Cell(Sp::new(1u8.into())), false)?;
+    program.extend([
+        Op::Dup { n: 2 },
+        list_index(6),
+        Op::Dup { n: 0 },
+        Op::Type,
+        push_one.clone(),
+        Op::Eq,
+        Op::Branch { skip: 4 },
+        push_one,
+        Op::Swap { n: 0 },
+        Op::Concat {
+            cached: false,
+            n: 66,
+        },
+        Op::Jmp { skip: 2 },
+        Op::Pop,
+        push_native_state(StateValue::Cell(Sp::new(absent)), false)?,
+    ]);
+    Ok(Op::Popeq {
+        cached: false,
+        result,
+    })
 }
 
 fn bind_contract_address(
@@ -3536,6 +3636,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::IncUnshieldedInputs { .. }
                 | Instruction::ClaimUnshieldedCoinSpend { .. }
                 | Instruction::RequireContractCaller { .. }
+                | Instruction::ReadCaller { .. }
                 | Instruction::ReadContractAddress { .. }
                 | Instruction::ReadTokenBalance { .. }
                 | Instruction::EmitEvent { .. }
@@ -3859,6 +3960,7 @@ impl PreparationCursor {
                             | Instruction::IncUnshieldedInputs { .. }
                             | Instruction::ClaimUnshieldedCoinSpend { .. }
                             | Instruction::RequireContractCaller { .. }
+                            | Instruction::ReadCaller { .. }
                             | Instruction::ReadContractAddress { .. }
                             | Instruction::ReadTokenBalance { .. }
                             | Instruction::EmitEvent { .. }
@@ -3877,6 +3979,23 @@ impl PreparationCursor {
                         Instruction::RequireContractCaller { .. }
                     ) {
                         consume_contract_caller_reads(plan, &mut read_index, Some(guard))?;
+                    }
+                    if let Instruction::ReadCaller {
+                        present,
+                        is_contract,
+                        contract_address,
+                        user_address,
+                    } = operation.as_ref()
+                    {
+                        event = Some(bind_caller_reads(
+                            plan,
+                            &mut read_index,
+                            Some(guard),
+                            [present, is_contract, contract_address, user_address],
+                            false,
+                            None,
+                            env,
+                        )?);
                     }
                     if let Instruction::ReadContractAddress { destination } = operation.as_ref() {
                         event = Some(bind_contract_address(
@@ -5039,6 +5158,24 @@ impl PreparationCursor {
                     cached: false,
                     result: AlignedValue::from(expected),
                 }
+            }
+            Instruction::ReadCaller {
+                present,
+                is_contract,
+                contract_address,
+                user_address,
+            } => {
+                let caller = context.call_context.caller;
+                event = Some(bind_caller_reads(
+                    plan,
+                    &mut read_index,
+                    instruction_guard,
+                    [present, is_contract, contract_address, user_address],
+                    true,
+                    caller,
+                    env,
+                )?);
+                append_caller_read(program, caller)?
             }
             Instruction::ReadContractAddress { destination } => {
                 let address = context.address;
