@@ -92,7 +92,8 @@ trap 'rm -rf -- "$scratch"' EXIT
   --emit ledger --output "$scratch/contract"
 NOCTIUM_NATIVE_TEST_ARTIFACTS="$scratch/contract" \
   cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
-    --no-default-features --features zkir-321 --test ordinary_merkle -- --ignored
+    --no-default-features --features zkir-321 --test ordinary_merkle \
+    ordinary_merkle_appends_match_compact_and_reset_exactly -- --ignored
 ```
 
 On the isolated Ledger 9.1.0.1 localnet, the native client finalized deployment
@@ -100,3 +101,73 @@ at height 4 and the first append at height 7. The receipt state bytes matched
 the native runtime prediction at both steps. The pinned ZKIR 3.2.1 tool
 reported k=8 and 231 rows for the append relation.
 [Localnet receipt](ordinary-merkle-localnet-receipt.json)
+
+### Check the current root
+
+```lean
+checkRoot claims against disclose(expectedRoot) as rootMatches
+```
+
+The expected root is a Field. The comparison binds a Boolean and uses the
+state after earlier effects in the call. The operation leaves the tree
+unchanged. If a guard skips the comparison, `rootMatches` is false and the
+runtime skips the ledger read. Declare the release when the expected root or
+guard depends on private data.
+
+The ordinary Merkle fixture above checks the empty root, a stale root and a
+root written in the same call. The native checker rejects a changed comparison
+result.
+
+The native client finalized deployment at height 4 and the combined append
+and root check at height 7 on Ledger 9 localnet. Both receipts matched the
+predicted state bytes. The combined relation used k=8 and 232 rows.
+[Localnet receipt](ordinary-merkle-root-check-localnet-receipt.json)
+
+## Write an ordinary Merkle tree at an index
+
+A root Merkle tree accepts both a prehashed Bytes32 leaf and a Field leaf at a
+UInt64 index. Declare the releases for the index and the value independently.
+
+```lean
+insertHashIndex claims at disclose(position) := disclose(leafHash)
+insertFieldIndex claims at disclose(position) := disclose(leaf)
+```
+
+An indexed write updates the selected leaf and sets the append cursor to the
+larger of its current value and `position + 1`. It accepts replacement when the
+cursor reaches capacity. The active operation rejects an index at or above
+`2 ^ depth`. An inactive guard skips the write, so later reads see the unchanged
+tree. Field leaves use the Compact-compatible `mdn:lh` hash domain.
+
+The [Lean fixture](../../tests/MerkleIndexed.lean) and the
+[Compact oracle](../../tests/compact/IndexedMerkle.compact) cover sparse writes,
+lower indices and replacements after the tree reaches capacity. The Rust test
+checks the exact roots and append cursors with the pinned native checker.
+
+```sh
+lake build noctium Noctium:shared
+mkdir -p build/experiments
+scratch=$(mktemp -d "$PWD/build/experiments/indexed-merkle.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+.lake/build/bin/noctium compile tests/MerkleIndexed.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output "$scratch/contract"
+NOCTIUM_NATIVE_TEST_ARTIFACTS="$scratch/contract" \
+  cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+    --no-default-features --features zkir-321 --test ordinary_merkle \
+    indexed_merkle_writes_match_compact_and_keep_the_highest_cursor -- --ignored
+```
+
+To run the oracle in the same scratch directory, use Compact 0.36.1 and make
+`@midnight-ntwrk/compact-runtime` 0.21.0 available to Node.
+
+```sh
+compactc --skip-zk tests/compact/IndexedMerkle.compact "$scratch/compact"
+cp tests/compact/indexed-merkle.mjs "$scratch/"
+node "$scratch/indexed-merkle.mjs"
+```
+
+The native client finalized deployment at height 5 and an indexed Field write
+at height 8 on Ledger 9 localnet. It matched the predicted state bytes for both
+receipts. The indexed Field relation used k=13 and 2176 rows.
+[Localnet receipt](indexed-ordinary-merkle-localnet-receipt.json)
