@@ -519,6 +519,16 @@ private def sequenceDescriptor (limits : Limits) (program : Program) (scope : Na
     failAt span "helper resource limit exceeded: iteration sequence length"
   pure descriptor
 
+/-- Infer the callback parameter types from the same fixed sequences accepted by
+map and fold. An empty tuple has no element type. -/
+def sequenceElementTypesWithLimits (limits : Limits) (program : Program) (scope : Nat)
+    (env : Environment) (span : SourceSpan) (sequences : List Term) :
+    Except Diagnostic (List (Option ResultType)) := do
+  if sequences.length > limits.maxParameters then
+    failAt span "helper resource limit exceeded: iteration sequences"
+  let typed ← sequences.mapM (sequenceDescriptor limits program scope env span)
+  pure (typed.map (·.elementType))
+
 private def projectSequence (sequence : Term) (descriptor : SequenceDescriptor)
     (index : Nat) : Term :=
   match descriptor.projection with

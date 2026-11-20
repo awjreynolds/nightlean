@@ -1,0 +1,15 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export ledger total: Field;
+witness iterationSeed(): Field;
+witness iterationBytes(): Bytes<2>;
+witness iterationVisit(item: Uint<8>): Field;
+
+export circuit update(offset: Field): Field {
+  const sum = fold((acc, value) => (acc + value) + offset,
+    iterationSeed(),
+    map((item) => iterationVisit(item), iterationBytes()));
+  total = disclose(sum);
+  return disclose(sum);
+}
