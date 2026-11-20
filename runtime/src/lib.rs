@@ -4241,6 +4241,8 @@ pub use zkir_320 as zkir;
 #[cfg(all(feature = "zkir-321", not(feature = "zkir-320")))]
 pub use zkir_321 as zkir;
 pub mod aggregates;
+pub mod collection_ffi;
+pub mod merkle;
 pub mod native_ffi;
 pub mod profile;
 pub mod proof;
