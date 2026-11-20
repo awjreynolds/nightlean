@@ -108,6 +108,7 @@ theorem pruneEntrypoint_disclosure (entry : Entrypoint) (control : Disclosure.Or
   rw [pruneCircuit_disclosure]
   rfl
 
+set_option maxHeartbeats 600000 in
 theorem pruneEntrypoint_validate (caps : Capabilities) (state : List StateDecl) (entry : Entrypoint) :
     (pruneEntrypoint entry).validate caps state = entry.validate caps state := by
   unfold Entrypoint.validate

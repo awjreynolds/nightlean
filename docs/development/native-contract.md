@@ -66,3 +66,128 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Reset a ledger cell
+
+`reset cellName` writes the canonical default of the cell's declared scalar
+type. Use `when flag reset cellName` for a conditional reset. The usual
+public-state disclosure and sealed-cell checks apply, and a following read
+sees the reset when execution takes the guard. The compiler lowers the reset
+as a typed write through the existing Impact path.
+
+[The Lean fixture](../../tests/NativeCellReset.lean) and
+[the Compact fixture](../../tests/compact/CellReset.compact) exercise seeded
+UInt64, Native/Field, Boolean and Bytes4 cells. Run the
+[native checker fixture](../../runtime/tests/native_cell_reset.rs) with
+`NOCTIUM_CELL_RESET_DIR` pointing to fresh Lean ZKIR 3.2.1 ledger outputs.
+The scalar fixture covers both guard outcomes. Aggregate Cell defaults and
+other type combinations need separate equivalence evidence.
+
+The Rust SDK deployed the seeded cells on Ledger 9.1.0.1 localnet at
+height 104 and finalized the active reset at height 107. The finalized
+contract bytes matched the predicted bytes at both heights. Native sizing
+reported K8 and 192 rows for `clear`. The inactive case was checked in the
+pinned native VM and Compact runtime. [Localnet receipt](native-cell-reset-localnet-receipt.json)
+
+## Record standalone token mints
+
+```lean
+when enabled mintShielded(domain, disclose(amount))
+when enabled mintUnshielded(domain, disclose(amount))
+```
+
+Both effects take a 32-byte domain and a `UInt 64` amount. The domain, amount
+and guard must be public or explicitly disclosed. Active effects accumulate by
+domain in separate shielded and unshielded mint maps. Accumulation beyond
+`UInt 64` fails. The ledger derives each token type from the issuer address
+and domain. These effects record issuance. A transfer or settlement requires
+its own ledger effects and transaction outputs.
+
+The [Lean fixture](../../tests/NativeStandaloneMints.lean) and
+[Compact reference fixture](../../tests/compact/StandaloneMints.compact)
+exercise guarded minting, separate effects and the accumulation limit.
+
+The [localnet receipt](native-standalone-mints-localnet-receipt.json) records
+an active call with two mint amounts, 17 and 2, in each namespace. Ledger
+9.1.0.1 finalized the call with the predicted contract state. The transaction
+settled no tokens to a recipient.
+
+## Read the current contract address
+
+`readSelf as own` binds the executing contract's `Bytes32` address.
+`when enabled readSelf as own` produces zero bytes when inactive. A
+private guard needs disclosure before it controls this public read.
+The compiler encodes the query-context address as a native Impact read
+and binds its two byte limbs in ZKIR. [Midnight self reference](https://docs.midnight.network/compact/reference/ledger-adt#self)
+
+The address comes from the contract execution context. This allows a
+caller-dependent entrypoint to use the callee's own address alongside
+the separate caller value. Native replay against a different address
+fails the equality check. [Lean fixture](../../tests/NativeContractAddress.lean) ·
+[Compact oracle](../../tests/compact/contract-address.mjs) ·
+[Native checker](../../runtime/tests/native_contract_address.rs)
+
+The Rust SDK deployed the fixture on Ledger 9.1.0.1 localnet at block 47
+and finalized the active call at block 50. The full state matched the SDK
+prediction, and a separate decoder matched the stored `lastAddress`
+cell to the actual deployment address. Native sizing reported K8 and
+146 rows. The guarded skip and wrong-address replay ran in the native
+VM. [Localnet receipt](native-contract-address-localnet-receipt.json)
+
+## Read a token balance
+
+Use a 32-byte color and a Boolean tag. `true` selects the unshielded balance and
+`false` selects the shielded balance for the same color.
+
+```lean
+tokenBalance(color, isUnshielded) as amount
+tokenBalanceLt(color, isUnshielded, limit) as below
+tokenBalanceGt(color, isUnshielded, limit) as above
+```
+
+These operations read the balance at the start of the call. A missing token has
+balance zero. Exact reads return `UInt 128`. Both strict comparisons accept a
+`UInt 128` limit at the source boundary. The pinned Impact VM requires the
+actual balance and limit to fit in `UInt 64` when the comparison runs.
+
+Color, tag, comparison limit and any `when` guard are public or explicitly
+disclosed. A skipped exact read binds zero. A skipped comparison binds
+`false`. The comparison binds its Boolean result to the native transcript.
+Use the exact read when the application needs the amount.
+
+The [Lean fixture](../../tests/NativeTokenBalance.lean) and
+[Compact reference fixture](../../tests/compact/TokenBalance.compact) use the
+same inputs and guards.
+
+The [localnet receipt](native-token-balance-localnet-receipt.json) records a
+finalized ordinary call for an absent unshielded token. The call wrote zero
+over the previous recorded value of 17. Shielded and nonzero cases use
+simulated starting balances with the pinned native checker.
+
+## Settle tagged token inputs and outputs
+
+```lean
+incUnshieldedInputs(color, received, isUnshielded)
+incUnshieldedOutputs(color, sent, isUnshielded)
+claimUnshieldedCoinSpend(color, authorized, isUnshielded, isContract, recipient)
+```
+
+Each operation records a separate native effect. The ledger verifies these
+effects against the transaction's other calls and settlement data.
+Use `true` for the unshielded token tag and `false` for the shielded tag.
+The spend's recipient tag distinguishes a contract address from a user
+address with the same bytes. Each operand and any guard is public or
+explicitly disclosed.
+
+A first entry accepts a `UInt 128` amount. An addition to an existing entry
+requires both operands and their sum to fit `UInt 64` in the pinned VM.
+The [Lean fixture](../../tests/NativeTaggedSettlement.lean) and
+[Compact reference fixture](../../tests/compact/TaggedSettlement.compact)
+exercise these bounds and the effects' tagged keys.
+
+The [funded localnet receipt](native-tagged-settlement-localnet-receipt.json)
+records a proof which checks that both starting balances are zero, even after
+the source records receipt effects. The finalized state contains 17
+unshielded-tag units and 23 shielded-tag units of the same color. The native
+assembler predicted both balances. The finalized bytes matched the SDK's
+ledger replay byte for byte.

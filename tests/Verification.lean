@@ -4,6 +4,9 @@ open Noctium Noctium.Verification
 
 namespace VerificationFixture
 
+private def withoutSettlementEffects (state : LedgerState) : LedgerState :=
+  {state with unshieldedInputs := [], unshieldedOutputs := [], unshieldedSpendClaims := []}
+
 def contract : Contract := {
   name := "ReviewedNoOp"
   entrypoints := [{name := "run", circuit := {name := "emptyRelation"}}]
@@ -14,7 +17,7 @@ def specification : Specification := {
   invariant := fun _ => True
   precondition := fun _ inputs _ => inputs = []
   enabled := fun _ _ _ => True
-  postcondition := fun _ _ before outputs after => outputs = [] ∧ after = before
+  postcondition := fun _ _ before outputs after => outputs = [] ∧ after = withoutSettlementEffects before
 }
 
 def subject : Subject := {
@@ -31,7 +34,7 @@ def policy : AuditPolicy := {
 }
 
 theorem entry_runs (ctx : EvalContext) (before : LedgerState) :
-    subject.entry.run ctx [] before = .ok ([], before) := by rfl
+    subject.entry.run ctx [] before = .ok ([], withoutSettlementEffects before) := by rfl
 
 theorem functional : FunctionalObligation policy := by
   constructor
@@ -47,7 +50,7 @@ theorem functional : FunctionalObligation policy := by
   · intro ctx inputs before _ hpre _
     change inputs = [] at hpre
     subst inputs
-    exact ⟨[], before, entry_runs ctx before⟩
+    exact ⟨[], withoutSettlementEffects before, entry_runs ctx before⟩
   · exact ⟨{modulus := Field.modulus, poseidon2 := fun _ _ _ => .error "unused"}, [], {}, rfl, rfl, True.intro⟩
 
 theorem privacy : PrivacyObligation policy := by
@@ -118,7 +121,7 @@ def releasingSpecification : Specification := {
   precondition := fun _ inputs _ => ∃ bit, inputs = [("secret", .bool bit)]
   enabled := fun _ _ _ => True
   postcondition := fun _ inputs before outputs after =>
-    (∃ bit, inputs = [("secret", .bool bit)] ∧ outputs = [("released", .bool bit)]) ∧ after = before
+    (∃ bit, inputs = [("secret", .bool bit)] ∧ outputs = [("released", .bool bit)]) ∧ after = withoutSettlementEffects before
 }
 
 def releasingSubject : Subject := {
@@ -136,7 +139,7 @@ def releasingPolicy : AuditPolicy := {
 
 theorem release_runs (ctx : EvalContext) (before : LedgerState) (bit : Bool) :
     releasingSubject.entry.run ctx [("secret", .bool bit)] before =
-      .ok ([("released", .bool bit)], before) := by cases bit <;> rfl
+      .ok ([("released", .bool bit)], withoutSettlementEffects before) := by cases bit <;> with_unfolding_all rfl
 
 theorem releasingFunctional : FunctionalObligation releasingPolicy := by
   constructor
@@ -152,7 +155,7 @@ theorem releasingFunctional : FunctionalObligation releasingPolicy := by
   · intro ctx inputs before _ hpre _
     obtain ⟨bit, hinputs⟩ := hpre
     subst inputs
-    exact ⟨[("released", .bool bit)], before, release_runs ctx before bit⟩
+    exact ⟨[("released", .bool bit)], withoutSettlementEffects before, release_runs ctx before bit⟩
   · exact ⟨{modulus := Field.modulus, poseidon2 := fun _ _ _ => .error "unused"},
       [("secret", .bool false)], {}, rfl, ⟨false, rfl⟩, True.intro⟩
 
@@ -200,7 +203,7 @@ def failureSpecification : Specification := {
   precondition := fun ctx inputs _ => ctx.modulus = Field.modulus ∧
     ∃ a b, a ≤ 1 ∧ b ≤ 1 ∧ inputs = failureInputs a b
   enabled := fun _ inputs _ => ∀ a b, inputs = failureInputs a b → b ≤ a
-  postcondition := fun _ _ before outputs after => outputs = [("accepted", .bool true)] ∧ after = before
+  postcondition := fun _ _ before outputs after => outputs = [("accepted", .bool true)] ∧ after = withoutSettlementEffects before
 }
 
 def failureSubject : Subject := {
@@ -219,19 +222,20 @@ def failurePolicy : AuditPolicy := {
 def failureAllOutcomesPolicy : AuditPolicy :=
   {failurePolicy with privacy := {scope := .allOutcomes}}
 
-theorem failure_value_flow_accepts : Disclosure.contract failureContract = .ok () := by rfl
+theorem failure_value_flow_accepts : Disclosure.contract failureContract = .ok () := by
+  with_unfolding_all rfl
 
 theorem failure_runs (ctx : EvalContext) (before : LedgerState) (a b : Nat)
     (hmod : ctx.modulus = Field.modulus) (ha : a ≤ 1) (hb : b ≤ 1) :
     failureSubject.entry.run ctx (failureInputs a b) before =
       if a < b then .error "unsigned subtraction underflow"
-      else .ok ([("accepted", .bool true)], before) := by
+      else .ok ([("accepted", .bool true)], withoutSettlementEffects before) := by
   obtain ha : a = 0 ∨ a = 1 := by omega
   obtain hb : b = 0 ∨ b = 1 := by omega
   rcases ctx with ⟨modulus, oracle⟩
   change modulus = Field.modulus at hmod
   subst modulus
-  rcases ha with rfl | rfl <;> rcases hb with rfl | rfl <;> rfl
+  rcases ha with rfl | rfl <;> rcases hb with rfl | rfl <;> with_unfolding_all rfl
 
 theorem failureFunctional : FunctionalObligation failurePolicy := by
   constructor
@@ -248,7 +252,7 @@ theorem failureFunctional : FunctionalObligation failurePolicy := by
   · intro ctx inputs before _ hpre henabled
     obtain ⟨hmod, a, b, ha, hb, rfl⟩ := hpre
     have hba : b ≤ a := henabled a b rfl
-    refine ⟨[("accepted", .bool true)], before, ?_⟩
+    refine ⟨[("accepted", .bool true)], withoutSettlementEffects before, ?_⟩
     change failureSubject.entry.run ctx (failureInputs a b) before = _
     rw [failure_runs ctx before a b hmod ha hb, ite_eq_right (by omega)]
   · refine ⟨{modulus := Field.modulus, poseidon2 := fun _ _ _ => .error "unused"},

@@ -183,6 +183,10 @@ structure EvalContext where
     fun _ => .error "qualified Jubjub byte-decoding oracle is unavailable"
   /-- Address of an immediate contract caller, supplied by the execution context. -/
   contractCaller : Option (List Nat) := none
+  /-- Address of the contract executing this entrypoint. -/
+  ownContractAddress : Option (List Nat) := none
+  unshieldedBalances : List (List Nat × Nat) := []
+  shieldedBalances : List (List Nat × Nat) := []
 
 private def sameValue : (ty : Ty) → ty.Denote → ty.Denote → Bool
   | .native, a, b => a == b
@@ -203,6 +207,12 @@ private def canonical (ctx : EvalContext) (ty : Ty) (v : ty.Denote) : Bool :=
   | .jubjubPoint => v.1 < ctx.modulus && v.2 < ctx.modulus &&
       (ctx.jubjub.pointValid v).isOk
   | .foreign kind => kind.canonical v
+
+private def contractAddressValue (ctx : EvalContext) : Except String Value := do
+  let some address := ctx.ownContractAddress | throw "missing execution contract address"
+  unless address.length == 32 && address.all (· < 256) do
+    throw "invalid execution contract address"
+  pure (.bytes 32 address)
 
 /-- Public reduction equation for input-admission and preservation proofs. -/
 theorem canonical_eq (ctx : EvalContext) (ty : Ty) (value : ty.Denote) :
@@ -696,7 +706,7 @@ theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSp
     (Expr.disclose span value).eval ctx env = value.eval ctx env := by
   simp [Expr.eval]
 
-private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
+def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, typedBoolean := true, poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
     sha512 := true, keccak256 := true,
@@ -719,16 +729,101 @@ def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except Strin
     pure (output.name, Value.pack output.ty (← output.value.eval ctx env))
 
 /-- Pure transaction state. A failed transition returns no successor state. -/
+structure TokenEffectKey where
+  color : List Nat
+  isUnshielded : Bool
+  deriving Repr, BEq
+
+structure SpendClaimKey where
+  color : List Nat
+  isUnshielded : Bool
+  isContract : Bool
+  recipient : List Nat
+  deriving Repr, BEq
+
 structure LedgerState where
   cells : List (String × Value) := []
   maps : List (String × List (Value × Value)) := []
   trees : List (String × LedgerValue) := []
   events : List (EventKind × List Nat) := []
+  shieldedMints : List (List Nat × Nat) := []
+  unshieldedMints : List (List Nat × Nat) := []
+  unshieldedInputs : List (TokenEffectKey × Nat) := []
+  unshieldedOutputs : List (TokenEffectKey × Nat) := []
+  unshieldedSpendClaims : List (SpendClaimKey × Nat) := []
   deriving Repr, BEq
 
 /-- The source evaluator replaces an entry and places it first in the association list. -/
 def updateAssoc [BEq α] (key : α) (value : β) (entries : List (α × β)) : List (α × β) :=
   (key, value) :: entries.filter (fun item => !(item.1 == key))
+
+private def accumulateMintAmount (entries : List (List Nat × Nat))
+    (domain : List Nat) (amount : Nat) : Except String (List (List Nat × Nat)) := do
+  let total := (entries.lookup domain).getD 0 + amount
+  unless total < 2 ^ 64 do throw "accumulated token effects exceed the native UInt64 sum"
+  pure (updateAssoc domain total entries)
+
+/-- The VM accepts a UInt128 value when a token-effect key is first inserted.
+For an existing key, its Add instruction takes UInt64 operands and returns a
+UInt64 sum. -/
+private def accumulateTaggedAmount [BEq α] (entries : List (α × Nat))
+    (key : α) (amount : Nat) : Except String (List (α × Nat)) := do
+  match entries.lookup key with
+  | none => pure (updateAssoc key amount entries)
+  | some previous => do
+    unless previous < 2 ^ 64 && amount < 2 ^ 64 do
+      throw "existing token-effect key requires UInt64 operands"
+    let total := previous + amount
+    unless total < 2 ^ 64 do
+      throw "accumulated token effects exceed the native UInt64 sum"
+    pure (updateAssoc key total entries)
+
+private def mintShielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1))) :
+    Except String LedgerState := do
+  let mints ← accumulateMintAmount state.shieldedMints
+    (← domain.eval ctx env) (← amount.eval ctx env)
+  pure {state with shieldedMints := mints}
+
+private def mintUnshielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1))) :
+    Except String LedgerState := do
+  let mints ← accumulateMintAmount state.unshieldedMints
+    (← domain.eval ctx env) (← amount.eval ctx env)
+  pure {state with unshieldedMints := mints}
+
+private def incUnshieldedInputs (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded : Expr .bool) : Except String LedgerState := do
+  let key : TokenEffectKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+  }
+  let inputs ← accumulateTaggedAmount state.unshieldedInputs key (← amount.eval ctx env)
+  pure {state with unshieldedInputs := inputs}
+
+private def incUnshieldedOutputs (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded : Expr .bool) : Except String LedgerState := do
+  let key : TokenEffectKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+  }
+  let outputs ← accumulateTaggedAmount state.unshieldedOutputs key (← amount.eval ctx env)
+  pure {state with unshieldedOutputs := outputs}
+
+private def claimUnshieldedCoinSpend (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32)) :
+    Except String LedgerState := do
+  let key : SpendClaimKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+    isContract := ← isContract.eval ctx env
+    recipient := ← recipient.eval ctx env
+  }
+  let claims ← accumulateTaggedAmount state.unshieldedSpendClaims key (← amount.eval ctx env)
+  pure {state with unshieldedSpendClaims := claims}
 
 private def evaluatePath (ctx : EvalContext) (env : EvalEnv) (keys : List PathKey) :
     Except String (List Value) := keys.mapM fun key => match key with
@@ -841,10 +936,26 @@ private def listPayloadAt (root : LedgerValue) (keys : List Value) :
     | throw "missing or non-list state value"
   pure entries
 
+private def tokenBalanceValue (ctx : EvalContext) (env : EvalEnv)
+    (color : Expr (.bytes 32)) (isUnshielded : Expr .bool)
+    (query : BalanceQuery) : Except String Value := do
+  let color ← color.eval ctx env
+  let unshielded ← isUnshielded.eval ctx env
+  let balances := if unshielded then ctx.unshieldedBalances else ctx.shieldedBalances
+  let amount := (balances.lookup color).getD 0
+  unless amount ≤ balanceMaximum do throw "invalid token balance"
+  match query with
+  | .exact => pure (.uint balanceMaximum amount)
+  | .compare less limit => do
+    let limit ← limit.eval ctx env
+    unless amount < 2 ^ 64 && limit < 2 ^ 64 do
+      throw "native balance comparisons require UInt64 operands"
+    pure (.bool (if less then amount < limit else amount > limit))
+
 /-- Execute ordered effects against a private tentative state and retain the
 ordered read environment for expressions evaluated after the effects. Returning
 an error never exposes that tentative state. -/
-private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
+def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
     (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
   let mut env := env
   let mut next := state
@@ -871,14 +982,28 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
         if !canonical ctx keyTy keyValue || !canonical ctx valueTy value then
           throw s!"noncanonical state map entry '{name}'"
       env := (destination, Value.bool (entries.lookup key).isSome) :: env
+    | .readContractAddress destination =>
+      env := (destination, ← contractAddressValue ctx) :: env
     | .require condition =>
       if !(← condition.eval ctx env) then throw "state transition guard failed"
     | .claimContractCall .. =>
       throw "reference evaluator does not execute cross-contract claims"
+    | .mintShielded domain amount =>
+      next ← mintShielded ctx env next domain amount
+    | .mintUnshielded domain amount =>
+      next ← mintUnshielded ctx env next domain amount
+    | .incUnshieldedInputs color amount isUnshielded =>
+      next ← incUnshieldedInputs ctx env next color amount isUnshielded
+    | .incUnshieldedOutputs color amount isUnshielded =>
+      next ← incUnshieldedOutputs ctx env next color amount isUnshielded
+    | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      next ← claimUnshieldedCoinSpend ctx env next color amount isUnshielded isContract recipient
     | .emitEvent kind payload =>
       next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
       unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
+    | .readTokenBalance destination color isUnshielded query =>
+      env := (destination, ← tokenBalanceValue ctx env color isUnshielded query) :: env
     | .writeCell name ty value =>
       let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
       if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -1108,7 +1233,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
     (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
   unless guards.isEmpty || guards.length == effects.length do
     throw "effect guard metadata length mismatch"
-  if guards.isEmpty then
+  if guards.all Option.isNone then
     runEffectsWithEnv ctx effects env state
   else do
     let mut env := env
@@ -1117,7 +1242,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
       let guard := guards[index]?.getD none
       if guard.isSome then
         match effect with
-        | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. | .require .. |
+        | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. | .require .. |
+            .readTokenBalance .. |
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
@@ -1126,7 +1252,9 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .merkleTreeIsFullAt .. | .merkleTreeCheckRootAt .. |
             .merkleTreeInsertHashAt .. | .merkleTreeInsertHashIndexAt .. |
             .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. |
-            .claimContractCall .. | .requireContractCaller .. | .emitEvent .. => pure ()
+            .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+            .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
+            .requireContractCaller .. | .emitEvent .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -1138,6 +1266,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some value := raw.as ty | throw s!"state cell type mismatch '{name}'"
           if !canonical ctx ty value then throw s!"noncanonical state cell '{name}'"
           env := (destination, Value.pack ty value) :: env
+        | .readContractAddress destination =>
+          env := (destination, ← contractAddressValue ctx) :: env
         | .readMap name destination keyTy valueTy key =>
           let key := Value.pack keyTy (← key.eval ctx env)
           let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
@@ -1158,10 +1288,22 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           if !(← condition.eval ctx env) then throw "state transition guard failed"
         | .claimContractCall .. =>
           throw "reference evaluator does not execute cross-contract claims"
+        | .mintShielded domain amount =>
+          next ← mintShielded ctx env next domain amount
+        | .mintUnshielded domain amount =>
+          next ← mintUnshielded ctx env next domain amount
+        | .incUnshieldedInputs color amount isUnshielded =>
+          next ← incUnshieldedInputs ctx env next color amount isUnshielded
+        | .incUnshieldedOutputs color amount isUnshielded =>
+          next ← incUnshieldedOutputs ctx env next color amount isUnshielded
+        | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+          next ← claimUnshieldedCoinSpend ctx env next color amount isUnshielded isContract recipient
         | .emitEvent kind payload =>
           next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
           unless ctx.contractCaller == some (← address.eval ctx env) do throw "required contract caller mismatch"
+        | .readTokenBalance destination color isUnshielded query =>
+          env := (destination, ← tokenBalanceValue ctx env color isUnshielded query) :: env
         | .writeCell name ty value =>
           let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
           if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -1367,7 +1509,16 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           env := (destination, Value.pack ty zero) :: env
         | .readMember _ destination .. =>
           env := (destination, .bool false) :: env
+        | .readContractAddress destination =>
+          env := (destination, .bytes 32 (List.replicate 32 0)) :: env
+        | .readTokenBalance destination _ _ query =>
+          let value := match query with
+            | .exact => Value.uint balanceMaximum 0
+            | .compare .. => Value.bool false
+          env := (destination, value) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
+            .mintShielded .. | .mintUnshielded .. | .incUnshieldedInputs .. |
+            .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
             .requireContractCaller .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
@@ -1415,6 +1566,10 @@ def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
   | .error diagnostic => throw diagnostic.message
   | .ok _ => pure ()
   let outputs ← entry.circuit.run ctx env
+  let state := {state with
+    unshieldedInputs := [],
+    unshieldedOutputs := [],
+    unshieldedSpendClaims := []}
   let (finalEnv, next) ←
     runEffectsWithGuardsAndEnv ctx entry.effects entry.effectGuards (outputs ++ env) state
   let returned ← entry.returns.mapM fun output => do

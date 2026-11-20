@@ -50,6 +50,10 @@ export circuit clear(owner: Bytes<32>, bucket: Field): [] {
   archives.lookup(disclose(owner)).lookup(disclose(bucket)).resetHistory();
 }
 
+export circuit digestFromPath(path: MerkleTreePath<2, Field>): Field {
+  return disclose(merkleTreePathRoot<2, Field>(path).field);
+}
+
 export circuit resetTrees(owner: Bytes<32>, bucket: Field): [] {
   ordinary.lookup(disclose(owner)).lookup(disclose(bucket)).resetToDefault();
   archives.lookup(disclose(owner)).lookup(disclose(bucket)).resetToDefault();

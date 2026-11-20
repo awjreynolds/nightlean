@@ -12,8 +12,13 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 NS = "Noctium.PrivateClaimVerification"
 MODULE = "proofs.PrivateClaimVerification"
+OPERATION = "PrivateClaim.claim"
+TARGET = ROOT / "profiles/midnight-ledger-9-zkir-3.2.1-target.json"
+MODEL_PIN = ROOT / "proofs/PrivateClaimVerification.model.sha256"
 MODEL_ROOTS = ["Noctium.Verification.FunctionalObligation", "Noctium.Verification.PrivacyObligation",
-               f"{NS}.policy", "PrivateClaimAuditNegative.wrongPolicy", "propext", "Classical.choice", "Quot.sound"]
+               f"{NS}.policy"]
+AXIOMS = ["propext", "Classical.choice", "Quot.sound"]
+OPERATION_ROOTS = ["Noctium.Contract.name", "Noctium.Entrypoint.name"]
 
 
 def run(args: list[str], env: dict[str, str] | None = None, stdin: str | None = None) -> str:
@@ -25,17 +30,24 @@ def run(args: list[str], env: dict[str, str] | None = None, stdin: str | None = 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output-dir", type=Path, default=ROOT / ".noctium/audits/private-claim-source")
+    parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--report", action="store_true", help="print the checked source report as JSON")
+    parser.add_argument("--proof-export", type=Path, help="candidate data export for --report")
     parser.add_argument("--trusted-model-export", type=Path)
     parser.add_argument("--trusted-model-sha256")
     args = parser.parse_args()
     if bool(args.trusted_model_export) != bool(args.trusted_model_sha256):
         parser.error("external model export and SHA256 must be supplied together")
-    output = args.output_dir.resolve()
-    output.mkdir(parents=True, exist_ok=True)
+    if args.report and args.trusted_model_export:
+        parser.error("--report uses the checked-in fixture model pin")
+    if args.proof_export and not args.report:
+        parser.error("--proof-export requires --report")
     run(["lake", "build", "Noctium", "Noctium.Frontend", "Noctium.Verification.ExportAudit"])
     with tempfile.TemporaryDirectory(prefix="noctium-private-claim-audit-") as directory:
         scratch = Path(directory)
+        default_output = scratch / "evidence" if args.report else ROOT / ".noctium/audits/private-claim-source"
+        output = (args.output_dir or default_output).resolve()
+        output.mkdir(parents=True, exist_ok=True)
         imports = scratch / "imports"
         for subdir in ["examples", "proofs"]:
             (imports / subdir).mkdir(parents=True)
@@ -64,21 +76,28 @@ def main() -> int:
         report = build("proofs/PrivateClaimVerification.lean")
         (output / "direct-axioms.txt").write_text(report)
         assert report.count("depends on axioms: [propext, Classical.choice, Quot.sound]") == 2, report
-        negative = '''import proofs.PrivateClaimVerification
+        if not args.report:
+            negative = '''import proofs.PrivateClaimVerification
 open Noctium Noctium.Verification Noctium.PrivateClaimVerification
 namespace PrivateClaimAuditNegative
 def wrongPolicy : AuditPolicy :=
   {policy with subject := {subject with specification := {specification with postcondition := fun _ _ _ _ _ => True}}}
 end PrivateClaimAuditNegative
 '''
-        build("proofs/PrivateClaimAuditNegative.lean", negative)
-        baseline = export("baseline-model.ndjson", MODEL_ROOTS, "proofs.PrivateClaimAuditNegative")
-        proof = export("proofs.ndjson", [f"{NS}.functional", f"{NS}.privacy"])
+            build("proofs/PrivateClaimAuditNegative.lean", negative)
+            roots = [*MODEL_ROOTS, "PrivateClaimAuditNegative.wrongPolicy", *AXIOMS]
+            baseline = export("baseline-model.ndjson", roots, "proofs.PrivateClaimAuditNegative")
+        else:
+            baseline = export("baseline-model.ndjson", [*MODEL_ROOTS, *OPERATION_ROOTS, *AXIOMS])
+        proof = (args.proof_export.resolve() if args.proof_export
+                 else export("proofs.ndjson", [f"{NS}.functional", f"{NS}.privacy"]))
         # Retain reviewed input bytes before the external driver reads them. A local
         # regression baseline is not an independent review of the business specification.
         model = output / "trusted-model.ndjson"
         model.write_bytes(args.trusted_model_export.read_bytes() if args.trusted_model_export else baseline.read_bytes())
-        pin = args.trusted_model_sha256 or hashlib.sha256(model.read_bytes()).hexdigest()
+        pin = args.trusted_model_sha256
+        if pin is None:
+            pin = MODEL_PIN.read_text().strip() if args.report else hashlib.sha256(model.read_bytes()).hexdigest()
         (output / "trusted-model.sha256").write_text(pin + "\n")
 
         def audit(candidate: Path, expected_error: str | None = None, policy: str = f"{NS}.policy") -> dict:
@@ -87,6 +106,8 @@ end PrivateClaimAuditNegative
                        "--policy", policy, "--functional-proof", f"{NS}.functional", "--privacy-proof", f"{NS}.privacy"]
             checked = subprocess.run(command, cwd=ROOT, capture_output=True, text=True, timeout=240)
             result = json.loads(checked.stdout)
+            if args.report and checked.returncode != 0:
+                parser.exit(1, f"{OPERATION}: {result['error']}\n")
             if expected_error:
                 assert checked.returncode != 0 and expected_error in result["error"], result
             else:
@@ -98,6 +119,22 @@ end PrivateClaimAuditNegative
 
         accepted = audit(proof)
         (output / "audit.json").write_text(json.dumps(accepted, indent=2, sort_keys=True) + "\n")
+        if args.report:
+            if (accepted.get("operation") != OPERATION
+                    or accepted.get("sourceFunctionalChecked") is not True
+                    or accepted.get("sourcePrivacyChecked") is not True):
+                parser.exit(1, f"{OPERATION}: unexpected checked subject or proof roles\n")
+            specification = accepted["specification"]
+            for key in ("initial", "invariant", "precondition", "enabled", "postcondition", "releaseDefinition"):
+                del specification[key]
+            profile_bytes = TARGET.read_bytes()
+            profile = json.loads(profile_bytes)
+            accepted.update(schemaVersion=1, targetProfile={
+                "name": profile["name"], "ledger": profile["ledger"], "zkir": profile["zkir"],
+                "sha256": hashlib.sha256(profile_bytes).hexdigest(),
+            })
+            print(json.dumps(accepted, indent=2, sort_keys=True))
+            return 0
         run(["lake", "env", "leanchecker", "--from-export", str(proof)])
         if not args.trusted_model_export:
             wrong_policy = audit(proof, "wrong_obligation", "PrivateClaimAuditNegative.wrongPolicy")

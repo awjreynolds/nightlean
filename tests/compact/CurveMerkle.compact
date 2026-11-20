@@ -1,0 +1,51 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger k1BaseTree: MerkleTree<2, Secp256k1Base>;
+export ledger k1ScalarTree: MerkleTree<2, Secp256k1Scalar>;
+export ledger k1PointTree: MerkleTree<2, Secp256k1Point>;
+export ledger r1BaseTree: MerkleTree<2, Secp256r1Base>;
+export ledger r1ScalarTree: MerkleTree<2, Secp256r1Scalar>;
+export ledger r1PointTree: MerkleTree<2, Secp256r1Point>;
+export ledger c255BaseTree: HistoricMerkleTree<2, Curve25519Base>;
+export ledger c255ScalarTree: HistoricMerkleTree<2, Curve25519Scalar>;
+export ledger c255PointTree: HistoricMerkleTree<2, Curve25519Point>;
+
+export circuit appendK1Base(v: Secp256k1Base): [] { k1BaseTree.insert(disclose(v)); }
+export circuit appendK1Scalar(v: Secp256k1Scalar): [] { k1ScalarTree.insert(disclose(v)); }
+export circuit appendK1Point(v: Secp256k1Point): [] { k1PointTree.insert(disclose(v)); }
+export circuit appendR1Base(v: Secp256r1Base): [] { r1BaseTree.insert(disclose(v)); }
+export circuit appendR1Scalar(v: Secp256r1Scalar): [] { r1ScalarTree.insert(disclose(v)); }
+export circuit appendR1Point(v: Secp256r1Point): [] { r1PointTree.insert(disclose(v)); }
+export circuit appendC255Base(v: Curve25519Base): [] { c255BaseTree.insert(disclose(v)); }
+export circuit appendC255Scalar(v: Curve25519Scalar): [] { c255ScalarTree.insert(disclose(v)); }
+export circuit appendC255Point(v: Curve25519Point): [] { c255PointTree.insert(disclose(v)); }
+
+export circuit k1BaseRoot(p: MerkleTreePath<2, Secp256k1Base>): Field { return disclose(merkleTreePathRoot<2, Secp256k1Base>(p).field); }
+export circuit k1ScalarRoot(p: MerkleTreePath<2, Secp256k1Scalar>): Field { return disclose(merkleTreePathRoot<2, Secp256k1Scalar>(p).field); }
+export circuit k1PointRoot(p: MerkleTreePath<2, Secp256k1Point>): Field { return disclose(merkleTreePathRoot<2, Secp256k1Point>(p).field); }
+export circuit r1BaseRoot(p: MerkleTreePath<2, Secp256r1Base>): Field { return disclose(merkleTreePathRoot<2, Secp256r1Base>(p).field); }
+export circuit r1ScalarRoot(p: MerkleTreePath<2, Secp256r1Scalar>): Field { return disclose(merkleTreePathRoot<2, Secp256r1Scalar>(p).field); }
+export circuit r1PointRoot(p: MerkleTreePath<2, Secp256r1Point>): Field { return disclose(merkleTreePathRoot<2, Secp256r1Point>(p).field); }
+export circuit c255BaseRoot(p: MerkleTreePath<2, Curve25519Base>): Field { return disclose(merkleTreePathRoot<2, Curve25519Base>(p).field); }
+export circuit c255ScalarRoot(p: MerkleTreePath<2, Curve25519Scalar>): Field { return disclose(merkleTreePathRoot<2, Curve25519Scalar>(p).field); }
+export circuit c255PointRoot(p: MerkleTreePath<2, Curve25519Point>): Field { return disclose(merkleTreePathRoot<2, Curve25519Point>(p).field); }
+
+export ledger points: MerkleTree<2, JubjubPoint>;
+export ledger scalars: HistoricMerkleTree<2, JubjubScalar>;
+
+export circuit appendPoint(point: JubjubPoint): [] {
+  points.insert(disclose(point));
+}
+
+export circuit appendScalar(scalar: JubjubScalar): [] {
+  scalars.insert(disclose(scalar));
+}
+
+export circuit pointPathRoot(path: MerkleTreePath<2, JubjubPoint>): Field {
+  return disclose(merkleTreePathRoot<2, JubjubPoint>(path).field);
+}
+
+export circuit scalarPathRoot(path: MerkleTreePath<2, JubjubScalar>): Field {
+  return disclose(merkleTreePathRoot<2, JubjubScalar>(path).field);
+}

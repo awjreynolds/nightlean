@@ -20,7 +20,7 @@ let (foldedProgram, folded) ← Iteration.foldWithLimits {} mappedProgram 0 env 
     .return (some (.binary .add (.ref "acc") (.ref "value")))])
 ```
 
-`applyWithLimits` applies an operator to ordinary argument expressions. `mapWithLimits` accepts one or more fixed sequence expressions and requires equal lengths. Its operator receives one element from each sequence. `foldWithLimits` accepts an initial value and a list of equal-length sequences. Its operator receives the current accumulator and one element from each sequence. Supported sequences include vectors, vector-compatible tuples, scalar byte strings and checked composite byte layouts. Tuple elements need a common type under the supported subtype rules. Byte elements use the bounded range 0..255. Empty tuples currently reject because they provide no element type; typed empty vectors and bytes remain supported.
+`applyWithLimits` applies an operator to ordinary argument expressions. `mapWithLimits` accepts one or more fixed sequence expressions and requires equal lengths. Its operator receives one element from each sequence. `foldWithLimits` accepts an initial value and a list of equal-length sequences. Its operator receives the current accumulator and one element from each sequence. Supported sequences include vectors, vector-compatible tuples, scalar byte strings and checked composite byte layouts. Tuple elements need a common type under the supported subtype rules. Byte elements use the bounded range 0..255. An empty tuple supplies its length. Its element type comes from an explicit parameter or a uniquely matching named helper. An omitted anonymous parameter stays unresolved while the source checker checks the zero-length callback.
 
 Generated wrapper parameters evaluate each complete sequence once. Fold evaluates its initial expression before its sequence expression. Ordered bindings retain operator calls and partial computations. Empty vectors keep their declared element type, so checking the operator does not require indexing a nonexistent element. Existing source, type, parameter, declaration and finite expansion limits apply. Checked layout costs bound result projection expansion before cloning. Zero-field results retain strict evaluation tokens, so binding a Unit or empty aggregate does not discard its assertions or partial computations.
 
@@ -47,4 +47,45 @@ The [native case](../../runtime/src/witness_execution/iteration_ledger_tests.rs)
 
 Each mapped record contains an enum amount and a nested two-element metadata vector. The middle input produces the empty amount variant. The other two contain amounts 6 and 10. Fold reads each enum tag and conditionally projects the active payload alongside byte fees `[1,2,3]`. The two-sequence fold sums the amounts and fees to 22. The source asserts the expected result, explicitly discloses the public cell write and stages private value 22. The entrypoint returns an `Iteration.Receipt` record containing the total, a Bool vector, an enum claim, bytes, nested Unit and an explicitly released private offset. Eight Native return fields form one committed SDK result. The inactive branch makes no provider calls and returns total 0 with the empty claim variant. The offset release remains explicit on both paths. A wrong provider value rejects before the write and private stage. Completed paths run through the native checker. Source rejections remove the write disclosure or the returned offset disclosure and check the private value is rejected at each public sink. Reordered return-view fields also reject.
 
-This is staged Lean source construction, with explicit Helpers statements. Readable operator syntax, empty-tuple inference and generic operator preservation remain open under [issue 48](https://github.com/awjreynolds/noctium/issues/48). Source and native checker cases do not establish full Compact equivalence or whole-compiler preservation. A conservative closure pass omits unused bindings only when their value and creation guard are total in the checked Native context. Partial and unknown expressions retain their order and guard totalization. At the [record-only checkpoint](https://github.com/awjreynolds/noctium/commit/02beefa6f7a2352b00387f04fc6ed931b34f3b86), the Impact plan fell from 25,167,866 to 3,309,220 bytes and ZKIR occupied 15,583 bytes. The current example also exercises Unit arguments, captures and a logical Unit root input. The native test rejects omission of that root input and checks its empty native binding list. The current nested-enum export occupies 231,506 bytes for Impact and 27,386 bytes for ZKIR. The native case passes in 0.06 seconds, excluding compilation. The workload now includes a committed composite receipt and nested tuple inputs with explicit structural widening, so these sizes do not form a matched optimisation comparison. Redundant total-value forcing is omitted, while explicit constraints and partial checks remain. Raw composite witness field bounds are unconditional circuit input requirements, including inactive defaults. These are artifact sizes, without a proof-time or K claim. Broader expression sharing stays in [optimisation issue 85](https://github.com/awjreynolds/noctium/issues/85). No keys, proofs, deployments or new K benchmark accompany this extension.
+This is staged Lean source construction, with explicit Helpers statements. Readable operator syntax and generic operator preservation remain open under [issue 48](https://github.com/awjreynolds/noctium/issues/48). Source and native checker cases do not establish full Compact equivalence or whole-compiler preservation. A conservative closure pass omits unused bindings only when their value and creation guard are total in the checked Native context. Partial and unknown expressions retain their order and guard totalization. At the [record-only checkpoint](https://github.com/awjreynolds/noctium/commit/02beefa6f7a2352b00387f04fc6ed931b34f3b86), the Impact plan fell from 25,167,866 to 3,309,220 bytes and ZKIR occupied 15,583 bytes. The current example also exercises Unit arguments, captures and a logical Unit root input. The native test rejects omission of that root input and checks its empty native binding list. The current nested-enum export occupies 231,506 bytes for Impact and 27,386 bytes for ZKIR. The native case passes in 0.06 seconds, excluding compilation. The workload now includes a committed composite receipt and nested tuple inputs with explicit structural widening, so these sizes do not form a matched optimisation comparison. Redundant total-value forcing is omitted, while explicit constraints and partial checks remain. Raw composite witness field bounds are unconditional circuit input requirements, including inactive defaults. These are artifact sizes, without a proof-time or K claim. Broader expression sharing stays in [optimisation issue 85](https://github.com/awjreynolds/noctium/issues/85). No keys, proofs, deployments or new K benchmark accompany this extension.
+
+### Empty tuple inputs
+
+The source checker accepts an unresolved parameter in a typed return, binding
+or helper argument. Arithmetic and Boolean conditions require an operand type.
+A callback with a known result infers the empty vector element type. When the
+result is still unresolved, pass `expectedElement` to the staged `mapWithLimits`
+API from the surrounding result type. For example, `some (.scalar .native)`
+chooses `Vector 0 Native` for the unannotated identity callback. A fold with
+an explicit result type uses that type for an omitted accumulator annotation.
+
+The [empty-tuple fixture](../../tests/EmptyTupleIteration.lean) folds over the result
+of an empty map and another empty tuple, with omitted callback parameter types.
+The Rust host asks for the seed first,
+then for tuple inputs 1, 2 and 3. The result and the ledger cell both equal the
+seed. Both operator callbacks remain uncalled. The [Compact 0.36.1 oracle](../../tests/compact/EmptyTupleIteration.compact)
+with [Compact runtime 0.21.0](../../tests/compact/empty-tuple-iteration.mjs) produces the same
+call order, result and ledger value for seed 9.
+
+```sh
+lake build noctium Noctium:shared
+mkdir -p build/experiments
+scratch=$(mktemp -d "$PWD/build/experiments/empty-tuple.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+.lake/build/bin/noctium compile tests/EmptyTupleIteration.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --emit witness --output "$scratch/contract"
+NOCTIUM_EMPTY_TUPLE_ARTIFACTS="$scratch/contract" \
+  cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+    --no-default-features --features zkir-321 --lib \
+    empty_tuple_iteration_evaluates_arguments_without_invoking_operators -- --ignored
+```
+
+To run the oracle in the same scratch directory, use Compact 0.36.1 and make
+`@midnight-ntwrk/compact-runtime` 0.21.0 available to Node.
+
+```sh
+compactc --skip-zk tests/compact/EmptyTupleIteration.compact "$scratch/compact"
+cp tests/compact/empty-tuple-iteration.mjs "$scratch/"
+node "$scratch/empty-tuple-iteration.mjs"
+```
