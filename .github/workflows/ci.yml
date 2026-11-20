@@ -108,6 +108,8 @@ jobs:
           lake env lean tests/NativeList.lean
           lake env lean tests/MerkleTree.lean
           lake env lean tests/MerkleIndexed.lean
+          lake env lean tests/HistoricMerkle.lean
+          lake env lean tests/NestedMerkle.lean
           lake env lean tests/NativeReturns.lean
           lake env lean tests/TypedCallArguments.lean
           lake env lean tests/ContractInterfaces.lean

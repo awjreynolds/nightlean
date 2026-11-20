@@ -60,27 +60,66 @@ inductive LedgerValue where
   | list (entries : List (List Nat))
   | merkleTree (depth count : Nat)
   | merkleTreeKnown (depth count : Nat) (tree : Noctium.Merkle.Tree)
+  | historicMerkleTree (depth count : Nat) (history : List Nat)
+  | historicMerkleTreeKnown (depth count : Nat) (tree : Noctium.Merkle.Tree)
+      (history : List Nat)
   deriving Repr, BEq
 
-private def merkleTreeState? : LedgerValue → Option (Nat × Nat × Option Noctium.Merkle.Tree)
-  | .merkleTree depth count => some (depth, count, if count == 0 then some .empty else none)
-  | .merkleTreeKnown depth count tree => some (depth, count, some tree)
+private structure MerkleTreeState where
+  depth : Nat
+  count : Nat
+  tree : Option Noctium.Merkle.Tree
+  history : Option (List Nat) := none
+
+private def merkleTreeState? : LedgerValue → Option MerkleTreeState
+  | .merkleTree depth count =>
+    some {depth, count, tree := if count == 0 then some .empty else none}
+  | .merkleTreeKnown depth count tree => some {depth, count, tree := some tree}
+  | .historicMerkleTree depth count history =>
+    some {depth, count, tree := if count == 0 then some .empty else none, history := some history}
+  | .historicMerkleTreeKnown depth count tree history =>
+    some {depth, count, tree := some tree, history := some history}
   | _ => none
 
-private def checkedMerkleTreeState (state : LedgerValue) :
-    Except String (Nat × Nat × Option Noctium.Merkle.Tree) := do
+def LedgerValue.emptyHistoricMerkleTree (depth : Nat) : LedgerValue :=
+  .historicMerkleTree depth 0 [0]
+
+private def checkedMerkleTreeState (state : LedgerValue) : Except String MerkleTreeState := do
   let some view := merkleTreeState? state | throw "missing or malformed MerkleTree state"
-  let (depth, count, _) := view
-  unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
-  if count > 2 ^ depth then throw "MerkleTree count exceeds its capacity"
+  unless 2 ≤ view.depth && view.depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
+  if view.count > 2 ^ view.depth then throw "MerkleTree count exceeds its capacity"
   pure view
+
+private def MerkleTreeState.withTree (state : MerkleTreeState) (count : Nat)
+    (tree : Noctium.Merkle.Tree) : LedgerValue :=
+  match state.history with
+  | some history =>
+    let updated := if history.contains tree.root then history else tree.root :: history
+    .historicMerkleTreeKnown state.depth count tree updated
+  | none => .merkleTreeKnown state.depth count tree
+
+private def MerkleTreeState.reset (state : MerkleTreeState) : LedgerValue :=
+  if state.history.isSome then LedgerValue.emptyHistoricMerkleTree state.depth
+  else .merkleTree state.depth 0
+
+private def resetMerkleTreeHistory (state : LedgerValue) : Except String LedgerValue := do
+  let view ← checkedMerkleTreeState state
+  unless view.history.isSome do throw "resetHistory requires a HistoricMerkleTree"
+  let some tree := view.tree | throw "MerkleTree root is unavailable for a nonempty count-only state"
+  if view.count == 0 then
+    pure (LedgerValue.emptyHistoricMerkleTree view.depth)
+  else
+    pure (.historicMerkleTreeKnown view.depth view.count tree [tree.root])
 
 private def checkMerkleTreeRoot (state : LedgerValue) (digest modulus : Nat) :
     Except String Bool := do
-  let (_, _, tree?) ← checkedMerkleTreeState state
-  let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+  let view ← checkedMerkleTreeState state
   unless digest < modulus do throw "MerkleTree expected root is noncanonical"
-  pure (tree.root == digest)
+  match view.history with
+  | some history => pure (history.contains digest)
+  | none => do
+    let some tree := view.tree | throw "MerkleTree root is unavailable for a nonempty count-only state"
+    pure (tree.root == digest)
 
 abbrev EvalEnv := List (String × Value)
 
@@ -812,7 +851,8 @@ private def treeLookup (root : LedgerValue) : List Value → Option LedgerValue
     | .scalar _ => none
     | .composite .. => none
     | .list _ => none
-    | .merkleTree .. | .merkleTreeKnown .. => none
+    | .merkleTree .. | .merkleTreeKnown .. |
+        .historicMerkleTree .. | .historicMerkleTreeKnown .. => none
     | .map entries => (entries.lookup key).bind fun value => treeLookup value rest
 
 private def treeMember (root : LedgerValue) (keys : List Value) : Except String Bool := do
@@ -833,7 +873,8 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
     | .scalar _ => none
     | .composite .. => none
     | .list _ => none
-    | .merkleTree .. | .merkleTreeKnown .. => none
+    | .merkleTree .. | .merkleTreeKnown .. |
+        .historicMerkleTree .. | .historicMerkleTreeKnown .. => none
     | .map entries =>
       if rest.isEmpty then
         pure (.map (updateAssoc key value entries))
@@ -841,6 +882,33 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
         let child ← entries.lookup key
         let next ← treeSet child rest value
         pure (.map (updateAssoc key next entries))
+
+private def readMerkleTreeAt (state : LedgerState) (name : String) (keys : List Value) :
+    Except String LedgerValue := do
+  if keys.isEmpty then throw "nested MerkleTree path must contain at least one map key"
+  let some root := state.trees.lookup name | throw s!"missing recursive MerkleTree state '{name}'"
+  let some selected := treeLookup root keys | throw s!"missing nested MerkleTree value '{name}'"
+  pure selected
+
+private def writeMerkleTreeAt (state : LedgerState) (name : String) (keys : List Value)
+    (value : LedgerValue) : Except String LedgerState := do
+  if keys.isEmpty then throw "nested MerkleTree path must contain at least one map key"
+  let some root := state.trees.lookup name | throw s!"missing recursive MerkleTree state '{name}'"
+  let some updated := treeSet root keys value
+    | throw s!"nested MerkleTree parent is missing or not a map '{name}'"
+  pure {state with trees := updateAssoc name updated state.trees}
+
+private def resetMerkleTreeAt (state : LedgerState) (name : String) (keys : List Value)
+    (depth : Nat) (historic : Bool) : Except String LedgerState := do
+  unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
+  let some root := state.trees.lookup name | throw s!"missing recursive MerkleTree state '{name}'"
+  if let some existing := treeLookup root keys then
+    let view ← checkedMerkleTreeState existing
+    unless view.depth == depth && view.history.isSome == historic do
+      throw "nested MerkleTree value does not match its declared type"
+  let replacement := if historic then LedgerValue.emptyHistoricMerkleTree depth
+    else .merkleTree depth 0
+  writeMerkleTreeAt state name keys replacement
 
 /-- Remove a final map entry while preserving ancestor maps. A missing final key
 is an unchanged map, matching the ledger VM's Map.remove behavior. -/
@@ -1070,21 +1138,23 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       next := {next with trees := updateAssoc name updated next.trees}
     | .merkleTreeIsFull name destination => do
       let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
-      let (depth, count, _) ← checkedMerkleTreeState raw
-      env := (destination, .bool (count == 2 ^ depth)) :: env
+      let view ← checkedMerkleTreeState raw
+      env := (destination, .bool (view.count == 2 ^ view.depth)) :: env
     | .merkleTreeCheckRoot name expected destination => do
       let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
       let result ← checkMerkleTreeRoot raw (← expected.eval ctx env) ctx.modulus
       env := (destination, .bool result) :: env
     | .merkleTreeInsertHash name hash => do
       let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
-      let (depth, count, tree?) ← checkedMerkleTreeState raw
-      let capacity := 2 ^ depth
-      if count == capacity then throw "MerkleTree is full"
-      let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+      let view ← checkedMerkleTreeState raw
+      let capacity := 2 ^ view.depth
+      if view.count == capacity then throw "MerkleTree is full"
+      let some tree := view.tree | throw "MerkleTree root is unavailable for a nonempty count-only state"
       let bytes ← hash.eval ctx env
-      let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus depth count bytes tree
-      next := {next with trees := updateAssoc name (.merkleTreeKnown depth (count + 1) updated) next.trees}
+      let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus
+        view.depth view.count bytes tree
+      let newTree := view.withTree (view.count + 1) updated
+      next := {next with trees := updateAssoc name newTree next.trees}
     | .merkleTreeInsertHashIndex name hash index => do
       let bytes ← hash.eval ctx env
       unless bytes.length == 32 && bytes.all (· < 256) do
@@ -1092,19 +1162,63 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let index ← index.eval ctx env
       let some raw := next.trees.lookup name
         | throw s!"missing or malformed MerkleTree state '{name}'"
-      let (depth, count, tree?) ← checkedMerkleTreeState raw
-      let capacity := 2 ^ depth
+      let view ← checkedMerkleTreeState raw
+      let capacity := 2 ^ view.depth
       if index ≥ capacity then throw "MerkleTree index is outside its capacity"
-      let some tree := tree?
+      let some tree := view.tree
         | throw "MerkleTree root is unavailable for a nonempty count-only state"
       let updated ← Noctium.Merkle.Tree.setHash ctx.transientHash ctx.modulus
-        depth index bytes tree
-      let newTree := LedgerValue.merkleTreeKnown depth (max count (index + 1)) updated
+        view.depth index bytes tree
+      let newTree := view.withTree (max view.count (index + 1)) updated
       next := {next with trees := updateAssoc name newTree next.trees}
     | .merkleTreeReset name => do
       let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
-      let (depth, _, _) ← checkedMerkleTreeState raw
-      next := {next with trees := updateAssoc name (.merkleTree depth 0) next.trees}
+      let view ← checkedMerkleTreeState raw
+      next := {next with trees := updateAssoc name view.reset next.trees}
+    | .merkleTreeResetHistory name => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed HistoricMerkleTree state '{name}'"
+      let updated ← resetMerkleTreeHistory raw
+      next := {next with trees := updateAssoc name updated next.trees}
+    | .merkleTreeIsFullAt name keys destination => do
+      let evaluated ← evaluatePath ctx env keys
+      let view ← checkedMerkleTreeState (← readMerkleTreeAt next name evaluated)
+      env := (destination, .bool (view.count == 2 ^ view.depth)) :: env
+    | .merkleTreeCheckRootAt name keys expected destination => do
+      let evaluated ← evaluatePath ctx env keys
+      let raw ← readMerkleTreeAt next name evaluated
+      let result ← checkMerkleTreeRoot raw (← expected.eval ctx env) ctx.modulus
+      env := (destination, .bool result) :: env
+    | .merkleTreeInsertHashAt name keys hash => do
+      let evaluated ← evaluatePath ctx env keys
+      let view ← checkedMerkleTreeState (← readMerkleTreeAt next name evaluated)
+      if view.count == 2 ^ view.depth then throw "MerkleTree is full"
+      let some tree := view.tree
+        | throw "MerkleTree root is unavailable for a nonempty count-only state"
+      let bytes ← hash.eval ctx env
+      let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus
+        view.depth view.count bytes tree
+      next ← writeMerkleTreeAt next name evaluated (view.withTree (view.count + 1) updated)
+    | .merkleTreeInsertHashIndexAt name keys hash index => do
+      let bytes ← hash.eval ctx env
+      unless bytes.length == 32 && bytes.all (· < 256) do
+        throw "MerkleTree inserted hash must be Bytes32"
+      let index ← index.eval ctx env
+      let evaluated ← evaluatePath ctx env keys
+      let view ← checkedMerkleTreeState (← readMerkleTreeAt next name evaluated)
+      if index ≥ 2 ^ view.depth then throw "MerkleTree index is outside its capacity"
+      let some tree := view.tree
+        | throw "MerkleTree root is unavailable for a nonempty count-only state"
+      let updated ← Noctium.Merkle.Tree.setHash ctx.transientHash ctx.modulus
+        view.depth index bytes tree
+      next ← writeMerkleTreeAt next name evaluated (view.withTree (max view.count (index + 1)) updated)
+    | .merkleTreeResetAt name keys depth historic => do
+      let evaluated ← evaluatePath ctx env keys
+      next ← resetMerkleTreeAt next name evaluated depth historic
+    | .merkleTreeResetHistoryAt name keys => do
+      let evaluated ← evaluatePath ctx env keys
+      let raw ← readMerkleTreeAt next name evaluated
+      let updated ← resetMerkleTreeHistory raw
+      next ← writeMerkleTreeAt next name evaluated updated
     | .insertPath name keys ty value | .writePath name keys ty value => do
       let evaluated ← evaluatePath ctx env keys
       let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -1162,7 +1276,10 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
             .merkleTreeIsFull .. | .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
-            .merkleTreeInsertHashIndex .. | .merkleTreeReset .. |
+            .merkleTreeInsertHashIndex .. | .merkleTreeReset .. | .merkleTreeResetHistory .. |
+            .merkleTreeIsFullAt .. | .merkleTreeCheckRootAt .. |
+            .merkleTreeInsertHashAt .. | .merkleTreeInsertHashIndexAt .. |
+            .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. |
             .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
             .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
             .requireContractCaller .. | .emitEvent .. | .readCaller .. => pure ()
@@ -1323,21 +1440,23 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next := {next with trees := updateAssoc name updated next.trees}
         | .merkleTreeIsFull name destination => do
           let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
-          let (depth, count, _) ← checkedMerkleTreeState raw
-          env := (destination, .bool (count == 2 ^ depth)) :: env
+          let view ← checkedMerkleTreeState raw
+          env := (destination, .bool (view.count == 2 ^ view.depth)) :: env
         | .merkleTreeCheckRoot name expected destination => do
           let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
           let result ← checkMerkleTreeRoot raw (← expected.eval ctx env) ctx.modulus
           env := (destination, .bool result) :: env
         | .merkleTreeInsertHash name hash => do
           let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
-          let (depth, count, tree?) ← checkedMerkleTreeState raw
-          let capacity := 2 ^ depth
-          if count == capacity then throw "MerkleTree is full"
-          let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+          let view ← checkedMerkleTreeState raw
+          let capacity := 2 ^ view.depth
+          if view.count == capacity then throw "MerkleTree is full"
+          let some tree := view.tree | throw "MerkleTree root is unavailable for a nonempty count-only state"
           let bytes ← hash.eval ctx env
-          let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus depth count bytes tree
-          next := {next with trees := updateAssoc name (.merkleTreeKnown depth (count + 1) updated) next.trees}
+          let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus
+            view.depth view.count bytes tree
+          let newTree := view.withTree (view.count + 1) updated
+          next := {next with trees := updateAssoc name newTree next.trees}
         | .merkleTreeInsertHashIndex name hash index => do
           let bytes ← hash.eval ctx env
           unless bytes.length == 32 && bytes.all (· < 256) do
@@ -1345,19 +1464,29 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let index ← index.eval ctx env
           let some raw := next.trees.lookup name
             | throw s!"missing or malformed MerkleTree state '{name}'"
-          let (depth, count, tree?) ← checkedMerkleTreeState raw
-          let capacity := 2 ^ depth
+          let view ← checkedMerkleTreeState raw
+          let capacity := 2 ^ view.depth
           if index ≥ capacity then throw "MerkleTree index is outside its capacity"
-          let some tree := tree?
+          let some tree := view.tree
             | throw "MerkleTree root is unavailable for a nonempty count-only state"
           let updated ← Noctium.Merkle.Tree.setHash ctx.transientHash ctx.modulus
-            depth index bytes tree
-          let newTree := LedgerValue.merkleTreeKnown depth (max count (index + 1)) updated
+            view.depth index bytes tree
+          let newTree := view.withTree (max view.count (index + 1)) updated
           next := {next with trees := updateAssoc name newTree next.trees}
         | .merkleTreeReset name => do
           let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
-          let (depth, _, _) ← checkedMerkleTreeState raw
-          next := {next with trees := updateAssoc name (.merkleTree depth 0) next.trees}
+          let view ← checkedMerkleTreeState raw
+          next := {next with trees := updateAssoc name view.reset next.trees}
+        | .merkleTreeResetHistory name => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed HistoricMerkleTree state '{name}'"
+          let updated ← resetMerkleTreeHistory raw
+          next := {next with trees := updateAssoc name updated next.trees}
+        | .merkleTreeIsFullAt .. | .merkleTreeCheckRootAt .. |
+            .merkleTreeInsertHashAt .. | .merkleTreeInsertHashIndexAt .. |
+            .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. => do
+          let (updatedEnv, updatedState) ← runEffectsWithEnv ctx [effect] env next
+          env := updatedEnv
+          next := updatedState
         | .insertPath name keys ty value | .writePath name keys ty value => do
           let evaluated ← evaluatePath ctx env keys
           let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -1441,11 +1570,14 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           env := (← callerValues destinations none) ++ env
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
-        | .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination =>
+        | .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination |
+            .merkleTreeIsFullAt _ _ destination | .merkleTreeCheckRootAt _ _ _ destination =>
           env := (destination, .bool false) :: env
         | .counterAdjust .. | .counterReset .. => pure ()
         | .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. |
-            .merkleTreeReset .. => pure ()
+            .merkleTreeReset .. | .merkleTreeResetHistory .. |
+            .merkleTreeInsertHashAt .. | .merkleTreeInsertHashIndexAt .. |
+            .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. => pure ()
         | .listLength _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .listHead _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)

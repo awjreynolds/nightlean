@@ -215,7 +215,12 @@ inductive LedgerValueType where
   | composite (environment : Types.CompositeEnv) (type : Types.CompositeType)
   | list (environment : Types.CompositeEnv) (type : Types.CompositeType)
   | counter
+  | merkleTree (depth : Nat) (historic : Bool)
   deriving Repr, BEq, DecidableEq
+
+def LedgerValueType.merkleTreeConfig? : LedgerValueType → Option (Nat × Bool)
+  | .merkleTree depth historic => some (depth, historic)
+  | _ => none
 
 /-- A typed dynamic key in a nested ledger path. -/
 inductive PathKey where
@@ -238,6 +243,18 @@ def LedgerValueType.resolvePath (schema : LedgerValueType) : List PathKey →
       value.resolvePath rest
     | .composite .. => throw "nested map path continues through a composite value"
     | .list .. => throw "nested map path continues through a list value"
+    | .merkleTree .. => throw "nested map path continues through a MerkleTree value"
+
+def LedgerValueType.merkleTreePathConfig (schema : LedgerValueType)
+    (keys : List PathKey) : Except String (Nat × Bool) := do
+  if keys.isEmpty then throw "nested MerkleTree path requires at least one map key"
+  if keys.length > 12 then throw "nested MerkleTree path supports at most 12 map keys"
+  let selected ← schema.resolvePath keys
+  let some config := selected.merkleTreeConfig?
+    | throw "nested path does not select a MerkleTree"
+  let (depth, _) := config
+  unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
+  pure config
 
 def LedgerValueType.counterPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String Unit := do
@@ -322,13 +339,18 @@ inductive StateKind where
   | map (keyTy valueTy : Ty)
   | tree (value : LedgerValueType)
   | merkleTree (depth : Nat)
+  | historicMerkleTree (depth : Nat)
   /-- UTF-8 FAB state metadata. This value is host/deployment-only and never a circuit Ty. -/
   | opaqueString
   deriving Repr, BEq, DecidableEq
 
 def StateKind.merkleTreeDepth? : StateKind → Option Nat
-  | .merkleTree depth => some depth
+  | .merkleTree depth | .historicMerkleTree depth => some depth
   | _ => none
+
+def StateKind.isHistoricMerkleTree : StateKind → Bool
+  | .historicMerkleTree _ => true
+  | _ => false
 
 structure StateDecl where
   name : String
@@ -499,6 +521,15 @@ inductive Effect where
   | merkleTreeInsertHashIndex (state : String) (hash : Expr (.bytes 32))
       (index : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeReset (state : String)
+  | merkleTreeResetHistory (state : String)
+  | merkleTreeIsFullAt (state : String) (keys : List PathKey) (destination : String)
+  | merkleTreeCheckRootAt (state : String) (keys : List PathKey)
+      (expected : Expr .native) (destination : String)
+  | merkleTreeInsertHashAt (state : String) (keys : List PathKey) (hash : Expr (.bytes 32))
+  | merkleTreeInsertHashIndexAt (state : String) (keys : List PathKey)
+      (hash : Expr (.bytes 32)) (index : Expr (.uint (2 ^ 64 - 1)))
+  | merkleTreeResetAt (state : String) (keys : List PathKey) (depth : Nat) (historic : Bool)
+  | merkleTreeResetHistoryAt (state : String) (keys : List PathKey)
   | emptyMapPath (state : String) (keys : List PathKey)
   | removePath (state : String) (keys : List PathKey)
   deriving Repr
@@ -840,6 +871,9 @@ private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
 
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
   | .counter => pure ()
+  | .merkleTree depth _ => do
+    unless 2 ≤ depth && depth ≤ 32 do
+      throw "MerkleTree depth must be between 2 and 32"
   | .scalar ty => ty.validate caps
   | .map keyTy value => do
     validateLedgerMapKeyType keyTy
@@ -859,6 +893,12 @@ private def resolveTreeState (decls : List StateDecl) (state : String)
   if keys.isEmpty then throw "nested map path must contain at least one key"
   if keys.length > 14 then throw "nested map path exceeds the native insertion depth"
   schema.resolvePath keys
+
+private def resolveMerkleTreePath (decls : List StateDecl) (state : String)
+    (keys : List PathKey) : Except String (Nat × Bool) := do
+  let some decl := decls.find? (·.name == state) | throw s!"unknown MerkleTree state '{state}'"
+  let .tree schema := decl.kind | throw s!"state '{state}' is not a recursive tree"
+  schema.merkleTreePathConfig keys
 
 private def resolveListState (decls : List StateDecl) (state : String)
     (keys : List PathKey) :
@@ -928,7 +968,9 @@ private def Effect.writeTarget : Effect → Option String
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .merkleTreeInsertHash state .. | .merkleTreeInsertHashIndex state .. |
-    .merkleTreeReset state |
+    .merkleTreeReset state | .merkleTreeResetHistory state |
+    .merkleTreeInsertHashAt state .. | .merkleTreeInsertHashIndexAt state .. |
+    .merkleTreeResetAt state .. | .merkleTreeResetHistoryAt state .. |
     .emptyMapPath state .. | .removePath state .. => some state
   | _ => none
 
@@ -1008,7 +1050,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
-      | .merkleTree _ => []
+      | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
       match ty.validate caps with
@@ -1058,7 +1100,11 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
           .readCaller .. | .merkleTreeIsFull .. | .merkleTreeCheckRoot .. |
-          .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. | .merkleTreeReset .. => pure ()
+          .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. | .merkleTreeReset .. |
+          .merkleTreeResetHistory .. | .merkleTreeIsFullAt .. |
+          .merkleTreeCheckRootAt .. | .merkleTreeInsertHashAt .. |
+          .merkleTreeInsertHashIndexAt .. | .merkleTreeResetAt .. |
+          .merkleTreeResetHistoryAt .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on ledger reads, writes, and require effects"}
@@ -1242,6 +1288,51 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         unless 2 ≤ depth && depth ≤ 32 do
           throw "MerkleTree depth must be between 2 and 32"
         pure []
+      | .merkleTreeResetHistory state => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let .historicMerkleTree depth := declaration.kind
+          | throw "resetHistory requires a HistoricMerkleTree"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "HistoricMerkleTree depth must be between 2 and 32"
+        pure []
+      | .merkleTreeIsFullAt state keys destination => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        pure [(destination, .bool)]
+      | .merkleTreeCheckRootAt state keys expected destination => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        expected.validate caps env
+        pure [(destination, .bool)]
+      | .merkleTreeInsertHashAt state keys hash => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        hash.validate caps env
+        pure []
+      | .merkleTreeInsertHashIndexAt state keys hash index => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        hash.validate caps env
+        index.validate caps env
+        pure []
+      | .merkleTreeResetAt state keys depth historic => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let (foundDepth, foundHistoric) ← resolveMerkleTreePath decls state keys
+        unless depth == foundDepth && historic == foundHistoric do
+          throw "nested MerkleTree reset schema mismatch"
+        pure []
+      | .merkleTreeResetHistoryAt state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let (_, historic) ← resolveMerkleTreePath decls state keys
+        unless historic do throw "resetHistory requires a HistoricMerkleTree"
+        pure []
       | .insertPath state keys valueTy value
       | .writePath state keys valueTy value => do
         if !caps.stateMaps then throw "target lacks state maps"
@@ -1357,7 +1448,7 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
-      | .merkleTree _ => []
+      | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
       match ty.validate caps with
