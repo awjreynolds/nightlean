@@ -1463,7 +1463,7 @@
       "layer": "artifact-ledger",
       "surface": "State/transcript/communication binding",
       "noctiumStatus": "subset",
-      "notes": "One native private claim finalized with exact state match. Multi-call, checkpoints, coins, all ADTs and malicious transcript variations unqualified.",
+      "notes": "The native private-claim and guarded-checkpoint fixtures finalized with exact state matches. Checkpoint prefix-only receipts and broader transcript variations still require separate evidence.",
       "source": [
         "ledger"
       ],
@@ -1472,7 +1472,8 @@
         "LEDGER"
       ],
       "observedEvidence": [
-        "docs/development/native-localnet.md"
+        "docs/development/native-localnet.md",
+        "docs/development/native-checkpoint-localnet-receipt.json"
       ],
       "equivalence": "unverified",
       "implementationUpdate": {
