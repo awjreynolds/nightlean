@@ -200,6 +200,15 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .listReset slot keys => Json.mkObj [
       ("op", toJson ("listReset" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
+  | .merkleTreeIsFull slot depth destination => Json.mkObj [
+      ("op", toJson ("merkleTreeIsFull" : String)), ("slot", toJson slot),
+      ("depth", toJson depth), ("destination", toJson destination)]
+  | .merkleTreeInsertHash slot depth hash => Json.mkObj [
+      ("op", toJson ("merkleTreeInsertHash" : String)), ("slot", toJson slot),
+      ("depth", toJson depth), ("hash", nativeExpressionJson hash)]
+  | .merkleTreeReset slot depth => Json.mkObj [
+      ("op", toJson ("merkleTreeReset" : String)), ("slot", toJson slot),
+      ("depth", toJson depth)]
   | .mapRemove slot keys => Json.mkObj [
       ("op", toJson ("mapRemove" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
@@ -214,6 +223,20 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .mintUnshielded domain amount => Json.mkObj [
       ("op", toJson ("mintUnshielded" : String)), ("domain", nativeExpressionJson domain),
       ("amount", nativeExpressionJson amount)]
+  | .incUnshieldedInputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedInputs" : String)),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("isUnshielded", nativeExpressionJson isUnshielded)]
+  | .incUnshieldedOutputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedOutputs" : String)),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("isUnshielded", nativeExpressionJson isUnshielded)]
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient => Json.mkObj [
+      ("op", toJson ("claimUnshieldedCoinSpend" : String)),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("isUnshielded", nativeExpressionJson isUnshielded),
+      ("isContract", nativeExpressionJson isContract),
+      ("recipient", nativeExpressionJson recipient)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
   | .readContractAddress destination => Json.mkObj [
@@ -262,6 +285,19 @@ private def effectJson : Effect → Json
   | .mintUnshielded domain amount => Json.mkObj [
       ("op", toJson ("mintUnshielded" : String)), ("domain", expressionJson domain),
       ("amount", expressionJson amount)]
+  | .incUnshieldedInputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedInputs" : String)),
+      ("color", expressionJson color), ("amount", expressionJson amount),
+      ("isUnshielded", expressionJson isUnshielded)]
+  | .incUnshieldedOutputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedOutputs" : String)),
+      ("color", expressionJson color), ("amount", expressionJson amount),
+      ("isUnshielded", expressionJson isUnshielded)]
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient => Json.mkObj [
+      ("op", toJson ("claimUnshieldedCoinSpend" : String)),
+      ("color", expressionJson color), ("amount", expressionJson amount),
+      ("isUnshielded", expressionJson isUnshielded),
+      ("isContract", expressionJson isContract), ("recipient", expressionJson recipient)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
   | .readContractAddress destination => Json.mkObj [
@@ -307,6 +343,14 @@ private def effectJson : Effect → Json
       ("op", toJson ("counterReset" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value))]
+  | .merkleTreeIsFull state destination => Json.mkObj [
+      ("op", toJson ("merkleTreeIsFull" : String)), ("state", toJson state),
+      ("destination", toJson destination)]
+  | .merkleTreeInsertHash state hash => Json.mkObj [
+      ("op", toJson ("merkleTreeInsertHash" : String)), ("state", toJson state),
+      ("hash", expressionJson hash)]
+  | .merkleTreeReset state => Json.mkObj [
+      ("op", toJson ("merkleTreeReset" : String)), ("state", toJson state)]
   | .listLength state destination keys => Json.mkObj [
       ("op", toJson ("listLength" : String)), ("state", toJson state),
       ("destination", toJson destination), ("type", toJson (typeName (.uint (2 ^ 64 - 1)))),
@@ -399,6 +443,7 @@ private def stateJson (state : StateDecl) : Json :=
     | .cell ty => Json.mkObj [("cell", toJson (typeName ty))]
     | .map kt vt => Json.mkObj [("map", toJson [typeName kt, typeName vt])]
     | .tree value => Json.mkObj [("tree", treeJson value)]
+    | .merkleTree depth => Json.mkObj [("merkleTree", toJson depth)]
     | .opaqueString => Json.mkObj [("opaqueString", toJson Bool.true)]
   Json.mkObj ([("name", toJson state.name), ("kind", kind)] ++
     (if state.sealed then [("sealed", toJson Bool.true)] else []))

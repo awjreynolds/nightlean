@@ -1,0 +1,18 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger claims: MerkleTree<2, Field>;
+
+export circuit append(hash: Bytes<32>): Boolean {
+  claims.insertHash(disclose(hash));
+  return claims.isFull();
+}
+
+export circuit fullStatus(): Boolean {
+  return claims.isFull();
+}
+
+export circuit resetAndCheck(): Boolean {
+  claims.resetToDefault();
+  return claims.isFull();
+}

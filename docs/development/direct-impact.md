@@ -67,3 +67,36 @@ reported separately in the JSON output.
 - [Ledger 9 VM opcode field representation](https://github.com/midnightntwrk/midnight-ledger/blob/ledger-9.1.0.1/onchain-vm/src/ops.rs)
 - [Ledger aligned-value field representation](https://github.com/midnightntwrk/midnight-ledger/blob/ledger-9.1.0.1/transient-crypto/src/fab.rs)
 - [Proof preimage construction from native operations](https://github.com/midnightntwrk/midnight-ledger/blob/ledger-9.1.0.1/onchain-runtime-wasm/src/primitives.rs)
+
+## Write an ordinary Merkle tree
+
+Declare a root tree with `merkleTree claims : 2`. Use
+`insertHash claims := disclose(leafHash)` to append a private Bytes32 digest.
+`isFull claims as full` reads the current capacity flag, including after an
+append in the same call. `reset claims` restores the default empty tree.
+Depths range from 2 through 32. The native runtime rejects appends at capacity.
+The compiler rejects a private leaf written without disclosure.
+
+The [Lean fixture](../../tests/MerkleTree.lean) and the
+[Compact oracle](../../tests/compact/ordinary-merkle.mjs) use the same
+depth-two tree. The native test checks the four append roots and cursors,
+the fifth append rejection, a changed capacity result, and exact reset.
+
+```sh
+lake build noctium Noctium:shared
+mkdir -p build/experiments
+scratch=$(mktemp -d "$PWD/build/experiments/ordinary-merkle.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+.lake/build/bin/noctium compile tests/MerkleTree.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output "$scratch/contract"
+NOCTIUM_NATIVE_TEST_ARTIFACTS="$scratch/contract" \
+  cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+    --no-default-features --features zkir-321 --test ordinary_merkle -- --ignored
+```
+
+On the isolated Ledger 9.1.0.1 localnet, the native client finalized deployment
+at height 4 and the first append at height 7. The receipt state bytes matched
+the native runtime prediction at both steps. The pinned ZKIR 3.2.1 tool
+reported k=8 and 231 rows for the append relation.
+[Localnet receipt](ordinary-merkle-localnet-receipt.json)

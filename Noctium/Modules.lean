@@ -964,7 +964,8 @@ private def resolveContractEffect (expansion : Expansion) (moduleInstance : Modu
     match member.stateKind? with
     | some (.cell ty) => pure (.writeCell fieldName ty (.ref outputName), [identity])
     | some (.map ..) => fail effectSpec.span "module output write requires a cell state"
-    | some (.tree ..) => fail effectSpec.span "module output write requires a cell state"
+    | some (.tree ..) | some (.merkleTree ..) =>
+      fail effectSpec.span "module output write requires a cell state"
     | some .opaqueString => fail effectSpec.span "module output write does not support opaque string state"
     | none => fail effectSpec.span s!"state member '{member.name}' has no declared type"
   | .writeMap target keyTy valueTy key value => do

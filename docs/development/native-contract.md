@@ -96,6 +96,28 @@ relation measured K9 and 467 rows. The remaining differential cases ran
 off chain. Shielded coin insertion and SDK host enumeration remain
 separate. [Native fixture](../../runtime/tests/native_set.rs) · [Localnet receipt](native-set-localnet-receipt.json)
 
+## Reset a ledger cell
+
+`reset cellName` writes the canonical default of the cell's declared scalar
+type. Use `when flag reset cellName` for a conditional reset. The usual
+public-state disclosure and sealed-cell checks apply, and a following read
+sees the reset when execution takes the guard. The compiler lowers the reset
+as a typed write through the existing Impact path.
+
+[The Lean fixture](../../tests/NativeCellReset.lean) and
+[the Compact fixture](../../tests/compact/CellReset.compact) exercise seeded
+UInt64, Native/Field, Boolean and Bytes4 cells. Run the
+[native checker fixture](../../runtime/tests/native_cell_reset.rs) with
+`NOCTIUM_CELL_RESET_DIR` pointing to fresh Lean ZKIR 3.2.1 ledger outputs.
+The scalar fixture covers both guard outcomes. Aggregate Cell defaults and
+other type combinations need separate equivalence evidence.
+
+The Rust SDK deployed the seeded cells on Ledger 9.1.0.1 localnet at
+height 104 and finalized the active reset at height 107. The finalized
+contract bytes matched the predicted bytes at both heights. Native sizing
+reported K8 and 192 rows for `clear`. The inactive case was checked in the
+pinned native VM and Compact runtime. [Localnet receipt](native-cell-reset-localnet-receipt.json)
+
 ## Record standalone token mints
 
 ```lean
@@ -170,3 +192,31 @@ The [localnet receipt](native-token-balance-localnet-receipt.json) records a
 finalized ordinary call for an absent unshielded token. The call wrote zero
 over the previous recorded value of 17. Shielded and nonzero cases use
 simulated starting balances with the pinned native checker.
+
+## Settle tagged token inputs and outputs
+
+```lean
+incUnshieldedInputs(color, received, isUnshielded)
+incUnshieldedOutputs(color, sent, isUnshielded)
+claimUnshieldedCoinSpend(color, authorized, isUnshielded, isContract, recipient)
+```
+
+Each operation records a separate native effect. The ledger verifies these
+effects against the transaction's other calls and settlement data.
+Use `true` for the unshielded token tag and `false` for the shielded tag.
+The spend's recipient tag distinguishes a contract address from a user
+address with the same bytes. Each operand and any guard is public or
+explicitly disclosed.
+
+A first entry accepts a `UInt 128` amount. An addition to an existing entry
+requires both operands and their sum to fit `UInt 64` in the pinned VM.
+The [Lean fixture](../../tests/NativeTaggedSettlement.lean) and
+[Compact reference fixture](../../tests/compact/TaggedSettlement.compact)
+exercise these bounds and the effects' tagged keys.
+
+The [funded localnet receipt](native-tagged-settlement-localnet-receipt.json)
+records a proof which checks that both starting balances are zero, even after
+the source records receipt effects. The finalized state contains 17
+unshielded-tag units and 23 shielded-tag units of the same color. The native
+assembler predicted both balances. The finalized bytes matched the SDK's
+ledger replay byte for byte.

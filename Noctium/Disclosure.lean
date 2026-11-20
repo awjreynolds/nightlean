@@ -178,7 +178,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .writeCell .. | some condition, .writeMap ..
       | some condition, .readTokenBalance ..
       | some condition, .claimContractCall .. | some condition, .mintShielded ..
-      | some condition, .mintUnshielded .. | some condition, .requireContractCaller ..
+      | some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs ..
+      | some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend ..
+      | some condition, .requireContractCaller ..
       | some condition, .emitEvent ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .mapIsEmpty .. | some condition, .mapSize ..
@@ -190,7 +192,8 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .setInsert ..
       | some condition, .listLength .. | some condition, .listHead ..
       | some condition, .listPushFront .. | some condition, .listPopFront ..
-      | some condition, .listReset .. =>
+      | some condition, .listReset .. | some condition, .merkleTreeIsFull ..
+      | some condition, .merkleTreeInsertHash .. | some condition, .merkleTreeReset .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
@@ -244,6 +247,23 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       let sink := {description := "public unshielded mint", span}
       checkSink sink (← expression env span domain) activeControl
       checkSink sink (← expression env span amount) activeControl
+    | .incUnshieldedInputs color amount isUnshielded =>
+      let sink := {description := "public unshielded input", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span amount) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+    | .incUnshieldedOutputs color amount isUnshielded =>
+      let sink := {description := "public unshielded output", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span amount) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+    | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      let sink := {description := "public unshielded spend claim", span}
+      checkSink sink (← expression env span color) activeControl
+      checkSink sink (← expression env span amount) activeControl
+      checkSink sink (← expression env span isUnshielded) activeControl
+      checkSink sink (← expression env span isContract) activeControl
+      checkSink sink (← expression env span recipient) activeControl
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
@@ -320,6 +340,16 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .listPopFront state keys | .listReset state keys =>
       checkSink {description := s!"public List mutation path '{state}'", span}
         (← pathExpression env span keys) activeControl
+    | .merkleTreeIsFull state destination =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public MerkleTree fullness guard '{state}'", span} [] activeControl
+      env := env ++ [(destination, [])]
+    | .merkleTreeInsertHash state hash =>
+      checkSink {description := s!"public MerkleTree inserted hash '{state}'", span}
+        (← expression env span hash) activeControl
+    | .merkleTreeReset state =>
+      checkSink {description := s!"public MerkleTree mutation guard '{state}'", span}
+        [] activeControl
     | .insertPath state keys _ payload | .writePath state keys _ payload =>
       checkSink {description := s!"public nested map write path '{state}'", span}
         (← pathExpression env span keys) activeControl

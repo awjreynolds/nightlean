@@ -2,17 +2,17 @@ import Noctium.IR
 
 namespace Noctium.GuardedExpression
 
-def zeroValue : (ty : Ty) → Option (Expr ty)
-  | .native => some (.native 0)
-  | .bool => some (.bool false)
-  | .uint maximum => some (.uint maximum 0)
-  | .bytes 32 => some (.bytes32Literal (List.replicate 32 0))
-  | .bytes length => some (.bytesLiteral length (List.replicate length 0))
-  | .jubjubScalar => some (.jubjubScalarFromNative (.native 0))
-  | .jubjubPoint => some (.jubjubFromCoordinates (.native 0) (.native 1))
-  | .foreign (.base curve) => some (.foreignBase curve 0)
-  | .foreign (.scalar curve) => some (.foreignScalar curve 0)
-  | .foreign (.point curve) => some (.foreignIdentity curve)
+def zeroValue : (ty : Ty) → Expr ty
+  | .native => .native 0
+  | .bool => .bool false
+  | .uint maximum => .uint maximum 0
+  | .bytes 32 => .bytes32Literal (List.replicate 32 0)
+  | .bytes length => .bytesLiteral length (List.replicate length 0)
+  | .jubjubScalar => .jubjubScalarFromNative (.native 0)
+  | .jubjubPoint => .jubjubFromCoordinates (.native 0) (.native 1)
+  | .foreign (.base curve) => .foreignBase curve 0
+  | .foreign (.scalar curve) => .foreignScalar curve 0
+  | .foreign (.point curve) => .foreignIdentity curve
 
 private def castMayFail (target source : Ty) : Bool :=
   match target, source with
@@ -134,9 +134,7 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .cast target (source := source) value =>
     let value := totalize guard value
     if castMayFail target source then
-      match zeroValue source with
-      | some zero => .cast target (.select guard value zero)
-      | none => .cast target value
+      .cast target (.select guard value (zeroValue source))
     else .cast target value
   | .letE name value body =>
     .letE name (totalize guard value) (totalize guard body)

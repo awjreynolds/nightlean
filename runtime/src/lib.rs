@@ -5,7 +5,9 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
 use base_crypto::hash::HashOutput;
 use base_crypto::repr::BinaryHashRepr;
-use coin_structure::coin::{PublicAddress, ShieldedTokenType, TokenType, UnshieldedTokenType};
+use coin_structure::coin::{
+    PublicAddress, ShieldedTokenType, TokenType, UnshieldedTokenType, UserAddress,
+};
 use coin_structure::contract::ContractAddress;
 use ledger::{
     construct::{PreTranscript, partition_transcripts},
@@ -32,6 +34,7 @@ use transient_crypto::{
     curve::{EmbeddedFr, EmbeddedGroupAffine, Fr},
     fab::{AlignedValueExt, AlignmentExt, ValueReprAlignedValue},
     hash::transient_hash,
+    merkle_tree::MerkleTree,
     proofs::{KeyLocation, ProofPreimage},
     repr::FieldRepr,
 };
@@ -1094,6 +1097,24 @@ pub enum Instruction {
         keys: Vec<PathPart>,
         destination: String,
     },
+
+    #[serde(rename = "merkleTreeIsFull")]
+    MerkleTreeIsFull {
+        slot: u32,
+        depth: u8,
+        destination: String,
+    },
+    #[serde(rename = "merkleTreeInsertHash")]
+    MerkleTreeInsertHash {
+        slot: u32,
+        depth: u8,
+        hash: Expr,
+    },
+    #[serde(rename = "merkleTreeReset")]
+    MerkleTreeReset {
+        slot: u32,
+        depth: u8,
+    },
     #[serde(rename = "listHead")]
     ListHead {
         slot: u32,
@@ -1147,6 +1168,26 @@ pub enum Instruction {
     MintUnshielded {
         domain: Expr,
         amount: Expr,
+    },
+    #[serde(rename = "incUnshieldedOutputs", rename_all = "camelCase")]
+    IncUnshieldedOutputs {
+        color: Expr,
+        amount: Expr,
+        is_unshielded: Expr,
+    },
+    #[serde(rename = "incUnshieldedInputs", rename_all = "camelCase")]
+    IncUnshieldedInputs {
+        color: Expr,
+        amount: Expr,
+        is_unshielded: Expr,
+    },
+    #[serde(rename = "claimUnshieldedCoinSpend", rename_all = "camelCase")]
+    ClaimUnshieldedCoinSpend {
+        color: Expr,
+        amount: Expr,
+        is_unshielded: Expr,
+        is_contract: Expr,
+        recipient: Expr,
     },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
@@ -1230,6 +1271,19 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             validate_map_size_path(plan, *slot, keys.len())?;
             vec![1, path_field_count(plan, *slot, keys)?, 1, 5, 1, 4]
         }
+
+        Instruction::MerkleTreeIsFull { slot, depth, .. } => {
+            ensure_merkle_tree_depth(plan, *slot, *depth)?;
+            vec![1, 4, 4, 5, 1, 1, 4]
+        }
+        Instruction::MerkleTreeInsertHash { slot, depth, .. } => {
+            ensure_merkle_tree_depth(plan, *slot, *depth)?;
+            vec![4, 4, 1, 4, 6, 1, 1, 4, 2, 1]
+        }
+        Instruction::MerkleTreeReset { slot, depth } => {
+            ensure_merkle_tree_depth(plan, *slot, *depth)?;
+            vec![5, 1 + merkle_tree_default_state(*depth).field_size(), 1]
+        }
         Instruction::ListHead {
             slot,
             keys,
@@ -1279,6 +1333,10 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             MINT_FIELD_COUNTS.to_vec()
         }
+        Instruction::IncUnshieldedOutputs { .. } | Instruction::IncUnshieldedInputs { .. } => {
+            token_accumulation_fields(11).to_vec()
+        }
+        Instruction::ClaimUnshieldedCoinSpend { .. } => token_accumulation_fields(19).to_vec(),
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
         Instruction::ReadContractAddress { .. } => vec![1, 4, 5],
         Instruction::ReadTokenBalance { comparison, .. } => {
@@ -1318,6 +1376,11 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
+        Instruction::IncUnshieldedOutputs { .. }
+        | Instruction::IncUnshieldedInputs { .. }
+        | Instruction::ClaimUnshieldedCoinSpend { .. } => {
+            impact_field_counts(instruction, plan)?.into_iter().sum()
+        }
         Instruction::RequireContractCaller { .. } => 15,
         Instruction::ReadContractAddress { .. } => 10,
         Instruction::ReadTokenBalance { .. } => {
@@ -1336,6 +1399,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::ListLength { .. }
         | Instruction::MapSize { .. }
         | Instruction::MapIsEmpty { .. }
+        | Instruction::MerkleTreeIsFull { .. }
+        | Instruction::MerkleTreeInsertHash { .. }
+        | Instruction::MerkleTreeReset { .. }
         | Instruction::ListHead { .. }
         | Instruction::ListPushFront { .. }
         | Instruction::ListPopFront { .. }
@@ -1377,6 +1443,10 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
 }
 
 const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
+
+fn token_accumulation_fields(key_push: usize) -> [usize; 16] {
+    [1, 4, key_push, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1]
+}
 
 fn reject_unqualified_foreign_storage(ty: &ScalarType) -> Result<()> {
     #[cfg(feature = "zkir-321")]
@@ -2189,7 +2259,14 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
         let value = config
             .get(&d.name)
             .ok_or_else(|| anyhow!("missing initial state cell"))?;
-        if d.kind.get("opaqueString") == Some(&Json::Bool(true)) {
+        if d.kind.get("merkleTree").is_some() {
+            let depth = checked_merkle_tree_schema(&d.kind)?;
+            ensure!(
+                value.as_array().is_some_and(Vec::is_empty),
+                "initial MerkleTree must be explicitly empty"
+            );
+            values.push(merkle_tree_default_state(depth));
+        } else if d.kind.get("opaqueString") == Some(&Json::Bool(true)) {
             values.push(StateValue::Cell(Sp::new(constructor::opaque_string(
                 value,
             )?)));
@@ -2261,6 +2338,73 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
     Ok(ChargedState::new(StateValue::Array(
         values.into_iter().collect(),
     )))
+}
+
+fn checked_merkle_tree_schema(schema: &Json) -> Result<u8> {
+    let fields = schema
+        .as_object()
+        .ok_or_else(|| anyhow!("invalid MerkleTree schema"))?;
+    ensure!(fields.len() == 1, "invalid MerkleTree schema");
+    let depth = fields
+        .get("merkleTree")
+        .and_then(Json::as_u64)
+        .ok_or_else(|| anyhow!("invalid MerkleTree schema"))?;
+    ensure!(
+        (2..=32).contains(&depth),
+        "MerkleTree depth must be between 2 and 32"
+    );
+    Ok(depth.try_into()?)
+}
+
+fn ensure_merkle_tree_depth(plan: &Plan, slot: u32, depth: u8) -> Result<()> {
+    let schema = &plan
+        .state
+        .get(slot as usize)
+        .ok_or_else(|| anyhow!("state slot out of range"))?
+        .kind;
+    ensure!(
+        checked_merkle_tree_schema(schema)? == depth,
+        "MerkleTree operation depth differs from state schema"
+    );
+    Ok(())
+}
+
+fn merkle_tree_default_state(depth: u8) -> StateValue<Db> {
+    StateValue::Array(
+        vec![
+            StateValue::BoundedMerkleTree(MerkleTree::<(), Db>::blank(depth)),
+            StateValue::Cell(Sp::new(0u64.into())),
+        ]
+        .into(),
+    )
+}
+
+fn merkle_tree_count(state: &StateValue<Db>, depth: u8) -> Result<u64> {
+    let StateValue::Array(node) = state else {
+        bail!("MerkleTree state must be an array");
+    };
+    ensure!(node.len() == 2, "MerkleTree state has an invalid shape");
+    let Some(StateValue::BoundedMerkleTree(tree)) = node.get(0) else {
+        bail!("MerkleTree state is missing its bounded tree");
+    };
+    ensure!(
+        tree.height() == depth,
+        "MerkleTree height differs from state schema"
+    );
+    let Some(StateValue::Cell(count)) = node.get(1) else {
+        bail!("MerkleTree state is missing its insertion count");
+    };
+    let Value::UInt { number, .. } =
+        decode_state_cell(count, "UIntRange<18446744073709551616>", "u64")?
+    else {
+        bail!("MerkleTree count must be UInt64");
+    };
+    let count: u64 = number.try_into()?;
+    ensure!(
+        count <= 1u64 << depth,
+        "MerkleTree count exceeds its capacity"
+    );
+    Ok(count)
 }
 fn read_state_value(
     context: &QueryContext<Db>,
@@ -2495,6 +2639,31 @@ fn list_index(index: u8) -> Op<ResultModeVerify, Db> {
     }
 }
 
+fn merkle_tree_index(index: u8, push_path: bool) -> Op<ResultModeVerify, Db> {
+    Op::Idx {
+        cached: false,
+        push_path,
+        path: vec![Key::Value(
+            AlignedValue::from(index)
+                .try_into()
+                .expect("u8 MerkleTree index"),
+        )]
+        .try_into()
+        .expect("one MerkleTree index"),
+    }
+}
+
+fn merkle_tree_root_index(slot: u32, push_path: bool) -> Result<Op<ResultModeVerify, Db>> {
+    let key = field_value(Fr::from(slot as u64))
+        .try_into()
+        .map_err(|_| anyhow!("invalid native index key"))?;
+    Ok(Op::Idx {
+        cached: false,
+        push_path,
+        path: vec![Key::Value(key)].try_into()?,
+    })
+}
+
 fn push_native_state(value: StateValue<Db>, storage: bool) -> Result<Op<ResultModeVerify, Db>> {
     Ok(Op::Push {
         storage,
@@ -2510,6 +2679,33 @@ fn mint_amount(amount: &Expr, env: &Environment) -> Result<u64> {
     };
     ensure!(maximum == u64::MAX.into(), "mint amount must be UInt64");
     Ok(number.try_into()?)
+}
+
+fn unshielded_amount(amount: &Expr, env: &Environment) -> Result<u128> {
+    let Value::UInt { number, maximum } = evaluate(amount, env)? else {
+        bail!("unshielded amount must be UInt128");
+    };
+    ensure!(
+        maximum == u128::MAX.into(),
+        "unshielded amount must be UInt128"
+    );
+    Ok(number.try_into()?)
+}
+
+fn append_unshielded_spend_claim(
+    program: &mut Program,
+    token: TokenType,
+    amount: u128,
+    is_contract: bool,
+    recipient: HashOutput,
+) -> Result<Op<ResultModeVerify, Db>> {
+    let address = if is_contract {
+        PublicAddress::Contract(ContractAddress(recipient))
+    } else {
+        PublicAddress::User(UserAddress(recipient))
+    };
+    let key = onchain_runtime::context::ClaimedUnshieldedSpendsKey(token, address);
+    append_token_accumulation(program, 8, key.into(), amount.into())
 }
 
 fn append_token_accumulation(
@@ -2920,6 +3116,9 @@ fn probe_instruction(
         Instruction::MapSize { keys, .. } | Instruction::MapIsEmpty { keys, .. } => {
             probe_paths(keys, plan, env, deferred_outputs)
         }
+        Instruction::MerkleTreeInsertHash { hash, .. } => {
+            probe_expression(hash, plan, env, deferred_outputs)
+        }
         Instruction::ListPushFront {
             keys, expressions, ..
         } => {
@@ -2949,6 +3148,28 @@ fn probe_instruction(
         | Instruction::MintUnshielded { domain, amount } => {
             probe_expressions([domain, amount], plan, env, deferred_outputs)
         }
+        Instruction::IncUnshieldedOutputs {
+            color,
+            amount,
+            is_unshielded,
+        }
+        | Instruction::IncUnshieldedInputs {
+            color,
+            amount,
+            is_unshielded,
+        } => probe_expressions([color, amount, is_unshielded], plan, env, deferred_outputs),
+        Instruction::ClaimUnshieldedCoinSpend {
+            color,
+            amount,
+            is_unshielded,
+            is_contract,
+            recipient,
+        } => probe_expressions(
+            [color, amount, is_unshielded, is_contract, recipient],
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
@@ -2977,6 +3198,8 @@ fn probe_instruction(
         | Instruction::New
         | Instruction::Member
         | Instruction::Insert { .. }
+        | Instruction::MerkleTreeIsFull { .. }
+        | Instruction::MerkleTreeReset { .. }
         | Instruction::AddImmediate { .. }
         | Instruction::SubImmediate { .. } => Ok(None),
     }
@@ -3162,7 +3385,6 @@ fn append_balance_read(
     }
     Ok(())
 }
-
 fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
     ensure!(
         matches!(
@@ -3195,9 +3417,15 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
+                | Instruction::MerkleTreeIsFull { .. }
+                | Instruction::MerkleTreeInsertHash { .. }
+                | Instruction::MerkleTreeReset { .. }
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::MintShielded { .. }
                 | Instruction::MintUnshielded { .. }
+                | Instruction::IncUnshieldedOutputs { .. }
+                | Instruction::IncUnshieldedInputs { .. }
+                | Instruction::ClaimUnshieldedCoinSpend { .. }
                 | Instruction::RequireContractCaller { .. }
                 | Instruction::ReadContractAddress { .. }
                 | Instruction::ReadTokenBalance { .. }
@@ -3511,9 +3739,15 @@ impl PreparationCursor {
                             | Instruction::ListPopFront { .. }
                             | Instruction::ListReset { .. }
                             | Instruction::MapRemove { .. }
+                            | Instruction::MerkleTreeIsFull { .. }
+                            | Instruction::MerkleTreeInsertHash { .. }
+                            | Instruction::MerkleTreeReset { .. }
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::MintShielded { .. }
                             | Instruction::MintUnshielded { .. }
+                            | Instruction::IncUnshieldedOutputs { .. }
+                            | Instruction::IncUnshieldedInputs { .. }
+                            | Instruction::ClaimUnshieldedCoinSpend { .. }
                             | Instruction::RequireContractCaller { .. }
                             | Instruction::ReadContractAddress { .. }
                             | Instruction::ReadTokenBalance { .. }
@@ -3729,6 +3963,17 @@ impl PreparationCursor {
                             event = Some(read_event(read, false, env, produced));
                             read_index += 1;
                         }
+                        Instruction::MerkleTreeIsFull { destination, .. } => {
+                            event = Some(bind_context_scalar(
+                                plan.reads.get(read_index),
+                                Some(guard),
+                                destination,
+                                false,
+                                Value::Bool(false),
+                                env,
+                            )?);
+                            read_index += 1;
+                        }
                         _ => {}
                     }
                     *stored_next_operation += 1;
@@ -3755,6 +4000,8 @@ impl PreparationCursor {
                     | Instruction::ListPushFront { .. }
                     | Instruction::ListPopFront { .. }
                     | Instruction::ListReset { .. }
+                    | Instruction::MerkleTreeIsFull { .. }
+                    | Instruction::MerkleTreeInsertHash { .. }
             )
         {
             advance_native_state_prefix(
@@ -4200,6 +4447,87 @@ impl PreparationCursor {
                     result: result.into(),
                 }
             }
+            Instruction::MerkleTreeIsFull {
+                slot,
+                depth,
+                destination,
+            } => {
+                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+                let index = merkle_tree_root_index(*slot, false)?;
+                let tree_state = read_state_value(
+                    if has_written {
+                        &prefix_context
+                    } else {
+                        &context
+                    },
+                    *slot,
+                    &[],
+                )?;
+                let count = merkle_tree_count(&tree_state, *depth)?;
+                let capacity = 1u64 << depth;
+                let result = count == capacity;
+                event = Some(bind_context_scalar(
+                    plan.reads.get(read_index),
+                    instruction_guard,
+                    destination,
+                    true,
+                    Value::Bool(result),
+                    env,
+                )?);
+                read_index += 1;
+                program.extend([
+                    Op::Dup { n: 0 },
+                    index,
+                    list_index(1),
+                    push_native_state(StateValue::Cell(Sp::new(capacity.into())), false)?,
+                    Op::Lt,
+                    Op::Neg,
+                ]);
+                Op::Popeq {
+                    cached: true,
+                    result: result.into(),
+                }
+            }
+            Instruction::MerkleTreeInsertHash { slot, depth, hash } => {
+                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+                let tree_state = read_state_value(
+                    if has_written {
+                        &prefix_context
+                    } else {
+                        &context
+                    },
+                    *slot,
+                    &[],
+                )?;
+                let count = merkle_tree_count(&tree_state, *depth)?;
+                let capacity = 1u64 << depth;
+                ensure!(count < capacity, "MerkleTree is full");
+                let hash = evaluate(hash, &env)?;
+                let Value::Bytes(bytes) = &hash else {
+                    bail!("MerkleTree inserted hash must be Bytes32")
+                };
+                ensure!(
+                    bytes.len() == 32,
+                    "MerkleTree inserted hash must be Bytes32"
+                );
+                let aligned_hash = aligned_bytes(&hash)?;
+                program.extend([
+                    merkle_tree_root_index(*slot, true)?,
+                    merkle_tree_index(0, true),
+                    Op::Dup { n: 2 },
+                    merkle_tree_index(1, false),
+                    push_native_state(StateValue::Cell(Sp::new(aligned_hash)), true)?,
+                    Op::Ins {
+                        cached: false,
+                        n: 1,
+                    },
+                    Op::Ins { cached: true, n: 1 },
+                    merkle_tree_index(1, true),
+                    Op::Addi { immediate: 1 },
+                ]);
+                has_written = true;
+                Op::Ins { cached: true, n: 2 }
+            }
             Instruction::ListHead {
                 slot,
                 keys,
@@ -4379,6 +4707,21 @@ impl PreparationCursor {
                     n: (keys.len() + 1).try_into()?,
                 }
             }
+            Instruction::MerkleTreeReset { slot, depth } => {
+                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+                program.extend([
+                    push_native_state(
+                        StateValue::Cell(Sp::new(field_value(Fr::from(*slot as u64)))),
+                        false,
+                    )?,
+                    push_native_state(merkle_tree_default_state(*depth), true)?,
+                ]);
+                has_written = true;
+                Op::Ins {
+                    cached: false,
+                    n: 1,
+                }
+            }
             Instruction::ClaimContractCall {
                 address,
                 entry_point_hash,
@@ -4407,6 +4750,57 @@ impl PreparationCursor {
                 let domain = claim_hash_output(evaluate(domain, &env)?, "unshielded mint domain")?;
                 let amount = mint_amount(amount, &env)?;
                 append_token_accumulation(program, 5, domain.into(), amount.into())?
+            }
+            Instruction::IncUnshieldedOutputs {
+                color,
+                amount,
+                is_unshielded,
+            } => {
+                let color = claim_hash_output(evaluate(color, &env)?, "unshielded output color")?;
+                let amount = unshielded_amount(amount, &env)?;
+                let is_unshielded = evaluate(is_unshielded, &env)?.boolean()?;
+                append_token_accumulation(
+                    program,
+                    7,
+                    token_type(color, is_unshielded).into(),
+                    amount.into(),
+                )?
+            }
+            Instruction::IncUnshieldedInputs {
+                color,
+                amount,
+                is_unshielded,
+            } => {
+                let color = claim_hash_output(evaluate(color, &env)?, "unshielded input color")?;
+                let amount = unshielded_amount(amount, &env)?;
+                let is_unshielded = evaluate(is_unshielded, &env)?.boolean()?;
+                append_token_accumulation(
+                    program,
+                    6,
+                    token_type(color, is_unshielded).into(),
+                    amount.into(),
+                )?
+            }
+            Instruction::ClaimUnshieldedCoinSpend {
+                color,
+                amount,
+                is_unshielded,
+                is_contract,
+                recipient,
+            } => {
+                let color = claim_hash_output(evaluate(color, &env)?, "unshielded spend color")?;
+                let amount = unshielded_amount(amount, &env)?;
+                let is_unshielded = evaluate(is_unshielded, &env)?.boolean()?;
+                let is_contract = evaluate(is_contract, &env)?.boolean()?;
+                let recipient =
+                    claim_hash_output(evaluate(recipient, &env)?, "unshielded recipient")?;
+                append_unshielded_spend_claim(
+                    program,
+                    token_type(color, is_unshielded),
+                    amount,
+                    is_contract,
+                    recipient,
+                )?
             }
             Instruction::ReadTokenBalance {
                 destination,
@@ -4548,6 +4942,8 @@ impl PreparationCursor {
         if matches!(
             instruction,
             Instruction::Insert { .. }
+                | Instruction::MerkleTreeInsertHash { .. }
+                | Instruction::MerkleTreeReset { .. }
                 | Instruction::ListPushFront { .. }
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }

@@ -1,5 +1,6 @@
 import Init.Data.Nat.PowMod
 import Noctium.Disclosure
+import Noctium.Merkle
 
 namespace Noctium
 
@@ -58,7 +59,22 @@ inductive LedgerValue where
   | map (entries : List (Value × LedgerValue))
   | composite (type : Types.CompositeType) (leaves : List Nat)
   | list (entries : List (List Nat))
+  | merkleTree (depth count : Nat)
+  | merkleTreeKnown (depth count : Nat) (tree : Noctium.Merkle.Tree)
   deriving Repr, BEq
+
+private def merkleTreeState? : LedgerValue → Option (Nat × Nat × Option Noctium.Merkle.Tree)
+  | .merkleTree depth count => some (depth, count, if count == 0 then some .empty else none)
+  | .merkleTreeKnown depth count tree => some (depth, count, some tree)
+  | _ => none
+
+private def checkedMerkleTreeState (state : LedgerValue) :
+    Except String (Nat × Nat × Option Noctium.Merkle.Tree) := do
+  let some view := merkleTreeState? state | throw "missing or malformed MerkleTree state"
+  let (depth, count, _) := view
+  unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
+  if count > 2 ^ depth then throw "MerkleTree count exceeds its capacity"
+  pure view
 
 abbrev EvalEnv := List (String × Value)
 
@@ -661,6 +677,18 @@ def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except Strin
     pure (output.name, Value.pack output.ty (← output.value.eval ctx env))
 
 /-- Pure transaction state. A failed transition returns no successor state. -/
+structure TokenEffectKey where
+  color : List Nat
+  isUnshielded : Bool
+  deriving Repr, BEq
+
+structure SpendClaimKey where
+  color : List Nat
+  isUnshielded : Bool
+  isContract : Bool
+  recipient : List Nat
+  deriving Repr, BEq
+
 structure LedgerState where
   cells : List (String × Value) := []
   maps : List (String × List (Value × Value)) := []
@@ -668,6 +696,9 @@ structure LedgerState where
   events : List (EventKind × List Nat) := []
   shieldedMints : List (List Nat × Nat) := []
   unshieldedMints : List (List Nat × Nat) := []
+  unshieldedInputs : List (TokenEffectKey × Nat) := []
+  unshieldedOutputs : List (TokenEffectKey × Nat) := []
+  unshieldedSpendClaims : List (SpendClaimKey × Nat) := []
   deriving Repr, BEq
 
 /-- The source evaluator replaces an entry and places it first in the association list. -/
@@ -679,6 +710,21 @@ private def accumulateMintAmount (entries : List (List Nat × Nat))
   let total := (entries.lookup domain).getD 0 + amount
   unless total < 2 ^ 64 do throw "accumulated token effects exceed the native UInt64 sum"
   pure (updateAssoc domain total entries)
+
+/-- The VM accepts a UInt128 value when a token-effect key is first inserted.
+For an existing key, its Add instruction takes UInt64 operands and returns a
+UInt64 sum. -/
+private def accumulateTaggedAmount [BEq α] (entries : List (α × Nat))
+    (key : α) (amount : Nat) : Except String (List (α × Nat)) := do
+  match entries.lookup key with
+  | none => pure (updateAssoc key amount entries)
+  | some previous => do
+    unless previous < 2 ^ 64 && amount < 2 ^ 64 do
+      throw "existing token-effect key requires UInt64 operands"
+    let total := previous + amount
+    unless total < 2 ^ 64 do
+      throw "accumulated token effects exceed the native UInt64 sum"
+    pure (updateAssoc key total entries)
 
 private def mintShielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
     (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1))) :
@@ -694,6 +740,39 @@ private def mintUnshielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerSt
     (← domain.eval ctx env) (← amount.eval ctx env)
   pure {state with unshieldedMints := mints}
 
+private def incUnshieldedInputs (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded : Expr .bool) : Except String LedgerState := do
+  let key : TokenEffectKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+  }
+  let inputs ← accumulateTaggedAmount state.unshieldedInputs key (← amount.eval ctx env)
+  pure {state with unshieldedInputs := inputs}
+
+private def incUnshieldedOutputs (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded : Expr .bool) : Except String LedgerState := do
+  let key : TokenEffectKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+  }
+  let outputs ← accumulateTaggedAmount state.unshieldedOutputs key (← amount.eval ctx env)
+  pure {state with unshieldedOutputs := outputs}
+
+private def claimUnshieldedCoinSpend (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32)) :
+    Except String LedgerState := do
+  let key : SpendClaimKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+    isContract := ← isContract.eval ctx env
+    recipient := ← recipient.eval ctx env
+  }
+  let claims ← accumulateTaggedAmount state.unshieldedSpendClaims key (← amount.eval ctx env)
+  pure {state with unshieldedSpendClaims := claims}
+
 private def evaluatePath (ctx : EvalContext) (env : EvalEnv) (keys : List PathKey) :
     Except String (List Value) := keys.mapM fun key => match key with
   | .mk ty expression => do
@@ -708,6 +787,7 @@ private def treeLookup (root : LedgerValue) : List Value → Option LedgerValue
     | .null => none
     | .composite .. => none
     | .list _ => none
+    | .merkleTree .. | .merkleTreeKnown .. => none
     | .map entries => (entries.lookup key).bind fun value => treeLookup value rest
 
 private def treeMember (root : LedgerValue) (keys : List Value) : Except String Bool := do
@@ -729,6 +809,7 @@ private def treeSet (root : LedgerValue) (keys : List Value) (value : LedgerValu
     | .null => none
     | .composite .. => none
     | .list _ => none
+    | .merkleTree .. | .merkleTreeKnown .. => none
     | .map entries =>
       if rest.isEmpty then
         pure (.map (updateAssoc key value entries))
@@ -883,6 +964,12 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       next ← mintShielded ctx env next domain amount
     | .mintUnshielded domain amount =>
       next ← mintUnshielded ctx env next domain amount
+    | .incUnshieldedInputs color amount isUnshielded =>
+      next ← incUnshieldedInputs ctx env next color amount isUnshielded
+    | .incUnshieldedOutputs color amount isUnshielded =>
+      next ← incUnshieldedOutputs ctx env next color amount isUnshielded
+    | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      next ← claimUnshieldedCoinSpend ctx env next color amount isUnshielded isContract recipient
     | .emitEvent kind payload =>
       next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
@@ -999,6 +1086,23 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let some updated := treeSet root evaluated (.list [])
         | throw s!"nested List parent is missing or not a map '{name}'"
       next := {next with trees := updateAssoc name updated next.trees}
+    | .merkleTreeIsFull name destination => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+      let (depth, count, _) ← checkedMerkleTreeState raw
+      env := (destination, .bool (count == 2 ^ depth)) :: env
+    | .merkleTreeInsertHash name hash => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+      let (depth, count, tree?) ← checkedMerkleTreeState raw
+      let capacity := 2 ^ depth
+      if count == capacity then throw "MerkleTree is full"
+      let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+      let bytes ← hash.eval ctx env
+      let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus depth count bytes tree
+      next := {next with trees := updateAssoc name (.merkleTreeKnown depth (count + 1) updated) next.trees}
+    | .merkleTreeReset name => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+      let (depth, _, _) ← checkedMerkleTreeState raw
+      next := {next with trees := updateAssoc name (.merkleTree depth 0) next.trees}
     | .insertPath name keys ty value | .writePath name keys ty value => do
       let evaluated ← evaluatePath ctx env keys
       let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -1050,8 +1154,10 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .setInsert .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
-            .mapIsEmpty .. | .mapSize .. |
+            .mapIsEmpty .. | .mapSize .. | .merkleTreeIsFull .. |
+            .merkleTreeInsertHash .. | .merkleTreeReset .. |
             .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+            .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
             .requireContractCaller .. | .emitEvent .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
@@ -1090,6 +1196,12 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next ← mintShielded ctx env next domain amount
         | .mintUnshielded domain amount =>
           next ← mintUnshielded ctx env next domain amount
+        | .incUnshieldedInputs color amount isUnshielded =>
+          next ← incUnshieldedInputs ctx env next color amount isUnshielded
+        | .incUnshieldedOutputs color amount isUnshielded =>
+          next ← incUnshieldedOutputs ctx env next color amount isUnshielded
+        | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+          next ← claimUnshieldedCoinSpend ctx env next color amount isUnshielded isContract recipient
         | .emitEvent kind payload =>
           next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
@@ -1206,6 +1318,23 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some updated := treeSet root evaluated (.list [])
             | throw s!"nested List parent is missing or not a map '{name}'"
           next := {next with trees := updateAssoc name updated next.trees}
+        | .merkleTreeIsFull name destination => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+          let (depth, count, _) ← checkedMerkleTreeState raw
+          env := (destination, .bool (count == 2 ^ depth)) :: env
+        | .merkleTreeInsertHash name hash => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+          let (depth, count, tree?) ← checkedMerkleTreeState raw
+          let capacity := 2 ^ depth
+          if count == capacity then throw "MerkleTree is full"
+          let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+          let bytes ← hash.eval ctx env
+          let updated ← Noctium.Merkle.Tree.insertHash ctx.transientHash ctx.modulus depth count bytes tree
+          next := {next with trees := updateAssoc name (.merkleTreeKnown depth (count + 1) updated) next.trees}
+        | .merkleTreeReset name => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+          let (depth, _, _) ← checkedMerkleTreeState raw
+          next := {next with trees := updateAssoc name (.merkleTree depth 0) next.trees}
         | .insertPath name keys ty value | .writePath name keys ty value => do
           let evaluated ← evaluatePath ctx env keys
           let payload := LedgerValue.scalar (Value.pack ty (← value.eval ctx env))
@@ -1261,7 +1390,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .compare .. => Value.bool false
           env := (destination, value) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
-            .mintShielded .. | .mintUnshielded .. |
+            .mintShielded .. | .mintUnshielded .. | .incUnshieldedInputs .. |
+            .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
             .requireContractCaller .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
@@ -1283,7 +1413,9 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .mapIsEmpty _ destination _ => env := (destination, .bool false) :: env
         | .mapSize _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
+        | .merkleTreeIsFull _ destination => env := (destination, .bool false) :: env
         | .counterAdjust .. | .counterReset .. => pure ()
+        | .merkleTreeInsertHash .. | .merkleTreeReset .. => pure ()
         | .listLength _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .listHead _ _ _ _ destinations =>
           env := env ++ destinations.map fun destination => (destination, .native 0)
@@ -1304,6 +1436,10 @@ def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
   | .error diagnostic => throw diagnostic.message
   | .ok _ => pure ()
   let outputs ← entry.circuit.run ctx env
+  let state := {state with
+    unshieldedInputs := [],
+    unshieldedOutputs := [],
+    unshieldedSpendClaims := []}
   let (finalEnv, next) ←
     runEffectsWithGuardsAndEnv ctx entry.effects entry.effectGuards (outputs ++ env) state
   let returned ← entry.returns.mapM fun output => do

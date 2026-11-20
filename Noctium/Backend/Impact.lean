@@ -53,6 +53,9 @@ inductive Op where
   | listLength (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
   | mapSize (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
   | mapIsEmpty (slot : Nat) (keys : List Aligned) (destination : String)
+  | merkleTreeIsFull (slot depth : Nat) (destination : String)
+  | merkleTreeInsertHash (slot depth : Nat) (hash : Expr (.bytes 32))
+  | merkleTreeReset (slot depth : Nat)
   | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
   | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
   | listPopFront (slot : Nat) (keys : List Aligned)
@@ -61,6 +64,12 @@ inductive Op where
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | incUnshieldedOutputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
   | readContractAddress (destination : String)
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
@@ -125,6 +134,41 @@ private def mapIsEmptyFieldGroups (slot : Nat) (keys : List Aligned)
   [[.native 0x30], indexPathFields slot false keys, [.native 0x04],
     [.native 0x10, .native 1] ++ (Aligned.counter (.uint (2 ^ 64 - 1) 0)).fields,
     [.native 0x02], [.native 0x0d] ++ (Aligned.bitExpr (.ref destination)).fields]
+
+private def merkleTreeIndexFields (index : Nat) (pushPath : Bool) : List Scalar :=
+  [.native (if pushPath then 0x70 else 0x50), .native 1, .native 1, .native index]
+
+private def merkleTreeIsFullFieldGroups (slot depth : Nat) (destination : String) :
+    List (List Scalar) :=
+  let capacity : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) (2 ^ depth)
+  [[.native 0x30], indexPathFields slot false [], listIndexFields 1,
+    [.native 0x10, .native 1] ++ (Aligned.counter capacity).fields,
+    [.native 0x01], [.native 0x08],
+    [.native 0x0d] ++ (Aligned.bitExpr (.ref destination)).fields]
+
+private def merkleTreeInsertHashFieldGroups (slot : Nat) (hash : Expr (.bytes 32)) :
+    List (List Scalar) :=
+  [ indexPathFields slot true []
+  , merkleTreeIndexFields 0 true
+  , [.native 0x32]
+  , listIndexFields 1
+  , [.native 0x11, .native 1] ++ (Aligned.bytes32 hash).fields
+  , [.native 0x91]
+  , [.native 0xa1]
+  , merkleTreeIndexFields 1 true
+  , [.native 0x0e, .native 1]
+  , [.native 0xa2]
+  ]
+
+private def merkleTreeResetFieldGroups (slot depth : Nat) : List (List Scalar) :=
+  let stateArrayTag := 3 + 2 * 16
+  let blankTreeTag := 4 + depth * 16
+  let zeroCount : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
+  [ [.native 0x10, .native 1] ++ (Aligned.field (.native slot)).fields
+  , [.native 0x11, .native stateArrayTag, .native blankTreeTag, .native 1] ++
+      (Aligned.counter zeroCount).fields
+  , [.native 0x91]
+  ]
 
 private def requireContractCallerFieldGroups (address : Expr (.bytes 32)) : List (List Scalar) :=
   -- Query context is two stack slots down. Context slot six holds the tagged caller.
@@ -191,6 +235,34 @@ private def taggedBalanceFieldGroups (destination : String) (color : Expr (.byte
     tokenChoiceValues color isUnshielded
   balanceFieldGroupsForToken destination token query
 
+private def pushAmount (value : Expr (.uint balanceMaximum)) : List Scalar :=
+  [.native 0x10, .native 1] ++ balanceAmountFields value
+
+private def standaloneSpendClaimFieldGroups (color : Expr (.bytes 32))
+    (amount : Expr (.uint balanceMaximum)) (isUnshielded isContract : Expr .bool)
+    (recipient : Expr (.bytes 32)) : List (List Scalar) :=
+  let lo : Scalar := .bytesField recipient 0
+  let hi : Scalar := .bytesField recipient 1
+  let address := [.select isContract (.native 1) (.native 0),
+    .select isContract lo (.native 0), .select isContract hi (.native 0),
+    .select isContract (.native 0) lo, .select isContract (.native 0) hi]
+  let tokenValues := tokenChoiceValues color isUnshielded
+  let claimKey := [.native 6, .native 1, .native 32, .native 32,
+    .native 1, .native 32, .native 32] ++ tokenValues ++ address
+  accumulateTokenFields 8 claimKey (pushAmount amount)
+
+private def standaloneOutputFieldGroups (color : Expr (.bytes 32))
+    (amount : Expr (.uint balanceMaximum)) (isUnshielded : Expr .bool) : List (List Scalar) :=
+  accumulateTokenFields 7
+    ([.native 3, .native 1, .native 32, .native 32] ++ tokenChoiceValues color isUnshielded)
+    (pushAmount amount)
+
+private def standaloneInputFieldGroups (color : Expr (.bytes 32))
+    (amount : Expr (.uint balanceMaximum)) (isUnshielded : Expr .bool) : List (List Scalar) :=
+  accumulateTokenFields 6
+    ([.native 3, .native 1, .native 32, .native 32] ++ tokenChoiceValues color isUnshielded)
+    (pushAmount amount)
+
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
   | .index slot pushPath => [.native (if pushPath then 0x70 else 0x50)] ++
@@ -217,6 +289,13 @@ def Op.fields : Op → List Scalar
       [.native 0x04, .native 0x0c] ++ (Aligned.counter value).fields
   | .mapIsEmpty slot keys destination =>
       (mapIsEmptyFieldGroups slot keys destination).flatten
+
+  | .merkleTreeIsFull slot depth destination =>
+      (merkleTreeIsFullFieldGroups slot depth destination).flatten
+  | .merkleTreeInsertHash slot _ hash =>
+      (merkleTreeInsertHashFieldGroups slot hash).flatten
+  | .merkleTreeReset slot depth =>
+      (merkleTreeResetFieldGroups slot depth).flatten
   | .listHead slot keys _schema values =>
       [.native 0x30] ++ indexPathFields slot false keys ++ listIndexFields 0 ++
       [.native 0x0c] ++ (Aligned.nativeFields values).fields
@@ -251,6 +330,12 @@ def Op.fields : Op → List Scalar
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .mintShielded domain amount => (mintFieldGroups 4 domain amount).flatten
   | .mintUnshielded domain amount => (mintFieldGroups 5 domain amount).flatten
+  | .incUnshieldedInputs color amount isUnshielded =>
+      (standaloneInputFieldGroups color amount isUnshielded).flatten
+  | .incUnshieldedOutputs color amount isUnshielded =>
+      (standaloneOutputFieldGroups color amount isUnshielded).flatten
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      (standaloneSpendClaimFieldGroups color amount isUnshielded isContract recipient).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
   | .readContractAddress destination => (contractAddressFieldGroups destination).flatten
   | .readTokenBalance destination color isUnshielded query =>
@@ -269,6 +354,13 @@ def Op.fieldGroups : Op → List (List Scalar)
         [.native 0x0c] ++ (Aligned.counter value).fields]
   | .mapIsEmpty slot keys destination =>
       mapIsEmptyFieldGroups slot keys destination
+
+  | .merkleTreeIsFull slot depth destination =>
+      merkleTreeIsFullFieldGroups slot depth destination
+  | .merkleTreeInsertHash slot _ hash =>
+      merkleTreeInsertHashFieldGroups slot hash
+  | .merkleTreeReset slot depth =>
+      merkleTreeResetFieldGroups slot depth
   | .listHead slot keys _schema values =>
       [[.native 0x30], indexPathFields slot false keys, listIndexFields 0,
         [.native 0x0c] ++ (Aligned.nativeFields values).fields]
@@ -304,6 +396,12 @@ def Op.fieldGroups : Op → List (List Scalar)
       claimContractCallFieldGroups address entryPointHash commitment
   | .mintShielded domain amount => mintFieldGroups 4 domain amount
   | .mintUnshielded domain amount => mintFieldGroups 5 domain amount
+  | .incUnshieldedInputs color amount isUnshielded =>
+      standaloneInputFieldGroups color amount isUnshielded
+  | .incUnshieldedOutputs color amount isUnshielded =>
+      standaloneOutputFieldGroups color amount isUnshielded
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      standaloneSpendClaimFieldGroups color amount isUnshielded isContract recipient
   | .requireContractCaller address => requireContractCallerFieldGroups address
   | .readContractAddress destination => contractAddressFieldGroups destination
   | .readTokenBalance destination color isUnshielded query =>
@@ -596,6 +694,36 @@ private def emptyMapOps (state : List StateDecl) (name : String)
   else
     pathWriteOps slot (← nativePathKeys keys) [.push (.field (.native 2)), .newMap]
 
+private def merkleTreeIsFullOp (state : List StateDecl) (name destination : String) :
+    Except String Op := do
+  let slot ← stateSlot state name
+  let some declaration := state[slot]? | throw s!"unknown MerkleTree state '{name}'"
+  let some depth := declaration.kind.merkleTreeDepth?
+    | throw s!"unknown MerkleTree state '{name}'"
+  unless 2 ≤ depth && depth ≤ 32 do
+    throw "MerkleTree depth must be between 2 and 32"
+  pure (.merkleTreeIsFull slot depth destination)
+
+private def merkleTreeInsertHashOp (state : List StateDecl) (name : String)
+    (hash : Expr (.bytes 32)) : Except String Op := do
+  let slot ← stateSlot state name
+  let some declaration := state[slot]? | throw s!"unknown MerkleTree state '{name}'"
+  let some depth := declaration.kind.merkleTreeDepth?
+    | throw s!"unknown MerkleTree state '{name}'"
+  unless 2 ≤ depth && depth ≤ 32 do
+    throw "MerkleTree depth must be between 2 and 32"
+  pure (.merkleTreeInsertHash slot depth hash)
+
+private def merkleTreeResetOp (state : List StateDecl) (name : String) :
+    Except String Op := do
+  let slot ← stateSlot state name
+  let some declaration := state[slot]? | throw s!"unknown MerkleTree state '{name}'"
+  let some depth := declaration.kind.merkleTreeDepth?
+    | throw s!"unknown MerkleTree state '{name}'"
+  unless 2 ≤ depth && depth ≤ 32 do
+    throw "MerkleTree depth must be between 2 and 32"
+  pure (.merkleTreeReset slot depth)
+
 private def expressionNames : Expr ty → List String
   | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignIdentity _ => []
   | .foreignEncodedField value _ | .foreignUnary _ value | .foreignToBytes value
@@ -703,6 +831,17 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure { plan with
       operations := plan.operations ++ [.dup, .index slot, value]
       reads := plan.reads ++ [{name := destination, ty}] }
+  | .merkleTreeIsFull name destination => do
+    let operation ← merkleTreeIsFullOp state name destination
+    pure {plan with
+      operations := plan.operations ++ [operation]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .merkleTreeInsertHash name hash => do
+    let operation ← merkleTreeInsertHashOp state name hash
+    pure {plan with operations := plan.operations ++ [operation]}
+  | .merkleTreeReset name => do
+    let operation ← merkleTreeResetOp state name
+    pure {plan with operations := plan.operations ++ [operation]}
   | .require condition =>
     pure {plan with guards := plan.guards ++ [condition]}
   | .claimContractCall address entryPointHash commitment =>
@@ -712,6 +851,15 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
   | .mintUnshielded domain amount =>
     pure {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
+  | .incUnshieldedInputs color amount isUnshielded =>
+    pure {plan with operations := plan.operations ++ [
+      .incUnshieldedInputs color amount isUnshielded]}
+  | .incUnshieldedOutputs color amount isUnshielded =>
+    pure {plan with operations := plan.operations ++ [
+      .incUnshieldedOutputs color amount isUnshielded]}
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+    pure {plan with operations := plan.operations ++ [
+      .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient]}
   | .emitEvent kind payload =>
     pure {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -937,6 +1085,23 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.mintUnshielded
         (totalizeActivityValue condition (expressionNames domain) domain)
         (totalizeActivityValue condition (expressionNames amount) amount))
+    | some condition, .incUnshieldedInputs color amount isUnshielded =>
+      pure (.incUnshieldedInputs
+        (totalizeActivityValue condition (expressionNames color) color)
+        (totalizeActivityValue condition (expressionNames amount) amount)
+        (totalizeActivityValue condition (expressionNames isUnshielded) isUnshielded))
+    | some condition, .incUnshieldedOutputs color amount isUnshielded =>
+      pure (.incUnshieldedOutputs
+        (totalizeActivityValue condition (expressionNames color) color)
+        (totalizeActivityValue condition (expressionNames amount) amount)
+        (totalizeActivityValue condition (expressionNames isUnshielded) isUnshielded))
+    | some condition, .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      pure (.claimUnshieldedCoinSpend
+        (totalizeActivityValue condition (expressionNames color) color)
+        (totalizeActivityValue condition (expressionNames amount) amount)
+        (totalizeActivityValue condition (expressionNames isUnshielded) isUnshielded)
+        (totalizeActivityValue condition (expressionNames isContract) isContract)
+        (totalizeActivityValue condition (expressionNames recipient) recipient))
     | some condition, .emitEvent kind payload =>
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
@@ -986,6 +1151,10 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.listPopFront name (totalizePathKeys condition keys))
     | some condition, .listReset name keys =>
       pure (.listReset name (totalizePathKeys condition keys))
+    | some condition, .merkleTreeInsertHash name hash =>
+      pure (.merkleTreeInsertHash name
+        (totalizeActivityValue condition (expressionNames hash) hash))
+    | some _, .merkleTreeReset .. => pure effect
     | some condition, .removePath name keys =>
       pure (.removePath name (totalizePathKeys condition keys))
     | some condition, .insertPath name keys ty value =>
@@ -1004,8 +1173,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.emptyMapPath name (totalizePathKeys condition keys))
     | some condition, .setInsert name keys =>
       pure (.setInsert name (totalizePathKeys condition keys))
-    | some _, .readCell .. => pure effect
-    | some _, .readContractAddress .. => pure effect
+    | some _, .readCell .. | some _, .readContractAddress .. |
+        some _, .merkleTreeIsFull .. => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
     | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
@@ -1026,7 +1195,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
   | some condition, .readContractAddress .. | some condition, .readPath .. | some condition, .readCompositePath .. |
       some condition, .memberPath .. | some condition, .counterRead .. |
       some condition, .listLength .. | some condition, .listHead .. |
-      some condition, .readTokenBalance .. | some condition, .mapSize .. | some condition, .mapIsEmpty .. =>
+      some condition, .readTokenBalance .. | some condition, .mapSize .. | some condition, .mapIsEmpty .. |
+      some condition, .merkleTreeIsFull .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -1051,8 +1221,11 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .listPushFront .. | some condition, .listPopFront .. |
       some condition, .listReset .. | some condition, .removePath .. |
       some condition, .setInsert .. |
+      some condition, .merkleTreeInsertHash .. | some condition, .merkleTreeReset .. |
       some condition, .claimContractCall .. | some condition, .mintShielded .. |
-      some condition, .mintUnshielded .. | some condition, .emitEvent .. =>
+      some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs .. |
+      some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend .. |
+      some condition, .emitEvent .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -1184,6 +1357,17 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := { plan with
       operations := plan.operations ++ [.dup, .index slot, value]
       reads := plan.reads ++ [{name := destination, ty}] }
+  | .merkleTreeIsFull name destination => do
+    let operation ← merkleTreeIsFullOp state name destination
+    plan := {plan with
+      operations := plan.operations ++ [operation]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
+  | .merkleTreeInsertHash name hash => do
+    let operation ← merkleTreeInsertHashOp state name hash
+    plan := {plan with operations := plan.operations ++ [operation]}
+  | .merkleTreeReset name => do
+    let operation ← merkleTreeResetOp state name
+    plan := {plan with operations := plan.operations ++ [operation]}
   | .require condition =>
     plan := {plan with guards := plan.guards ++ [condition]}
   | .claimContractCall address entryPointHash commitment =>
@@ -1193,6 +1377,15 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
   | .mintUnshielded domain amount =>
     plan := {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
+  | .incUnshieldedInputs color amount isUnshielded =>
+    plan := {plan with operations := plan.operations ++ [
+      .incUnshieldedInputs color amount isUnshielded]}
+  | .incUnshieldedOutputs color amount isUnshielded =>
+    plan := {plan with operations := plan.operations ++ [
+      .incUnshieldedOutputs color amount isUnshielded]}
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+    plan := {plan with operations := plan.operations ++ [
+      .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient]}
   | .emitEvent kind payload =>
     plan := {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -1448,7 +1641,8 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
             .memberPath _ destination .. | .counterRead _ destination .. |
             .mapSize _ destination .. |
             .readContractAddress destination | .readTokenBalance destination .. |
-            .mapIsEmpty _ destination .. | .listLength _ destination .. => [destination]
+            .mapIsEmpty _ destination .. | .listLength _ destination .. |
+            .merkleTreeIsFull _ destination => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
         | _ => [])
@@ -1554,6 +1748,13 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("value", Lean.toJson (← value.eval ctx env))])])
   | .mapSize .. => throw "mapSize uses its dedicated native-plan operation JSON"
   | .mapIsEmpty .. => throw "mapIsEmpty uses its dedicated native-plan operation JSON"
+
+  | .merkleTreeIsFull .. =>
+    throw "merkleTreeIsFull uses its dedicated native-plan operation JSON"
+  | .merkleTreeInsertHash .. =>
+    throw "merkleTreeInsertHash uses its dedicated native-plan operation JSON"
+  | .merkleTreeReset .. =>
+    throw "merkleTreeReset uses its dedicated native-plan operation JSON"
   | .listHead slot keys schema values => do
     let values ← values.mapM (fun value => value.eval ctx env)
     pure (Lean.Json.mkObj [("listHead", Lean.Json.mkObj [
@@ -1573,6 +1774,9 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
   | .mintUnshielded .. => throw "unshielded mint uses its dedicated native-plan operation JSON"
+  | .incUnshieldedInputs .. => throw "unshielded input accumulation uses its dedicated native-plan operation JSON"
+  | .incUnshieldedOutputs .. => throw "unshielded output accumulation uses its dedicated native-plan operation JSON"
+  | .claimUnshieldedCoinSpend .. => throw "unshielded spend claim uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
   | .readContractAddress .. => throw "contract address read uses its dedicated native-plan operation JSON"
   | .readTokenBalance .. => throw "readTokenBalance uses its dedicated native-plan operation JSON"

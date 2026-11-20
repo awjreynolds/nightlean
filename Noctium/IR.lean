@@ -328,6 +328,7 @@ inductive StateKind where
   | cell (valueTy : Ty)
   | map (keyTy valueTy : Ty)
   | tree (value : LedgerValueType)
+  | merkleTree (depth : Nat)
   /-- UTF-8 FAB state metadata. This value is host/deployment-only and never a circuit Ty. -/
   | opaqueString
   deriving Repr, BEq, DecidableEq
@@ -343,6 +344,10 @@ def StateKind.validateCollectionPath (kind : StateKind) (keys : List PathKey) :
   let some schema := kind.pathSchema | throw "path must select a Map or Set"
   unless (← schema.resolvePath keys).collectionKey?.isSome do
     throw "path must select a Map or Set"
+
+def StateKind.merkleTreeDepth? : StateKind → Option Nat
+  | .merkleTree depth => some depth
+  | _ => none
 
 structure StateDecl where
   name : String
@@ -468,6 +473,12 @@ inductive Effect where
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | incUnshieldedOutputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
       (isUnshielded : Expr .bool) (query : BalanceQuery)
@@ -492,6 +503,9 @@ inductive Effect where
       (type : Types.CompositeType) (values : List (Expr .native))
   | listPopFront (state : String) (keys : List PathKey)
   | listReset (state : String) (keys : List PathKey)
+  | merkleTreeIsFull (state destination : String)
+  | merkleTreeInsertHash (state : String) (hash : Expr (.bytes 32))
+  | merkleTreeReset (state : String)
   | emptyMapPath (state : String) (keys : List PathKey)
   | setInsert (state : String) (keys : List PathKey)
   | removePath (state : String) (keys : List PathKey)
@@ -920,7 +934,8 @@ private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
-    .emptyMapPath state .. | .setInsert state .. | .removePath state .. => some state
+    .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
+    .merkleTreeInsertHash state .. | .merkleTreeReset state => some state
   | _ => none
 
 /-- Preserve first constraint diagnostic and source span in list order. -/
@@ -999,6 +1014,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
+      | .merkleTree _ => []
       | .opaqueString => []
     for ty in types do
       match ty.validate caps with
@@ -1041,12 +1057,14 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. |
           .readTokenBalance .. | .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+          .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
           .requireContractCaller .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .mapIsEmpty .. | .mapSize .. |
           .insertPath .. | .writePath .. | .emptyMapPath .. | .setInsert .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
-          .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. => pure ()
+          .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
+          .merkleTreeIsFull .. | .merkleTreeInsertHash .. | .merkleTreeReset .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on ledger reads, writes, and require effects"}
@@ -1080,6 +1098,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .mintShielded domain amount | .mintUnshielded domain amount => do
         domain.validate caps env
         amount.validate caps env
+        pure []
+      | .incUnshieldedInputs color amount isUnshielded
+      | .incUnshieldedOutputs color amount isUnshielded => do
+        color.validate caps env
+        amount.validate caps env
+        isUnshielded.validate caps env
+        pure []
+      | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient => do
+        color.validate caps env
+        amount.validate caps env
+        isUnshielded.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
         pure []
       | .requireContractCaller address => do
         address.validate caps env
@@ -1187,6 +1218,31 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
         discard (resolveListState decls state keys)
+        pure []
+      | .merkleTreeIsFull state destination => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let some depth := declaration.kind.merkleTreeDepth?
+          | throw s!"unknown MerkleTree state '{state}'"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "MerkleTree depth must be between 2 and 32"
+        pure [(destination, .bool)]
+      | .merkleTreeInsertHash state hash => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let some depth := declaration.kind.merkleTreeDepth?
+          | throw s!"unknown MerkleTree state '{state}'"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "MerkleTree depth must be between 2 and 32"
+        hash.validate caps env
+        pure []
+      | .merkleTreeReset state => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let some depth := declaration.kind.merkleTreeDepth?
+          | throw s!"unknown MerkleTree state '{state}'"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "MerkleTree depth must be between 2 and 32"
         pure []
       | .insertPath state keys valueTy value
       | .writePath state keys valueTy value => do
@@ -1314,6 +1370,7 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
+      | .merkleTree _ => []
       | .opaqueString => []
     for ty in types do
       match ty.validate caps with
@@ -1323,6 +1380,9 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       match schema.validate caps with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
+    if let some depth := decl.kind.merkleTreeDepth? then
+      unless 2 ≤ depth && depth ≤ 32 do
+        throw {span := decl.span, message := "MerkleTree depth must be between 2 and 32"}
   match c.constructor with
   | some constructor => Constructor.validate caps c.state constructor c.span
   | none =>
