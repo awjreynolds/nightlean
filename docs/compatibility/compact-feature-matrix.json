@@ -1280,8 +1280,8 @@
       "id": "C-CONTRACT-INTERFACE",
       "layer": "language-ledger",
       "surface": "Contract types and implements",
-      "noctiumStatus": "missing",
-      "notes": "Non-generic provable signatures. Pure interface circuits rejected in 0.36.x.",
+      "noctiumStatus": "subset",
+      "notes": "Named non-generic interfaces check provable entrypoint names, ordered scalar types and grouped ABI layouts. A registered Lean implementation may use different local labels. Interface-qualified commitments reuse direct native lowering. Dynamic contract values need separate evidence.",
       "source": [
         "reference",
         "release0360"
@@ -1291,7 +1291,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ContractInterfaces.lean",
+        "tests/compact/contract-interfaces.py",
+        "examples/AggregateSerialization.lean",
+        "runtime/tests/aggregate_serialization.rs"
+      ],
       "equivalence": "unverified"
     },
     {

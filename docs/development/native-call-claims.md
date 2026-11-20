@@ -89,6 +89,43 @@ localnet transaction at block 31967. The Rust client checked one call event
 per address and matched both finalized states to their exact deployment
 bytes. Two compiles reproduced all 27 selected files. [Aggregate composition receipt](native-aggregate-composition-receipt.json)
 
+### Share a named call interface
+
+A named interface lists the argument and return layouts for provable contract
+entrypoints. Declare each implementation before using the interface at a call.
+
+```lean
+noctium_interface BalanceUpdate where
+  entry store accepts [amount : UInt 8] yields [stored : UInt 8]
+end
+
+noctium_implements BalanceContract implements BalanceUpdate
+```
+
+Pass the implementing contract and interface to the qualified commitment form.
+
+```lean
+claimContractCall(target,
+  disclose(callCommitment(BalanceContract, BalanceUpdate, "store", opening,
+    [proposedAmount], [expectedStored])))
+```
+
+The compiler checks entry names, field order, scalar types and aggregate
+grouping. Source labels belong to each declaration. A caller uses the
+interface's labels for grouped arguments and results. The contract
+implementation uses its own labels. The qualified form uses the existing
+native commitment and the declared operation's selector. It still requires the
+call commitment to cross the normal disclosure check.
+
+The [payment example](../../examples/AggregateSerialization.lean) uses a named
+interface for two grouped returns and two scalar returns. The native test
+assembles the compiled caller and callee and rejects a changed result. The
+[Compact oracle](../../tests/compact/NamedInterface.compact) checks
+matching declarations and incompatible signatures against the pinned compiler.
+Run `python3 tests/compact/contract-interfaces.py /path/to/compactc` with
+Compact 0.36.1.
+[Compact contract types](https://docs.midnight.network/compact/reference/compact-reference#contract-types)
+
 ### Bind the entrypoint and read the address from a registry
 
 The two-argument form derives the entrypoint selector from the same declared
