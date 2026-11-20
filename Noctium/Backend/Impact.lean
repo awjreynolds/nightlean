@@ -59,6 +59,12 @@ inductive Op where
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | incUnshieldedOutputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
   | checkpoint
   | readContractAddress (destination : String)
@@ -184,6 +190,34 @@ private def taggedBalanceFieldGroups (destination : String) (color : Expr (.byte
     tokenChoiceValues color isUnshielded
   balanceFieldGroupsForToken destination token query
 
+private def pushAmount (value : Expr (.uint balanceMaximum)) : List Scalar :=
+  [.native 0x10, .native 1] ++ balanceAmountFields value
+
+private def standaloneSpendClaimFieldGroups (color : Expr (.bytes 32))
+    (amount : Expr (.uint balanceMaximum)) (isUnshielded isContract : Expr .bool)
+    (recipient : Expr (.bytes 32)) : List (List Scalar) :=
+  let lo : Scalar := .bytesField recipient 0
+  let hi : Scalar := .bytesField recipient 1
+  let address := [.select isContract (.native 1) (.native 0),
+    .select isContract lo (.native 0), .select isContract hi (.native 0),
+    .select isContract (.native 0) lo, .select isContract (.native 0) hi]
+  let tokenValues := tokenChoiceValues color isUnshielded
+  let claimKey := [.native 6, .native 1, .native 32, .native 32,
+    .native 1, .native 32, .native 32] ++ tokenValues ++ address
+  accumulateTokenFields 8 claimKey (pushAmount amount)
+
+private def standaloneOutputFieldGroups (color : Expr (.bytes 32))
+    (amount : Expr (.uint balanceMaximum)) (isUnshielded : Expr .bool) : List (List Scalar) :=
+  accumulateTokenFields 7
+    ([.native 3, .native 1, .native 32, .native 32] ++ tokenChoiceValues color isUnshielded)
+    (pushAmount amount)
+
+private def standaloneInputFieldGroups (color : Expr (.bytes 32))
+    (amount : Expr (.uint balanceMaximum)) (isUnshielded : Expr .bool) : List (List Scalar) :=
+  accumulateTokenFields 6
+    ([.native 3, .native 1, .native 32, .native 32] ++ tokenChoiceValues color isUnshielded)
+    (pushAmount amount)
+
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
   | .index slot pushPath => [.native (if pushPath then 0x70 else 0x50)] ++
@@ -239,6 +273,12 @@ def Op.fields : Op → List Scalar
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .mintShielded domain amount => (mintFieldGroups 4 domain amount).flatten
   | .mintUnshielded domain amount => (mintFieldGroups 5 domain amount).flatten
+  | .incUnshieldedInputs color amount isUnshielded =>
+      (standaloneInputFieldGroups color amount isUnshielded).flatten
+  | .incUnshieldedOutputs color amount isUnshielded =>
+      (standaloneOutputFieldGroups color amount isUnshielded).flatten
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      (standaloneSpendClaimFieldGroups color amount isUnshielded isContract recipient).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
   | .checkpoint => [.native 0xff]
   | .readContractAddress destination => (contractAddressFieldGroups destination).flatten
@@ -288,6 +328,12 @@ def Op.fieldGroups : Op → List (List Scalar)
       claimContractCallFieldGroups address entryPointHash commitment
   | .mintShielded domain amount => mintFieldGroups 4 domain amount
   | .mintUnshielded domain amount => mintFieldGroups 5 domain amount
+  | .incUnshieldedInputs color amount isUnshielded =>
+      standaloneInputFieldGroups color amount isUnshielded
+  | .incUnshieldedOutputs color amount isUnshielded =>
+      standaloneOutputFieldGroups color amount isUnshielded
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      standaloneSpendClaimFieldGroups color amount isUnshielded isContract recipient
   | .requireContractCaller address => requireContractCallerFieldGroups address
   | .readContractAddress destination => contractAddressFieldGroups destination
   | .readTokenBalance destination color isUnshielded query =>
@@ -667,6 +713,15 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
   | .mintUnshielded domain amount =>
     pure {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
+  | .incUnshieldedInputs color amount isUnshielded =>
+    pure {plan with operations := plan.operations ++ [
+      .incUnshieldedInputs color amount isUnshielded]}
+  | .incUnshieldedOutputs color amount isUnshielded =>
+    pure {plan with operations := plan.operations ++ [
+      .incUnshieldedOutputs color amount isUnshielded]}
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+    pure {plan with operations := plan.operations ++ [
+      .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient]}
   | .emitEvent kind payload =>
     pure {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -885,6 +940,23 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.mintUnshielded
         (totalizeActivityValue condition (expressionNames domain) domain)
         (totalizeActivityValue condition (expressionNames amount) amount))
+    | some condition, .incUnshieldedInputs color amount isUnshielded =>
+      pure (.incUnshieldedInputs
+        (totalizeActivityValue condition (expressionNames color) color)
+        (totalizeActivityValue condition (expressionNames amount) amount)
+        (totalizeActivityValue condition (expressionNames isUnshielded) isUnshielded))
+    | some condition, .incUnshieldedOutputs color amount isUnshielded =>
+      pure (.incUnshieldedOutputs
+        (totalizeActivityValue condition (expressionNames color) color)
+        (totalizeActivityValue condition (expressionNames amount) amount)
+        (totalizeActivityValue condition (expressionNames isUnshielded) isUnshielded))
+    | some condition, .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      pure (.claimUnshieldedCoinSpend
+        (totalizeActivityValue condition (expressionNames color) color)
+        (totalizeActivityValue condition (expressionNames amount) amount)
+        (totalizeActivityValue condition (expressionNames isUnshielded) isUnshielded)
+        (totalizeActivityValue condition (expressionNames isContract) isContract)
+        (totalizeActivityValue condition (expressionNames recipient) recipient))
     | some condition, .emitEvent kind payload =>
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
@@ -1137,6 +1209,15 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
   | .mintUnshielded domain amount =>
     plan := {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
+  | .incUnshieldedInputs color amount isUnshielded =>
+    plan := {plan with operations := plan.operations ++ [
+      .incUnshieldedInputs color amount isUnshielded]}
+  | .incUnshieldedOutputs color amount isUnshielded =>
+    plan := {plan with operations := plan.operations ++ [
+      .incUnshieldedOutputs color amount isUnshielded]}
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+    plan := {plan with operations := plan.operations ++ [
+      .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient]}
   | .emitEvent kind payload =>
     plan := {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -1507,6 +1588,9 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
   | .mintUnshielded .. => throw "unshielded mint uses its dedicated native-plan operation JSON"
+  | .incUnshieldedInputs .. => throw "unshielded input accumulation uses its dedicated native-plan operation JSON"
+  | .incUnshieldedOutputs .. => throw "unshielded output accumulation uses its dedicated native-plan operation JSON"
+  | .claimUnshieldedCoinSpend .. => throw "unshielded spend claim uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
   | .checkpoint => pure (Lean.toJson ("ckpt" : String))
   | .readContractAddress .. => throw "contract address read uses its dedicated native-plan operation JSON"

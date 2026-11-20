@@ -447,6 +447,12 @@ inductive Effect where
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | incUnshieldedOutputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded : Expr .bool)
+  | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+      (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
   /-- Candidate boundary for the native guaranteed and fallible transcripts. -/
   | checkpoint
@@ -1017,6 +1023,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
           .claimContractCall .. | .requireContractCaller .. | .checkpoint | .emitEvent .. |
           .readContractAddress .. | .readTokenBalance .. | .mintShielded .. | .mintUnshielded .. |
+          .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -1054,6 +1061,19 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .mintShielded domain amount | .mintUnshielded domain amount => do
         domain.validate caps env
         amount.validate caps env
+        pure []
+      | .incUnshieldedInputs color amount isUnshielded
+      | .incUnshieldedOutputs color amount isUnshielded => do
+        color.validate caps env
+        amount.validate caps env
+        isUnshielded.validate caps env
+        pure []
+      | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient => do
+        color.validate caps env
+        amount.validate caps env
+        isUnshielded.validate caps env
+        isContract.validate caps env
+        recipient.validate caps env
         pure []
       | .requireContractCaller address => do
         address.validate caps env
