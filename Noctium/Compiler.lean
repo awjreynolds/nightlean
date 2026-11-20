@@ -36,6 +36,9 @@ private def expressionJson : Expr ty → Json
       Json.mkObj [("tag", toJson ("concatBytes" : String)),
         ("leftLength", toJson leftLength), ("rightLength", toJson rightLength),
         ("left", expressionJson left), ("right", expressionJson right)]
+  | .sha256 (length := length) value => Json.mkObj [
+      ("tag", toJson ("sha256" : String)), ("length", toJson length),
+      ("value", expressionJson value)]
   | .sha512 (length := length) value => Json.mkObj [
       ("tag", toJson ("sha512" : String)), ("length", toJson length),
       ("value", expressionJson value)]
@@ -198,6 +201,10 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .merkleTreeInsertHash slot depth hash => Json.mkObj [
       ("op", toJson ("merkleTreeInsertHash" : String)), ("slot", toJson slot),
       ("depth", toJson depth), ("hash", nativeExpressionJson hash)]
+  | .merkleTreeInsertHashIndex slot depth hash idx => Json.mkObj [
+      ("op", toJson ("merkleTreeInsertHashIndex" : String)), ("slot", toJson slot),
+      ("depth", toJson depth), ("hash", nativeExpressionJson hash),
+      ("index", nativeExpressionJson idx)]
   | .merkleTreeReset slot depth => Json.mkObj [
       ("op", toJson ("merkleTreeReset" : String)), ("slot", toJson slot),
       ("depth", toJson depth)]
@@ -282,6 +289,10 @@ private def effectJson : Effect → Json
   | .merkleTreeInsertHash state hash => Json.mkObj [
       ("op", toJson ("merkleTreeInsertHash" : String)), ("state", toJson state),
       ("hash", expressionJson hash)]
+  | .merkleTreeInsertHashIndex state hash index => Json.mkObj [
+      ("op", toJson ("merkleTreeInsertHashIndex" : String)),
+      ("state", toJson state), ("hash", expressionJson hash),
+      ("index", expressionJson index)]
   | .merkleTreeReset state => Json.mkObj [
       ("op", toJson ("merkleTreeReset" : String)), ("state", toJson state)]
   | .listLength state destination keys => Json.mkObj [
