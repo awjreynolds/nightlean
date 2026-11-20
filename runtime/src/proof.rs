@@ -850,7 +850,7 @@ impl ContractOperationTarget {
         }
         preparation_cursor(
             self.bundle()?,
-            &state.state.data,
+            &state.state,
             self.contract_address(),
             inputs,
         )
@@ -1160,7 +1160,7 @@ impl WitnessTarget {
         };
         preparation_cursor(
             bundle,
-            &deployment.initial_state.data,
+            &deployment.initial_state,
             self.contract_address(),
             inputs,
         )
@@ -1195,7 +1195,7 @@ impl WitnessTarget {
 
 fn preparation_cursor(
     bundle: &VerifiedBundle,
-    state: &onchain_runtime::state::ChargedState<Db>,
+    state: &ContractState<Db>,
     address: &str,
     inputs: &BTreeMap<String, Json>,
 ) -> Result<crate::PreparationCursor> {
@@ -1216,7 +1216,9 @@ fn preparation_cursor(
             .try_into()
             .map_err(|_| Error::BindingMismatch)?,
     ));
-    crate::PreparationCursor::new(&plan, inputs, state, &parameters, address)
+    let mut context = onchain_runtime::context::QueryContext::new(state.data.clone(), address);
+    context.call_context.balance = state.balance.clone();
+    crate::PreparationCursor::from_context(&plan, inputs, context, &parameters, false)
         .map_err(|_| Error::InvalidPrivateInput)
 }
 

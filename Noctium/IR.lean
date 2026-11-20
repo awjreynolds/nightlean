@@ -5,6 +5,8 @@ namespace Noctium
 
 def maxBytesLength : Nat := Types.defaultLimits.maxVectorLength
 
+def balanceMaximum : Nat := 2 ^ 128 - 1
+
 inductive Visibility where
   | «public» | «private»
   deriving Repr, BEq, DecidableEq, Inhabited
@@ -417,6 +419,16 @@ def EventKind.fields : EventKind → List (String × EventFieldType)
 def EventKind.payloadSize (kind : EventKind) : Nat :=
   kind.fields.foldl (fun size field => size + field.2.width) 0
 
+/-- Query the starting ledger balance of either native token namespace. -/
+inductive BalanceQuery where
+  | exact
+  | compare (less : Bool) (limit : Expr (.uint balanceMaximum))
+  deriving Repr
+
+def BalanceQuery.resultType : BalanceQuery → Ty
+  | .exact => .uint balanceMaximum
+  | .compare .. => .bool
+
 /-- State effects are ordered transaction instructions, not circuit nodes.
 A read binds a typed name for later guards/writes. Outputs are bound explicitly
 by an entrypoint. The backend must bind these values into the accepted transcript. -/
@@ -424,6 +436,7 @@ inductive Effect where
   | readCell (state destination : String) (ty : Ty)
   | readMap (state destination : String) (keyTy valueTy : Ty) (key : Expr keyTy)
   | readMember (state destination : String) (keyTy valueTy : Ty) (key : Expr keyTy)
+  | readContractAddress (destination : String)
   | require (condition : Expr .bool)
   | writeCell (state : String) (ty : Ty) (value : Expr ty)
   | writeMap (state : String) (keyTy valueTy : Ty) (key : Expr keyTy) (value : Expr valueTy)
@@ -432,7 +445,11 @@ inductive Effect where
   transcript slot. The commitment is the native transient input/output hash.
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
+  | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | requireContractCaller (address : Expr (.bytes 32))
+  | readTokenBalance (destination : String) (color : Expr (.bytes 32))
+      (isUnshielded : Expr .bool) (query : BalanceQuery)
   /-- Compare the native ledger transcript's block time, in seconds, with a
   public cutoff. `before` selects the strict `<` direction; false selects `>`. -/
   | blockTimeCompare (destination : String) (before : Bool)
@@ -999,8 +1016,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .error message => throw {span, message}
       | .ok _ => pure ()
       match effect with
-      | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
-          .claimContractCall .. | .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. |
+      | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. |
+          .readTokenBalance .. | .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+          .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -1024,6 +1042,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         requireState decls state (.map keyTy valueTy)
         key.validate caps env
         pure [(destination, .bool)]
+      | .readContractAddress destination => do
+        (.bytes 32 : Ty).validate caps
+        pure [(destination, .bytes 32)]
       | .require condition =>
         condition.validate caps env
         pure []
@@ -1032,9 +1053,20 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         entryPointHash.validate caps env
         commitment.validate caps env
         pure []
+      | .mintShielded domain amount | .mintUnshielded domain amount => do
+        domain.validate caps env
+        amount.validate caps env
+        pure []
       | .requireContractCaller address => do
         address.validate caps env
         pure []
+      | .readTokenBalance destination color isUnshielded query => do
+        color.validate caps env
+        isUnshielded.validate caps env
+        match query with
+        | .exact => pure ()
+        | .compare _ limit => limit.validate caps env
+        pure [(destination, query.resultType)]
       | .blockTimeCompare destination _ deadline => do
         deadline.validate caps env
         pure [(destination, .bool)]

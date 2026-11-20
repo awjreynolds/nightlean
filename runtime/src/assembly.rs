@@ -641,9 +641,10 @@ fn build_for_deployment(
 ) -> Result<Built> {
     ensure!(ttl > 0, "TTL must be explicit Unix seconds");
     let address = deployment.address();
+    let mut context = QueryContext::new(initial.data.clone(), address);
+    context.call_context.balance = initial.balance.clone();
     // prepare's zero-randomness preimage is diagnostic only. Reuse only its
     // evaluated program and private fields, then repartition for this commitment.
-    let mut context = QueryContext::new(initial.data.clone(), address);
     let evaluated = if let Some(block) = block {
         context.call_context.tblock = block.tblock;
         context.call_context.tblock_err = block.tblock_err;

@@ -1,0 +1,13 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger lastAddress: Bytes<32>;
+
+export circuit identify(enabled: Boolean): Bytes<32> {
+  if (!disclose(enabled)) {
+    return default<Bytes<32>>;
+  }
+  const own = kernel.self().bytes;
+  lastAddress = own;
+  return own;
+}

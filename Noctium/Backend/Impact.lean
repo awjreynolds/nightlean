@@ -57,7 +57,12 @@ inductive Op where
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
+  | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | requireContractCaller (address : Expr (.bytes 32))
+  | readContractAddress (destination : String)
+  | readTokenBalance (destination : String) (color : Expr (.bytes 32))
+      (isUnshielded : Expr .bool) (query : BalanceQuery)
   | blockTimeCompare (destination : String) (before : Bool)
       (deadline : Expr (.uint (2 ^ 64 - 1)))
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
@@ -79,6 +84,14 @@ private def claimContractCallFieldGroups
   , [.native 0x40]
   ]
 
+private def accumulateTokenFields (slot : Nat) (key encodedAmount : List Scalar) :
+    List (List Scalar) :=
+  [[.native 0x40], [.native 0x80, .native 1, .native 1, .native slot],
+    [.native 0x10, .native 1] ++ key, [.native 0x31], [.native 0x31], [.native 0x18],
+    encodedAmount, [.native 0x40], [.native 0x08], [.native 0x12, .native 4],
+    [.native 0x32], [.native 0x32], [.native 0x60, .native (Field.modulus - 1)],
+    [.native 0x14], [.native 0xa2], [.native 0x40]]
+
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
 def Aligned.fields : Aligned → List Scalar
@@ -95,6 +108,11 @@ def Aligned.fields : Aligned → List Scalar
       List.replicate values.length (.native (Field.modulus - 2)) ++ values
   | .counter value => [.native 1, .native 8, .cast .native value]
 
+private def mintFieldGroups (slot : Nat) (domain : Expr (.bytes 32))
+    (amount : Expr (.uint (2 ^ 64 - 1))) : List (List Scalar) :=
+  accumulateTokenFields slot (Aligned.bytes32 domain).fields
+    ([.native 0x10, .native 1] ++ (Aligned.counter amount).fields)
+
 private def indexPathFields (slot : Nat) (pushPath : Bool) (keys : List Aligned) : List Scalar :=
   [.native ((if pushPath then 0x70 else 0x50) + keys.length)] ++
     (Aligned.field (.native slot)).fields ++ keys.flatMap Aligned.fields
@@ -107,6 +125,11 @@ private def requireContractCallerFieldGroups (address : Expr (.bytes 32)) : List
   [[.native 0x32], listIndexFields 6,
     [.native 0x0c, .native 3, .native 1, .native 32, .native 32,
       .native 1, .bytesField address 0, .bytesField address 1, .native 0, .native 0]]
+
+private def contractAddressFieldGroups (destination : String) : List (List Scalar) :=
+  -- Query context is two stack slots down. Context slot zero holds this contract's address.
+  [[.native 0x32], listIndexFields 0,
+    [.native 0x0c] ++ (Aligned.bytes32 (.ref destination)).fields]
 
 private def blockTimeFieldGroups (destination : String) (before : Bool)
     (deadline : Expr (.uint (2 ^ 64 - 1))) : List (List Scalar) :=
@@ -136,6 +159,39 @@ private def eventFieldGroups (kind : EventKind)
     else (Aligned.bytes kind.payloadSize payload).fields
   [[.native 0x10, .native 0x33, .native 1, .native 1, .native 4, .native 1,
     .native 1, .native 1, .native 1, .native kind.tag, .native 1] ++ data, [.native 0x09]]
+
+private def tokenChoiceValues (color : Expr (.bytes 32)) (isUnshielded : Expr .bool) :
+    List Scalar :=
+  [.select isUnshielded (.native 1) (.native 0),
+    .select isUnshielded (.bytesField color 0) (.native 0),
+    .select isUnshielded (.bytesField color 1) (.native 0),
+    .select isUnshielded (.native 0) (.bytesField color 0),
+    .select isUnshielded (.native 0) (.bytesField color 1)]
+
+private def balanceAmountFields (value : Expr (.uint balanceMaximum)) : List Scalar :=
+  [.native 1, .native 16, .cast .native value]
+
+private def pushBalanceAmount (value : Expr (.uint balanceMaximum)) : List Scalar :=
+  [.native 0x10, .native 1] ++ balanceAmountFields value
+
+private def balanceFieldGroupsForToken (destination : String) (token : List Scalar)
+    (query : BalanceQuery) : List (List Scalar) :=
+  let load depth := [[.native (0x30 + depth)], listIndexFields 5,
+    [.native 0x30], [.native 0x10, .native 1] ++ token,
+    [.native 0x18], [.native 0x12, .native 3], [.native 0x0b],
+    pushBalanceAmount (.uint balanceMaximum 0), [.native 0x13, .native 1], [.native 0x50] ++ token]
+  match query with
+  | .exact => load 2 ++ [[.native 0x0c] ++ balanceAmountFields (.ref destination)]
+  | .compare less limit =>
+    let operands := if less then load 2 ++ [pushBalanceAmount limit]
+      else pushBalanceAmount limit :: load 3
+    operands ++ [[.native 0x01], [.native 0x0c] ++ (Aligned.bitExpr (.ref destination)).fields]
+
+private def taggedBalanceFieldGroups (destination : String) (color : Expr (.bytes 32))
+    (isUnshielded : Expr .bool) (query : BalanceQuery) : List (List Scalar) :=
+  let token := [.native 3, .native 1, .native 32, .native 32] ++
+    tokenChoiceValues color isUnshielded
+  balanceFieldGroupsForToken destination token query
 
 def Op.fields : Op → List Scalar
   | .dup => [.native 0x30]
@@ -190,7 +246,12 @@ def Op.fields : Op → List Scalar
           finalKey.fields ++ [.native 0x19, .native (0x90 + keys.length)]
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
+  | .mintShielded domain amount => (mintFieldGroups 4 domain amount).flatten
+  | .mintUnshielded domain amount => (mintFieldGroups 5 domain amount).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .readContractAddress destination => (contractAddressFieldGroups destination).flatten
+  | .readTokenBalance destination color isUnshielded query =>
+      (taggedBalanceFieldGroups destination color isUnshielded query).flatten
   | .blockTimeCompare destination before deadline =>
       (blockTimeFieldGroups destination before deadline).flatten
   | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
@@ -235,7 +296,12 @@ def Op.fieldGroups : Op → List (List Scalar)
           [.native 0x19], [.native (0x90 + keys.length)]]
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
+  | .mintShielded domain amount => mintFieldGroups 4 domain amount
+  | .mintUnshielded domain amount => mintFieldGroups 5 domain amount
   | .requireContractCaller address => requireContractCallerFieldGroups address
+  | .readContractAddress destination => contractAddressFieldGroups destination
+  | .readTokenBalance destination color isUnshielded query =>
+      taggedBalanceFieldGroups destination color isUnshielded query
   | .blockTimeCompare destination before deadline => blockTimeFieldGroups destination before deadline
   | .emitEvent kind payload => eventFieldGroups kind payload
   | operation => [operation.fields]
@@ -607,12 +673,24 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     pure {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .mintShielded domain amount =>
+    pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
+  | .mintUnshielded domain amount =>
+    pure {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
   | .emitEvent kind payload =>
     pure {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
     pure {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readContractAddress destination =>
+    pure {plan with
+      operations := plan.operations ++ [.readContractAddress destination]
+      reads := plan.reads ++ [{name := destination, ty := .bytes 32}]}
+  | .readTokenBalance destination color isUnshielded query =>
+    pure {plan with
+      operations := plan.operations ++ [.readTokenBalance destination color isUnshielded query]
+      reads := plan.reads ++ [{name := destination, ty := query.resultType}]}
   | .blockTimeCompare destination before deadline =>
     pure {plan with
       operations := plan.operations ++ [.blockTimeCompare destination before deadline]
@@ -813,10 +891,29 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (totalizeActivityValue condition avoid address)
         (totalizeActivityValue condition avoid entryPointHash)
         (totalizeActivityValue condition avoid commitment))
+    | some condition, .mintShielded domain amount =>
+      pure (.mintShielded
+        (totalizeActivityValue condition (expressionNames domain) domain)
+        (totalizeActivityValue condition (expressionNames amount) amount))
+    | some condition, .mintUnshielded domain amount =>
+      pure (.mintUnshielded
+        (totalizeActivityValue condition (expressionNames domain) domain)
+        (totalizeActivityValue condition (expressionNames amount) amount))
     | some condition, .emitEvent kind payload =>
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
       pure (.requireContractCaller (totalizeActivityValue condition (expressionNames address) address))
+    | some condition, .readTokenBalance destination color isUnshielded query =>
+      let limitNames := match query with
+        | .exact => []
+        | .compare _ limit => expressionNames limit
+      let avoid := expressionNames color ++ expressionNames isUnshielded ++ limitNames
+      let query := match query with
+        | .exact => .exact
+        | .compare less limit => .compare less (totalizeActivityValue condition avoid limit)
+      pure (.readTokenBalance destination
+        (totalizeActivityValue condition avoid color)
+        (totalizeActivityValue condition avoid isUnshielded) query)
     | some condition, .blockTimeCompare destination before deadline =>
       pure (.blockTimeCompare destination before
         (totalizeActivityValue condition (expressionNames deadline) deadline))
@@ -867,6 +964,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some condition, .emptyMapPath name keys =>
       pure (.emptyMapPath name (totalizePathKeys condition keys))
     | some _, .readCell .. => pure effect
+    | some _, .readContractAddress .. => pure effect
     | some condition, .require required =>
       pure (.require (totalizeActivityCondition condition required))
     | some _, _ => throw "native guards are supported only on ledger reads, writes, and require effects"
@@ -885,9 +983,10 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     pure {result with
       reads := reads
       activityGuards := priorGuards ++ List.replicate added (some condition)}
-  | some condition, .readPath .. | some condition, .readCompositePath .. |
+  | some condition, .readContractAddress .. | some condition, .readPath .. | some condition, .readCompositePath .. |
       some condition, .memberPath .. | some condition, .counterRead .. |
-      some condition, .listLength .. | some condition, .listHead .. =>
+      some condition, .listLength .. | some condition, .listHead .. |
+      some condition, .readTokenBalance .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded nested read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -911,7 +1010,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
       some condition, .listReset .. | some condition, .removePath .. |
-      some condition, .claimContractCall .. | some condition, .emitEvent .. =>
+      some condition, .claimContractCall .. | some condition, .mintShielded .. |
+      some condition, .mintUnshielded .. | some condition, .emitEvent .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -1048,12 +1148,24 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     plan := {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .mintShielded domain amount =>
+    plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
+  | .mintUnshielded domain amount =>
+    plan := {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
   | .emitEvent kind payload =>
     plan := {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
     plan := {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .readContractAddress destination =>
+    plan := {plan with
+      operations := plan.operations ++ [.readContractAddress destination]
+      reads := plan.reads ++ [{name := destination, ty := .bytes 32}]}
+  | .readTokenBalance destination color isUnshielded query =>
+    plan := {plan with
+      operations := plan.operations ++ [.readTokenBalance destination color isUnshielded query]
+      reads := plan.reads ++ [{name := destination, ty := query.resultType}]}
   | .blockTimeCompare destination before deadline =>
     plan := {plan with
       operations := plan.operations ++ [.blockTimeCompare destination before deadline]
@@ -1290,6 +1402,7 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
         | .readCell _ destination _ | .readMap _ destination .. |
             .readMember _ destination .. | .readPath _ destination .. |
             .memberPath _ destination .. | .counterRead _ destination .. |
+            .readContractAddress destination | .readTokenBalance destination .. |
             .listLength _ destination .. => [destination]
         | .readCompositePath _ _ _ _ destinations => destinations
         | .listHead _ _ _ _ destinations => destinations
@@ -1411,7 +1524,11 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .mapRemove slot keys => pure (Lean.Json.mkObj [("mapRemove", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
+  | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
+  | .mintUnshielded .. => throw "unshielded mint uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .readContractAddress .. => throw "contract address read uses its dedicated native-plan operation JSON"
+  | .readTokenBalance .. => throw "readTokenBalance uses its dedicated native-plan operation JSON"
   | .blockTimeCompare .. => throw "block-time comparison uses its dedicated native-plan operation JSON"
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 
