@@ -1,0 +1,53 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "nodeImage": "midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "specVersion": 2001100,
+  "transactionVersion": 4,
+  "entrypoint": "NativeTaggedSettlement.settle",
+  "compilerRevision": "471b90148ea0fc912c00d0c4f89e581489007539",
+  "tokenColor": "3bcac66103e41cfeb968f6ced7a3e039db8dbc5ccb11af29a48f4afae35c587b",
+  "exactPredictedStateAccepted": true,
+  "artifactSha256": {
+    "source": "6b2982325ba4e3ccf7f03042e6c42fa9f596327c13d38d7024f05995466559ce",
+    "circuit": "7e3c8e5f0c4882513728ad1da596ee672b5acfeca79f2c85c7f5630c8a980e46",
+    "plan": "8ef32df1e44f71c5478b8dc00c0e70787e21d7ad764f2764d775693aaf433248",
+    "metadata": "5583b0d55d01b2ea8df662b8ecdb2faaa1264fbd880fe3e1aabb845f3f081768",
+    "abi": "9adb028a54398dd7bccc35fae814616829d940ff58c29690bb74e400c2c8787d",
+    "profile": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093",
+    "ledgerParameters": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+    "proverKey": "de842d67e32d4874e190fcb555c89566e47b2b716d0f8ff517da1260c44ef300",
+    "verifierKey": "3402ed777f9815714f3858b7fa70f26cab962a92b91c66b520a18da0c5a5fa71",
+    "toolchain": "dccec8838ddd4739ef31f5a3268aef62ea7e8eff498fe8b875ab1ed763dc663b"
+  },
+  "bundleManifestSha256": "3b7673d1a7ef2517f0fd427a28f015023683bafa068f2cc2dc5ed0128f2f7844",
+  "circuit": {
+    "k": 13,
+    "rows": 4452
+  },
+  "receipts": [
+    {
+      "event": "Deploy",
+      "height": 104,
+      "blockHash": "20388ebe5d91271f4d396d9cdaa2b4e62f9871edd108870bdfa48851b3cf3aa1",
+      "contractAddress": "a72b90bc80356b9747ed1b3a60fb1c49c2e41e551ecd37472a0f8007bb0e5bd8",
+      "transactionId": "daa275b374f9e3fe0fc56e0430b8e5c64238ed00ebcc2f4ef6e208052e940bdc",
+      "stateBytes": 2228,
+      "stateSha256": "cf55eae70638ba0b20161959831fc25e75247403f2c4630d4b3a9107843ca7ca"
+    },
+    {
+      "event": "Call",
+      "height": 107,
+      "blockHash": "4a5581d7f9aa2a73a639da63d5df469ea7eb04b87175e75389796334ac1bea08",
+      "contractAddress": "a72b90bc80356b9747ed1b3a60fb1c49c2e41e551ecd37472a0f8007bb0e5bd8",
+      "transactionId": "b692747a25a333e590d277face14d84cec9f8cc6a932ed5ca5bbd9e15d274377",
+      "stateBytes": 2420,
+      "stateSha256": "786824af48ad44b83780ee1bf40e9e15969e19d6783e3d91843a19d438e18f38"
+    }
+  ],
+  "finalizedBalances": {
+    "shielded": "23",
+    "unshielded": "17"
+  },
+  "nativeAssemblerPredictedBothBalances": true
+}

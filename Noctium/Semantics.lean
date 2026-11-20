@@ -660,6 +660,18 @@ def Circuit.run (ctx : EvalContext) (c : Circuit) (env : EvalEnv) : Except Strin
     pure (output.name, Value.pack output.ty (← output.value.eval ctx env))
 
 /-- Pure transaction state. A failed transition returns no successor state. -/
+structure TokenEffectKey where
+  color : List Nat
+  isUnshielded : Bool
+  deriving Repr, BEq
+
+structure SpendClaimKey where
+  color : List Nat
+  isUnshielded : Bool
+  isContract : Bool
+  recipient : List Nat
+  deriving Repr, BEq
+
 structure LedgerState where
   cells : List (String × Value) := []
   maps : List (String × List (Value × Value)) := []
@@ -667,6 +679,9 @@ structure LedgerState where
   events : List (EventKind × List Nat) := []
   shieldedMints : List (List Nat × Nat) := []
   unshieldedMints : List (List Nat × Nat) := []
+  unshieldedInputs : List (TokenEffectKey × Nat) := []
+  unshieldedOutputs : List (TokenEffectKey × Nat) := []
+  unshieldedSpendClaims : List (SpendClaimKey × Nat) := []
   deriving Repr, BEq
 
 /-- The source evaluator replaces an entry and places it first in the association list. -/
@@ -678,6 +693,21 @@ private def accumulateMintAmount (entries : List (List Nat × Nat))
   let total := (entries.lookup domain).getD 0 + amount
   unless total < 2 ^ 64 do throw "accumulated token effects exceed the native UInt64 sum"
   pure (updateAssoc domain total entries)
+
+/-- The VM accepts a UInt128 value when a token-effect key is first inserted.
+For an existing key, its Add instruction takes UInt64 operands and returns a
+UInt64 sum. -/
+private def accumulateTaggedAmount [BEq α] (entries : List (α × Nat))
+    (key : α) (amount : Nat) : Except String (List (α × Nat)) := do
+  match entries.lookup key with
+  | none => pure (updateAssoc key amount entries)
+  | some previous => do
+    unless previous < 2 ^ 64 && amount < 2 ^ 64 do
+      throw "existing token-effect key requires UInt64 operands"
+    let total := previous + amount
+    unless total < 2 ^ 64 do
+      throw "accumulated token effects exceed the native UInt64 sum"
+    pure (updateAssoc key total entries)
 
 private def mintShielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
     (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1))) :
@@ -692,6 +722,39 @@ private def mintUnshielded (ctx : EvalContext) (env : EvalEnv) (state : LedgerSt
   let mints ← accumulateMintAmount state.unshieldedMints
     (← domain.eval ctx env) (← amount.eval ctx env)
   pure {state with unshieldedMints := mints}
+
+private def incUnshieldedInputs (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded : Expr .bool) : Except String LedgerState := do
+  let key : TokenEffectKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+  }
+  let inputs ← accumulateTaggedAmount state.unshieldedInputs key (← amount.eval ctx env)
+  pure {state with unshieldedInputs := inputs}
+
+private def incUnshieldedOutputs (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded : Expr .bool) : Except String LedgerState := do
+  let key : TokenEffectKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+  }
+  let outputs ← accumulateTaggedAmount state.unshieldedOutputs key (← amount.eval ctx env)
+  pure {state with unshieldedOutputs := outputs}
+
+private def claimUnshieldedCoinSpend (ctx : EvalContext) (env : EvalEnv) (state : LedgerState)
+    (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
+    (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32)) :
+    Except String LedgerState := do
+  let key : SpendClaimKey := {
+    color := ← color.eval ctx env
+    isUnshielded := ← isUnshielded.eval ctx env
+    isContract := ← isContract.eval ctx env
+    recipient := ← recipient.eval ctx env
+  }
+  let claims ← accumulateTaggedAmount state.unshieldedSpendClaims key (← amount.eval ctx env)
+  pure {state with unshieldedSpendClaims := claims}
 
 private def evaluatePath (ctx : EvalContext) (env : EvalEnv) (keys : List PathKey) :
     Except String (List Value) := keys.mapM fun key => match key with
@@ -829,6 +892,12 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       next ← mintShielded ctx env next domain amount
     | .mintUnshielded domain amount =>
       next ← mintUnshielded ctx env next domain amount
+    | .incUnshieldedInputs color amount isUnshielded =>
+      next ← incUnshieldedInputs ctx env next color amount isUnshielded
+    | .incUnshieldedOutputs color amount isUnshielded =>
+      next ← incUnshieldedOutputs ctx env next color amount isUnshielded
+    | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+      next ← claimUnshieldedCoinSpend ctx env next color amount isUnshielded isContract recipient
     | .emitEvent kind payload =>
       next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
     | .requireContractCaller address =>
@@ -996,6 +1065,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
             .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
+            .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
             .requireContractCaller .. | .emitEvent .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
@@ -1034,6 +1104,12 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           next ← mintShielded ctx env next domain amount
         | .mintUnshielded domain amount =>
           next ← mintUnshielded ctx env next domain amount
+        | .incUnshieldedInputs color amount isUnshielded =>
+          next ← incUnshieldedInputs ctx env next color amount isUnshielded
+        | .incUnshieldedOutputs color amount isUnshielded =>
+          next ← incUnshieldedOutputs ctx env next color amount isUnshielded
+        | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient =>
+          next ← claimUnshieldedCoinSpend ctx env next color amount isUnshielded isContract recipient
         | .emitEvent kind payload =>
           next := {next with events := next.events ++ [(kind, ← payload.eval ctx env)]}
         | .requireContractCaller address =>
@@ -1204,7 +1280,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             | .compare .. => Value.bool false
           env := (destination, value) :: env
         | .writeCell .. | .writeMap .. | .require .. | .claimContractCall .. |
-            .mintShielded .. | .mintUnshielded .. |
+            .mintShielded .. | .mintUnshielded .. | .incUnshieldedInputs .. |
+            .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
             .requireContractCaller .. | .emitEvent .. |
             .insertPath .. | .writePath .. |
             .writeCompositePath .. | .emptyMapPath .. | .listPushFront .. |
@@ -1245,6 +1322,10 @@ def Entrypoint.run (ctx : EvalContext) (entry : Entrypoint) (env : EvalEnv)
   | .error diagnostic => throw diagnostic.message
   | .ok _ => pure ()
   let outputs ← entry.circuit.run ctx env
+  let state := {state with
+    unshieldedInputs := [],
+    unshieldedOutputs := [],
+    unshieldedSpendClaims := []}
   let (finalEnv, next) ←
     runEffectsWithGuardsAndEnv ctx entry.effects entry.effectGuards (outputs ++ env) state
   let returned ← entry.returns.mapM fun output => do

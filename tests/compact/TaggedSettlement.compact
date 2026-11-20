@@ -1,0 +1,19 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export circuit record(color: Bytes<32>, amount: Uint<128>, extra: Uint<128>, isUnshielded: Boolean,
+                      isContract: Boolean, recipient: Bytes<32>, enabled: Boolean, addSecond: Boolean): [] {
+  const token = isUnshielded ? left<Bytes<32>, Bytes<32>>(color) : right<Bytes<32>, Bytes<32>>(color);
+  const target = isContract ? left<ContractAddress, UserAddress>(ContractAddress{bytes: recipient})
+                            : right<ContractAddress, UserAddress>(UserAddress{bytes: recipient});
+  if (disclose(enabled)) {
+    kernel.incUnshieldedInputs(disclose(token), disclose(amount));
+    kernel.incUnshieldedOutputs(disclose(token), disclose(amount));
+    kernel.claimUnshieldedCoinSpend(disclose(token), disclose(target), disclose(amount));
+  }
+  if (disclose(addSecond)) {
+    kernel.incUnshieldedInputs(disclose(token), disclose(extra));
+    kernel.incUnshieldedOutputs(disclose(token), disclose(extra));
+    kernel.claimUnshieldedCoinSpend(disclose(token), disclose(target), disclose(extra));
+  }
+}
