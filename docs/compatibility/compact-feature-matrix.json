@@ -1850,7 +1850,8 @@
         "tests/NativeContractAddress.lean",
         "tests/compact/contract-address.mjs",
         "runtime/tests/native_contract_address.rs",
-        "docs/development/native-contract.md"
+        "docs/development/native-contract.md",
+        "docs/development/native-contract-address-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
