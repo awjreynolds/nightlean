@@ -460,6 +460,7 @@ inductive Effect where
   | listPopFront (state : String) (keys : List PathKey)
   | listReset (state : String) (keys : List PathKey)
   | merkleTreeIsFull (state destination : String)
+  | merkleTreeCheckRoot (state : String) (expected : Expr .native) (destination : String)
   | merkleTreeInsertHash (state : String) (hash : Expr (.bytes 32))
   | merkleTreeInsertHashIndex (state : String) (hash : Expr (.bytes 32))
       (index : Expr (.uint (2 ^ 64 - 1)))
@@ -1020,7 +1021,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
-          .merkleTreeIsFull .. | .merkleTreeInsertHash .. |
+          .merkleTreeIsFull .. | .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
           .merkleTreeInsertHashIndex .. | .merkleTreeReset .. => pure ()
       | .require _ => pure ()
       | _ =>
@@ -1138,6 +1139,15 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           | throw s!"unknown MerkleTree state '{state}'"
         unless 2 ≤ depth && depth ≤ 32 do
           throw "MerkleTree depth must be between 2 and 32"
+        pure [(destination, .bool)]
+      | .merkleTreeCheckRoot state expected destination => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let some depth := declaration.kind.merkleTreeDepth?
+          | throw s!"unknown MerkleTree state '{state}'"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "MerkleTree depth must be between 2 and 32"
+        expected.validate caps env
         pure [(destination, .bool)]
       | .merkleTreeInsertHash state hash => do
         let some declaration := decls.find? (·.name == state)

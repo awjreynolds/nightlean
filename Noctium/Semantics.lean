@@ -75,6 +75,13 @@ private def checkedMerkleTreeState (state : LedgerValue) :
   if count > 2 ^ depth then throw "MerkleTree count exceeds its capacity"
   pure view
 
+private def checkMerkleTreeRoot (state : LedgerValue) (digest modulus : Nat) :
+    Except String Bool := do
+  let (_, _, tree?) ← checkedMerkleTreeState state
+  let some tree := tree? | throw "MerkleTree root is unavailable for a nonempty count-only state"
+  unless digest < modulus do throw "MerkleTree expected root is noncanonical"
+  pure (tree.root == digest)
+
 abbrev EvalEnv := List (String × Value)
 
 structure JubjubOracle where
@@ -912,6 +919,10 @@ private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env :
       let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
       let (depth, count, _) ← checkedMerkleTreeState raw
       env := (destination, .bool (count == 2 ^ depth)) :: env
+    | .merkleTreeCheckRoot name expected destination => do
+      let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+      let result ← checkMerkleTreeRoot raw (← expected.eval ctx env) ctx.modulus
+      env := (destination, .bool result) :: env
     | .merkleTreeInsertHash name hash => do
       let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
       let (depth, count, tree?) ← checkedMerkleTreeState raw
@@ -996,7 +1007,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .readPath .. | .readCompositePath .. | .memberPath .. | .insertPath .. |
             .writePath .. | .writeCompositePath .. | .emptyMapPath .. | .counterRead .. |
             .counterAdjust .. | .counterReset .. | .removePath .. |
-            .merkleTreeIsFull .. | .merkleTreeInsertHash .. |
+            .merkleTreeIsFull .. | .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
             .merkleTreeInsertHashIndex .. | .merkleTreeReset .. |
             .claimContractCall .. | .requireContractCaller .. | .emitEvent .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
@@ -1142,6 +1153,10 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
           let (depth, count, _) ← checkedMerkleTreeState raw
           env := (destination, .bool (count == 2 ^ depth)) :: env
+        | .merkleTreeCheckRoot name expected destination => do
+          let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
+          let result ← checkMerkleTreeRoot raw (← expected.eval ctx env) ctx.modulus
+          env := (destination, .bool result) :: env
         | .merkleTreeInsertHash name hash => do
           let some raw := next.trees.lookup name | throw s!"missing or malformed MerkleTree state '{name}'"
           let (depth, count, tree?) ← checkedMerkleTreeState raw
@@ -1243,7 +1258,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           env := env ++ destinations.map fun destination => (destination, .native 0)
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
-        | .merkleTreeIsFull _ destination => env := (destination, .bool false) :: env
+        | .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination =>
+          env := (destination, .bool false) :: env
         | .counterAdjust .. | .counterReset .. => pure ()
         | .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. |
             .merkleTreeReset .. => pure ()

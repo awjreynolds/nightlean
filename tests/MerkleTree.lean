@@ -12,6 +12,16 @@ noctium_circuit insertHashCircuit where
   private leafHash : Bytes32
 end
 
+noctium_circuit checkRootCircuit where
+  public active : Bool
+  private expectedRoot : Native
+end
+
+noctium_circuit appendAndCheckCircuit where
+  private leafHash : Bytes32
+  private expectedRoot : Native
+end
+
 noctium_contract NativeMerkleTree where
   merkleTree claims : 2
   entry fullStatus uses emptyCircuit where
@@ -27,6 +37,15 @@ noctium_contract NativeMerkleTree where
     insertHash claims := disclose(leafHash)
     isFull claims as appendFull
     return fullStatus : Bool := appendFull
+  end
+  entry checkCurrent uses checkRootCircuit where
+    when active checkRoot claims against disclose(expectedRoot) as rootMatches
+    return isValid : Bool := rootMatches
+  end
+  entry appendAndCheck uses appendAndCheckCircuit where
+    insertHash claims := disclose(leafHash)
+    checkRoot claims against disclose(expectedRoot) as rootMatches
+    return isValid : Bool := rootMatches
   end
 end
 
@@ -82,5 +101,37 @@ noctium_contract UndisclosedMerkleAppend where
   merkleTree claims : 2
   entry append uses insertHashCircuit where
     insertHash claims := leafHash
+  end
+end
+
+private def checkRootModel : Except String _root_.Bool := do
+  let some checkCurrent := NativeMerkleTree.entrypoints.find? (·.name == "checkCurrent")
+    | throw "missing checkCurrent"
+  let some appendAndCheck := NativeMerkleTree.entrypoints.find? (·.name == "appendAndCheck")
+    | throw "missing appendAndCheck"
+  let initial : LedgerState := {trees := [("claims", .merkleTree 2 0)]}
+  let check := fun active expected => checkCurrent.run merkleTreeContext
+    [("active", .bool active), ("expectedRoot", .native expected)] initial
+  let (empty, _) ← check Bool.true 0
+  let (mismatch, _) ← check Bool.true 1
+  let (skipped, _) ← check Bool.false 0
+  let (inserted, _) ← appendAndCheck.run merkleTreeContext
+    [("leafHash", .bytes 32 (List.replicate 32 7)), ("expectedRoot", .native sevenLeafRoot)] initial
+  pure (empty.lookup "isValid" == some (.bool Bool.true) &&
+    mismatch.lookup "isValid" == some (.bool Bool.false) &&
+    skipped.lookup "isValid" == some (.bool Bool.false) &&
+    inserted.lookup "isValid" == some (.bool Bool.true))
+
+#guard match checkRootModel with
+  | .ok result => result
+  | .error _ => Bool.false
+
+/-- undisclosed private parameter -/
+#guard_msgs (substring := true) in
+noctium_contract UndisclosedMerkleRoot where
+  merkleTree claims : 2
+  entry checkCurrent uses checkRootCircuit where
+    when active checkRoot claims against expectedRoot as rootMatches
+    return isValid : Bool := rootMatches
   end
 end

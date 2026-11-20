@@ -198,6 +198,10 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .merkleTreeIsFull slot depth destination => Json.mkObj [
       ("op", toJson ("merkleTreeIsFull" : String)), ("slot", toJson slot),
       ("depth", toJson depth), ("destination", toJson destination)]
+  | .merkleTreeCheckRoot slot depth expected destination => Json.mkObj [
+      ("op", toJson ("merkleTreeCheckRoot" : String)), ("slot", toJson slot),
+      ("depth", toJson depth), ("expected", nativeExpressionJson expected),
+      ("destination", toJson destination)]
   | .merkleTreeInsertHash slot depth hash => Json.mkObj [
       ("op", toJson ("merkleTreeInsertHash" : String)), ("slot", toJson slot),
       ("depth", toJson depth), ("hash", nativeExpressionJson hash)]
@@ -286,6 +290,9 @@ private def effectJson : Effect → Json
   | .merkleTreeIsFull state destination => Json.mkObj [
       ("op", toJson ("merkleTreeIsFull" : String)), ("state", toJson state),
       ("destination", toJson destination)]
+  | .merkleTreeCheckRoot state expected destination => Json.mkObj [
+      ("op", toJson ("merkleTreeCheckRoot" : String)), ("state", toJson state),
+      ("expected", expressionJson expected), ("destination", toJson destination)]
   | .merkleTreeInsertHash state hash => Json.mkObj [
       ("op", toJson ("merkleTreeInsertHash" : String)), ("state", toJson state),
       ("hash", expressionJson hash)]
