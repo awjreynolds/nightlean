@@ -1641,8 +1641,8 @@
       "id": "C-ADT-KERNEL-BLOCKTIMEGREATERTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.blockTimeGreaterThan",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Strict UInt64 Unix-second comparison through the native ledger context. Focused checks cover equal and unequal cutoffs, guard outcomes, replay across a changed result and explicit disclosure. The native Rust client passes a checked prospective block context. Hosted client and composition qualification remain separate.",
       "source": [
         "adt"
       ],
@@ -1651,15 +1651,21 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeBlockTime.lean",
+        "tests/compact/block-time.mjs",
+        "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-BLOCKTIMELESSTHAN",
       "layer": "language-ledger",
       "surface": "Kernel.blockTimeLessThan",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Strict UInt64 Unix-second comparison through the native ledger context. Focused checks cover equal and unequal cutoffs, guard outcomes, replay across a changed result and explicit disclosure. The native Rust client passes a checked prospective block context. Hosted client and composition qualification remain separate.",
       "source": [
         "adt"
       ],
@@ -1668,7 +1674,13 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeBlockTime.lean",
+        "tests/compact/block-time.mjs",
+        "runtime/tests/native_block_time.rs",
+        "docs/development/native-block-time-localnet-receipt.json",
+        "docs/development/native-contract.md"
+      ],
       "equivalence": "unverified"
     },
     {

@@ -219,6 +219,37 @@ The [localnet receipt](native-token-balance-localnet-receipt.json) records a
 finalized ordinary call for an absent unshielded token. The call wrote zero
 over the previous recorded value of 17. Shielded and nonzero cases use
 simulated starting balances with the pinned native checker.
+## Compare the block time
+
+`blockTimeBefore(deadline) as before` and `blockTimeAfter(deadline) as after`
+compare the ledger block time against a `UInt 64` deadline in Unix seconds.
+Both are false at equality. A guarded inactive comparison supplies false
+without reading the clock. A private deadline or activity condition needs
+an explicit disclosure because the native transcript exposes the comparison
+operands and activity. [Midnight kernel reference](https://docs.midnight.network/compact/reference/ledger-adt#blocktimelessthan)
+
+The compiler emits native Impact operations to fetch the block time and
+bind the Boolean result to the ZKIR statement. The native VM re-evaluates
+the comparison against its execution context. If the clock crosses the
+deadline and changes a bound result, the transcript fails. The caller
+must prepare a new proof for the changed result.
+
+Use `PreparedProof::from_config_in_block` with a prospective ledger
+`BlockContext` in the Rust SDK. The native localnet client takes this
+context from its checked node snapshot. The low-level
+`prepare_with_context` also accepts an explicit query context.
+An active comparison fails preparation when no clock is supplied.
+The [source fixture](../../tests/NativeBlockTime.lean),
+[Compact oracle](../../tests/compact/block-time.mjs) and
+[native checker fixture](../../runtime/tests/native_block_time.rs)
+check the strict boundaries. A hosted SDK path that does not provide a
+block context still requires integration.
+
+On Ledger 9.1.0.1 localnet, the Rust SDK finalized deployment at block 67
+and a call using both strict predicates at block 70. The exact observed
+contract state matched the SDK prediction at both blocks. Native sizing
+reported K8 and 126 rows. The deadline-crossing rejection was checked in
+native VM replay. [Localnet receipt](native-block-time-localnet-receipt.json)
 
 ## Settle tagged token inputs and outputs
 

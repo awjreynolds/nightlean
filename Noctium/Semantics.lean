@@ -195,6 +195,8 @@ structure EvalContext where
   ownContractAddress : Option (List Nat) := none
   unshieldedBalances : List (List Nat × Nat) := []
   shieldedBalances : List (List Nat × Nat) := []
+  /-- Block timestamp in seconds from the native ledger transcript. -/
+  blockTimeSeconds : Option Nat := none
 
 private def contractCallerAddress (ctx : EvalContext) : Option (List Nat) :=
   match ctx.caller with
@@ -1032,6 +1034,14 @@ private def tokenBalanceValue (ctx : EvalContext) (env : EvalEnv)
       throw "native balance comparisons require UInt64 operands"
     pure (.bool (if less then amount < limit else amount > limit))
 
+private def blockTimeResult (ctx : EvalContext) (env : EvalEnv) (before : Bool)
+    (deadline : Expr (.uint (2 ^ 64 - 1))) : Except String Value := do
+  let some time := ctx.blockTimeSeconds | throw "missing execution block time"
+  unless time < 2 ^ 64 do throw "block time exceeds u64"
+  let seconds ← deadline.eval ctx env
+  unless seconds < 2 ^ 64 do throw "block time deadline exceeds u64"
+  pure (.bool (if before then time < seconds else seconds < time))
+
 /-- Execute ordered effects against a private tentative state and retain the
 ordered read environment for expressions evaluated after the effects. Returning
 an error never exposes that tentative state. -/
@@ -1086,6 +1096,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       env := (← callerValues destinations ctx.caller) ++ env
     | .readTokenBalance destination color isUnshielded query =>
       env := (destination, ← tokenBalanceValue ctx env color isUnshielded query) :: env
+    | .blockTimeCompare destination before deadline =>
+      env := (destination, ← blockTimeResult ctx env before deadline) :: env
     | .writeCell name ty value =>
       let some existing := next.cells.lookup name | throw s!"missing state cell '{name}'"
       if (existing.as ty).isNone then throw s!"state cell type mismatch '{name}'"
@@ -1338,7 +1350,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
             .merkleTreeResetAt .. | .merkleTreeResetHistoryAt .. |
             .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
             .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
-            .requireContractCaller .. | .emitEvent .. | .readCaller .. => pure ()
+            .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. | .readCaller .. => pure ()
         | _ => throw "native guards are supported only on ledger reads, writes, and require effects"
       let active ← match guard with
         | some condition => condition.eval ctx env
@@ -1359,6 +1371,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let some value := raw.as valueTy | throw s!"state map value type mismatch '{name}'"
           if !canonical ctx valueTy value then throw s!"noncanonical state map value '{name}'"
           env := (destination, Value.pack valueTy value) :: env
+        | .blockTimeCompare destination before deadline =>
+          env := (destination, ← blockTimeResult ctx env before deadline) :: env
         | .readMember name destination keyTy valueTy key =>
           let key := Value.pack keyTy (← key.eval ctx env)
           let some entries := next.maps.lookup name | throw s!"missing state map '{name}'"
@@ -1626,6 +1640,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
         | .readCaller destinations =>
           env := (← callerValues destinations none) ++ env
         | .memberPath _ destination _ => env := (destination, .bool false) :: env
+        | .blockTimeCompare destination .. => env := (destination, .bool false) :: env
         | .mapIsEmpty _ destination _ => env := (destination, .bool false) :: env
         | .mapSize _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env
         | .counterRead _ destination _ => env := (destination, .uint (2 ^ 64 - 1) 0) :: env

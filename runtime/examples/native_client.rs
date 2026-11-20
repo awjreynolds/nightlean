@@ -186,10 +186,11 @@ async fn run(configuration: Configuration) -> Result<()> {
     let dust_srs = cache.parameters(material.k()).await?;
     let bundle = artifacts::verify(&configuration.bundle, Some(&configuration.manifest_sha256))?;
     let private = read(&configuration.private_config, 1_048_576)?;
-    let prepared = PreparedProof::from_config(
+    let prepared = PreparedProof::from_config_in_block(
         &bundle,
         &private,
         snapshot.block.tblock.to_secs() + 1800,
+        &snapshot.block,
         &mut OsRng,
     )?;
     let call_srs = cache.parameters(prepared.k()).await?;

@@ -517,6 +517,10 @@ inductive Effect where
   | readCaller (destinations : CallerBindings)
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
       (isUnshielded : Expr .bool) (query : BalanceQuery)
+  /-- Compare the native ledger transcript's block time, in seconds, with a
+  public cutoff. `before` selects the strict `<` direction; false selects `>`. -/
+  | blockTimeCompare (destination : String) (before : Bool)
+      (deadline : Expr (.uint (2 ^ 64 - 1)))
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
@@ -1121,7 +1125,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .readCell .. | .readMap .. | .readMember .. | .readContractAddress .. | .writeCell .. | .writeMap .. |
           .readTokenBalance .. | .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
           .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
-          .requireContractCaller .. | .emitEvent .. |
+          .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .mapIsEmpty .. | .mapSize .. |
           .insertPath .. | .writePath .. | .emptyMapPath .. | .setInsert .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
@@ -1193,6 +1197,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         | .exact => pure ()
         | .compare _ limit => limit.validate caps env
         pure [(destination, query.resultType)]
+      | .blockTimeCompare destination _ deadline => do
+        deadline.validate caps env
+        pure [(destination, .bool)]
       | .emitEvent _ payload =>
         payload.validate caps env
         pure []

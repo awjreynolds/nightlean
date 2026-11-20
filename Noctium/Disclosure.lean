@@ -180,7 +180,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .claimContractCall .. | some condition, .mintShielded ..
       | some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs ..
       | some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend ..
-      | some condition, .requireContractCaller ..
+      | some condition, .requireContractCaller .. | some condition, .blockTimeCompare ..
       | some condition, .emitEvent ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .mapIsEmpty .. | some condition, .mapSize ..
@@ -283,6 +283,10 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       checkSink sink (← expression env span isUnshielded) activeControl
       if let .compare _ limit := query then
         checkSink sink (← expression env span limit) activeControl
+      env := env ++ [(destination, [])]
+    | .blockTimeCompare destination _ deadline =>
+      checkSink {description := "public block-time cutoff", span}
+        (← expression env span deadline) activeControl
       env := env ++ [(destination, [])]
     | .emitEvent _ payload =>
       checkSink {description := "public contract event", span}

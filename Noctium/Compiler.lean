@@ -297,6 +297,9 @@ private def operationJsonBare : Backend.Impact.Op → Json
       | .compare less limit =>
         [("comparison", Json.mkObj [
           (if less then "lessThan" else "greaterThan", nativeExpressionJson limit)])])
+  | .blockTimeCompare destination before deadline => Json.mkObj [
+      ("op", toJson ("blockTimeCompare" : String)), ("destination", toJson destination),
+      ("before", toJson before), ("deadline", nativeExpressionJson deadline)]
 
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
@@ -362,6 +365,9 @@ private def effectJson : Effect → Json
       | .compare less limit =>
         [("comparison", Json.mkObj [
           (if less then "lessThan" else "greaterThan", expressionJson limit)])])
+  | .blockTimeCompare destination before deadline => Json.mkObj [
+      ("op", toJson ("blockTimeCompare" : String)), ("destination", toJson destination),
+      ("before", toJson before), ("deadline", expressionJson deadline)]
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
       ("payload", expressionJson payload)]

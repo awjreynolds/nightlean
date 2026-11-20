@@ -106,6 +106,7 @@ jobs:
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeContractAddress.lean
           lake env lean tests/NativeTokenBalance.lean
+          lake env lean tests/NativeBlockTime.lean
           lake env lean tests/NativeList.lean
           lake env lean tests/MerkleTree.lean
           lake env lean tests/MerkleIndexed.lean
