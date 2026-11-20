@@ -5878,8 +5878,10 @@
         },
         "genericRangeSpecialization": "passed, compile-time Nat substitution, distinct endpoint instances, actual specialized circuit compilation, reversed/oversized/missing-N/index-escape rejection"
       },
-      "limits": "No new keys/proofs/deployments, cross-profile run, timing/K benchmark or general loop preservation proof. Readable container for loops remain open under issue48. Dynamic guarded continuation lowering is unchanged. Broader optimisation deferred to issue85.",
+      "limits": "One isolated Ledger 9 deployment and two guarded range calls finalized with exact state. Readable container loops passed the selected byte fixture in Rust and browser WASM. General loop preservation, cross-profile evidence and broader optimisation remain open.",
       "readableSource": "../../tests/ReadableFiniteRange.lean",
+      "containerSource": "../../tests/ReadableContainerLoop.lean",
+      "localnetReceipts": "../development/finite-range-localnet-receipts.json",
       "genericSource": "../../tests/GenericSpecialization.lean"
     },
     "staticOperators": {

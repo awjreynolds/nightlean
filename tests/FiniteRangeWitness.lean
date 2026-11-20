@@ -53,6 +53,7 @@ private def loopProgram (start stop : Nat) (body : List Statement) : Program := 
 #guard (Helpers.compile (loopProgram (2^248-2) (2^248-1) []) "main").isOk
 #guard !(Helpers.compile (loopProgram 0 (2^248) []) "main").isOk
 #guard !(Helpers.compile (loopProgram 2 1 []) "main").isOk
+#guard (Helpers.prepareProgramWithLimits {} (loopProgram 0 1024 [])).isOk
 #guard !(Helpers.compile (loopProgram 0 1025 []) "main").isOk
 #guard !(Helpers.compile (loopProgram 0 0 [.return none]) "main").isOk
 #guard !(Helpers.compile (loopProgram 0 0 [.assert (.ref "missing")]) "main").isOk

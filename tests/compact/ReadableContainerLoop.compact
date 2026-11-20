@@ -1,0 +1,21 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export ledger total: Field;
+witness containerBytes(): Bytes<2>;
+witness emptyContainer(): Bytes<0>;
+witness previous(): Field;
+witness containerStep(item: Uint<8>, previousValue: Field): Field;
+
+export circuit update(expected: Field): Field {
+  for (const item of containerBytes()) {
+    const before = previous();
+    assert(containerStep(item, before) == before + (item as Field), "invalid step");
+  }
+  for (const item of emptyContainer()) {
+    assert(containerStep(item, 0 as Field) == item as Field, "empty step reached");
+  }
+  assert(previous() == expected, "invalid final private state");
+  total = disclose(expected);
+  return disclose(expected);
+}
