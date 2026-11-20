@@ -176,6 +176,7 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember ..
       | some condition, .writeCell .. | some condition, .writeMap ..
       | some condition, .claimContractCall .. | some condition, .requireContractCaller ..
+      | some condition, .blockTimeCompare ..
       | some condition, .emitEvent ..
       | some condition, .readPath .. | some condition, .memberPath ..
       | some condition, .insertPath .. | some condition, .writePath ..
@@ -230,6 +231,10 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
+    | .blockTimeCompare destination _ deadline =>
+      checkSink {description := "public block-time cutoff", span}
+        (← expression env span deadline) activeControl
+      env := env ++ [(destination, [])]
     | .emitEvent _ payload =>
       checkSink {description := "public contract event", span}
         (← expression env span payload) activeControl

@@ -58,6 +58,8 @@ inductive Op where
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
   | requireContractCaller (address : Expr (.bytes 32))
+  | blockTimeCompare (destination : String) (before : Bool)
+      (deadline : Expr (.uint (2 ^ 64 - 1)))
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
 
 private def claimContractCallFieldGroups
@@ -105,6 +107,14 @@ private def requireContractCallerFieldGroups (address : Expr (.bytes 32)) : List
   [[.native 0x32], listIndexFields 6,
     [.native 0x0c, .native 3, .native 1, .native 32, .native 32,
       .native 1, .bytesField address 0, .bytesField address 1, .native 0, .native 0]]
+
+private def blockTimeFieldGroups (destination : String) (before : Bool)
+    (deadline : Expr (.uint (2 ^ 64 - 1))) : List (List Scalar) :=
+  let push := [.native 0x10, .native 1] ++ (Aligned.counter deadline).fields
+  let comparison := [[.native 0x01], [.native 0x0c] ++ (Aligned.bitExpr (.ref destination)).fields]
+  let operands := if before then [[.native 0x32], listIndexFields 2, push]
+    else [push, [.native 0x33], listIndexFields 2]
+  operands ++ comparison
 
 private def listU8CellPushFields (index : Nat) : List Scalar :=
   [.native 0x10, .native 1, .native 1, .native 1, .native index]
@@ -181,6 +191,8 @@ def Op.fields : Op → List Scalar
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
+  | .blockTimeCompare destination before deadline =>
+      (blockTimeFieldGroups destination before deadline).flatten
   | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
 
 /-- Native transcript groups correspond one-to-one with VM operations. List
@@ -224,6 +236,7 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
   | .requireContractCaller address => requireContractCallerFieldGroups address
+  | .blockTimeCompare destination before deadline => blockTimeFieldGroups destination before deadline
   | .emitEvent kind payload => eventFieldGroups kind payload
   | operation => [operation.fields]
 
@@ -600,6 +613,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     pure {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .blockTimeCompare destination before deadline =>
+    pure {plan with
+      operations := plan.operations ++ [.blockTimeCompare destination before deadline]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -800,6 +817,9 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
       pure (.requireContractCaller (totalizeActivityValue condition (expressionNames address) address))
+    | some condition, .blockTimeCompare destination before deadline =>
+      pure (.blockTimeCompare destination before
+        (totalizeActivityValue condition (expressionNames deadline) deadline))
     | some condition, .readMap name destination keyTy valueTy key =>
       pure (.readMap name destination keyTy valueTy
         (totalizeActivityValue condition (expressionNames key) key))
@@ -855,7 +875,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
   let added := result.operations.length - before
   match guard, effect with
   | some _, .require _ => pure result
-  | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember .. =>
+  | some condition, .readCell .. | some condition, .readMap .. | some condition, .readMember .. |
+      some condition, .blockTimeCompare .. =>
     let readIndex := plan.reads.length
     let some read := result.reads[readIndex]? | throw "guarded read did not append a read binding"
     let reads := result.reads.take readIndex ++ [{read with guard := some condition}]
@@ -1033,6 +1054,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     plan := {plan with
       operations := plan.operations ++ [.requireContractCaller address]
       reads := plan.reads ++ contractCallerReads plan.reads.length}
+  | .blockTimeCompare destination before deadline =>
+    plan := {plan with
+      operations := plan.operations ++ [.blockTimeCompare destination before deadline]
+      reads := plan.reads ++ [{name := destination, ty := .bool}]}
   | .requireAbsent name _ key =>
     let slot ← stateSlot state name
     let key ← nativeAligned _ key
@@ -1387,6 +1412,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
+  | .blockTimeCompare .. => throw "block-time comparison uses its dedicated native-plan operation JSON"
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 
 def Plan.toJson (ctx : EvalContext) (env : EvalEnv) (plan : Plan) : Except String Lean.Json := do

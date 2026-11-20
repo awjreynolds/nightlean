@@ -313,6 +313,8 @@ scoped syntax "write" ident "[" nlexpr "]" "[" nlexpr "]" ":=" nlleaves : nleffe
 scoped syntax "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "popFront" nlpath : nleffect
 scoped syntax "remove" nlpath : nleffect
+scoped syntax "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
+scoped syntax "blockTimeAfter(" nlexpr ")" "as" ident : nleffect
 scoped syntax "when" nlexpr "write" ident ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "insert" ident "[" nlexpr "]" ":=" nlexpr : nleffect
 scoped syntax "when" nlexpr "require" nlexpr : nleffect
@@ -329,6 +331,8 @@ scoped syntax "when" nlexpr "reset" nlpath : nleffect
 scoped syntax "when" nlexpr "pushFront" nlpath ":=" nlleaves : nleffect
 scoped syntax "when" nlexpr "popFront" nlpath : nleffect
 scoped syntax "when" nlexpr "remove" nlpath : nleffect
+scoped syntax "when" nlexpr "blockTimeBefore(" nlexpr ")" "as" ident : nleffect
+scoped syntax "when" nlexpr "blockTimeAfter(" nlexpr ")" "as" ident : nleffect
 
 declare_syntax_cat nlstatement
 scoped syntax nleffect : nlstatement
@@ -1381,6 +1385,9 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr pushFront $_path:nlpath := $_payload:nlleaves) => some condition
   | `(nleffect| when $condition:nlexpr popFront $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr remove $_path:nlpath) => some condition
+  | `(nleffect| when $condition:nlexpr blockTimeBefore($_deadline:nlexpr) as $_dest:ident)
+  | `(nleffect| when $condition:nlexpr blockTimeAfter($_deadline:nlexpr) as $_dest:ident) =>
+    some condition
   | _ => none
 
 private def effectGuardTerm (env : Bindings) (parent : Option (TSyntax `term))
@@ -1423,6 +1430,16 @@ private def bindReadName (state : EntryEffects) (sourceName internalName : Strin
   let env ← if sourceName == internalName then addReferences state.env [(sourceName, ty)]
     else addReferenceAs state.env sourceName internalName ty
   pure {state with env}
+
+private def elaborateBlockTimeRead (state : EntryEffects) (depth : Nat)
+    (destination : TSyntax `ident) (before : _root_.Bool) (deadline : TSyntax `nlexpr) :
+    CommandElabM EntryEffects := do
+  let value ← checkedExpression state.env deadline (.uint (2 ^ 64 - 1))
+  let (name, updated) ← freshReadName depth state destination
+  let direction ← if before then `(Bool.true) else `(Bool.false)
+  let term ← `(Noctium.Effect.blockTimeCompare $(stringTerm name) $direction $value)
+  bindReadName {updated with terms := updated.terms.push term}
+    destination.getId.toString name .bool
 
 private def elaborateTreeRead (storage destination : TSyntax `ident)
     (keys : List (TSyntax `nlexpr))
@@ -1779,6 +1796,12 @@ private def elaborateEffect (schema : List (String × StateKind))
   | `(nleffect| member $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr member $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema "member" path destination depth state
+  | `(nleffect| blockTimeBefore($deadline) as $destination:ident)
+  | `(nleffect| when $_:nlexpr blockTimeBefore($deadline) as $destination:ident) =>
+    state := ← elaborateBlockTimeRead state depth destination Bool.true deadline
+  | `(nleffect| blockTimeAfter($deadline) as $destination:ident)
+  | `(nleffect| when $_:nlexpr blockTimeAfter($deadline) as $destination:ident) =>
+    state := ← elaborateBlockTimeRead state depth destination Bool.false deadline
   | `(nleffect| $operation:ident $path:nlpath as $destination:ident)
   | `(nleffect| when $_:nlexpr $operation:ident $path:nlpath as $destination:ident) =>
     state := ← elaborateNamedPathRead schema operation.getId.toString path destination depth state

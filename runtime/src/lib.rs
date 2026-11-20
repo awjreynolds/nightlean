@@ -1119,6 +1119,12 @@ pub enum Instruction {
         tag: u8,
         payload: Expr,
     },
+    #[serde(rename = "blockTimeCompare")]
+    BlockTimeCompare {
+        destination: String,
+        before: bool,
+        deadline: Expr,
+    },
 }
 
 fn event_payload_length(tag: u8) -> Result<usize> {
@@ -1208,6 +1214,13 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         Instruction::EmitEvent { tag, .. } => {
             vec![13 + event_payload_length(*tag)?.div_ceil(31), 1]
         }
+        Instruction::BlockTimeCompare { before, .. } => {
+            if *before {
+                vec![1, 4, 5, 1, 4]
+            } else {
+                vec![5, 1, 4, 1, 4]
+            }
+        }
         _ => vec![impact_field_count(instruction, plan)?],
     })
 }
@@ -1228,6 +1241,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
         Instruction::RequireContractCaller { .. } => 15,
+        Instruction::BlockTimeCompare { .. } => 15,
         Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
@@ -2613,6 +2627,7 @@ pub struct PreparationCursor {
     supplied_inputs: BTreeSet<String>,
     deferred_outputs: BTreeMap<String, Vec<Input>>,
     context: QueryContext<Db>,
+    has_block_time: bool,
     params: LedgerParameters,
     prefix_context: QueryContext<Db>,
     materialized_prefix: usize,
@@ -2790,6 +2805,9 @@ fn probe_instruction(
             event_payload_length(*tag)?;
             probe_expression(payload, plan, env, deferred_outputs)
         }
+        Instruction::BlockTimeCompare { deadline, .. } => {
+            probe_expression(deadline, plan, env, deferred_outputs)
+        }
         // Read expressions bind values produced by the state read itself.
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
@@ -2858,6 +2876,29 @@ fn read_event(
     }
 }
 
+fn bind_block_time_result(
+    read: Option<&Read>,
+    guard: Option<&Expr>,
+    destination: &str,
+    active: bool,
+    result: bool,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let read = read.ok_or_else(|| anyhow!("missing block-time result read"))?;
+    ensure!(
+        read.name == destination
+            && read.ty == "Bool"
+            && read.guard.as_ref() == guard
+            && read.components.is_empty()
+            && read.projections.is_none()
+            && read.schema.is_none()
+            && !env.contains_key(destination),
+        "block-time result read schema mismatch"
+    );
+    env.insert(destination.to_owned(), Value::Bool(result));
+    Ok(read_event(read, active, env, vec![destination.to_owned()]))
+}
+
 fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
     ensure!(
         matches!(
@@ -2891,6 +2932,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::RequireContractCaller { .. }
                 | Instruction::EmitEvent { .. }
+                | Instruction::BlockTimeCompare { .. }
         ),
         "guarded native operation has an unsupported shape"
     );
@@ -2910,6 +2952,7 @@ impl PreparationCursor {
             inputs,
             QueryContext::new(state.clone(), address),
             params,
+            false,
         )
     }
 
@@ -2918,6 +2961,7 @@ impl PreparationCursor {
         inputs: &BTreeMap<String, Json>,
         context: QueryContext<Db>,
         params: &LedgerParameters,
+        has_block_time: bool,
     ) -> Result<Self> {
         let env = parse_input_environment(plan, inputs, true)?;
         let supplied_inputs = inputs.keys().cloned().collect();
@@ -2928,6 +2972,7 @@ impl PreparationCursor {
             env,
             supplied_inputs,
             context,
+            has_block_time,
             params: params.clone(),
             prefix_context,
             materialized_prefix: 0,
@@ -3102,12 +3147,13 @@ pub fn prepare(
     params: &LedgerParameters,
     address: ContractAddress,
 ) -> Result<Execution> {
-    prepare_with_context(
+    finish_preparation(PreparationCursor::from_context(
         plan,
         inputs,
         QueryContext::new(state.clone(), address),
         params,
-    )
+        false,
+    )?)
 }
 
 /// Prepare a call using its prospective ledger query context. Composition assembly
@@ -3118,7 +3164,12 @@ pub fn prepare_with_context(
     context: QueryContext<Db>,
     params: &LedgerParameters,
 ) -> Result<Execution> {
-    let mut cursor = PreparationCursor::from_context(plan, inputs, context, params)?;
+    finish_preparation(PreparationCursor::from_context(
+        plan, inputs, context, params, true,
+    )?)
+}
+
+fn finish_preparation(mut cursor: PreparationCursor) -> Result<Execution> {
     loop {
         match cursor.step()? {
             PreparationStep::PendingInputs(missing) => bail!(
@@ -3142,6 +3193,7 @@ impl PreparationCursor {
             plan,
             env,
             context,
+            has_block_time,
             params,
             prefix_context,
             materialized_prefix: stored_materialized_prefix,
@@ -3201,6 +3253,7 @@ impl PreparationCursor {
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::RequireContractCaller { .. }
                             | Instruction::EmitEvent { .. }
+                            | Instruction::BlockTimeCompare { .. }
                     ),
                     "guarded native operation has an unsupported shape"
                 );
@@ -3216,6 +3269,17 @@ impl PreparationCursor {
                         Instruction::RequireContractCaller { .. }
                     ) {
                         consume_contract_caller_reads(plan, &mut read_index, Some(guard))?;
+                    }
+                    if let Instruction::BlockTimeCompare { destination, .. } = operation.as_ref() {
+                        event = Some(bind_block_time_result(
+                            plan.reads.get(read_index),
+                            Some(guard),
+                            destination,
+                            false,
+                            false,
+                            env,
+                        )?);
+                        read_index += 1;
                     }
                     if let Instruction::Popeq {
                         expression,
@@ -3961,6 +4025,48 @@ impl PreparationCursor {
                 );
                 program.push(push_native_state(value, false)?);
                 Op::Log
+            }
+            Instruction::BlockTimeCompare {
+                destination,
+                before,
+                deadline,
+            } => {
+                ensure!(
+                    *has_block_time,
+                    "active time comparison requires explicit block context"
+                );
+                let Value::UInt { number, maximum } = evaluate(deadline, &env)? else {
+                    bail!("block-time comparison requires a UInt64 deadline")
+                };
+                ensure!(
+                    maximum == u64::MAX.into(),
+                    "block-time deadline must be UInt64"
+                );
+                let seconds: u64 = number.try_into()?;
+                let current = context.call_context.tblock.to_secs();
+                let threshold =
+                    push_native_state(StateValue::Cell(Sp::new(seconds.into())), false)?;
+                let result = if *before {
+                    program.extend([Op::Dup { n: 2 }, list_index(2), threshold]);
+                    current < seconds
+                } else {
+                    program.extend([threshold, Op::Dup { n: 3 }, list_index(2)]);
+                    seconds < current
+                };
+                program.push(Op::Lt);
+                event = Some(bind_block_time_result(
+                    plan.reads.get(read_index),
+                    instruction_guard,
+                    destination,
+                    true,
+                    result,
+                    env,
+                )?);
+                read_index += 1;
+                Op::Popeq {
+                    cached: false,
+                    result: result.into(),
+                }
             }
             Instruction::Member => Op::Member,
             Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {

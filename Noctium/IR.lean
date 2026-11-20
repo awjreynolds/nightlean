@@ -433,6 +433,10 @@ inductive Effect where
   Helper and witness-statement authoring APIs do not expose this effect yet. -/
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Expr .native)
   | requireContractCaller (address : Expr (.bytes 32))
+  /-- Compare the native ledger transcript's block time, in seconds, with a
+  public cutoff. `before` selects the strict `<` direction; false selects `>`. -/
+  | blockTimeCompare (destination : String) (before : Bool)
+      (deadline : Expr (.uint (2 ^ 64 - 1)))
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
@@ -996,7 +1000,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .ok _ => pure ()
       match effect with
       | .readCell .. | .readMap .. | .readMember .. | .writeCell .. | .writeMap .. |
-          .claimContractCall .. | .requireContractCaller .. | .emitEvent .. |
+          .claimContractCall .. | .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. |
           .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
@@ -1031,6 +1035,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .requireContractCaller address => do
         address.validate caps env
         pure []
+      | .blockTimeCompare destination _ deadline => do
+        deadline.validate caps env
+        pure [(destination, .bool)]
       | .emitEvent _ payload =>
         payload.validate caps env
         pure []

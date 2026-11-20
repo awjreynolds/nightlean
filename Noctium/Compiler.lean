@@ -202,6 +202,9 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("commitment", nativeExpressionJson commitment)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
+  | .blockTimeCompare destination before deadline => Json.mkObj [
+      ("op", toJson ("blockTimeCompare" : String)), ("destination", toJson destination),
+      ("before", toJson before), ("deadline", nativeExpressionJson deadline)]
 
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
@@ -234,6 +237,9 @@ private def effectJson : Effect → Json
       ("commitment", expressionJson commitment)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
+  | .blockTimeCompare destination before deadline => Json.mkObj [
+      ("op", toJson ("blockTimeCompare" : String)), ("destination", toJson destination),
+      ("before", toJson before), ("deadline", expressionJson deadline)]
   | .emitEvent kind payload => Json.mkObj [
       ("op", toJson ("emitEvent" : String)), ("tag", toJson kind.tag),
       ("payload", expressionJson payload)]

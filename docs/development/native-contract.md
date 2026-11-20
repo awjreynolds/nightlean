@@ -66,3 +66,29 @@ node scripts/zkir/check-native-cases.mjs build/native-claim/artifacts build/nati
 ```
 
 The current helper supports the initial source subset: Native-field and Boolean inputs, field arithmetic, equality, eager selection, Poseidon, state-cell reads, and empty initial maps with member checks and insertion. Unsupported source features must fail before a support claim. The accepted source-to-ledger evidence is [native-localnet.md](native-localnet.md).
+
+## Compare the block time
+
+`blockTimeBefore(deadline) as before` and `blockTimeAfter(deadline) as after`
+compare the ledger block time against a `UInt 64` deadline in Unix seconds.
+Both are false at equality. A guarded inactive comparison supplies false
+without reading the clock. A private deadline or activity condition needs
+an explicit disclosure because the native transcript exposes the comparison
+operands and activity. [Midnight kernel reference](https://docs.midnight.network/compact/reference/ledger-adt#blocktimelessthan)
+
+The compiler emits native Impact operations to fetch the block time and
+bind the Boolean result to the ZKIR statement. The native VM re-evaluates
+the comparison against its execution context. If the clock crosses the
+deadline and changes a bound result, the transcript fails. The caller
+must prepare a new proof for the changed result.
+
+Use `PreparedProof::from_config_in_block` with a prospective ledger
+`BlockContext` in the Rust SDK. The native localnet client takes this
+context from its checked node snapshot. The low-level
+`prepare_with_context` also accepts an explicit query context.
+An active comparison fails preparation when no clock is supplied.
+The [source fixture](../../tests/NativeBlockTime.lean),
+[Compact oracle](../../tests/compact/block-time.mjs) and
+[native checker fixture](../../runtime/tests/native_block_time.rs)
+check the strict boundaries. A hosted SDK path that does not provide a
+block context still requires integration.
