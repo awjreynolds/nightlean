@@ -1728,7 +1728,8 @@
       "observedEvidence": [
         "tests/NativeTaggedSettlement.lean",
         "tests/compact/tagged-settlement.mjs",
-        "runtime/tests/native_tagged_settlement.rs"
+        "runtime/tests/native_tagged_settlement.rs",
+        "docs/development/native-tagged-settlement-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
@@ -1800,7 +1801,8 @@
       "observedEvidence": [
         "tests/NativeTaggedSettlement.lean",
         "tests/compact/tagged-settlement.mjs",
-        "runtime/tests/native_tagged_settlement.rs"
+        "runtime/tests/native_tagged_settlement.rs",
+        "docs/development/native-tagged-settlement-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
@@ -1821,7 +1823,8 @@
       "observedEvidence": [
         "tests/NativeTaggedSettlement.lean",
         "tests/compact/tagged-settlement.mjs",
-        "runtime/tests/native_tagged_settlement.rs"
+        "runtime/tests/native_tagged_settlement.rs",
+        "docs/development/native-tagged-settlement-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },

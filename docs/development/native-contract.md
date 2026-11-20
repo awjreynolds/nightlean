@@ -162,3 +162,10 @@ requires both operands and their sum to fit `UInt 64` in the pinned VM.
 The [Lean fixture](../../tests/NativeTaggedSettlement.lean) and
 [Compact reference fixture](../../tests/compact/TaggedSettlement.compact)
 exercise these bounds and the effects' tagged keys.
+
+The [funded localnet receipt](native-tagged-settlement-localnet-receipt.json)
+records a proof which checks that both starting balances are zero, even after
+the source records receipt effects. The finalized state contains 17
+unshielded-tag units and 23 shielded-tag units of the same color. The native
+assembler predicted both balances. The finalized bytes matched the SDK's
+ledger replay byte for byte.
