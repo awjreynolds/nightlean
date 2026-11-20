@@ -57,6 +57,8 @@ inductive Op where
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
   | claimContractCall (address entryPointHash : Expr (.bytes 32)) (commitment : Scalar)
+  | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
+  | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | requireContractCaller (address : Expr (.bytes 32))
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
 
@@ -77,6 +79,14 @@ private def claimContractCallFieldGroups
   , [.native 0x40]
   ]
 
+private def accumulateTokenFields (slot : Nat) (key encodedAmount : List Scalar) :
+    List (List Scalar) :=
+  [[.native 0x40], [.native 0x80, .native 1, .native 1, .native slot],
+    [.native 0x10, .native 1] ++ key, [.native 0x31], [.native 0x31], [.native 0x18],
+    encodedAmount, [.native 0x40], [.native 0x08], [.native 0x12, .native 4],
+    [.native 0x32], [.native 0x32], [.native 0x60, .native (Field.modulus - 1)],
+    [.native 0x14], [.native 0xa2], [.native 0x40]]
+
 /-- Field-representation vectors match ledger-9 onchain-vm/src/ops.rs and
 transient-crypto/src/fab.rs. Map-key alignment follows the declared key type. -/
 def Aligned.fields : Aligned → List Scalar
@@ -92,6 +102,11 @@ def Aligned.fields : Aligned → List Scalar
   | .nativeFields values => [.native values.length] ++
       List.replicate values.length (.native (Field.modulus - 2)) ++ values
   | .counter value => [.native 1, .native 8, .cast .native value]
+
+private def mintFieldGroups (slot : Nat) (domain : Expr (.bytes 32))
+    (amount : Expr (.uint (2 ^ 64 - 1))) : List (List Scalar) :=
+  accumulateTokenFields slot (Aligned.bytes32 domain).fields
+    ([.native 0x10, .native 1] ++ (Aligned.counter amount).fields)
 
 private def indexPathFields (slot : Nat) (pushPath : Bool) (keys : List Aligned) : List Scalar :=
   [.native ((if pushPath then 0x70 else 0x50) + keys.length)] ++
@@ -180,6 +195,8 @@ def Op.fields : Op → List Scalar
           finalKey.fields ++ [.native 0x19, .native (0x90 + keys.length)]
   | .claimContractCall address entryPointHash commitment =>
       (claimContractCallFieldGroups address entryPointHash commitment).flatten
+  | .mintShielded domain amount => (mintFieldGroups 4 domain amount).flatten
+  | .mintUnshielded domain amount => (mintFieldGroups 5 domain amount).flatten
   | .requireContractCaller address => (requireContractCallerFieldGroups address).flatten
   | .emitEvent kind payload => (eventFieldGroups kind payload).flatten
 
@@ -223,6 +240,8 @@ def Op.fieldGroups : Op → List (List Scalar)
           [.native 0x19], [.native (0x90 + keys.length)]]
   | .claimContractCall address entryPointHash commitment =>
       claimContractCallFieldGroups address entryPointHash commitment
+  | .mintShielded domain amount => mintFieldGroups 4 domain amount
+  | .mintUnshielded domain amount => mintFieldGroups 5 domain amount
   | .requireContractCaller address => requireContractCallerFieldGroups address
   | .emitEvent kind payload => eventFieldGroups kind payload
   | operation => [operation.fields]
@@ -594,6 +613,10 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     pure {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .mintShielded domain amount =>
+    pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
+  | .mintUnshielded domain amount =>
+    pure {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
   | .emitEvent kind payload =>
     pure {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -796,6 +819,14 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
         (totalizeActivityValue condition avoid address)
         (totalizeActivityValue condition avoid entryPointHash)
         (totalizeActivityValue condition avoid commitment))
+    | some condition, .mintShielded domain amount =>
+      pure (.mintShielded
+        (totalizeActivityValue condition (expressionNames domain) domain)
+        (totalizeActivityValue condition (expressionNames amount) amount))
+    | some condition, .mintUnshielded domain amount =>
+      pure (.mintUnshielded
+        (totalizeActivityValue condition (expressionNames domain) domain)
+        (totalizeActivityValue condition (expressionNames amount) amount))
     | some condition, .emitEvent kind payload =>
       pure (.emitEvent kind (totalizeActivityValue condition (expressionNames payload) payload))
     | some condition, .requireContractCaller address =>
@@ -890,7 +921,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .counterAdjust .. | some condition, .counterReset .. |
       some condition, .listPushFront .. | some condition, .listPopFront .. |
       some condition, .listReset .. | some condition, .removePath .. |
-      some condition, .claimContractCall .. | some condition, .emitEvent .. =>
+      some condition, .claimContractCall .. | some condition, .mintShielded .. |
+      some condition, .mintUnshielded .. | some condition, .emitEvent .. =>
     let priorGuards := if plan.activityGuards.isEmpty then List.replicate before none
       else plan.activityGuards
     pure {result with activityGuards := priorGuards ++ List.replicate added (some condition)}
@@ -1027,6 +1059,10 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .claimContractCall address entryPointHash commitment =>
     plan := {plan with operations := plan.operations ++ [
       .claimContractCall address entryPointHash commitment]}
+  | .mintShielded domain amount =>
+    plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
+  | .mintUnshielded domain amount =>
+    plan := {plan with operations := plan.operations ++ [.mintUnshielded domain amount]}
   | .emitEvent kind payload =>
     plan := {plan with operations := plan.operations ++ [.emitEvent kind payload]}
   | .requireContractCaller address =>
@@ -1386,6 +1422,8 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .mapRemove slot keys => pure (Lean.Json.mkObj [("mapRemove", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length)])])
   | .claimContractCall .. => throw "claimContractCall uses its dedicated native-plan operation JSON"
+  | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
+  | .mintUnshielded .. => throw "unshielded mint uses its dedicated native-plan operation JSON"
   | .requireContractCaller .. => throw "requireContractCaller uses its dedicated native-plan operation JSON"
   | .emitEvent .. => throw "emitEvent uses its dedicated native-plan operation JSON"
 

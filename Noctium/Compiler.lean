@@ -200,6 +200,12 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("address", nativeExpressionJson address),
       ("entryPointHash", nativeExpressionJson entryPointHash),
       ("commitment", nativeExpressionJson commitment)]
+  | .mintShielded domain amount => Json.mkObj [
+      ("op", toJson ("mintShielded" : String)), ("domain", nativeExpressionJson domain),
+      ("amount", nativeExpressionJson amount)]
+  | .mintUnshielded domain amount => Json.mkObj [
+      ("op", toJson ("mintUnshielded" : String)), ("domain", nativeExpressionJson domain),
+      ("amount", nativeExpressionJson amount)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
 
@@ -232,6 +238,12 @@ private def effectJson : Effect → Json
       ("address", expressionJson address),
       ("entryPointHash", expressionJson entryPointHash),
       ("commitment", expressionJson commitment)]
+  | .mintShielded domain amount => Json.mkObj [
+      ("op", toJson ("mintShielded" : String)), ("domain", expressionJson domain),
+      ("amount", expressionJson amount)]
+  | .mintUnshielded domain amount => Json.mkObj [
+      ("op", toJson ("mintUnshielded" : String)), ("domain", expressionJson domain),
+      ("amount", expressionJson amount)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
   | .emitEvent kind payload => Json.mkObj [
