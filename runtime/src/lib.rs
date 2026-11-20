@@ -5,7 +5,7 @@ use anyhow::{Context, Result, anyhow, bail, ensure};
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom, Value as FabValue, ValueAtom};
 use base_crypto::hash::HashOutput;
 use base_crypto::repr::BinaryHashRepr;
-use coin_structure::coin::PublicAddress;
+use coin_structure::coin::{PublicAddress, ShieldedTokenType, TokenType, UnshieldedTokenType};
 use coin_structure::contract::ContractAddress;
 use ledger::{
     construct::{PreTranscript, partition_transcripts},
@@ -1000,6 +1000,22 @@ pub struct Read {
     #[serde(default)]
     pub schema: Option<Json>,
 }
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum BalanceComparison {
+    LessThan(Expr),
+    GreaterThan(Expr),
+}
+
+impl BalanceComparison {
+    fn limit(&self) -> &Expr {
+        match self {
+            Self::LessThan(limit) | Self::GreaterThan(limit) => limit,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReadComponent {
@@ -1110,9 +1126,30 @@ pub enum Instruction {
         entry_point_hash: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "mintShielded")]
+    MintShielded {
+        domain: Expr,
+        amount: Expr,
+    },
+    #[serde(rename = "mintUnshielded")]
+    MintUnshielded {
+        domain: Expr,
+        amount: Expr,
+    },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
         address: Expr,
+    },
+    #[serde(rename = "readContractAddress")]
+    ReadContractAddress {
+        destination: String,
+    },
+    #[serde(rename = "readTokenBalance", rename_all = "camelCase")]
+    ReadTokenBalance {
+        destination: String,
+        color: Expr,
+        is_unshielded: Expr,
+        comparison: Option<BalanceComparison>,
     },
     #[serde(rename = "emitEvent")]
     EmitEvent {
@@ -1204,7 +1241,23 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             }
         }
         Instruction::ClaimContractCall { .. } => vec![1, 4, 1, 1, 11, 2, 2, 1, 1],
+        Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
+            MINT_FIELD_COUNTS.to_vec()
+        }
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
+        Instruction::ReadContractAddress { .. } => vec![1, 4, 5],
+        Instruction::ReadTokenBalance { comparison, .. } => {
+            let mut counts = vec![1, 4, 1, 11, 1, 2, 1, 5, 2, 10];
+            match comparison {
+                None => counts.push(4),
+                Some(BalanceComparison::LessThan(_)) => counts.extend([5, 1, 4]),
+                Some(BalanceComparison::GreaterThan(_)) => {
+                    counts.insert(0, 5);
+                    counts.extend([1, 4]);
+                }
+            }
+            counts
+        }
         Instruction::EmitEvent { tag, .. } => {
             vec![13 + event_payload_length(*tag)?.div_ceil(31), 1]
         }
@@ -1227,7 +1280,14 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     Ok(match instruction {
         Instruction::AddImmediate { .. } | Instruction::SubImmediate { .. } => 2,
         Instruction::ClaimContractCall { .. } => 24,
+        Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
+            impact_field_counts(instruction, plan)?.into_iter().sum()
+        }
         Instruction::RequireContractCaller { .. } => 15,
+        Instruction::ReadContractAddress { .. } => 10,
+        Instruction::ReadTokenBalance { .. } => {
+            impact_field_counts(instruction, plan)?.into_iter().sum()
+        }
         Instruction::EmitEvent { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::Dup | Instruction::Member | Instruction::Insert { .. } | Instruction::New => 1,
         Instruction::Index { key: None, .. } => 4,
@@ -1278,6 +1338,8 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
         .pop()
         .ok_or_else(|| anyhow!("invalid map key schema"))
 }
+
+const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
 
 fn reject_unqualified_foreign_storage(ty: &ScalarType) -> Result<()> {
     #[cfg(feature = "zkir-321")]
@@ -2390,6 +2452,51 @@ fn push_native_state(value: StateValue<Db>, storage: bool) -> Result<Op<ResultMo
     })
 }
 
+fn mint_amount(amount: &Expr, env: &Environment) -> Result<u64> {
+    let Value::UInt { number, maximum } = evaluate(amount, env)? else {
+        bail!("mint amount must be UInt64");
+    };
+    ensure!(maximum == u64::MAX.into(), "mint amount must be UInt64");
+    Ok(number.try_into()?)
+}
+
+fn append_token_accumulation(
+    program: &mut Program,
+    slot: u8,
+    key: AlignedValue,
+    amount: AlignedValue,
+) -> Result<Op<ResultModeVerify, Db>> {
+    program.extend([
+        Op::Swap { n: 0 },
+        Op::Idx {
+            cached: true,
+            push_path: true,
+            path: vec![Key::Value(
+                AlignedValue::from(slot).try_into().expect("u8 index"),
+            )]
+            .try_into()?,
+        },
+        push_native_state(StateValue::Cell(Sp::new(key)), false)?,
+        Op::Dup { n: 1 },
+        Op::Dup { n: 1 },
+        Op::Member,
+        push_native_state(StateValue::Cell(Sp::new(amount)), false)?,
+        Op::Swap { n: 0 },
+        Op::Neg,
+        Op::Branch { skip: 4 },
+        Op::Dup { n: 2 },
+        Op::Dup { n: 2 },
+        Op::Idx {
+            cached: true,
+            push_path: false,
+            path: vec![Key::Stack].try_into()?,
+        },
+        Op::Add,
+        Op::Ins { cached: true, n: 2 },
+    ]);
+    Ok(Op::Swap { n: 0 })
+}
+
 fn record_schema_at_path(plan: &Plan, slot: u32, depth: usize) -> Result<&Json> {
     tree_schema_at_path(plan, slot, depth)?
         .get("composite")
@@ -2783,9 +2890,27 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::MintShielded { domain, amount }
+        | Instruction::MintUnshielded { domain, amount } => {
+            probe_expressions([domain, amount], plan, env, deferred_outputs)
+        }
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
+        Instruction::ReadContractAddress { .. } => Ok(None),
+        Instruction::ReadTokenBalance {
+            color,
+            is_unshielded,
+            comparison,
+            ..
+        } => probe_expressions(
+            std::iter::once(color)
+                .chain(std::iter::once(is_unshielded))
+                .chain(comparison.iter().map(BalanceComparison::limit)),
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::EmitEvent { tag, payload } => {
             event_payload_length(*tag)?;
             probe_expression(payload, plan, env, deferred_outputs)
@@ -2827,6 +2952,35 @@ fn consume_contract_caller_reads(
     Ok(())
 }
 
+fn bind_contract_address(
+    read: Option<&Read>,
+    guard: Option<&Expr>,
+    destination: &str,
+    address: Option<ContractAddress>,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let read = read.ok_or_else(|| anyhow!("missing contract address read"))?;
+    ensure!(
+        read.name == destination
+            && ScalarType::parse(&read.ty)? == ScalarType::Bytes32
+            && read.guard.as_ref() == guard,
+        "contract address read schema mismatch"
+    );
+    validate_byte_read_projections(read, &ScalarType::Bytes32)?;
+    ensure!(
+        !env.contains_key(destination),
+        "contract address read shadows an existing value"
+    );
+    let value = Value::Bytes(address.map_or_else(|| vec![0; 32], |address| address.0.0.to_vec()));
+    env.insert(destination.to_owned(), value);
+    Ok(read_event(
+        read,
+        address.is_some(),
+        env,
+        vec![destination.to_owned()],
+    ))
+}
+
 fn read_event(
     read: &Read,
     active: bool,
@@ -2856,6 +3010,102 @@ fn read_event(
         active,
         values,
     }
+}
+
+fn bind_context_scalar(
+    read: Option<&Read>,
+    guard: Option<&Expr>,
+    destination: &str,
+    active: bool,
+    value: Value,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let read = read.ok_or_else(|| anyhow!("missing context scalar read"))?;
+    ensure!(
+        read.name == destination
+            && ScalarType::parse(&read.ty)? == value.scalar_type()
+            && read.guard.as_ref() == guard
+            && read.components.is_empty()
+            && read.projections.is_none()
+            && read.schema.is_none()
+            && !env.contains_key(destination),
+        "context scalar read schema mismatch"
+    );
+    env.insert(destination.to_owned(), value);
+    Ok(read_event(read, active, env, vec![destination.to_owned()]))
+}
+
+fn balance_amount(value: u128) -> Value {
+    Value::UInt {
+        number: value.into(),
+        maximum: u128::MAX.into(),
+    }
+}
+
+fn token_type(color: HashOutput, is_unshielded: bool) -> TokenType {
+    if is_unshielded {
+        TokenType::Unshielded(UnshieldedTokenType(color))
+    } else {
+        TokenType::Shielded(ShieldedTokenType(color))
+    }
+}
+
+fn balance_limit(expression: &Expr, env: &Environment) -> Result<u128> {
+    let Value::UInt { number, maximum } = evaluate(expression, env)? else {
+        bail!("token balance comparison limit must be UInt128");
+    };
+    ensure!(
+        maximum == u128::MAX.into(),
+        "token balance comparison limit must be UInt128"
+    );
+    Ok(number.try_into()?)
+}
+
+fn push_amount(value: u128) -> Result<Op<ResultModeVerify, Db>> {
+    push_native_state(StateValue::Cell(Sp::new(value.into())), false)
+}
+
+fn append_balance_read(
+    program: &mut Program,
+    token: TokenType,
+    comparison: Option<(bool, u128)>,
+) -> Result<()> {
+    let token: AlignedValue = token.into();
+    let key = Key::Value(
+        token
+            .clone()
+            .try_into()
+            .map_err(|_| anyhow!("invalid balance token key"))?,
+    );
+    let reverse = comparison.is_some_and(|(less, _)| !less);
+    if let Some((false, limit)) = comparison {
+        program.push(push_amount(limit)?);
+    }
+    program.extend([
+        Op::Dup {
+            n: if reverse { 3 } else { 2 },
+        },
+        list_index(5),
+        Op::Dup { n: 0 },
+        push_native_state(StateValue::Cell(Sp::new(token)), false)?,
+        Op::Member,
+        Op::Branch { skip: 3 },
+        Op::Pop,
+        push_amount(0)?,
+        Op::Jmp { skip: 1 },
+        Op::Idx {
+            cached: false,
+            push_path: false,
+            path: vec![key].try_into()?,
+        },
+    ]);
+    if let Some((less, limit)) = comparison {
+        if less {
+            program.push(push_amount(limit)?);
+        }
+        program.push(Op::Lt);
+    }
+    Ok(())
 }
 
 fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
@@ -2889,7 +3139,11 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::ClaimContractCall { .. }
+                | Instruction::MintShielded { .. }
+                | Instruction::MintUnshielded { .. }
                 | Instruction::RequireContractCaller { .. }
+                | Instruction::ReadContractAddress { .. }
+                | Instruction::ReadTokenBalance { .. }
                 | Instruction::EmitEvent { .. }
         ),
         "guarded native operation has an unsupported shape"
@@ -2913,7 +3167,7 @@ impl PreparationCursor {
         )
     }
 
-    fn from_context(
+    pub(crate) fn from_context(
         plan: &Plan,
         inputs: &BTreeMap<String, Json>,
         context: QueryContext<Db>,
@@ -3199,7 +3453,11 @@ impl PreparationCursor {
                             | Instruction::ListReset { .. }
                             | Instruction::MapRemove { .. }
                             | Instruction::ClaimContractCall { .. }
+                            | Instruction::MintShielded { .. }
+                            | Instruction::MintUnshielded { .. }
                             | Instruction::RequireContractCaller { .. }
+                            | Instruction::ReadContractAddress { .. }
+                            | Instruction::ReadTokenBalance { .. }
                             | Instruction::EmitEvent { .. }
                     ),
                     "guarded native operation has an unsupported shape"
@@ -3216,6 +3474,37 @@ impl PreparationCursor {
                         Instruction::RequireContractCaller { .. }
                     ) {
                         consume_contract_caller_reads(plan, &mut read_index, Some(guard))?;
+                    }
+                    if let Instruction::ReadContractAddress { destination } = operation.as_ref() {
+                        event = Some(bind_contract_address(
+                            plan.reads.get(read_index),
+                            Some(guard),
+                            destination,
+                            None,
+                            env,
+                        )?);
+                        read_index += 1;
+                    }
+                    if let Instruction::ReadTokenBalance {
+                        destination,
+                        comparison,
+                        ..
+                    } = operation.as_ref()
+                    {
+                        let result = if comparison.is_some() {
+                            Value::Bool(false)
+                        } else {
+                            balance_amount(0)
+                        };
+                        event = Some(bind_context_scalar(
+                            plan.reads.get(read_index),
+                            Some(guard),
+                            destination,
+                            false,
+                            result,
+                            env,
+                        )?);
+                        read_index += 1;
                     }
                     if let Instruction::Popeq {
                         expression,
@@ -3933,6 +4222,58 @@ impl PreparationCursor {
                 program.extend(claim_ops[..8].iter().cloned());
                 claim_ops[8].clone()
             }
+            Instruction::MintShielded { domain, amount } => {
+                let domain = claim_hash_output(evaluate(domain, &env)?, "shielded mint domain")?;
+                let amount = mint_amount(amount, &env)?;
+                append_token_accumulation(program, 4, domain.into(), amount.into())?
+            }
+            Instruction::MintUnshielded { domain, amount } => {
+                let domain = claim_hash_output(evaluate(domain, &env)?, "unshielded mint domain")?;
+                let amount = mint_amount(amount, &env)?;
+                append_token_accumulation(program, 5, domain.into(), amount.into())?
+            }
+            Instruction::ReadTokenBalance {
+                destination,
+                color,
+                is_unshielded,
+                comparison,
+            } => {
+                let color = claim_hash_output(evaluate(color, &env)?, "balance token color")?;
+                let token = token_type(color, evaluate(is_unshielded, &env)?.boolean()?);
+                let amount = context
+                    .call_context
+                    .balance
+                    .get(&token)
+                    .map(|value| *value)
+                    .unwrap_or(0);
+                let (comparison, result, expected) = match comparison {
+                    None => (None, balance_amount(amount), AlignedValue::from(amount)),
+                    Some(comparison) => {
+                        let limit = balance_limit(comparison.limit(), &env)?;
+                        ensure!(
+                            amount <= u128::from(u64::MAX) && limit <= u128::from(u64::MAX),
+                            "native balance comparisons require UInt64 operands"
+                        );
+                        let less = matches!(comparison, BalanceComparison::LessThan(_));
+                        let answer = if less { amount < limit } else { amount > limit };
+                        (Some((less, limit)), Value::Bool(answer), answer.into())
+                    }
+                };
+                append_balance_read(program, token, comparison)?;
+                event = Some(bind_context_scalar(
+                    plan.reads.get(read_index),
+                    instruction_guard,
+                    destination,
+                    true,
+                    result,
+                    env,
+                )?);
+                read_index += 1;
+                Op::Popeq {
+                    cached: false,
+                    result: expected,
+                }
+            }
             Instruction::RequireContractCaller { address } => {
                 consume_contract_caller_reads(plan, &mut read_index, instruction_guard)?;
                 let expected = PublicAddress::Contract(ContractAddress(claim_hash_output(
@@ -3947,6 +4288,22 @@ impl PreparationCursor {
                 Op::Popeq {
                     cached: false,
                     result: AlignedValue::from(expected),
+                }
+            }
+            Instruction::ReadContractAddress { destination } => {
+                let address = context.address;
+                event = Some(bind_contract_address(
+                    plan.reads.get(read_index),
+                    instruction_guard,
+                    destination,
+                    Some(address),
+                    env,
+                )?);
+                read_index += 1;
+                program.extend([Op::Dup { n: 2 }, list_index(0)]);
+                Op::Popeq {
+                    cached: false,
+                    result: AlignedValue::from(address),
                 }
             }
             Instruction::EmitEvent { tag, payload } => {
@@ -4223,6 +4580,8 @@ pub use artifacts::ContractBundleSet;
 /// Native private transaction artifact assembly.
 pub mod assembly;
 mod composition_wire;
+/// Bounded replies for an explicit browser transaction host.
+pub mod browser_transport;
 
 /// Scoped host providers and private journal transport.
 pub mod host;
@@ -4241,6 +4600,8 @@ pub use zkir_320 as zkir;
 #[cfg(all(feature = "zkir-321", not(feature = "zkir-320")))]
 pub use zkir_321 as zkir;
 pub mod aggregates;
+pub mod collection_ffi;
+pub mod merkle;
 pub mod native_ffi;
 pub mod profile;
 pub mod proof;

@@ -1,4 +1,5 @@
 //! Browser adapter for the same bounded Control ABI used by native hosts.
+mod client;
 mod proved;
 
 use js_sys::Uint8Array;

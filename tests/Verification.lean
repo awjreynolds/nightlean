@@ -136,7 +136,7 @@ def releasingPolicy : AuditPolicy := {
 
 theorem release_runs (ctx : EvalContext) (before : LedgerState) (bit : Bool) :
     releasingSubject.entry.run ctx [("secret", .bool bit)] before =
-      .ok ([("released", .bool bit)], before) := by cases bit <;> rfl
+      .ok ([("released", .bool bit)], before) := by cases bit <;> with_unfolding_all rfl
 
 theorem releasingFunctional : FunctionalObligation releasingPolicy := by
   constructor
@@ -219,7 +219,8 @@ def failurePolicy : AuditPolicy := {
 def failureAllOutcomesPolicy : AuditPolicy :=
   {failurePolicy with privacy := {scope := .allOutcomes}}
 
-theorem failure_value_flow_accepts : Disclosure.contract failureContract = .ok () := by rfl
+theorem failure_value_flow_accepts : Disclosure.contract failureContract = .ok () := by
+  with_unfolding_all rfl
 
 theorem failure_runs (ctx : EvalContext) (before : LedgerState) (a b : Nat)
     (hmod : ctx.modulus = Field.modulus) (ha : a ≤ 1) (hb : b ≤ 1) :
@@ -231,7 +232,7 @@ theorem failure_runs (ctx : EvalContext) (before : LedgerState) (a b : Nat)
   rcases ctx with ⟨modulus, oracle⟩
   change modulus = Field.modulus at hmod
   subst modulus
-  rcases ha with rfl | rfl <;> rcases hb with rfl | rfl <;> rfl
+  rcases ha with rfl | rfl <;> rcases hb with rfl | rfl <;> with_unfolding_all rfl
 
 theorem failureFunctional : FunctionalObligation failurePolicy := by
   constructor
