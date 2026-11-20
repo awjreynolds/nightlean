@@ -68,12 +68,51 @@ noctium_witness_circuit emptyTupleLoops using emptyTupleWire where
     let next : Native := witness containerStep(item, 0)
     prove eq(next, item)
   end
+  for inferred in items do
+    let next := witness containerStep(inferred, 0)
+    let widened : Native := inferred
+    prove eq(next, widened)
+  end
+  for inferred in items do
+    let flag : Bool := inferred
+    prove flag
+  end
 end
 
 #guard
   let compiled := Noctium.Witness.compile emptyTupleLoops.__program
     "noctium.witness-circuit.emptyTupleLoops.v1"
   compiled.toOption.map (fun source => source.calls.map (·.name)) == some ["emptyContainer"]
+
+noctium_witness emptyTupleSeed() : Native
+
+noctium_witness_circuit emptyTupleOperators using emptyTupleWire where
+  let items := decode(emptyTupleWire, witness emptyContainer())
+  let mapped := map([items], fun item => witness containerStep(item, 0))
+  let sum := fold(witness emptyTupleSeed(), [items, mapped],
+    fun acc item value => add(value, witness containerStep(item, acc)))
+  output result : Native := disclose(sum)
+end
+
+#guard
+  let compiled := Noctium.Witness.compile emptyTupleOperators.__program
+    "noctium.witness-circuit.emptyTupleOperators.v1"
+  compiled.toOption.map (fun source => source.calls.map (·.name)) ==
+    some ["emptyContainer", "emptyTupleSeed"]
+
+noctium_control emptyTupleOperatorsHost from emptyTupleOperators.__program
+  entry "noctium.witness-circuit.emptyTupleOperators.v1"
+
+/-- error: empty tuple item 'item' has conflicting expected types -/
+#guard_msgs in
+noctium_witness_circuit conflictingEmptyItemTypes using emptyTupleWire where
+  let items := decode(emptyTupleWire, witness emptyContainer())
+  for item in items do
+    let flag : Bool := item
+    let byte : UInt 8 := item
+    prove flag
+  end
+end
 
 /-- error: unknown readable witness value 'item' -/
 #guard_msgs in

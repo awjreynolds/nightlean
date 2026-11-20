@@ -26,7 +26,13 @@ private reads, witness calls, assertions, or staging. The body sees the inferred
 element type and captures enclosing values. The sequence expression runs once,
 including when empty. The body runs in index order and its bindings stay inside
 each iteration. If an empty tuple's body uses the item as a scalar, give it a
-type such as `for item : UInt 8 in items do`. [Container loop fixture](../../tests/ReadableContainerLoop.lean)
+type through a direct typed use. A witness parameter or an annotated `let`
+supplies the missing type. A loop also accepts `for item : UInt 8 in items do`.
+The same witness parameter rule applies to readable `map` and `fold` callbacks.
+Noctium assigns one type to the item and rejects conflicting expectations.
+Compact 0.36.1 accepted a zero-length loop whose same item appeared in both
+Boolean and UInt bindings. Uses without a known type still need a typed
+position. [Container loop and empty tuple fixture](../../tests/ReadableContainerLoop.lean)
 
 For bytes `[4, 5]`, the native Rust witness executor, the browser WASM control
 session and the Compact 0.36.1 oracle all request the sequence once, read and
