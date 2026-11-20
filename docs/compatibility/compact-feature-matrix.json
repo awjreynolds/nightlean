@@ -2627,8 +2627,8 @@
       "id": "C-ADT-MERKLETREE-INSERTHASH",
       "layer": "language-ledger",
       "surface": "MerkleTree.insertHash",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-only Bytes32 digest append. Depth-two roots and cursors match the pinned Compact fixture. Nested paths and other insert methods require separate evidence.",
       "source": [
         "adt"
       ],
@@ -2637,7 +2637,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MerkleTree.lean",
+        "runtime/tests/ordinary_merkle.rs",
+        "tests/compact/ordinary-merkle.mjs",
+        "docs/development/ordinary-merkle-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2695,8 +2700,8 @@
       "id": "C-ADT-MERKLETREE-ISFULL",
       "layer": "language-ledger",
       "surface": "MerkleTree.isFull",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-only fullness reads match the pinned Compact fixture before and after append. The native checker rejects an altered capacity result.",
       "source": [
         "adt"
       ],
@@ -2705,15 +2710,20 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MerkleTree.lean",
+        "runtime/tests/ordinary_merkle.rs",
+        "tests/compact/ordinary-merkle.mjs",
+        "docs/development/ordinary-merkle-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-MERKLETREE-RESETTODEFAULT",
       "layer": "language-ledger",
       "surface": "MerkleTree.resetToDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Root-only reset restores the exact initial native state. The depth-two fixture also compares the empty root and cursor with Compact.",
       "source": [
         "adt"
       ],
@@ -2722,7 +2732,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MerkleTree.lean",
+        "runtime/tests/ordinary_merkle.rs",
+        "tests/compact/ordinary-merkle.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
