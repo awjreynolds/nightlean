@@ -73,7 +73,7 @@ theorem accepted_authorized (ctx : EvalContext) (input : InputValues)
   | some value =>
     have rejected : claimEntry.run ctx (inputEnvironment input) (state input.root input.campaign values) =
         .error "state map key already present" := by
-      simp only [Entrypoint.run, entry_disclosure_valid]
+      simp only [Entrypoint.run, entry_disclosure_valid, clear_settlement_state]
       dsimp only [Bind.bind, Except.bind, Except.pure]
       rw [circuit]
       dsimp only [Bind.bind, Except.bind]
