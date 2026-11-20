@@ -215,6 +215,20 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .mintUnshielded domain amount => Json.mkObj [
       ("op", toJson ("mintUnshielded" : String)), ("domain", nativeExpressionJson domain),
       ("amount", nativeExpressionJson amount)]
+  | .incUnshieldedInputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedInputs" : String)),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("isUnshielded", nativeExpressionJson isUnshielded)]
+  | .incUnshieldedOutputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedOutputs" : String)),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("isUnshielded", nativeExpressionJson isUnshielded)]
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient => Json.mkObj [
+      ("op", toJson ("claimUnshieldedCoinSpend" : String)),
+      ("color", nativeExpressionJson color), ("amount", nativeExpressionJson amount),
+      ("isUnshielded", nativeExpressionJson isUnshielded),
+      ("isContract", nativeExpressionJson isContract),
+      ("recipient", nativeExpressionJson recipient)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", nativeExpressionJson address)]
   | .readContractAddress destination => Json.mkObj [
@@ -263,6 +277,19 @@ private def effectJson : Effect → Json
   | .mintUnshielded domain amount => Json.mkObj [
       ("op", toJson ("mintUnshielded" : String)), ("domain", expressionJson domain),
       ("amount", expressionJson amount)]
+  | .incUnshieldedInputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedInputs" : String)),
+      ("color", expressionJson color), ("amount", expressionJson amount),
+      ("isUnshielded", expressionJson isUnshielded)]
+  | .incUnshieldedOutputs color amount isUnshielded => Json.mkObj [
+      ("op", toJson ("incUnshieldedOutputs" : String)),
+      ("color", expressionJson color), ("amount", expressionJson amount),
+      ("isUnshielded", expressionJson isUnshielded)]
+  | .claimUnshieldedCoinSpend color amount isUnshielded isContract recipient => Json.mkObj [
+      ("op", toJson ("claimUnshieldedCoinSpend" : String)),
+      ("color", expressionJson color), ("amount", expressionJson amount),
+      ("isUnshielded", expressionJson isUnshielded),
+      ("isContract", expressionJson isContract), ("recipient", expressionJson recipient)]
   | .requireContractCaller address => Json.mkObj [
       ("op", toJson ("requireContractCaller" : String)), ("address", expressionJson address)]
   | .readContractAddress destination => Json.mkObj [

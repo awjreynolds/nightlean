@@ -204,6 +204,17 @@ theorem effects_reject_recorded (ctx : EvalContext) (env : EvalEnv)
     hr, hc, hn, Claim.markSpent, hSelf, Except.pure, Except.bind, Except.map]
   rfl
 
+theorem clear_settlement_state (root campaign : Nat) (values : List (Nat × _root_.Bool)) :
+    {state root campaign values with
+      unshieldedInputs := [], unshieldedOutputs := [], unshieldedSpendClaims := []} =
+      state root campaign values := rfl
+
+private theorem clear_settlement_recorded (root campaign nullifier : Nat)
+    (values : List (Nat × _root_.Bool)) :
+    {recorded root campaign nullifier values with
+      unshieldedInputs := [], unshieldedOutputs := [], unshieldedSpendClaims := []} =
+      recorded root campaign nullifier values := rfl
+
 /-- An accepted actual circuit, matching configured public parameters and an
 unspent key produce exactly the stated successor. No hash assumption is hidden
 here: circuit acceptance is an explicit premise. -/
@@ -217,7 +228,7 @@ theorem accepted_claim_transition (ctx : EvalContext) (env : EvalEnv)
     (hAbsent : (typedEntries values).lookup (.native nullifier) = none) :
     claimEntry.run ctx env (state root campaign values) =
       .ok ([("nullifier", .native nullifier)], recorded root campaign nullifier values) := by
-  simp only [Entrypoint.run, entry_disclosure_valid]
+  simp only [Entrypoint.run, entry_disclosure_valid, clear_settlement_state]
   dsimp only [Bind.bind, Except.bind, Except.pure]
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
@@ -237,7 +248,7 @@ theorem recorded_claim_rejects_replay (ctx : EvalContext) (env : EvalEnv)
     (hcNullifier : nullifier < ctx.modulus) :
     claimEntry.run ctx env (recorded root campaign nullifier values) =
       .error "state map key already present" := by
-  simp only [Entrypoint.run, entry_disclosure_valid]
+  simp only [Entrypoint.run, entry_disclosure_valid, clear_settlement_recorded]
   dsimp only [Bind.bind, Except.bind, Except.pure]
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
@@ -266,7 +277,7 @@ theorem wrong_root_claim_rejected (ctx : EvalContext) (env : EvalEnv)
     (hMismatch : storedRoot ≠ publicRoot) :
     claimEntry.run ctx env (state storedRoot campaign values) =
       .error "state transition guard failed" := by
-  simp only [Entrypoint.run, entry_disclosure_valid]
+  simp only [Entrypoint.run, entry_disclosure_valid, clear_settlement_state]
   dsimp only [Bind.bind, Except.bind, Except.pure]
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
@@ -299,7 +310,7 @@ theorem wrong_campaign_claim_rejected (ctx : EvalContext) (env : EvalEnv)
     (hcPublic : publicCampaign < ctx.modulus) (hMismatch : storedCampaign ≠ publicCampaign) :
     claimEntry.run ctx env (state root storedCampaign values) =
       .error "state transition guard failed" := by
-  simp only [Entrypoint.run, entry_disclosure_valid]
+  simp only [Entrypoint.run, entry_disclosure_valid, clear_settlement_state]
   dsimp only [Bind.bind, Except.bind, Except.pure]
   rw [hCircuit]
   dsimp only [Bind.bind, Except.bind]
