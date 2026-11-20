@@ -1577,7 +1577,8 @@
       "observedEvidence": [
         "tests/NativeTokenBalance.lean",
         "tests/compact/token-balance.mjs",
-        "runtime/tests/native_token_balance.rs"
+        "runtime/tests/native_token_balance.rs",
+        "docs/development/native-token-balance-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
@@ -1598,7 +1599,8 @@
       "observedEvidence": [
         "tests/NativeTokenBalance.lean",
         "tests/compact/token-balance.mjs",
-        "runtime/tests/native_token_balance.rs"
+        "runtime/tests/native_token_balance.rs",
+        "docs/development/native-token-balance-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
@@ -1619,7 +1621,8 @@
       "observedEvidence": [
         "tests/NativeTokenBalance.lean",
         "tests/compact/token-balance.mjs",
-        "runtime/tests/native_token_balance.rs"
+        "runtime/tests/native_token_balance.rs",
+        "docs/development/native-token-balance-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },

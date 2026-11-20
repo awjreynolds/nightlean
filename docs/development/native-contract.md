@@ -91,3 +91,8 @@ Use the exact read when the application needs the amount.
 The [Lean fixture](../../tests/NativeTokenBalance.lean) and
 [Compact reference fixture](../../tests/compact/TokenBalance.compact) use the
 same inputs and guards.
+
+The [localnet receipt](native-token-balance-localnet-receipt.json) records a
+finalized ordinary call for an absent unshielded token. The call wrote zero
+over the previous recorded value of 17. Shielded and nonzero cases use
+simulated starting balances with the pinned native checker.

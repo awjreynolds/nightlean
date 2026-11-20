@@ -1,12 +1,12 @@
 #![cfg(feature = "zkir-321")]
 
-use base_crypto::{fab::AlignedValue, hash::HashOutput};
+use base_crypto::hash::HashOutput;
 use coin_structure::{
     coin::{ShieldedTokenType, TokenType, UnshieldedTokenType},
     contract::ContractAddress,
 };
 use noctium_runtime::{Plan, check, create_state, prepare_with_context, zkir::IrSource};
-use onchain_runtime::{context::QueryContext, state::StateValue};
+use onchain_runtime::context::QueryContext;
 use serde_json::json;
 use std::{collections::BTreeMap, fs, path::PathBuf};
 
@@ -65,13 +65,11 @@ fn tagged_token_balance_reads_bind_to_the_selected_ledger_namespace() -> anyhow:
         assert_eq!(returns["exactAmount"], json!(expected.to_string()));
         assert_eq!(returns["belowLimit"], json!(below));
         assert_eq!(returns["aboveLimit"], json!(above));
-        let StateValue::Array(state) = execution.after.state.get_ref() else {
-            panic!("expected contract state array");
-        };
-        let StateValue::Cell(recorded) = state.get(0).unwrap() else {
-            panic!("expected recorded balance cell");
-        };
-        assert_eq!(**recorded, AlignedValue::from(expected));
+        let expected_state = create_state(
+            &plan,
+            &BTreeMap::from([("recorded".into(), json!(expected.to_string()))]),
+        )?;
+        assert_eq!(execution.after.state, expected_state);
     }
 
     let absent = execute(true, 20, true, true, None, Some(23))?;
