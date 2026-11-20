@@ -4721,6 +4721,8 @@ pub use artifacts::ContractBundleSet;
 /// Native private transaction artifact assembly.
 pub mod assembly;
 mod composition_wire;
+/// Bounded replies for an explicit browser transaction host.
+pub mod browser_transport;
 
 /// Scoped host providers and private journal transport.
 pub mod host;
@@ -4739,6 +4741,8 @@ pub use zkir_320 as zkir;
 #[cfg(all(feature = "zkir-321", not(feature = "zkir-320")))]
 pub use zkir_321 as zkir;
 pub mod aggregates;
+pub mod collection_ffi;
+pub mod merkle;
 pub mod native_ffi;
 pub mod profile;
 pub mod proof;

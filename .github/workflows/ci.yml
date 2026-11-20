@@ -34,6 +34,8 @@ jobs:
           use-github-cache: false
       - name: Build the POC compiler
         run: lake build noctium Noctium.Compiler Noctium.Foreign Noctium.Claim Noctium.Verification.RangeDedup
+      - name: Check the private claim source-proof report
+        run: python3 scripts/proofs/check-private-claim-audit.py --report
       - name: Check source contract examples
         run: |
           lake env lean examples/PrivateClaim.lean
@@ -73,6 +75,7 @@ jobs:
           lake env lean tests/IterationWitness.lean
           lake env lean tests/Helpers.lean
           lake env lean tests/Iteration.lean
+          lake env lean tests/EmptyTupleIteration.lean
           lake env lean tests/CompositeValues.lean
           lake env lean tests/ComponentDisclosure.lean
           lake env lean tests/GenericSpecialization.lean
@@ -103,6 +106,7 @@ jobs:
           lake env lean tests/NativeList.lean
           lake env lean tests/NativeReturns.lean
           lake env lean tests/TypedCallArguments.lean
+          lake env lean tests/ContractInterfaces.lean
           lake env lean tests/NativeCallClaims.lean
           lake env lean tests/NativeCopy.lean
           lake env lean tests/NativeOpaqueReturns.lean
@@ -114,5 +118,9 @@ jobs:
           lake env lean tests/Issue43EffectBlocks.lean
           lake env lean examples/openzeppelin/PublicSupply.lean
           lake env lean examples/openzeppelin/ConfidentialToken.lean
+      - name: Check source proof registration
+        run: |
+          lake build Noctium.Verification
+          lake env lean tests/Verification.lean
       - name: Check readable private state source and disclosure
         run: bash tests/private-authoring-cli.sh

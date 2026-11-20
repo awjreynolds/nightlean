@@ -637,7 +637,7 @@ theorem disclose_evaluation (ctx : EvalContext) (env : EvalEnv) (span : SourceSp
     (Expr.disclose span value).eval ctx env = value.eval ctx env := by
   simp [Expr.eval]
 
-private def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
+def evaluationCapabilities (ctx : EvalContext) : Capabilities :=
   {nativeModulus := ctx.modulus, typedBoolean := true, poseidon2 := true, persistentHash32 := true,
     persistentHashVector32 := true, persistentHashNative := true,
     sha512 := true, keccak256 := true,
@@ -855,7 +855,7 @@ private def tokenBalanceValue (ctx : EvalContext) (env : EvalEnv)
 /-- Execute ordered effects against a private tentative state and retain the
 ordered read environment for expressions evaluated after the effects. Returning
 an error never exposes that tentative state. -/
-private def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
+def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv)
     (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
   let mut env := env
   let mut next := state
@@ -1050,7 +1050,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
     (state : LedgerState) : Except String (EvalEnv × LedgerState) := do
   unless guards.isEmpty || guards.length == effects.length do
     throw "effect guard metadata length mismatch"
-  if guards.isEmpty then
+  if guards.all Option.isNone then
     runEffectsWithEnv ctx effects env state
   else do
     let mut env := env
