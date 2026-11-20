@@ -192,11 +192,15 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
       | some condition, .setInsert ..
       | some condition, .listLength .. | some condition, .listHead ..
       | some condition, .listPushFront .. | some condition, .listPopFront ..
+      | some condition, .readCaller ..
       | some condition, .listReset .. | some condition, .merkleTreeIsFull ..
       | some condition, .merkleTreeCheckRoot ..
       | some condition, .merkleTreeInsertHash ..
       | some condition, .merkleTreeInsertHashIndex ..
-      | some condition, .merkleTreeReset .. =>
+      | some condition, .merkleTreeReset .. | some condition, .merkleTreeResetHistory ..
+      | some condition, .merkleTreeIsFullAt .. | some condition, .merkleTreeCheckRootAt ..
+      | some condition, .merkleTreeInsertHashAt .. | some condition, .merkleTreeInsertHashIndexAt ..
+      | some condition, .merkleTreeResetAt .. | some condition, .merkleTreeResetHistoryAt .. =>
         expression env span condition
       | some condition, .require _ =>
         discard (expression env span condition)
@@ -270,6 +274,9 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
     | .requireContractCaller address =>
       checkSink {description := "required contract caller", span}
         (← expression env span address) activeControl
+    | .readCaller destinations =>
+      checkSink {description := "public caller read guard", span} [] activeControl
+      env := env ++ destinations.types.map (fun (name, _) => (name, []))
     | .readTokenBalance destination color isUnshielded query =>
       let sink := {description := "public token balance read", span}
       checkSink sink (← expression env span color) activeControl
@@ -361,9 +368,41 @@ def entrypoint (value : Entrypoint) (control : Origins := []) : Except Diagnosti
         (← expression env span hash) activeControl
       checkSink {description := s!"public MerkleTree index '{state}'", span}
         (← expression env span index) activeControl
-    | .merkleTreeReset state =>
+    | .merkleTreeReset state | .merkleTreeResetHistory state =>
       checkSink {description := s!"public MerkleTree mutation guard '{state}'", span}
         [] activeControl
+    | .merkleTreeIsFullAt state keys destination =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public nested MerkleTree fullness guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public nested MerkleTree path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      env := env ++ [(destination, [])]
+    | .merkleTreeCheckRootAt state keys expected destination =>
+      if value.effectGuardAt index |>.isSome then
+        checkSink {description := s!"public nested MerkleTree root-check guard '{state}'", span} [] activeControl
+      checkSink {description := s!"public nested MerkleTree path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      checkSink {description := s!"public nested MerkleTree root comparison '{state}'", span}
+        (← expression env span expected) activeControl
+      env := env ++ [(destination, [])]
+    | .merkleTreeInsertHashAt state keys hash =>
+      checkSink {description := s!"public nested MerkleTree path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      checkSink {description := s!"public nested MerkleTree inserted hash '{state}'", span}
+        (← expression env span hash) activeControl
+    | .merkleTreeInsertHashIndexAt state keys hash index =>
+      checkSink {description := s!"public nested MerkleTree path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+      checkSink {description := s!"public nested MerkleTree indexed hash '{state}'", span}
+        (← expression env span hash) activeControl
+      checkSink {description := s!"public nested MerkleTree index '{state}'", span}
+        (← expression env span index) activeControl
+    | .merkleTreeResetAt state keys _ _ =>
+      checkSink {description := s!"public nested MerkleTree reset path '{state}'", span}
+        (← pathExpression env span keys) activeControl
+    | .merkleTreeResetHistoryAt state keys =>
+      checkSink {description := s!"public nested HistoricMerkleTree history reset path '{state}'", span}
+        (← pathExpression env span keys) activeControl
     | .insertPath state keys _ payload | .writePath state keys _ payload =>
       checkSink {description := s!"public nested map write path '{state}'", span}
         (← pathExpression env span keys) activeControl

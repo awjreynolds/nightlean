@@ -171,3 +171,78 @@ The native client finalized deployment at height 5 and an indexed Field write
 at height 8 on Ledger 9 localnet. It matched the predicted state bytes for both
 receipts. The indexed Field relation used k=13 and 2176 rows.
 [Localnet receipt](indexed-ordinary-merkle-localnet-receipt.json)
+
+## Retain and clear Merkle root history
+
+Declare `historicMerkleTree claims : 2` in a contract to retain historical
+roots. Use the regular Merkle append and indexed write syntax. Choose
+`insertHash` for a prehashed Bytes32 leaf or `insertField` for a Field.
+Each write records the resulting root. `checkRoot` tests membership in the
+retained history, including a root recorded earlier in the same call.
+
+```lean
+insertField claims := disclose(leaf)
+checkRoot claims against disclose(expectedRoot) as knownRoot
+resetHistory claims
+```
+
+`resetHistory` keeps the current root and cursor. The full `reset` restores
+the empty tree, cursor zero and the empty root in history. For a root-level
+Field tree, writing an explicit zero at an index matches the Field default
+operation in Compact. [Midnight ledger data types](https://docs.midnight.network/compact/reference/ledger-adt#historicmerkletreenat-value_type)
+
+The [Lean fixture](../../tests/HistoricMerkle.lean) and
+[Compact oracle](../../tests/compact/historic-merkle.mjs) cover the two
+resets, membership across writes, sparse insertion, and replacement at
+capacity. The native checker validates the generated relation and rejects a
+changed membership result.
+
+```sh
+lake build noctium Noctium:shared
+mkdir -p build/experiments
+scratch=$(mktemp -d "$PWD/build/experiments/historic-merkle.XXXXXX")
+trap 'rm -rf -- "$scratch"' EXIT
+.lake/build/bin/noctium compile tests/HistoricMerkle.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output "$scratch/contract"
+NOCTIUM_NATIVE_TEST_ARTIFACTS="$scratch/contract" \
+  cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+    --no-default-features --features zkir-321 --test merkle_history -- --ignored
+```
+
+On Ledger 9 localnet, deployment finalized at height 4. The combined
+append and past-root membership call finalized at height 7. Both
+receipts matched the predicted state bytes. The combined relation used
+k=8 and 245 rows. [Localnet receipt](historic-merkle-localnet-receipt.json)
+
+## Store Merkle trees inside a map
+
+A typed map path selects an ordinary or historic tree. Create the parent maps
+before resetting the final tree slot. A reset creates the empty tree at the
+final key. Reads and writes require the tree to exist.
+
+```lean
+tree archives : Bytes32 => Native => HistoricMerkleTree 2
+```
+
+```lean
+reset archives[disclose(owner)][disclose(bucket)]
+insertField archives[disclose(owner)][disclose(bucket)] := disclose(leaf)
+checkRoot archives[disclose(owner)][disclose(bucket)] against disclose(digest) as knownRoot
+```
+
+Declare the release for each private path key, leaf or root used by the
+operation. The same call sees its earlier map initialization and writes.
+Resetting one tree preserves both adjacent buckets and trees under another
+owner.
+
+The [Lean fixture](../../tests/NestedMerkle.lean) and
+[Compact oracle](../../tests/compact/nested-merkle.mjs) check initialization,
+sparse insertion, replacement at capacity, root membership and both resets.
+The native fixture checks exact roots, cursors and retained history. It also
+checks a missing parent, an invalid index and a tampered read result.
+
+The Ledger 9 localnet finalized deployment at height 4 and the combined
+setup and append of both trees at height 7. Both receipts matched the
+predicted state bytes. The relation used k=13 and 2651 rows.
+[Localnet receipt](nested-merkle-localnet-receipt.json)

@@ -50,50 +50,69 @@ const snapshot = ([address, bucket]) => {
 const a = [owner(7), 1n];
 const sibling = [owner(7), 2n];
 const other = [owner(8), 1n];
+const emptyProbe = [owner(9), 9n];
 await assert.rejects(async () => invoke('readTrees', ...a, {field: 0n}));
 await assert.rejects(async () => invoke('resetTrees', ...a));
-for (const path of [a, sibling, other]) await apply('setup', ...path);
-assert.equal(ledger(state).archives.lookup(a[0]).lookup(a[1]).findPathForLeaf(1n), undefined);
-await apply('append', ...a, owner(1), 1n);
+await apply('setup', ...emptyProbe);
+assert.equal(ledger(state).archives.lookup(emptyProbe[0]).lookup(emptyProbe[1]).findPathForLeaf(1n), undefined);
+
+await apply('setupAndAppend', ...a, owner(1), 1n);
+const afterAppend = snapshot(a);
+for (const path of [sibling, other]) await apply('setup', ...path);
+assert.deepEqual(snapshot(a), afterAppend);
 await apply('append', ...sibling, owner(2), 256n);
 await apply('append', ...other, owner(4), 257n);
-const afterAppend = snapshot(a);
 const siblings = [snapshot(sibling), snapshot(other)];
-const archivesPath = ledger(state).archives.lookup(a[0]).lookup(a[1]).findPathForLeaf(1n);
+
+const archivesTree = () => ledger(state).archives.lookup(a[0]).lookup(a[1]);
+const archivesPath = archivesTree().findPathForLeaf(1n);
 assert.ok(archivesPath);
-assert.deepEqual(archivesPath, ledger(state).archives.lookup(a[0]).lookup(a[1]).pathForLeaf(0n, 1n));
+assert.deepEqual(archivesPath, archivesTree().pathForLeaf(0n, 1n));
 assert.equal(await pathDigest(archivesPath), BigInt(afterAppend.archives.root));
-assert.equal(ledger(state).archives.lookup(a[0]).lookup(a[1]).findPathForLeaf(999n), undefined);
-const wrongArchivesPath = ledger(state).archives.lookup(a[0]).lookup(a[1]).pathForLeaf(0n, 999n);
+assert.equal(archivesTree().findPathForLeaf(999n), undefined);
+const wrongArchivesPath = archivesTree().pathForLeaf(0n, 999n);
 const wrongArchivesRoot = await pathDigest(wrongArchivesPath);
 assert.notEqual(wrongArchivesRoot, BigInt(afterAppend.archives.root));
-await apply('setIndex', ...a, owner(3), 0n);
+
+await apply('setIndex', ...a, owner(3), 0n, 3n);
 const afterIndexed = snapshot(a);
 assert.deepEqual([afterIndexed.ordinary.firstFree, afterIndexed.archives.firstFree], ['3', '4']);
 await check(a, BigInt(afterAppend.archives.root), [false, true, false, true]);
 await check(a, BigInt(afterIndexed.ordinary.root), [true, false, false, true]);
-const ordinaryPath = ledger(state).ordinary.lookup(a[0]).lookup(a[1]).findPathForLeaf(0n);
+await assert.rejects(async () => invoke('setIndex', ...a, owner(4), 1n, 4n));
+assert.deepEqual(snapshot(a), afterIndexed);
+
+const ordinaryTree = () => ledger(state).ordinary.lookup(a[0]).lookup(a[1]);
+const ordinaryPath = ordinaryTree().findPathForLeaf(0n);
 assert.ok(ordinaryPath);
-assert.deepEqual(ordinaryPath, ledger(state).ordinary.lookup(a[0]).lookup(a[1]).pathForLeaf(2n, 0n));
+assert.deepEqual(ordinaryPath, ordinaryTree().pathForLeaf(2n, 0n));
 assert.equal(await pathDigest(ordinaryPath), BigInt(afterIndexed.ordinary.root));
-assert.equal(ledger(state).ordinary.lookup(a[0]).lookup(a[1]).findPathForLeaf(999n), undefined);
-const wrongOrdinaryPath = ledger(state).ordinary.lookup(a[0]).lookup(a[1]).pathForLeaf(2n, 999n);
+assert.equal(ordinaryTree().findPathForLeaf(999n), undefined);
+const wrongOrdinaryPath = ordinaryTree().pathForLeaf(2n, 999n);
 const wrongOrdinaryRoot = await pathDigest(wrongOrdinaryPath);
 assert.notEqual(wrongOrdinaryRoot, BigInt(afterIndexed.ordinary.root));
-const archiveAtIndex = ledger(state).archives.lookup(a[0]).lookup(a[1]).pathForLeaf(0n, 999n);
+const archiveAtIndex = archivesTree().pathForLeaf(0n, 999n);
 const archiveCandidateRoot = await pathDigest(archiveAtIndex);
-const ordinaryAtCursor = ledger(state).ordinary.lookup(a[0]).lookup(a[1]).pathForLeaf(3n, 777n);
+const ordinaryAtCursor = ordinaryTree().pathForLeaf(3n, 777n);
 const indexedCursorRoot = await pathDigest(ordinaryAtCursor);
+
+await apply('setIndex', ...a, owner(5), 256n, 3n);
+const afterReplacement = snapshot(a);
+assert.deepEqual([afterReplacement.ordinary.firstFree, afterReplacement.archives.firstFree], ['3', '4']);
+assert.notEqual(afterReplacement.archives.root, afterIndexed.archives.root);
+await check(a, BigInt(afterIndexed.archives.root), [false, true, false, true]);
+
 await apply('clear', ...a);
 const afterClear = snapshot(a);
-assert.deepEqual(afterClear.ordinary, afterIndexed.ordinary);
-assert.equal(afterClear.archives.root, afterIndexed.archives.root);
-assert.equal(afterClear.archives.firstFree, afterIndexed.archives.firstFree);
-assert.deepEqual(afterClear.archives.history, [afterIndexed.archives.root]);
+assert.deepEqual(afterClear.ordinary, afterReplacement.ordinary);
+assert.equal(afterClear.archives.root, afterReplacement.archives.root);
+assert.equal(afterClear.archives.firstFree, afterReplacement.archives.firstFree);
+assert.deepEqual(afterClear.archives.history, [afterReplacement.archives.root]);
 await check(a, BigInt(afterAppend.archives.root), [false, false, false, true]);
-await check(a, BigInt(afterIndexed.archives.root), [false, true, false, true]);
+await check(a, BigInt(afterReplacement.archives.root), [false, true, false, true]);
 assert.deepEqual([snapshot(sibling), snapshot(other)], siblings);
 await check(sibling, 0n, [false, true, false, false]);
+
 await apply('resetTrees', ...a);
 const afterReset = snapshot(a);
 assert.deepEqual(afterReset.ordinary, {
@@ -105,15 +124,15 @@ assert.deepEqual(afterReset.archives, {
 await check(a, 0n, [true, true, false, false]);
 assert.deepEqual([snapshot(sibling), snapshot(other)], siblings);
 
-const ordinary = () => ledger(state).ordinary.lookup(a[0]).lookup(a[1]);
-assert.throws(() => ordinary().pathForLeaf(0n, 777n));
-await apply('setIndex', ...a, owner(3), 0n);
-assert.equal(ordinary().firstFree(), 3n);
-assert.throws(() => ordinary().pathForLeaf(1n, 777n));
-assert.equal(ordinary().pathForLeaf(2n, 777n).leaf, 777n);
-const atCursor = ordinary().pathForLeaf(3n, 777n);
+const resetOrdinary = () => ledger(state).ordinary.lookup(a[0]).lookup(a[1]);
+assert.throws(() => resetOrdinary().pathForLeaf(0n, 777n));
+await apply('setIndex', ...a, owner(3), 0n, 3n);
+assert.equal(resetOrdinary().firstFree(), 3n);
+assert.throws(() => resetOrdinary().pathForLeaf(1n, 777n));
+assert.equal(resetOrdinary().pathForLeaf(2n, 777n).leaf, 777n);
+const atCursor = resetOrdinary().pathForLeaf(3n, 777n);
 assert.equal(atCursor.leaf, 777n);
-assert.throws(() => ordinary().pathForLeaf(4n, 777n));
+assert.throws(() => resetOrdinary().pathForLeaf(4n, 777n));
 const paths = {
   wrongArchives: {root: wrongArchivesRoot.toString(), path: pathSnapshot(wrongArchivesPath)},
   wrongOrdinary: {root: wrongOrdinaryRoot.toString(), path: pathSnapshot(wrongOrdinaryPath)},
@@ -121,4 +140,4 @@ const paths = {
   cursorAfterIndex: {root: indexedCursorRoot.toString(), path: pathSnapshot(ordinaryAtCursor)},
   atCursor: {root: (await pathDigest(atCursor)).toString(), path: pathSnapshot(atCursor)},
 };
-console.log(JSON.stringify({afterAppend, afterIndexed, afterClear, afterReset, siblings, paths}));
+console.log(JSON.stringify({afterAppend, afterIndexed, afterReplacement, afterClear, afterReset, siblings, paths}));

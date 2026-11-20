@@ -29,7 +29,7 @@ use std::{
     borrow::Cow,
     collections::{BTreeMap, BTreeSet},
 };
-use storage::{arena::Sp, db::InMemoryDB};
+use storage::{arena::Sp, db::InMemoryDB, storage::HashMap};
 use transient_crypto::{
     curve::{EmbeddedFr, EmbeddedGroupAffine, Fr},
     fab::{AlignedValueExt, AlignmentExt, ValueReprAlignedValue},
@@ -1109,12 +1109,16 @@ pub enum Instruction {
     #[serde(rename = "merkleTreeIsFull")]
     MerkleTreeIsFull {
         slot: u32,
+        #[serde(default)]
+        keys: Vec<PathPart>,
         depth: u8,
         destination: String,
     },
     #[serde(rename = "merkleTreeCheckRoot")]
     MerkleTreeCheckRoot {
         slot: u32,
+        #[serde(default)]
+        keys: Vec<PathPart>,
         depth: u8,
         expected: Expr,
         destination: String,
@@ -1122,12 +1126,16 @@ pub enum Instruction {
     #[serde(rename = "merkleTreeInsertHash")]
     MerkleTreeInsertHash {
         slot: u32,
+        #[serde(default)]
+        keys: Vec<PathPart>,
         depth: u8,
         hash: Expr,
     },
     #[serde(rename = "merkleTreeInsertHashIndex")]
     MerkleTreeInsertHashIndex {
         slot: u32,
+        #[serde(default)]
+        keys: Vec<PathPart>,
         depth: u8,
         hash: Expr,
         index: Expr,
@@ -1135,6 +1143,15 @@ pub enum Instruction {
     #[serde(rename = "merkleTreeReset")]
     MerkleTreeReset {
         slot: u32,
+        #[serde(default)]
+        keys: Vec<PathPart>,
+        depth: u8,
+    },
+    #[serde(rename = "merkleTreeResetHistory")]
+    MerkleTreeResetHistory {
+        slot: u32,
+        #[serde(default)]
+        keys: Vec<PathPart>,
         depth: u8,
     },
     #[serde(rename = "listHead")]
@@ -1215,6 +1232,12 @@ pub enum Instruction {
     RequireContractCaller {
         address: Expr,
     },
+    #[serde(rename = "readCaller", rename_all = "camelCase")]
+    ReadCaller {
+        present: String,
+        is_contract: String,
+        contract_address: String,
+        user_address: String,
     #[serde(rename = "readContractAddress")]
     ReadContractAddress {
         destination: String,
@@ -1294,25 +1317,64 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             vec![1, path_field_count(plan, *slot, keys)?, 1, 5, 1, 4]
         }
 
-        Instruction::MerkleTreeIsFull { slot, depth, .. } => {
-            ensure_merkle_tree_depth(plan, *slot, *depth)?;
-            vec![1, 4, 4, 5, 1, 1, 4]
+        Instruction::MerkleTreeIsFull {
+            slot, keys, depth, ..
+        } => {
+            ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+            vec![1, path_field_count(plan, *slot, keys)?, 4, 5, 1, 1, 4]
         }
-        Instruction::MerkleTreeCheckRoot { slot, depth, .. } => {
-            ensure_merkle_tree_depth(plan, *slot, *depth)?;
-            vec![1, 4, 4, 1, 5, 1, 4]
+        Instruction::MerkleTreeCheckRoot {
+            slot, keys, depth, ..
+        } => {
+            let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+            let path = path_field_count(plan, *slot, keys)?;
+            if historic {
+                vec![1, path, 4, 5, 1, 4]
+            } else {
+                vec![1, path, 4, 1, 5, 1, 4]
+            }
         }
-        Instruction::MerkleTreeInsertHash { slot, depth, .. } => {
-            ensure_merkle_tree_depth(plan, *slot, *depth)?;
-            vec![4, 4, 1, 4, 6, 1, 1, 4, 2, 1]
+        Instruction::MerkleTreeInsertHash {
+            slot, keys, depth, ..
+        } => {
+            let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+            let path = path_field_count(plan, *slot, keys)?;
+            let mut groups = vec![path, 4, 1, 4, 6, 1, 1, 4, 2, 1];
+            if historic {
+                groups.extend([4, 1, 4, 1, 2, 1, 1]);
+            }
+            groups
         }
-        Instruction::MerkleTreeInsertHashIndex { slot, depth, .. } => {
-            ensure_merkle_tree_depth(plan, *slot, *depth)?;
-            vec![4, 4, 5, 6, 1, 4, 5, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1, 1]
+        Instruction::MerkleTreeInsertHashIndex {
+            slot, keys, depth, ..
+        } => {
+            let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+            let path = path_field_count(plan, *slot, keys)?;
+            let mut groups = vec![path, 4, 5, 6, 1, 4, 5, 2, 1, 1, 1, 2, 1, 2, 1, 1, 1];
+            if historic {
+                groups.extend([4, 1, 4, 1, 2, 1]);
+            }
+            groups.push(1);
+            groups
         }
-        Instruction::MerkleTreeReset { slot, depth } => {
-            ensure_merkle_tree_depth(plan, *slot, *depth)?;
-            vec![5, 1 + merkle_tree_default_state(*depth).field_size(), 1]
+        Instruction::MerkleTreeReset { slot, keys, depth } => {
+            let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+            let default_fields = 1 + merkle_tree_default_state(*depth, historic).field_size();
+            if let Some((_, parents)) = keys.split_last() {
+                let full = path_field_count(plan, *slot, keys)?;
+                let parent = path_field_count(plan, *slot, parents)?;
+                // The final key is a Push, with two more header fields than a path key.
+                vec![parent, full - parent + 2, default_fields, 1]
+            } else {
+                vec![5, default_fields, 1]
+            }
+        }
+        Instruction::MerkleTreeResetHistory { slot, keys, depth } => {
+            ensure!(
+                ensure_merkle_tree_depth(plan, *slot, keys, *depth)?,
+                "resetHistory requires a historic MerkleTree"
+            );
+            vec![path_field_count(plan, *slot, keys)?, 5, 2, 1, 4, 1, 2, 1]
         }
         Instruction::ListHead {
             slot,
@@ -1368,6 +1430,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::ClaimUnshieldedCoinSpend { .. } => token_accumulation_fields(19).to_vec(),
         Instruction::RequireContractCaller { .. } => vec![1, 4, 10],
+        Instruction::ReadCaller { .. } => vec![1, 4, 1, 1, 5, 1, 2, 5, 1, 2, 2, 1, 13, 12],
         Instruction::ReadContractAddress { .. } => vec![1, 4, 5],
         Instruction::ReadTokenBalance { comparison, .. } => {
             let mut counts = vec![1, 4, 1, 11, 1, 2, 1, 5, 2, 10];
@@ -1412,6 +1475,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
         Instruction::RequireContractCaller { .. } => 15,
+        Instruction::ReadCaller { .. } => impact_field_counts(instruction, plan)?.into_iter().sum(),
         Instruction::ReadContractAddress { .. } => 10,
         Instruction::ReadTokenBalance { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
@@ -1434,6 +1498,7 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         | Instruction::MerkleTreeInsertHash { .. }
         | Instruction::MerkleTreeInsertHashIndex { .. }
         | Instruction::MerkleTreeReset { .. }
+        | Instruction::MerkleTreeResetHistory { .. }
         | Instruction::ListHead { .. }
         | Instruction::ListPushFront { .. }
         | Instruction::ListPopFront { .. }
@@ -1581,6 +1646,14 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
     let fields = schema
         .as_object()
         .ok_or_else(|| anyhow!("invalid state tree schema"))?;
+    if fields.contains_key("merkleTree") {
+        ensure!(
+            (1..=12).contains(&depth),
+            "invalid nested MerkleTree path depth"
+        );
+        checked_merkle_tree_schema(schema)?;
+        return Ok(());
+    }
     ensure!(fields.len() == 1, "invalid state tree schema");
     if fields.get("counter") == Some(&Json::Bool(true)) {
         return Ok(());
@@ -2292,12 +2365,12 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
             .get(&d.name)
             .ok_or_else(|| anyhow!("missing initial state cell"))?;
         if d.kind.get("merkleTree").is_some() {
-            let depth = checked_merkle_tree_schema(&d.kind)?;
+            let (depth, historic) = checked_merkle_tree_schema(&d.kind)?;
             ensure!(
                 value.as_array().is_some_and(Vec::is_empty),
                 "initial MerkleTree must be explicitly empty"
             );
-            values.push(merkle_tree_default_state(depth));
+            values.push(merkle_tree_default_state(depth, historic));
         } else if d.kind.get("opaqueString") == Some(&Json::Bool(true)) {
             values.push(StateValue::Cell(Sp::new(constructor::opaque_string(
                 value,
@@ -2372,11 +2445,15 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
     )))
 }
 
-fn checked_merkle_tree_schema(schema: &Json) -> Result<u8> {
+fn checked_merkle_tree_schema(schema: &Json) -> Result<(u8, bool)> {
     let fields = schema
         .as_object()
         .ok_or_else(|| anyhow!("invalid MerkleTree schema"))?;
-    ensure!(fields.len() == 1, "invalid MerkleTree schema");
+    let historic = match fields.get("historic") {
+        None if fields.len() == 1 => false,
+        Some(Json::Bool(historic)) if fields.len() == 2 => *historic,
+        _ => bail!("invalid MerkleTree schema"),
+    };
     let depth = fields
         .get("merkleTree")
         .and_then(Json::as_u64)
@@ -2385,37 +2462,57 @@ fn checked_merkle_tree_schema(schema: &Json) -> Result<u8> {
         (2..=32).contains(&depth),
         "MerkleTree depth must be between 2 and 32"
     );
-    Ok(depth.try_into()?)
+    Ok((depth.try_into()?, historic))
 }
 
-fn ensure_merkle_tree_depth(plan: &Plan, slot: u32, depth: u8) -> Result<()> {
-    let schema = &plan
-        .state
-        .get(slot as usize)
-        .ok_or_else(|| anyhow!("state slot out of range"))?
-        .kind;
+fn ensure_merkle_tree_depth(plan: &Plan, slot: u32, keys: &[PathPart], depth: u8) -> Result<bool> {
+    ensure!(keys.len() <= 12, "MerkleTree path exceeds 12 keys");
+    let schema = if keys.is_empty() {
+        &plan
+            .state
+            .get(slot as usize)
+            .ok_or_else(|| anyhow!("state slot out of range"))?
+            .kind
+    } else {
+        tree_schema_at_path(plan, slot, keys.len())?
+    };
+    let (declared_depth, historic) = checked_merkle_tree_schema(schema)?;
     ensure!(
-        checked_merkle_tree_schema(schema)? == depth,
+        declared_depth == depth,
         "MerkleTree operation depth differs from state schema"
     );
-    Ok(())
+    Ok(historic)
 }
 
-fn merkle_tree_default_state(depth: u8) -> StateValue<Db> {
-    StateValue::Array(
-        vec![
-            StateValue::BoundedMerkleTree(MerkleTree::<(), Db>::blank(depth)),
-            StateValue::Cell(Sp::new(0u64.into())),
-        ]
-        .into(),
-    )
+fn merkle_tree_default_state(depth: u8, historic: bool) -> StateValue<Db> {
+    let mut values = vec![
+        StateValue::BoundedMerkleTree(MerkleTree::<(), Db>::blank(depth)),
+        StateValue::Cell(Sp::new(0u64.into())),
+    ];
+    if historic {
+        values.push(StateValue::Map(
+            [(field_value(Fr::from(0u64)), StateValue::Null)]
+                .into_iter()
+                .collect(),
+        ));
+    }
+    StateValue::Array(values.into())
 }
 
-fn merkle_tree_parts(state: &StateValue<Db>, depth: u8) -> Result<(&MerkleTree<(), Db>, u64)> {
+type HistoricRoots = HashMap<AlignedValue, StateValue<Db>, Db>;
+
+fn merkle_tree_parts(
+    state: &StateValue<Db>,
+    depth: u8,
+    historic: bool,
+) -> Result<(&MerkleTree<(), Db>, u64, Option<&HistoricRoots>)> {
     let StateValue::Array(node) = state else {
         bail!("MerkleTree state must be an array");
     };
-    ensure!(node.len() == 2, "MerkleTree state has an invalid shape");
+    ensure!(
+        node.len() == 2 + usize::from(historic),
+        "MerkleTree state has an invalid shape"
+    );
     let Some(StateValue::BoundedMerkleTree(tree)) = node.get(0) else {
         bail!("MerkleTree state is missing its bounded tree");
     };
@@ -2436,12 +2533,25 @@ fn merkle_tree_parts(state: &StateValue<Db>, depth: u8) -> Result<(&MerkleTree<(
         count <= 1u64 << depth,
         "MerkleTree count exceeds its capacity"
     );
-    Ok((tree, count))
-}
-
-fn merkle_tree_count(state: &StateValue<Db>, depth: u8) -> Result<u64> {
-    let (_, count) = merkle_tree_parts(state, depth)?;
-    Ok(count)
+    let history = if historic {
+        let Some(StateValue::Map(history)) = node.get(2) else {
+            bail!("historic MerkleTree state is missing its root map");
+        };
+        let current = tree
+            .root()
+            .context("MerkleTree state has an unrehashed root")?
+            .0;
+        ensure!(
+            history
+                .get(&field_value(current))
+                .is_some_and(|entry| matches!(*entry, StateValue::Null)),
+            "historic MerkleTree root map is missing its current root"
+        );
+        Some(history)
+    } else {
+        None
+    };
+    Ok((tree, count, history))
 }
 
 fn read_state_value(
@@ -2691,15 +2801,19 @@ fn merkle_tree_index(index: u8, push_path: bool) -> Op<ResultModeVerify, Db> {
     }
 }
 
-fn merkle_tree_root_index(slot: u32, push_path: bool) -> Result<Op<ResultModeVerify, Db>> {
-    let key = field_value(Fr::from(slot as u64))
-        .try_into()
-        .map_err(|_| anyhow!("invalid native index key"))?;
-    Ok(Op::Idx {
-        cached: false,
-        push_path,
-        path: vec![Key::Value(key)].try_into()?,
-    })
+fn append_historic_merkle_root(program: &mut Program) -> Result<()> {
+    program.extend([
+        merkle_tree_index(2, true),
+        Op::Dup { n: 2 },
+        merkle_tree_index(0, false),
+        Op::Root,
+        push_native_state(StateValue::Null, true)?,
+        Op::Ins {
+            cached: false,
+            n: 1,
+        },
+    ]);
+    Ok(())
 }
 
 fn push_native_state(value: StateValue<Db>, storage: bool) -> Result<Op<ResultModeVerify, Db>> {
@@ -3154,15 +3268,32 @@ fn probe_instruction(
         Instruction::MapSize { keys, .. } | Instruction::MapIsEmpty { keys, .. } => {
             probe_paths(keys, plan, env, deferred_outputs)
         }
-        Instruction::MerkleTreeInsertHash { hash, .. } => {
-            probe_expression(hash, plan, env, deferred_outputs)
+        Instruction::MerkleTreeIsFull { keys, .. }
+        | Instruction::MerkleTreeReset { keys, .. }
+        | Instruction::MerkleTreeResetHistory { keys, .. } => {
+            probe_paths(keys, plan, env, deferred_outputs)
         }
-        Instruction::MerkleTreeInsertHashIndex { hash, index, .. } => {
-            probe_expressions([hash, index], plan, env, deferred_outputs)
-        }
-        Instruction::MerkleTreeCheckRoot { expected, .. } => {
-            probe_expression(expected, plan, env, deferred_outputs)
-        }
+        Instruction::MerkleTreeInsertHash { keys, hash, .. }
+        | Instruction::MerkleTreeCheckRoot {
+            keys,
+            expected: hash,
+            ..
+        } => probe_expressions(
+            keys.iter().map(|part| &part.expression).chain([hash]),
+            plan,
+            env,
+            deferred_outputs,
+        ),
+        Instruction::MerkleTreeInsertHashIndex {
+            keys, hash, index, ..
+        } => probe_expressions(
+            keys.iter()
+                .map(|part| &part.expression)
+                .chain([hash, index]),
+            plan,
+            env,
+            deferred_outputs,
+        ),
         Instruction::ListPushFront {
             keys, expressions, ..
         } => {
@@ -3217,6 +3348,7 @@ fn probe_instruction(
         Instruction::RequireContractCaller { address } => {
             probe_expression(address, plan, env, deferred_outputs)
         }
+        Instruction::ReadCaller { .. } => Ok(None),
         Instruction::ReadContractAddress { .. } => Ok(None),
         Instruction::ReadTokenBalance {
             color,
@@ -3242,8 +3374,6 @@ fn probe_instruction(
         | Instruction::New
         | Instruction::Member
         | Instruction::Insert { .. }
-        | Instruction::MerkleTreeIsFull { .. }
-        | Instruction::MerkleTreeReset { .. }
         | Instruction::AddImmediate { .. }
         | Instruction::SubImmediate { .. } => Ok(None),
     }
@@ -3272,6 +3402,96 @@ fn consume_contract_caller_reads(
     }
     *index += 5;
     Ok(())
+}
+
+fn bind_caller_reads(
+    plan: &Plan,
+    index: &mut usize,
+    guard: Option<&Expr>,
+    destinations: [&str; 4],
+    active: bool,
+    caller: Option<PublicAddress>,
+    env: &mut Environment,
+) -> Result<PreparationRead> {
+    let zero = [0; 32];
+    let (contract, user) = match caller {
+        Some(PublicAddress::Contract(address)) => (address.0.0, zero),
+        Some(PublicAddress::User(address)) => (zero, address.0.0),
+        None => (zero, zero),
+    };
+    let returned = [
+        Value::Bool(caller.is_some()),
+        Value::Bool(matches!(caller, Some(PublicAddress::Contract(_)))),
+        Value::Bytes(contract.to_vec()),
+        Value::Bytes(user.to_vec()),
+    ];
+    let mut values = BTreeMap::new();
+    for (destination, value) in destinations.into_iter().zip(returned) {
+        let read = plan
+            .reads
+            .get(*index)
+            .ok_or_else(|| anyhow!("missing caller read"))?;
+        ensure!(
+            read.name == destination
+                && ScalarType::parse(&read.ty)? == value.scalar_type()
+                && read.guard.as_ref() == guard
+                && !env.contains_key(destination),
+            "caller read schema mismatch"
+        );
+        if matches!(value, Value::Bytes(_)) {
+            validate_byte_read_projections(read, &ScalarType::Bytes32)?;
+        } else {
+            ensure!(
+                read.schema.is_none() && read.components.is_empty() && read.projections.is_none(),
+                "caller flag has unexpected read projections"
+            );
+        }
+        env.insert(destination.to_owned(), value.clone());
+        values.insert(destination.to_owned(), value);
+        *index += 1;
+    }
+    Ok(PreparationRead {
+        name: destinations[0].to_owned(),
+        active,
+        values,
+    })
+}
+
+fn append_caller_read(
+    program: &mut Program,
+    caller: Option<PublicAddress>,
+) -> Result<Op<ResultModeVerify, Db>> {
+    let absent = AlignedValue::concat([
+        &false.into(),
+        &PublicAddress::User(UserAddress(HashOutput([0; 32]))).into(),
+    ]);
+    let result = match caller {
+        Some(address) => AlignedValue::concat([&true.into(), &address.into()]),
+        None => absent.clone(),
+    };
+    let push_one = push_native_state(StateValue::Cell(Sp::new(1u8.into())), false)?;
+    program.extend([
+        Op::Dup { n: 2 },
+        list_index(6),
+        Op::Dup { n: 0 },
+        Op::Type,
+        push_one.clone(),
+        Op::Eq,
+        Op::Branch { skip: 4 },
+        push_one,
+        Op::Swap { n: 0 },
+        Op::Concat {
+            cached: false,
+            n: 66,
+        },
+        Op::Jmp { skip: 2 },
+        Op::Pop,
+        push_native_state(StateValue::Cell(Sp::new(absent)), false)?,
+    ]);
+    Ok(Op::Popeq {
+        cached: false,
+        result,
+    })
 }
 
 fn bind_contract_address(
@@ -3466,6 +3686,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::MerkleTreeInsertHash { .. }
                 | Instruction::MerkleTreeInsertHashIndex { .. }
                 | Instruction::MerkleTreeReset { .. }
+                | Instruction::MerkleTreeResetHistory { .. }
                 | Instruction::ClaimContractCall { .. }
                 | Instruction::MintShielded { .. }
                 | Instruction::MintUnshielded { .. }
@@ -3473,6 +3694,7 @@ fn validate_guarded_shape(operation: &Instruction) -> Result<()> {
                 | Instruction::IncUnshieldedInputs { .. }
                 | Instruction::ClaimUnshieldedCoinSpend { .. }
                 | Instruction::RequireContractCaller { .. }
+                | Instruction::ReadCaller { .. }
                 | Instruction::ReadContractAddress { .. }
                 | Instruction::ReadTokenBalance { .. }
                 | Instruction::EmitEvent { .. }
@@ -3790,6 +4012,7 @@ impl PreparationCursor {
                             | Instruction::MerkleTreeInsertHash { .. }
                             | Instruction::MerkleTreeInsertHashIndex { .. }
                             | Instruction::MerkleTreeReset { .. }
+                            | Instruction::MerkleTreeResetHistory { .. }
                             | Instruction::ClaimContractCall { .. }
                             | Instruction::MintShielded { .. }
                             | Instruction::MintUnshielded { .. }
@@ -3797,6 +4020,7 @@ impl PreparationCursor {
                             | Instruction::IncUnshieldedInputs { .. }
                             | Instruction::ClaimUnshieldedCoinSpend { .. }
                             | Instruction::RequireContractCaller { .. }
+                            | Instruction::ReadCaller { .. }
                             | Instruction::ReadContractAddress { .. }
                             | Instruction::ReadTokenBalance { .. }
                             | Instruction::EmitEvent { .. }
@@ -3815,6 +4039,23 @@ impl PreparationCursor {
                         Instruction::RequireContractCaller { .. }
                     ) {
                         consume_contract_caller_reads(plan, &mut read_index, Some(guard))?;
+                    }
+                    if let Instruction::ReadCaller {
+                        present,
+                        is_contract,
+                        contract_address,
+                        user_address,
+                    } = operation.as_ref()
+                    {
+                        event = Some(bind_caller_reads(
+                            plan,
+                            &mut read_index,
+                            Some(guard),
+                            [present, is_contract, contract_address, user_address],
+                            false,
+                            None,
+                            env,
+                        )?);
                     }
                     if let Instruction::ReadContractAddress { destination } = operation.as_ref() {
                         event = Some(bind_contract_address(
@@ -4053,6 +4294,7 @@ impl PreparationCursor {
                     | Instruction::MerkleTreeCheckRoot { .. }
                     | Instruction::MerkleTreeInsertHash { .. }
                     | Instruction::MerkleTreeInsertHashIndex { .. }
+                    | Instruction::MerkleTreeResetHistory { .. }
             )
         {
             advance_native_state_prefix(
@@ -4500,11 +4742,12 @@ impl PreparationCursor {
             }
             Instruction::MerkleTreeIsFull {
                 slot,
+                keys,
                 depth,
                 destination,
             } => {
-                ensure_merkle_tree_depth(plan, *slot, *depth)?;
-                let index = merkle_tree_root_index(*slot, false)?;
+                let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+                let (index, values) = native_index(plan, *slot, keys, false, &env)?;
                 let tree_state = read_state_value(
                     if has_written {
                         &prefix_context
@@ -4512,9 +4755,9 @@ impl PreparationCursor {
                         &context
                     },
                     *slot,
-                    &[],
+                    &values,
                 )?;
-                let count = merkle_tree_count(&tree_state, *depth)?;
+                let (_, count, _) = merkle_tree_parts(&tree_state, *depth, historic)?;
                 let capacity = 1u64 << depth;
                 let result = count == capacity;
                 event = Some(bind_context_scalar(
@@ -4541,24 +4784,38 @@ impl PreparationCursor {
             }
             Instruction::MerkleTreeCheckRoot {
                 slot,
+                keys,
                 depth,
                 expected,
                 destination,
             } => {
-                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+                let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+                let (index, values) = native_index(plan, *slot, keys, false, &env)?;
                 let read_context = if has_written {
                     &prefix_context
                 } else {
                     &context
                 };
-                let tree_state = read_state_value(read_context, *slot, &[])?;
-                let (tree, _) = merkle_tree_parts(&tree_state, *depth)?;
+                let tree_state = read_state_value(read_context, *slot, &values)?;
+                let (tree, _, history) = merkle_tree_parts(&tree_state, *depth, historic)?;
                 let expected_root = evaluate(expected, &env)?.field()?;
-                let actual_root = tree
-                    .root()
-                    .context("MerkleTree state has an unrehashed root")?
-                    .0;
-                let result = actual_root == expected_root;
+                let expected_key = field_value(expected_root);
+                let result = if let Some(history) = history {
+                    if let Some(entry) = history.get(&expected_key) {
+                        ensure!(
+                            matches!(*entry, StateValue::Null),
+                            "historic MerkleTree root value must be Null"
+                        );
+                        true
+                    } else {
+                        false
+                    }
+                } else {
+                    tree.root()
+                        .context("MerkleTree state has an unrehashed root")?
+                        .0
+                        == expected_root
+                };
                 event = Some(bind_context_scalar(
                     plan.reads.get(read_index),
                     instruction_guard,
@@ -4570,22 +4827,29 @@ impl PreparationCursor {
                 read_index += 1;
                 program.extend([
                     Op::Dup { n: 0 },
-                    merkle_tree_root_index(*slot, false)?,
-                    merkle_tree_index(0, false),
-                    Op::Root,
-                    push_native_state(
-                        StateValue::Cell(Sp::new(field_value(expected_root))),
-                        false,
-                    )?,
-                    Op::Eq,
+                    index,
+                    merkle_tree_index(if historic { 2 } else { 0 }, false),
+                ]);
+                if !historic {
+                    program.push(Op::Root);
+                }
+                program.extend([
+                    push_native_state(StateValue::Cell(Sp::new(expected_key)), false)?,
+                    if historic { Op::Member } else { Op::Eq },
                 ]);
                 Op::Popeq {
                     cached: true,
                     result: result.into(),
                 }
             }
-            Instruction::MerkleTreeInsertHash { slot, depth, hash } => {
-                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+            Instruction::MerkleTreeInsertHash {
+                slot,
+                keys,
+                depth,
+                hash,
+            } => {
+                let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+                let (root_index, values) = native_index(plan, *slot, keys, true, &env)?;
                 let tree_state = read_state_value(
                     if has_written {
                         &prefix_context
@@ -4593,9 +4857,9 @@ impl PreparationCursor {
                         &context
                     },
                     *slot,
-                    &[],
+                    &values,
                 )?;
-                let count = merkle_tree_count(&tree_state, *depth)?;
+                let (_, count, _) = merkle_tree_parts(&tree_state, *depth, historic)?;
                 let capacity = 1u64 << depth;
                 ensure!(count < capacity, "MerkleTree is full");
                 let hash = evaluate(hash, &env)?;
@@ -4608,7 +4872,7 @@ impl PreparationCursor {
                 );
                 let aligned_hash = aligned_bytes(&hash)?;
                 program.extend([
-                    merkle_tree_root_index(*slot, true)?,
+                    root_index,
                     merkle_tree_index(0, true),
                     Op::Dup { n: 2 },
                     merkle_tree_index(1, false),
@@ -4621,24 +4885,32 @@ impl PreparationCursor {
                     merkle_tree_index(1, true),
                     Op::Addi { immediate: 1 },
                 ]);
+                if historic {
+                    program.push(Op::Ins { cached: true, n: 1 });
+                    append_historic_merkle_root(program)?;
+                }
                 has_written = true;
-                Op::Ins { cached: true, n: 2 }
+                Op::Ins {
+                    cached: true,
+                    n: (keys.len() + 2).try_into()?,
+                }
             }
             Instruction::MerkleTreeInsertHashIndex {
                 slot,
+                keys,
                 depth,
                 hash,
                 index,
             } => {
-                ensure_merkle_tree_depth(plan, *slot, *depth)?;
-                let root_index = merkle_tree_root_index(*slot, true)?;
+                let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+                let (root_index, values) = native_index(plan, *slot, keys, true, &env)?;
                 let read_context = if has_written {
                     &prefix_context
                 } else {
                     &context
                 };
-                let tree_state = read_state_value(read_context, *slot, &[])?;
-                merkle_tree_count(&tree_state, *depth)?;
+                let tree_state = read_state_value(read_context, *slot, &values)?;
+                merkle_tree_parts(&tree_state, *depth, historic)?;
                 let capacity = 1u64 << depth;
 
                 let index_value = evaluate(index, &env)?;
@@ -4690,8 +4962,14 @@ impl PreparationCursor {
                         n: 1,
                     },
                 ]);
+                if historic {
+                    append_historic_merkle_root(program)?;
+                }
                 has_written = true;
-                Op::Ins { cached: true, n: 1 }
+                Op::Ins {
+                    cached: true,
+                    n: (keys.len() + 1 + usize::from(historic)).try_into()?,
+                }
             }
             Instruction::ListHead {
                 slot,
@@ -4872,19 +5150,52 @@ impl PreparationCursor {
                     n: (keys.len() + 1).try_into()?,
                 }
             }
-            Instruction::MerkleTreeReset { slot, depth } => {
-                ensure_merkle_tree_depth(plan, *slot, *depth)?;
+            Instruction::MerkleTreeReset { slot, keys, depth } => {
+                let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+                let key = if let Some((_, parents)) = keys.split_last() {
+                    let (_, mut values) = native_index(plan, *slot, keys, false, &env)?;
+                    let (parent, _) = native_index(plan, *slot, parents, true, &env)?;
+                    program.push(parent);
+                    values.pop().expect("nonempty MerkleTree path")
+                } else {
+                    field_value(Fr::from(*slot as u64))
+                };
                 program.extend([
-                    push_native_state(
-                        StateValue::Cell(Sp::new(field_value(Fr::from(*slot as u64)))),
-                        false,
-                    )?,
-                    push_native_state(merkle_tree_default_state(*depth), true)?,
+                    push_native_state(StateValue::Cell(Sp::new(key)), false)?,
+                    push_native_state(merkle_tree_default_state(*depth, historic), true)?,
                 ]);
                 has_written = true;
                 Op::Ins {
                     cached: false,
-                    n: 1,
+                    n: (keys.len() + 1).try_into()?,
+                }
+            }
+            Instruction::MerkleTreeResetHistory { slot, keys, depth } => {
+                ensure!(
+                    ensure_merkle_tree_depth(plan, *slot, keys, *depth)?,
+                    "resetHistory requires a historic MerkleTree"
+                );
+                let (root_index, values) = native_index(plan, *slot, keys, true, &env)?;
+                let read_context = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let tree_state = read_state_value(read_context, *slot, &values)?;
+                merkle_tree_parts(&tree_state, *depth, true)?;
+                program.extend([
+                    root_index,
+                    push_native_state(StateValue::Cell(Sp::new(AlignedValue::from(2u8))), false)?,
+                    push_native_state(StateValue::Map(Default::default()), true)?,
+                    Op::Dup { n: 2 },
+                    merkle_tree_index(0, false),
+                    Op::Root,
+                    push_native_state(StateValue::Null, true)?,
+                ]);
+                has_written = true;
+                Op::Ins {
+                    cached: true,
+                    n: (keys.len() + 3).try_into()?,
                 }
             }
             Instruction::ClaimContractCall {
@@ -5025,6 +5336,24 @@ impl PreparationCursor {
                     result: AlignedValue::from(expected),
                 }
             }
+            Instruction::ReadCaller {
+                present,
+                is_contract,
+                contract_address,
+                user_address,
+            } => {
+                let caller = context.call_context.caller;
+                event = Some(bind_caller_reads(
+                    plan,
+                    &mut read_index,
+                    instruction_guard,
+                    [present, is_contract, contract_address, user_address],
+                    true,
+                    caller,
+                    env,
+                )?);
+                append_caller_read(program, caller)?
+            }
             Instruction::ReadContractAddress { destination } => {
                 let address = context.address;
                 event = Some(bind_contract_address(
@@ -5110,6 +5439,7 @@ impl PreparationCursor {
                 | Instruction::MerkleTreeInsertHash { .. }
                 | Instruction::MerkleTreeInsertHashIndex { .. }
                 | Instruction::MerkleTreeReset { .. }
+                | Instruction::MerkleTreeResetHistory { .. }
                 | Instruction::ListPushFront { .. }
                 | Instruction::ListPopFront { .. }
                 | Instruction::ListReset { .. }

@@ -100,6 +100,7 @@ jobs:
           lake env lean tests/NestedEscrow.lean
           lake env lean tests/NativeCounter.lean
           lake env lean tests/NativeSet.lean
+          lake env lean tests/NativeCaller.lean
           lake env lean tests/NativeCellReset.lean
           lake env lean tests/NativeStandaloneMints.lean
           lake env lean tests/NativeTaggedSettlement.lean
@@ -108,6 +109,8 @@ jobs:
           lake env lean tests/NativeList.lean
           lake env lean tests/MerkleTree.lean
           lake env lean tests/MerkleIndexed.lean
+          lake env lean tests/HistoricMerkle.lean
+          lake env lean tests/NestedMerkle.lean
           lake env lean tests/NativeReturns.lean
           lake env lean tests/TypedCallArguments.lean
           lake env lean tests/ContractInterfaces.lean
