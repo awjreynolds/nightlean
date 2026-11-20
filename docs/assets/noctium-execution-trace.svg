@@ -1,0 +1,101 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="780" height="782" viewBox="0 0 780 782" role="img" aria-labelledby="title desc">
+  <title id="title">Noctium execution trace</title>
+  <desc id="desc">For TypedWitness.ScalarWitness.claim, Lean emits the ZKIR circuit, Impact plan, witness binding and control. Chrome authenticates the entrypoint bundle, runs the witness and proves and verifies locally. A loopback Rust provider funds and signs after approval. Chrome saves a recovery checkpoint in IndexedDB before broadcasting through the provider. The ledger reports the call pending at the restart checkpoint. A new worker restores the same sealed transaction, matches 1,482 public state bytes at finalized height 7 and commits cache/last = 14 once in private IndexedDB storage.</desc>
+  <defs>
+    <style>
+      text { font-family: Arial, Helvetica, sans-serif; fill: #182832 }
+      .heading { font-size: 34px; font-weight: 700 }
+      .code { font-family: Menlo, Consolas, monospace; font-size: 22px }
+      .section { font-size: 23px; font-weight: 700 }
+      .label { font-size: 21px }
+      .actor { font-size: 18px; font-weight: 700; text-anchor: middle }
+      .detail { font-size: 17px; fill: #41535e }
+      .rule { stroke: #c7d2d7; fill: none }
+      .lifeline { stroke: #98aab3; stroke-width: 1.5; fill: none }
+      .wire { stroke: #18597a; stroke-width: 2; fill: none }
+      .msg { stroke: #18597a; stroke-width: 2; fill: none; marker-end: url(#arrow) }
+      .dot { fill: #18597a }
+    </style>
+    <marker id="arrow" viewBox="0 0 9 10" refX="8" refY="5" markerWidth="9" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M0 0 9 5 0 10Z" fill="#18597a"/>
+    </marker>
+  </defs>
+  <rect width="780" height="782" fill="white"/>
+  <text x="22" y="44" class="heading">Noctium execution trace</text>
+  <text x="23" y="78" class="code">TypedWitness.ScalarWitness.claim</text>
+  <path d="M22 99H758" class="rule"/>
+
+  <g aria-label="Build artifacts">
+    <text x="22" y="130" class="section">Build artifacts</text>
+    <text x="22" y="178" class="label">Lean 4</text>
+    <text x="22" y="204" class="label">source</text>
+    <path d="M100 185H145 M145 156V214" class="wire"/>
+    <path d="M145 156H183" class="msg"/>
+    <path d="M145 185H183" class="msg"/>
+    <path d="M145 214H183" class="msg"/>
+    <text x="195" y="163" class="label">ZKIR 3.2.1 circuit</text>
+    <text x="195" y="192" class="label">Native Impact plan</text>
+    <text x="195" y="221" class="label">Witness binding + control</text>
+    <path d="M371 156H473V214H444 M385 185H473" class="wire"/>
+    <path d="M413 156V122H518" class="msg"/>
+    <text x="531" y="129" class="label">Native ZKIR keygen</text>
+    <path d="M563 138V165" class="msg"/>
+    <text x="577" y="156" class="detail">prover + verifier keys</text>
+    <path d="M473 185H518" class="msg"/>
+    <text x="531" y="192" class="label">Entrypoint bundle</text>
+  </g>
+  <path d="M22 246H758" class="rule"/>
+
+  <g aria-label="Chrome and Midnight localnet call sequence">
+    <text x="22" y="281" class="section">Localnet call</text>
+    <text x="22" y="309" class="detail">Ledger 9.1.0.1</text>
+    <rect x="660" y="257" width="98" height="495" fill="#f0f5f7"/>
+    <g class="actor">
+      <text x="361" y="280">IndexedDB</text><text x="472" y="280">Chrome 157</text>
+      <text x="599" y="280">Rust provider</text><text x="709" y="280">Ledger</text>
+    </g>
+    <g class="detail" text-anchor="middle">
+      <text x="361" y="306">private store</text><text x="472" y="306">WASM worker</text>
+      <text x="599" y="306">loopback</text><text x="709" y="306">public state</text>
+    </g>
+    <path d="M361 318V741 M472 318V578 M472 623V741 M599 318V741 M709 318V741" class="lifeline"/>
+    <g class="label">
+      <text x="22" y="351">Authenticate bundle and SRS</text>
+      <text x="22" y="383">Run witness (5 callbacks)</text>
+      <text x="22" y="415">Prove and verify locally</text>
+      <text x="22" y="447">Fund and sign after approval</text>
+      <text x="22" y="479">Persist recovery checkpoint</text>
+      <text x="22" y="511">Broadcast sealed transaction</text>
+      <text x="22" y="553">Observe pending call</text>
+    </g>
+    <circle cx="472" cy="344" r="4.5" class="dot"/>
+    <circle cx="472" cy="376" r="4.5" class="dot"/>
+    <circle cx="472" cy="408" r="4.5" class="dot"/>
+    <text x="490" y="414" class="detail">k = 7 · 80 rows</text>
+    <path d="M472 440H598" class="msg"/>
+    <path d="M472 472H362" class="msg"/>
+    <path d="M472 504H598" class="msg"/>
+    <path d="M599 510H708" class="msg"/>
+    <path d="M709 540H600" class="msg"/>
+    <path d="M599 546H473" class="msg"/>
+
+    <rect x="22" y="577" width="736" height="44" fill="#e7f1f6"/>
+    <path d="M22 577H758 M22 621H758" stroke="#7793a2" stroke-dasharray="5 4" fill="none"/>
+    <text x="34" y="605" class="section">Chrome worker restarts</text>
+    <text x="498" y="604" class="detail">Same transaction · no reproof</text>
+
+    <g class="label">
+      <text x="22" y="654">Restore sealed transaction</text>
+      <text x="22" y="686">Read finalized receipt</text>
+      <text x="22" y="718">Match 1,482 public state bytes</text>
+      <text x="22" y="750">Commit private state (1 CAS)</text>
+    </g>
+    <path d="M361 647H471" class="msg"/>
+    <path d="M709 674H600" class="msg"/>
+    <path d="M599 680H473" class="msg"/>
+    <text x="637" y="660" class="detail">block 7</text>
+    <circle cx="472" cy="711" r="4.5" class="dot"/>
+    <path d="M472 743H362" class="msg"/>
+    <text x="488" y="750" class="detail">cache/last = 14</text>
+  </g>
+</svg>
