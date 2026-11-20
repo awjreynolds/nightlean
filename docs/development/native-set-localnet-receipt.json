@@ -1,0 +1,41 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "nodeImage": "midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "entrypoint": "NativeSet.update",
+  "path": "initial insertion into top-level and nested set",
+  "compilerRevision": "35a6a7816f0cb9421dd69ddf5a73493739808ab2",
+  "artifactSha256": {
+    "source": "fbb5d5eb9406148c1c19105ad56c5885b5a780fa49332f5fa771faa3a7d65c90",
+    "circuit": "ef03c15fa10e378e54aa5c185f4635c6fadf90a3189aaef6e9204359e1edc0af",
+    "plan": "2db39171756f249927fe376ab4a40dad298044fe77fa19d1ce86edd803971e21",
+    "verifierKey": "d7a3a21fc47b988027d9c9104562352da2fe488bf20fa4b00631209165ce1e7f",
+    "ledgerParameters": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+    "bundleManifest": "a348b574e3b4988214c3058647bff7543764f96f1cccff9f7f1e97976e0722f4"
+  },
+  "exactPredictedStateAccepted": true,
+  "receipts": [
+    {
+      "event": "Deploy",
+      "height": 148,
+      "blockHash": "36b116c2e945b08b262a3d9e51684374c8dfdc398f0c4afc4e131e0d74c87487",
+      "contractAddress": "0072002fa365632abf93c687f92622ebac43c7d7c3227643934f6fd69728eed6",
+      "transactionId": "b4db95e548050e5c2ee34563f65d456bc01246ffe402a49392e6354b73ecc4be",
+      "stateBytes": 1513,
+      "stateSha256": "bbd3575a2fa015e3cf84f436aca74dfc61a8d11b0e88f9a0de4dada1ef2c3194"
+    },
+    {
+      "event": "Call",
+      "height": 151,
+      "blockHash": "8f6f6dbcfb456790d4c0c22014ee07cf638fd6b87bbb62e862f942d32c0ec64a",
+      "contractAddress": "0072002fa365632abf93c687f92622ebac43c7d7c3227643934f6fd69728eed6",
+      "transactionId": "0432f4f282efc6f84cc407ca616c64ee083308c5efdc228e5e7b5fd79b28d0fd",
+      "stateBytes": 1902,
+      "stateSha256": "86d32305ef8645de732301231c5ade03db232fee540b41a687e0fb699d766ad1"
+    }
+  ],
+  "circuit": {
+    "k": 9,
+    "rows": 467
+  }
+}

@@ -212,10 +212,16 @@ scalar surface. Maps retain their key type and recursively describe values. -/
 inductive LedgerValueType where
   | scalar (ty : Ty)
   | map (keyTy : Ty) (value : LedgerValueType)
+  | set (keyTy : Ty)
   | composite (environment : Types.CompositeEnv) (type : Types.CompositeType)
   | list (environment : Types.CompositeEnv) (type : Types.CompositeType)
   | counter
+  | merkleTree (depth : Nat) (historic : Bool)
   deriving Repr, BEq, DecidableEq
+
+def LedgerValueType.merkleTreeConfig? : LedgerValueType → Option (Nat × Bool)
+  | .merkleTree depth historic => some (depth, historic)
+  | _ => none
 
 /-- A typed dynamic key in a nested ledger path. -/
 inductive PathKey where
@@ -236,8 +242,21 @@ def LedgerValueType.resolvePath (schema : LedgerValueType) : List PathKey →
     | .map expected value =>
       unless keyTy == expected do throw "nested map key type mismatch"
       value.resolvePath rest
+    | .set _ => throw "set members have no readable value"
     | .composite .. => throw "nested map path continues through a composite value"
     | .list .. => throw "nested map path continues through a list value"
+    | .merkleTree .. => throw "nested map path continues through a MerkleTree value"
+
+def LedgerValueType.merkleTreePathConfig (schema : LedgerValueType)
+    (keys : List PathKey) : Except String (Nat × Bool) := do
+  if keys.isEmpty then throw "nested MerkleTree path requires at least one map key"
+  if keys.length > 12 then throw "nested MerkleTree path supports at most 12 map keys"
+  let selected ← schema.resolvePath keys
+  let some config := selected.merkleTreeConfig?
+    | throw "nested path does not select a MerkleTree"
+  let (depth, _) := config
+  unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
+  pure config
 
 def LedgerValueType.counterPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String Unit := do
@@ -248,17 +267,24 @@ def LedgerValueType.counterPath (schema : LedgerValueType) (keys : List PathKey)
     let .counter ← schema.resolvePath keys
       | throw "counter path must select a Counter value"
 
-/-- A removal path names the complete entry path. Its final key selects an
-entry inside a map, while earlier keys select the parent map. -/
+def LedgerValueType.collectionKey? : LedgerValueType → Option Ty
+  | .map ty _ | .set ty => some ty
+  | _ => none
+
+/-- The final key addresses an entry in the selected parent map or set. -/
+def LedgerValueType.entryParent (schema : LedgerValueType) (keys : List PathKey) :
+    Except String LedgerValueType := do
+  let some key := keys.getLast? | throw "map or set operation requires a key"
+  if keys.length > 14 then throw "map or set path exceeds the native insertion depth"
+  let parent ← schema.resolvePath (keys.take (keys.length - 1))
+  let some expected := parent.collectionKey? | throw "entry path must select a map or set"
+  unless key.ty == expected do throw "map or set key type mismatch"
+  pure parent
+
+/-- A removal path names the complete entry path in a map or set. -/
 def LedgerValueType.removalPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String Unit := do
-  if keys.isEmpty then throw "map removal requires at least one key"
-  if keys.length > 14 then throw "map removal path exceeds the native insertion depth"
-  let parents := keys.take (keys.length - 1)
-  let .map keyTy _ ← schema.resolvePath parents
-    | throw "map removal parent path must select a map"
-  let some finalKey := keys.getLast? | throw "map removal requires at least one key"
-  unless finalKey.ty == keyTy do throw "map removal key type mismatch"
+  discard (schema.entryParent keys)
 
 private def checkedNativeRecord (environment : Types.CompositeEnv)
     (type : Types.CompositeType) : Except String (Types.CheckedLayout Types.defaultLimits) := do
@@ -322,13 +348,30 @@ inductive StateKind where
   | map (keyTy valueTy : Ty)
   | tree (value : LedgerValueType)
   | merkleTree (depth : Nat)
+  | historicMerkleTree (depth : Nat)
   /-- UTF-8 FAB state metadata. This value is host/deployment-only and never a circuit Ty. -/
   | opaqueString
   deriving Repr, BEq, DecidableEq
 
-def StateKind.merkleTreeDepth? : StateKind → Option Nat
-  | .merkleTree depth => some depth
+def StateKind.pathSchema : StateKind → Option LedgerValueType
+  | .map keyTy valueTy => some (.map keyTy (.scalar valueTy))
+  | .tree schema => some schema
   | _ => none
+
+def StateKind.validateCollectionPath (kind : StateKind) (keys : List PathKey) :
+    Except String Unit := do
+  if keys.length >= 16 then throw "collection path exceeds the native index limit"
+  let some schema := kind.pathSchema | throw "path must select a Map or Set"
+  unless (← schema.resolvePath keys).collectionKey?.isSome do
+    throw "path must select a Map or Set"
+
+def StateKind.merkleTreeDepth? : StateKind → Option Nat
+  | .merkleTree depth | .historicMerkleTree depth => some depth
+  | _ => none
+
+def StateKind.isHistoricMerkleTree : StateKind → Bool
+  | .historicMerkleTree _ => true
+  | _ => false
 
 structure StateDecl where
   name : String
@@ -426,6 +469,16 @@ def EventKind.fields : EventKind → List (String × EventFieldType)
 def EventKind.payloadSize (kind : EventKind) : Nat :=
   kind.fields.foldl (fun size field => size + field.2.width) 0
 
+structure CallerBindings where
+  present : String
+  isContract : String
+  contractAddress : String
+  userAddress : String
+  deriving Repr
+
+def CallerBindings.types (names : CallerBindings) : List (String × Ty) :=
+  [(names.present, .bool), (names.isContract, .bool),
+    (names.contractAddress, .bytes 32), (names.userAddress, .bytes 32)]
 /-- Query the starting ledger balance of either native token namespace. -/
 inductive BalanceQuery where
   | exact
@@ -461,6 +514,7 @@ inductive Effect where
   | claimUnshieldedCoinSpend (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded isContract : Expr .bool) (recipient : Expr (.bytes 32))
   | requireContractCaller (address : Expr (.bytes 32))
+  | readCaller (destinations : CallerBindings)
   | readTokenBalance (destination : String) (color : Expr (.bytes 32))
       (isUnshielded : Expr .bool) (query : BalanceQuery)
   /-- Compare the native ledger transcript's block time, in seconds, with a
@@ -470,6 +524,8 @@ inductive Effect where
   | emitEvent (kind : EventKind) (payload : Expr (.bytes kind.payloadSize))
   | readPath (state destination : String) (keys : List PathKey) (valueTy : Ty)
   | memberPath (state destination : String) (keys : List PathKey)
+  | mapIsEmpty (state destination : String) (keys : List PathKey)
+  | mapSize (state destination : String) (keys : List PathKey)
   | counterRead (state destination : String) (keys : List PathKey)
   | counterAdjust (state : String) (keys : List PathKey) (subtract : Bool) (amount : Nat)
   | counterReset (state : String) (keys : List PathKey)
@@ -492,7 +548,17 @@ inductive Effect where
   | merkleTreeInsertHashIndex (state : String) (hash : Expr (.bytes 32))
       (index : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeReset (state : String)
+  | merkleTreeResetHistory (state : String)
+  | merkleTreeIsFullAt (state : String) (keys : List PathKey) (destination : String)
+  | merkleTreeCheckRootAt (state : String) (keys : List PathKey)
+      (expected : Expr .native) (destination : String)
+  | merkleTreeInsertHashAt (state : String) (keys : List PathKey) (hash : Expr (.bytes 32))
+  | merkleTreeInsertHashIndexAt (state : String) (keys : List PathKey)
+      (hash : Expr (.bytes 32)) (index : Expr (.uint (2 ^ 64 - 1)))
+  | merkleTreeResetAt (state : String) (keys : List PathKey) (depth : Nat) (historic : Bool)
+  | merkleTreeResetHistoryAt (state : String) (keys : List PathKey)
   | emptyMapPath (state : String) (keys : List PathKey)
+  | setInsert (state : String) (keys : List PathKey)
   | removePath (state : String) (keys : List PathKey)
   deriving Repr
 
@@ -833,11 +899,17 @@ private def validateLedgerMapKeyType (keyTy : Ty) : Except String Unit := do
 
 def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except String Unit
   | .counter => pure ()
+  | .merkleTree depth _ => do
+    unless 2 ≤ depth && depth ≤ 32 do
+      throw "MerkleTree depth must be between 2 and 32"
   | .scalar ty => ty.validate caps
   | .map keyTy value => do
     validateLedgerMapKeyType keyTy
     keyTy.validate caps
     value.validate caps
+  | .set keyTy => do
+    validateLedgerMapKeyType keyTy
+    keyTy.validate caps
   | .composite environment type => do
     let _ ← checkedNativeRecord environment type
     pure ()
@@ -852,6 +924,12 @@ private def resolveTreeState (decls : List StateDecl) (state : String)
   if keys.isEmpty then throw "nested map path must contain at least one key"
   if keys.length > 14 then throw "nested map path exceeds the native insertion depth"
   schema.resolvePath keys
+
+private def resolveMerkleTreePath (decls : List StateDecl) (state : String)
+    (keys : List PathKey) : Except String (Nat × Bool) := do
+  let some decl := decls.find? (·.name == state) | throw s!"unknown MerkleTree state '{state}'"
+  let .tree schema := decl.kind | throw s!"state '{state}' is not a recursive tree"
+  schema.merkleTreePathConfig keys
 
 private def resolveListState (decls : List StateDecl) (state : String)
     (keys : List PathKey) :
@@ -920,9 +998,11 @@ private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
+    .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
     .merkleTreeInsertHash state .. | .merkleTreeInsertHashIndex state .. |
-    .merkleTreeReset state |
-    .emptyMapPath state .. | .removePath state .. => some state
+    .merkleTreeReset state | .merkleTreeResetHistory state |
+    .merkleTreeInsertHashAt state .. | .merkleTreeInsertHashIndexAt state .. |
+    .merkleTreeResetAt state .. | .merkleTreeResetHistoryAt state .. => some state
   | _ => none
 
 /-- Preserve first constraint diagnostic and source span in list order. -/
@@ -1001,7 +1081,7 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
-      | .merkleTree _ => []
+      | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
       match ty.validate caps with
@@ -1046,12 +1126,17 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           .readTokenBalance .. | .claimContractCall .. | .mintShielded .. | .mintUnshielded .. |
           .incUnshieldedInputs .. | .incUnshieldedOutputs .. | .claimUnshieldedCoinSpend .. |
           .requireContractCaller .. | .blockTimeCompare .. | .emitEvent .. |
-          .readPath .. | .memberPath .. | .insertPath .. | .writePath .. | .emptyMapPath .. |
+          .readPath .. | .memberPath .. | .mapIsEmpty .. | .mapSize .. |
+          .insertPath .. | .writePath .. | .emptyMapPath .. | .setInsert .. |
           .readCompositePath .. | .writeCompositePath .. | .counterRead .. |
           .counterAdjust .. | .counterReset .. | .listLength .. | .listHead .. |
           .listPushFront .. | .listPopFront .. | .listReset .. | .removePath .. |
-          .merkleTreeIsFull .. | .merkleTreeCheckRoot .. | .merkleTreeInsertHash .. |
-          .merkleTreeInsertHashIndex .. | .merkleTreeReset .. => pure ()
+          .readCaller .. | .merkleTreeIsFull .. | .merkleTreeCheckRoot .. |
+          .merkleTreeInsertHash .. | .merkleTreeInsertHashIndex .. | .merkleTreeReset .. |
+          .merkleTreeResetHistory .. | .merkleTreeIsFullAt .. |
+          .merkleTreeCheckRootAt .. | .merkleTreeInsertHashAt .. |
+          .merkleTreeInsertHashIndexAt .. | .merkleTreeResetAt .. |
+          .merkleTreeResetHistoryAt .. => pure ()
       | .require _ => pure ()
       | _ =>
         throw {span := span, message := "native guards are supported only on ledger reads, writes, and require effects"}
@@ -1102,6 +1187,9 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .requireContractCaller address => do
         address.validate caps env
         pure []
+      | .readCaller destinations => do
+        (.bytes 32 : Ty).validate caps
+        pure destinations.types
       | .readTokenBalance destination color isUnshielded query => do
         color.validate caps env
         isUnshielded.validate caps env
@@ -1145,8 +1233,26 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .memberPath state destination keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
-        discard (resolveTreeState decls state keys)
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        let some schema := decl.kind.pathSchema
+          | throw s!"state '{state}' is not a map or set"
+        discard (schema.entryParent keys)
         pure [(destination, .bool)]
+      | .mapIsEmpty state destination keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        decl.kind.validateCollectionPath keys
+        pure [(destination, .bool)]
+      | .mapSize state destination keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        decl.kind.validateCollectionPath keys
+        pure [(destination, .uint (2 ^ 64 - 1))]
       | .counterRead state destination keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
@@ -1235,6 +1341,51 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         unless 2 ≤ depth && depth ≤ 32 do
           throw "MerkleTree depth must be between 2 and 32"
         pure []
+      | .merkleTreeResetHistory state => do
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown MerkleTree state '{state}'"
+        let .historicMerkleTree depth := declaration.kind
+          | throw "resetHistory requires a HistoricMerkleTree"
+        unless 2 ≤ depth && depth ≤ 32 do
+          throw "HistoricMerkleTree depth must be between 2 and 32"
+        pure []
+      | .merkleTreeIsFullAt state keys destination => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        pure [(destination, .bool)]
+      | .merkleTreeCheckRootAt state keys expected destination => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        expected.validate caps env
+        pure [(destination, .bool)]
+      | .merkleTreeInsertHashAt state keys hash => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        hash.validate caps env
+        pure []
+      | .merkleTreeInsertHashIndexAt state keys hash index => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        discard (resolveMerkleTreePath decls state keys)
+        hash.validate caps env
+        index.validate caps env
+        pure []
+      | .merkleTreeResetAt state keys depth historic => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let (foundDepth, foundHistoric) ← resolveMerkleTreePath decls state keys
+        unless depth == foundDepth && historic == foundHistoric do
+          throw "nested MerkleTree reset schema mismatch"
+        pure []
+      | .merkleTreeResetHistoryAt state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let (_, historic) ← resolveMerkleTreePath decls state keys
+        unless historic do throw "resetHistory requires a HistoricMerkleTree"
+        pure []
       | .insertPath state keys valueTy value
       | .writePath state keys valueTy value => do
         if !caps.stateMaps then throw "target lacks state maps"
@@ -1268,16 +1419,27 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .emptyMapPath state keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
-        let .map _ _ ← resolveTreeState decls state keys
-          | throw "emptyMap assignment must select a map value"
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown map or set state '{state}'"
+        decl.kind.validateCollectionPath keys
+        pure []
+      | .setInsert state keys => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        for key in keys do key.validate caps env
+        let some decl := decls.find? (·.name == state)
+          | throw s!"unknown set state '{state}'"
+        let some schema := decl.kind.pathSchema
+          | throw s!"state '{state}' is not a set"
+        let .set _ ← schema.entryParent keys
+          | throw "set insertion path must select a Set"
         pure []
       | .removePath state keys => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
         let some decl := decls.find? (·.name == state)
-          | throw s!"unknown tree state '{state}'"
-        let .tree schema := decl.kind
-          | throw s!"state '{state}' is not a recursive map"
+          | throw s!"unknown map or set state '{state}'"
+        let some schema := decl.kind.pathSchema
+          | throw s!"state '{state}' is not a map or set"
         schema.removalPath keys
         pure []
     match result with
@@ -1350,7 +1512,7 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       | .cell ty => [ty]
       | .map keyTy valueTy => [keyTy, valueTy]
       | .tree _ => []
-      | .merkleTree _ => []
+      | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
       match ty.validate caps with

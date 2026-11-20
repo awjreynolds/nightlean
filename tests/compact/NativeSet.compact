@@ -1,0 +1,35 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger registered: Set<Bytes<32>>;
+export ledger groups: Map<Field, Set<Bytes<32>>>;
+
+export circuit update(bucket: Field, tag: Bytes<32>, adding: Boolean,
+                      removing: Boolean, clearing: Boolean): [Boolean, Boolean, Uint<64>, Uint<64>, Boolean] {
+  const group = disclose(bucket);
+  const value = disclose(tag);
+  if (!groups.member(group)) { groups.insertDefault(group); }
+  if (disclose(adding)) {
+    registered.insert(value);
+    groups.lookup(group).insert(value);
+  }
+  if (disclose(removing)) {
+    registered.remove(value);
+    groups.lookup(group).remove(value);
+  }
+  if (disclose(clearing)) {
+    registered.resetToDefault();
+    groups.lookup(group).resetToDefault();
+  }
+  return [registered.member(value), groups.lookup(group).member(value),
+          registered.size(), groups.lookup(group).size(), registered.isEmpty()];
+}
+
+export circuit inspect(bucket: Field, enabled: Boolean): [Boolean, Boolean, Boolean] {
+  const registeredEmpty = registered.isEmpty();
+  const groupsEmpty = groups.isEmpty();
+  if (disclose(enabled)) {
+    return [registeredEmpty, groupsEmpty, groups.lookup(disclose(bucket)).isEmpty()];
+  }
+  return [registeredEmpty, groupsEmpty, false];
+}
