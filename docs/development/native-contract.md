@@ -99,6 +99,28 @@ The current SDK checks a finalized receipt against the full predicted state.
 Reconciliation for a finalized guaranteed-prefix outcome requires its own
 receipt and private-journal handling. [Prefix-only receipt tracking](https://github.com/awjreynolds/noctium/issues/134)
 
+## Reset a ledger cell
+
+`reset cellName` writes the canonical default of the cell's declared scalar
+type. Use `when flag reset cellName` for a conditional reset. The usual
+public-state disclosure and sealed-cell checks apply, and a following read
+sees the reset when execution takes the guard. The compiler lowers the reset
+as a typed write through the existing Impact path.
+
+[The Lean fixture](../../tests/NativeCellReset.lean) and
+[the Compact fixture](../../tests/compact/CellReset.compact) exercise seeded
+UInt64, Native/Field, Boolean and Bytes4 cells. Run the
+[native checker fixture](../../runtime/tests/native_cell_reset.rs) with
+`NOCTIUM_CELL_RESET_DIR` pointing to fresh Lean ZKIR 3.2.1 ledger outputs.
+The scalar fixture covers both guard outcomes. Aggregate Cell defaults and
+other type combinations need separate equivalence evidence.
+
+The Rust SDK deployed the seeded cells on Ledger 9.1.0.1 localnet at
+height 104 and finalized the active reset at height 107. The finalized
+contract bytes matched the predicted bytes at both heights. Native sizing
+reported K8 and 192 rows for `clear`. The inactive case was checked in the
+pinned native VM and Compact runtime. [Localnet receipt](native-cell-reset-localnet-receipt.json)
+
 ## Record standalone token mints
 
 ```lean
