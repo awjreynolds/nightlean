@@ -15,6 +15,12 @@ Lean 4 contracts and proofs for Midnight. Noctium compiles directly to native ZK
   <a href="https://github.com/awjreynolds/noctium/actions/workflows/ci.yml"><img src="https://github.com/awjreynolds/noctium/actions/workflows/ci.yml/badge.svg" alt="POC compiler checks CI"></a>
 </p>
 
+## OpenZeppelin benchmark
+
+[![OpenZeppelin confidential-token benchmark showing median source compilation time, output sizes, and K and synthesis rows for 15 entrypoints paired by name](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
+
+Three runs per compiler on an Apple M3 Max. The ports use different ABIs, state paths and output formats. Timings exclude key generation and proving. [Method and artifact inventory](docs/development/oz-compile-performance.md) · [Raw data](docs/development/oz-compile-performance.json)
+
 ## ZKIR v3 and witness targets
 
 Noctium registers 40 active ZKIR 3.2.1 opcodes and uses 15 native type families through scoped source and lowering paths. [Native inventory and Compact backend audit](docs/compatibility/comparison.md#full-pinned-zkir-v3-instruction-inventory)
@@ -28,12 +34,6 @@ Noctium registers 40 active ZKIR 3.2.1 opcodes and uses 15 native type families 
 | TypeScript / web | ✓ WASM, Chrome tested | ✓ Generated JavaScript and TypeScript declarations |
 
 Noctium's checkmarks cover specific runtime workloads. The Compact column covers generated interfaces for each host. [SDK evidence and scope](docs/compatibility/comparison.md#witness-execution-targets)
-
-## OpenZeppelin benchmark
-
-The latest November 19 development benchmark measured **3.69 s for Noctium** and **0.285 s for Compact 0.36.1** on an Apple M3 Max. Noctium used a development snapshot based on `cedb6ef` with uncommitted compiler changes. The ports emit different artifacts. Noctium generated zero SDK bindings, and both runs excluded key generation and proving. Across 15 entrypoints paired by name, Noctium's K was lower on 3, equal on 11, and higher on 1. Noctium used fewer rows on 9 and more on 6. [Full measurements and artifact inventory](docs/development/oz-compile-performance.md)
-
-[![Noctium and Compact compilation times and per-entrypoint K and row counts for the OpenZeppelin confidential token](docs/assets/noctium-performance.png)](docs/assets/noctium-performance.png)
 
 ## Write and prove a contract
 
