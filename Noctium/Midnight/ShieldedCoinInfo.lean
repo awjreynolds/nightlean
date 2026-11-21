@@ -38,4 +38,10 @@ def codec : Helpers.Wire.Codec := {
   composites := environment
 }
 
+/-- Canonical payload for the absent branch of `Maybe<ShieldedCoinInfo>`. -/
+def zeroValue : Types.AggregateValue := .structure id [
+  ("nonce", .bytes (List.replicate 32 0)),
+  ("color", .bytes (List.replicate 32 0)),
+  ("value", .scalar (.uint (2 ^ 128 - 1)) 0)]
+
 end Noctium.Midnight.ShieldedCoinInfo
