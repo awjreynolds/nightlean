@@ -516,7 +516,7 @@
       "layer": "language",
       "surface": "Opaque string and Uint8Array",
       "noctiumStatus": "subset",
-      "notes": "OpaqueString covers sealed constructor metadata. OpaqueBytes stores and reads public raw bytes in a Bytes32-keyed Map and binds one FAB Compress projection on ZKIR 3.2.1. The native test matches empty and binary reference values, rejects noncanonical trailing zero before effects and rejects a changed compressed proof transcript. Other containers and full host equivalence remain open.",
+      "notes": "OpaqueString covers sealed constructor metadata. OpaqueBytes stores and reads public raw bytes in a Bytes32-keyed Map and binds one FAB Compress projection on ZKIR 3.2.1. The native test matches empty and binary reference values, rejects noncanonical trailing zero before effects and rejects a changed compressed proof transcript. A development Ledger 9 run finalized deployment, one binary store and a read with unchanged state. Other containers and full host equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -530,6 +530,7 @@
         "tests/compact/OpaqueBytes.compact",
         "tests/compact/opaque-bytes.mjs",
         "docs/development/opaque-byte-map.md",
+        "tests/opaque-byte-map-localnet-evidence.json",
         "docs/development/constructors.md"
       ],
       "equivalence": "unverified"
@@ -2851,8 +2852,8 @@
       "id": "C-ADT-LIST-PUSHFRONTCOIN",
       "layer": "language-ledger",
       "surface": "List.pushFrontCoin",
-      "noctiumStatus": "missing",
-      "notes": "Qualified shielded-coin insertion requires a coin index allocated in the current transaction. The coin-valued method remains open.",
+      "noctiumStatus": "subset",
+      "notes": "A root List prepends the fixed QualifiedInfo record using a coin index booked for the current contract. The native query-context fixture checks head-to-tail order and rejects missing or wrong-recipient bookings. Finalized ledger execution and broader recipient cases remain open.",
       "source": [
         "adt"
       ],
@@ -2861,7 +2862,10 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/QualifiedCoinList.lean",
+        "runtime/tests/qualified_coin_list.rs"
+      ],
       "equivalence": "unverified"
     },
     {

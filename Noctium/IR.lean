@@ -387,7 +387,9 @@ def LedgerValueType.listElementFields (environment : Types.CompositeEnv)
     (type : Types.CompositeType) : Except String (List (String × Ty)) :=
   match type with
   | .scalar ty => pure [("value", ty)]
-  | _ => LedgerValueType.recordFields environment type
+  | _ => match LedgerValueType.recordFields environment type with
+    | .ok fields => pure fields
+    | .error _ => LedgerValueType.shieldedCoinRecordFields environment type
 
 def LedgerValueType.listPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String (Types.CompositeEnv × Types.CompositeType × List (String × Ty)) := do
@@ -599,6 +601,10 @@ inductive Effect where
   /-- Store a coin whose self-recipient commitment is already booked in the
   current transaction. The runtime obtains its Ledger index from context. -/
   | writeShieldedCoinCell (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Push a transaction-booked self-recipient shielded coin to a root List.
+  The backend obtains the coin's current transaction index from ledger context. -/
+  | pushFrontCoin (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
   /-- Spend the exact coin record read from a Bytes32-keyed tree Map entry.
   The backend derives native nullifier and output-commitment claims. -/
@@ -1128,7 +1134,7 @@ private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .receiveShieldedToMap state .. | .insertShieldedCoinSet state .. |
     .sendShieldedFromMap state .. |
-    .writeShieldedCoinCell state .. |
+    .writeShieldedCoinCell state .. | .pushFrontCoin state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1324,6 +1330,18 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           | throw s!"unknown qualified shielded coin Cell '{state}'"
         let .tree (.composite compositeEnv recordType) := declaration.kind
           | throw s!"qualified shielded coin write requires a root composite Cell '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .pushFrontCoin state nonce color amount selfAddress => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin List '{state}'"
+        let .tree (.list compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin push requires a root List '{state}'"
         discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
         nonce.validate caps env
         color.validate caps env
