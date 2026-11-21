@@ -3561,8 +3561,8 @@
       "id": "C-STDLIB-JUBJUBSCHNORRSIGNATURE",
       "layer": "standard-library",
       "surface": "JubjubSchnorrSignature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries JubjubPoint announcement and Native response. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3575,15 +3575,18 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256K1ECDSASIGNATURE",
       "layer": "standard-library",
       "surface": "Secp256k1EcdsaSignature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries two Secp256k1 Scalar fields. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3596,15 +3599,18 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SECP256R1ECDSASIGNATURE",
       "layer": "standard-library",
       "surface": "Secp256r1EcdsaSignature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries two Secp256r1 Scalar fields. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3617,15 +3623,18 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-ED25519SIGNATURE",
       "layer": "standard-library",
       "surface": "Ed25519Signature",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The Lean signature record carries a Curve25519 Point and Scalar. Its verifier call emits the same native relation as passing the typed components individually. Portable aggregate signature input and output remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3638,7 +3647,10 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Crypto/Signatures.lean",
+        "tests/SignatureChecks.lean"
+      ],
       "equivalence": "unverified"
     },
     {
