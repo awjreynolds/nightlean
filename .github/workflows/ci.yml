@@ -111,6 +111,7 @@ jobs:
           lake env lean tests/ForeignTransport.lean
           lake env lean tests/ForeignPointLiterals.lean
           lake env lean tests/ForeignOperations.lean
+          lake env lean tests/ForeignFieldNegInv.lean
           lake env lean tests/ForeignStorage.lean
           lake env lean tests/ForeignTree.lean
           lake env lean tests/ForeignKeys.lean
@@ -134,6 +135,7 @@ jobs:
           lake env lean tests/NativeStandaloneMints.lean
           lake env lean tests/ShieldedReceive.lean
           lake env lean tests/FundedShieldedReceive.lean
+          lake env lean tests/ShieldedWalletMint.lean
           lake env lean tests/ShieldedSpend.lean
           lake env lean tests/ShieldedMapPartialSpend.lean
           lake env lean tests/ShieldedImmediateRelay.lean

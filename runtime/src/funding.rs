@@ -8,9 +8,12 @@ use crate::{
 #[cfg(feature = "localnet")]
 use base_crypto::hash::HashOutput;
 use base_crypto::{rng::SplittableRng, time::Timestamp};
-#[cfg(feature = "localnet")]
-use coin_structure::coin::Info;
 use coin_structure::coin::TokenType;
+#[cfg(feature = "localnet")]
+use coin_structure::{
+    coin::{Info, PublicKey},
+    transfer::Recipient,
+};
 use ledger::{
     dust::{DUST_EXPECTED_FILES, DustActions, DustLocalState, DustOutput, DustSecretKey},
     structure::{
@@ -209,6 +212,86 @@ impl DustFunding {
             || !offer.inputs.is_empty()
             || !offer.transient.is_empty()
             || output.contract_address.as_deref() != Some(&call.address)
+        {
+            return Err(Error::Intent);
+        }
+
+        self.fund_shielded_offer(
+            contract,
+            offer,
+            offer_binding_randomness,
+            network_id,
+            parameters,
+            material,
+            srs,
+            now,
+            policy,
+            rng,
+        )
+        .await
+    }
+
+    /// Fund one shielded mint to a wallet key, with no contract-owned receive.
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn fund_shielded_wallet_mint(
+        &self,
+        contract: &ProvedNativeIntent,
+        offer: ZswapOffer<Proof, Db>,
+        offer_binding_randomness: PedersenRandomness,
+        domain: HashOutput,
+        coin: &Info,
+        recipient: PublicKey,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
+        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+            return Err(Error::Intent);
+        };
+        let Some(output) = offer.outputs.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(amount) = u64::try_from(coin.value).ok() else {
+            return Err(Error::Intent);
+        };
+        let exact_mint_delta = {
+            let mut deltas = offer.deltas.iter_deref();
+            match (deltas.next(), deltas.next()) {
+                (Some(delta), None) => {
+                    delta.token_type == coin.type_ && delta.value == -i128::from(amount)
+                }
+                _ => false,
+            }
+        };
+        let expected_commitment = coin.commitment(&Recipient::User(recipient));
+        if contract.actions.len() != 1
+            || call.fallible_transcript.is_some()
+            || transcript.effects.claimed_nullifiers.size() != 0
+            || transcript.effects.claimed_shielded_spends.size() != 0
+            || transcript.effects.claimed_shielded_receives.size() != 0
+            || transcript.effects.shielded_mints.size() != 1
+            || transcript
+                .effects
+                .shielded_mints
+                .get(&domain)
+                .map(|value| *value)
+                != Some(amount)
+            || offer.inputs.len() != 0
+            || offer.outputs.len() != 1
+            || !offer.transient.is_empty()
+            || coin.value == 0
+            || coin.type_ != call.address.custom_shielded_token_type(domain)
+            || output.coin_com != expected_commitment
+            || output.contract_address.is_some()
+            || output.ciphertext.is_none()
+            || !exact_mint_delta
         {
             return Err(Error::Intent);
         }

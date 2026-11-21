@@ -5070,8 +5070,8 @@
       "id": "C-STDLIB-NEG",
       "layer": "standard-library",
       "surface": "neg",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignNeg lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. A native 3.2.1 fixture checks one nonzero value and zero for each field. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5084,15 +5084,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-INV",
       "layer": "standard-library",
       "surface": "inv",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignInv lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. The native 3.2.1 fixture checks one nonzero inverse per field and rejects each active zero inverse. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5105,7 +5109,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5399,8 +5407,8 @@
       "id": "C-STDLIB-MINTSHIELDEDTOKEN",
       "layer": "standard-library",
       "surface": "mintShieldedToken",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean composes the native mint and recipient-specific Cell booking. Pinned Compact confirms the reference wallet recipient and Cell booking behavior. A funded Ledger 9 run checks the finalized commitment and index, wallet recovery and the stored qualified coin. Changed recipient and replay attempts leave state unchanged. Contract recipients and multi-output settlement need separate qualification.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5413,7 +5421,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedWalletMint.lean",
+        "tests/compact/explicit-booked-coin-recipients.mjs",
+        "runtime/tests/shielded_wallet_mint.rs",
+        "runtime/src/localnet/shielded_receive.rs",
+        "docs/development/shielded-wallet-mint-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
