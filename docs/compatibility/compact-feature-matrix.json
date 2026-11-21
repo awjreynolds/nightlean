@@ -1773,8 +1773,8 @@
       "id": "C-ADT-KERNEL-CLAIMCONTRACTCALL",
       "layer": "language-ledger",
       "surface": "Kernel.claimContractCall",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "related-subset",
+      "notes": "Direct call-claim tests cover public target, entrypoint hash and control, require explicit commitment disclosure, and reject private target/hash/control or an undisclosed commitment. Named-interface composition covers one stateful route and aggregate call accepted on localnet. Other claim shapes and full Compact equivalence remain unverified.",
       "source": [
         "adt"
       ],
@@ -1783,7 +1783,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCallClaims.lean",
+        "tests/ContractInterfaceComposition.lean",
+        "docs/development/native-call-claims.md",
+        "docs/development/named-interface-stateful-composition-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
