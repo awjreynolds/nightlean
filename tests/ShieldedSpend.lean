@@ -89,3 +89,32 @@ private def spendsRecordedCoin (effect : Effect) : _root_.Bool :=
   | _ => _root_.Bool.false
 #guard (Disclosure.entrypoint shieldedSpendEntry).isOk
 #guard (shieldedSpendEntry.validate Capabilities.source ShieldedSpend.state).isOk
+
+private def spendBytes (byte : Nat) : Value := .bytes 32 (List.replicate 32 byte)
+
+private def spendInputs : EvalEnv := [
+  ("nonce", spendBytes 1),
+  ("recipient", spendBytes 2)]
+
+private def spendState (recordNonce : Nat) : LedgerState := {
+  trees := [("pot", .map [
+    (spendBytes 1, .composite (.structure "ShieldedSpend.Coin") [
+      spendBytes recordNonce,
+      spendBytes 3,
+      .uint (2 ^ 128 - 1) 5,
+      .uint (2 ^ 64 - 1) 0])])]
+}
+
+private def spendContext : EvalContext := {
+  modulus := Field.modulus
+  poseidon2 := fun _ _ _ => .error "unused by shielded spend fixture"
+  ownContractAddress := some (List.replicate 32 4)
+}
+
+#guard match Entrypoint.run spendContext shieldedSpendEntry spendInputs (spendState 2) with
+  | .error message => message == "state transition guard failed"
+  | .ok _ => _root_.Bool.false
+#guard match Entrypoint.run spendContext shieldedSpendEntry spendInputs (spendState 1) with
+  | .error message =>
+      message == "reference evaluator cannot determine the native shielded spend commitment"
+  | .ok _ => _root_.Bool.false

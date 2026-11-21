@@ -361,6 +361,64 @@ impl BoundTransaction {
         .await
     }
 
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn prepare_shielded_transfer(
+        contract: &ProvedNativeIntent,
+        expected_offer: &zswap::Offer<transient_crypto::proofs::Proof, Db>,
+        policy: NetworkPolicy,
+        chain: &impl ChainAdapter,
+        funding: &impl FundingAdapter,
+        signer: &impl SigningAdapter,
+    ) -> Result<Self> {
+        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+            return Err(Error::Funding);
+        };
+        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+            return Err(Error::Funding);
+        };
+        let Some(input) = expected_offer.inputs.get(0) else {
+            return Err(Error::Funding);
+        };
+        let Some(output) = expected_offer.outputs.get(0) else {
+            return Err(Error::Funding);
+        };
+        require(
+            contract.actions.len() == 1
+                && call.fallible_transcript.is_none()
+                && transcript.effects.claimed_nullifiers.size() == 1
+                && transcript
+                    .effects
+                    .claimed_nullifiers
+                    .iter()
+                    .any(|nullifier| **nullifier == input.nullifier)
+                && transcript.effects.claimed_shielded_spends.size() == 1
+                && transcript
+                    .effects
+                    .claimed_shielded_spends
+                    .iter()
+                    .any(|commitment| **commitment == output.coin_com)
+                && transcript.effects.claimed_shielded_receives.size() == 0
+                && transcript.effects.shielded_mints.size() == 0
+                && expected_offer.inputs.len() == 1
+                && expected_offer.outputs.len() == 1
+                && expected_offer.transient.is_empty()
+                && input.contract_address.as_deref() == Some(&call.address)
+                && output.contract_address.is_none()
+                && output.ciphertext.is_some(),
+            Error::Funding,
+        )?;
+        let expected_offer = body(&Some(storage::arena::Sp::new(expected_offer.clone())))?;
+        Self::prepare_inner(
+            contract,
+            policy,
+            chain,
+            funding,
+            signer,
+            Some(expected_offer),
+        )
+        .await
+    }
+
     async fn prepare_inner(
         contract: &ProvedNativeIntent,
         policy: NetworkPolicy,

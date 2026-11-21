@@ -1831,8 +1831,8 @@
       "id": "C-ADT-KERNEL-CLAIMZSWAPCOINSPEND",
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinSpend",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "related-subset",
+      "notes": "The unguarded whole-coin Map spend claims one guaranteed user-owned output and finalizes on Ledger 9.1.0.1 with ZKIR 3.2.1. It covers one input and one full-value output.",
       "source": [
         "adt"
       ],
@@ -1841,15 +1841,18 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/shielded-spend-localnet-receipt.json",
+        "docs/development/compact-shielded-coin-map.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-ADT-KERNEL-CLAIMZSWAPNULLIFIER",
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapNullifier",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "related-subset",
+      "notes": "The whole-coin Map spend claims the input nullifier derived for the contract-owned coin and finalizes on Ledger 9.1.0.1 with ZKIR 3.2.1. The native harness rejects replay.",
       "source": [
         "adt"
       ],
@@ -1858,7 +1861,10 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/shielded-spend-localnet-receipt.json",
+        "docs/development/compact-shielded-coin-map.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5194,8 +5200,8 @@
       "id": "C-STDLIB-SENDSHIELDED",
       "layer": "standard-library",
       "surface": "sendShielded",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "The pinned Compact comparator and Noctium exercise a full-value send from one qualified Map coin to one user output. Noctium finalizes this scope on Ledger 9.1.0.1 with ZKIR 3.2.1. Partial spend with retained change is tracked separately.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5208,7 +5214,10 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "docs/development/shielded-spend-localnet-receipt.json",
+        "docs/development/compact-shielded-coin-map.md"
+      ],
       "equivalence": "unverified"
     },
     {
