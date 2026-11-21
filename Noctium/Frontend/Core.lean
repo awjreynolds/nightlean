@@ -11,6 +11,7 @@ import Noctium.Types.Maybe
 import Noctium.Types.Either
 import Noctium.EntryPointHash
 import Noctium.Wire
+import Noctium.ShieldedBurn
 import Lean
 
 namespace Noctium
@@ -272,6 +273,7 @@ scoped syntax "persistentCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,*
 scoped syntax "transientCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "shieldedOutputNonce(" nlexpr ")" : nlexpr
+scoped syntax "shieldedBurnKey(" ")" : nlexpr
 declare_syntax_cat nlcallvalue
 scoped syntax nlexpr : nlcallvalue
 scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallvalue
@@ -1216,6 +1218,8 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| shieldedOutputNonce($value)) => do
     let value ← expected env value (.bytes 32)
     pure (.bytes 32, ← `(Noctium.Wire.shieldedOutputNonce $value))
+  | `(nlexpr| shieldedBurnKey()) =>
+    pure (.bytes 32, ← `(Noctium.shieldedBurnAddress.recipient))
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -1847,6 +1851,7 @@ private partial def nominalBytes32OfExpression (state : EntryEffects)
     (expression : TSyntax `nlexpr) : Option NominalBytes32 :=
   match expression with
   | `(nlexpr| disclose($value)) => nominalBytes32OfExpression state value
+  | `(nlexpr| shieldedBurnKey()) => some .zswapCoinPublicKey
   | `(nlexpr| $name:ident) => state.nominalBytes32Bindings.lookup name.getId.toString
   | _ => none
 
