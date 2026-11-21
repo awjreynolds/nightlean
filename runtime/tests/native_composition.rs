@@ -368,6 +368,65 @@ fn native_intent_assembles_a_call_forest_and_rejects_unmatched_claims() {
     .unwrap();
     assert!(assemble(&[caller(&wrong_tuple), callee()]).is_err());
 
+    let wrong_entry = EntryPointBuf::from(b"withdraw".to_vec()).ep_hash();
+    let wrong_claims = [
+        ("entryHash", bytes32(wrong_entry)),
+        ("argument", json!("4")),
+        ("expectedBalance", json!("14")),
+    ]
+    .map(|(field, value)| {
+        let mut inputs = caller_inputs(callee_address.0, entry_hash, true);
+        inputs.insert(field.into(), value);
+        let wrong_claim = prepare(
+            &caller_plan,
+            &inputs,
+            &caller_state,
+            &INITIAL_PARAMETERS,
+            caller_address,
+        )
+        .unwrap();
+        (field, wrong_claim)
+    });
+    for (field, wrong_claim) in &wrong_claims {
+        check(wrong_claim, &caller_circuit).unwrap();
+        assert_eq!(
+            assemble(&[caller(wrong_claim), callee()])
+                .err()
+                .unwrap()
+                .to_string(),
+            "contract claim has no matching later call in this intent",
+            "unexpected result for a claim with the wrong {field}"
+        );
+    }
+
+    let second_parent_address = ContractAddress(HashOutput([13; 32]));
+    let second_parent_execution = prepare(
+        &caller_plan,
+        &caller_inputs(callee_address.0, entry_hash, true),
+        &caller_state,
+        &INITIAL_PARAMETERS,
+        second_parent_address,
+    )
+    .unwrap();
+    check(&second_parent_execution, &caller_circuit).unwrap();
+    let second_parent = checked_call(
+        &second_parent_execution,
+        &caller_circuit,
+        caller_state.clone(),
+        second_parent_address,
+        EntryPointBuf::from(b"claim".to_vec()),
+        Fr::from(107u64),
+    );
+    let multiple_claims = assemble(&[caller(&caller_execution), second_parent, callee()])
+        .err()
+        .unwrap()
+        .to_string();
+    assert!(
+        multiple_claims == "contract call has multiple claims"
+            || multiple_claims == "official native call forest partition failed",
+        "unexpected multiple-parent rejection: {multiple_claims}"
+    );
+
     let prepare_inactive = || {
         prepare(
             &caller_plan,

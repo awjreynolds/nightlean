@@ -300,7 +300,7 @@ offer, a 16 MiB total draft limit and a maximum of 64 calls per draft. Imports
 check the profile, canonical encoding, entrypoint and transcript bounds. The
 draft also checks the network ID and that the rebuilt public calls match its
 digest. Hosts supply authentication, expiry policy and the trusted ledger
-snapshot. Foreign SDK bindings and durable recovery remain open.
+snapshot.
 
 The K9 caller and K7 callee finalized together at block 30432. The node
 confirmed both call events in the same extrinsic and the exact resulting
@@ -328,6 +328,42 @@ cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
   --no-default-features --features zkir-321,localnet --test native_composition \
   independent_processes_compose_on_localnet -- --ignored --nocapture
 ```
+
+### Prove a callee through the C ABI
+
+The [native header](../../runtime/include/noctium_native.h) exposes the owner
+side of this protocol. Begin with the authenticated bundle and proof
+parameters, the address and trusted ledger snapshot, the private input map
+and fresh entropy. Read the public offer from a result token. Approve the
+coordinator's draft and pass the exact draft bytes, owner slot and fresh
+entropy to prove. The runtime rebuilds the draft, checks the owner slot and
+installed verifier, and returns a detached proof. Free the owner and both
+result tokens. Hosts authenticate their snapshot and approve the full draft.
+The Rust coordinator continues to attach the proofs and submit the intent.
+
+Build the C++ callee for the same funded test. Set `LIBDIR` to the directory
+holding the Cargo output for this build.
+
+```sh
+cargo +1.100.0 build --manifest-path runtime/Cargo.toml --locked \
+  --no-default-features --features zkir-321,localnet --lib
+c++ -std=c++17 -Wall -Wextra -Werror runtime/tests/native_composition/cpp_owner.cpp \
+  -L"$LIBDIR" -lnoctium_runtime -Wl,-rpath,"$LIBDIR" -o "$LIBDIR/cpp-composition-owner"
+export NOCTIUM_COMPOSITION_CPP_OWNER="$LIBDIR/cpp-composition-owner"
+```
+
+Run `independent_processes_compose_on_localnet` with the same bundle and
+network settings. The callee's test worker passes its inputs and finalized
+snapshot to the linked C++ process over a private pipe. The coordinator
+receives the public offer and detached proof. The caller continues to use
+the Rust SDK. Durable composition recovery and foreign coordinator APIs
+remain open.
+
+The Rust caller and linked C++ callee finalized together on Ledger 9 at block
+113. The callee rejected the wrong slot and an altered draft, then proved its
+own slot and rejected a second proof. The caller's state matched its deployment
+bytes. The callee's balance moved from 10 to 13 and its count from 0 to 1.
+[Finalized receipt and build pins](composition-cpp-localnet-receipt.json)
 
 ## Fund and observe on localnet
 
