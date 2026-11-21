@@ -354,12 +354,20 @@ def LedgerValueType.recordFields (environment : Types.CompositeEnv)
       throw "mixed ledger record layout does not match its flat field declaration"
     pure fields
 
+/-- Describe a List element as its typed scalar value or as the fields of its
+existing checked record representation. -/
+def LedgerValueType.listElementFields (environment : Types.CompositeEnv)
+    (type : Types.CompositeType) : Except String (List (String × Ty)) :=
+  match type with
+  | .scalar ty => pure [("value", ty)]
+  | _ => LedgerValueType.recordFields environment type
+
 def LedgerValueType.listPath (schema : LedgerValueType) (keys : List PathKey) :
     Except String (Types.CompositeEnv × Types.CompositeType × List (String × Ty)) := do
   if keys.length > 13 then throw "list path exceeds the native insertion depth"
   let .list environment type ← schema.resolvePath keys
     | throw "list operation path must select a List value"
-  let fields ← LedgerValueType.recordFields environment type
+  let fields ← LedgerValueType.listElementFields environment type
   pure (environment, type, fields)
 
 def LedgerValueType.compositeSchema (schema : LedgerValueType) :
@@ -966,7 +974,7 @@ def LedgerValueType.validate (caps : Capabilities) : LedgerValueType → Except 
       ty.validate caps
     pure ()
   | .list environment type => do
-    let fields ← LedgerValueType.recordFields environment type
+    let fields ← LedgerValueType.listElementFields environment type
     for (_, ty) in fields do
       ty.validate caps
     pure ()

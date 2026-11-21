@@ -1,0 +1,38 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger values: List<Field>;
+export ledger memos: Map<Bytes<32>, List<Bytes<128>>>;
+
+export circuit push(owner: Bytes<32>, value: Field, memo: Bytes<128>): [] {
+  const key = disclose(owner);
+  if (!memos.member(key)) { memos.insertDefault(key); }
+  values.pushFront(disclose(value));
+  memos.lookup(key).pushFront(disclose(memo));
+}
+
+export circuit inspect(owner: Bytes<32>, enabled: Boolean): [Uint<64>, Boolean, Boolean, Field, Uint<64>, Boolean, Boolean, Bytes<128>] {
+  if (disclose(enabled)) {
+    const key = disclose(owner);
+    const value = values.head();
+    const memo = memos.lookup(key).head();
+    return [values.length(), values.isEmpty(), value.is_some, value.value,
+            memos.lookup(key).length(), memos.lookup(key).isEmpty(), memo.is_some, memo.value];
+  }
+  return [0 as Uint<64>, false, false, 0 as Field, 0 as Uint<64>, false, false, pad(128, "")];
+}
+
+export circuit pop(owner: Bytes<32>): [] {
+  values.popFront();
+  memos.lookup(disclose(owner)).popFront();
+}
+
+export circuit reset(owner: Bytes<32>): [] {
+  const key = disclose(owner);
+  if (memos.member(key)) {
+    memos.lookup(key).resetToDefault();
+  } else {
+    memos.insertDefault(key);
+  }
+  values.resetToDefault();
+}
