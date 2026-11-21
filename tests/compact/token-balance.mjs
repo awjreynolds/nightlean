@@ -11,9 +11,9 @@ const raw = Buffer.from(color).toString('hex');
 const max128 = (1n << 128n) - 1n;
 const { currentContractState } = await contract.initialState(createConstructorContext(null, key));
 
-function inspect(unshielded, shielded, tag, limit, enabled, exact) {
+function contextWithBalance(circuitId, unshielded, shielded) {
   const context = createCircuitContext({
-    circuitId: 'inspect',
+    circuitId,
     contractAddress: dummyContractAddress(),
     coinPublicKeyOrZswapState: key,
     contractState: currentContractState.data,
@@ -21,12 +21,20 @@ function inspect(unshielded, shielded, tag, limit, enabled, exact) {
   });
   const vm = context.callContext.currentQueryContext;
   const balance = new Map();
-  balance.set({tag: 'unshielded', raw}, unshielded);
+  if (unshielded !== null) {
+    balance.set({tag: 'unshielded', raw}, unshielded);
+  }
   if (shielded !== null) {
     balance.set({tag: 'shielded', raw}, shielded);
   }
   vm.block = {...vm.block, balance};
-  return contract.circuits.inspect(context, color, tag, limit, enabled, exact);
+  return context;
+}
+
+function inspect(unshielded, shielded, tag, limit, enabled, exact) {
+  return contract.circuits.inspect(
+    contextWithBalance('inspect', unshielded, shielded), color, tag, limit, enabled, exact,
+  );
 }
 
 for (const [shielded, tag, limit, enabled, exact, amount] of [
@@ -45,3 +53,22 @@ for (const [amount, limit] of [[max128, 0n], [23n, max128]]) {
     /decode for built-in type u64/);
 }
 console.log('Token balance: six Compact results and two width rejections matched');
+
+for (const [amount, expected] of [
+  [17n, [17n, true, false, false, true]],
+  [20n, [20n, false, true, false, true]],
+  [23n, [23n, false, true, true, false]],
+  [null, [0n, true, false, false, true]],
+]) {
+  const context = contextWithBalance('unshielded', amount, 11n);
+  const {result} = await contract.circuits.unshielded(context, color, 20n, true);
+  assert.deepEqual(result, expected);
+}
+const inactive = await contract.circuits.unshielded(
+  contextWithBalance('unshielded', max128, 11n), color, max128, false,
+);
+assert.deepEqual(inactive.result, [max128, false, false, false, false]);
+await assert.rejects(async () => contract.circuits.unshielded(
+  contextWithBalance('unshielded', max128, 11n), color, 20n, true,
+), /decode for built-in type u64/);
+console.log('Unshielded helpers: five Compact results and one width rejection matched');
