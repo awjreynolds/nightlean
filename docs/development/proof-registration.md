@@ -26,6 +26,8 @@ An `AuditPolicy` binds the subject and privacy specification. `FunctionalObligat
 
 These commands create provisional authoring metadata. They do not establish the review authority of `reviewedPolicy`. The separate data-export audit must apply an independently trusted model pin.
 
+Run `#noctium_source_proof_coverage MyContract` after registration to list the contract's entrypoints and the checked roles for each one. The report uses kernel definitional equality to match the contract and pair the full functional and privacy policies. It reports missing roles, ambiguous candidates, and policy mismatches. Repeated identical registrations count once. Native and deployment verification remain false in this report.
+
 The final policy and proof declarations must be closed instances without uninstantiated universe parameters. Generic lemmas remain unrestricted; a small ordinary Lean theorem instantiates them for the concrete audited subject and policy. The transport does not silently choose universe arguments or discharge missing theorem hypotheses.
 
 ## Privacy scope
