@@ -1,0 +1,7 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export circuit exposeOwnPublicKey(): Bytes<32> {
+  const key = ownPublicKey();
+  return disclose(key.bytes);
+}
