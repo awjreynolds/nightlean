@@ -1773,8 +1773,8 @@
       "id": "C-ADT-KERNEL-CLAIMCONTRACTCALL",
       "layer": "language-ledger",
       "surface": "Kernel.claimContractCall",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "related-subset",
+      "notes": "Direct call-claim tests cover public target, entrypoint hash and control, require explicit commitment disclosure, and reject private target/hash/control or an undisclosed commitment. Named-interface composition covers one stateful route and aggregate call accepted on localnet. Other claim shapes and full Compact equivalence remain unverified.",
       "source": [
         "adt"
       ],
@@ -1783,7 +1783,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeCallClaims.lean",
+        "tests/ContractInterfaceComposition.lean",
+        "docs/development/native-call-claims.md",
+        "docs/development/named-interface-stateful-composition-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -1813,7 +1818,7 @@
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinReceive",
       "noctiumStatus": "related-subset",
-      "notes": "The native mint-and-receive fixture claims one guaranteed contract-owned output with its Ledger commitment and finalizes on localnet. A standalone public source primitive and other offer shapes remain open.",
+      "notes": "The native mint-and-receive fixture claims one guaranteed contract-owned output. The partial spend also claims and retains one change output. Both finalize on Ledger 9.1.0.1. A standalone public source primitive and other offer shapes remain open.",
       "source": [
         "adt"
       ],
@@ -1823,6 +1828,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-receive-localnet-receipt.json"
       ],
       "equivalence": "unverified"
@@ -1832,7 +1838,7 @@
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinSpend",
       "noctiumStatus": "related-subset",
-      "notes": "The unguarded whole-coin Map spend claims one guaranteed user-owned output and finalizes on Ledger 9.1.0.1 with ZKIR 3.2.1. It covers one input and one full-value output.",
+      "notes": "Whole and partial root Map spends finalize on Ledger 9.1.0.1 with ZKIR 3.2.1. The partial case claims one user output and one contract-owned change output for one qualified input.",
       "source": [
         "adt"
       ],
@@ -1842,6 +1848,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-spend-localnet-receipt.json",
         "docs/development/compact-shielded-coin-map.md"
       ],
@@ -2429,7 +2436,7 @@
       "layer": "language-ledger",
       "surface": "Map.insertCoin",
       "noctiumStatus": "related-subset",
-      "notes": "The same-call mint-and-receive fixture finalizes on localnet and stores the Ledger-assigned output index in a root Bytes32-keyed Map. General Map.insertCoin remains open.",
+      "notes": "Native same-call mint-and-receive and partial-spend change finalize on Ledger 9.1.0.1 and store the Ledger-assigned index in a root Bytes32-keyed Map. General Map.insertCoin remains open.",
       "source": [
         "adt"
       ],
@@ -2439,6 +2446,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-receive-localnet-receipt.json",
         "tests/ShieldedReceive.lean",
         "runtime/tests/shielded_receive.rs",
@@ -2668,7 +2676,7 @@
       "layer": "language-ledger",
       "surface": "List.head",
       "noctiumStatus": "subset",
-      "notes": "Scalar and named-record Lists expose strict head and headOrDefault. Strict head requires a nonempty List. The optional form binds presence and a typed scalar or the declared record fields. The matched Native and Bytes128 case checks empty and nonempty values. Compact returns Maybe<T>. The host ledger getter remains unqualified.",
+      "notes": "Scalar and named-record Lists expose strict head and headOrDefault. Strict head requires a nonempty List. The optional form binds presence and a typed scalar or the declared record fields. The matched Native and Bytes128 case checks empty and nonempty values. The matched UInt8 case returns a single typed Maybe view on both compilers, with tag first and canonical zero for an empty List. The host ledger getter remains unqualified.",
       "source": [
         "adt"
       ],
@@ -2678,6 +2686,10 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "tests/NativeScalarListMaybe.lean",
+        "runtime/tests/scalar_list_maybe.rs",
+        "tests/compact/ListHeadMaybe.compact",
+        "tests/compact/list-head-maybe.mjs",
         "tests/OptionalListHead.lean",
         "runtime/tests/optional_list_head.rs",
         "tests/MixedLedgerRecord.lean",
@@ -3417,8 +3429,8 @@
       "id": "C-STDLIB-MAYBE",
       "layer": "standard-library",
       "surface": "Maybe",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Scalar native List heads return the typed Maybe shape. Matched Compact 0.36.1 and Noctium on ZKIR 3.2.1 UInt8 cases cover empty and one-item Lists. General Maybe values in other source positions and element families remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3431,7 +3443,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeScalarListMaybe.lean",
+        "runtime/tests/scalar_list_maybe.rs",
+        "tests/compact/ListHeadMaybe.compact",
+        "tests/compact/list-head-maybe.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5205,7 +5222,7 @@
       "layer": "standard-library",
       "surface": "sendShielded",
       "noctiumStatus": "related-subset",
-      "notes": "The pinned Compact comparator and Noctium exercise a full-value send from one qualified Map coin to one user output. Noctium finalizes this scope on Ledger 9.1.0.1 with ZKIR 3.2.1. Partial spend with retained change is tracked separately.",
+      "notes": "The pinned Compact comparator and Noctium exercise full-value and 5-to-2-plus-3 sends from one qualified Map coin. Noctium finalizes both on Ledger 9.1.0.1 with ZKIR 3.2.1, including contract change qualification.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5219,6 +5236,7 @@
         "ABI"
       ],
       "observedEvidence": [
+        "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-spend-localnet-receipt.json",
         "docs/development/compact-shielded-coin-map.md"
       ],

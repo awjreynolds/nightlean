@@ -227,6 +227,13 @@ def describeEffect : Effect → LedgerEffectDescriptor
       [.selector "nonce" sink nonce, .selector "color" sink color,
        .payload "amount" sink amount, .selector "recipient" sink recipient,
        .selector "contractAddress" sink selfAddress] []
+  | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
+    let sink := "public partial shielded coin send"
+    .publicEffect "sendShieldedFromMap" .asset .publicActivity sink
+      [.selector "nonce" sink nonce, .selector "color" sink color,
+       .payload "inputAmount" sink inputAmount, .payload "sendAmount" sink sendAmount,
+       .selector "recipient" sink recipient,
+       .selector "contractAddress" sink selfAddress] []
   | .mintUnshielded domain amount =>
     let sink := "public unshielded mint"
     .publicEffect "mintUnshielded" .asset .publicActivity sink

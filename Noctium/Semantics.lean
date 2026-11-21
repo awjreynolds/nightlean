@@ -1122,6 +1122,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       throw "reference evaluator cannot determine the native shielded receive index"
     | .spendShieldedFromMap .. =>
       throw "reference evaluator cannot determine the native shielded spend commitment"
+    | .sendShieldedFromMap .. =>
+      throw "reference evaluator cannot determine the native shielded change index"
     | .mintShielded domain amount =>
       next ← mintShielded ctx env next domain amount
     | .mintUnshielded domain amount =>
@@ -1435,6 +1437,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           throw "reference evaluator cannot determine the native shielded receive index"
         | .spendShieldedFromMap .. =>
           throw "reference evaluator cannot determine the native shielded spend commitment"
+        | .sendShieldedFromMap .. =>
+          throw "reference evaluator cannot determine the native shielded change index"
         | .mintShielded domain amount =>
           next ← mintShielded ctx env next domain amount
         | .mintUnshielded domain amount =>

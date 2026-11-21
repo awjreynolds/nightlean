@@ -354,6 +354,92 @@ impl DustFunding {
         .await
     }
 
+    /// Fund one contract-owned coin split across one encrypted user output and one contract change.
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn fund_shielded_split(
+        &self,
+        contract: &ProvedNativeIntent,
+        offer: ZswapOffer<Proof, Db>,
+        offer_binding_randomness: PedersenRandomness,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
+        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+            return Err(Error::Intent);
+        };
+        let Some(input) = offer.inputs.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(user_output) = offer
+            .outputs
+            .iter_deref()
+            .find(|output| output.contract_address.is_none() && output.ciphertext.is_some())
+        else {
+            return Err(Error::Intent);
+        };
+        let Some(change_output) = offer.outputs.iter_deref().find(|output| {
+            output.contract_address.as_deref() == Some(&call.address) && output.ciphertext.is_none()
+        }) else {
+            return Err(Error::Intent);
+        };
+        if contract.actions.len() != 1
+            || call.fallible_transcript.is_some()
+            || transcript.effects.claimed_nullifiers.size() != 1
+            || !transcript
+                .effects
+                .claimed_nullifiers
+                .iter()
+                .any(|nullifier| **nullifier == input.nullifier)
+            || transcript.effects.claimed_shielded_spends.size() != 2
+            || !transcript
+                .effects
+                .claimed_shielded_spends
+                .iter()
+                .any(|commitment| **commitment == user_output.coin_com)
+            || !transcript
+                .effects
+                .claimed_shielded_spends
+                .iter()
+                .any(|commitment| **commitment == change_output.coin_com)
+            || transcript.effects.claimed_shielded_receives.size() != 1
+            || !transcript
+                .effects
+                .claimed_shielded_receives
+                .iter()
+                .any(|commitment| **commitment == change_output.coin_com)
+            || transcript.effects.shielded_mints.size() != 0
+            || offer.inputs.len() != 1
+            || offer.outputs.len() != 2
+            || !offer.transient.is_empty()
+            || user_output.coin_com == change_output.coin_com
+            || input.contract_address.as_deref() != Some(&call.address)
+        {
+            return Err(Error::Intent);
+        }
+
+        self.fund_shielded_offer(
+            contract,
+            offer,
+            offer_binding_randomness,
+            network_id,
+            parameters,
+            material,
+            srs,
+            now,
+            policy,
+            rng,
+        )
+        .await
+    }
+
     #[cfg(feature = "localnet")]
     async fn fund_shielded_offer(
         &self,

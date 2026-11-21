@@ -89,4 +89,42 @@ NOCTIUM_TRANSFER_SPEND_MANIFEST_SHA256=YOUR_SPEND_MANIFEST_SHA256 \
   funded_shielded_map_spend_localnet -- --ignored --nocapture
 ```
 
+## Partial spend from a Map
+
+`tests/ShieldedMapPartialSpend.lean` adds `sendShieldedFromMap`. It spends one contract-owned coin into a user output and contract change. The native runtime enforces `0 < sendAmount < inputAmount`, derives the user nonce with `midnight:kernel:nonce_evolve` and the change nonce with `midnight:kernel:nonce_evolve/2`, removes the old Map row, then receives the change under its derived nonce. The native plan binds the nullifier and both output commitments, and allows only read-only change-key checks before the change receive.
+
+The pinned Compact 0.36.1 runner checks a 5-unit input split into a 2-unit user output and 3-unit contract change, including exact claim hashes, Map contents, amount bounds and replay rejection. Noctium's focused VM test and opt-in compiled-plan/ZKIR check pass against the same vector. On the ZKIR 3.2.1 mock, sharing the immutable contract-address read changes the circuit size from 25,493 rows to 19,599 rows. Both versions report k=15.
+
+Ledger 9.1.0.1 finalized the split at block 231. The recipient decrypted two units at output index 32. The contract Map held three units at change index 33 and no longer held the original coin. The harness rejected a mismatched nonce, a full-value request through the split entry and replay before submission. [Receipt](shielded-partial-spend-localnet-receipt.json)
+
+Export the Lean fixture:
+
+```sh
+lake exe noctium compile tests/ShieldedMapPartialSpend.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output build/experiments/214/lean-partial-spend-shared-address
+```
+
+Run the Compact comparator with the pinned compiler and runtime directories:
+
+```sh
+node tests/compact/shielded-coin-map.mjs \
+  /path/to/compactc-0.36.1 \
+  /path/to/compact-runtime-0.21.0
+```
+
+Run the funded Noctium localnet test after preparing authenticated `tip` and `spend` bundles and a local development node:
+
+```sh
+NOCTIUM_PARTIAL_SPEND_NODE=http://127.0.0.1:19944 \
+NOCTIUM_PARTIAL_SPEND_PARAMETER_CACHE=/path/to/verified/parameter-cache \
+NOCTIUM_PARTIAL_SPEND_TIP_BUNDLE=/path/to/tip-bundle \
+NOCTIUM_PARTIAL_SPEND_TIP_MANIFEST_SHA256=YOUR_TIP_MANIFEST_SHA256 \
+NOCTIUM_PARTIAL_SPEND_SPEND_BUNDLE=/path/to/spend-bundle \
+NOCTIUM_PARTIAL_SPEND_SPEND_MANIFEST_SHA256=YOUR_SPEND_MANIFEST_SHA256 \
+  cargo test --locked --manifest-path runtime/Cargo.toml --lib \
+  --no-default-features --features zkir-321,localnet \
+  funded_shielded_map_partial_spend_localnet -- --ignored --nocapture
+```
+
 Pins and source behavior: [Compact 0.36.1 release](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.36.1), [Compact private tip jar](https://docs.midnight.network/tutorials/private-tip-jar/smart-contract), [Compact ledger ADTs](https://docs.midnight.network/compact/reference/ledger-adt), [Ledger 9.1.0.1](https://github.com/midnightntwrk/midnight-ledger/releases/tag/ledger-9.1.0.1).

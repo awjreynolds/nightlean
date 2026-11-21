@@ -60,3 +60,30 @@ pop. It does not depend on the Compact compiler or runtime.
 standalone Native and nested Bytes128 Lists. The
 [Compact 0.36.1 oracle](../../tests/compact/native-scalar-list.mjs)
 checks the corresponding empty, prepend, pop and reset transitions.
+
+The [pinned Compact `Maybe` oracle](../../tests/compact/ListHeadMaybe.compact)
+and [runner](../../tests/compact/list-head-maybe.mjs) check `head()` on
+`List<Uint<8>>`: an empty List returns `is_some = false, value = 0`, and a
+List after pushing `37` returns `is_some = true, value = 37`. The runner
+requires Compact 0.36.1 and `@midnight-ntwrk/compact-runtime` 0.21.0, and
+accepts their local paths as arguments:
+
+```sh
+node tests/compact/list-head-maybe.mjs <compactc-0.36.1> <compact-runtime-0.21.0>
+```
+
+[`NativeScalarListMaybe.lean`](../../tests/NativeScalarListMaybe.lean)
+uses `headOrDefault values as (present, payload)` followed by
+`returnMaybe head as (present, payload)`. The native checker accepted the
+fresh 3.2.1 circuits for both cases and returned one structured value with
+the Boolean tag first and the UInt8 payload second. An absent result carries
+the canonical zero payload. [Native checker](../../runtime/tests/scalar_list_maybe.rs)
+
+```sh
+lake exe noctium compile tests/NativeScalarListMaybe.lean \
+  --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+  --emit ledger --output build/scalar-list-maybe
+NOCTIUM_SCALAR_LIST_MAYBE_DIR="$PWD/build/scalar-list-maybe" \
+  cargo test --locked --manifest-path runtime/Cargo.toml \
+  --no-default-features --features zkir-321 --test scalar_list_maybe -- --ignored
+```

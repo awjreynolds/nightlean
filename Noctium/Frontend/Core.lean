@@ -7,7 +7,9 @@ import Noctium.Witness
 import Noctium.Modules
 import Noctium.Crypto.Signatures
 import Noctium.Backend.Impact
+import Noctium.Types.Maybe
 import Noctium.EntryPointHash
+import Noctium.Wire
 import Lean
 
 namespace Noctium
@@ -353,6 +355,7 @@ scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -446,6 +449,7 @@ scoped syntax "if" nlexpr "then" "{" nlstatement* "}" "else" "{" nlstatement* "}
 
 declare_syntax_cat nlreturn
 scoped syntax "return" ident ":" nltype ":=" nlexpr : nlreturn
+scoped syntax "returnMaybe" ident "as" "(" ident "," ident ")" : nlreturn
 scoped syntax "return" ident : nlreturn
 
 declare_syntax_cat nlentry
@@ -2441,6 +2445,84 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push removeTerm
         spans := state.spans.push span |>.push span |>.push span |>.push span
         guards := state.guards.push noGuard |>.push noGuard |>.push noGuard |>.push noGuard}
+    | `(nlupdate| sendShieldedFromMap($storage:ident, $nonce:nlexpr,
+        $sendAmount:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "sendShieldedFromMap must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "sendShieldedFromMap must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .map keyTy (.composite environment recordType) := treeSchema
+        | throwErrorAt storage "sendShieldedFromMap requires a root Bytes32-keyed tree Map"
+      unless keyTy == .bytes 32 do
+        throwErrorAt storage "sendShieldedFromMap map key must be Bytes32"
+      let fields ← match LedgerValueType.shieldedCoinRecordFields environment recordType with
+        | .ok fields => pure fields
+        | .error message => throwErrorAt storage message
+      unless fields.map Prod.fst == ["nonce", "color", "value", "mtIndex"] do
+        throwErrorAt storage "sendShieldedFromMap requires the exact shielded coin field order"
+      let sendAmountValue ← checkedExpression state.env sendAmount (.uint (2 ^ 128 - 1))
+      let recipientValue ← checkedExpression state.env recipient (.bytes 32)
+      let coinName := s!"noctium_send_coin_{state.terms.size}"
+      let coin := mkIdent (Name.mkSimple coinName)
+      state ← elaborateTreeRead storage coin [nonce] treeSchema depth state
+      let nonceFieldName := coinName ++ "_nonce"
+      let colorFieldName := coinName ++ "_color"
+      let amountFieldName := coinName ++ "_value"
+      let nonceField := mkIdent (Name.mkSimple nonceFieldName)
+      let colorField := mkIdent (Name.mkSimple colorFieldName)
+      let amountField := mkIdent (Name.mkSimple amountFieldName)
+      let nonceFieldSyntax ← `(nlexpr| $nonceField:ident)
+      let colorFieldSyntax ← `(nlexpr| $colorField:ident)
+      let amountFieldSyntax ← `(nlexpr| $amountField:ident)
+      let nonceRecord ← checkedExpression state.env nonceFieldSyntax (.bytes 32)
+      let color ← checkedExpression state.env colorFieldSyntax (.bytes 32)
+      let inputAmount ← checkedExpression state.env amountFieldSyntax (.uint (2 ^ 128 - 1))
+      let equalitySyntax ← `(nlexpr| eq($nonceFieldSyntax, $nonce))
+      let equality ← checkedExpression state.env equalitySyntax .bool
+      let requireTerm ← `(Noctium.Effect.require $equality)
+      state := {state with terms := state.terms.push requireTerm}
+      let sendAddressName := s!"noctium_send_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != sendAddressName) do
+        throwErrorAt update "reserved sendShieldedFromMap binding collides with an existing read"
+      let sendAddressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm sendAddressName))
+      state := {state with terms := state.terms.push sendAddressTerm}
+      state ← bindReadName state sendAddressName sendAddressName (.bytes 32)
+      let sendSelfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm sendAddressName))
+      let sendTerm ← `(Noctium.Effect.sendShieldedFromMap
+        $(stringTerm storage.getId.toString) $nonceRecord $color $inputAmount
+        $sendAmountValue $recipientValue $sendSelfAddress)
+      state := {state with terms := state.terms.push sendTerm}
+      let (path, _) ← lowerTreePath state.env treeSchema [nonce]
+      let keys ← pathKeysTerm path
+      let removeTerm ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keys)
+      state := {state with terms := state.terms.push removeTerm}
+
+      let changeNonce ← `(Noctium.Wire.shieldedChangeNonce $nonceRecord)
+      let changeAmount ← `(Noctium.Expr.usub $inputAmount $sendAmountValue)
+      let changeKey ← `(Noctium.PathKey.mk (Noctium.Ty.bytes 32) $changeNonce)
+      let changeKeys ← pathKeysTerm [changeKey]
+      let changeMemberName := s!"noctium_send_change_member_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != changeMemberName) do
+        throwErrorAt update "reserved change membership binding collides with an existing read"
+      let memberTerm ← `(Noctium.Effect.memberPath
+        $(stringTerm storage.getId.toString) $(stringTerm changeMemberName) $changeKeys)
+      state := {state with terms := state.terms.push memberTerm}
+      state ← bindReadName state changeMemberName changeMemberName .bool
+      let absentCondition ← `(Noctium.Expr.eq
+        (Noctium.Expr.ref $(stringTerm changeMemberName)) (Noctium.Expr.bool Bool.false))
+      let absentTerm ← `(Noctium.Effect.require $absentCondition)
+      state := {state with terms := state.terms.push absentTerm}
+      let receiveTerm ← `(Noctium.Effect.receiveShieldedToMap
+        $(stringTerm storage.getId.toString) $changeNonce $color $changeAmount $sendSelfAddress)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push receiveTerm
+        spans := state.spans.push span |>.push span |>.push span |>.push span
+          |>.push span |>.push span |>.push span
+        guards := state.guards.push noGuard |>.push noGuard |>.push noGuard |>.push noGuard
+          |>.push noGuard |>.push noGuard |>.push noGuard}
     | `(nlupdate| mintUnshielded($domain:nlexpr, $amount:nlexpr)) => do
       let domain ← checkedExpression state.env domain (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
@@ -2694,12 +2776,72 @@ private partial def elaborateStatements (schema : List (String × StateKind))
     | _ => throwErrorAt statement "unsupported Noctium state statement"
   pure state
 
-private def elaborateReturns (statements : Array (TSyntax `nlreturn))
+private def maybeReturnBinding (environment : Bindings) (name : String) :
+    Option (Ty × TSyntax `term) := do
+  let (_, ty, expression) ← environment.find? (fun binding => binding.1 == name)
+  pure (ty, expression)
+
+private def elaborateMaybeReturn (contractName : String) (label : TSyntax `ident)
+    (presentName payloadName : TSyntax `ident) (statement : TSyntax `nlreturn)
+    (state : EntryEffects) : CommandElabM EntryEffects := do
+  let labelName := label.getId.toString
+  let presentBindingName := presentName.getId.toString
+  let payloadBindingName := payloadName.getId.toString
+  let some (.bool, presentExpression) := maybeReturnBinding state.env presentBindingName
+    | throwErrorAt presentName "returnMaybe tag must reference a Bool binding"
+  let some (payloadType, payloadExpression) := maybeReturnBinding state.env payloadBindingName
+    | throwErrorAt payloadName "returnMaybe payload must reference a scalar binding"
+  let typeId ← match Noctium.Types.Maybe.scalarTypeId contractName payloadType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let _environment ← match Noctium.Types.Maybe.scalarEnvironment typeId payloadType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let fieldTypes ← match Noctium.Types.Maybe.scalarFieldTypes payloadType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let typeIdTerm := stringTerm typeId
+  let span ← spanTerm statement
+  let mut fieldTerms := #[]
+  for (fieldName, fieldTy) in fieldTypes do
+    let fieldNameTerm := stringTerm fieldName
+    let fieldType ← `(Noctium.Types.CompositeType.scalar $(← tyTerm fieldTy))
+    fieldTerms := fieldTerms.push (← `({ name := $fieldNameTerm, type := $fieldType, span := $span : Noctium.Types.Field }))
+  let structureTerm ← `({ id := $typeIdTerm, fields := [$fieldTerms,*], span := $span : Noctium.Types.StructDecl })
+  let environmentTerm ← `({ structures := [$structureTerm] : Noctium.Types.CompositeEnv })
+  let payloadDefault ← match payloadType with
+    | .native => `(Noctium.Expr.native 0)
+    | .bool => `(Noctium.Expr.bool Bool.false)
+    | .uint maximum => `(Noctium.Expr.uint $(natTerm maximum) 0)
+    | _ => throwErrorAt statement "returnMaybe payload must be a scalar"
+  let canonicalPayload ← `(Noctium.Expr.select $presentExpression $payloadExpression $payloadDefault)
+  let isSomeReturnName := s!"{labelName}_is_some"
+  let payloadReturnName := s!"{labelName}_value"
+  for returnName in [isSomeReturnName, payloadReturnName] do
+    if state.env.any (fun binding => binding.1 == returnName) then
+      throwErrorAt label s!"structured return field '{returnName}' collides with an input or read binding"
+  let isSomeReturn ← `({ name := $(stringTerm isSomeReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $presentExpression), span := $span : Noctium.Output })
+  let payloadReturn ← `({ name := $(stringTerm payloadReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $canonicalPayload), span := $span : Noctium.Output })
+  let compositeType ← `(Noctium.Types.CompositeType.structure $typeIdTerm)
+  let view ← `({ name := $(stringTerm labelName), environment := $environmentTerm, type := $compositeType, fields := [$(stringTerm isSomeReturnName), $(stringTerm payloadReturnName)] : Noctium.ReturnView })
+  pure {state with
+    returns := state.returns.push isSomeReturn |>.push payloadReturn
+    returnViews := state.returnViews.push view}
+
+private def elaborateReturns (contractName : String) (statements : Array (TSyntax `nlreturn))
     (info : CircuitInfo) (initial : EntryEffects) : CommandElabM EntryEffects := do
   let mut state := initial
   let mut labels : List String := []
   for statement in statements do
     match statement with
+    | `(nlreturn| returnMaybe $label:ident as ($present:ident, $payload:ident)) => do
+      let labelName := label.getId.toString
+      if labels.contains labelName then
+        throwErrorAt label "duplicate entry return label '{labelName}'"
+      if state.env.any (fun binding => binding.1 == labelName) then
+        throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
+      state ← elaborateMaybeReturn contractName label present payload statement state
+      labels := labelName :: labels
     | `(nlreturn| return $label:ident : $returnTy:nltype := $value:nlexpr) => do
       let labelName := label.getId.toString
       if labels.contains labelName then
@@ -3130,7 +3272,7 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
           returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
         let initial : EntryEffects := {env, merkleLeafTypes, usedLocalNames := reserved}
         let lowered ← elaborateStatements schema none 0 statements initial
-        let lowered ← elaborateReturns returns info lowered
+        let lowered ← elaborateReturns ((← getCurrNamespace) ++ name.getId).toString returns info lowered
         let circuitTerm := mkIdent info.declName
         let entryName := stringTerm id.getId.toString
         let entrySpan ← spanTerm entryStx
@@ -3150,7 +3292,7 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
           returns.toList.flatMap (fun statement => syntaxIdentifiers statement.raw)
         let initial : EntryEffects := {env, merkleLeafTypes, usedLocalNames := reserved}
         let lowered ← elaborateStatements schema none 0 statements initial
-        let lowered ← elaborateReturns returns info lowered
+        let lowered ← elaborateReturns ((← getCurrNamespace) ++ name.getId).toString returns info lowered
         let circuitTerm := mkIdent info.declName
         entryTerms := entryTerms.push (← `({ name := $(stringTerm id.getId.toString), circuit := $circuitTerm, effects := [$lowered.terms,*], returns := [$lowered.returns,*], returnViews := [$lowered.returnViews,*], span := $(← spanTerm entryStx), effectSpans := [$lowered.spans,*], effectGuards := [$lowered.guards,*] : Noctium.Entrypoint }))
       | `(nlentry| entry $id:ident from $source:ident entry $exportName:str end) =>

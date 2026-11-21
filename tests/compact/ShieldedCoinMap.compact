@@ -33,3 +33,28 @@ export circuit withdraw(nonce: Bytes<32>, recipient: ZswapCoinPublicKey): [] {
   assert(!result.change.is_some, "full send must have no change");
   pot.remove(disclose(nonce));
 }
+
+export circuit withdrawPartial(
+  nonce: Bytes<32>,
+  recipient: ZswapCoinPublicKey,
+  quantity: Uint<128>
+): [] {
+  const key = disclose(nonce);
+  assert(pot.member(key), "coin nonce missing");
+  const coin = pot.lookup(key);
+  const amount = disclose(quantity);
+  assert(amount > 0 && amount < coin.value, "partial send must leave change");
+  const result = sendShielded(
+    coin,
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    amount
+  );
+  assert(result.change.is_some, "partial send must have change");
+  const change = result.change.value;
+  pot.remove(key);
+  pot.insertCoin(
+    change.nonce,
+    change,
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+}

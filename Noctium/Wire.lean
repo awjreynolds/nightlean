@@ -51,4 +51,30 @@ def ScalarCodec.serialize (codec : ScalarCodec type) (value : Expr type)
     sum ▸ Expr.concatBytes (codec.encode value)
       (.bytesLiteral (length - codec.width) (List.replicate (length - codec.width) 0))
 
+private def shieldedNonceDomainTag (change : Bool) : String :=
+  if change then "midnight:kernel:nonce_evolve/2" else "midnight:kernel:nonce_evolve"
+
+private def shieldedNonceDomain (change : Bool) : Expr .native :=
+  let domain := shieldedNonceDomainTag change
+  .fromBytes (.bytesLiteral domain.utf8ByteSize (domain.toUTF8.data.toList.map UInt8.toNat))
+
+private def upgradeShieldedNonce (value : Expr .native) : Expr (.bytes 32) :=
+  .concatBytes (.sliceBytes (.toBytes32 value) 0 31) (.bytesLiteral 1 [0])
+
+private def degradeShieldedNonce (value : Expr (.bytes 32)) : Expr .native :=
+  .bytesField value 1
+
+private def evolveShieldedNonce (change : Bool) (nonce : Expr (.bytes 32)) :
+    Expr (.bytes 32) :=
+  upgradeShieldedNonce
+    (.transientHash [shieldedNonceDomain change, degradeShieldedNonce nonce])
+
+/-- Derive the recipient nonce for a shielded send. -/
+def shieldedOutputNonce (nonce : Expr (.bytes 32)) : Expr (.bytes 32) :=
+  evolveShieldedNonce false nonce
+
+/-- Derive the contract-owned change nonce for a partial shielded send. -/
+def shieldedChangeNonce (nonce : Expr (.bytes 32)) : Expr (.bytes 32) :=
+  evolveShieldedNonce true nonce
+
 end Noctium.Wire
