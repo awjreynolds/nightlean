@@ -308,10 +308,8 @@ scoped syntax (name := circuitCommand) "noctium_circuit" ident "where" nlcstmt* 
 declare_syntax_cat nlstate
 scoped syntax "cell" ident ":" nltype : nlstate
 scoped syntax "sealed" "cell" ident ":" nltype : nlstate
-scoped syntax "sealed" "cell" ident ":" "OpaqueString" : nlstate
 declare_syntax_cat nlconstructorparam
 scoped syntax ident ":" nltype : nlconstructorparam
-scoped syntax ident ":" "OpaqueString" : nlconstructorparam
 declare_syntax_cat nlconstructorinit
 scoped syntax "initialize" ident ":=" nlexpr : nlconstructorinit
 scoped syntax "initialize" ident ":=" str : nlconstructorinit
@@ -3142,14 +3140,14 @@ private def elaborateConstructor (source : TSyntax `nlstate)
   let mut parameterNames : List String := []
   for parameter in parameters.getElems.toList do
     let (name, parameterType, typeTerm) ← match parameter with
-      | `(nlconstructorparam| $id:ident : OpaqueString) => do
-        let name := id.getId.toString
-        pure (name, ConstructorType.opaqueString, ← `(Noctium.ConstructorType.opaqueString))
       | `(nlconstructorparam| $id:ident : $sourceTy:nltype) => do
         let name := id.getId.toString
         let ty ← readTy sourceTy
-        pure (name, ConstructorType.scalar ty,
-          ← `(Noctium.ConstructorType.scalar $(← tyTerm ty)))
+        if ty == .opaqueString then
+          pure (name, ConstructorType.opaqueString, ← `(Noctium.ConstructorType.opaqueString))
+        else
+          pure (name, ConstructorType.scalar ty,
+            ← `(Noctium.ConstructorType.scalar $(← tyTerm ty)))
       | _ => throwErrorAt parameter "unsupported constructor parameter"
     if parameterNames.contains name then throwErrorAt parameter s!"duplicate constructor parameter '{name}'"
     parameterNames := name :: parameterNames
@@ -3306,11 +3304,12 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
           let valueSchema := LedgerValueType.composite environment compositeType
           let valueTerm ← `(Noctium.LedgerValueType.composite $environmentTerm $compositeTypeTerm)
           pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
-        | `(nlstate| sealed cell $id:ident : OpaqueString) =>
-          pure (id, StateKind.opaqueString, ← `(Noctium.StateKind.opaqueString))
         | `(nlstate| sealed cell $id:ident : $ty:nltype) => do
           let t ← readTy ty
-          pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
+          if t == .opaqueString then
+            pure (id, StateKind.opaqueString, ← `(Noctium.StateKind.opaqueString))
+          else
+            pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
         | `(nlstate| cell $id:ident : $ty:nltype) => do
           let t ← readTy ty
           pure (id, StateKind.cell t, ← `(Noctium.StateKind.cell $(← tyTerm t)))
@@ -3460,13 +3459,13 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
         | _ => throwErrorAt state "unsupported Noctium state declaration"
       if schema.any (fun p => p.1 == id.getId.toString) then throwErrorAt id "duplicate Noctium state"
       schema := schema ++ [(id.getId.toString, kind)]
-      concreteSchema := concreteSchema ++ [{name := id.getId.toString, kind := kind, «sealed» := state.raw[0].getAtomVal == "sealed"}]
-      if state.raw[0].getAtomVal == "sealed" then
-        stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
-          $term Bool.true $(← spanTerm state)))
-      else
-        stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
-          $term Bool.false $(← spanTerm state)))
+      let isSealed : _root_.Bool := match state with
+        | `(nlstate| sealed cell $_:ident : $_:nltype) => Bool.true
+        | _ => Bool.false
+      concreteSchema := concreteSchema ++ [{name := id.getId.toString, kind := kind, «sealed» := isSealed}]
+      let sealedTerm ← if isSealed then `(Bool.true) else `(Bool.false)
+      stateTerms := stateTerms.push (← `(Noctium.StateDecl.mk $(stringTerm id.getId.toString)
+        $term $sealedTerm $(← spanTerm state)))
     let constructorTerm ← match constructorSyntax? with
       | none => `(none)
       | some ctor => elaborateConstructor ctor schema
