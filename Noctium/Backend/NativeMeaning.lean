@@ -623,8 +623,7 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     pure {term, bounds, assertions}
   | .persistentHashFab compositeEnv compositeType values => do
     let compiled ← validateFabHashLayout compositeEnv compositeType values
-    let .structure _ fields := compiled
-      | throw "mixed FAB persistent hash requires a named flat structure"
+    let fields ← fabHashLayoutFields compiled
     let normalizedValues ← normalizeFabValues env values
     let payload ← alignedFabPayload fields normalizedValues
     let {alignment, operands, bounds, assertions} := payload
@@ -632,8 +631,7 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     pure (Normalized.mk term bounds assertions)
   | .persistentCommitFab compositeEnv compositeType opening values => do
     let compiled ← validateFabHashLayout compositeEnv compositeType values
-    let .structure _ fields := compiled
-      | throw "mixed FAB persistent commitment requires a named flat structure"
+    let fields ← fabHashLayoutFields compiled
     let opening ← normalize env opening
     let (highByte, low31) ← alignedBytes32Fields opening
     let normalizedValues ← normalizeFabValues env values
@@ -646,8 +644,7 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
       (opening.assertions ++ payloadAssertions))
   | .transientCommitFab compositeEnv compositeType opening values => do
     let compiled ← validateFabHashLayout compositeEnv compositeType values
-    let .structure _ fields := compiled
-      | throw "mixed FAB transient commitment requires a named flat structure"
+    let fields ← fabHashLayoutFields compiled
     let opening ← normalize env opening
     let normalizedValues ← normalizeFabValues env values
     let payload ← alignedFabPayload fields normalizedValues
