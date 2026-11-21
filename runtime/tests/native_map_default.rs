@@ -1,7 +1,10 @@
 #![cfg(feature = "zkir-321")]
 
 use base_crypto::fab::{AlignedValue, Alignment, AlignmentAtom};
-use noctium_runtime::{Db, Plan, check, create_state, field_value, prepare, zkir::IrSource};
+use noctium_runtime::{
+    Db, Plan, Value, check, create_state, field_decimal, field_value, merkle::merkle_tree_at,
+    prepare, zkir::IrSource,
+};
 use onchain_runtime::state::{ChargedState, StateValue};
 use serde_json::{Value as Json, json};
 use std::{
@@ -11,6 +14,9 @@ use std::{
 };
 use storage::arena::Sp;
 use transient_crypto::{curve::Fr, fab::AlignedValueExt};
+
+const BOOL_TRUE_ROOT: &str =
+    "28130625729914575041647056173685745844593451559868206617144826111893468892246";
 
 fn artifacts() -> PathBuf {
     env::var_os("NOCTIUM_NATIVE_MAP_DEFAULT_DIR")
@@ -40,6 +46,7 @@ fn inputs(plan: &Plan, key: u64, amount: u64, enabled: bool) -> BTreeMap<String,
                 "key" => json!(key.to_string()),
                 "amount" => json!(amount.to_string()),
                 "enabled" => json!(enabled),
+                "leaf" => json!(true),
                 other => panic!("unexpected input {other}"),
             };
             (input.name.clone(), value)
@@ -139,13 +146,20 @@ fn assert_merkle_default(value: &StateValue<Db>, historic: bool) {
         let StateValue::Map(history) = tree.get(2).expect("HistoricMerkleTree history") else {
             panic!("expected historic root map")
         };
-        assert_eq!(history.size(), 1);
-        let root = field_value(Fr::from(0u64));
-        assert!(matches!(
-            &*history.get(&root).expect("initial historic root"),
-            StateValue::Null
-        ));
+        assert_eq!(history.size(), 0);
     }
+}
+
+fn historic_snapshot(plan: &Plan, state: &ChargedState<Db>) -> (String, u64, BTreeMap<String, ()>) {
+    let path = [Value::Bytes(vec![7u8; 32])];
+    let tree = merkle_tree_at(&plan.state, state, "historic", &path).unwrap();
+    let view = tree.view().unwrap();
+    let roots = tree
+        .historic_roots()
+        .unwrap()
+        .map(|root| (field_decimal(root.unwrap()), ()))
+        .collect();
+    (field_decimal(view.root), view.first_free, roots)
 }
 
 fn empty_state(plan: &Plan) -> ChargedState<Db> {
@@ -311,4 +325,60 @@ fn native_map_default_inserts_replaces_and_initializes_typed_values() {
         **record,
         AlignedValue::concat([&amount, &payload, &identity_x, &identity_y])
     );
+
+    let (check_zero, check_zero_circuit) = fixture(&directory, "checkHistoricZero");
+    let check_zero = |state: &ChargedState<Db>| {
+        let returns = run(&check_zero, &check_zero_circuit, 0, 0, false, state).returns_json();
+        returns["known"].as_bool().unwrap()
+    };
+    assert_eq!(check_zero(&active.after.state), false);
+
+    let (append_historic, append_historic_circuit) = fixture(&directory, "appendHistoric");
+    let appended = run(
+        &append_historic,
+        &append_historic_circuit,
+        0,
+        0,
+        true,
+        &active.after.state,
+    );
+    assert_eq!(
+        historic_snapshot(&append_historic, &appended.after.state),
+        (
+            BOOL_TRUE_ROOT.to_owned(),
+            1,
+            BTreeMap::from([(BOOL_TRUE_ROOT.to_owned(), ())]),
+        )
+    );
+    assert_eq!(check_zero(&appended.after.state), false);
+
+    let (default_historic, default_historic_circuit) = fixture(&directory, "defaultHistoric");
+    let cleared = run(
+        &default_historic,
+        &default_historic_circuit,
+        0,
+        0,
+        false,
+        &appended.after.state,
+    );
+    assert_eq!(
+        historic_snapshot(&default_historic, &cleared.after.state),
+        ("0".into(), 0, BTreeMap::new())
+    );
+    assert_eq!(check_zero(&cleared.after.state), false);
+
+    let (reset_historic, reset_historic_circuit) = fixture(&directory, "resetHistoric");
+    let reset = run(
+        &reset_historic,
+        &reset_historic_circuit,
+        0,
+        0,
+        false,
+        &cleared.after.state,
+    );
+    assert_eq!(
+        historic_snapshot(&reset_historic, &reset.after.state),
+        ("0".into(), 0, BTreeMap::from([("0".into(), ())]))
+    );
+    assert_eq!(check_zero(&reset.after.state), true);
 }

@@ -1953,7 +1953,8 @@ private def elaborateListPopFront (schema : List (String × StateKind))
   pure {state with terms := state.terms.push term}
 
 private def collectionResetTerm (path : TSyntax `nlpath) (storage : TSyntax `ident)
-    (keys : TSyntax `term) (keyCount : Nat) (value : LedgerValueType) :
+    (keys : TSyntax `term) (keyCount : Nat) (value : LedgerValueType)
+    (mapDefault : _root_.Bool := Bool.false) :
     CommandElabM (TSyntax `term) := do
   let name := stringTerm storage.getId.toString
   match value with
@@ -1968,7 +1969,8 @@ private def collectionResetTerm (path : TSyntax `nlpath) (storage : TSyntax `ide
     unless 2 ≤ depth && depth ≤ 32 do
       throwErrorAt path "MerkleTree depth must be between 2 and 32"
     let historyTerm ← if historic then `(Bool.true) else `(Bool.false)
-    `(Noctium.Effect.merkleTreeResetAt $name $keys $(natTerm depth) $historyTerm)
+    let emptyHistory ← if historic && mapDefault then `(Bool.true) else `(Bool.false)
+    `(Noctium.Effect.merkleTreeResetAt $name $keys $(natTerm depth) $historyTerm $emptyHistory)
   | _ => throwErrorAt path "reset requires a Counter, List, Map, Set or MerkleTree value"
 
 private def elaborateReset (schema : List (String × StateKind)) (path : TSyntax `nlpath)
@@ -2021,7 +2023,7 @@ private def elaborateMapDefault (schema : List (String × StateKind)) (path : TS
       `(Noctium.Effect.writeCompositePath $name $keys
         (Noctium.Types.CompositeType.structure $(stringTerm id)) [$values,*])
     | .composite .. => throwErrorAt path "insertDefault requires a named ledger record"
-    | value => collectionResetTerm path storage keys sourceKeys.length value
+    | value => collectionResetTerm path storage keys sourceKeys.length value Bool.true
   pure {state with terms := state.terms.push term}
 
 private def elaborateCompositePathWrite (schema : List (String × StateKind))

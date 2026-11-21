@@ -351,7 +351,7 @@ def describeEffect : Effect → LedgerEffectDescriptor
     .publicEffect "merkleTreeInsertHashIndexAt" .stateWrite .publicActivity sink
       [.path sink keys, .payload "hash" s!"public nested MerkleTree indexed hash '{state}'" hash,
        .selector "index" s!"public nested MerkleTree index '{state}'" index] []
-  | .merkleTreeResetAt state keys _ _ =>
+  | .merkleTreeResetAt state keys _ _ _ =>
     let sink := s!"public nested MerkleTree reset path '{state}'"
     .publicEffect "merkleTreeResetAt" .stateWrite .publicActivity sink [.path sink keys] []
   | .merkleTreeResetHistoryAt state keys =>

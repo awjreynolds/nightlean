@@ -78,6 +78,8 @@ separate work. No new keys, proofs or deployments were generated.
 the existing entry. `insertDefault balances[owner][key]` requires the owner map
 to exist. Defaults use the existing scalar and record layouts, empty Map, Set
 and List state, zero Counters, and empty ordinary or historic Merkle Trees.
+Inserting a historic tree default starts with empty root history. Explicit
+`reset` records root zero in history.
 
 `when enabled insertDefault balances[owner][key]` skips the path and write when
 disabled. Private keys and guards require explicit disclosure.

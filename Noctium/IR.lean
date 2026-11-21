@@ -614,6 +614,7 @@ inductive Effect where
   | merkleTreeInsertHashIndexAt (state : String) (keys : List PathKey)
       (hash : Expr (.bytes 32)) (index : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeResetAt (state : String) (keys : List PathKey) (depth : Nat) (historic : Bool)
+      (emptyHistory : Bool := false)
   | merkleTreeResetHistoryAt (state : String) (keys : List PathKey)
   | emptyMapPath (state : String) (keys : List PathKey)
   | setInsert (state : String) (keys : List PathKey)
@@ -1446,12 +1447,16 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         hash.validate caps env
         index.validate caps env
         pure []
-      | .merkleTreeResetAt state keys depth historic => do
+      | .merkleTreeResetAt state keys depth historic emptyHistory => do
         if !caps.stateMaps then throw "target lacks state maps"
+        if emptyHistory && keys.isEmpty then
+          throw "empty-history reset requires a nested HistoricMerkleTree"
         for key in keys do key.validate caps env
         let (foundDepth, foundHistoric) ← resolveMerkleTreePath decls state keys
         unless depth == foundDepth && historic == foundHistoric do
           throw "nested MerkleTree reset schema mismatch"
+        if emptyHistory && !historic then
+          throw "empty-history reset requires a HistoricMerkleTree"
         pure []
       | .merkleTreeResetHistoryAt state keys => do
         if !caps.stateMaps then throw "target lacks state maps"

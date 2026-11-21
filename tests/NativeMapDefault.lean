@@ -6,6 +6,15 @@ import Noctium.Disclosure
 open scoped Noctium
 open Noctium
 
+noctium_circuit nativeHistoricPathInputs where
+  private owner : Bytes32
+end
+
+noctium_circuit nativeHistoricLeafInputs where
+  private owner : Bytes32
+  private leaf : Bool
+end
+
 noctium_circuit nativeMapDefaultInputs where
   private owner : Bytes32
   private key : Native
@@ -21,7 +30,7 @@ noctium_contract NativeMapDefault where
   tree lists : Bytes32 => List Native
   tree counters : Bytes32 => Counter
   tree ordinary : Bytes32 => MerkleTree 2
-  tree historic : Bytes32 => HistoricMerkleTree 2
+  tree historic : Bytes32 => HistoricMerkleTree 2 of Bool
   tree records : Bytes32 => struct Record {
     amount : Native
     payload : Bytes32
@@ -62,6 +71,23 @@ noctium_contract NativeMapDefault where
 
   entry missingParent uses nativeMapDefaultInputs where
     when enabled insertDefault nestedValues[disclose(owner)][disclose(key)]
+  end
+
+  entry defaultHistoric uses nativeHistoricPathInputs where
+    insertDefault historic[disclose(owner)]
+  end
+
+  entry appendHistoric uses nativeHistoricLeafInputs where
+    insertLeaf historic[disclose(owner)] := disclose(leaf)
+  end
+
+  entry checkHistoricZero uses nativeHistoricPathInputs where
+    checkRoot historic[disclose(owner)] against 0 as hasZeroRoot
+    return known : Bool := hasZeroRoot
+  end
+
+  entry resetHistoric uses nativeHistoricPathInputs where
+    reset historic[disclose(owner)]
   end
 end
 

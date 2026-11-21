@@ -1157,6 +1157,8 @@ pub enum Instruction {
         #[serde(default)]
         keys: Vec<PathPart>,
         depth: u8,
+        #[serde(default, rename = "emptyHistory")]
+        empty_history: bool,
     },
     #[serde(rename = "merkleTreeResetHistory")]
     MerkleTreeResetHistory {
@@ -1518,9 +1520,16 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             groups.push(1);
             groups
         }
-        Instruction::MerkleTreeReset { slot, keys, depth } => {
-            let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
-            let default_fields = 1 + merkle_tree_default_state(*depth, historic).field_size();
+        Instruction::MerkleTreeReset {
+            slot,
+            keys,
+            depth,
+            empty_history,
+        } => {
+            let historic =
+                ensure_merkle_tree_reset_mode(plan, *slot, keys, *depth, *empty_history)?;
+            let default_fields =
+                1 + merkle_tree_default_state(*depth, historic, *empty_history).field_size();
             if let Some((_, parents)) = keys.split_last() {
                 let full = path_field_count(plan, *slot, keys)?;
                 let parent = path_field_count(plan, *slot, parents)?;
@@ -3143,7 +3152,7 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                 value.as_array().is_some_and(Vec::is_empty),
                 "initial MerkleTree must be explicitly empty"
             );
-            values.push(merkle_tree_default_state(depth, historic));
+            values.push(merkle_tree_default_state(depth, historic, false));
         } else if d.kind.get("opaqueString") == Some(&Json::Bool(true)) {
             values.push(StateValue::Cell(Sp::new(constructor::opaque_string(
                 value,
@@ -3244,17 +3253,35 @@ fn ensure_merkle_tree_depth(plan: &Plan, slot: u32, keys: &[PathPart], depth: u8
     Ok(historic)
 }
 
-fn merkle_tree_default_state(depth: u8, historic: bool) -> StateValue<Db> {
+fn ensure_merkle_tree_reset_mode(
+    plan: &Plan,
+    slot: u32,
+    keys: &[PathPart],
+    depth: u8,
+    empty_history: bool,
+) -> Result<bool> {
+    let historic = ensure_merkle_tree_depth(plan, slot, keys, depth)?;
+    ensure!(
+        !empty_history || (!keys.is_empty() && historic),
+        "emptyHistory requires a nested historic MerkleTree"
+    );
+    Ok(historic)
+}
+
+fn merkle_tree_default_state(depth: u8, historic: bool, empty_history: bool) -> StateValue<Db> {
     let mut values = vec![
         StateValue::BoundedMerkleTree(MerkleTree::<(), Db>::blank(depth)),
         StateValue::Cell(Sp::new(0u64.into())),
     ];
     if historic {
-        values.push(StateValue::Map(
+        let history = if empty_history {
+            HashMap::default()
+        } else {
             [(field_value(Fr::from(0u64)), StateValue::Null)]
                 .into_iter()
-                .collect(),
-        ));
+                .collect()
+        };
+        values.push(StateValue::Map(history));
     }
     StateValue::Array(values.into())
 }
@@ -3301,10 +3328,12 @@ fn merkle_tree_parts(
             .root()
             .context("MerkleTree state has an unrehashed root")?
             .0;
+        let has_current_root = history
+            .get(&field_value(current))
+            .is_some_and(|entry| matches!(*entry, StateValue::Null));
         ensure!(
-            history
-                .get(&field_value(current))
-                .is_some_and(|entry| matches!(*entry, StateValue::Null)),
+            has_current_root
+                || (history.is_empty() && count == 0 && current == Fr::from(0u64)),
             "historic MerkleTree root map is missing its current root"
         );
         Some(history)
@@ -6055,8 +6084,14 @@ impl PreparationCursor {
                     n: (keys.len() + 1).try_into()?,
                 }
             }
-            Instruction::MerkleTreeReset { slot, keys, depth } => {
-                let historic = ensure_merkle_tree_depth(plan, *slot, keys, *depth)?;
+            Instruction::MerkleTreeReset {
+                slot,
+                keys,
+                depth,
+                empty_history,
+            } => {
+                let historic =
+                    ensure_merkle_tree_reset_mode(plan, *slot, keys, *depth, *empty_history)?;
                 let key = if let Some((_, parents)) = keys.split_last() {
                     let (_, mut values) = native_index(plan, *slot, keys, false, &env)?;
                     let (parent, _) = native_index(plan, *slot, parents, true, &env)?;
@@ -6067,7 +6102,10 @@ impl PreparationCursor {
                 };
                 program.extend([
                     push_native_state(StateValue::Cell(Sp::new(key)), false)?,
-                    push_native_state(merkle_tree_default_state(*depth, historic), true)?,
+                    push_native_state(
+                        merkle_tree_default_state(*depth, historic, *empty_history),
+                        true,
+                    )?,
                 ]);
                 has_written = true;
                 Op::Ins {
