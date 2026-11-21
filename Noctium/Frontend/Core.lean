@@ -11,24 +11,28 @@ import Noctium.Types.Maybe
 import Noctium.Types.Either
 import Noctium.EntryPointHash
 import Noctium.Wire
+import Noctium.ShieldedBurn
 import Lean
 
 namespace Noctium
 open Lean Elab Command
 
-/-- Source-only nominal tags for the two Midnight recipient values represented
-by the same 32-byte expression at the circuit and native boundaries. -/
+/-- Source-only labels for Midnight address and key values represented by
+Bytes32 expressions at circuit and native boundaries. -/
 inductive NominalBytes32 where
   | contractAddress
+  | userAddress
   | zswapCoinPublicKey
   deriving Repr, BEq, DecidableEq, Inhabited
 
 def NominalBytes32.displayName : NominalBytes32 → String
   | .contractAddress => "ContractAddress"
+  | .userAddress => "UserAddress"
   | .zswapCoinPublicKey => "ZswapCoinPublicKey"
 
 def NominalBytes32.declarationId : NominalBytes32 → String
   | .contractAddress => "Noctium.Midnight.ContractAddress"
+  | .userAddress => "Noctium.Midnight.UserAddress"
   | .zswapCoinPublicKey => "Noctium.Midnight.ZswapCoinPublicKey"
 
 /-- Declarations registered through the supported Noctium circuit surface. -/
@@ -263,6 +267,8 @@ scoped syntax "concatBytes(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "bytes32(" str ")" : nlexpr
 scoped syntax "nativeToken()" : nlexpr
 scoped syntax "tokenType(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "publicAddressContract(" nlexpr ")" : nlexpr
+scoped syntax "publicAddressUser(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
@@ -273,6 +279,7 @@ scoped syntax "persistentCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,*
 scoped syntax "transientCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "shieldedOutputNonce(" nlexpr ")" : nlexpr
+scoped syntax "shieldedBurnKey(" ")" : nlexpr
 scoped syntax "shieldedIndexedNonce(" nlexpr "," nlexpr ")" : nlexpr
 declare_syntax_cat nlcallvalue
 scoped syntax nlexpr : nlcallvalue
@@ -412,6 +419,7 @@ scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "claimUnshieldedCoinSpendTo" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "claimUnshieldedCoinSpend" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "requireContractCaller" "(" nlexpr ")" : nlupdate
 scoped syntax "checkpoint" : nlupdate
@@ -1222,6 +1230,8 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| shieldedOutputNonce($value)) => do
     let value ← expected env value (.bytes 32)
     pure (.bytes 32, ← `(Noctium.Wire.shieldedOutputNonce $value))
+  | `(nlexpr| shieldedBurnKey()) =>
+    pure (.bytes 32, ← `(Noctium.shieldedBurnAddress.recipient))
   | `(nlexpr| shieldedIndexedNonce($index, $nonce)) => do
     let index ← expected env index (.uint (2 ^ 128 - 1))
     let nonce ← expected env nonce (.bytes 32)
@@ -1871,6 +1881,7 @@ private partial def nominalBytes32OfExpression (state : EntryEffects)
     (expression : TSyntax `nlexpr) : Option NominalBytes32 :=
   match expression with
   | `(nlexpr| disclose($value)) => nominalBytes32OfExpression state value
+  | `(nlexpr| shieldedBurnKey()) => some .zswapCoinPublicKey
   | `(nlexpr| $name:ident) => state.nominalBytes32Bindings.lookup name.getId.toString
   | _ => none
 
@@ -1881,6 +1892,40 @@ private def checkNominalBytes32Argument (state : EntryEffects)
     unless actual == expected do
       throwErrorAt expression
         s!"{operation} expects {expected.displayName}, got {actual.displayName}"
+
+private def requireNominalBytes32Argument (state : EntryEffects)
+    (expression : TSyntax `nlexpr) (expected : NominalBytes32) (branch : String) :
+    CommandElabM Unit := do
+  let some actual := nominalBytes32OfExpression state expression
+    | throwErrorAt expression
+        s!"PublicAddress.{branch} requires a nominal {expected.displayName} value"
+  unless actual == expected do
+    throwErrorAt expression
+      s!"PublicAddress.{branch} expects {expected.displayName}, got {actual.displayName}"
+
+private partial def boolLiteralValue? (expression : TSyntax `nlexpr) : Option _root_.Bool :=
+  match expression with
+  | `(nlexpr| true) => some _root_.Bool.true
+  | `(nlexpr| false) => some _root_.Bool.false
+  | `(nlexpr| disclose($value)) => boolLiteralValue? value
+  | _ => none
+
+private def checkUnshieldedRecipientTag (state : EntryEffects)
+    (isContract recipient : TSyntax `nlexpr) : CommandElabM Unit := do
+  match nominalBytes32OfExpression state recipient with
+  | none => pure ()
+  | some .zswapCoinPublicKey =>
+    throwErrorAt recipient
+      "claimUnshieldedCoinSpend cannot use a ZswapCoinPublicKey recipient"
+  | some nominal =>
+    let expectedContract := nominal == .contractAddress
+    let some actualContract := boolLiteralValue? isContract
+      | throwErrorAt isContract
+          "claimUnshieldedCoinSpend needs a literal tag for a nominal recipient; use claimUnshieldedCoinSpendTo"
+    unless actualContract == expectedContract do
+      let expectedBranch := if expectedContract then "true for ContractAddress" else "false for UserAddress"
+      throwErrorAt isContract
+        s!"claimUnshieldedCoinSpend tag must be {expectedBranch}"
 
 private def addNominalBytes32Binding (state : EntryEffects) (name : String)
     (type : NominalBytes32) : EntryEffects :=
@@ -2971,8 +3016,28 @@ private def elaborateEffect (schema : List (String × StateKind))
       let isUnshielded ← checkedExpression state.env isUnshielded .bool
       let term ← `(Noctium.Effect.incUnshieldedOutputs $color $amount $isUnshielded)
       state := {state with terms := state.terms.push term}
+    | `(nlupdate| claimUnshieldedCoinSpendTo($color:nlexpr, $amount:nlexpr,
+        $isUnshielded:nlexpr, $address:nlexpr)) => do
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint balanceMaximum)
+      let isUnshielded ← checkedExpression state.env isUnshielded .bool
+      let (isContract, recipient) ← match address with
+        | `(nlexpr| publicAddressContract($value)) => do
+          requireNominalBytes32Argument state value .contractAddress "contract"
+          let recipient ← checkedExpression state.env value (.bytes 32)
+          pure (← `(Noctium.Expr.bool Bool.true), recipient)
+        | `(nlexpr| publicAddressUser($value)) => do
+          requireNominalBytes32Argument state value .userAddress "user"
+          let recipient ← checkedExpression state.env value (.bytes 32)
+          pure (← `(Noctium.Expr.bool Bool.false), recipient)
+        | _ => throwErrorAt address
+          "claimUnshieldedCoinSpendTo requires publicAddressContract(...) or publicAddressUser(...)"
+      let term ← `(Noctium.Effect.claimUnshieldedCoinSpend
+        $color $amount $isUnshielded $isContract $recipient)
+      state := {state with terms := state.terms.push term}
     | `(nlupdate| claimUnshieldedCoinSpend($color:nlexpr, $amount:nlexpr,
         $isUnshielded:nlexpr, $isContract:nlexpr, $recipient:nlexpr)) => do
+      checkUnshieldedRecipientTag state isContract recipient
       let color ← checkedExpression state.env color (.bytes 32)
       let amount ← checkedExpression state.env amount (.uint balanceMaximum)
       let isUnshielded ← checkedExpression state.env isUnshielded .bool
