@@ -236,6 +236,8 @@ mutual
       liftD (fail target.span "portable control capability unavailable: ledger writes")
     | .writeMap .. :: _ =>
       liftD (fail target.span "portable control capability unavailable: ledger writes")
+    | .emitEvent .. :: _ =>
+      liftD (fail target.span "portable control capability unavailable: ledger events")
     | .forRange .. :: _ =>
       liftD (fail target.span "unexpanded finite loop reached portable control analysis")
     | .branch condition yes no :: rest =>
@@ -556,6 +558,8 @@ mutual
         | .writeCell .. => emitLift (fail target.span "portable control capability unavailable: ledger writes")
         | .writeMap .. =>
           emitLift (fail target.span "portable control capability unavailable: ledger writes")
+        | .emitEvent .. =>
+          emitLift (fail target.span "portable control capability unavailable: ledger events")
         | .forRange .. => emitLift (fail target.span "unexpanded finite loop reached portable control emission")
       result := result ++ [item]
     pure result

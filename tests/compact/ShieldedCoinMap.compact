@@ -1,0 +1,23 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger pot: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
+
+export circuit tip(coin: ShieldedCoinInfo): [] {
+  const nonce = disclose(coin.nonce);
+  assert(!pot.member(nonce), "coin nonce already received");
+  receiveShielded(disclose(coin));
+  pot.insertCoin(
+    nonce,
+    disclose(coin),
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+}
+
+export circuit storeWithoutReceive(coin: ShieldedCoinInfo): [] {
+  pot.insertCoin(
+    disclose(coin.nonce),
+    disclose(coin),
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+}

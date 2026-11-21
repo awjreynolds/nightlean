@@ -305,6 +305,7 @@ inductive Statement where
   | readMap (state destination : String) (keyTy valueTy : Ty) (key : Term)
   | readMember (state destination : String) (keyTy valueTy : Ty) (key : Term)
   | writeMap (state : String) (keyTy valueTy : Ty) (key value : Term)
+  | emitEvent (kind : EventKind) (payload : Term)
   deriving Repr
 
 structure Declaration where
@@ -460,6 +461,7 @@ private def statementTerms : Statement → List Term
   | .readCell .. => []
   | .readMap _ _ _ _ key | .readMember _ _ _ _ key => [key]
   | .writeMap _ _ _ key value => [key, value]
+  | .emitEvent _ payload => [payload]
   | .branch condition _ _ => [condition]
   | .return value => value.toList
   | .forRange .. => []
@@ -906,6 +908,7 @@ private partial def freshenStatementWitnessSites (statement : Statement) : Expan
   | .writeMap state keyType valueType key value =>
     return .writeMap state keyType valueType (← freshenTermWitnessSites key)
       (← freshenTermWitnessSites value)
+  | .emitEvent kind payload => return .emitEvent kind (← freshenTermWitnessSites payload)
 
 private partial def freshenStatementsWitnessSites (body : List Statement) : ExpansionM (List Statement) :=
   body.mapM freshenStatementWitnessSites
@@ -1552,6 +1555,11 @@ private def checkBody (limits : Limits) (program : Program) (declaration : Decla
           let value ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span value
           unless partialSubtype value.ty (.scalar valueTy) do fail span "ledger map value type mismatch"
           pure (combine (some .unit) [key, value] [.ledgerWrite])
+        | .emitEvent kind payload => do
+          let info ← inferPartialTerm limits.maxSourceDepth program declaration.id.scope env span payload
+          unless partialSubtype info.ty (.scalar (.bytes kind.payloadSize)) do
+            fail span "helper ledger event payload type mismatch"
+          pure {info with ty := some .unit, effects := (.event :: info.effects).eraseDups}
       result := {result with
         calls := result.calls ++ info.calls
         effects := (result.effects ++ info.effects).eraseDups
@@ -2064,6 +2072,7 @@ private def closeExpression (types : TypeEnv) (bindings : List LocalBinding)
 private def closeLedgerEffect (types : TypeEnv) (bindings : List LocalBinding) : Effect → Effect
   | .require condition => .require (closeExpression types bindings condition)
   | .writeCell state ty value => .writeCell state ty (closeExpression types bindings value)
+  | .emitEvent kind payload => .emitEvent kind (closeExpression types bindings payload)
   | .readMap state destination keyTy valueTy key =>
       .readMap state destination keyTy valueTy (closeExpression types bindings key)
   | .readMember state destination keyTy valueTy key =>
@@ -2765,6 +2774,14 @@ mutual
         let value ← liftD (typedExpr declaration.span valueTy value)
         appendLedgerEffect declaration.span (.writeMap stateName keyTy valueTy key value)
         lowerBodyWith program declaration env rest continuation
+      | .emitEvent kind payload => do
+        unless (← get).ledgerMode do
+          liftD (fail declaration.span "native helper capability unavailable: ledger event")
+        let payload ← lowerTerm program declaration.id.scope env declaration.span payload
+        appendLedgerConstraints declaration.span payload.constraints
+        let payload ← liftD (typedExpr declaration.span (.bytes kind.payloadSize) payload)
+        appendLedgerEffect declaration.span (.emitEvent kind payload)
+        lowerBodyWith program declaration env rest continuation
       | .forRange .. => liftD (fail declaration.span "unprepared finite range reached helper lowering")
       | .stage .. => liftD (fail declaration.span "native helper capability unavailable: private state")
       | .return _ => liftD (fail declaration.span "invalid helper statement sequence")
@@ -2884,7 +2901,7 @@ private def compileEntrypointForState (allowWitnesses : Bool) (limits : Limits) 
   for summary in summaries do
     for effect in summary.effects do
       unless effect == .assertion || effect == .fallibleCast ||
-          effect == .ledgerRead || effect == .ledgerWrite ||
+          effect == .ledgerRead || effect == .ledgerWrite || effect == .event ||
           (allowWitnesses && effect == .witness) do
         let declaration ← lookup program summary.id {}
         fail declaration.span s!"native ledger helper capability unavailable: {repr effect}"
@@ -3213,6 +3230,8 @@ mutual
       liftM (fail declaration.span "ledger reads require the native contract runtime")
     | .writeMap .. :: _ =>
       liftM (fail declaration.span "ledger writes require the native contract runtime")
+    | .emitEvent .. :: _ =>
+      liftM (fail declaration.span "ledger events require the native contract runtime")
     | .stage _ _ _ _ :: _ => liftM (fail declaration.span "private staging requires the portable control runtime")
 end
 

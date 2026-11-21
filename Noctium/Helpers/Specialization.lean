@@ -101,6 +101,7 @@ inductive Statement where
   | branch (condition : Term) (yes no : List Statement)
   | forRange (index : String) (start stop : Natural) (body : List Statement)
   | stage (capability key : String) (type : GenericType) (value : Term)
+  | emitEvent (kind : EventKind) (payload : Term)
   deriving Repr, Inhabited
 
 structure Declaration where
@@ -596,6 +597,7 @@ private def sourceChildren (limits : Limits) (span : SourceSpan) :
       if body.length + 2 > limits.maxSourceNodes then resource span "source nodes"
       pure ([SourceNode.natural start, SourceNode.natural stop] ++ body.map SourceNode.statement)
     | .stage _ _ type value => pure [.typeExpr type, .term value]
+    | .emitEvent _ payload => pure [.term payload]
 
 private def scanNodes (limits : Limits) (span : SourceSpan) (available : Nat)
     (initial : List SourceNode) : Except Diagnostic Nat := go available 0 (initial.map (·, 1))
@@ -837,6 +839,9 @@ mutual
         let .scalar ty := concrete | liftM (fail declaration.span "generic private stage requires a scalar type")
         let value ← convertTerm limits declaration types naturals values value
         result := result.push (.stage capability key ty value)
+      | .emitEvent kind payload => do
+        let payload ← convertTerm limits declaration types naturals values payload
+        result := result.push (.emitEvent kind payload)
     pure result.toList
 
   private partial def convertTerm (limits : Limits) (declaration : Declaration)
@@ -1152,6 +1157,7 @@ private partial def collectWitnessStatements : List Helpers.Statement → Array 
         collectWitnessTerms key result
       | .writeMap _ _ _ key value =>
         collectWitnessTerms value (collectWitnessTerms key result)
+      | .emitEvent _ payload => collectWitnessTerms payload result
     collectWitnessStatements rest result
 
 private def witnessStatements (body : List Helpers.Statement) : List SignatureValue :=

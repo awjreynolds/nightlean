@@ -1,0 +1,18 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger flags: Map<Field, Boolean>;
+export ledger members: Set<Bytes<32>>;
+export ledger values: List<Field>;
+
+export circuit put(key: Field, value: Boolean): [] {
+  flags.insert(disclose(key), disclose(value));
+}
+
+export circuit add(tag: Bytes<32>): [] {
+  members.insert(disclose(tag));
+}
+
+export circuit prepend(value: Field): [] {
+  values.pushFront(disclose(value));
+}
