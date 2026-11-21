@@ -241,6 +241,7 @@ jobs:
           lake build Noctium.Verification Noctium.Verification.ScalarNormalizationSoundness
           lake env lean tests/Verification.lean
           lake env lean tests/SourceProofCoverage.lean
+          bash tests/private-claim-source-coverage.sh
       - name: Check readable private state source and disclosure
         run: |
           bash tests/private-authoring-cli.sh
