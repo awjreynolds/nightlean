@@ -31,6 +31,9 @@ inductive Expr : Ty → Type where
   lowering. Source expressions cannot cast or do arithmetic on byte strings. -/
   | bytesField (value : Expr (.bytes length)) (chunkIndex : Nat) : Expr .native
   | bytesAt (value : Expr (.bytes length)) (index : Nat) : Expr (.uint 255)
+  /-- The one Native projection used for FAB `Compress` alignment. The raw byte
+  sequence stays in the host plan and is never reconstructed from this field. -/
+  | opaqueBytesProjection (value : Expr .opaqueBytes) : Expr .native
   /-- A fixed-length, right-zero-padded source byte string. -/
   | bytesLiteral (length : Nat) (values : List Nat) : Expr (.bytes length)
   /-- Reverse a fixed-length source byte string without changing its type. -/
@@ -47,6 +50,10 @@ inductive Expr : Ty → Type where
   | sha512 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 64)
   /-- Keccak-256 over a source byte string, returning its full fixed-width digest. -/
   | keccak256 {length : Nat} (value : Expr (.bytes length)) : Expr (.bytes 32)
+  /-- Compact-compatible Keccak over the canonical FAB encoding of a
+  Secp256k1Point. This is distinct from the point's compressed byte form. -/
+  | keccak256Secp256k1Point
+      (value : Expr (.foreign (.point .secp256k1))) : Expr (.bytes 32)
   /-- SHA-256 over the pinned FAB Bytes32 alignment, using native ZKIR
   persistent_hash and returning a typed Bytes32 digest. -/
   | persistentHash32 (value : Expr (.bytes 32)) : Expr (.bytes 32)
@@ -142,6 +149,7 @@ def Input.nativeIdentifiers (input : Input) : List String :=
       s!"%input_{input.name}_byte_{index}"
   | .jubjubPoint => [s!"%input_{input.name}_x", s!"%input_{input.name}_y"]
   | .foreign _ => ["%input_" ++ input.name]
+  | .opaqueBytes => ["%input_" ++ input.name]
   | _ => ["%input_" ++ input.name]
 
 /-- Committed byte arguments use FAB high-to-low chunks, as returns do. -/
@@ -183,6 +191,7 @@ def Expr.nativeCallFields : Expr ty → List (Expr .native) :=
   | .jubjubPoint => fun value => [.jubjubCoordinate value 0, .jubjubCoordinate value 1]
   | .foreign kind => fun value =>
     (List.range kind.encodedFieldCount).map fun index => .foreignEncodedField value index
+  | .opaqueBytes => fun value => [.opaqueBytesProjection value]
 
 def Output.nativeReturnFields (output : Output) : Except String (List (Expr .native)) :=
   pure (output.value.nativeCallFields)
@@ -578,6 +587,10 @@ inductive Effect where
   contract address read from ledger context. -/
   | receiveShieldedToMap (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Store a coin whose self-recipient commitment is already booked in the
+  current transaction. The runtime obtains its Ledger index from context. -/
+  | writeShieldedCoinCell (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
   /-- Spend the exact coin record read from a Bytes32-keyed tree Map entry.
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
@@ -588,6 +601,12 @@ inductive Effect where
   | sendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
       (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
       (recipient selfAddress : Expr (.bytes 32))
+  /-- Receive an exact shielded coin transiently at this contract and forward
+  its full value to another contract. The backend derives receive, nullifier
+  and contract-recipient spend commitments. This operation does not store a
+  relay coin or create change. -/
+  | relayShieldedImmediate (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded : Expr .bool)
@@ -741,6 +760,7 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
   | .bytes length =>
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+  | .opaqueBytes => pure ()
   | .jubjubScalar | .jubjubPoint =>
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
   | .foreign _ =>
@@ -771,6 +791,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless index < length do
       if length == 32 then throw "Bytes32 byte index is out of range"
       else throw "byte index is out of range"
+  | .opaqueBytesProjection value => value.validate caps env
   | .bytesLiteral length values => do
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
@@ -806,6 +827,9 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless caps.keccak256 do throw "target lacks qualified Keccak-256 support"
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+    value.validate caps env
+  | .keccak256Secp256k1Point value => do
+    unless caps.keccak256 do throw "target lacks qualified Keccak-256 support"
     value.validate caps env
   | .reverseBytes32 value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
@@ -939,7 +963,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     | _ => throw "inverse supports only Native and JubjubScalar"
     value.validate caps env
   | .cast target (source := source) value => do
-    if target.isBytes || source.isBytes then
+    if target.isBytes || source.isBytes || target.isOpaqueBytes || source.isOpaqueBytes then
       throw "byte strings do not support scalar casts"
     if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
       throw "curve values do not support scalar casts"
@@ -953,12 +977,13 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     body.validate caps env
   | .copyValue value | .disclose _ value => value.validate caps env
   | .eq (ty := operandTy) a b => do
-    if operandTy.isBytes then throw "byte string equality is not supported by this source surface"
+    if operandTy.isBytes || operandTy.isOpaqueBytes then
+      throw "byte string equality is not supported by this source surface"
     if !caps.equality then throw "target lacks equality"
     a.validate caps env
     b.validate caps env
   | .select c a b => do
-    if ty.isJubjub || (ty.isBytes && !caps.bytes32Conversions) then
+    if ty.isJubjub || ty.isOpaqueBytes || (ty.isBytes && !caps.bytes32Conversions) then
       throw "byte string and Jubjub selection is not supported by this source surface"
     if ty.isForeign && !caps.foreignValues then
       throw "target lacks typed foreign-curve value support"
@@ -1089,6 +1114,7 @@ private def Constructor.validate (caps : Capabilities) (states : List StateDecl)
 private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .receiveShieldedToMap state .. | .sendShieldedFromMap state .. |
+    .writeShieldedCoinCell state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1278,6 +1304,18 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         amount.validate caps env
         selfAddress.validate caps env
         pure []
+      | .writeShieldedCoinCell state nonce color amount selfAddress => do
+        if !caps.stateCells then throw "target lacks state cells"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin Cell '{state}'"
+        let .tree (.composite compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin write requires a root composite Cell '{state}'"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        selfAddress.validate caps env
+        pure []
       | .spendShieldedFromMap state nonce color amount recipient selfAddress => do
         if !caps.stateMaps then throw "target lacks state maps"
         let some declaration := decls.find? (·.name == state)
@@ -1306,6 +1344,13 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         color.validate caps env
         inputAmount.validate caps env
         sendAmount.validate caps env
+        recipient.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .relayShieldedImmediate nonce color amount recipient selfAddress => do
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
         recipient.validate caps env
         selfAddress.validate caps env
         pure []

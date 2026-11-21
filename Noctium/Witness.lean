@@ -30,6 +30,7 @@ private def scalarName : Ty → String
   | .uint maximum => s!"UIntRange<{maximum + 1}>"
   | .bytes 32 => "Bytes<32>"
   | .bytes length => s!"Bytes<{length}>"
+  | .opaqueBytes => "OpaqueBytes"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
   | .foreign kind => kind.sourceName

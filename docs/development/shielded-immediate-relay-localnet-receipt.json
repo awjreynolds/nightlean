@@ -1,0 +1,29 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "sourceRevision": "09c0ba8efa648c6ff15e27151a28994d12603241",
+  "ledgerParametersSha256": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+  "relayBundleManifestSha256": "194bf740558186cc9ccdcdc2e3512b28cb8aba53c8752641a9f6af8991b1b6fe",
+  "destinationBundleManifestSha256": "32fce7e3de2815afc83d40804513b3025d2cc40a4deaf2e8ea78bfaa3ee2eb53",
+  "relayDeploymentHeight": 129,
+  "destinationDeploymentHeight": 132,
+  "callHeight": 136,
+  "callTransaction": "144d680bd6f8fd613cce1f0758b528fad2cfee8dd176a09e081f4bfd64e648b5",
+  "relayAddress": "eff5ae68d3ab863dc67a32283af25c4bcf0630f7af48d9f7bc0db6bc772bf556",
+  "destinationAddress": "a874e17aeeb49bc5fe99ce371bde5d58d4ae9a49679c3f12052f5c5cfce5b424",
+  "domain": "2828282828282828282828282828282828282828282828282828282828282828",
+  "value": "5",
+  "transientCommitment": "1ed4e3372e5f8d20b672f52eed9e9f3443dcb019544a53a362604a85b6dacada",
+  "transientIndex": 31,
+  "nullifier": "ee0682e97e2eacd9438cae6e777cd878c822902acd5147cfd03ee0e5eca649d1",
+  "outputCommitment": "25917458d979cb37fef80cd724d057c78f1694b85335a575048356c218cb987c",
+  "outputIndex": 30,
+  "relayK": 15,
+  "relayRows": 18644,
+  "destinationK": 13,
+  "destinationRows": 6436,
+  "rejected": [
+    "wrongRecipient",
+    "wrongColor"
+  ]
+}

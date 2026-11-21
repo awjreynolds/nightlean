@@ -519,13 +519,66 @@ async fn run(configuration: Configuration) -> Result<()> {
             &mut host.current_state,
             &remaining_operations,
             &bootstrap_signer,
-            true,
+            false,
             live.block.tblock.to_secs() + 1800,
             &host.descriptor,
             &setup,
             &mut OsRng,
         )?;
         host.finish(installation).await?;
+    }
+
+    if !host.ready {
+        let live = host.node.sync()?;
+        let rotation_signer = base_crypto::schnorr::SigningKey::from_bytes(&[30; 32])
+            .map_err(|_| anyhow!("invalid public fixture replacement key"))?;
+        let setup = host.setup(&attempt_id())?;
+        let rotation = host.target.start_authority_rotation_client(
+            &mut host.current_state,
+            &bootstrap_signer,
+            rotation_signer.verifying_key(),
+            live.block.tblock.to_secs() + 1800,
+            &host.descriptor,
+            &setup,
+            &mut OsRng,
+        )?;
+        host.finish(rotation).await?;
+
+        let retired_signer = base_crypto::schnorr::SigningKey::from_bytes(&[31; 32])
+            .map_err(|_| anyhow!("invalid public fixture retired-key probe"))?;
+        let live = host.node.sync()?;
+        let stale_setup = host.setup(&attempt_id())?;
+        let stale_authority_attempt = host.target.start_authority_rotation_client(
+            &mut host.current_state,
+            &bootstrap_signer,
+            retired_signer.verifying_key(),
+            live.block.tblock.to_secs() + 1800,
+            &host.descriptor,
+            &stale_setup,
+            &mut OsRng,
+        );
+        ensure!(
+            stale_authority_attempt.is_err() && host.current_state.is_some(),
+            "retired authority was accepted or consumed the current-state token"
+        );
+        println!(
+            "{}",
+            json!({"stage":"retired-authority-rejected","stateTokenRetained":true})
+        );
+
+        let live = host.node.sync()?;
+        let setup = host.setup(&attempt_id())?;
+        let lock = host.target.start_installation_client(
+            &mut host.current_state,
+            &[],
+            &rotation_signer,
+            true,
+            live.block.tblock.to_secs() + 1800,
+            &host.descriptor,
+            &setup,
+            &mut OsRng,
+        )?;
+        host.finish(lock).await?;
     }
     drop(bootstrap_signer);
     token::run(&mut host).await

@@ -1,16 +1,16 @@
 //! Native proof service boundary. Public artifacts stay retained, private values have no Debug.
 //! This API proves frozen native call intents. It does not fund, sign, or submit transactions.
 use crate::{
-    Db, Plan,
+    Config, Db, Plan,
     artifacts::{ContractBundleSet, Role, VerifiedBundle},
-    assembly::NativeIntent,
+    assembly::{BookedComIndices, CheckedNativeCall, NativeIntent},
     zkir::IrSource,
 };
 use base_crypto::cost_model::CostDuration;
-use coin_structure::coin::Commitment;
+use coin_structure::coin::{Commitment, PublicAddress};
 use futures::{Future, FutureExt, pin_mut, select_biased};
 use ledger::structure::{
-    ContractAction, ContractCall, Intent, LedgerParameters, ProofKind, ProofMarker,
+    ContractAction, ContractCall, Intent, LedgerParameters, LedgerState, ProofKind, ProofMarker,
     ProofPreimageVersioned, ProofVersioned, Signature,
 };
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
@@ -254,6 +254,15 @@ pub struct CurrentStateContext {
     state: ContractState<Db>,
 }
 
+/// One side of the private two-call relay path. The state token moves only after the
+/// complete, snapshot-checked composition has been prepared.
+pub(crate) struct CurrentStateCompositionCall<'target, 'state> {
+    pub(crate) target: &'target ContractOperationTarget,
+    pub(crate) current: &'state mut Option<CurrentStateContext>,
+    pub(crate) parameters: &'target TrustedParameters,
+    pub(crate) inputs: BTreeMap<String, Json>,
+}
+
 /// Private binding carried from prepared source call through client receipt validation.
 #[derive(Clone)]
 pub(crate) struct ContractStateBinding {
@@ -486,8 +495,7 @@ impl WitnessContractTarget {
             }
             ContractEvent::Maintain => {
                 if operation != "__noctium_maintenance"
-                    || state.data != self.inner.ready_state.data
-                    || state.balance != self.inner.ready_state.balance
+                    || !supported_maintenance_authority(&state.maintenance_authority)
                 {
                     return Err(Error::BindingMismatch);
                 }
@@ -496,22 +504,6 @@ impl WitnessContractTarget {
                     if self.inner.ready_state.operations.get(&**name).as_deref() != Some(&**value) {
                         return Err(Error::BindingMismatch);
                     }
-                }
-                let initial = self
-                    .inner
-                    .deployment
-                    .ready_state()
-                    .map_err(|_| Error::BindingMismatch)?;
-                let policy = &state.maintenance_authority;
-                let locked = policy.committee
-                    == self.inner.ready_state.maintenance_authority.committee
-                    && policy.threshold == self.inner.ready_state.maintenance_authority.threshold;
-                let installing = policy.committee == initial.maintenance_authority.committee
-                    && policy.threshold == initial.maintenance_authority.threshold;
-                if (!locked && !installing)
-                    || (locked && state.operations != self.inner.ready_state.operations)
-                {
-                    return Err(Error::BindingMismatch);
                 }
             }
             ContractEvent::Call => {
@@ -765,6 +757,80 @@ impl WitnessContractTarget {
             },
         ))
     }
+
+    pub(crate) fn prepare_authority_rotation(
+        &self,
+        current: &CurrentStateContext,
+        signer: &base_crypto::schnorr::SigningKey,
+        next_key: base_crypto::schnorr::VerifyingKey,
+        ttl: u64,
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<(NativeIntent, ContractStateBinding)> {
+        use ledger::structure::{MaintenanceUpdate, SingleUpdate};
+
+        if ttl == 0
+            || !self.maintenance_context_matches(current)
+            || current.state.maintenance_authority.threshold != 1
+            || current.state.maintenance_authority.committee
+                != vec![ContractMaintenanceVerifyingKey::Schnorr(
+                    signer.verifying_key(),
+                )]
+            || current.state.maintenance_authority.counter == u32::MAX
+            || next_key == signer.verifying_key()
+            || encode(&current.state)? != current.state_bytes
+        {
+            return Err(Error::BindingMismatch);
+        }
+
+        let next_counter = current.state.maintenance_authority.counter + 1;
+        let next_authority = ContractMaintenanceAuthority {
+            committee: vec![ContractMaintenanceVerifyingKey::Schnorr(next_key)],
+            threshold: 1,
+            counter: next_counter,
+        };
+        let mut expected = current.state.clone();
+        expected.maintenance_authority = next_authority.clone();
+        let address = coin_structure::contract::ContractAddress(base_crypto::hash::HashOutput(
+            hex::decode(self.contract_address())
+                .map_err(|_| Error::BindingMismatch)?
+                .try_into()
+                .map_err(|_| Error::BindingMismatch)?,
+        ));
+        let mut update = MaintenanceUpdate::<Db> {
+            address,
+            updates: vec![SingleUpdate::ReplaceAuthority(next_authority)].into(),
+            counter: current.state.maintenance_authority.counter,
+            signatures: vec![].into(),
+        };
+        let signature = Signature::Schnorr(signer.sign(rng, &update.data_to_sign()));
+        update.signatures = vec![ledger::structure::SignaturesValue(0, signature)].into();
+        let intent = NativeIntent::empty(rng, base_crypto::time::Timestamp::from_secs(ttl))
+            .add_maintenance_update(update);
+        Ok((
+            intent,
+            ContractStateBinding {
+                contract_set_identity: self.identity().to_owned(),
+                deployment_identity: self.inner.deployment_identity.clone(),
+                state_schema_sha256: self.inner.state_schema_sha256.clone(),
+                address: self.contract_address().to_owned(),
+                operation: "__noctium_maintenance".into(),
+                context_identity: current.identity.clone(),
+                current_state_sha256: Some(hex::encode(Sha256::digest(&current.state_bytes))),
+                current_state: Some(current.state_bytes.clone()),
+                expected_state: encode(&expected)?,
+                deployment: false,
+            },
+        ))
+    }
+
+    fn maintenance_context_matches(&self, current: &CurrentStateContext) -> bool {
+        current.contract_set_identity == self.identity()
+            && current.deployment_identity == self.inner.deployment_identity
+            && current.state_schema_sha256 == self.inner.state_schema_sha256
+            && current.address == self.contract_address()
+            && current.state.operations == self.inner.ready_state.operations
+            && supported_maintenance_authority(&current.state.maintenance_authority)
+    }
 }
 
 impl ContractOperationTarget {
@@ -902,6 +968,15 @@ impl ContractOperationTarget {
         }
         Ok(material)
     }
+}
+
+fn supported_maintenance_authority(authority: &ContractMaintenanceAuthority) -> bool {
+    authority.threshold == 1
+        && (authority.committee.is_empty()
+            || matches!(
+                authority.committee.as_slice(),
+                [ContractMaintenanceVerifyingKey::Schnorr(_)]
+            ))
 }
 
 impl ContractStateBinding {
@@ -1994,6 +2069,230 @@ impl PreparedProof {
     }
 }
 
+/// Prepare the native relay and destination calls in fixed ledger order. Both calls
+/// evaluate against the same snapshot and booked index map. The destination's
+/// communication randomness is the opening committed by the relay source call.
+pub(crate) fn prepare_relay_destination_composition<'target, 'state>(
+    relay: CurrentStateCompositionCall<'target, 'state>,
+    destination: CurrentStateCompositionCall<'target, 'state>,
+    snapshot: &LedgerState<Db>,
+    booked_indices: &BookedComIndices,
+    destination_communication_commitment_rand: Fr,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<(PreparedComposition<'target>, [ContractStateBinding; 2])> {
+    let CurrentStateCompositionCall {
+        target: relay_target,
+        current: relay_current_slot,
+        parameters: relay_parameters,
+        inputs: relay_input_values,
+    } = relay;
+    let CurrentStateCompositionCall {
+        target: destination_target,
+        current: destination_current_slot,
+        parameters: destination_parameters,
+        inputs: destination_input_values,
+    } = destination;
+    let relay_config = SecretConfig(Config {
+        inputs: relay_input_values,
+        state: BTreeMap::new(),
+        negative_cases: Vec::new(),
+    });
+    let destination_config = SecretConfig(Config {
+        inputs: destination_input_values,
+        state: BTreeMap::new(),
+        negative_cases: Vec::new(),
+    });
+
+    if destination_communication_commitment_rand == Fr::from(0u64)
+        || relay_target.ttl == 0
+        || relay_target.ttl != destination_target.ttl
+        || relay_target.contract_address() == destination_target.contract_address()
+    {
+        return Err(Error::BindingMismatch);
+    }
+    let relay_current = relay_current_slot
+        .as_ref()
+        .ok_or(Error::BindingMismatch)?;
+    let destination_current = destination_current_slot
+        .as_ref()
+        .ok_or(Error::BindingMismatch)?;
+    ensure_current_state_matches_snapshot(relay_target, relay_current, snapshot)?;
+    ensure_current_state_matches_snapshot(destination_target, destination_current, snapshot)?;
+
+    let relay_material = relay_target.selected_material()?;
+    let destination_material = destination_target.selected_material()?;
+    ensure_target_parameters(relay_target, relay_parameters, &relay_material)?;
+    ensure_target_parameters(
+        destination_target,
+        destination_parameters,
+        &destination_material,
+    )?;
+    let relay_plan = target_plan(relay_target)?;
+    let destination_plan = target_plan(destination_target)?;
+    let ttl = relay_target.ttl;
+    let relay_name = relay_target.inner.bundles.contract_name();
+    let destination_name = destination_target.inner.bundles.contract_name();
+    let relay_call = crate::assembly::prepare_checked_call_for_ready_state(
+        &relay_plan,
+        relay_name,
+        &relay_target.operation,
+        &relay_config.0,
+        &snapshot.parameters,
+        ContractOperation::new(Some(relay_material.verifier.clone()), None),
+        &relay_material.circuit,
+        ttl,
+        &relay_target.inner.deployment,
+        &relay_target.inner.ready_state,
+        &relay_current.state,
+        booked_indices,
+        None,
+        None,
+        rng,
+    )
+    .map_err(|_| Error::InvalidPrivateInput)?;
+    let relay_address = parse_contract_address(relay_target.contract_address())?;
+    let destination_call = crate::assembly::prepare_checked_call_for_ready_state(
+        &destination_plan,
+        destination_name,
+        &destination_target.operation,
+        &destination_config.0,
+        &snapshot.parameters,
+        ContractOperation::new(Some(destination_material.verifier.clone()), None),
+        &destination_material.circuit,
+        ttl,
+        &destination_target.inner.deployment,
+        &destination_target.inner.ready_state,
+        &destination_current.state,
+        booked_indices,
+        Some(PublicAddress::Contract(relay_address)),
+        Some(destination_communication_commitment_rand),
+        rng,
+    )
+    .map_err(|_| Error::InvalidPrivateInput)?;
+
+    let checked_calls = [
+        CheckedNativeCall {
+            execution: &relay_call.execution,
+            circuit: &relay_material.circuit,
+            initial_context: relay_call.initial_context.clone(),
+            entry_point: relay_call.entry_point.clone(),
+            communication_commitment_rand: relay_call.communication_commitment_rand,
+        },
+        CheckedNativeCall {
+            execution: &destination_call.execution,
+            circuit: &destination_material.circuit,
+            initial_context: destination_call.initial_context.clone(),
+            entry_point: destination_call.entry_point.clone(),
+            communication_commitment_rand: destination_call.communication_commitment_rand,
+        },
+    ];
+    let intent = crate::assembly::assemble_checked_calls(
+        &checked_calls,
+        &snapshot.parameters,
+        ttl,
+        rng,
+    )
+    .map_err(|_| Error::InvalidIntent)?;
+    let selections = [
+        CompositionMaterial {
+            bundle: relay_target.bundle()?,
+            parameters: relay_parameters,
+        },
+        CompositionMaterial {
+            bundle: destination_target.bundle()?,
+            parameters: destination_parameters,
+        },
+    ];
+    let prepared = PreparedComposition::from_intent(intent, snapshot, &selections)?;
+    let bindings = [
+        current_state_binding(relay_target, relay_current, &relay_call.predicted)?,
+        current_state_binding(
+            destination_target,
+            destination_current,
+            &destination_call.predicted,
+        )?,
+    ];
+
+    // These tokens are single-use. Keep both intact for every earlier error path.
+    let _relay_token = relay_current_slot.take().ok_or(Error::BindingMismatch)?;
+    let _destination_token = destination_current_slot.take().ok_or(Error::BindingMismatch)?;
+    Ok((prepared, bindings))
+}
+
+fn ensure_current_state_matches_snapshot(
+    target: &ContractOperationTarget,
+    current: &CurrentStateContext,
+    snapshot: &LedgerState<Db>,
+) -> Result<()> {
+    if !target.context_matches(current) || current.state_bytes.len() > MAX_NATIVE_STATE {
+        return Err(Error::BindingMismatch);
+    }
+    let address = parse_contract_address(target.contract_address())?;
+    let deployed = snapshot
+        .contract
+        .get(&address)
+        .ok_or(Error::BindingMismatch)?;
+    if encode(deployed)? != current.state_bytes
+        || encode(&current.state)? != current.state_bytes
+    {
+        return Err(Error::BindingMismatch);
+    }
+    Ok(())
+}
+
+fn ensure_target_parameters(
+    target: &ContractOperationTarget,
+    parameters: &TrustedParameters,
+    material: &Material,
+) -> Result<()> {
+    if parameters.k() != target.k
+        || parameters.sha256() != target.proof_parameters_sha256.as_str()
+        || material.circuit.k() != target.k
+    {
+        return Err(Error::InvalidParameters);
+    }
+    Ok(())
+}
+
+fn target_plan(target: &ContractOperationTarget) -> Result<Plan> {
+    serde_json::from_slice(
+        target
+            .bundle()?
+            .file(Role::Plan)
+            .map_err(|_| Error::InvalidArtifacts)?,
+    )
+    .map_err(|_| Error::InvalidArtifacts)
+}
+
+fn parse_contract_address(address: &str) -> Result<coin_structure::contract::ContractAddress> {
+    let bytes: [u8; 32] = hex::decode(address)
+        .map_err(|_| Error::BindingMismatch)?
+        .try_into()
+        .map_err(|_| Error::BindingMismatch)?;
+    Ok(coin_structure::contract::ContractAddress(
+        base_crypto::hash::HashOutput(bytes),
+    ))
+}
+
+fn current_state_binding(
+    target: &ContractOperationTarget,
+    current: &CurrentStateContext,
+    predicted: &ContractState<Db>,
+) -> Result<ContractStateBinding> {
+    Ok(ContractStateBinding {
+        contract_set_identity: target.contract_set_identity().to_owned(),
+        deployment_identity: target.deployment_identity().to_owned(),
+        state_schema_sha256: target.state_schema_sha256().to_owned(),
+        address: target.contract_address().to_owned(),
+        operation: target.operation.clone(),
+        context_identity: current.identity.clone(),
+        current_state_sha256: Some(hex::encode(Sha256::digest(&current.state_bytes))),
+        current_state: Some(current.state_bytes.clone()),
+        expected_state: encode(predicted)?,
+        deployment: false,
+    })
+}
+
 /// Native attached result only becomes available after local cryptographic verification.
 /// The binding is frozen. Subsequent changes to bound call/intent fields require re-proving.
 pub struct ProvedIntent {
@@ -2299,7 +2598,7 @@ mod tests {
     #[test]
     #[cfg(feature = "zkir-321")]
     #[ignore = "requires the externally pinned confidential-token bundle index"]
-    fn staged_installation_requires_authority_and_locks_the_complete_map() {
+    fn staged_installation_and_authority_rotation_bind_current_state() {
         let index = std::fs::read(std::env::var("NOCTIUM_STAGED_BUNDLE_INDEX").unwrap()).unwrap();
         assert_eq!(
             crate::artifacts::digest(&index),
@@ -2336,6 +2635,7 @@ mod tests {
         )
         .unwrap();
         let initial = target.inner.deployment.ready_state().unwrap();
+        assert_eq!(initial.maintenance_authority.counter, 0);
         let bytes = encode(&initial).unwrap();
         let current = target
             .deployment_binding("registerWithKey")
@@ -2424,6 +2724,203 @@ mod tests {
             .unwrap();
         assert!(admitted.state.operations == target.inner.ready_state.operations);
         assert!(admitted.state.maintenance_authority == ready.maintenance_authority);
+
+        let next_owner = base_crypto::schnorr::SigningKey::sample(&mut OsRng);
+        let (install_intent, install_binding) = target
+            .prepare_installation(
+                &current,
+                &names[8..],
+                &owner,
+                false,
+                2_000_000_000,
+                &mut OsRng,
+            )
+            .unwrap();
+        let installed_state: ContractState<Db> = decode(&install_binding.expected_state).unwrap();
+        assert_eq!(
+            installed_state.operations,
+            target.inner.ready_state.operations
+        );
+        assert_eq!(installed_state.maintenance_authority.counter, 1);
+        assert_eq!(
+            installed_state.maintenance_authority.committee,
+            vec![ContractMaintenanceVerifyingKey::Schnorr(
+                owner.verifying_key()
+            )]
+        );
+        assert!(matches!(
+            install_intent.actions.iter_deref().next(),
+            Some(ContractAction::Maintain(_))
+        ));
+        let call_target = ContractOperationTarget {
+            inner: target.inner.clone(),
+            operation: names[0].clone(),
+            manifest: String::new(),
+            k: 1,
+            proof_parameters_sha256: String::new(),
+            ttl: 1,
+        };
+        let installed = install_binding
+            .admit_committed_state(
+                &install_binding.expected_state,
+                &install_binding.expected_state,
+                &"c".repeat(64),
+                false,
+            )
+            .unwrap();
+        assert!(
+            !call_target.context_matches(&installed),
+            "calls must stay blocked until the maintenance authority is locked"
+        );
+
+        assert!(
+            target
+                .prepare_authority_rotation(
+                    &installed,
+                    &foreign,
+                    next_owner.verifying_key(),
+                    2_000_000_000,
+                    &mut OsRng,
+                )
+                .is_err()
+        );
+        let (rotation, binding) = target
+            .prepare_authority_rotation(
+                &installed,
+                &owner,
+                next_owner.verifying_key(),
+                2_000_000_000,
+                &mut OsRng,
+            )
+            .unwrap();
+        let expected: ContractState<Db> = decode(&binding.expected_state).unwrap();
+        assert_eq!(expected.operations, installed.state.operations);
+        assert_eq!(expected.data, installed.state.data);
+        assert_eq!(expected.balance, installed.state.balance);
+        assert_eq!(expected.maintenance_authority.counter, 2);
+        assert_eq!(
+            expected.maintenance_authority.committee,
+            vec![ContractMaintenanceVerifyingKey::Schnorr(
+                next_owner.verifying_key()
+            )]
+        );
+        let Some(ContractAction::Maintain(update)) = rotation.actions.iter_deref().next() else {
+            panic!("expected signed authority rotation")
+        };
+        assert_eq!(update.counter, 1);
+        assert_eq!(update.updates.len(), 1);
+        let Some(ledger::structure::SingleUpdate::ReplaceAuthority(authority)) =
+            update.updates.iter_deref().next()
+        else {
+            panic!("rotation must replace only the maintenance authority")
+        };
+        assert_eq!(authority, &expected.maintenance_authority);
+        let signature = update.signatures.iter_deref().next().unwrap();
+        let Signature::Schnorr(signature) = &signature.1 else {
+            panic!("expected a Schnorr maintenance signature")
+        };
+        assert!(
+            owner
+                .verifying_key()
+                .verify(&update.data_to_sign(), signature)
+        );
+        assert!(
+            crate::native_client::prove_maintenance(
+                &rotation,
+                &ledger::structure::INITIAL_PARAMETERS
+            )
+            .is_ok()
+        );
+
+        let rotated = binding
+            .admit_committed_state(
+                &binding.expected_state,
+                &binding.expected_state,
+                &"d".repeat(64),
+                false,
+            )
+            .unwrap();
+        assert!(target.maintenance_context_matches(&rotated));
+        assert!(!call_target.context_matches(&rotated));
+        assert!(
+            target
+                .prepare_authority_rotation(
+                    &rotated,
+                    &owner,
+                    foreign.verifying_key(),
+                    2_000_000_000,
+                    &mut OsRng,
+                )
+                .is_err()
+        );
+
+        let unbound = CurrentStateContext {
+            contract_set_identity: "different contract set".into(),
+            deployment_identity: rotated.deployment_identity.clone(),
+            state_schema_sha256: rotated.state_schema_sha256.clone(),
+            address: rotated.address.clone(),
+            identity: rotated.identity.clone(),
+            state_bytes: rotated.state_bytes.clone(),
+            state: rotated.state.clone(),
+        };
+        assert!(
+            target
+                .prepare_authority_rotation(
+                    &unbound,
+                    &next_owner,
+                    foreign.verifying_key(),
+                    2_000_000_000,
+                    &mut OsRng,
+                )
+                .is_err()
+        );
+
+        let (next_rotation, _) = target
+            .prepare_authority_rotation(
+                &rotated,
+                &next_owner,
+                foreign.verifying_key(),
+                2_000_000_000,
+                &mut OsRng,
+            )
+            .unwrap();
+        let Some(ContractAction::Maintain(update)) = next_rotation.actions.iter_deref().next()
+        else {
+            panic!("new authority must be able to rotate the next key")
+        };
+        assert_eq!(update.counter, 2);
+
+        let mut altered = expected;
+        altered.maintenance_authority.counter += 1;
+        let altered_bytes = encode(&altered).unwrap();
+        assert!(
+            binding
+                .admit_committed_state(&altered_bytes, &altered_bytes, &"e".repeat(64), false)
+                .is_err()
+        );
+
+        let (lock, lock_binding) = target
+            .prepare_installation(&rotated, &[], &next_owner, true, 2_000_000_000, &mut OsRng)
+            .unwrap();
+        assert!(matches!(
+            lock.actions.iter_deref().next(),
+            Some(ContractAction::Maintain(_))
+        ));
+        let locked_state: ContractState<Db> = decode(&lock_binding.expected_state).unwrap();
+        assert_eq!(locked_state.operations, target.inner.ready_state.operations);
+        assert_eq!(locked_state.operations.size(), 16);
+        assert_eq!(locked_state.maintenance_authority.counter, 3);
+        assert!(locked_state.maintenance_authority.committee.is_empty());
+        assert_eq!(locked_state.maintenance_authority.threshold, 1);
+        let locked = lock_binding
+            .admit_committed_state(
+                &lock_binding.expected_state,
+                &lock_binding.expected_state,
+                &"f".repeat(64),
+                false,
+            )
+            .unwrap();
+        assert!(call_target.context_matches(&locked));
     }
 
     #[cfg(feature = "zkir-321")]

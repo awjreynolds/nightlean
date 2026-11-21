@@ -61,6 +61,7 @@ pub enum Value {
         maximum: BigUint,
     },
     Bytes(Vec<u8>),
+    OpaqueBytes(Vec<u8>),
     JubjubScalar(EmbeddedFr),
     JubjubPoint(EmbeddedGroupAffine),
     #[cfg(feature = "zkir-321")]
@@ -128,6 +129,18 @@ fn aligned_bytes(value: &Value) -> Result<AlignedValue> {
             length: bytes.len() as u32,
         }),
     })
+}
+
+fn aligned_opaque_bytes(value: &Value) -> Result<AlignedValue> {
+    value.validate()?;
+    let Value::OpaqueBytes(bytes) = value else {
+        bail!("expected opaque bytes value")
+    };
+    AlignedValue::new(
+        FabValue(vec![ValueAtom(bytes.clone())]),
+        Alignment::singleton(AlignmentAtom::Compress),
+    )
+    .ok_or_else(|| anyhow!("invalid opaque byte alignment"))
 }
 
 fn claim_hash_output(value: Value, label: &str) -> Result<HashOutput> {
@@ -206,6 +219,7 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
         return aligned_bytes(value);
     }
     match alignment {
+        "compress" => aligned_opaque_bytes(value),
         "field" => match value {
             #[cfg(feature = "zkir-321")]
             Value::Foreign(value) => Ok(aligned_fields(&value.encode()?)),
@@ -330,6 +344,10 @@ pub enum Expr {
     },
     Keccak256 {
         length: usize,
+        value: Box<Expr>,
+    },
+    #[serde(rename = "keccak256Secp256k1Point")]
+    Keccak256Secp256k1Point {
         value: Box<Expr>,
     },
     #[serde(rename = "sliceBytes")]
@@ -798,6 +816,43 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         Expr::Keccak256 { length, value } => {
             Value::Bytes(sha3::Keccak256::digest(evaluated_bytes(value, *length, env)?).to_vec())
         }
+        #[cfg(feature = "zkir-321")]
+        Expr::Keccak256Secp256k1Point { value } => {
+            let Value::Foreign(point) = evaluate(value, env)? else {
+                bail!("keccak256Secp256k1Point requires a typed foreign point")
+            };
+            let expected = foreign::ForeignType::new(
+                foreign::ForeignFamily::Secp256k1,
+                foreign::ForeignRole::Point,
+            );
+            ensure!(
+                point.foreign_type() == expected,
+                "keccak256Secp256k1Point requires Secp256k1Point"
+            );
+            let encoded = point.encode()?;
+            ensure!(
+                encoded.len() == 5,
+                "Secp256k1Point Encode must produce five fields"
+            );
+            let mut preimage = Vec::with_capacity(96);
+            for (field, width) in encoded.iter().zip([24usize, 8, 24, 8, 32]) {
+                let bytes = field.as_le_bytes();
+                ensure!(
+                    bytes[width..].iter().all(|byte| *byte == 0),
+                    "Secp256k1Point Encode field exceeds its FAB alignment"
+                );
+                preimage.extend_from_slice(&bytes[..width]);
+            }
+            ensure!(
+                preimage.len() == 96,
+                "Secp256k1Point FAB preimage must be 96 bytes"
+            );
+            Value::Bytes(sha3::Keccak256::digest(preimage).to_vec())
+        }
+        #[cfg(not(feature = "zkir-321"))]
+        Expr::Keccak256Secp256k1Point { .. } => {
+            bail!("keccak256Secp256k1Point requires the ZKIR 3.2.1 runtime")
+        }
         Expr::SliceBytes {
             length,
             value,
@@ -1255,6 +1310,14 @@ pub enum Instruction {
         amount: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "writeShieldedCoinCell", rename_all = "camelCase")]
+    WriteShieldedCoinCell {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "spendShieldedFromMap", rename_all = "camelCase")]
     SpendShieldedFromMap {
         nonce: Expr,
@@ -1279,6 +1342,18 @@ pub enum Instruction {
         output_commitment: Expr,
         #[serde(rename = "changeCommitment")]
         change_commitment: Expr,
+    },
+    #[serde(rename = "relayShieldedImmediate", rename_all = "camelCase")]
+    RelayShieldedImmediate {
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        recipient: Expr,
+        #[serde(rename = "inputCommitment")]
+        input_commitment: Expr,
+        nullifier: Expr,
+        #[serde(rename = "outputCommitment")]
+        output_commitment: Expr,
     },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
@@ -1397,8 +1472,8 @@ pub(crate) fn ledger_key_type(value: &Json) -> Result<ScalarType> {
     )?;
     reject_jubjub_map_key(&ty)?;
     ensure!(
-        !matches!(&ty, ScalarType::Bytes(_)),
-        "only Bytes32 byte map keys are supported"
+        !matches!(&ty, ScalarType::Bytes(_) | ScalarType::OpaqueBytes),
+        "only fixed-width byte map keys are supported"
     );
     Ok(ty)
 }
@@ -1519,8 +1594,12 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             vec![1, path_field_count(plan, *slot, keys)?, 1, 5, 1, 4]
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
+        Instruction::WriteShieldedCoinCell { .. } => WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec(),
         Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SendShieldedFromMap { .. } => SEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
+        Instruction::RelayShieldedImmediate { .. } => {
+            RELAY_SHIELDED_IMMEDIATE_FIELD_COUNTS.to_vec()
+        }
 
         Instruction::MerkleTreeIsFull {
             slot, keys, depth, ..
@@ -1693,7 +1772,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
 fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     let value_fields = |alignment: &str| -> Result<usize> {
         match alignment {
-            "field" | "bit" | "u64" => Ok(1),
+            "field" | "bit" | "u64" | "compress" => Ok(1),
             _ => match byte_alignment_length(alignment)? {
                 Some(length) => Ok(length.div_ceil(31)),
                 None => bail!("unsupported alignment"),
@@ -1706,11 +1785,17 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::ReceiveShieldedToMap { .. } => {
             bail!("shielded receive must be unguarded")
         }
+        Instruction::WriteShieldedCoinCell { .. } => {
+            bail!("shielded coin Cell write must be unguarded")
+        }
         Instruction::SpendShieldedFromMap { .. } => {
             bail!("shielded spend must be unguarded")
         }
         Instruction::SendShieldedFromMap { .. } => {
             bail!("shielded send must be unguarded")
+        }
+        Instruction::RelayShieldedImmediate { .. } => {
+            bail!("immediate shielded relay must be unguarded")
         }
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
@@ -1816,8 +1901,11 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
 const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
 const RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS: [usize; 16] =
     [1, 4, 6, 2, 1, 1, 4, 6, 1, 6, 5, 11, 1, 2, 1, 1];
+const WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS: [usize; 8] = [5, 1, 6, 5, 11, 1, 2, 1];
 const SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 12] = [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 const SEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 18] =
+    [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
+const RELAY_SHIELDED_IMMEDIATE_FIELD_COUNTS: [usize; 18] =
     [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 
 fn token_accumulation_fields(key_push: usize) -> [usize; 16] {
@@ -1873,6 +1961,72 @@ fn validate_scalar_storage_type(
         "typed ledger type differs from state schema"
     );
     Ok(())
+}
+
+fn opaque_byte_storage_path(
+    plan: &Plan,
+    operation_index: usize,
+    guard: Option<&Expr>,
+) -> Result<(u32, usize)> {
+    let key_operation = operation_index
+        .checked_sub(1)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque byte write has no indexed key push"))?;
+    let (key_operation, key_guard) = unguarded_operation(key_operation);
+    ensure!(
+        key_guard == guard,
+        "opaque byte key push guard differs from its write"
+    );
+    let Instruction::Push {
+        storage: false,
+        expression: _,
+        alignment: key_alignment,
+    } = key_operation
+    else {
+        bail!("opaque byte write requires an adjacent non-storage key push")
+    };
+    ensure!(
+        key_alignment == "bytes32",
+        "opaque byte map key push must use Bytes32 alignment"
+    );
+
+    let path_operation = operation_index
+        .checked_sub(2)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque byte write has no adjacent indexed path"))?;
+    let (path_operation, path_guard) = unguarded_operation(path_operation);
+    ensure!(
+        path_guard == guard,
+        "opaque byte indexed path guard differs from its write"
+    );
+    let Instruction::IndexPath {
+        slot,
+        push_path: true,
+        keys,
+    } = path_operation
+    else {
+        bail!("opaque byte write requires an adjacent indexed storage path")
+    };
+    ensure!(
+        keys.is_empty(),
+        "opaque byte write requires a direct Map root path"
+    );
+    let key_types = map_path_key_types(plan, *slot, 1)?;
+    ensure!(
+        key_types.len() == 1 && key_types[0] == ScalarType::Bytes32,
+        "opaque byte Map key must be Bytes32"
+    );
+    let insert_operation = operation_index
+        .checked_add(1)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque byte write has no adjacent Map insertion"))?;
+    let (insert_operation, insert_guard) = unguarded_operation(insert_operation);
+    ensure!(
+        insert_guard == guard
+            && matches!(insert_operation, Instruction::Insert { n: 2 }),
+        "opaque byte Map value push must be followed by Insert(2)"
+    );
+    Ok((*slot, 1))
 }
 
 fn reject_jubjub_map_key(ty: &ScalarType) -> Result<()> {
@@ -2042,6 +2196,24 @@ fn validate_shielded_coin_map(plan: &Plan, slot: u32) -> Result<()> {
     ensure!(
         is_shielded_coin_record_schema(value),
         "shielded receive Map must use the fixed coin record schema"
+    );
+    Ok(())
+}
+
+fn validate_shielded_coin_cell(plan: &Plan, slot: u32) -> Result<()> {
+    let schema = tree_schema_at_path(plan, slot, 0)?;
+    ensure!(
+        !plan.state[slot as usize].sealed,
+        "shielded coin Cell is sealed"
+    );
+    let record = schema
+        .as_object()
+        .filter(|object| object.len() == 1)
+        .and_then(|object| object.get("composite"))
+        .ok_or_else(|| anyhow!("shielded coin write requires a root composite Cell"))?;
+    ensure!(
+        is_shielded_coin_record_schema(record),
+        "shielded coin Cell must use the fixed qualified coin record schema"
     );
     Ok(())
 }
@@ -2350,6 +2522,7 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::MerkleTreeReset { .. }
             | Instruction::MerkleTreeResetHistory { .. }
             | Instruction::ReceiveShieldedToMap { .. }
+            | Instruction::WriteShieldedCoinCell { .. }
     )
 }
 
@@ -2542,6 +2715,44 @@ fn validate_shielded_send_layout(
     Ok((slot, read_key, receive_index))
 }
 
+fn validate_relay_shielded_immediate_layout(
+    plan: &Plan,
+    operation_index: usize,
+    recipient: &Expr,
+) -> Result<()> {
+    let address_read_index = operation_index
+        .checked_sub(1)
+        .ok_or_else(|| anyhow!("immediate shielded relay requires a current address read"))?;
+    let address_read = &plan.operations[address_read_index];
+    let (address_read, address_guard) = unguarded_operation(address_read);
+    ensure!(
+        address_guard.is_none()
+            && matches!(address_read, Instruction::ReadContractAddress { .. }),
+        "immediate shielded relay requires an unguarded current address read"
+    );
+
+    let call_index = operation_index
+        .checked_add(1)
+        .ok_or_else(|| anyhow!("immediate shielded relay has no recipient call"))?;
+    let call = plan
+        .operations
+        .get(call_index)
+        .ok_or_else(|| anyhow!("immediate shielded relay has no recipient call"))?;
+    let (call, guard) = unguarded_operation(call);
+    ensure!(
+        guard.is_none(),
+        "immediate shielded recipient call must be unguarded"
+    );
+    let Instruction::ClaimContractCall { address, .. } = call else {
+        bail!("immediate shielded relay must be followed by its recipient call")
+    };
+    ensure!(
+        address == recipient,
+        "immediate shielded recipient call differs from the output owner"
+    );
+    Ok(())
+}
+
 fn is_record_schema(schema: &Json) -> bool {
     schema.get("schemaVersion").is_some()
         || schema
@@ -2644,6 +2855,10 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                     input_amount,
                     change_commitment,
                 )?;
+            }
+            Instruction::RelayShieldedImmediate { recipient, .. } => {
+                ensure!(guard.is_none(), "immediate shielded relay must be unguarded");
+                validate_relay_shielded_immediate_layout(plan, index, recipient)?;
             }
             Instruction::ListHead {
                 slot,
@@ -2918,6 +3133,7 @@ fn decode_typed_scalar(ty: &ScalarType, fields: &[Fr]) -> Result<Value> {
 fn aligned_storage_cell(value: &Value) -> Result<AlignedValue> {
     match value {
         Value::Bytes(_) => aligned_bytes(value),
+        Value::OpaqueBytes(_) => aligned_opaque_bytes(value),
         Value::JubjubScalar(_) | Value::JubjubPoint(_) => {
             Ok(aligned_fields(&typed_scalar_fields(value)?))
         }
@@ -3121,6 +3337,7 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
         },
         ScalarType::Bytes32 => Value::Bytes(vec![0; 32]),
         ScalarType::Bytes(length) => Value::Bytes(vec![0; length]),
+        ScalarType::OpaqueBytes => Value::OpaqueBytes(Vec::new()),
         ScalarType::JubjubScalar => Value::JubjubScalar(jubjub::scalar("0")?),
         ScalarType::JubjubPoint => {
             Value::JubjubPoint(jubjub::point(Fr::from(0u64), Fr::from(1u64))?)
@@ -3195,6 +3412,36 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(Value::Bytes(bytes))
+        }
+        ScalarType::OpaqueBytes => {
+            let object = json
+                .as_object()
+                .ok_or_else(|| anyhow!("expected opaque byte object"))?;
+            ensure!(
+                object.len() == 2
+                    && object.get("kind").and_then(Json::as_str) == Some("opaqueBytes"),
+                "invalid opaque byte object"
+            );
+            let values = object
+                .get("values")
+                .and_then(Json::as_array)
+                .ok_or_else(|| anyhow!("expected opaque byte array"))?;
+            ensure!(
+                values.len() <= scalars::MAX_OPAQUE_BYTES_LENGTH,
+                "opaque byte value exceeds native limit"
+            );
+            let bytes = values
+                .iter()
+                .map(|value| {
+                    value
+                        .as_u64()
+                        .and_then(|value| u8::try_from(value).ok())
+                        .ok_or_else(|| anyhow!("expected canonical opaque byte integer"))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let value = Value::OpaqueBytes(bytes);
+            value.validate()?;
+            Ok(value)
         }
         ScalarType::JubjubScalar => {
             let object = json
@@ -3880,7 +4127,20 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
         "state cell encoding mismatch"
     );
     let parsed = ScalarType::parse(ty)?;
-    let decoded = if let Some(length) = parsed.bytes_length() {
+    let decoded = if parsed == ScalarType::OpaqueBytes {
+        ensure!(
+            alignment == "compress",
+            "opaque byte read requires Compress alignment"
+        );
+        ensure!(
+            value.alignment == Alignment::singleton(AlignmentAtom::Compress),
+            "opaque byte state cell alignment mismatch"
+        );
+        ensure!(value.value.0.len() == 1, "invalid opaque byte atom count");
+        let decoded = Value::OpaqueBytes(value.value.0[0].0.clone());
+        decoded.validate()?;
+        decoded
+    } else if let Some(length) = parsed.bytes_length() {
         ensure!(
             byte_alignment_length(alignment)? == Some(length),
             "byte state read alignment mismatch"
@@ -3916,7 +4176,9 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
                 ensure!(fields.len() == 1, "expected scalar state cell");
                 input_value(ty, &Json::String(field_decimal(fields[0])))?
             }
-            ScalarType::Bytes32 | ScalarType::Bytes(_) => unreachable!("decoded above"),
+            ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => {
+                unreachable!("decoded above")
+            }
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                 decode_typed_scalar(&parsed, &fields)?
             }
@@ -3930,7 +4192,9 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
         ScalarType::Foreign(_) => true,
         _ => false,
     };
-    let encoded = if parsed.bytes_length().is_some() {
+    let encoded = if parsed == ScalarType::OpaqueBytes {
+        aligned_opaque_bytes(&decoded)?
+    } else if parsed.bytes_length().is_some() {
         aligned_bytes(&decoded)?
     } else if typed_scalar {
         aligned_storage_cell(&decoded)?
@@ -3999,6 +4263,7 @@ fn list_scalar_storage_alignment(ty: &ScalarType) -> String {
     match ty {
         ScalarType::Bytes32 => "bytes32".to_owned(),
         ScalarType::Bytes(length) => format!("bytes:{length}"),
+        ScalarType::OpaqueBytes => "compress".to_owned(),
         _ => "field".to_owned(),
     }
 }
@@ -4358,6 +4623,9 @@ fn aligned_call_values<'a>(values: impl Iterator<Item = &'a Value>) -> Result<Al
         value.validate()?;
         match value {
             Value::Bytes(_) => aligned_bytes(value)?.value_only_field_repr(&mut fields),
+            Value::OpaqueBytes(_) => {
+                aligned_opaque_bytes(value)?.value_only_field_repr(&mut fields)
+            }
             Value::JubjubScalar(value) => fields.push(jubjub::scalar_native(*value)?),
             Value::JubjubPoint(value) => fields.extend(jubjub::coordinates(*value)?),
             #[cfg(feature = "zkir-321")]
@@ -4816,6 +5084,13 @@ fn probe_instruction(
             amount,
             commitment,
             ..
+        }
+        | Instruction::WriteShieldedCoinCell {
+            nonce,
+            color,
+            amount,
+            commitment,
+            ..
         } => probe_expressions(
             [nonce, color, amount, commitment],
             plan,
@@ -4861,6 +5136,28 @@ fn probe_instruction(
                 nullifier,
                 output_commitment,
                 change_commitment,
+            ],
+            plan,
+            env,
+            deferred_outputs,
+        ),
+        Instruction::RelayShieldedImmediate {
+            nonce,
+            color,
+            amount,
+            recipient,
+            input_commitment,
+            nullifier,
+            output_commitment,
+        } => probe_expressions(
+            [
+                nonce,
+                color,
+                amount,
+                recipient,
+                input_commitment,
+                nullifier,
+                output_commitment,
             ],
             plan,
             env,
@@ -5662,6 +5959,11 @@ impl PreparationCursor {
                                 "inactive byte read alignment mismatch"
                             );
                             validate_byte_read_projections(read, &read_type)?;
+                        } else if alignment == "compress" {
+                            ensure!(
+                                read_type == ScalarType::OpaqueBytes,
+                                "inactive opaque byte read alignment mismatch"
+                            );
                         } else {
                             ensure!(
                                 matches!(alignment.as_str(), "field" | "bit" | "u64"),
@@ -5926,6 +6228,15 @@ impl PreparationCursor {
                 alignment,
             } => {
                 let value = evaluate(expression, &env)?;
+                if *storage && matches!(&value, Value::OpaqueBytes(_)) {
+                    let (slot, depth) = opaque_byte_storage_path(plan, index, instruction_guard)?;
+                    validate_scalar_storage_type(
+                        plan,
+                        slot,
+                        depth,
+                        &ScalarType::OpaqueBytes,
+                    )?;
+                }
                 #[cfg(feature = "zkir-321")]
                 ensure!(
                     !matches!(&value, Value::Foreign(_)),
@@ -6051,7 +6362,10 @@ impl PreparationCursor {
                             if read_type.bytes_length().is_some() {
                                 validate_byte_read_projections(read, &read_type)?;
                             }
-                            if is_typed_scalar(&read_type) || read_type.bytes_length().is_some() {
+                            if is_typed_scalar(&read_type)
+                                || read_type.bytes_length().is_some()
+                                || read_type == ScalarType::OpaqueBytes
+                            {
                                 validate_scalar_storage_type(plan, *slot, keys.len(), &read_type)?;
                             }
                             read_state_cell(read_context, *slot, keys, &read.ty, alignment)?
@@ -6963,6 +7277,89 @@ impl PreparationCursor {
                 has_written = true;
                 insert_final
             }
+            Instruction::WriteShieldedCoinCell {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+            } => {
+                validate_shielded_coin_cell(plan, *slot)?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "shielded coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "shielded coin color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                let recipient = Recipient::Contract(context.address);
+                let expected_commitment =
+                    claim_hash_output(evaluate(commitment, &env)?, "shielded coin commitment")?;
+                ensure!(
+                    coin.commitment(&recipient).0 == expected_commitment,
+                    "shielded coin Cell commitment mismatch"
+                );
+                context.qualify(&coin).ok_or_else(|| {
+                    anyhow!("shielded coin Cell commitment is absent from the current transaction")
+                })?;
+
+                if has_written {
+                    advance_native_state_prefix(
+                        prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let current = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                ensure!(
+                    matches!(read_state_value(current, *slot, &[])?, StateValue::Cell(_)),
+                    "shielded coin destination is not a Cell"
+                );
+                let path = vec![Key::Value(
+                    AlignedValue::from(u8::try_from(*slot)?)
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid shielded coin Cell slot"))?,
+                )];
+                let [
+                    _,
+                    slot_push,
+                    duplicate,
+                    commitment_push,
+                    lookup,
+                    coin_push,
+                    swap,
+                    concatenate,
+                    insert,
+                    _,
+                ] = onchain_runtime::program_fragments::Cell_write_coin!(
+                    path,
+                    false,
+                    QualifiedInfo,
+                    coin,
+                    recipient
+                );
+                program.extend([
+                    slot_push,
+                    duplicate,
+                    commitment_push,
+                    lookup,
+                    coin_push,
+                    swap,
+                    concatenate,
+                ]);
+                has_written = true;
+                insert
+            }
             Instruction::SpendShieldedFromMap {
                 nonce,
                 color,
@@ -7160,6 +7557,103 @@ impl PreparationCursor {
                 program.extend(send_ops);
                 program.extend(change_ops[..5].iter().cloned());
                 change_ops[5].clone()
+            }
+            Instruction::RelayShieldedImmediate {
+                nonce,
+                color,
+                amount,
+                recipient,
+                input_commitment,
+                nullifier,
+                output_commitment,
+            } => {
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "immediate relay coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "immediate relay coin color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                ensure!(
+                    coin.value > 0,
+                    "immediate shielded relay amount must be positive"
+                );
+
+                let source_commitment = claim_hash_output(
+                    evaluate(input_commitment, &env)?,
+                    "immediate relay input commitment",
+                )?;
+                let coin_commitment = coin.commitment(&Recipient::Contract(context.address));
+                ensure!(
+                    coin_commitment.0 == source_commitment,
+                    "immediate relay input commitment mismatch"
+                );
+                let qualified_coin = context
+                    .qualify(&coin)
+                    .ok_or_else(|| anyhow!("immediate relay transient is absent from context"))?;
+                ensure!(
+                    context.call_context.com_indices.get(&coin_commitment)
+                        == Some(&qualified_coin.mt_index),
+                    "immediate relay transient index mismatch"
+                );
+
+                let coin_nullifier = coin.nullifier(&SenderEvidence::Contract(context.address));
+                let source_nullifier =
+                    claim_hash_output(evaluate(nullifier, &env)?, "immediate relay nullifier")?;
+                ensure!(
+                    coin_nullifier.0 == source_nullifier,
+                    "immediate relay nullifier mismatch"
+                );
+
+                let target = ContractAddress(claim_hash_output(
+                    evaluate(recipient, &env)?,
+                    "immediate relay recipient contract",
+                )?);
+                let output_coin = coin.evolve_from(
+                    b"midnight:kernel:nonce_evolve",
+                    coin.value,
+                    coin.type_,
+                );
+                let destination = output_coin.commitment(&Recipient::Contract(target));
+                let source_output_commitment = claim_hash_output(
+                    evaluate(output_commitment, &env)?,
+                    "immediate relay output commitment",
+                )?;
+                ensure!(
+                    destination.0 == source_output_commitment,
+                    "immediate relay output commitment mismatch"
+                );
+                ensure!(
+                    context.call_context.com_indices.contains_key(&destination),
+                    "immediate relay output commitment is absent from context"
+                );
+
+                let receive_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_coin_receive!(
+                        (),
+                        (),
+                        coin_commitment
+                    );
+                let nullifier_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+                        (),
+                        (),
+                        coin_nullifier
+                    );
+                let spend_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+                        (),
+                        (),
+                        destination
+                    );
+                program.extend(receive_ops);
+                program.extend(nullifier_ops);
+                program.extend(spend_ops[..5].iter().cloned());
+                spend_ops[5].clone()
             }
             Instruction::ReadTokenBalance {
                 destination,
@@ -7436,6 +7930,7 @@ impl PreparationCursor {
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::ReceiveShieldedToMap { .. }
+                | Instruction::WriteShieldedCoinCell { .. }
         ) {
             mutation_boundary = program.len();
         }
@@ -7557,6 +8052,8 @@ impl PreparationCursor {
                 Value::Bytes(bytes) => {
                     private_transcript.extend(bytes.iter().map(|byte| Fr::from(*byte as u64)))
                 }
+                Value::OpaqueBytes(_) => aligned_opaque_bytes(&env[&input.name])?
+                    .value_only_field_repr(&mut private_transcript),
                 Value::JubjubScalar(value) => {
                     private_transcript.push(jubjub::scalar_native(*value)?)
                 }
@@ -7804,6 +8301,8 @@ mod shielded_spend_tests {
     const COLOR: [u8; 32] = [1; 32];
     const RECIPIENT: [u8; 32] = [3; 32];
     const ADDRESS: [u8; 32] = [0; 32];
+    const RELAY_TARGET: [u8; 32] = [4; 32];
+    const ENTRY_POINT: [u8; 32] = [5; 32];
 
     fn hash_from_hex(value: &str) -> [u8; 32] {
         assert_eq!(value.len(), 64);
@@ -7938,6 +8437,76 @@ mod shielded_spend_tests {
         plan
     }
 
+    fn relay_plan_json() -> Json {
+        let mut value = spend_plan_json();
+        value["entrypoint"] = json!("relayShieldedImmediate");
+        value["circuit"]["inputs"] = json!([
+            {"name":"nonce", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"color", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"amount", "type":"UIntRange<340282366920938463463374607431768211456>", "visibility":"private"},
+            {"name":"recipient", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"inputCommitment", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"nullifier", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"outputCommitment", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"entryPoint", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"callCommitment", "type":"Native", "visibility":"private"}
+        ]);
+        value["operations"] = json!([
+            {"op":"readContractAddress", "destination":"selfAddress"},
+            {
+                "op":"relayShieldedImmediate",
+                "nonce":reference("nonce"),
+                "color":reference("color"),
+                "amount":reference("amount"),
+                "recipient":reference("recipient"),
+                "inputCommitment":reference("inputCommitment"),
+                "nullifier":reference("nullifier"),
+                "outputCommitment":reference("outputCommitment")
+            },
+            {
+                "op":"claimcontractcall",
+                "address":reference("recipient"),
+                "entryPointHash":reference("entryPoint"),
+                "commitment":reference("callCommitment")
+            }
+        ]);
+        value["reads"] = json!([{
+            "name":"selfAddress",
+            "type":"Bytes<32>",
+            "projections":byte_projection_bindings("selfAddress", 32)
+                .unwrap()
+                .into_iter()
+                .map(|(name, ty)| json!({"name":name, "type":ty}))
+                .collect::<Vec<_>>()
+        }]);
+        value
+    }
+
+    fn relay_plan() -> Plan {
+        let mut plan: Plan = serde_json::from_value(relay_plan_json()).unwrap();
+        plan.target = Some(profile::NAME.into());
+        plan.target_profile = Some(profile::target_json());
+        plan
+    }
+
+    fn relay_inputs(
+        input_commitment: [u8; 32],
+        nullifier: [u8; 32],
+        output_commitment: [u8; 32],
+    ) -> BTreeMap<String, Json> {
+        BTreeMap::from([
+            ("nonce".into(), bytes_json(&NONCE)),
+            ("color".into(), bytes_json(&COLOR)),
+            ("amount".into(), json!("5")),
+            ("recipient".into(), bytes_json(&RELAY_TARGET)),
+            ("inputCommitment".into(), bytes_json(&input_commitment)),
+            ("nullifier".into(), bytes_json(&nullifier)),
+            ("outputCommitment".into(), bytes_json(&output_commitment)),
+            ("entryPoint".into(), bytes_json(&ENTRY_POINT)),
+            ("callCommitment".into(), json!("17")),
+        ])
+    }
+
     fn spend_inputs(nullifier: [u8; 32], commitment: [u8; 32]) -> BTreeMap<String, Json> {
         BTreeMap::from([
             ("nonce".into(), bytes_json(&NONCE)),
@@ -8030,6 +8599,21 @@ mod shielded_spend_tests {
         )
     }
 
+    fn context_with_relay_bookings(
+        input_commitment: Commitment,
+        input_index: u64,
+        output_commitment: Commitment,
+        output_index: u64,
+    ) -> QueryContext<Db> {
+        let mut context = context(NONCE, NONCE);
+        context.call_context.com_indices = context
+            .call_context
+            .com_indices
+            .insert(input_commitment, input_index)
+            .insert(output_commitment, output_index);
+        context
+    }
+
     fn context_with_schema_send_outputs(
         schema: &Json,
         key_nonce: [u8; 32],
@@ -8048,6 +8632,46 @@ mod shielded_spend_tests {
                 .insert(send_commitment, send_index)
                 .insert(change_commitment, change_index);
         context
+    }
+
+    fn expected_relay_effects() -> (Commitment, Nullifier, Commitment) {
+        let coin = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(NONCE)),
+            type_: ShieldedTokenType(HashOutput(COLOR)),
+            value: 5,
+        };
+        let input_commitment = coin.commitment(&Recipient::Contract(ContractAddress(HashOutput(
+            ADDRESS,
+        ))));
+        let nullifier = coin.nullifier(&SenderEvidence::Contract(ContractAddress(HashOutput(
+            ADDRESS,
+        ))));
+        let output_coin = coin.evolve_from(
+            b"midnight:kernel:nonce_evolve",
+            coin.value,
+            coin.type_,
+        );
+        let output_commitment = output_coin
+            .commitment(&Recipient::Contract(ContractAddress(HashOutput(RELAY_TARGET))));
+        assert_eq!(
+            input_commitment.0,
+            HashOutput(hash_from_hex(
+                "84a93c4d7971bb71252e9b01a8cc75f4daffdcac90c25c3d3ea484a1b6eae3a0"
+            ))
+        );
+        assert_eq!(
+            nullifier.0,
+            HashOutput(hash_from_hex(
+                "d119520f9cd70fb3b835e7421773629b1991e38d642ff9b6b69eb9ed1bf86c24"
+            ))
+        );
+        assert_eq!(
+            output_commitment.0,
+            HashOutput(hash_from_hex(
+                "142498ccc64b0b945dbabf4804b879f555b3e1eefe9251b9d6e4abaad1ca5a0b"
+            ))
+        );
+        (input_commitment, nullifier, output_commitment)
     }
 
     fn expected_coin_effects() -> (Nullifier, Commitment) {
@@ -8473,6 +9097,112 @@ mod shielded_spend_tests {
             .is_err()
         );
         assert!(prepare_with_context(&plan, &inputs, context(NONCE, NONCE), parameters,).is_err());
+    }
+
+    #[test]
+    fn shielded_immediate_relay_matches_compact_claims_and_requires_booked_coins() {
+        let (input_commitment, nullifier, output_commitment) = expected_relay_effects();
+        let plan = relay_plan();
+        let inputs = relay_inputs(
+            input_commitment.0.0,
+            nullifier.0.0,
+            output_commitment.0.0,
+        );
+        let execution = prepare_with_context(
+            &plan,
+            &inputs,
+            context_with_relay_bookings(input_commitment, 7, output_commitment, 9),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .unwrap();
+
+        let receive_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_receive!(
+            (),
+            (),
+            input_commitment
+        );
+        let nullifier_ops = onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+            (),
+            (),
+            nullifier
+        );
+        let spend_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+            (),
+            (),
+            output_commitment
+        );
+        let mut expected_program: Program = receive_ops.into();
+        expected_program.extend(nullifier_ops);
+        expected_program.extend(spend_ops);
+        assert!(execution
+            .program
+            .windows(expected_program.len())
+            .any(|operations| operations == expected_program));
+        assert_eq!(execution.after.effects.claimed_nullifiers.size(), 1);
+        assert!(execution
+            .after
+            .effects
+            .claimed_nullifiers
+            .member(&nullifier));
+        assert_eq!(execution.after.effects.claimed_shielded_receives.size(), 1);
+        assert!(execution
+            .after
+            .effects
+            .claimed_shielded_receives
+            .iter()
+            .any(|entry| **entry == input_commitment));
+        assert_eq!(execution.after.effects.claimed_shielded_spends.size(), 1);
+        assert!(execution
+            .after
+            .effects
+            .claimed_shielded_spends
+            .member(&output_commitment));
+
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+        for (name, wrong) in [
+            ("inputCommitment", [0; 32]),
+            ("nullifier", [0; 32]),
+            ("outputCommitment", [0; 32]),
+        ] {
+            let mut changed = inputs.clone();
+            changed.insert(name.into(), bytes_json(&wrong));
+            assert!(prepare_with_context(
+                &plan,
+                &changed,
+                context_with_relay_bookings(input_commitment, 7, output_commitment, 9),
+                parameters,
+            )
+            .is_err());
+        }
+
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            context_with_relay_bookings(input_commitment, 7, Commitment(HashOutput([8; 32])), 9),
+            parameters,
+        )
+        .is_err());
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            context_with_relay_bookings(Commitment(HashOutput([8; 32])), 7, output_commitment, 9),
+            parameters,
+        )
+        .is_err());
+
+        let mut wrong_call_target = plan.clone();
+        let Instruction::ClaimContractCall { address, .. } = &mut wrong_call_target.operations[2]
+        else {
+            unreachable!("relay plan ends with its child call")
+        };
+        *address = serde_json::from_value(reference("entryPoint")).unwrap();
+        assert!(prepare_with_context(
+            &wrong_call_target,
+            &inputs,
+            context_with_relay_bookings(input_commitment, 7, output_commitment, 9),
+            parameters,
+        )
+        .is_err());
     }
 
     #[test]

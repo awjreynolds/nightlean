@@ -22,6 +22,7 @@ private def expressionJson : Expr ty → Json
       ("maximum", toJson (toString maximum)), ("value", toJson (toString value))])]
   | .bytesField value index => Json.mkObj [("bytesField", Json.mkObj [
       ("value", expressionJson value), ("index", toJson index)])]
+  | .opaqueBytesProjection value => expressionJson value
   | .bytesAt value index => Json.mkObj [("byteAt", Json.mkObj [
       ("value", expressionJson value), ("index", toJson index)])]
   | .bytesLiteral length values => Json.mkObj [("tag", toJson ("bytesLiteral" : String)),
@@ -44,6 +45,9 @@ private def expressionJson : Expr ty → Json
       ("value", expressionJson value)]
   | .keccak256 (length := length) value => Json.mkObj [
       ("tag", toJson ("keccak256" : String)), ("length", toJson length),
+      ("value", expressionJson value)]
+  | .keccak256Secp256k1Point value => Json.mkObj [
+      ("tag", toJson ("keccak256Secp256k1Point" : String)),
       ("value", expressionJson value)]
   | .reverseBytes32 value => Json.mkObj [("tag", toJson ("reverseBytes32" : String)),
       ("value", expressionJson value)]
@@ -151,6 +155,8 @@ private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json)
   | .bitExpr expression => [("alignment", toJson ("bit" : String)), ("expression", nativeExpressionJson expression)]
   | .bytes32 expression => [("alignment", toJson ("bytes32" : String)), ("expression", nativeExpressionJson expression)]
   | .bytes length expression => [("alignment", toJson (s!"bytes:{length}")), ("expression", nativeExpressionJson expression)]
+  | .compress expression => [("alignment", toJson ("compress" : String)),
+      ("expression", nativeExpressionJson expression)]
   | .nativeFields expressions => [("alignment", toJson ("nativeFields" : String)),
       ("expressions", toJson (expressions.map nativeExpressionJson))]
   | .counter expression => [("alignment", toJson ("u64" : String)),
@@ -164,6 +170,7 @@ private def alignedExpressionJson (value : Backend.Impact.Aligned) : Json :=
   | .bitExpr expression => nativeExpressionJson expression
   | .bytes32 expression => nativeExpressionJson expression
   | .bytes _ expression => nativeExpressionJson expression
+  | .compress expression => nativeExpressionJson expression
   | .nativeFields expressions => toJson (expressions.map nativeExpressionJson)
   | .counter expression => nativeExpressionJson expression
 
@@ -295,6 +302,11 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
       ("amount", nativeExpressionJson amount),
       ("commitment", nativeExpressionJson commitment)]
+  | .writeShieldedCoinCell slot nonce color amount commitment => Json.mkObj [
+      ("op", toJson ("writeShieldedCoinCell" : String)), ("slot", toJson slot),
+      ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
+      ("amount", nativeExpressionJson amount),
+      ("commitment", nativeExpressionJson commitment)]
   | .spendShieldedFromMap nonce color amount recipient nullifier outputCommitment => Json.mkObj [
       ("op", toJson ("spendShieldedFromMap" : String)),
       ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
@@ -311,6 +323,14 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("nullifier", nativeExpressionJson nullifier),
       ("outputCommitment", nativeExpressionJson outputCommitment),
       ("changeCommitment", nativeExpressionJson changeCommitment)]
+  | .relayShieldedImmediate nonce color amount recipient inputCommitment nullifier outputCommitment =>
+      Json.mkObj [
+        ("op", toJson ("relayShieldedImmediate" : String)),
+        ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
+        ("amount", nativeExpressionJson amount), ("recipient", nativeExpressionJson recipient),
+        ("inputCommitment", nativeExpressionJson inputCommitment),
+        ("nullifier", nativeExpressionJson nullifier),
+        ("outputCommitment", nativeExpressionJson outputCommitment)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", nativeExpressionJson domain),
       ("amount", nativeExpressionJson amount)]
@@ -385,6 +405,10 @@ private def effectJson : Effect → Json
       ("op", toJson ("receiveShieldedToMap" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
+  | .writeShieldedCoinCell state nonce color amount selfAddress => Json.mkObj [
+      ("op", toJson ("writeShieldedCoinCell" : String)), ("state", toJson state),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("selfAddress", expressionJson selfAddress)]
   | .spendShieldedFromMap state nonce color amount recipient selfAddress => Json.mkObj [
       ("op", toJson ("spendShieldedFromMap" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
@@ -395,6 +419,11 @@ private def effectJson : Effect → Json
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("inputAmount", expressionJson inputAmount), ("sendAmount", expressionJson sendAmount),
       ("recipient", expressionJson recipient), ("selfAddress", expressionJson selfAddress)]
+  | .relayShieldedImmediate nonce color amount recipient selfAddress => Json.mkObj [
+      ("op", toJson ("relayShieldedImmediate" : String)),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("recipient", expressionJson recipient),
+      ("selfAddress", expressionJson selfAddress)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", expressionJson domain),
       ("amount", expressionJson amount)]
@@ -802,6 +831,16 @@ private def moduleCircuitFor (outputs : Array (Name × ModuleBuildOutput)) (name
     Option ModuleCircuitBuildInfo :=
   outputs.toList.flatMap (·.2.circuits) |>.find? (·.declarationName == name)
 
+private def importedModuleCircuit (env : Environment) (name : Name) : _root_.Bool :=
+  match name with
+  | .str (.str owner "__moduleCircuit") _ =>
+    (moduleBuildRegistry.getState env).any fun info =>
+      env.isImportedConst info.contractName && owner == info.contractName
+  | _ => _root_.Bool.false
+
+private def importedWitnessCircuit (env : Environment) (name : Name) : _root_.Bool :=
+  (witnessRegistry.getState env).any (·.circuitName == name)
+
 private def moduleWitnessProgramFor (outputs : Array (Name × ModuleBuildOutput))
     (info : WitnessInfo) : Option Helpers.Program := do
   let circuit ← outputs.toList.flatMap (·.2.circuits) |>.find? fun item =>
@@ -814,9 +853,17 @@ private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuil
     (contracts : Array (Name × Contract)) :
     CommandElabM (Array (Name × Circuit)) := do
   let env ← getEnv
+  let referencedCircuits := contracts.toList.flatMap fun (_, contract) =>
+    contract.entrypoints.map (·.circuit.name)
   let mut circuits := #[]
   for info in circuitRegistry.getState env do
-    unless env.isImportedConst info.declName do
+    let imported := env.isImportedConst info.declName
+    let selectedImportedOrdinary := imported &&
+      referencedCircuits.contains info.declName.toString &&
+      info.stateProgram?.isNone &&
+      !importedWitnessCircuit env info.declName &&
+      !importedModuleCircuit env info.declName
+    if !imported || selectedImportedOrdinary then
       let moduleCircuit := moduleCircuitFor moduleOutputs info.declName
       if moduleCircuit.isNone then
         if let some (sourceName, exportName) := info.sourceProgram? then
@@ -839,6 +886,9 @@ private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuil
       match circuit.validate sourceCapabilities with
       | .error d => failDiagnostic d
       | .ok _ =>
+        if selectedImportedOrdinary then
+          unless circuit.name == info.declName.toString do
+            throwError "registered circuit identity does not match declaration '{info.declName}'"
         match Disclosure.circuit circuit with
         | .error d => failDiagnostic d
         | .ok _ => circuits := circuits.push (info.declName, circuit)

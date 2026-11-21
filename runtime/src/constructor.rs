@@ -49,26 +49,29 @@ pub(crate) fn opaque_string(value: &Json) -> Result<AlignedValue> {
         text.len() <= MAX_CONSTRUCTOR_BYTES,
         "opaque string exceeds byte limit"
     );
-    // ValueAtom::from trims trailing zero bytes, which changes a string ending in U+0000.
+    let atom = ValueAtom(text.as_bytes().to_vec());
+    ensure!(atom.is_in_normal_form(), "opaque string has trailing zero bytes");
     AlignedValue::new(
-        FabValue(vec![ValueAtom(text.as_bytes().to_vec())]),
+        FabValue(vec![atom]),
         Alignment::singleton(AlignmentAtom::Compress),
     )
     .ok_or_else(|| anyhow!("invalid opaque string alignment"))
 }
 
-/// Decode the declared UTF-8 metadata representation without trimming zero bytes.
+/// Decode a canonical UTF-8 metadata atom.
 pub fn decode_opaque_string(value: &AlignedValue) -> Result<String> {
     ensure!(
         value.alignment == Alignment::singleton(AlignmentAtom::Compress)
             && value.value.0.len() == 1,
         "invalid opaque string alignment"
     );
-    let bytes = &value.value.0[0].0;
+    let atom = &value.value.0[0];
+    let bytes = &atom.0;
     ensure!(
         bytes.len() <= MAX_CONSTRUCTOR_BYTES,
         "opaque string exceeds byte limit"
     );
+    ensure!(atom.is_in_normal_form(), "opaque string has trailing zero bytes");
     Ok(String::from_utf8(bytes.clone())?)
 }
 
@@ -89,6 +92,7 @@ fn scalar_zero(ty: &str) -> Result<Json> {
         ScalarType::Bool => json!(false),
         ScalarType::Bytes32 => json!({"kind":"bytes", "values":vec![0u8;32]}),
         ScalarType::Bytes(length) => json!({"kind":"bytes", "values":vec![0u8;length]}),
+        ScalarType::OpaqueBytes => json!({"kind":"opaqueBytes", "values":Vec::<u8>::new()}),
         ScalarType::JubjubScalar => json!({"kind":"jubjubScalar", "value":"0"}),
         ScalarType::JubjubPoint => json!({"kind":"jubjubPoint", "x":"0", "y":"1"}),
         #[cfg(feature = "zkir-321")]
