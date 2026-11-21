@@ -126,6 +126,7 @@ jobs:
           lake env lean tests/FundedShieldedReceive.lean
           lake env lean tests/ShieldedSpend.lean
           lake env lean tests/ShieldedMapPartialSpend.lean
+          lake env lean tests/ShieldedImmediateRelay.lean
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeContractAddress.lean
           lake env lean tests/NativeTokenBalance.lean

@@ -152,6 +152,9 @@ inductive Op where
   | sendShieldedFromMap (nonce color : Expr (.bytes 32))
       (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
       (recipient nullifier outputCommitment changeCommitment : Expr (.bytes 32))
+  | relayShieldedImmediate (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1)))
+      (recipient inputCommitment nullifier outputCommitment : Expr (.bytes 32))
   | mintShielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
@@ -244,6 +247,15 @@ private def sendShieldedOp (nonce color : Expr (.bytes 32))
   let changeAmount : Expr (.uint (2 ^ 128 - 1)) := .usub inputAmount sendAmount
   let change := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 changeNonce color changeAmount selfAddress
   .sendShieldedFromMap nonce color inputAmount sendAmount recipient nullifier output change
+
+private def relayShieldedOp (nonce color : Expr (.bytes 32))
+    (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32)) : Op :=
+  let inputCommitment := shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonce color amount selfAddress
+  let nullifier := shieldedCoinDigest "midnight:zswap-cn[v1]" 0 nonce color amount selfAddress
+  let outputNonce := Wire.shieldedOutputNonce nonce
+  let outputCommitment :=
+    shieldedCoinDigest "midnight:zswap-cc[v1]" 0 outputNonce color amount recipient
+  .relayShieldedImmediate nonce color amount recipient inputCommitment nullifier outputCommitment
 
 private def shieldedClaimFieldGroups (effectSlot : Nat) (digest : Expr (.bytes 32)) :
     List (List Scalar) :=
@@ -620,6 +632,9 @@ def Op.fields : Op → List Scalar
   | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
       (shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
         shieldedClaimFieldGroups 2 change).flatten
+  | .relayShieldedImmediate _ _ _ _ inputCommitment nullifier outputCommitment =>
+      (shieldedClaimFieldGroups 1 inputCommitment ++ shieldedClaimFieldGroups 0 nullifier ++
+        shieldedClaimFieldGroups 2 outputCommitment).flatten
   | .mintShielded domain amount => (mintFieldGroups 4 domain amount).flatten
   | .mintUnshielded domain amount => (mintFieldGroups 5 domain amount).flatten
   | .incUnshieldedInputs color amount isUnshielded =>
@@ -726,6 +741,9 @@ def Op.fieldGroups : Op → List (List Scalar)
   | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
       shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
         shieldedClaimFieldGroups 2 change
+  | .relayShieldedImmediate _ _ _ _ inputCommitment nullifier outputCommitment =>
+      shieldedClaimFieldGroups 1 inputCommitment ++ shieldedClaimFieldGroups 0 nullifier ++
+        shieldedClaimFieldGroups 2 outputCommitment
   | .mintShielded domain amount => mintFieldGroups 4 domain amount
   | .mintUnshielded domain amount => mintFieldGroups 5 domain amount
   | .incUnshieldedInputs color amount isUnshielded =>
@@ -1368,6 +1386,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}
+  | .relayShieldedImmediate nonce color amount recipient selfAddress =>
+    pure {plan with operations := plan.operations ++ [
+      relayShieldedOp nonce color amount recipient selfAddress]}
   | .checkpoint => pure {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     pure {plan with operations := plan.operations ++ [.mintShielded domain amount]}
@@ -1800,6 +1821,7 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       some condition, .merkleTreeInsertHashAt .. | some condition, .merkleTreeInsertHashIndexAt .. |
       some condition, .merkleTreeResetAt .. | some condition, .merkleTreeResetHistoryAt .. |
       some condition, .claimContractCall .. | some condition, .mintShielded .. |
+      some condition, .relayShieldedImmediate .. |
       some condition, .mintUnshielded .. | some condition, .incUnshieldedInputs .. |
       some condition, .incUnshieldedOutputs .. | some condition, .claimUnshieldedCoinSpend .. |
       some condition, .emitEvent .. | some condition, .checkpoint =>
@@ -1995,6 +2017,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}
+  | .relayShieldedImmediate nonce color amount recipient selfAddress =>
+    plan := {plan with operations := plan.operations ++ [
+      relayShieldedOp nonce color amount recipient selfAddress]}
   | .checkpoint => plan := {plan with operations := plan.operations ++ [.checkpoint]}
   | .mintShielded domain amount =>
     plan := {plan with operations := plan.operations ++ [.mintShielded domain amount]}
@@ -2418,6 +2443,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .receiveShieldedToMap .. => throw "shielded coin receive uses its dedicated native-plan operation JSON"
   | .spendShieldedFromMap .. => throw "shielded coin spend uses its dedicated native-plan operation JSON"
   | .sendShieldedFromMap .. => throw "shielded coin send uses its dedicated native-plan operation JSON"
+  | .relayShieldedImmediate .. => throw "shielded coin relay uses its dedicated native-plan operation JSON"
   | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
   | .mintUnshielded .. => throw "unshielded mint uses its dedicated native-plan operation JSON"
   | .incUnshieldedInputs .. => throw "unshielded input accumulation uses its dedicated native-plan operation JSON"

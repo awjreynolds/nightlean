@@ -1,9 +1,15 @@
 //! Bounded native DUST fee construction. The host owns wallet state, keys and approval.
+#[cfg(feature = "localnet")]
+use crate::client::shielded_relay_shape_valid;
 use crate::{
     Db,
     proof::{ProvedNativeIntent, TrustedParameters},
 };
+#[cfg(feature = "localnet")]
+use base_crypto::hash::HashOutput;
 use base_crypto::{rng::SplittableRng, time::Timestamp};
+#[cfg(feature = "localnet")]
+use coin_structure::coin::Info;
 use coin_structure::coin::TokenType;
 use ledger::{
     dust::{DUST_EXPECTED_FILES, DustActions, DustLocalState, DustOutput, DustSecretKey},
@@ -204,6 +210,42 @@ impl DustFunding {
             || !offer.transient.is_empty()
             || output.contract_address.as_deref() != Some(&call.address)
         {
+            return Err(Error::Intent);
+        }
+
+        self.fund_shielded_offer(
+            contract,
+            offer,
+            offer_binding_randomness,
+            network_id,
+            parameters,
+            material,
+            srs,
+            now,
+            policy,
+            rng,
+        )
+        .await
+    }
+
+    /// Fund the pinned relay-to-destination transient and matching final output.
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn fund_shielded_relay(
+        &self,
+        contract: &ProvedNativeIntent,
+        offer: ZswapOffer<Proof, Db>,
+        offer_binding_randomness: PedersenRandomness,
+        relay_mint: &Info,
+        mint_domain: HashOutput,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
+        if !shielded_relay_shape_valid(contract, &offer, relay_mint, mint_domain) {
             return Err(Error::Intent);
         }
 

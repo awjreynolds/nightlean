@@ -160,6 +160,41 @@ try {
     );
   }
   console.log('Shielded partial spend: exact claims, 2+3 outputs, qualified change Map row, amount bounds, and replay rejection matched');
+
+  const destination = { bytes: new Uint8Array(32).fill(4) };
+  const selector = new Uint8Array(32).fill(5);
+  const { context: relayed } = await contract.circuits.relayImmediate(
+    contextFor(currentContractState.data, 'relayImmediate'),
+    coin,
+    destination,
+    selector,
+    7n,
+  );
+  const relayQuery = relayed.callContext.currentQueryContext;
+  const relayOffer = relayed.callContext.currentZswapLocalState;
+  assert.deepEqual(relayQuery.effects.claimedShieldedReceives, [
+    '84a93c4d7971bb71252e9b01a8cc75f4daffdcac90c25c3d3ea484a1b6eae3a0',
+  ]);
+  assert.deepEqual(relayQuery.effects.claimedShieldedSpends, [
+    '142498ccc64b0b945dbabf4804b879f555b3e1eefe9251b9d6e4abaad1ca5a0b',
+  ]);
+  assert.deepEqual(relayQuery.effects.claimedNullifiers, afterSpend.effects.claimedNullifiers);
+  const [call] = relayQuery.effects.claimedContractCalls;
+  assert.equal(relayQuery.effects.claimedContractCalls.length, 1);
+  assert.deepEqual(call.slice(0, 3), [0n, '04'.repeat(32), '05'.repeat(32)]);
+  assert.equal(Buffer.from(call[3]).toString('hex'),
+    '732e3d03df361e56dbd2b33ff35904092faafe3124f3c1e7cd36b3ac4c9f56f242');
+  assert.deepEqual(relayOffer.inputs, [{ ...coin, mt_index: 0n }]);
+  assert.equal(relayOffer.outputs.length, 2);
+  const [selfOutput, destinationOutput] = relayOffer.outputs;
+  assert.deepEqual(selfOutput.coinInfo, coin);
+  assert.equal(selfOutput.recipient.is_left, false);
+  assert.deepEqual(selfOutput.recipient.right.bytes, new Uint8Array(32));
+  assert.deepEqual(destinationOutput.coinInfo, { ...coin, nonce: output.coinInfo.nonce });
+  assert.equal(destinationOutput.recipient.is_left, false);
+  assert.deepEqual(destinationOutput.recipient.right, destination);
+  assert.deepEqual([...ledger(relayQuery.state).pot], []);
+  console.log('Immediate shielded relay: exact claims, transient pairing, and full-value destination output matched');
 } finally {
   rmSync(scratch, { recursive: true, force: true });
 }
