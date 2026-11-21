@@ -187,6 +187,7 @@ private structure AuthoredOutput where
   span : SourceSpan
   ordinal : Nat
   source : LogicalAliasSource
+  nominalBytes32 : Option NominalBytes32 := none
 
 private def AuthoredOutput.layoutType (item : AuthoredOutput) : Types.CompositeType :=
   match item.value.type with
@@ -489,6 +490,9 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
   | `(nlexpr| sha512($value)) => s!"sha512({renderExpr value})"
   | `(nlexpr| keccak256($value)) => s!"keccak256({renderExpr value})"
   | `(nlexpr| bytes32($literal:str)) => s!"bytes32({(toJson literal.getString).compress})"
+  | `(nlexpr| nativeToken()) => "nativeToken()"
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    s!"tokenType({renderExpr domain}, {renderExpr contractAddress})"
   | `(nlexpr| bytes($length:num, $literal:str)) =>
     s!"bytes({length.getNat}, {(toJson literal.getString).compress})"
   | `(nlexpr| byteAt($value, $index:num)) =>
@@ -606,6 +610,8 @@ private partial def disclosedValues (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap disclosedValues
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    disclosedValues domain ++ disclosedValues contractAddress
   | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*]))
   | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
     disclosedValues opening ++ values.getElems.toList.flatMap disclosedValues
@@ -671,6 +677,8 @@ private partial def inlineAssertions (stx : TSyntax `nlexpr) : List String :=
   | `(nlexpr| persistentHashNativeVector([$values,*]))
   | `(nlexpr| transientHashNativeVector([$values,*])) =>
     values.getElems.toList.flatMap inlineAssertions
+  | `(nlexpr| tokenType($domain, $contractAddress)) =>
+    inlineAssertions domain ++ inlineAssertions contractAddress
   | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*]))
   | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
     inlineAssertions opening ++ values.getElems.toList.flatMap inlineAssertions
@@ -780,6 +788,27 @@ private def selectedCodec (name : TSyntax `ident) : ExprM (Helpers.Wire.Codec ×
   let some ((_, codec), index) := (← get).codecs.zipIdx.find? (fun (candidate, _) => candidate.1 == name.getId)
     | throwErrorAt name s!"add codec '{name.getId}' to the circuit's using clause"
   pure (codec, Helpers.Wire.codecName index)
+
+private def nominalBytes32ForCodec? (codec : Helpers.Wire.Codec) :
+    Option NominalBytes32 :=
+  if codec.frameBytes != 32 then none else
+  match codec.payload with
+  | .structure id => do
+    let kind ← [NominalBytes32.contractAddress, .zswapCoinPublicKey].find? fun candidate =>
+      candidate.declarationId == id
+    let some declaration := codec.composites.structures.find? (·.id == id) | none
+    let [field] := declaration.fields | none
+    if field.name == "bytes" && field.type == .bytes 32 then some kind else none
+  | _ => none
+
+private partial def nominalBytes32OfOutput? (state : AuthoringExprState)
+    (source : TSyntax `nlexpr) : Option NominalBytes32 := do
+  match source with
+  | `(nlexpr| disclose($value)) => nominalBytes32OfOutput? state value
+  | `(nlexpr| encode($codecName:ident, $_value:nlexpr)) => do
+    let some (_, codec) := state.codecs.find? (·.1 == codecName.getId) | none
+    nominalBytes32ForCodec? codec
+  | _ => none
 
 private def lowerProjection (stx : Syntax) (value : Lowered)
     (projection : Types.Projection) : ExprM Lowered := do
@@ -1069,6 +1098,10 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
       type := .scalar (.foreign (.point .curve25519))
       term := .foreignConstant (.point .curve25519) (Foreign.identityEncoding .curve25519)
     }
+  | `(nlexpr| nativeToken()) | `(nlexpr| tokenType($_:nlexpr, $_:nlexpr)) => do
+    let some expanded ← Noctium.expandTokenHelperSyntax stx
+      | throwErrorAt stx "token helper expansion failed"
+    lowerExpr programName callPrefix env expanded
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -2153,7 +2186,17 @@ private partial def lowerReadableStatement (programName path : String)
               | throwErrorAt id "scalar outputs require a type annotation"
             pure lowered
         let source := readableAliasSource value sourceExpr
-        authoredOutputs := authoredOutputs ++ [{name := valueName, value, span := outputSpan, ordinal, source}]
+        let nominalBytes32? := if value.type == .scalar (.bytes 32) then
+            nominalBytes32OfOutput? exprState sourceExpr
+          else none
+        authoredOutputs := authoredOutputs ++ [{
+          name := valueName
+          value := value
+          span := outputSpan
+          ordinal := ordinal
+          source := source
+          nominalBytes32 := nominalBytes32?
+        }]
         sourceBody := updatedBody.observe value [sourceExpr]
       | _ =>
         sourceBody ← lowerReadableStatement programNameText (toString ordinal) exprState codecTerms
@@ -2263,6 +2306,8 @@ private partial def lowerReadableStatement (programName path : String)
         let value ← `(@Noctium.Expr.ref $(← tyTerm input.ty) $(stringTerm input.name))
         logicalEnv := logicalEnv ++ [(input.name, input.ty, value)]
       let mut logicalOutputAliases : List (String × Ty × Name) := []
+      let nominalBytes32Outputs := authoredOutputs.filterMap fun item =>
+        item.nominalBytes32.map fun nominal => (item.name, nominal)
       let defineAlias (item : AuthoredOutput) (ty : Ty) (value : TSyntax `term) : CommandElabM Name := do
         let aliasName := generatedName fullName s!"__logicalOutput_{item.ordinal}_{item.name}"
         if (← getEnv).contains aliasName then
@@ -2338,7 +2383,7 @@ private partial def lowerReadableStatement (programName path : String)
           | .unit => throwErrorAt stx "unexpected Unit circuit output"
         unless remaining.isEmpty do
           throwErrorAt stx "circuit output layout did not consume the compiled Native fields"
-      pure (logicalOutputAliases, registeredAggregates)
+      pure (logicalOutputAliases, registeredAggregates, nominalBytes32Outputs)
     let signatureTerms ← witnesses.mapM quoteSignature
     let signatureTerms := signatureTerms.toArray
     let inputTerms ← inputs.mapM fun input => inputTerm input.name input.ty input.visibility input.span

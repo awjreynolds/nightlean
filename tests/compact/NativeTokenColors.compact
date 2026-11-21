@@ -1,0 +1,10 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export pure circuit nativeTokenValue(): Bytes<32> {
+  return nativeToken();
+}
+
+export pure circuit deriveTokenColor(domain: Bytes<32>, contractAddress: Bytes<32>): Bytes<32> {
+  return tokenType(domain, ContractAddress { bytes: contractAddress });
+}
