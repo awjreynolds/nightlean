@@ -11,6 +11,7 @@ inductive Kind where
   | native
   | uint (maximum : Nat)
   | bytes (length : Nat)
+  | opaqueBytes
   | jubjubScalar | jubjubPoint
   | foreign (kind : Foreign.Kind)
   deriving Repr, BEq, DecidableEq
@@ -27,6 +28,7 @@ def validate : Kind → Except String Unit
   | .uint maximum =>
     if maximum ≤ maxUint then pure () else .error "unsigned type exceeds target maximum"
   | .bytes _ => .error "byte strings are not scalar values"
+  | .opaqueBytes => .error "opaque byte strings are not scalar values"
   | .jubjubScalar => .error "Jubjub scalars require a qualified curve operation"
   | .jubjubPoint => .error "Jubjub points require a qualified curve operation"
   | .foreign _ => .error "foreign values require a qualified curve operation"
@@ -46,6 +48,7 @@ def accepts : Kind → Nat → Bool
   | .native, value => value < Field.modulus
   | .uint maximum, value => maximum ≤ maxUint && value ≤ maximum
   | .bytes _, _ => false
+  | .opaqueBytes, _ => false
   | .jubjubScalar, _ | .jubjubPoint, _ | .foreign _, _ => false
 
 def infer (op : Binary) (left right : Kind) : Except String Kind := do
@@ -62,7 +65,8 @@ def infer (op : Binary) (left right : Kind) : Except String Kind := do
     let result := Kind.uint maximum
     validate result
     return result
-  | .bytes _, _ | _, .bytes _ => throw "byte strings do not support scalar arithmetic"
+  | .bytes _, _ | _, .bytes _ | .opaqueBytes, _ | _, .opaqueBytes =>
+    throw "byte strings do not support scalar arithmetic"
   | .jubjubScalar, _ | _, .jubjubScalar | .jubjubPoint, _ | _, .jubjubPoint =>
     throw "Jubjub values do not support scalar arithmetic"
   | .foreign _, _ | _, .foreign _ =>
@@ -95,7 +99,7 @@ def evaluate (op : Binary) (left right : Value) : Except String Value := do
       | .mul => pure (a * b)
       | .sub =>
         if b ≤ a then pure (a - b) else throw "unsigned subtraction underflow"
-    | .bytes _ => throw "byte strings do not support scalar arithmetic"
+    | .bytes _ | .opaqueBytes => throw "byte strings do not support scalar arithmetic"
     | .jubjubScalar => throw "Jubjub scalars require a qualified curve operation"
     | .jubjubPoint => throw "Jubjub points require a qualified curve operation"
     | .foreign _ => throw "foreign values require a qualified curve operation"
@@ -109,10 +113,10 @@ def cast (value : Value) (target : Kind) : Except String Value := do
   value.validate
   validate target
   if value.kind == .jubjubScalar || value.kind == .jubjubPoint ||
-      (match value.kind with | .foreign _ => true | _ => false) then
+      (match value.kind with | .foreign _ | .opaqueBytes => true | _ => false) then
     throw "Jubjub values do not support scalar casts"
   if target == .jubjubScalar || target == .jubjubPoint ||
-      (match target with | .foreign _ => true | _ => false) then
+      (match target with | .foreign _ | .opaqueBytes => true | _ => false) then
     throw "Jubjub values do not support scalar casts"
   let number := if target == .bool then (if value.number == 0 then 0 else 1) else value.number
   let result := {kind := target, number : Value}

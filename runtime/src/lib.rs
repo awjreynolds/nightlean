@@ -61,6 +61,7 @@ pub enum Value {
         maximum: BigUint,
     },
     Bytes(Vec<u8>),
+    OpaqueBytes(Vec<u8>),
     JubjubScalar(EmbeddedFr),
     JubjubPoint(EmbeddedGroupAffine),
     #[cfg(feature = "zkir-321")]
@@ -128,6 +129,18 @@ fn aligned_bytes(value: &Value) -> Result<AlignedValue> {
             length: bytes.len() as u32,
         }),
     })
+}
+
+fn aligned_opaque_bytes(value: &Value) -> Result<AlignedValue> {
+    value.validate()?;
+    let Value::OpaqueBytes(bytes) = value else {
+        bail!("expected opaque bytes value")
+    };
+    AlignedValue::new(
+        FabValue(vec![ValueAtom(bytes.clone())]),
+        Alignment::singleton(AlignmentAtom::Compress),
+    )
+    .ok_or_else(|| anyhow!("invalid opaque byte alignment"))
 }
 
 fn claim_hash_output(value: Value, label: &str) -> Result<HashOutput> {
@@ -206,6 +219,7 @@ fn aligned(value: &Value, alignment: &str) -> Result<AlignedValue> {
         return aligned_bytes(value);
     }
     match alignment {
+        "compress" => aligned_opaque_bytes(value),
         "field" => match value {
             #[cfg(feature = "zkir-321")]
             Value::Foreign(value) => Ok(aligned_fields(&value.encode()?)),
@@ -330,6 +344,10 @@ pub enum Expr {
     },
     Keccak256 {
         length: usize,
+        value: Box<Expr>,
+    },
+    #[serde(rename = "keccak256Secp256k1Point")]
+    Keccak256Secp256k1Point {
         value: Box<Expr>,
     },
     #[serde(rename = "sliceBytes")]
@@ -797,6 +815,43 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
         }
         Expr::Keccak256 { length, value } => {
             Value::Bytes(sha3::Keccak256::digest(evaluated_bytes(value, *length, env)?).to_vec())
+        }
+        #[cfg(feature = "zkir-321")]
+        Expr::Keccak256Secp256k1Point { value } => {
+            let Value::Foreign(point) = evaluate(value, env)? else {
+                bail!("keccak256Secp256k1Point requires a typed foreign point")
+            };
+            let expected = foreign::ForeignType::new(
+                foreign::ForeignFamily::Secp256k1,
+                foreign::ForeignRole::Point,
+            );
+            ensure!(
+                point.foreign_type() == expected,
+                "keccak256Secp256k1Point requires Secp256k1Point"
+            );
+            let encoded = point.encode()?;
+            ensure!(
+                encoded.len() == 5,
+                "Secp256k1Point Encode must produce five fields"
+            );
+            let mut preimage = Vec::with_capacity(96);
+            for (field, width) in encoded.iter().zip([24usize, 8, 24, 8, 32]) {
+                let bytes = field.as_le_bytes();
+                ensure!(
+                    bytes[width..].iter().all(|byte| *byte == 0),
+                    "Secp256k1Point Encode field exceeds its FAB alignment"
+                );
+                preimage.extend_from_slice(&bytes[..width]);
+            }
+            ensure!(
+                preimage.len() == 96,
+                "Secp256k1Point FAB preimage must be 96 bytes"
+            );
+            Value::Bytes(sha3::Keccak256::digest(preimage).to_vec())
+        }
+        #[cfg(not(feature = "zkir-321"))]
+        Expr::Keccak256Secp256k1Point { .. } => {
+            bail!("keccak256Secp256k1Point requires the ZKIR 3.2.1 runtime")
         }
         Expr::SliceBytes {
             length,
@@ -1273,6 +1328,14 @@ pub enum Instruction {
         amount: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "insertShieldedCoinSet", rename_all = "camelCase")]
+    InsertShieldedCoinSet {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "spendShieldedFromMap", rename_all = "camelCase")]
     SpendShieldedFromMap {
         nonce: Expr,
@@ -1427,8 +1490,8 @@ pub(crate) fn ledger_key_type(value: &Json) -> Result<ScalarType> {
     )?;
     reject_jubjub_map_key(&ty)?;
     ensure!(
-        !matches!(&ty, ScalarType::Bytes(_)),
-        "only Bytes32 byte map keys are supported"
+        !matches!(&ty, ScalarType::Bytes(_) | ScalarType::OpaqueBytes),
+        "only fixed-width byte map keys are supported"
     );
     Ok(ty)
 }
@@ -1552,6 +1615,10 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         Instruction::WriteShieldedCoinCell { .. } => WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec(),
         Instruction::ListPushFrontCoin { .. } => {
             bail!("qualified coin List push must be unguarded")
+        }
+        Instruction::InsertShieldedCoinSet { slot, .. } => {
+            validate_shielded_coin_set(plan, *slot)?;
+            INSERT_SHIELDED_COIN_SET_FIELD_COUNTS.to_vec()
         }
         Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SendShieldedFromMap { .. } => SEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
@@ -1730,7 +1797,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
 fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
     let value_fields = |alignment: &str| -> Result<usize> {
         match alignment {
-            "field" | "bit" | "u64" => Ok(1),
+            "field" | "bit" | "u64" | "compress" => Ok(1),
             _ => match byte_alignment_length(alignment)? {
                 Some(length) => Ok(length.div_ceil(31)),
                 None => bail!("unsupported alignment"),
@@ -1748,6 +1815,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         }
         Instruction::ListPushFrontCoin { .. } => {
             bail!("qualified coin List push must be unguarded")
+        }
+        Instruction::InsertShieldedCoinSet { .. } => {
+            bail!("shielded coin Set insertion must be unguarded")
         }
         Instruction::SpendShieldedFromMap { .. } => {
             bail!("shielded spend must be unguarded")
@@ -1863,6 +1933,7 @@ const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1
 const RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS: [usize; 16] =
     [1, 4, 6, 2, 1, 1, 4, 6, 1, 6, 5, 11, 1, 2, 1, 1];
 const WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS: [usize; 8] = [5, 1, 6, 5, 11, 1, 2, 1];
+const INSERT_SHIELDED_COIN_SET_FIELD_COUNTS: [usize; 10] = [4, 1, 6, 5, 11, 1, 2, 2, 1, 1];
 const SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 12] = [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 const SEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 18] =
     [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
@@ -1922,6 +1993,72 @@ fn validate_scalar_storage_type(
         "typed ledger type differs from state schema"
     );
     Ok(())
+}
+
+fn opaque_byte_storage_path(
+    plan: &Plan,
+    operation_index: usize,
+    guard: Option<&Expr>,
+) -> Result<(u32, usize)> {
+    let key_operation = operation_index
+        .checked_sub(1)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque byte write has no indexed key push"))?;
+    let (key_operation, key_guard) = unguarded_operation(key_operation);
+    ensure!(
+        key_guard == guard,
+        "opaque byte key push guard differs from its write"
+    );
+    let Instruction::Push {
+        storage: false,
+        expression: _,
+        alignment: key_alignment,
+    } = key_operation
+    else {
+        bail!("opaque byte write requires an adjacent non-storage key push")
+    };
+    ensure!(
+        key_alignment == "bytes32",
+        "opaque byte map key push must use Bytes32 alignment"
+    );
+
+    let path_operation = operation_index
+        .checked_sub(2)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque byte write has no adjacent indexed path"))?;
+    let (path_operation, path_guard) = unguarded_operation(path_operation);
+    ensure!(
+        path_guard == guard,
+        "opaque byte indexed path guard differs from its write"
+    );
+    let Instruction::IndexPath {
+        slot,
+        push_path: true,
+        keys,
+    } = path_operation
+    else {
+        bail!("opaque byte write requires an adjacent indexed storage path")
+    };
+    ensure!(
+        keys.is_empty(),
+        "opaque byte write requires a direct Map root path"
+    );
+    let key_types = map_path_key_types(plan, *slot, 1)?;
+    ensure!(
+        key_types.len() == 1 && key_types[0] == ScalarType::Bytes32,
+        "opaque byte Map key must be Bytes32"
+    );
+    let insert_operation = operation_index
+        .checked_add(1)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque byte write has no adjacent Map insertion"))?;
+    let (insert_operation, insert_guard) = unguarded_operation(insert_operation);
+    ensure!(
+        insert_guard == guard
+            && matches!(insert_operation, Instruction::Insert { n: 2 }),
+        "opaque byte Map value push must be followed by Insert(2)"
+    );
+    Ok((*slot, 1))
 }
 
 fn reject_jubjub_map_key(ty: &ScalarType) -> Result<()> {
@@ -2014,7 +2151,19 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
         return Ok(());
     }
     if let Some(key) = fields.get("set") {
-        ledger_key_type(key)?;
+        if let Some(record) = key
+            .as_object()
+            .filter(|object| object.len() == 1)
+            .and_then(|object| object.get("composite"))
+        {
+            ensure!(
+                is_shielded_coin_record_schema(record),
+                "Set composite schema is unsupported"
+            );
+            checked_record_schema(record)?;
+        } else {
+            ledger_key_type(key)?;
+        }
         return Ok(());
     }
     let parts = fields
@@ -2143,6 +2292,34 @@ fn validate_shielded_coin_list(
         "qualified coin List operation differs from state schema"
     );
     checked_record_schema(operation_schema)?;
+    Ok(())
+}
+
+fn validate_shielded_coin_set(plan: &Plan, slot: u32) -> Result<()> {
+    ensure!(
+        plan.state.len() <= 16 && slot < 16,
+        "shielded coin Set slot exceeds the native state limit"
+    );
+    let declaration = plan
+        .state
+        .get(slot as usize)
+        .ok_or_else(|| anyhow!("shielded coin Set slot out of range"))?;
+    ensure!(!declaration.sealed, "shielded coin Set is sealed");
+    let schema = tree_schema_at_path(plan, slot, 0)?;
+    let set = schema
+        .as_object()
+        .filter(|object| object.len() == 1)
+        .and_then(|object| object.get("set"))
+        .ok_or_else(|| anyhow!("shielded coin insertion requires a root Set"))?;
+    let record = set
+        .as_object()
+        .filter(|object| object.len() == 1)
+        .and_then(|object| object.get("composite"))
+        .ok_or_else(|| anyhow!("shielded coin Set must store qualified coin records"))?;
+    ensure!(
+        is_shielded_coin_record_schema(record),
+        "shielded coin Set must use the fixed qualified coin record schema"
+    );
     Ok(())
 }
 
@@ -2452,6 +2629,7 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::MerkleTreeResetHistory { .. }
             | Instruction::ReceiveShieldedToMap { .. }
             | Instruction::WriteShieldedCoinCell { .. }
+            | Instruction::InsertShieldedCoinSet { .. }
     )
 }
 
@@ -3071,6 +3249,7 @@ fn decode_typed_scalar(ty: &ScalarType, fields: &[Fr]) -> Result<Value> {
 fn aligned_storage_cell(value: &Value) -> Result<AlignedValue> {
     match value {
         Value::Bytes(_) => aligned_bytes(value),
+        Value::OpaqueBytes(_) => aligned_opaque_bytes(value),
         Value::JubjubScalar(_) | Value::JubjubPoint(_) => {
             Ok(aligned_fields(&typed_scalar_fields(value)?))
         }
@@ -3274,6 +3453,7 @@ fn inactive_read_value(ty: &str) -> Result<Value> {
         },
         ScalarType::Bytes32 => Value::Bytes(vec![0; 32]),
         ScalarType::Bytes(length) => Value::Bytes(vec![0; length]),
+        ScalarType::OpaqueBytes => Value::OpaqueBytes(Vec::new()),
         ScalarType::JubjubScalar => Value::JubjubScalar(jubjub::scalar("0")?),
         ScalarType::JubjubPoint => {
             Value::JubjubPoint(jubjub::point(Fr::from(0u64), Fr::from(1u64))?)
@@ -3348,6 +3528,36 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             Ok(Value::Bytes(bytes))
+        }
+        ScalarType::OpaqueBytes => {
+            let object = json
+                .as_object()
+                .ok_or_else(|| anyhow!("expected opaque byte object"))?;
+            ensure!(
+                object.len() == 2
+                    && object.get("kind").and_then(Json::as_str) == Some("opaqueBytes"),
+                "invalid opaque byte object"
+            );
+            let values = object
+                .get("values")
+                .and_then(Json::as_array)
+                .ok_or_else(|| anyhow!("expected opaque byte array"))?;
+            ensure!(
+                values.len() <= scalars::MAX_OPAQUE_BYTES_LENGTH,
+                "opaque byte value exceeds native limit"
+            );
+            let bytes = values
+                .iter()
+                .map(|value| {
+                    value
+                        .as_u64()
+                        .and_then(|value| u8::try_from(value).ok())
+                        .ok_or_else(|| anyhow!("expected canonical opaque byte integer"))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let value = Value::OpaqueBytes(bytes);
+            value.validate()?;
+            Ok(value)
         }
         ScalarType::JubjubScalar => {
             let object = json
@@ -4033,7 +4243,20 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
         "state cell encoding mismatch"
     );
     let parsed = ScalarType::parse(ty)?;
-    let decoded = if let Some(length) = parsed.bytes_length() {
+    let decoded = if parsed == ScalarType::OpaqueBytes {
+        ensure!(
+            alignment == "compress",
+            "opaque byte read requires Compress alignment"
+        );
+        ensure!(
+            value.alignment == Alignment::singleton(AlignmentAtom::Compress),
+            "opaque byte state cell alignment mismatch"
+        );
+        ensure!(value.value.0.len() == 1, "invalid opaque byte atom count");
+        let decoded = Value::OpaqueBytes(value.value.0[0].0.clone());
+        decoded.validate()?;
+        decoded
+    } else if let Some(length) = parsed.bytes_length() {
         ensure!(
             byte_alignment_length(alignment)? == Some(length),
             "byte state read alignment mismatch"
@@ -4069,7 +4292,9 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
                 ensure!(fields.len() == 1, "expected scalar state cell");
                 input_value(ty, &Json::String(field_decimal(fields[0])))?
             }
-            ScalarType::Bytes32 | ScalarType::Bytes(_) => unreachable!("decoded above"),
+            ScalarType::Bytes32 | ScalarType::Bytes(_) | ScalarType::OpaqueBytes => {
+                unreachable!("decoded above")
+            }
             ScalarType::JubjubScalar | ScalarType::JubjubPoint => {
                 decode_typed_scalar(&parsed, &fields)?
             }
@@ -4083,7 +4308,9 @@ fn decode_state_cell(value: &AlignedValue, ty: &str, alignment: &str) -> Result<
         ScalarType::Foreign(_) => true,
         _ => false,
     };
-    let encoded = if parsed.bytes_length().is_some() {
+    let encoded = if parsed == ScalarType::OpaqueBytes {
+        aligned_opaque_bytes(&decoded)?
+    } else if parsed.bytes_length().is_some() {
         aligned_bytes(&decoded)?
     } else if typed_scalar {
         aligned_storage_cell(&decoded)?
@@ -4152,6 +4379,7 @@ fn list_scalar_storage_alignment(ty: &ScalarType) -> String {
     match ty {
         ScalarType::Bytes32 => "bytes32".to_owned(),
         ScalarType::Bytes(length) => format!("bytes:{length}"),
+        ScalarType::OpaqueBytes => "compress".to_owned(),
         _ => "field".to_owned(),
     }
 }
@@ -4511,6 +4739,9 @@ fn aligned_call_values<'a>(values: impl Iterator<Item = &'a Value>) -> Result<Al
         value.validate()?;
         match value {
             Value::Bytes(_) => aligned_bytes(value)?.value_only_field_repr(&mut fields),
+            Value::OpaqueBytes(_) => {
+                aligned_opaque_bytes(value)?.value_only_field_repr(&mut fields)
+            }
             Value::JubjubScalar(value) => fields.push(jubjub::scalar_native(*value)?),
             Value::JubjubPoint(value) => fields.extend(jubjub::coordinates(*value)?),
             #[cfg(feature = "zkir-321")]
@@ -4978,6 +5209,13 @@ fn probe_instruction(
             ..
         }
         | Instruction::ListPushFrontCoin {
+            nonce,
+            color,
+            amount,
+            commitment,
+            ..
+        }
+        | Instruction::InsertShieldedCoinSet {
             nonce,
             color,
             amount,
@@ -5851,6 +6089,11 @@ impl PreparationCursor {
                                 "inactive byte read alignment mismatch"
                             );
                             validate_byte_read_projections(read, &read_type)?;
+                        } else if alignment == "compress" {
+                            ensure!(
+                                read_type == ScalarType::OpaqueBytes,
+                                "inactive opaque byte read alignment mismatch"
+                            );
                         } else {
                             ensure!(
                                 matches!(alignment.as_str(), "field" | "bit" | "u64"),
@@ -6115,6 +6358,15 @@ impl PreparationCursor {
                 alignment,
             } => {
                 let value = evaluate(expression, &env)?;
+                if *storage && matches!(&value, Value::OpaqueBytes(_)) {
+                    let (slot, depth) = opaque_byte_storage_path(plan, index, instruction_guard)?;
+                    validate_scalar_storage_type(
+                        plan,
+                        slot,
+                        depth,
+                        &ScalarType::OpaqueBytes,
+                    )?;
+                }
                 #[cfg(feature = "zkir-321")]
                 ensure!(
                     !matches!(&value, Value::Foreign(_)),
@@ -6240,7 +6492,10 @@ impl PreparationCursor {
                             if read_type.bytes_length().is_some() {
                                 validate_byte_read_projections(read, &read_type)?;
                             }
-                            if is_typed_scalar(&read_type) || read_type.bytes_length().is_some() {
+                            if is_typed_scalar(&read_type)
+                                || read_type.bytes_length().is_some()
+                                || read_type == ScalarType::OpaqueBytes
+                            {
                                 validate_scalar_storage_type(plan, *slot, keys.len(), &read_type)?;
                             }
                             read_state_cell(read_context, *slot, keys, &read.ty, alignment)?
@@ -7348,6 +7603,97 @@ impl PreparationCursor {
                 has_written = true;
                 insert
             }
+            Instruction::InsertShieldedCoinSet {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+            } => {
+                validate_shielded_coin_set(plan, *slot)?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "shielded Set coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "shielded Set coin color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                let recipient = Recipient::Contract(context.address);
+                let expected_commitment = claim_hash_output(
+                    evaluate(commitment, &env)?,
+                    "shielded Set coin commitment",
+                )?;
+                let coin_commitment = coin.commitment(&recipient);
+                ensure!(
+                    coin_commitment.0 == expected_commitment,
+                    "shielded coin Set commitment mismatch"
+                );
+                let qualified = context.qualify(&coin).ok_or_else(|| {
+                    anyhow!(
+                        "shielded coin Set commitment is absent from the current transaction"
+                    )
+                })?;
+                let qualified_key = AlignedValue::from(qualified);
+                ensure!(
+                    qualified_key.alignment.fits(&qualified_key.value),
+                    "shielded coin Set record alignment mismatch"
+                );
+
+                if has_written {
+                    advance_native_state_prefix(
+                        prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let current = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                let set_state = read_state_value(current, *slot, &[])?;
+                let StateValue::Map(members) = &set_state else {
+                    bail!("shielded coin Set state is not a Map")
+                };
+                if let Some(marker) = members.get(&qualified_key) {
+                    ensure!(
+                        matches!(*marker, StateValue::Null),
+                        "shielded coin Set member marker is invalid"
+                    );
+                }
+
+                let path = vec![Key::Value(
+                    AlignedValue::from(u8::try_from(*slot)?)
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid shielded coin Set slot"))?,
+                )];
+                let set_ops = onchain_runtime::program_fragments::Set_insert_coin!(
+                    path,
+                    false,
+                    QualifiedInfo,
+                    coin,
+                    recipient
+                );
+                program.extend([
+                    set_ops[0].clone(),
+                    set_ops[1].clone(),
+                    set_ops[2].clone(),
+                    set_ops[3].clone(),
+                    set_ops[5].clone(),
+                    set_ops[6].clone(),
+                    set_ops[4].clone(),
+                    set_ops[7].clone(),
+                    set_ops[8].clone(),
+                ]);
+                has_written = true;
+                set_ops[9].clone()
+            }
             Instruction::SpendShieldedFromMap {
                 nonce,
                 color,
@@ -7920,6 +8266,7 @@ impl PreparationCursor {
                 | Instruction::MapRemove { .. }
                 | Instruction::ReceiveShieldedToMap { .. }
                 | Instruction::WriteShieldedCoinCell { .. }
+                | Instruction::InsertShieldedCoinSet { .. }
         ) {
             mutation_boundary = program.len();
         }
@@ -8041,6 +8388,8 @@ impl PreparationCursor {
                 Value::Bytes(bytes) => {
                     private_transcript.extend(bytes.iter().map(|byte| Fr::from(*byte as u64)))
                 }
+                Value::OpaqueBytes(_) => aligned_opaque_bytes(&env[&input.name])?
+                    .value_only_field_repr(&mut private_transcript),
                 Value::JubjubScalar(value) => {
                     private_transcript.push(jubjub::scalar_native(*value)?)
                 }

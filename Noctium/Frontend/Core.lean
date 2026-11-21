@@ -188,6 +188,7 @@ scoped syntax "UInt" num : nltype
 scoped syntax "UIntRange" num : nltype
 scoped syntax "Bytes32" : nltype
 scoped syntax "Bytes" num : nltype
+scoped syntax "OpaqueBytes" : nltype
 scoped syntax "JubjubScalar" : nltype
 scoped syntax "JubjubPoint" : nltype
 scoped syntax "Secp256k1Base" : nltype
@@ -319,12 +320,14 @@ scoped syntax "counter" ident : nlstate
 declare_syntax_cat nlcompositefield
 scoped syntax ident ":" nltype : nlcompositefield
 scoped syntax "cell" ident ":" "struct" ident "{" nlcompositefield* "}" : nlstate
+scoped syntax "set" ident ":" "struct" ident "{" nlcompositefield* "}" : nlstate
 declare_syntax_cat nlmerklespec
 scoped syntax num ("of" nltype)? : nlmerklespec
 scoped syntax num "of" "struct" ident "{" nlcompositefield* "}" : nlmerklespec
 scoped syntax "merkleTree" ident ":" nlmerklespec : nlstate
 scoped syntax "historicMerkleTree" ident ":" nlmerklespec : nlstate
 scoped syntax "tree" ident ":" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
+scoped syntax "tree" ident ":" nltype "=>" nltype : nlstate
 scoped syntax "tree" ident ":" nltype "=>" nltype "=>" "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax ident ident ":" "struct" ident "{" nlcompositefield* "}" : nlstate
 scoped syntax "tree" ident ":" nltype "=>" ident "struct" ident "{" nlcompositefield* "}" : nlstate
@@ -359,6 +362,7 @@ scoped syntax "claimContractCall" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdat
 scoped syntax "claimContractCall" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "insertShieldedCoinSet" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "writeShieldedCoinCell" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
@@ -499,6 +503,7 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
     if length.getNat > Noctium.maxBytesLength then
       throwErrorAt length s!"byte string length exceeds the maximum of {Noctium.maxBytesLength}"
     pure (.bytes length.getNat)
+  | `(nltype| OpaqueBytes) => pure .opaqueBytes
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
   | `(nltype| Secp256k1Base) => pure (.foreign (.base .secp256k1))
@@ -517,6 +522,7 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .bool => `(Noctium.Ty.bool)
   | .uint maximum => `(Noctium.Ty.uint $(⟨Syntax.mkNumLit (toString maximum)⟩))
   | .bytes len => `(Noctium.Ty.bytes $(⟨Syntax.mkNumLit (toString len)⟩))
+  | .opaqueBytes => `(Noctium.Ty.opaqueBytes)
   | .jubjubScalar => `(Noctium.Ty.jubjubScalar)
   | .jubjubPoint => `(Noctium.Ty.jubjubPoint)
   | .foreign (.base .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1))
@@ -850,6 +856,8 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| cast($target:nltype, $value:nlexpr)) =>
     let target ← readTy target
     let (source, value) ← expression env value
+    if target.isOpaqueBytes || source.isOpaqueBytes then
+      throwErrorAt stx "OpaqueBytes do not support scalar casts"
     if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
       throwErrorAt stx "curve values require explicit typed conversions"
     pure (target, ← `(Noctium.Expr.cast $(← tyTerm target) $value))
@@ -860,6 +868,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .bool => pure (.bool, ← `(Noctium.Expr.bool Bool.false))
     | .uint maximum => pure (target, ← `(Noctium.Expr.uint $(natTerm maximum) 0))
     | .bytes _ => throwErrorAt stx "byte strings have no scalar default expression"
+    | .opaqueBytes => throwErrorAt stx "OpaqueBytes have no generic default expression"
     | .jubjubScalar | .jubjubPoint => throwErrorAt stx "Jubjub values have no generic default expression"
     | .foreign _ => throwErrorAt stx "foreign values have no generic default expression"
   | `(nlexpr| disclose($value)) =>
@@ -1046,9 +1055,12 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     pure (.bytes 64, ← `(Noctium.Expr.sha512 $value))
   | `(nlexpr| keccak256($value)) => do
     let (valueTy, value) ← expression env value
-    let .bytes _ := valueTy
-      | throwErrorAt stx "keccak256 requires a Bytes expression"
-    pure (.bytes 32, ← `(Noctium.Expr.keccak256 $value))
+    match valueTy with
+    | .bytes _ => pure (.bytes 32, ← `(Noctium.Expr.keccak256 $value))
+    | .foreign (.point .secp256k1) =>
+      pure (.bytes 32, ← `(Noctium.Expr.keccak256Secp256k1Point $value))
+    | .foreign (.point _) => throwErrorAt stx "keccak256 point overload supports Secp256k1Point"
+    | _ => throwErrorAt stx "keccak256 requires a Bytes or Secp256k1Point expression"
   | `(nlexpr| secp256k1EcdsaVerify($msgHash, $r, $s, $pk)) => do
     let msgHash ← expected env msgHash (.bytes 32)
     let r ← expected env r (.foreign (.scalar .secp256k1))
@@ -1429,6 +1441,7 @@ where
         | .sub => `(Noctium.Expr.usub $left $right)
         | .mul => `(Noctium.Expr.umul $left $right)
       pure (.uint maximum, term)
+    | .opaqueBytes => throwErrorAt stx "OpaqueBytes do not support scalar arithmetic"
     | .bool => throwErrorAt stx "invalid arithmetic result type"
     | .bytes _ => throwErrorAt stx "Bytes32 does not support arithmetic"
     | .jubjubScalar | .jubjubPoint =>
@@ -1468,6 +1481,7 @@ private partial def lowerTreePath (env : Bindings) (schema : LedgerValueType)
   | value, [] => pure ([], value)
   | .scalar _, _ :: _ => throwError "nested map path continues through a scalar value"
   | .set _, _ :: _ => throwError "set members have no readable value"
+  | .shieldedCoinSet .., _ :: _ => throwError "qualified shielded coin Set members have no readable value"
   | .counter, _ :: _ => throwError "nested map path continues through a Counter value"
   | .composite .., _ :: _ => throwError "nested map path continues through a composite value"
   | .«list» .., _ :: _ => throwError "nested map path continues through a list value"
@@ -1958,6 +1972,7 @@ private def elaborateTreeRead (storage destination : TSyntax `ident)
   | .composite .. => throwErrorAt destination "native composite ledger reads require a named structure"
   | .map .. => throwErrorAt destination "nested map read must select a scalar or composite value"
   | .set _ => throwErrorAt destination "Set members do not have readable values"
+  | .shieldedCoinSet .. => throwErrorAt destination "Set members do not have readable values"
   | .«list» .. => throwErrorAt destination "List reads require head or length"
   | .merkleTree .. => throwErrorAt destination "MerkleTree values are read through their operations"
   | .counter => do
@@ -2433,6 +2448,36 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push relayTerm
         spans := state.spans.push span
         guards := state.guards.push noGuard}
+    | `(nlupdate| insertShieldedCoinSet($storage:ident, $nonce:nlexpr,
+        $color:nlexpr, $amount:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "insertShieldedCoinSet must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "insertShieldedCoinSet must be unguarded"
+      let treeSchema ← treeStateSchema schema storage
+      let .shieldedCoinSet environment recordType := treeSchema
+        | throwErrorAt storage "insertShieldedCoinSet requires a root QualifiedShieldedCoinInfo Set"
+      match LedgerValueType.shieldedCoinRecordFields environment recordType with
+      | .ok _ => pure ()
+      | .error message => throwErrorAt storage message
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let addressName := s!"noctium_coin_set_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != addressName) do
+        throwErrorAt update "reserved insertShieldedCoinSet binding collides with an existing read"
+      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+      state := {state with terms := state.terms.push addressTerm}
+      state ← bindReadName state addressName addressName (.bytes 32)
+      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+      let insertTerm ← `(Noctium.Effect.insertShieldedCoinSet
+        $(stringTerm storage.getId.toString) $nonce $color $amount $selfAddress)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push insertTerm
+        spans := state.spans.push span
+        guards := state.guards.push noGuard}
     | `(nlupdate| writeShieldedCoinCell($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do
@@ -2812,13 +2857,23 @@ private def elaborateEffect (schema : List (String × StateKind))
     state := ← elaborateTypedMerkleWrite schema path none (some index) Bool.false state
   | `(nleffect| insert $storage:ident [ $key:nlexpr ] := $value:nlexpr)
   | `(nleffect| when $_:nlexpr insert $storage:ident [ $key:nlexpr ] := $value:nlexpr) => do
-    let some (.map keyTy valueTy) := schema.lookup storage.getId.toString
-      | throwErrorAt storage "insert requires a declared state map"
-    let loweredKey ← checkedExpression state.env key keyTy
-    let loweredValue ← checkedExpression state.env value valueTy
-    let term ← `(Noctium.Effect.writeMap
-      $(stringTerm storage.getId.toString) $(← tyTerm keyTy) $(← tyTerm valueTy)
-      $loweredKey $loweredValue)
+    let term ← match schema.lookup storage.getId.toString with
+      | some (.map keyTy valueTy) => do
+        let loweredKey ← checkedExpression state.env key keyTy
+        let loweredValue ← checkedExpression state.env value valueTy
+        `(Noctium.Effect.writeMap
+          $(stringTerm storage.getId.toString) $(← tyTerm keyTy) $(← tyTerm valueTy)
+          $loweredKey $loweredValue)
+      | some (.tree _) => do
+        let treeSchema ← treeStateSchema schema storage
+        let (path, selected) ← lowerTreePath state.env treeSchema [key]
+        unless selected == .scalar .opaqueBytes do
+          throwErrorAt storage "single-key tree insertion currently supports only OpaqueBytes leaves"
+        let loweredValue ← checkedExpression state.env value .opaqueBytes
+        let keys ← pathKeysTerm path
+        `(Noctium.Effect.insertPath $(stringTerm storage.getId.toString) $keys
+          Noctium.Ty.opaqueBytes $loweredValue)
+      | _ => throwErrorAt storage "insert requires a declared state map or OpaqueBytes tree"
     state := {state with terms := state.terms.push term}
   | `(nleffect| insert $storage:ident [$owner:nlexpr] := emptyMap) => do
     let schema ← treeStateSchema schema storage
@@ -3223,6 +3278,16 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
       if let some (id, _, _, ty) := merkle then
         merkleLeafTypes := (id.getId.toString, ty) :: merkleLeafTypes
       let (id, kind, term) ← if let some (id, kind, term, _) := merkle then pure (id, kind, term) else match state with
+        | `(nlstate| set $id:ident : struct $record:ident { $recordFields:nlcompositefield* }) => do
+          let contractName := (← getCurrNamespace) ++ name.getId
+          let (environment, compositeType, environmentTerm, compositeTypeTerm) ←
+            elaborateNamedRecord contractName record recordFields state
+          match LedgerValueType.shieldedCoinRecordFields environment compositeType with
+          | .ok _ => pure ()
+          | .error message => throwErrorAt state message
+          let valueSchema := LedgerValueType.shieldedCoinSet environment compositeType
+          let valueTerm ← `(Noctium.LedgerValueType.shieldedCoinSet $environmentTerm $compositeTypeTerm)
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
         | `(nlstate| cell $id:ident : struct $record:ident { $recordFields:nlcompositefield* }) => do
           let contractName := (← getCurrNamespace) ++ name.getId
           let (environment, compositeType, environmentTerm, compositeTypeTerm) ←
@@ -3295,6 +3360,15 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
           let valueSchema := LedgerValueType.map keyTy (.composite environment compositeType)
           let valueTerm ← `(Noctium.LedgerValueType.map $(← tyTerm keyTy)
             (Noctium.LedgerValueType.composite $environmentTerm $compositeTypeTerm))
+          pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
+        | `(nlstate| tree $id:ident : $key:nltype => $value:nltype) => do
+          let keyTy ← readTy key
+          let valueTy ← readTy value
+          unless keyTy == .bytes 32 && valueTy == .opaqueBytes do
+            throwErrorAt state "single-key scalar trees currently support only Bytes32 => OpaqueBytes"
+          let valueSchema := LedgerValueType.map keyTy (.scalar valueTy)
+          let valueTerm ← `(Noctium.LedgerValueType.map $(← tyTerm keyTy)
+            (Noctium.LedgerValueType.scalar $(← tyTerm valueTy)))
           pure (id, StateKind.tree valueSchema, ← `(Noctium.StateKind.tree $valueTerm))
         | `(nlstate| tree $id:ident : $outer:nltype => $inner:nltype => struct $record:ident { $recordFields:nlcompositefield* }) => do
           let outerTy ← readTy outer
