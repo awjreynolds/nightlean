@@ -932,14 +932,15 @@ private def writeMerkleTreeAt (state : LedgerState) (name : String) (keys : List
   pure {state with trees := updateAssoc name updated state.trees}
 
 private def resetMerkleTreeAt (state : LedgerState) (name : String) (keys : List Value)
-    (depth : Nat) (historic : Bool) : Except String LedgerState := do
+    (depth : Nat) (historic emptyHistory : Bool) : Except String LedgerState := do
+  if emptyHistory && !historic then throw "empty-history reset requires a HistoricMerkleTree"
   unless 2 ≤ depth && depth ≤ 32 do throw "MerkleTree depth must be between 2 and 32"
   let some root := state.trees.lookup name | throw s!"missing recursive MerkleTree state '{name}'"
   if let some existing := treeLookup root keys then
     let view ← checkedMerkleTreeState existing
     unless view.depth == depth && view.history.isSome == historic do
       throw "nested MerkleTree value does not match its declared type"
-  let replacement := if historic then LedgerValue.emptyHistoricMerkleTree depth
+  let replacement : LedgerValue := if historic then .historicMerkleTree depth 0 (if emptyHistory then [] else [0])
     else .merkleTree depth 0
   writeMerkleTreeAt state name keys replacement
 
@@ -1320,9 +1321,9 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let updated ← Noctium.Merkle.Tree.setHash ctx.transientHash ctx.modulus
         view.depth index bytes tree
       next ← writeMerkleTreeAt next name evaluated (view.withTree (max view.count (index + 1)) updated)
-    | .merkleTreeResetAt name keys depth historic => do
+    | .merkleTreeResetAt name keys depth historic emptyHistory => do
       let evaluated ← evaluatePath ctx env keys
-      next ← resetMerkleTreeAt next name evaluated depth historic
+      next ← resetMerkleTreeAt next name evaluated depth historic emptyHistory
     | .merkleTreeResetHistoryAt name keys => do
       let evaluated ← evaluatePath ctx env keys
       let raw ← readMerkleTreeAt next name evaluated

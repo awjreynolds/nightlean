@@ -270,10 +270,11 @@ private def operationJsonBare : Backend.Impact.Op → Json
   | .historicMerkleTreeReset slot depth => Json.mkObj [
       ("op", toJson ("merkleTreeReset" : String)), ("slot", toJson slot),
       ("depth", toJson depth)]
-  | .merkleTreeResetAt slot depth _ keys => Json.mkObj [
+  | .merkleTreeResetAt slot depth _ keys emptyHistory => Json.mkObj ([
       ("op", toJson ("merkleTreeReset" : String)), ("slot", toJson slot),
       ("depth", toJson depth),
-      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))]
+      ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key)))] ++
+        (if emptyHistory then [("emptyHistory", toJson Bool.true)] else []))
   | .merkleTreeResetHistory slot depth => Json.mkObj [
       ("op", toJson ("merkleTreeResetHistory" : String)), ("slot", toJson slot),
       ("depth", toJson depth)]
@@ -468,9 +469,10 @@ private def effectJson : Effect → Json
       ("keys", toJson (keys.map fun key => match key with | .mk _ value => expressionJson value))]
   | .merkleTreeReset state => Json.mkObj [
       ("op", toJson ("merkleTreeReset" : String)), ("state", toJson state)]
-  | .merkleTreeResetAt state keys _ _ => Json.mkObj [
+  | .merkleTreeResetAt state keys _ _ emptyHistory => Json.mkObj ([
       ("op", toJson ("merkleTreeReset" : String)), ("state", toJson state),
-      ("keys", toJson (keys.map fun key => match key with | .mk _ value => expressionJson value))]
+      ("keys", toJson (keys.map fun key => match key with | .mk _ value => expressionJson value))] ++
+        (if emptyHistory then [("emptyHistory", toJson Bool.true)] else []))
   | .merkleTreeResetHistory state => Json.mkObj [
       ("op", toJson ("merkleTreeResetHistory" : String)), ("state", toJson state)]
   | .merkleTreeResetHistoryAt state keys => Json.mkObj [

@@ -27,6 +27,10 @@ export circuit setupArchive(owner: Bytes<32>): [] {
   archives.lookup(key).resetToDefault();
 }
 
+export circuit resetArchive(owner: Bytes<32>): [] {
+  archives.lookup(disclose(owner)).resetToDefault();
+}
+
 export circuit archiveHasRoot(owner: Bytes<32>, digest: MerkleTreeDigest): Boolean {
   return archives.lookup(disclose(owner)).checkRoot(disclose(digest));
 }

@@ -133,6 +133,7 @@ inductive Op where
   | merkleTreeInsertHashIndexAt (slot depth : Nat) (historic : Bool) (keys : List Aligned)
       (hash : Expr (.bytes 32)) (index : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeResetAt (slot depth : Nat) (historic : Bool) (keys : List Aligned)
+      (emptyHistory : Bool := false)
   | merkleTreeResetHistoryAt (slot depth : Nat) (keys : List Aligned)
   | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
   | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
@@ -297,12 +298,14 @@ private def merkleTreeInsertHashIndexFieldGroups (slot : Nat)
   , [.native 0x91]
   ] ++ (if historic then recordHistoricRootFieldGroups keys else [[.native (0xa1 + keys.length)]])
 
-private def blankMerkleTreeFields (depth : Nat) (historic : Bool) : List Scalar :=
+private def blankMerkleTreeFields (depth : Nat) (historic : Bool)
+    (emptyHistory : Bool := false) : List Scalar :=
   let stateArrayTag := 3 + (if historic then 3 else 2) * 16
   let blankTreeTag := 4 + depth * 16
   let zeroCount : Expr (.uint (2 ^ 64 - 1)) := .uint (2 ^ 64 - 1) 0
   let history := if historic then
-      [.native (2 + 16)] ++ (Aligned.field (.native 0)).fields ++ [.native 0]
+      if emptyHistory then [.native 2]
+      else [.native (2 + 16)] ++ (Aligned.field (.native 0)).fields ++ [.native 0]
     else []
   [.native 0x11, .native stateArrayTag, .native blankTreeTag, .native 1] ++
     (Aligned.counter zeroCount).fields ++ history
@@ -315,13 +318,13 @@ private def merkleTreeResetFieldGroups (slot depth : Nat) (historic : Bool := fa
   ]
 
 private def merkleTreeResetAtFieldGroups (slot depth : Nat) (historic : Bool)
-    (keys : List Aligned) : List (List Scalar) :=
+    (keys : List Aligned) (emptyHistory : Bool := false) : List (List Scalar) :=
   match keys.getLast? with
   | none => []
   | some finalKey =>
     [ indexPathFields slot true (keys.take (keys.length - 1))
     , [.native 0x10, .native 1] ++ finalKey.fields
-    , blankMerkleTreeFields depth historic
+    , blankMerkleTreeFields depth historic emptyHistory
     , [.native (0x91 + keys.length)]
     ]
 
@@ -509,8 +512,8 @@ def Op.fields : Op → List Scalar
       (merkleTreeInsertHashFieldGroups slot hash historic keys).flatten
   | .merkleTreeInsertHashIndexAt slot _ historic keys hash idx =>
       (merkleTreeInsertHashIndexFieldGroups slot hash idx historic keys).flatten
-  | .merkleTreeResetAt slot depth historic keys =>
-      (merkleTreeResetAtFieldGroups slot depth historic keys).flatten
+  | .merkleTreeResetAt slot depth historic keys emptyHistory =>
+      (merkleTreeResetAtFieldGroups slot depth historic keys emptyHistory).flatten
   | .merkleTreeResetHistoryAt slot _ keys =>
       (merkleTreeResetHistoryFieldGroups slot keys).flatten
   | .listHead slot keys _schema values =>
@@ -607,8 +610,8 @@ def Op.fieldGroups : Op → List (List Scalar)
       merkleTreeInsertHashFieldGroups slot hash historic keys
   | .merkleTreeInsertHashIndexAt slot _ historic keys hash idx =>
       merkleTreeInsertHashIndexFieldGroups slot hash idx historic keys
-  | .merkleTreeResetAt slot depth historic keys =>
-      merkleTreeResetAtFieldGroups slot depth historic keys
+  | .merkleTreeResetAt slot depth historic keys emptyHistory =>
+      merkleTreeResetAtFieldGroups slot depth historic keys emptyHistory
   | .merkleTreeResetHistoryAt slot _ keys =>
       merkleTreeResetHistoryFieldGroups slot keys
   | .listHead slot keys _schema values =>
@@ -1078,11 +1081,15 @@ private def merkleTreeInsertHashIndexAtOp (state : List StateDecl) (name : Strin
   pure (.merkleTreeInsertHashIndexAt slot depth historic keys hash index)
 
 private def merkleTreeResetAtOp (state : List StateDecl) (name : String)
-    (keys : List PathKey) (depth : Nat) (historic : Bool) : Except String Op := do
+    (keys : List PathKey) (depth : Nat) (historic emptyHistory : Bool) : Except String Op := do
+  if emptyHistory && keys.isEmpty then
+    throw "empty-history reset requires a nested HistoricMerkleTree"
   let (slot, foundDepth, foundHistoric, keys) ← merkleTreePathOpConfig state name keys
   unless depth == foundDepth && historic == foundHistoric do
     throw "nested MerkleTree reset schema mismatch"
-  pure (.merkleTreeResetAt slot depth historic keys)
+  if emptyHistory && !historic then
+    throw "empty-history reset requires a HistoricMerkleTree"
+  pure (.merkleTreeResetAt slot depth historic keys emptyHistory)
 
 private def merkleTreeResetHistoryAtOp (state : List StateDecl) (name : String)
     (keys : List PathKey) : Except String Op := do
@@ -1252,9 +1259,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .merkleTreeInsertHashIndexAt name keys hash index =>
     pure {plan with operations := plan.operations ++ [
       ← merkleTreeInsertHashIndexAtOp state name keys hash index]}
-  | .merkleTreeResetAt name keys depth historic =>
+  | .merkleTreeResetAt name keys depth historic emptyHistory =>
     pure {plan with operations := plan.operations ++ [
-      ← merkleTreeResetAtOp state name keys depth historic]}
+      ← merkleTreeResetAtOp state name keys depth historic emptyHistory]}
   | .merkleTreeResetHistoryAt name keys =>
     pure {plan with operations := plan.operations ++ [
       ← merkleTreeResetHistoryAtOp state name keys]}
@@ -1615,8 +1622,8 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.merkleTreeInsertHashIndexAt name (totalizePathKeys condition keys)
         (totalizeActivityValue condition avoid hash)
         (totalizeActivityValue condition avoid index))
-    | some condition, .merkleTreeResetAt name keys depth historic =>
-      pure (.merkleTreeResetAt name (totalizePathKeys condition keys) depth historic)
+    | some condition, .merkleTreeResetAt name keys depth historic emptyHistory =>
+      pure (.merkleTreeResetAt name (totalizePathKeys condition keys) depth historic emptyHistory)
     | some condition, .merkleTreeResetHistoryAt name keys =>
       pure (.merkleTreeResetHistoryAt name (totalizePathKeys condition keys))
     | some _, .merkleTreeReset .. | some _, .merkleTreeResetHistory .. => pure effect
@@ -1867,8 +1874,8 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .merkleTreeInsertHashIndexAt name keys hash index => do
     let operation ← merkleTreeInsertHashIndexAtOp state name keys hash index
     plan := {plan with operations := plan.operations ++ [operation]}
-  | .merkleTreeResetAt name keys depth historic => do
-    let operation ← merkleTreeResetAtOp state name keys depth historic
+  | .merkleTreeResetAt name keys depth historic emptyHistory => do
+    let operation ← merkleTreeResetAtOp state name keys depth historic emptyHistory
     plan := {plan with operations := plan.operations ++ [operation]}
   | .merkleTreeResetHistoryAt name keys => do
     let operation ← merkleTreeResetHistoryAtOp state name keys

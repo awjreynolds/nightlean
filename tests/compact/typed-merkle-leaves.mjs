@@ -15,6 +15,7 @@ const { Contract, ledger } = await import(
 const contract = new Contract({});
 const walletKey = '00'.repeat(32);
 const owner = new Uint8Array(32).fill(7);
+const defaultOwner = new Uint8Array(32).fill(8);
 const { currentContractState } = await contract.initialState(createConstructorContext(null, walletKey));
 let state = currentContractState.data;
 
@@ -35,8 +36,8 @@ const ordinarySnapshot = () => {
   const tree = ledger(state).ordinary;
   return { root: tree.root().field.toString(), firstFree: tree.firstFree().toString() };
 };
-const archiveSnapshot = () => {
-  const tree = ledger(state).archives.lookup(owner);
+const archiveSnapshot = (address = owner) => {
+  const tree = ledger(state).archives.lookup(address);
   return {
     root: tree.root().field.toString(),
     firstFree: tree.firstFree().toString(),
@@ -97,6 +98,32 @@ archives.push(archiveSnapshot());
 await assert.rejects(async () => invoke('writeArchive', owner, 4n, true));
 assert.deepEqual(archiveSnapshot(), archives[2]);
 
+await invoke('insertDefaultArchive', defaultOwner);
+const defaultOnly = archiveSnapshot(defaultOwner);
+assert.deepEqual(defaultOnly, { root: '0', firstFree: '0', history: [] });
+assert.equal(await invoke('archiveHasRoot', defaultOwner, { field: 0n }), false);
+
+await invoke('appendArchive', defaultOwner, true);
+const appendFromDefault = archiveSnapshot(defaultOwner);
+assert.equal(appendFromDefault.firstFree, '1');
+assert.deepEqual(appendFromDefault.history, [appendFromDefault.root]);
+assert.notEqual(appendFromDefault.root, '0');
+assert.equal(await invoke('archiveHasRoot', defaultOwner, { field: 0n }), false);
+
+await invoke('insertDefaultArchive', defaultOwner);
+const replacedByDefault = archiveSnapshot(defaultOwner);
+assert.deepEqual(replacedByDefault, { root: '0', firstFree: '0', history: [] });
+assert.equal(await invoke('archiveHasRoot', defaultOwner, { field: 0n }), false);
+assert.equal(
+  await invoke('archiveHasRoot', defaultOwner, { field: BigInt(appendFromDefault.root) }),
+  false,
+);
+
+await invoke('resetArchive', defaultOwner);
+const resetAfterReplacement = archiveSnapshot(defaultOwner);
+assert.deepEqual(resetAfterReplacement, { root: '0', firstFree: '0', history: ['0'] });
+assert.equal(await invoke('archiveHasRoot', defaultOwner, { field: 0n }), true);
+
 assert.deepEqual(ordinary.map(({ firstFree }) => firstFree), ['1', '4', '4']);
 assert.deepEqual(archives.map(({ root, firstFree }) => ({ root, firstFree })), ordinary);
 assert.deepEqual(archives.map(({ history }, index) => history), archives.map((_, index) =>
@@ -115,5 +142,8 @@ console.log(JSON.stringify({
     rootHistoryAfterAppend,
     rootHistoryAfterReset,
     rootHistoryHasZeroAfterReset,
+    appendFromDefault,
+    replacedByDefault,
+    resetAfterReplacement,
   },
 }));
