@@ -274,6 +274,11 @@ enum CollectionSchema {
         key_type: ScalarType,
         key_name: String,
     },
+    List {
+        slot: usize,
+        element_type: ScalarType,
+        element_name: String,
+    },
 }
 
 fn collection_schema(plan: &ReadPlan, name: &str) -> Result<Option<CollectionSchema>, i32> {
@@ -316,6 +321,22 @@ fn collection_schema(plan: &ReadPlan, name: &str) -> Result<Option<CollectionSch
             key_name,
             value_type,
             value_name,
+        }));
+    }
+    if let Some(list) = schema.get("list") {
+        let element_name = list
+            .as_object()
+            .filter(|fields| fields.len() == 1)
+            .and_then(|fields| fields.get("scalar"))
+            .and_then(Json::as_str)
+            .ok_or(INVALID_ARGUMENT)?
+            .to_owned();
+        let element_type =
+            crate::validate_tree_scalar_type(&element_name).map_err(|_| INVALID_ARGUMENT)?;
+        return Ok(Some(CollectionSchema::List {
+            slot,
+            element_type,
+            element_name,
         }));
     }
     Ok(None)
@@ -367,6 +388,7 @@ fn collection_page(
         | CollectionSchema::Set {
             key_type, key_name, ..
         } => (key_type, key_name),
+        CollectionSchema::List { .. } => return Err(INVALID_ARGUMENT),
     };
     let map_size = usize::try_from(map.size()).map_err(|_| INVALID_ARGUMENT)?;
     let mut entries = Vec::with_capacity(map_size);
@@ -400,6 +422,7 @@ fn collection_page(
                 }
                 None
             }
+            CollectionSchema::List { .. } => return Err(INVALID_ARGUMENT),
         };
         entries.push(OrderedEntry {
             order,
@@ -422,12 +445,87 @@ fn collection_page(
     let kind = match schema {
         CollectionSchema::Map { .. } => "map",
         CollectionSchema::Set { .. } => "set",
+        CollectionSchema::List { .. } => return Err(INVALID_ARGUMENT),
     };
     Ok(json!({
         "abiVersion": 1,
         "kind": kind,
         "entries": page,
         "nextOffset": (end < map_size).then_some(end)
+    }))
+}
+
+fn list_page(
+    state: &StateValue<Db>,
+    element_type: &ScalarType,
+    element_name: &str,
+    offset: usize,
+    limit: usize,
+) -> Result<Json, i32> {
+    let mut cursor = state;
+    let mut remaining = None;
+    let mut length = 0usize;
+    let end = offset.saturating_add(limit);
+    let mut entries = Vec::with_capacity(limit);
+
+    loop {
+        let StateValue::Array(node) = cursor else {
+            return Err(INVALID_ARGUMENT);
+        };
+        if node.len() != 3 {
+            return Err(INVALID_ARGUMENT);
+        }
+        let StateValue::Cell(count) = node.get(2).ok_or(INVALID_ARGUMENT)? else {
+            return Err(INVALID_ARGUMENT);
+        };
+        let Value::UInt { number, .. } =
+            crate::decode_state_cell(count, "UIntRange<18446744073709551616>", "u64")
+                .map_err(|_| INVALID_ARGUMENT)?
+        else {
+            return Err(INVALID_ARGUMENT);
+        };
+        let count = u64::try_from(number).map_err(|_| INVALID_ARGUMENT)?;
+        let count = usize::try_from(count).map_err(|_| INVALID_ARGUMENT)?;
+        if count > MAX_BYTES || remaining.is_some_and(|expected| count != expected) {
+            return Err(INVALID_ARGUMENT);
+        }
+
+        if count == 0 {
+            if !matches!(node.get(0), Some(StateValue::Null))
+                || !matches!(node.get(1), Some(StateValue::Null))
+            {
+                return Err(INVALID_ARGUMENT);
+            }
+            break;
+        }
+
+        let StateValue::Cell(head) = node.get(0).ok_or(INVALID_ARGUMENT)? else {
+            return Err(INVALID_ARGUMENT);
+        };
+        let value = crate::decode_state_cell(
+            head,
+            element_name,
+            &crate::list_scalar_storage_alignment(element_type),
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        if length >= offset && length < end {
+            entries.push(value.public_json());
+        }
+        length = length.checked_add(1).ok_or(INVALID_ARGUMENT)?;
+
+        let tail = node.get(1).ok_or(INVALID_ARGUMENT)?;
+        if !matches!(tail, StateValue::Array(_)) {
+            return Err(INVALID_ARGUMENT);
+        }
+        cursor = tail;
+        remaining = Some(count - 1);
+    }
+
+    Ok(json!({
+        "abiVersion": 1,
+        "kind": "list",
+        "entries": entries,
+        "nextOffset": (end < length).then_some(end)
     }))
 }
 
@@ -516,17 +614,21 @@ pub unsafe extern "C" fn noctium_ledger_collection_page(
                         return Err(INVALID_ARGUMENT);
                     };
                     let slot = match &schema {
-                        CollectionSchema::Map { slot, .. } | CollectionSchema::Set { slot, .. } => {
-                            *slot
-                        }
+                        CollectionSchema::Map { slot, .. }
+                        | CollectionSchema::Set { slot, .. }
+                        | CollectionSchema::List { slot, .. } => *slot,
                     };
                     let selected = root.get(slot).ok_or(INVALID_ARGUMENT)?;
-                    collection_page(
-                        selected,
-                        &schema,
-                        request.offset.ok_or(INVALID_ARGUMENT)?,
-                        request.limit.ok_or(INVALID_ARGUMENT)?,
-                    )?
+                    let offset = request.offset.ok_or(INVALID_ARGUMENT)?;
+                    let limit = request.limit.ok_or(INVALID_ARGUMENT)?;
+                    match &schema {
+                        CollectionSchema::List {
+                            element_type,
+                            element_name,
+                            ..
+                        } => list_page(selected, element_type, element_name, offset, limit)?,
+                        _ => collection_page(selected, &schema, offset, limit)?,
+                    }
                 }
                 None => {
                     let tree = merkle_tree_at(&plan.state, &state.data, &request.name, &keys)

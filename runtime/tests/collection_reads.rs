@@ -6,7 +6,8 @@ use noctium_runtime::{
     collection_ffi::noctium_ledger_collection_page,
     field_value,
     native_ffi::{
-        OK, noctium_native_result_copy, noctium_native_result_free, noctium_native_result_length,
+        INVALID_ARGUMENT, OK, noctium_native_result_copy, noctium_native_result_free,
+        noctium_native_result_length,
     },
 };
 use onchain_runtime::state::{ChargedState, ContractState, StateValue};
@@ -70,6 +71,37 @@ impl Snapshot {
             serde_json::from_slice(&output).unwrap()
         }
     }
+
+    fn status(&self, name: &str, offset: usize, limit: usize, state_sha256: &str) -> i32 {
+        let request = serde_json::to_vec(&json!({
+            "abiVersion": 1,
+            "planSha256": artifacts::digest(&self.plan),
+            "stateSha256": state_sha256,
+            "name": name,
+            "keys": [],
+            "offset": offset,
+            "limit": limit,
+        }))
+        .unwrap();
+        let mut token = 0;
+        let status = unsafe {
+            noctium_ledger_collection_page(
+                request.as_ptr(),
+                request.len(),
+                self.plan.as_ptr(),
+                self.plan.len(),
+                self.state.as_ptr(),
+                self.state.len(),
+                &mut token,
+            )
+        };
+        if status == OK {
+            assert_eq!(noctium_native_result_free(token), OK);
+        } else {
+            assert_eq!(token, 0);
+        }
+        status
+    }
 }
 
 fn plan(state: Vec<Value>) -> Value {
@@ -86,24 +118,24 @@ fn plan(state: Vec<Value>) -> Value {
     })
 }
 
-fn snapshot() -> Snapshot {
-    let map = HashMap::new()
-        .insert(
-            field_value(Fr::from(10u64)),
-            StateValue::Cell(Sp::new(field_value(Fr::from(1u64)))),
-        )
-        .insert(
-            field_value(Fr::from(2u64)),
-            StateValue::Cell(Sp::new(field_value(Fr::from(0u64)))),
-        )
-        .insert(
-            field_value(Fr::from(1u64)),
-            StateValue::Cell(Sp::new(field_value(Fr::from(1u64)))),
-        );
-    let set = HashMap::new()
-        .insert(AlignedValue::from([9u8; 32]), StateValue::Null)
-        .insert(AlignedValue::from([1u8; 32]), StateValue::Null)
-        .insert(AlignedValue::from([4u8; 32]), StateValue::Null);
+fn map_set_snapshot(reverse: bool) -> Snapshot {
+    let mut map_entries = vec![(10u64, 1u64), (2, 0), (1, 1)];
+    let mut set_entries = vec![[9u8; 32], [1; 32], [4; 32]];
+    if reverse {
+        map_entries.reverse();
+        set_entries.reverse();
+    }
+    let map = map_entries
+        .into_iter()
+        .fold(HashMap::new(), |map, (key, value)| {
+            map.insert(
+                field_value(Fr::from(key)),
+                StateValue::Cell(Sp::new(field_value(Fr::from(value)))),
+            )
+        });
+    let set = set_entries.into_iter().fold(HashMap::new(), |set, key| {
+        set.insert(AlignedValue::from(key), StateValue::Null)
+    });
     let state = ChargedState::new(StateValue::Array(
         vec![StateValue::Map(map), StateValue::Map(set)].into(),
     ));
@@ -116,12 +148,74 @@ fn snapshot() -> Snapshot {
     )
 }
 
+fn scalar_list(values: &[u64]) -> StateValue<Db> {
+    let mut list = StateValue::Array(
+        vec![
+            StateValue::Null,
+            StateValue::Null,
+            StateValue::Cell(Sp::new(AlignedValue::from(0u64))),
+        ]
+        .into(),
+    );
+    for (index, value) in values.iter().enumerate().rev() {
+        list = StateValue::Array(
+            vec![
+                StateValue::Cell(Sp::new(field_value(Fr::from(*value)))),
+                list,
+                StateValue::Cell(Sp::new(AlignedValue::from((values.len() - index) as u64))),
+            ]
+            .into(),
+        );
+    }
+    list
+}
+
+fn list_snapshot(values: &[u64]) -> Snapshot {
+    Snapshot::new(
+        plan(vec![
+            json!({"name":"values","kind":{"tree":{"list":{"scalar":"Native"}}}}),
+            json!({"name":"empty","kind":{"tree":{"list":{"scalar":"Native"}}}}),
+        ]),
+        ChargedState::new(StateValue::Array(
+            vec![scalar_list(values), scalar_list(&[])].into(),
+        )),
+    )
+}
+
+fn malformed_list_snapshot() -> Snapshot {
+    let tail = StateValue::Array(
+        vec![
+            StateValue::Cell(Sp::new(field_value(Fr::from(2u64)))),
+            scalar_list(&[]),
+            StateValue::Cell(Sp::new(AlignedValue::from(8u64))),
+        ]
+        .into(),
+    );
+    let list = StateValue::Array(
+        vec![
+            StateValue::Cell(Sp::new(field_value(Fr::from(1u64)))),
+            tail,
+            StateValue::Cell(Sp::new(AlignedValue::from(2u64))),
+        ]
+        .into(),
+    );
+    Snapshot::new(
+        plan(vec![json!({
+            "name":"values",
+            "kind":{"tree":{"list":{"scalar":"Native"}}}
+        })]),
+        ChargedState::new(StateValue::Array(vec![list].into())),
+    )
+}
+
 #[test]
 fn map_and_set_pages_are_typed_stable_and_bounded() {
-    let snapshot = snapshot();
+    let snapshot = map_set_snapshot(false);
+    let reverse = map_set_snapshot(true);
 
+    let first_map_page = snapshot.page("flags", 0, 2);
     assert_eq!(
-        snapshot.page("flags", 0, 2),
+        first_map_page,
         json!({
             "abiVersion": 1,
             "kind": "map",
@@ -141,9 +235,12 @@ fn map_and_set_pages_are_typed_stable_and_bounded() {
             "nextOffset": null
         })
     );
+    assert_eq!(reverse.page("flags", 0, 2), first_map_page);
+    assert_eq!(reverse.page("flags", 2, 2), snapshot.page("flags", 2, 2));
 
+    let first_set_page = snapshot.page("members", 0, 2);
     assert_eq!(
-        snapshot.page("members", 0, 2),
+        first_set_page,
         json!({
             "abiVersion": 1,
             "kind": "set",
@@ -154,6 +251,11 @@ fn map_and_set_pages_are_typed_stable_and_bounded() {
             "nextOffset": 2
         })
     );
+    assert_eq!(reverse.page("members", 0, 2), first_set_page);
+    assert_eq!(
+        reverse.page("members", 2, 2),
+        snapshot.page("members", 2, 2)
+    );
     assert_eq!(
         snapshot.page("members", 2, 2),
         json!({
@@ -162,5 +264,48 @@ fn map_and_set_pages_are_typed_stable_and_bounded() {
             "entries": [{"kind":"bytes","values":vec![9u8;32]}],
             "nextOffset": null
         })
+    );
+
+    assert_eq!(
+        snapshot.status("flags", 0, 2, &"0".repeat(64)),
+        INVALID_ARGUMENT
+    );
+}
+
+#[test]
+fn scalar_list_pages_validate_count_and_empty_sentinel() {
+    let snapshot = list_snapshot(&[11, 22, 33]);
+    assert_eq!(
+        snapshot.page("empty", 0, 2),
+        json!({
+            "abiVersion": 1,
+            "kind": "list",
+            "entries": [],
+            "nextOffset": null
+        })
+    );
+    assert_eq!(
+        snapshot.page("values", 0, 2),
+        json!({
+            "abiVersion": 1,
+            "kind": "list",
+            "entries": ["11", "22"],
+            "nextOffset": 2
+        })
+    );
+    assert_eq!(
+        snapshot.page("values", 2, 2),
+        json!({
+            "abiVersion": 1,
+            "kind": "list",
+            "entries": ["33"],
+            "nextOffset": null
+        })
+    );
+
+    let malformed = malformed_list_snapshot();
+    assert_eq!(
+        malformed.status("values", 0, 2, &artifacts::digest(&malformed.state)),
+        INVALID_ARGUMENT
     );
 }
