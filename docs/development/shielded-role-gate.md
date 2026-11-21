@@ -8,7 +8,7 @@ The Compact 0.36.1 comparator and Noctium's native witness and relation checker 
 
 The compiler keeps mirrored conditional hashes compact in the symbolic checker and preserves the original instruction, input and depth budgets. The checker requires the same condition and exactly swapped arms. It also recognizes reconstruction from the low and high chunks of the same Bytes32 value. These changes preserve value comparisons and leave the original bounds in force.
 
-The emitted Impact plan still repeats helper bindings across result projections. [Impact artifact sharing](https://github.com/awjreynolds/noctium/issues/203)
+With the same selected artifacts and range deduplication, sharing 124 bindings reduces this Impact plan from 4,715,622 to 142,072 bytes. It fits the bundler's 2 MiB JSON limit. Expanding the shared bindings reproduces the original plan, and the ZKIR and witness files match byte for byte. The native authorization cases still pass. [Impact artifact sharing](https://github.com/awjreynolds/noctium/issues/203)
 
 Run the Compact oracle with the pinned compiler and runtime. Compile the Lean fixture for the 3.2.1 target, then point the focused native test at those artifacts.
 
