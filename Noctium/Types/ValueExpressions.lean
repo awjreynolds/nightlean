@@ -15,6 +15,7 @@ def ScalarExpression.native (value : ScalarExpression) : Except String (Expr .na
   | ⟨.uint _, value⟩ => pure (.cast .native value)
   | ⟨.bytes _, _⟩ => throw "byte strings require an aggregate bytes expression"
   | ⟨.opaqueBytes, _⟩ => throw "OpaqueBytes require a qualified ledger scalar expression"
+  | ⟨.opaqueString, _⟩ => throw "OpaqueString requires a qualified ledger scalar expression"
   | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
     throw "Jubjub values require a qualified curve expression"
   | ⟨.foreign _, _⟩ => throw "foreign values require a qualified curve expression"
@@ -38,6 +39,7 @@ private def scalarExpression (type : Ty) (number : Nat) : Except String ScalarEx
   | .uint maximum => pure ⟨.uint maximum, .uint maximum number⟩
   | .bytes _ => throw "byte strings require an aggregate bytes expression"
   | .opaqueBytes => throw "OpaqueBytes require a qualified ledger scalar expression"
+  | .opaqueString => throw "OpaqueString requires a qualified ledger scalar expression"
   | .jubjubScalar | .jubjubPoint => throw "Jubjub values require a qualified curve expression"
   | .foreign _ => throw "foreign values require a qualified curve expression"
 
@@ -123,6 +125,7 @@ private def evalAux (context : EvalContext) (environment : EvalEnv) : Nat → Ag
         | ⟨.uint maximum, expression⟩ => @Noctium.Expr.eval (.uint maximum) context environment expression
         | ⟨.bytes _, _⟩ => throw "byte strings require an aggregate bytes expression"
         | ⟨.opaqueBytes, _⟩ => throw "OpaqueBytes require a qualified ledger scalar expression"
+        | ⟨.opaqueString, _⟩ => throw "OpaqueString requires a qualified ledger scalar expression"
         | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
           throw "Jubjub values require a qualified curve expression"
         | ⟨.foreign _, _⟩ => throw "foreign values require a qualified curve expression"

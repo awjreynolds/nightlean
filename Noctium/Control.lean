@@ -57,7 +57,7 @@ private def constantBool (value : Abstract) : Option Bool := do
 private def abstractCast (ty : ResultType) (value : Abstract) : Abstract :=
   {value with ty, literal := match ty, value.literal with
     | .scalar ty, some literal =>
-      if ty.isBytes || ty.isOpaqueBytes || ty.isJubjub || ty.isForeign then none
+      if ty.isBytes || ty.isOpaqueBytes || ty.isOpaqueString || ty.isJubjub || ty.isForeign then none
       else (ScalarPolicy.cast literal ty.scalarKind).toOption
     | _, _ => none}
 
@@ -319,6 +319,7 @@ private def typeName : ResultType → String
   | .scalar (.uint maximum) => s!"UIntRange<{maximum + 1}>"
   | .scalar (.bytes length) => s!"Bytes<{length}>"
   | .scalar .opaqueBytes => "OpaqueBytes"
+  | .scalar .opaqueString => "OpaqueString"
   | .scalar .jubjubScalar => "JubjubScalar"
   | .scalar .jubjubPoint => "JubjubPoint"
   | .scalar (.foreign kind) => kind.sourceName
