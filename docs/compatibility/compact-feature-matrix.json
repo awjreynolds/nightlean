@@ -682,8 +682,8 @@
       "id": "C-LANG-CONTROL",
       "layer": "language",
       "surface": "if, short-circuit logic, return, sequencing",
-      "noctiumStatus": "missing",
-      "notes": "Guard witness calls, failed assertions, state effects and event effects correctly.",
+      "noctiumStatus": "subset",
+      "notes": "Ordinary typed circuits support lazy andThen and orElse. The ZKIR 3.2.1 case skips inactive UInt narrowing and enforces its bound on the active path, including nested expressions. Guarded statement and witness evidence covers the scoped cases below. Full control-flow conformance remains open.",
       "source": [
         "reference"
       ],
@@ -691,7 +691,13 @@
         "SEM",
         "ZK"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Frontend/Core.lean",
+        "Noctium/GuardedExpression.lean",
+        "tests/LazyBoolean.lean",
+        "runtime/tests/native_boolean_gates.rs",
+        "docs/development/boolean-gates.md"
+      ],
       "equivalence": "unverified",
       "nativeBranchUpdate": {
         "checkedOn": "2026-11-18",
