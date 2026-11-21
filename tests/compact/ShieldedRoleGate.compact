@@ -1,0 +1,72 @@
+// Behavior slice for the upstream ShieldedAccessControl module pinned at
+// OpenZeppelin/compact-contracts f85f1a23685c6bbedfc8c2589ae3aa128aff7c46
+// (source blob 68cee5368e49951c62dcaa40fa75e8c3d3d023bc). The source header
+// identifies OpenZeppelin Compact Contracts v0.5.0-alpha.2 and language
+// >= 0.28.0. The compiler fixture pin is Compact 0.36.1, language 0.28.0.
+pragma language_version >= 0.28.0;
+import CompactStandardLibrary;
+
+export new type RoleIdentifier = Bytes<32>;
+export new type AccountIdentifier = Bytes<32>;
+export new type RoleCommitment = Bytes<32>;
+export new type RoleNullifier = Bytes<32>;
+
+export ledger operatorRoles: MerkleTree<20, RoleCommitment>;
+export ledger revokedRoleNullifiers: Set<RoleNullifier>;
+export ledger protectedActions: Counter;
+export sealed ledger instanceSalt: Bytes<32>;
+
+witness wit_secretKey(): Bytes<32>;
+witness wit_getRoleCommitmentPath(
+  roleCommitment: RoleCommitment
+): MerkleTreePath<20, RoleCommitment>;
+
+constructor(salt: Bytes<32>) {
+  instanceSalt = disclose(salt);
+}
+
+circuit computeAccountId(secretKey: Bytes<32>): AccountIdentifier {
+  return persistentHash<Vector<3, Bytes<32>>>([
+    secretKey,
+    instanceSalt,
+    pad(32, "ShieldedAccessControl:accountId")
+  ]) as AccountIdentifier;
+}
+
+circuit computeRoleCommitment(
+  role: RoleIdentifier,
+  accountId: AccountIdentifier
+): RoleCommitment {
+  return persistentHash<Vector<4, Bytes<32>>>([
+    role as Bytes<32>,
+    accountId as Bytes<32>,
+    instanceSalt,
+    pad(32, "ShieldedAccessControl:commitment")
+  ]) as RoleCommitment;
+}
+
+pure circuit computeNullifier(roleCommitment: RoleCommitment): RoleNullifier {
+  return persistentHash<Vector<2, Bytes<32>>>([
+    roleCommitment as Bytes<32>,
+    pad(32, "ShieldedAccessControl:nullifier")
+  ]) as RoleNullifier;
+}
+
+export circuit protectedAction(role: RoleIdentifier): [] {
+  const accountId = computeAccountId(wit_secretKey());
+  const roleCommitment = computeRoleCommitment(role, accountId);
+  const path = wit_getRoleCommitmentPath(roleCommitment);
+  const isValidPath = operatorRoles.checkRoot(
+    merkleTreePathRoot<20, RoleCommitment>(disclose(path))
+  );
+  if (isValidPath) {
+    assert(
+      path.leaf == roleCommitment,
+      "ShieldedRoleGate: path leaf does not match role commitment"
+    );
+  }
+  const nullifier = computeNullifier(roleCommitment);
+  const isRevoked = revokedRoleNullifiers.member(disclose(nullifier));
+  assert(isValidPath && !isRevoked, "ShieldedRoleGate: unauthorized role");
+  protectedActions.increment(1);
+}

@@ -120,7 +120,9 @@ inductive BytesOp where
   | persistentHashVector32
   | persistentHashNative
   | persistentHashNativeVector
+  | transientHashNativeVector
   | persistentHashPoint
+  | sha256 (length : Nat)
   | sha512 (length : Nat)
   | keccak256 (length : Nat)
   | reverseBytes32
@@ -141,7 +143,9 @@ def BytesOp.operationName : BytesOp → String
   | .persistentHashVector32 => "persistentHashVector32"
   | .persistentHashNative => "persistentHashNative"
   | .persistentHashNativeVector => "persistentHashNativeVector"
+  | .transientHashNativeVector => "transientHashNativeVector"
   | .persistentHashPoint => "persistentHashPoint"
+  | .sha256 length => s!"sha256:{length}"
   | .sha512 length => s!"sha512:{length}"
   | .keccak256 length => s!"keccak256:{length}"
   | .reverseBytes32 => "reverseBytes32"
@@ -180,9 +184,17 @@ def BytesOp.signature (operation : BytesOp) (argumentCount : Nat) : Except Strin
     unless argumentCount ≥ 1 && argumentCount ≤ 32 do
       throw "persistentHashNativeVector requires 1 to 32 Native arguments"
     pure (List.replicate argumentCount .native, .bytes 32)
+  | .transientHashNativeVector =>
+    unless argumentCount ≤ Types.defaultLimits.maxVectorLength do
+      throw "transientHashNativeVector field count is outside the source limit"
+    pure (List.replicate argumentCount .native, .native)
   | .persistentHashPoint =>
     unless argumentCount == 1 do throw "persistentHashPoint requires one JubjubPoint argument"
     pure ([.jubjubPoint], .bytes 32)
+  | .sha256 length =>
+    unless argumentCount == 1 do throw "sha256 requires one byte-string argument"
+    unless length ≤ Types.defaultLimits.maxVectorLength do throw "sha256 input length exceeds the source limit"
+    pure ([.bytes length], .bytes 32)
   | .sha512 length =>
     unless argumentCount == 1 do throw "sha512 requires one byte-string argument"
     unless length ≤ Types.defaultLimits.maxVectorLength do throw "sha512 input length exceeds the source limit"
@@ -2435,10 +2447,16 @@ mutual
         | .persistentHashNativeVector, values => do
           let values ← values.mapM fun value => liftD (typedExpr span .native value)
           pure (scalarValue (Expr.persistentHashNativeVector values))
+        | .transientHashNativeVector, values => do
+          let values ← values.mapM fun value => liftD (typedExpr span .native value)
+          pure (scalarValue (Expr.transientHash values))
         | .persistentHashPoint, [value] => do
           let point ← liftD (typedExpr span .jubjubPoint value)
           pure (scalarValue (Expr.persistentHashNativeVector [
             Expr.jubjubCoordinate point 0, Expr.jubjubCoordinate point 1]))
+        | .sha256 length, [value] => do
+          let value ← liftD (typedExpr span (.bytes length) value)
+          pure (scalarValue (Expr.sha256 value))
         | .sha512 length, [value] => do
           let value ← liftD (typedExpr span (.bytes length) value)
           pure (scalarValue (Expr.sha512 value))

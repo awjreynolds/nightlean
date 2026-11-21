@@ -71,6 +71,7 @@ jobs:
           lake env lean tests/NativePreparationCursor.lean
           lake env lean tests/ImpactEffectBoundaries.lean
           lake env lean tests/HostedLedgerWitness.lean
+          lake env lean tests/TypedWitnessResultCodec.lean
           lake env lean tests/LedgerWitnessTransform.lean
           lake env lean tests/StructuredLedgerWitness.lean
           lake env lean tests/StructuredTypedCells.lean
@@ -148,6 +149,7 @@ jobs:
           lake env lean tests/Issue43EffectBlocks.lean
           lake env lean examples/openzeppelin/PublicSupply.lean
           lake env lean examples/openzeppelin/ConfidentialToken.lean
+          .lake/build/bin/noctium check examples/openzeppelin/ShieldedRoleGate.lean --target profiles/midnight-ledger-9-zkir-3.2.1-target.json
       - name: Check source proof registration
         run: |
           lake build Noctium.Verification

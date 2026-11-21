@@ -603,6 +603,10 @@ private def lowerFixedConcat (leftLength rightLength : Nat)
     (left right : ByteOperands) : LowerM ByteOperands := do
   if leftLength == 0 then return right
   if rightLength == 0 then return left
+  if !left.packed && !right.packed then
+    if left.values.length != leftLength || right.values.length != rightLength then
+      rejectLowering "byte leaf count mismatch"
+    return {values := left.values ++ right.values}
   let left ← lowerFixedBytesFromChunks leftLength (← byteChunks leftLength left)
   let right ← lowerFixedBytesFromChunks rightLength (← byteChunks rightLength right)
   let key : ExpressionKey := ("concat", [left, right], none)

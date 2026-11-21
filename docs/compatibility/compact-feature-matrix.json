@@ -3568,8 +3568,8 @@
       "id": "C-STDLIB-MERKLETREEPATH",
       "layer": "standard-library",
       "surface": "MerkleTreePath",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "The shielded role example uses a checked depth-20 Bytes32 path with a native sibling and a Boolean direction per step. The provider ABI binds the exact codec. Other depths and leaf types need separate evidence.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3582,7 +3582,10 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/TypedWitnessResultCodec.lean",
+        "docs/development/shielded-role-gate.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5002,7 +5005,7 @@
       "layer": "standard-library",
       "surface": "merkleTreePathRoot",
       "noctiumStatus": "related-subset",
-      "notes": "Claim example computes a selected fixed-depth path, not this generic library API or standard leaf hash.",
+      "notes": "The shielded role example hashes a Bytes32 leaf using the ledger domain and computes a depth-20 root from checked path directions and siblings. The native result and three authorization rejections match the pinned Compact workload. The general API needs separate evidence.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5016,7 +5019,8 @@
         "ABI"
       ],
       "observedEvidence": [
-        "docs/development/native-localnet.md"
+        "docs/development/native-localnet.md",
+        "docs/development/shielded-role-gate.md"
       ],
       "equivalence": "unverified"
     },
