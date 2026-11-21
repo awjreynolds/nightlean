@@ -34,3 +34,5 @@ NOCTIUM_LAZY_BOOLEAN_DIR="$PWD/build/lazy-boolean" \
 ```
 
 The separate formal witness semantics needs reconciliation with the expanded byte, curve and Boolean language. [Issue 21](https://github.com/awjreynolds/noctium/issues/21#issuecomment-6971590829) tracks that gap. The focused execution cases do not establish witness-erasure or whole-language preservation.
+
+`ite(condition, thenValue, elseValue)` binds the condition once and requires both branches to have the same type. Only the selected branch's dynamic checks apply. `select` evaluates both branches. The [Lean conditional fixture](../../tests/LazyConditional.lean) and [pinned Compact comparator](../../tests/compact/LazyConditional.compact) exercise both branch directions with an invalid `UInt 1` narrowing. The [native check](../../runtime/tests/native_boolean_gates.rs) also changes each private condition in the accepted proof input and checks rejection against the emitted relation.

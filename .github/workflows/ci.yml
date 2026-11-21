@@ -97,6 +97,7 @@ jobs:
           lake env lean tests/ByteHashes.lean
           lake env lean tests/BooleanGates.lean
           lake env lean tests/LazyBoolean.lean
+          lake env lean tests/LazyConditional.lean
           lake env lean tests/HashToCurve.lean
           lake env lean tests/ForeignTransport.lean
           lake env lean tests/ForeignPointLiterals.lean
