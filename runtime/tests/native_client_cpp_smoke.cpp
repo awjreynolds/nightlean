@@ -55,7 +55,17 @@ static std::string command(uint64_t c,const char* op,Host& host){uint64_t out=0;
 static std::string observe(uint64_t c,Host& h){for(unsigned i=0;i<180;++i){auto s=command(c,"observe",h);if(s.find("\"receipt\":")!=std::string::npos)return s;assert(field(s,"status")=="step_done");std::this_thread::sleep_for(std::chrono::milliseconds(500));}assert(false);return{};}
 static Bytes transaction(uint64_t c){uint64_t t=0;assert(noctium_client_transaction(c,&t)==NOCTIUM_NATIVE_OK);return take(t);}
 static Bytes state(uint64_t c){uint64_t t=0;assert(noctium_client_receipt_state(c,&t)==NOCTIUM_NATIVE_OK);return take(t);}
-static std::string private_value(Host& h,const std::string& ns){auto q="{\"namespace\":\""+ns+"\",\"key\":\"claims/accepted\"}";uint64_t p=0;assert(noctium_localnet_private_value(h.adapter,reinterpret_cast<const uint8_t*>(q.data()),q.size(),&p)==NOCTIUM_NATIVE_OK);auto b=take(p,true);auto s=text(b);wipe(b);return s;}
+static std::string private_value(Host& host, const std::string& name_space,
+                                 const std::string& key = "claims/accepted") {
+  const auto request = "{\"namespace\":\"" + name_space + "\",\"key\":\"" + key + "\"}";
+  uint64_t token = 0;
+  assert(noctium_localnet_private_value(host.adapter,
+      reinterpret_cast<const uint8_t*>(request.data()), request.size(), &token) == NOCTIUM_NATIVE_OK);
+  auto data = take(token, true);
+  const auto value = text(data);
+  wipe(data);
+  return value;
+}
 static uint64_t recover(const Bytes& descriptor,const std::string& ctx){uint64_t c=0;assert(noctium_client_recover(descriptor.data(),descriptor.size(),reinterpret_cast<const uint8_t*>(ctx.data()),ctx.size(),&c)==NOCTIUM_NATIVE_OK);return c;}
 static uint64_t prove_source(const Bytes& descriptor,const Bytes& config,const Bytes& parameters){
   auto entropy=coins();uint64_t source=0,t=0,request=0;assert(noctium_native_begin(descriptor.data(),descriptor.size(),config.data(),config.size(),parameters.data(),parameters.size(),entropy.data(),entropy.size(),&source)==NOCTIUM_NATIVE_OK);wipe(entropy);
@@ -86,7 +96,7 @@ static uint64_t chain_ttl(Host& host) {
 }
 
 static uint64_t finalize_module_call(uint64_t client, const std::string& operation,
-                                    Host& host, bool recovery) {
+                                    Host& host, bool recovery, std::string* revision = nullptr) {
   if (!recovery) {
     assert(field(command(client, "prepare", host), "phase") == "Prepared");
     assert(field(command(client, "submit", host), "status") == "step_done");
@@ -98,6 +108,7 @@ static uint64_t finalize_module_call(uint64_t client, const std::string& operati
   const auto accepted = command(client, "commit", host);
   assert(field(accepted, "phase") == "Committed");
   assert(accepted.find("\"privateCommitted\":true") != std::string::npos);
+  if (revision) *revision = field(accepted, "privateRevision");
   require_ok(noctium_native_contract_state_take(client, &next), "take committed state");
   uint64_t duplicate = 99;
   assert(noctium_native_contract_state_take(client, &duplicate) == NOCTIUM_NATIVE_INVALID_STATE);
@@ -112,7 +123,143 @@ static std::string module_namespace(const std::string& id) {
   return "cpp67-" + id.substr(0, 24);
 }
 
-static int modules(int argc, char** argv, bool recovery) {
+static constexpr auto wallet_key = "noctium/NoctiumExamples.Wallet/saved";
+static constexpr auto wallet_capability = "private_state:NoctiumExamples.Wallet";
+static constexpr auto uint8_schema = "UIntRange<256>";
+
+static std::string typed_context(const std::string& attempt, const std::string& name_space,
+                                 const std::string& revision, const std::string& provider) {
+  const auto operation = "noctium.witness." + provider + ".v1";
+  return "{\"protocolVersion\":1,\"namespace\":\"" + name_space
+      + "\",\"baseRevision\":\"" + revision + "\",\"attemptId\":\"" + attempt
+      + "\",\"commitCapability\":\"" + wallet_capability + "\",\"capabilities\":["
+      + "{\"id\":\"" + wallet_capability + "\",\"namespace\":\"" + name_space
+      + "\",\"keyPrefix\":\"noctium/NoctiumExamples.Wallet/\",\"operations\":["
+      + "\"private_state.read.v1\",\"private_state.stage.v1\",\"private_state.compare_exchange.v1\"]},"
+      + "{\"id\":\"" + provider + "\",\"namespace\":\"" + name_space
+      + "\",\"keyPrefix\":\"callbacks/\",\"operations\":[\"" + operation + "\"]}],"
+      + "\"operations\":[{\"operation\":\"private_state.read.v1\",\"argumentSchema\":{\"key\":\"Key\"},"
+      + "\"resultSchema\":\"" + uint8_schema + "\"},{\"operation\":\"" + operation
+      + "\",\"argumentSchema\":{\"previous\":\"" + uint8_schema + "\"},\"resultSchema\":\""
+      + uint8_schema + "\"}],\"providers\":[{\"input\":\"private_state.read.NoctiumExamples.Wallet.saved.v1\","
+      + "\"operation\":\"private_state.read.v1\",\"capability\":\"" + wallet_capability
+      + "\",\"arguments\":{\"key\":\"" + wallet_key + "\"}},{\"input\":\"" + provider
+      + "\",\"operation\":\"" + operation + "\",\"capability\":\"" + provider
+      + "\",\"arguments\":{}}]}";
+}
+
+static std::string typed_reply(const std::string& request, const std::string& attempt,
+                               const std::string& decimal) {
+  return "{\"protocolVersion\":2,\"requestId\":\"" + field(request, "requestId")
+      + "\",\"attemptId\":\"" + attempt + "\",\"outcome\":\"value\",\"operation\":\""
+      + field(request, "operation") + "\",\"capability\":\"" + field(request, "capability")
+      + "\",\"schema\":\"" + field(request, "schema") + "\",\"value\":\"" + decimal + "\"}";
+}
+
+static uint64_t start_typed_module_call(uint64_t target, uint64_t& current,
+    const std::string& selection, const std::string& operation, const std::string& attempt,
+    const std::string& name_space, const std::string& revision, const Bytes& descriptor,
+    const Bytes& srs, Host& host) {
+  const bool first = operation == "advance";
+  assert(first || operation == "advanceAgain");
+  const std::string provider = first ? "NoctiumExamples.nextValue"
+                                     : "NoctiumExamples.nextValueAfterCheckpoint";
+  const std::string prior = first ? "6" : "7";
+  const std::string next = first ? "7" : "9";
+  const auto inputs = "{\"expected\":\"" + next + "\"}";
+  auto begin = [&](const std::string& id) {
+    const auto source_context = typed_context(id, name_space, revision, provider);
+    auto entropy = coins();
+    uint64_t witness = 0;
+    require_ok(noctium_native_contract_witness_begin(
+        target, current, bytes(selection), selection.size(), bytes(inputs), inputs.size(),
+        bytes(source_context), source_context.size(), srs.data(), srs.size(),
+        entropy.data(), entropy.size(), &witness), "begin bound typed witness");
+    wipe(entropy);
+    assert(noctium_native_contract_state_free(current) == NOCTIUM_NATIVE_INVALID_HANDLE);
+    current = 0;
+    return witness;
+  };
+  if (first) {
+    const auto cancelled = begin(attempt_id());
+    uint64_t status = 0, private_request = 0;
+    require_ok(noctium_native_contract_witness_advance(cancelled, &status), "advance before cancel");
+    assert(field(text(take(status)), "status") == "need_host");
+    require_ok(noctium_native_contract_witness_private_request(cancelled, &private_request), "get request before cancel");
+    require_ok(noctium_native_contract_witness_cancel(cancelled, &current), "cancel bound typed witness");
+    size_t size = 99;
+    assert(noctium_native_private_length(private_request, &size) == NOCTIUM_NATIVE_INVALID_HANDLE);
+    assert(size == 0 && current != 0);
+  }
+  const auto witness = begin(attempt);
+  unsigned requests = 0;
+  for (; requests < 3; ++requests) {
+    uint64_t status = 0;
+    require_ok(noctium_native_contract_witness_advance(witness, &status), "advance bound typed witness");
+    const auto pending = text(take(status));
+    assert(pending.find("\"arguments\":") == std::string::npos);
+    if (field(pending, "status") == "completed") break;
+    assert(field(pending, "status") == "need_host");
+    uint64_t token = 0;
+    require_ok(noctium_native_contract_witness_private_request(witness, &token), "read private typed request");
+    size_t size = 99;
+    assert(noctium_native_result_length(token, &size) == NOCTIUM_NATIVE_INVALID_HANDLE && size == 0);
+    auto private_bytes = take(token, true);
+    auto request = text(private_bytes);
+    wipe(private_bytes);
+    assert(field(pending, "schema") == uint8_schema);
+    assert(field(request, "requestId") == field(pending, "requestId"));
+    std::string answer;
+    if (requests == 0) {
+      assert(field(request, "operation") == "private_state.read.v1");
+      assert(field(request, "key") == wallet_key);
+      const auto saved = private_value(host, name_space, wallet_key);
+      if (first) {
+        assert(saved == "null");
+        answer = "6";
+      } else {
+        assert(field(saved, "value") == "7");
+        answer = field(saved, "value");
+      }
+    } else {
+      assert(requests == 1 && field(request, "operation") == "noctium.witness." + provider + ".v1");
+      assert(field(request, "previous") == prior);
+      answer = std::to_string(std::stoul(field(request, "previous")) + (first ? 1 : 2));
+      assert(answer == next);
+    }
+    auto response = typed_reply(pending, attempt, answer);
+    if (first && requests == 0) {
+      const auto crossed = typed_reply(pending, std::string(64, 'f'), answer);
+      status = 99;
+      assert(noctium_native_contract_witness_resume(witness, bytes(crossed), crossed.size(), &status)
+             == NOCTIUM_NATIVE_INVALID_RESPONSE && status == 0);
+      std::vector<uint64_t> retained(64);
+      for (auto& token : retained) {
+        require_ok(noctium_native_contract_witness_advance(witness, &token), "retain callback status");
+      }
+      status = 99;
+      assert(noctium_native_contract_witness_resume(witness, bytes(response), response.size(), &status)
+             == NOCTIUM_NATIVE_LIMIT && status == 0);
+      for (auto token : retained) require_ok(noctium_native_result_free(token), "release callback status");
+    }
+    require_ok(noctium_native_contract_witness_resume(witness, bytes(response), response.size(), &status),
+               "resume bound typed witness");
+    take(status);
+    for (volatile auto& byte : response) byte = 0;
+    for (volatile auto& byte : request) byte = 0;
+  }
+  assert(requests == 2);
+  auto entropy = coins();
+  uint64_t client = 0;
+  require_ok(noctium_client_contract_witness_start(
+      witness, descriptor.data(), descriptor.size(), entropy.data(), entropy.size(), &client),
+      "prove and start bound typed call");
+  wipe(entropy);
+  assert(noctium_native_contract_witness_free(witness) == NOCTIUM_NATIVE_INVALID_HANDLE);
+  return client;
+}
+
+static int modules(int argc, char** argv, bool recovery, bool typed = false) {
   assert(argc == 9);
   const auto descriptor = read(argv[2]);
   Host host{open_adapter(read(argv[3]), true)};
@@ -143,12 +290,20 @@ static int modules(int argc, char** argv, bool recovery) {
   wipe(entropy);
   wipe(state_config);
   const auto address = field(text(take(metadata_token)), "contractAddress");
+  const std::string first_operation = typed ? "advance" : "firstUpdate";
+  const auto witness_namespace = "cpp67-typed-" + address.substr(0, 24);
+  std::string private_revision = "r0";
   uint64_t current = 0;
   auto start = [&](const std::string& operation, const std::string& value,
                    const std::string& id, int32_t expected = NOCTIUM_NATIVE_OK) {
     const auto selection = "{\"abiVersion\":1,\"operation\":\"" + operation
-                         + "\",\"k\":6,\"ttl\":" + std::to_string(chain_ttl(host))
+                         + "\",\"k\":" + (typed ? "7" : "6") + ",\"ttl\":" + std::to_string(chain_ttl(host))
                          + ",\"proofParametersSha256\":\"" + srs_sha + "\"}";
+    if (typed) {
+      assert(expected == NOCTIUM_NATIVE_OK);
+      return start_typed_module_call(target, current, selection, operation, id, witness_namespace,
+                                     private_revision, descriptor, srs, host);
+    }
     const auto inputs = "{\"value\":\"" + value + "\"}";
     const auto setup_json = setup(context(id, module_namespace(id)));
     uint64_t client = 99;
@@ -172,28 +327,39 @@ static int modules(int argc, char** argv, bool recovery) {
   if (!recovery) {
     const auto deploy_id = attempt_id();
     const auto setup_json = setup(context(deploy_id, module_namespace(deploy_id)));
-    const std::string operation = "firstUpdate";
     uint64_t deployment = 0;
     require_ok(noctium_client_contract_deployment_start(
-        target, bytes(operation), operation.size(), descriptor.data(), descriptor.size(),
+        target, bytes(first_operation), first_operation.size(), descriptor.data(), descriptor.size(),
         bytes(setup_json), setup_json.size(), &deployment), "start module deployment");
     current = finalize_module_call(deployment, "deploy", host, false);
     const auto call_id = attempt_id();
-    const auto first = start(operation, "11", call_id);
+    const auto first = start(first_operation, "11", call_id);
     assert(field(command(first, "prepare", host), "phase") == "Prepared");
     const auto sealed = transaction(first);
     host.lose_submit_ack = true;
     const auto uncertain = command(first, "submit", host);
     assert(field(uncertain, "phase") == "Uncertain");
-    assert(private_value(host, module_namespace(call_id)) == "null");
+    assert((typed ? private_value(host, witness_namespace, wallet_key)
+                  : private_value(host, module_namespace(call_id))) == "null");
+    std::string recovery_context;
+    if (typed) {
+      uint64_t token = 0;
+      require_ok(noctium_client_recovery_context(first, &token), "take typed recovery context");
+      auto private_data = take(token, true);
+      recovery_context = text(private_data);
+      wipe(private_data);
+    }
     require_ok(noctium_client_detach(first), "detach uncertain client");
     write(argv[8], "{\"deploymentAttempt\":\"" + deploy_id + "\",\"callAttempt\":\"" + call_id
           + "\",\"transactionId\":\"" + field(uncertain, "transactionId")
-          + "\",\"contractAddress\":\"" + address + "\",\"transactionHex\":\"" + hex(sealed) + "\"}", true);
+          + "\",\"contractAddress\":\"" + address + "\",\"transactionHex\":\"" + hex(sealed)
+          + "\"" + (typed ? ",\"typedContext\":" + recovery_context : "") + "}", true);
+    for (volatile auto& byte : recovery_context) byte = 0;
   } else {
     assert(address == field(reference, "contractAddress"));
     const auto call_id = field(reference, "callAttempt");
-    const auto host_context = context(call_id, module_namespace(call_id));
+    auto host_context = typed ? object(reference, "typedContext")
+                              : context(call_id, module_namespace(call_id));
     const auto deploy_id = field(reference, "deploymentAttempt");
     const auto crossed_context = context(deploy_id, module_namespace(deploy_id));
     uint64_t denied = 99;
@@ -205,25 +371,36 @@ static int modules(int argc, char** argv, bool recovery) {
     require_ok(noctium_native_contract_call_recover(
         target, bytes(call_id), call_id.size(), descriptor.data(), descriptor.size(),
         bytes(host_context), host_context.size(), &first), "recover module call");
+    for (volatile auto& byte : host_context) byte = 0;
     drive(first, host);
     assert(hex(transaction(first)) == field(reference, "transactionHex"));
-    current = finalize_module_call(first, "firstUpdate", host, true);
+    current = finalize_module_call(first, first_operation, host, true, &private_revision);
     assert(std::count(host.operations.begin(), host.operations.end(),
                       "private_state.compare_exchange.v1") == 1);
-    assert(private_value(host, module_namespace(call_id)).find("\"value\":true") != std::string::npos);
     for (const auto& operation : host.operations) {
       assert(operation != "funding.native.v1" && operation != "approval.sign.v1");
     }
-    const std::pair<const char*, const char*> calls[] = {
-        {"againRead", "11"}, {"againUpdate", "23"}, {"differentUpdate", "7"}
-    };
-    for (const auto& [operation, value] : calls) {
-      current = finalize_module_call(start(operation, value, attempt_id()), operation, host, false);
+    if (typed) {
+      assert(private_revision == "r1");
+      assert(field(private_value(host, witness_namespace, wallet_key), "value") == "7");
+      current = finalize_module_call(start("advanceAgain", "9", attempt_id()), "advanceAgain",
+                                     host, false, &private_revision);
+      assert(private_revision == "r2");
+      assert(field(private_value(host, witness_namespace, wallet_key), "value") == "9");
+    } else {
+      assert(private_value(host, module_namespace(call_id)).find("\"value\":true") != std::string::npos);
+      const std::pair<const char*, const char*> calls[] = {
+          {"againRead", "11"}, {"againUpdate", "23"}, {"differentUpdate", "7"}
+      };
+      for (const auto& [operation, value] : calls) {
+        current = finalize_module_call(start(operation, value, attempt_id()), operation, host, false);
+      }
+      start("againRead", "22", attempt_id(), NOCTIUM_NATIVE_INVALID_ARGUMENT);
     }
-    start("againRead", "22", attempt_id(), NOCTIUM_NATIVE_INVALID_ARGUMENT);
     require_ok(noctium_native_contract_state_free(current), "free final module state");
     std::cout << "{\"recoveredFirstCall\":true,\"crossedRecoveryRejected\":true,"
-              << "\"staleReadRejected\":true,\"contractAddress\":\""
+              << (typed ? "\"secondCallbackReadCommittedState\":true," : "\"staleReadRejected\":true,")
+              << "\"contractAddress\":\""
               << address << "\"}" << std::endl;
     for (volatile auto& byte : reference) byte = 0;
   }
@@ -236,6 +413,9 @@ int main(int argc,char** argv){
   assert(argc>=2);const std::string mode=argv[1];
   if (mode == "modules-run" || mode == "modules-recover") {
     return modules(argc, argv, mode == "modules-recover");
+  }
+  if (mode == "typed-modules-run" || mode == "typed-modules-recover") {
+    return modules(argc, argv, mode == "typed-modules-recover", true);
   }
   if(mode=="run"){
     assert(argc==9);auto proof_descriptor=read(argv[2]),private_config=read(argv[3]),srs=read(argv[4]),descriptor=read(argv[5]),local=read(argv[6]);Host host{open_adapter(local,true)};

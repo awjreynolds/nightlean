@@ -203,7 +203,12 @@ A rejected handoff preserves a completed invocation for corrected retry. After s
 
 Chain acceptance and private CAS are separate outcomes. A finalized call does not disappear when private storage reports a revision conflict. Recovery retains typed schemas and the exact source journal through the existing trusted-store protocol.
 
-The qualified single-operation context covers deployment and its first call. [Existing-state calls and multi-entrypoint assembly](https://github.com/awjreynolds/noctium/issues/67) have a separate integration gate. Source execution does not require a fresh-deployment assumption inside the interpreter or provider protocol.
+The single-operation context covers deployment and its first call. The
+multi-entrypoint C ABI selects a retained operation and uses an opaque state
+token from a finalized, privately committed client. The linked C++ host
+executed two typed callbacks against one Ledger 9 deployment, recovering the
+first call after restart before the second callback read its committed value.
+[Multi-entrypoint ABI and receipt](native-client-abi.md#run-typed-witnesses-against-the-current-state)
 
 The Rust contract-set POC also supports corrected pre-proof retries at an
 authenticated current-state checkpoint. `WitnessExecution::begin_contract_operation`

@@ -86,6 +86,44 @@ digest matched the Rust module run. A mismatched recovery context and a stale
 read both rejected.
 [C++ receipts and artifact pins](module-ledger-cpp-localnet-receipts.json)
 
+## Run typed witnesses against the current state
+
+For an operation with witness sidecars, call
+`noctium_native_contract_witness_begin` with its authenticated contract target,
+current-state token, selected operation, source inputs, typed host context
+and SRS. The runtime selects the control plan from the retained bundle and
+binds ledger reads to the state token before requesting callbacks.
+
+Advance the witness handle to get request metadata. Read callback arguments
+through the private token API and resume with a typed response for the same
+attempt. To abandon an unprepared invocation, cancel it to recover the
+current state. On completion, `noctium_client_contract_witness_start` prepares
+and proves the call locally, then transfers its source runtime into the
+native client. Drive the client through finality and durable private commit
+before taking the next state token.
+
+For the linked C++ test, compile [TypedMultiEntryWitness](../../tests/TypedMultiEntryWitness.lean)
+with `--emit ledger --emit witness` and assemble both authenticated operation
+bundles. Initialize the public count at 6. The test uses 6 as the application
+default for its private cell and reads the journal after the first commit.
+Use the same localnet and client settings as the scalar test, with the
+pinned K7 SRS. Keep the exported recovery context and handoff file private.
+
+```sh
+"$CPP_HOST" typed-modules-run "$CLIENT" "$LOCALNET" "$TARGET" "$INITIAL_STATE" \
+  "$K7_SRS" "$K7_SHA256" "$HANDOFF"
+"$CPP_HOST" typed-modules-recover "$CLIENT" "$LOCALNET" "$TARGET" "$INITIAL_STATE" \
+  "$K7_SRS" "$K7_SHA256" "$HANDOFF"
+```
+
+Ledger 9 finalized the deployment and both typed calls at blocks 145, 148
+and 151. The host lost the first call's submission acknowledgement and
+recovered its original signed transaction in a new process. The next
+callback read the committed wallet value of 7, then advanced the public
+count and private fixture value to 9. The test rejected a crossed callback
+reply and retried the same valid response after releasing a full result
+queue. [Finalized typed witness receipts and artifact pins](typed-multi-entry-cpp-receipts.json)
+
 ## Read Merkle snapshots
 
 `noctium_ledger_collection_page` reads ordinary and historic Merkle trees

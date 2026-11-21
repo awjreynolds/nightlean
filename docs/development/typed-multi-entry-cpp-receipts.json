@@ -1,0 +1,142 @@
+{
+  "schemaVersion": 1,
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "network": "funded development localnet",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "host": "linked C++ on darwin-arm64",
+  "runtime": {
+    "specVersion": 2001100,
+    "transactionVersion": 4,
+    "images": {
+      "node": "midnightntwrk/midnight-node@sha256:0c1ad548d523c1109aa1f16daab1bf72dcb78c7e17b8a8c6d97424ad0eba7b8a",
+      "relay": "node@sha256:e67514e5d0f6c46656005e1b693b2ec9d52e80b641307de684d4a015ba7a4eaf",
+      "ledgerParameterToolkit": "midnightntwrk/midnight-node-toolkit@sha256:904f824f3350530bc2fb03448906cc5f9f200b98e98bd9fbb274a1cc25b9f89c"
+    },
+    "ledgerRevision": "a2b30128ca4b660b73a068e29b56b48ede8c9a74",
+    "zkirRevision": "7a51b3385bbf4bce3604df87a7c70867c9ab43c0"
+  },
+  "artifactProvenance": {
+    "compilerRevision": "417d905f0a3ff6de272e01aab35a26d837b1603a",
+    "compilerBinarySha256": "9931f0894008c4e8fa7989eaa63faecb2a8c677511395c19b2d14367dd7763f2",
+    "sourceSha256": "1e36663f06afb9c78aaba72f25f5f3bb3bd03e7eded77139dd7a9786583ead28",
+    "targetProfileSha256": "02b4242c2561232daea1d7d1d29bde68f3157eb9eed8cfb037254a0013f40093",
+    "ledgerParametersSha256": "d7d5f27e5dba936f21c14a8a8a1d5128c65f17fd09b2958c5b3c3593a94cd708",
+    "nativeZkirBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40",
+    "srsSha256": {
+      "bls_midnight_2p7": "e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d",
+      "bls_midnight_2p13": "d3324910969c4cc54143b8045b649e5c3a4bd5fb7b8f85fe1b770f640ce1c803",
+      "dust/10/spend.prover": "3dff9f54add761350ad02621a425d67fe3d656c8145fef8ef147870489ffdc81",
+      "dust/10/spend.verifier": "d15a1295780549f534287a39c938005e1faa3232be21861573bd0cdb148949cb",
+      "dust/10/spend.bzkir": "d211cacb22391b9db60f945787d98c16d344cbb4790246132117084c080399c1"
+    },
+    "operations": {
+      "advance": {
+        "k": 7,
+        "rows": 109,
+        "manifestSha256": "497a29dad11f32fbeebe6670c272c440b526a8a90730d55a655c0480db28ce03",
+        "state": [
+          {
+            "kind": {
+              "cell": "UIntRange<256>"
+            },
+            "name": "count"
+          }
+        ],
+        "circuitSha256": "6b083421964b45c7a063bb8a5b59b6c4b27d8ce660de4112810c5bfa7c786f1d",
+        "planSha256": "6b9bcdc74d2bf4bad0f78f418d5b8aa6c239b51f7f8eb6c8a85571c97d079074",
+        "proverKeySha256": "35478fa7e0ba1d701e59f435ad42fac2aefc3f327b75841102b54e8835eacc01",
+        "verifierKeySha256": "3555263791d68aac42638d354c9df30770b5c3210beb8dc4342d9e9dff1804fa",
+        "witnessBindingSha256": "1a9fba2fa25f1abde9799e9599de44ade78c4465bf2ffc788e7b1652cae371ff",
+        "witnessControlSha256": "da4a4c09095fa5080cf334bf76c112d9d665d91ad4599c9f92bc3ccf2b7bef8d"
+      },
+      "advanceAgain": {
+        "k": 7,
+        "rows": 109,
+        "manifestSha256": "cb983ba6e15db2c2177b91e52cf785f195055db8c970a24e0fc39f45cdaeb4a3",
+        "state": [
+          {
+            "kind": {
+              "cell": "UIntRange<256>"
+            },
+            "name": "count"
+          }
+        ],
+        "circuitSha256": "95e1395d2582d5148a0e9f0acaa18939ab582178bdf121bc26900ee3e95b443d",
+        "planSha256": "9447aec948173525e09c9e054f8f9f54cb56546eaf2af9f63446a1bea1d28671",
+        "proverKeySha256": "15b4d4a4804c9ead900be59f9334203934c64dde8ed982857ad4a31de82e7ccd",
+        "verifierKeySha256": "9cc85114d324fd15d0aad47d2b2f5deef13b424ecb81781314f327178b564d6f",
+        "witnessBindingSha256": "3659fae893a5749de91ada71a2ddff920223ce2f60e2c503e0c143ccd4418e7b",
+        "witnessControlSha256": "a59b09007320050673e2a004de9751fd6613747b4a814a87e48020f8d5688b81"
+      }
+    }
+  },
+  "receipts": [
+    {
+      "operation": "deploy",
+      "receipt": {
+        "blockHash": "3430d8c30113e73ae237a1123d1cc518fbee8a725b7d722359e11cfed2ac309e",
+        "contractAddress": "ad24bf2edef8595b0a658cf7cdeedc8c9fca5e4ac0321e6d77bd77d9fb9e18fe",
+        "contractStateBytes": 2900,
+        "contractStateSha256": "5b45067fd895025587ca5855fc90fde81fa06339825df840d171c8f89f206ce3",
+        "event": "Deploy",
+        "extrinsicHash": "ca3cd080decc7d56975a88cd878189688a46ff1a112ad909c4bfa3ac936b92a2",
+        "extrinsicIndex": 4,
+        "finalizedHash": "3430d8c30113e73ae237a1123d1cc518fbee8a725b7d722359e11cfed2ac309e",
+        "finalizedHeight": "145",
+        "height": "145",
+        "intentId": "efaa025091bb2b38cf9d6ce46538472c87f69dd60e3d40fee7c2038687cb3e15",
+        "transactionId": "12838df3a76c4e690513f8af388b5d6952c5f85b310f240830b0f168021ea079"
+      },
+      "count": "6"
+    },
+    {
+      "operation": "advance",
+      "receipt": {
+        "blockHash": "9d8b64496ba071ca24bb7ce1e3fa5521dfd86e31246306868e219878e540da16",
+        "contractAddress": "ad24bf2edef8595b0a658cf7cdeedc8c9fca5e4ac0321e6d77bd77d9fb9e18fe",
+        "contractStateBytes": 2900,
+        "contractStateSha256": "ebd6b8a852c404c3af599d4eebc522425be536651dd06a44f57f8c7b3181b993",
+        "event": "Call",
+        "extrinsicHash": "42d23ab9c1f19911d445e764499e3d4f5877bcbf01567d3b2445aa4299dc5e95",
+        "extrinsicIndex": 4,
+        "finalizedHash": "9d8b64496ba071ca24bb7ce1e3fa5521dfd86e31246306868e219878e540da16",
+        "finalizedHeight": "148",
+        "height": "148",
+        "intentId": "ae80ed1d278c2c6dad94ded43732d64ffa233b00a17fb4b4fb4d4a0b9f3d28f0",
+        "transactionId": "a6cf69f34758892b22a7870d827a1ca2caa96ee8315a285b8b4f45f3b1be7736"
+      },
+      "count": "7",
+      "committedFixtureWalletValue": "7"
+    },
+    {
+      "operation": "advanceAgain",
+      "receipt": {
+        "blockHash": "d2e5c0726db3171192f57d5d03e5274e2fc31bd9f67c00ce0407e0b5bf4c9a6d",
+        "contractAddress": "ad24bf2edef8595b0a658cf7cdeedc8c9fca5e4ac0321e6d77bd77d9fb9e18fe",
+        "contractStateBytes": 2900,
+        "contractStateSha256": "352e9055dc63f647a9cca4c46acb0e54cf9df6d9c2c7446f1646991cd15b1cbb",
+        "event": "Call",
+        "extrinsicHash": "6943a07b1ddb86416fdfe66eb6ccd8807411f9bd310573a401265fabbf8902fc",
+        "extrinsicIndex": 4,
+        "finalizedHash": "d2e5c0726db3171192f57d5d03e5274e2fc31bd9f67c00ce0407e0b5bf4c9a6d",
+        "finalizedHeight": "151",
+        "height": "151",
+        "intentId": "cf2431067157ee68c5a61b28cc938beab2d9bc9648cf7a5466f52552a047e41f",
+        "transactionId": "f91c7b9a243eae39c0fdc790f1ffcdf485e42d65a5369d71544a5fbfb08ef82f"
+      },
+      "count": "9",
+      "committedFixtureWalletValue": "9"
+    }
+  ],
+  "checks": {
+    "nativeStateAndInstalledKeysDecoded": true,
+    "recoveredOriginalSealedCall": true,
+    "recoveryDidNotFundOrSignAgain": true,
+    "recoveredCallCommittedPrivateStateOnce": true,
+    "crossedRecoveryRejected": true,
+    "crossedTypedReplyRejected": true,
+    "fullResultQueuePreservedPendingTypedReply": true,
+    "cancelReturnedAdmittedStateAndRevokedPrivateRequest": true,
+    "secondCallbackReadCommittedState": true
+  }
+}
