@@ -382,6 +382,47 @@ mod tests {
         time::{Duration, Instant},
     };
 
+    #[test]
+    fn staged_merge_claims_reject_wrong_mint_and_transient_shape() {
+        use crate::client::shielded_merge_claims_match;
+        use base_crypto::time::{Duration as LedgerDuration, Timestamp};
+        use onchain_runtime::context::Effects;
+
+        let mut rng = StdRng::from_seed([0x5a; 32]);
+        let address = ContractAddress(HashOutput([0x21; 32]));
+        let domain = HashOutput([0x31; 32]);
+        let type_ = address.custom_shielded_token_type(domain);
+        let a = Info::new(&mut rng, 5, type_);
+        let b = Info::new(&mut rng, 7, type_);
+        let c = a.evolve_from(b"midnight:kernel:nonce_evolve", 12, type_);
+        let seed = stage_contract_owned_output(address, &a, &mut rng).unwrap();
+        let zswap = zswap::ledger::State::<Db>::new();
+        let offer = Offer::new(vec![], vec![seed.output], vec![]).unwrap();
+        let (zswap, indices) = zswap.try_apply(&offer, None).unwrap();
+        let zswap = zswap.post_block_update(Timestamp::from_secs(1), LedgerDuration::from_secs(3600));
+        let a = a.qualify(*indices.get(&seed.commitment).unwrap());
+        let input = stage_contract_owned_input(&zswap, address, &a, &mut rng).unwrap();
+        let output = stage_contract_owned_output(address, &c, &mut rng).unwrap();
+        let transient = stage_contract_owned_transient(address, &b, &mut rng).unwrap();
+        let effects = Effects {
+            claimed_nullifiers: [input.nullifier, transient.nullifier].into_iter().collect(),
+            claimed_shielded_receives: [output.commitment, transient.coin_com].into_iter().collect(),
+            claimed_shielded_spends: [output.commitment].into_iter().collect(),
+            shielded_mints: [(domain, 7)].into_iter().collect(),
+            ..Effects::default()
+        };
+        let offer = Offer::new(vec![input.input], vec![output.output], vec![transient.clone()]).unwrap();
+        assert!(shielded_merge_claims_match(&effects, address, &offer, Some((&b, domain))));
+        let wrong_amount = Info { value: 8, ..b.clone() };
+        assert!(!shielded_merge_claims_match(&effects, address, &offer, Some((&wrong_amount, domain))));
+        assert!(!shielded_merge_claims_match(
+            &effects, address, &offer, Some((&b, HashOutput([0x32; 32]))),
+        ));
+        let mut duplicate = offer.clone();
+        duplicate.transient = [transient.clone(), transient].into_iter().collect();
+        assert!(!shielded_merge_claims_match(&effects, address, &duplicate, Some((&b, domain))));
+    }
+
     async fn finalize(node: &Node, bound: &BoundTransaction) -> Result<FinalizedReceipt> {
         let sent = node
             .submit(bound)

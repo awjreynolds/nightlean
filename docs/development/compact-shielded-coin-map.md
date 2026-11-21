@@ -173,4 +173,14 @@ NOCTIUM_MERGE_MANIFEST_SHA256=YOUR_MERGE_MANIFEST_SHA256 \
   funded_shielded_map_merge_localnet -- --ignored --nocapture
 ```
 
+## Merge a coin minted in the same operation
+
+`mergeShieldedImmediateFromMap(pot, nonceA, nonceB, colorB, amountB)` consumes a finalized Map coin and a new transient coin of the same color. The output uses the first coin's evolved nonce and a checked UInt128 sum. The development binder checks the exact guaranteed offer, both nullifiers, both receive commitments, the durable output spend and the proved mint domain and amount.
+
+The pinned Compact 0.36.1 comparator and the native checker agree on the 5 + 7 result, nonce, nullifiers and commitments. The native checker rejects a detached transient and a commitment booked under a different owner. The host check rejects a different mint amount, a different domain and a duplicate transient.
+
+Ledger 9.1.0.1 finalized the funded call at block 48573. Both input nullifiers were spent. The Map contained one output worth 12 at index 34, with the spent transient recorded at index 35. This covers one same-operation mint and merge. [Receipt](shielded-map-immediate-merge-localnet-receipt.json)
+
+To repeat the funded case, compile `tests/ShieldedCoinImmediateMerge.lean` and assemble its `mint` and `merge` bundles. Run the command above with their manifest hashes and the test name `funded_shielded_map_immediate_merge_localnet`.
+
 Pins and source behavior are recorded in the [Compact 0.36.1 release](https://github.com/LFDT-Minokawa/compact/releases/tag/compactc-v0.36.1), [Compact private tip jar](https://docs.midnight.network/tutorials/private-tip-jar/smart-contract), [Compact ledger ADTs](https://docs.midnight.network/compact/reference/ledger-adt), and [Ledger 9.1.0.1 release](https://github.com/midnightntwrk/midnight-ledger/releases/tag/ledger-9.1.0.1).

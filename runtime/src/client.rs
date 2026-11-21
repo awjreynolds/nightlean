@@ -467,17 +467,26 @@ pub(crate) fn shielded_merge_shape_valid(
     let Some(transcript) = call.guaranteed_transcript.as_deref() else {
         return false;
     };
+    contract.actions.len() == 1
+        && call.fallible_transcript.is_none()
+        && shielded_merge_claims_match(&transcript.effects, call.address, offer, staged_mint)
+}
+
+#[cfg(feature = "localnet")]
+pub(crate) fn shielded_merge_claims_match<P: storage::Storable<Db>>(
+    effects: &Effects<Db>,
+    address: coin_structure::contract::ContractAddress,
+    offer: &zswap::Offer<P, Db>,
+    staged_mint: Option<(&Info, HashOutput)>,
+) -> bool {
     let (Some(input), Some(output)) = (offer.inputs.get(0), offer.outputs.get(0)) else {
         return false;
     };
-    let effects = &transcript.effects;
-    if contract.actions.len() != 1
-        || call.fallible_transcript.is_some()
-        || effects.claimed_contract_calls.size() != 0
+    if effects.claimed_contract_calls.size() != 0
         || !no_unshielded_effects(effects)
         || offer.outputs.len() != 1
-        || input.contract_address.as_deref() != Some(&call.address)
-        || output.contract_address.as_deref() != Some(&call.address)
+        || input.contract_address.as_deref() != Some(&address)
+        || output.contract_address.as_deref() != Some(&address)
         || output.ciphertext.is_some()
         || effects.claimed_nullifiers.size() != 2
         || !effects.claimed_nullifiers.member(&input.nullifier)
@@ -495,7 +504,7 @@ pub(crate) fn shielded_merge_shape_valid(
             ) else {
                 return false;
             };
-            let token_type = call.address.custom_shielded_token_type(domain);
+            let token_type = address.custom_shielded_token_type(domain);
             offer.inputs.len() == 1
                 && offer.transient.len() == 1
                 && offer.deltas.len() == 1
@@ -503,10 +512,10 @@ pub(crate) fn shielded_merge_shape_valid(
                 && mint.type_ == token_type
                 && delta.token_type == token_type
                 && delta.value == -i128::from(amount)
-                && transient.contract_address.as_deref() == Some(&call.address)
+                && transient.contract_address.as_deref() == Some(&address)
                 && transient.ciphertext.is_none()
-                && transient.nullifier == mint.nullifier(&SenderEvidence::Contract(call.address))
-                && transient.coin_com == mint.commitment(&Recipient::Contract(call.address))
+                && transient.nullifier == mint.nullifier(&SenderEvidence::Contract(address))
+                && transient.coin_com == mint.commitment(&Recipient::Contract(address))
                 && transient.nullifier != input.nullifier
                 && transient.coin_com != output.coin_com
                 && effects.claimed_nullifiers.member(&transient.nullifier)
@@ -522,7 +531,7 @@ pub(crate) fn shielded_merge_shape_valid(
             offer.inputs.len() == 2
                 && offer.transient.is_empty()
                 && offer.deltas.is_empty()
-                && second.contract_address.as_deref() == Some(&call.address)
+                && second.contract_address.as_deref() == Some(&address)
                 && second.nullifier != input.nullifier
                 && effects.claimed_nullifiers.member(&second.nullifier)
                 && effects.claimed_shielded_receives.size() == 1

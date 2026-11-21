@@ -11087,12 +11087,26 @@ mod shielded_merge_tests {
         let (a, b, result, nullifier_a, nullifier_b, output) =
             merge_coins([0x42; 32], [0x41; 32], 5, [0x43; 32], [0x41; 32], 7);
         let staged = b.commitment(&Recipient::Contract(ContractAddress(HashOutput(ADDRESS))));
-        assert_eq!(hex::encode(result.nonce.0.0),
-            "008886c2deacb2bc58c16043752c6107ac13841d68ab515cf6d7ca9283255500");
-        assert_eq!(hex::encode(output.0.0),
-            "22c1d942576b35bea2e506169770fcc5932e05173d69470c57a70d4d4e125ef5");
-        assert_eq!(hex::encode(staged.0.0),
-            "dfb10c0f02bdda38262b6290bb6f612705f798c12143f36a73d17febdf2d1df2");
+        assert_eq!(
+            hex::encode(result.nonce.0.0),
+            "008886c2deacb2bc58c16043752c6107ac13841d68ab515cf6d7ca9283255500"
+        );
+        assert_eq!(
+            hex::encode(output.0.0),
+            "22c1d942576b35bea2e506169770fcc5932e05173d69470c57a70d4d4e125ef5"
+        );
+        assert_eq!(
+            hex::encode(staged.0.0),
+            "dfb10c0f02bdda38262b6290bb6f612705f798c12143f36a73d17febdf2d1df2"
+        );
+        assert_eq!(
+            hex::encode(nullifier_a.0.0),
+            "ca83e7a3bd8c3a1d70258463efb2c83a44849adee2114324ccecdddc154d38ae"
+        );
+        assert_eq!(
+            hex::encode(nullifier_b.0.0),
+            "246570a69371f21f83a2da9aaf9f214198a29703c0721fb85de05888cc70b241"
+        );
         let inputs = BTreeMap::from([
             ("domain".into(), bytes_json(&[0x40; 32])),
             ("nonceA".into(), bytes_json(&a.nonce.0.0)),
