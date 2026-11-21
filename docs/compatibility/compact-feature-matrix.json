@@ -4339,8 +4339,8 @@
       "id": "C-STDLIB-CURVE25519POINT",
       "layer": "standard-library",
       "surface": "Curve25519Point",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Native Edwards subgroup points support checked coordinates, canonical compressed bytes, group operations, typed ledger storage and typed witness callbacks.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4353,15 +4353,22 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Curve25519.lean",
+        "runtime/tests/curve25519.rs",
+        "docs/development/curve25519.md",
+        "runtime/tests/curve25519_codec.rs",
+        "tests/Curve25519Witness.lean",
+        "runtime/tests/curve25519_witness.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-CURVE25519BASE",
       "layer": "standard-library",
       "surface": "Curve25519Base",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Native Curve25519 Base supports typed inputs and results, field operations, bytes and scalar ledger storage.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4374,15 +4381,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Curve25519.lean",
+        "runtime/tests/curve25519.rs",
+        "docs/development/curve25519.md",
+        "runtime/tests/curve25519_codec.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-CURVE25519SCALAR",
       "layer": "standard-library",
       "surface": "Curve25519Scalar",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Native Curve25519 Scalar supports its own field encoding, arithmetic, point multiplication, typed ledger storage and typed witness callbacks.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4395,15 +4407,22 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Curve25519.lean",
+        "runtime/tests/curve25519.rs",
+        "docs/development/curve25519.md",
+        "runtime/tests/curve25519_codec.rs",
+        "tests/Curve25519Witness.lean",
+        "runtime/tests/curve25519_witness.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-CURVE25519POINTX",
       "layer": "standard-library",
       "surface": "curve25519PointX",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Lean curveX returns the native Base coordinate from a checked Curve25519 point, including identity.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4416,15 +4435,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Curve25519.lean",
+        "runtime/tests/curve25519.rs",
+        "docs/development/curve25519.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-CURVE25519POINTY",
       "layer": "standard-library",
       "surface": "curve25519PointY",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Lean curveY returns the native Base coordinate from a checked Curve25519 point, including identity.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4437,7 +4460,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/Curve25519.lean",
+        "runtime/tests/curve25519.rs",
+        "docs/development/curve25519.md"
+      ],
       "equivalence": "unverified"
     },
     {

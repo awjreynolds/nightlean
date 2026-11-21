@@ -101,6 +101,7 @@ jobs:
           lake env lean --run tests/ForeignEncoding.lean > /tmp/noctium-foreign-encoding.json
           cmp /tmp/noctium-foreign-encoding.json runtime/tests/fixtures/foreign-codec/321/encoding.json
           lake env lean tests/CurveWitness.lean
+          lake env lean tests/Curve25519Witness.lean
           lake env lean tests/CurveHelpers.lean
           lake env lean tests/HashWitness.lean
           lake env lean tests/NestedEscrow.lean
