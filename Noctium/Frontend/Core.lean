@@ -222,6 +222,7 @@ scoped syntax "andThen(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "orElse(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "boolXor(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "ite(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
@@ -814,7 +815,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| ed25519Verify($_:nlexpr, $_:nlexpr, $_:nlexpr, $_:nlexpr))
   | `(nlexpr| secp256k1EthereumAddress($_:nlexpr)) => Bool.true
   | `(nlexpr| jubjubSchnorrVerify([$messages,*], $_:nlexpr, $_:nlexpr, $_:nlexpr)) => Bool.true
-  | `(nlexpr| select($c, $a, $b)) =>
+  | `(nlexpr| select($c, $a, $b)) | `(nlexpr| ite($c, $a, $b)) =>
     hasPartialScalar c || hasPartialScalar a || hasPartialScalar b
   | _ => Bool.false
 
@@ -1007,6 +1008,20 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let a ← coerceExpression stx ta ty a
     let b ← coerceExpression stx tb ty b
     pure (ty, ← `(Noctium.Expr.select $c $a $b))
+  | `(nlexpr| ite($condition, $thenValue, $elseValue)) => do
+    let condition ← expected env condition .bool
+    let (thenTy, thenValue) ← expression env thenValue
+    let (elseTy, elseValue) ← expression env elseValue
+    let ty ← commonType stx thenTy elseTy
+    let thenValue ← coerceExpression stx thenTy ty thenValue
+    let elseValue ← coerceExpression stx elseTy ty elseValue
+    let name := freshLazyBooleanName env stx
+    let conditionRef ← `(Noctium.Expr.ref (ty := Noctium.Ty.bool) $(stringTerm name))
+    let inactiveGuard ← `(Noctium.Expr.eq $conditionRef (Noctium.Expr.bool Bool.false))
+    let safeThen ← `(Noctium.GuardedExpression.totalize $conditionRef $thenValue)
+    let safeElse ← `(Noctium.GuardedExpression.totalize $inactiveGuard $elseValue)
+    pure (ty, ← `(Noctium.Expr.letE $(stringTerm name) $condition
+      (Noctium.Expr.select $conditionRef $safeThen $safeElse)))
   | `(nlexpr| poseidon2($domain:num, $a, $b)) =>
     let a ← expected env a .native
     let b ← expected env b .native

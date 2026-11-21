@@ -196,3 +196,65 @@ fn lazy_boolean_gates_skip_inactive_uint1_narrowing() {
         );
     }
 }
+
+#[test]
+#[ignore = "requires fresh LazyConditional outputs in NOCTIUM_LAZY_CONDITIONAL_DIR"]
+fn lazy_conditionals_check_both_skipped_cast_branches() {
+    let directory = PathBuf::from(
+        env::var_os("NOCTIUM_LAZY_CONDITIONAL_DIR").expect("NOCTIUM_LAZY_CONDITIONAL_DIR"),
+    );
+    let plan: Plan = serde_json::from_slice(
+        &fs::read(directory.join("LazyConditional.branches.impact.json")).unwrap(),
+    )
+    .unwrap();
+    let circuit_bytes = fs::read(directory.join("LazyConditional.branches.zkir")).unwrap();
+    let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+    let initial = create_state(&plan, &BTreeMap::new()).unwrap();
+    let parameters = &ledger::structure::INITIAL_PARAMETERS;
+    let address = coin_structure::contract::ContractAddress::default();
+    let inputs = |then_condition: bool, else_condition: bool| {
+        BTreeMap::from([
+            ("thenCondition".into(), json!(then_condition)),
+            ("elseCondition".into(), json!(else_condition)),
+            ("amount".into(), json!("3")),
+        ])
+    };
+    let accepted_inputs = inputs(false, true);
+
+    let accepted = prepare(&plan, &accepted_inputs, &initial, parameters, address)
+        .expect("false then and true else skip both invalid UInt1 casts");
+    check(&accepted, &circuit).unwrap();
+    assert_eq!(
+        accepted.returns_json(),
+        BTreeMap::from([
+            ("thenResult".into(), json!(true)),
+            ("elseResult".into(), json!(true)),
+        ])
+    );
+    assert_eq!(
+        accepted.preimage.private_transcript,
+        vec![Fr::from(0u64), Fr::from(1u64), Fr::from(3u64)]
+    );
+
+    for (private_index, active_then, active_else, active_value, result_name) in [
+        (0, true, true, 1u64, "thenResult"),
+        (1, false, false, 0u64, "elseResult"),
+    ] {
+        let active_inputs = inputs(active_then, active_else);
+        assert!(
+            prepare(&plan, &active_inputs, &initial, parameters, address).is_err(),
+            "host preparation rejects active {result_name} narrowing"
+        );
+        let mut forged = prepare(&plan, &accepted_inputs, &initial, parameters, address).unwrap();
+        forged.preimage.private_transcript[private_index] = Fr::from(active_value);
+        assert_eq!(
+            forged.returns_json()[result_name],
+            json!(true),
+            "active invalid narrowing keeps the accepted result"
+        );
+        assert!(
+            check(&forged, &circuit).is_err(),
+            "native relation rejects active UInt1 narrowing for {result_name}"
+        );
+    }
+}
