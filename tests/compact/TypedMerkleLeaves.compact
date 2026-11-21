@@ -1,0 +1,62 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger ordinary: MerkleTree<2, Boolean>;
+export ledger archives: Map<Bytes<32>, HistoricMerkleTree<2, Boolean>>;
+export ledger historyRoot: HistoricMerkleTree<2, Boolean>;
+
+export circuit appendOrdinary(leaf: Boolean): [] {
+  ordinary.insert(disclose(leaf));
+}
+
+export circuit writeOrdinary(index: Uint<64>, leaf: Boolean): [] {
+  ordinary.insertIndex(disclose(leaf), disclose(index));
+}
+
+export circuit defaultOrdinary(index: Uint<64>): [] {
+  ordinary.insertIndexDefault(disclose(index));
+}
+
+export circuit insertDefaultArchive(owner: Bytes<32>): [] {
+  archives.insertDefault(disclose(owner));
+}
+
+export circuit setupArchive(owner: Bytes<32>): [] {
+  const key = disclose(owner);
+  archives.insertDefault(key);
+  archives.lookup(key).resetToDefault();
+}
+
+export circuit archiveHasRoot(owner: Bytes<32>, digest: MerkleTreeDigest): Boolean {
+  return archives.lookup(disclose(owner)).checkRoot(disclose(digest));
+}
+
+export circuit rootHasRoot(digest: MerkleTreeDigest): Boolean {
+  return historyRoot.checkRoot(disclose(digest));
+}
+
+export circuit appendRootHistory(leaf: Boolean): [] {
+  historyRoot.insert(disclose(leaf));
+}
+
+export circuit resetHistoryRoot(): [] {
+  historyRoot.resetToDefault();
+}
+
+export circuit appendArchive(owner: Bytes<32>, leaf: Boolean): [] {
+  const key = disclose(owner);
+  if (!archives.member(key)) { archives.insertDefault(key); }
+  archives.lookup(key).insert(disclose(leaf));
+}
+
+export circuit writeArchive(owner: Bytes<32>, index: Uint<64>, leaf: Boolean): [] {
+  const key = disclose(owner);
+  if (!archives.member(key)) { archives.insertDefault(key); }
+  archives.lookup(key).insertIndex(disclose(leaf), disclose(index));
+}
+
+export circuit defaultArchive(owner: Bytes<32>, index: Uint<64>): [] {
+  const key = disclose(owner);
+  if (!archives.member(key)) { archives.insertDefault(key); }
+  archives.lookup(key).insertIndexDefault(disclose(index));
+}

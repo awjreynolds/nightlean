@@ -82,3 +82,17 @@ and List state, zero Counters, and empty ordinary or historic Merkle Trees.
 `when enabled insertDefault balances[owner][key]` skips the path and write when
 disabled. Private keys and guards require explicit disclosure.
 [Source example](../../tests/NativeMapDefault.lean)
+
+## Typed Merkle leaves
+
+`merkleTree claims : 2 of Bool` declares a depth-two tree of Boolean leaves.
+`tree archives : Bytes32 => HistoricMerkleTree 2 of Bytes 3` declares one
+historic tree per key. Leaf types include Native, Bool, bounded UInt and fixed
+Bytes. A declaration with only a depth uses Native.
+
+Use `insertLeaf claims := disclose(eligible)` to append,
+`insertLeafIndex claims at position := disclose(eligible)` to write at an
+index, and `insertLeafDefault claims at position` to write a hashed default.
+These use the declared FAB byte layout and the ledger leaf hash. The explicit
+`insertHash` and `insertHashIndex` forms accept a precomputed digest.
+[Source example](../../tests/TypedMerkleLeaves.lean)

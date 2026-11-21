@@ -2419,7 +2419,7 @@
       "layer": "language-ledger",
       "surface": "Map.insertDefault",
       "noctiumStatus": "subset",
-      "notes": "insertDefault writes the admitted typed default to a direct or nested Map entry. A pinned Field fixture compares insertion, replacement, membership and size. The native case exercises nested scalar, checked record and collection layouts. Full type, proof and ledger qualification remain open.",
+      "notes": "insertDefault writes the admitted typed default to a direct or nested Map entry. A pinned Field fixture compares insertion, replacement, membership and size. The native case exercises nested scalar, checked record and collection layouts. Nested historic Map insertion currently seeds root zero. Compact leaves the history empty. Issue #186 tracks the difference. Full type, proof and ledger qualification remain open.",
       "source": [
         "adt"
       ],
@@ -2832,8 +2832,8 @@
       "id": "C-ADT-MERKLETREE-INSERT",
       "layer": "language-ledger",
       "surface": "MerkleTree.insert",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Typed Native, Bool, bounded UInt and fixed Bytes leaves lower through the mdn:lh digest into the existing native append. The pinned ordinary Bool case compares roots and cursor. Curve and aggregate leaves remain open.",
       "source": [
         "adt"
       ],
@@ -2842,7 +2842,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/TypedMerkleLeaves.lean",
+        "tests/compact/TypedMerkleLeaves.compact",
+        "tests/compact/typed-merkle-leaves.mjs",
+        "runtime/tests/typed_merkle_leaves.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2893,7 +2898,7 @@
       "layer": "language-ledger",
       "surface": "MerkleTree.insertIndex",
       "noctiumStatus": "subset",
-      "notes": "Ordinary root writes accept disclosed Field leaves and UInt64 indices. The compiler hashes the canonical Field bytes in the mdn:lh domain. Focused depth-two native roots and cursors match Compact. The nested ledger ADT row covers the depth-two Field case. Other leaf layouts remain open.",
+      "notes": "Typed scalar indexed writes bind the declared leaf encoding and a UInt64 index. Existing Field evidence and a pinned ordinary Bool case cover sparse insertion and active out-of-range rejection.",
       "source": [
         "adt"
       ],
@@ -2906,7 +2911,11 @@
         "tests/MerkleIndexed.lean",
         "runtime/tests/ordinary_merkle.rs",
         "tests/compact/indexed-merkle.mjs",
-        "docs/development/indexed-ordinary-merkle-localnet-receipt.json"
+        "docs/development/indexed-ordinary-merkle-localnet-receipt.json",
+        "tests/TypedMerkleLeaves.lean",
+        "tests/compact/TypedMerkleLeaves.compact",
+        "tests/compact/typed-merkle-leaves.mjs",
+        "runtime/tests/typed_merkle_leaves.rs"
       ],
       "equivalence": "unverified"
     },
@@ -2914,8 +2923,8 @@
       "id": "C-ADT-MERKLETREE-INSERTINDEXDEFAULT",
       "layer": "language-ledger",
       "surface": "MerkleTree.insertIndexDefault",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "Indexed writes hash the declared scalar default and reuse the native cursor update. The pinned ordinary Bool case replaces true with false at index zero while preserving the cursor at capacity.",
       "source": [
         "adt"
       ],
@@ -2924,7 +2933,12 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/TypedMerkleLeaves.lean",
+        "tests/compact/TypedMerkleLeaves.compact",
+        "tests/compact/typed-merkle-leaves.mjs",
+        "runtime/tests/typed_merkle_leaves.rs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -3061,7 +3075,7 @@
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insert",
       "noctiumStatus": "subset",
-      "notes": "Root-level Field appends use the canonical mdn:lh leaf digest. The depth-two cursor and retained roots match Compact.",
+      "notes": "Typed scalar appends use the mdn:lh leaf digest. Existing root-level Field evidence and the nested Bool comparison cover cursor and retained roots.",
       "source": [
         "adt"
       ],
@@ -3073,7 +3087,11 @@
       "observedEvidence": [
         "tests/HistoricMerkle.lean",
         "runtime/tests/merkle_history.rs",
-        "tests/compact/historic-merkle.mjs"
+        "tests/compact/historic-merkle.mjs",
+        "tests/TypedMerkleLeaves.lean",
+        "tests/compact/TypedMerkleLeaves.compact",
+        "tests/compact/typed-merkle-leaves.mjs",
+        "runtime/tests/typed_merkle_leaves.rs"
       ],
       "equivalence": "unverified"
     },
@@ -3125,7 +3143,7 @@
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndex",
       "noctiumStatus": "subset",
-      "notes": "Root-level Field writes support sparse indices and replacement at capacity. Both retain the resulting root.",
+      "notes": "Typed scalar writes support sparse indices and replacement at capacity. The pinned nested Bool case compares current roots, cursor and retained history.",
       "source": [
         "adt"
       ],
@@ -3137,7 +3155,11 @@
       "observedEvidence": [
         "tests/HistoricMerkle.lean",
         "runtime/tests/merkle_history.rs",
-        "tests/compact/historic-merkle.mjs"
+        "tests/compact/historic-merkle.mjs",
+        "tests/TypedMerkleLeaves.lean",
+        "tests/compact/TypedMerkleLeaves.compact",
+        "tests/compact/typed-merkle-leaves.mjs",
+        "runtime/tests/typed_merkle_leaves.rs"
       ],
       "equivalence": "unverified"
     },
@@ -3146,7 +3168,7 @@
       "layer": "language-ledger",
       "surface": "HistoricMerkleTree.insertIndexDefault",
       "noctiumStatus": "subset",
-      "notes": "For root-level Field leaves, write zero at the selected index. The Compact oracle compares this operation with insertIndexDefault.",
+      "notes": "Indexed writes hash the declared scalar default and retain the resulting root. The existing root Field and new nested Bool cases compare replacement after sparse writes.",
       "source": [
         "adt"
       ],
@@ -3158,7 +3180,11 @@
       "observedEvidence": [
         "tests/HistoricMerkle.lean",
         "runtime/tests/merkle_history.rs",
-        "tests/compact/historic-merkle.mjs"
+        "tests/compact/historic-merkle.mjs",
+        "tests/TypedMerkleLeaves.lean",
+        "tests/compact/TypedMerkleLeaves.compact",
+        "tests/compact/typed-merkle-leaves.mjs",
+        "runtime/tests/typed_merkle_leaves.rs"
       ],
       "equivalence": "unverified"
     },
