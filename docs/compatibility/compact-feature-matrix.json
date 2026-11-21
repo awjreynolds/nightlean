@@ -3503,7 +3503,7 @@
       "layer": "standard-library",
       "surface": "Maybe",
       "noctiumStatus": "related-subset",
-      "notes": "Scalar native List heads return the typed Maybe shape. Matched Compact 0.36.1 and Noctium on ZKIR 3.2.1 UInt8 cases cover empty and one-item Lists. General Maybe values in other source positions and element families remain open.",
+      "notes": "Readable witness authoring constructs and projects typed Maybe values for Native, Bool and bounded UInt, with false and a canonical zero payload for none. Matched Compact 0.36.1 and native ZKIR 3.2.1 checks cover those scalar outputs. Scalar native List heads also return Maybe for UInt8. Other source positions and element families remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3517,6 +3517,11 @@
         "ABI"
       ],
       "observedEvidence": [
+        "Noctium/Authoring.lean",
+        "tests/ScalarMaybeAuthoring.lean",
+        "runtime/tests/scalar_maybe_authoring.rs",
+        "tests/compact/ScalarMaybeAuthoring.compact",
+        "tests/compact/scalar-maybe-authoring.mjs",
         "tests/NativeScalarListMaybe.lean",
         "runtime/tests/scalar_list_maybe.rs",
         "tests/compact/ListHeadMaybe.compact",
@@ -4159,8 +4164,8 @@
       "id": "C-STDLIB-SOME",
       "layer": "standard-library",
       "surface": "some",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Readable witness authoring constructs typed Some values for Native, Bool and bounded UInt and returns checked aggregate fields. Paired Compact 0.36.1 and native ZKIR 3.2.1 checks cover the tag and payload. Other element families and nested uses remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4173,15 +4178,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Authoring.lean",
+        "tests/ScalarMaybeAuthoring.lean",
+        "runtime/tests/scalar_maybe_authoring.rs",
+        "tests/compact/ScalarMaybeAuthoring.compact",
+        "tests/compact/scalar-maybe-authoring.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-NONE",
       "layer": "standard-library",
       "surface": "none",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "Readable witness authoring constructs typed None values for Native, Bool and bounded UInt, zeroing the inactive payload. Paired Compact 0.36.1 and native ZKIR 3.2.1 checks cover those layouts. Other element families and nested uses remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4194,7 +4205,13 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Authoring.lean",
+        "tests/ScalarMaybeAuthoring.lean",
+        "runtime/tests/scalar_maybe_authoring.rs",
+        "tests/compact/ScalarMaybeAuthoring.compact",
+        "tests/compact/scalar-maybe-authoring.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
