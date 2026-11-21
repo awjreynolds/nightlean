@@ -135,6 +135,7 @@ jobs:
           lake env lean tests/CounterCompare.lean
           lake env lean tests/NativeSet.lean
           lake env lean tests/NativeCaller.lean
+          lake env lean tests/NativeKernelContext.lean
           lake env lean tests/NativeCellReset.lean
           lake env lean tests/NativeStandaloneMints.lean
           lake env lean tests/ShieldedReceive.lean

@@ -1,0 +1,22 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export circuit inspect(
+  enabled: Boolean,
+  color: Bytes<32>,
+  isUnshielded: Boolean
+): [Bytes<32>, Boolean, Boolean, Bytes<32>, Bytes<32>, Uint<128>] {
+  const active = disclose(enabled);
+  const caller = active ? kernel.caller() : none<PublicAddress>();
+  const token = disclose(isUnshielded)
+    ? left<Bytes<32>, Bytes<32>>(disclose(color))
+    : right<Bytes<32>, Bytes<32>>(disclose(color));
+  const startingBalance = active ? kernel.balance(token) : 0;
+  const selfAddress = active ? kernel.self().bytes : default<Bytes<32>>;
+  const callerIsContract = caller.is_some && caller.value.is_left;
+  const callerContract = callerIsContract ? caller.value.left.bytes : default<Bytes<32>>;
+  const callerUser = caller.is_some && !caller.value.is_left
+    ? caller.value.right.bytes
+    : default<Bytes<32>>;
+  return [selfAddress, caller.is_some, callerIsContract, callerContract, callerUser, startingBalance];
+}

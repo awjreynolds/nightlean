@@ -3913,8 +3913,8 @@
       "id": "C-STDLIB-KERNEL",
       "layer": "language-ledger",
       "surface": "kernel",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "The combined Lean entrypoint uses existing native kernel reads for contract identity, optional caller and tagged starting balance. The paired tests cover supplied user, contract and absent callers, both asset namespaces and an inactive guard. Caller derivation from funding and the remaining kernel methods have their own evidence scope.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3927,7 +3927,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeKernelContext.lean",
+        "runtime/tests/native_kernel_context.rs",
+        "tests/compact/kernel-context.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
