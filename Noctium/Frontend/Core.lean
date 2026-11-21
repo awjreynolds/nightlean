@@ -1681,6 +1681,7 @@ private def merkleLeafWidth : Ty → Option Nat
   | .bool => some 1
   | .uint maximum => some (maximum.log2 / 8 + 1)
   | .bytes length => some length
+  | .jubjubPoint => some 64
   | _ => none
 
 private def encodeMerkleLeafScalar (ty : Ty) (value : TSyntax `term) :
@@ -1693,6 +1694,12 @@ private def encodeMerkleLeafScalar (ty : Ty) (value : TSyntax `term) :
       (Noctium.Expr.toBytes32 (Noctium.Expr.cast Noctium.Ty.native $value)) 0
       $(natTerm (maximum.log2 / 8 + 1)))
   | .bytes _ => pure value
+  | .jubjubPoint => do
+    let x ← `(Noctium.Expr.jubjubCoordinate $value 0)
+    let y ← `(Noctium.Expr.jubjubCoordinate $value 1)
+    let xBytes ← `(Noctium.Expr.toBytes32 $x)
+    let yBytes ← `(Noctium.Expr.toBytes32 $y)
+    `(Noctium.Expr.concatBytes $xBytes $yBytes)
   | _ => throwError "unsupported MerkleTree leaf type"
 
 private partial def concatMerkleLeafBytes : List (TSyntax `term) → CommandElabM (TSyntax `term)
@@ -2734,7 +2741,7 @@ private def checkMerkleLeafWidth (source : Syntax) (fields : List Ty) : CommandE
   let widths ← fields.mapM fun ty =>
     match merkleLeafWidth ty with
     | some width => pure width
-    | none => throwErrorAt source "MerkleTree leaves require Native, Bool, bounded UInt or fixed Bytes"
+    | none => throwErrorAt source "MerkleTree leaves require Native, Bool, bounded UInt, fixed Bytes or JubjubPoint"
   unless widths.sum + 6 ≤ Noctium.maxBytesLength do
     throwErrorAt source s!"MerkleTree leaf exceeds the maximum preimage length of {Noctium.maxBytesLength}"
 
