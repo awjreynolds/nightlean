@@ -41,7 +41,9 @@ jobs:
       - name: Build the POC compiler
         run: lake build noctium Noctium.Compiler Noctium.Foreign Noctium.Claim Noctium.Verification.RangeDedup
       - name: Check the private claim source-proof report
-        run: python3 scripts/proofs/check-private-claim-audit.py --report
+        run: |
+          python3 tests/check-public-audit-assertions.py
+          python3 scripts/proofs/check-private-claim-audit.py --report
       - name: Check source contract examples
         run: |
           lake env lean examples/PrivateClaim.lean
