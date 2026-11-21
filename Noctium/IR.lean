@@ -578,6 +578,10 @@ inductive Effect where
   contract address read from ledger context. -/
   | receiveShieldedToMap (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
+  /-- Store a coin whose self-recipient commitment is already booked in the
+  current transaction. The runtime obtains its Ledger index from context. -/
+  | writeShieldedCoinCell (state : String) (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (selfAddress : Expr (.bytes 32))
   /-- Spend the exact coin record read from a Bytes32-keyed tree Map entry.
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
@@ -1095,6 +1099,7 @@ private def Constructor.validate (caps : Capabilities) (states : List StateDecl)
 private def Effect.writeTarget : Effect → Option String
   | .writeCell state _ _ | .writeMap state .. | .insertPath state .. | .writePath state .. |
     .receiveShieldedToMap state .. | .sendShieldedFromMap state .. |
+    .writeShieldedCoinCell state .. |
     .writeCompositePath state .. | .counterAdjust state .. | .counterReset state .. |
     .listPushFront state .. | .listPopFront state .. | .listReset state .. |
     .emptyMapPath state .. | .setInsert state .. | .removePath state .. |
@@ -1278,6 +1283,18 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
           | throw s!"shielded coin receive requires a root Bytes32-keyed tree Map '{state}'"
         unless keyTy == .bytes 32 do
           throw "shielded coin map key must be Bytes32"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .writeShieldedCoinCell state nonce color amount selfAddress => do
+        if !caps.stateCells then throw "target lacks state cells"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown qualified shielded coin Cell '{state}'"
+        let .tree (.composite compositeEnv recordType) := declaration.kind
+          | throw s!"qualified shielded coin write requires a root composite Cell '{state}'"
         discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
         nonce.validate caps env
         color.validate caps env

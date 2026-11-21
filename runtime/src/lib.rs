@@ -1255,6 +1255,14 @@ pub enum Instruction {
         amount: Expr,
         commitment: Expr,
     },
+    #[serde(rename = "writeShieldedCoinCell", rename_all = "camelCase")]
+    WriteShieldedCoinCell {
+        slot: u32,
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        commitment: Expr,
+    },
     #[serde(rename = "spendShieldedFromMap", rename_all = "camelCase")]
     SpendShieldedFromMap {
         nonce: Expr,
@@ -1531,6 +1539,7 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
             vec![1, path_field_count(plan, *slot, keys)?, 1, 5, 1, 4]
         }
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
+        Instruction::WriteShieldedCoinCell { .. } => WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS.to_vec(),
         Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SendShieldedFromMap { .. } => SEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
         Instruction::RelayShieldedImmediate { .. } => {
@@ -1721,6 +1730,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::ReceiveShieldedToMap { .. } => {
             bail!("shielded receive must be unguarded")
         }
+        Instruction::WriteShieldedCoinCell { .. } => {
+            bail!("shielded coin Cell write must be unguarded")
+        }
         Instruction::SpendShieldedFromMap { .. } => {
             bail!("shielded spend must be unguarded")
         }
@@ -1834,6 +1846,7 @@ fn map_key_type(plan: &Plan, slot: u32) -> Result<ScalarType> {
 const MINT_FIELD_COUNTS: [usize; 16] = [1, 4, 6, 1, 1, 1, 5, 1, 1, 2, 1, 1, 2, 1, 1, 1];
 const RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS: [usize; 16] =
     [1, 4, 6, 2, 1, 1, 4, 6, 1, 6, 5, 11, 1, 2, 1, 1];
+const WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS: [usize; 8] = [5, 1, 6, 5, 11, 1, 2, 1];
 const SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 12] = [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 const SEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 18] =
     [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
@@ -2062,6 +2075,24 @@ fn validate_shielded_coin_map(plan: &Plan, slot: u32) -> Result<()> {
     ensure!(
         is_shielded_coin_record_schema(value),
         "shielded receive Map must use the fixed coin record schema"
+    );
+    Ok(())
+}
+
+fn validate_shielded_coin_cell(plan: &Plan, slot: u32) -> Result<()> {
+    let schema = tree_schema_at_path(plan, slot, 0)?;
+    ensure!(
+        !plan.state[slot as usize].sealed,
+        "shielded coin Cell is sealed"
+    );
+    let record = schema
+        .as_object()
+        .filter(|object| object.len() == 1)
+        .and_then(|object| object.get("composite"))
+        .ok_or_else(|| anyhow!("shielded coin write requires a root composite Cell"))?;
+    ensure!(
+        is_shielded_coin_record_schema(record),
+        "shielded coin Cell must use the fixed qualified coin record schema"
     );
     Ok(())
 }
@@ -2370,6 +2401,7 @@ fn mutates_contract_state(operation: &Instruction) -> bool {
             | Instruction::MerkleTreeReset { .. }
             | Instruction::MerkleTreeResetHistory { .. }
             | Instruction::ReceiveShieldedToMap { .. }
+            | Instruction::WriteShieldedCoinCell { .. }
     )
 }
 
@@ -4878,6 +4910,13 @@ fn probe_instruction(
             amount,
             commitment,
             ..
+        }
+        | Instruction::WriteShieldedCoinCell {
+            nonce,
+            color,
+            amount,
+            commitment,
+            ..
         } => probe_expressions(
             [nonce, color, amount, commitment],
             plan,
@@ -7047,6 +7086,89 @@ impl PreparationCursor {
                 has_written = true;
                 insert_final
             }
+            Instruction::WriteShieldedCoinCell {
+                slot,
+                nonce,
+                color,
+                amount,
+                commitment,
+            } => {
+                validate_shielded_coin_cell(plan, *slot)?;
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "shielded coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "shielded coin color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                let recipient = Recipient::Contract(context.address);
+                let expected_commitment =
+                    claim_hash_output(evaluate(commitment, &env)?, "shielded coin commitment")?;
+                ensure!(
+                    coin.commitment(&recipient).0 == expected_commitment,
+                    "shielded coin Cell commitment mismatch"
+                );
+                context.qualify(&coin).ok_or_else(|| {
+                    anyhow!("shielded coin Cell commitment is absent from the current transaction")
+                })?;
+
+                if has_written {
+                    advance_native_state_prefix(
+                        prefix_context,
+                        &program,
+                        &mut materialized_prefix,
+                        mutation_boundary,
+                        cost,
+                    )?;
+                }
+                let current = if has_written {
+                    &prefix_context
+                } else {
+                    &context
+                };
+                ensure!(
+                    matches!(read_state_value(current, *slot, &[])?, StateValue::Cell(_)),
+                    "shielded coin destination is not a Cell"
+                );
+                let path = vec![Key::Value(
+                    AlignedValue::from(u8::try_from(*slot)?)
+                        .try_into()
+                        .map_err(|_| anyhow!("invalid shielded coin Cell slot"))?,
+                )];
+                let [
+                    _,
+                    slot_push,
+                    duplicate,
+                    commitment_push,
+                    lookup,
+                    coin_push,
+                    swap,
+                    concatenate,
+                    insert,
+                    _,
+                ] = onchain_runtime::program_fragments::Cell_write_coin!(
+                    path,
+                    false,
+                    QualifiedInfo,
+                    coin,
+                    recipient
+                );
+                program.extend([
+                    slot_push,
+                    duplicate,
+                    commitment_push,
+                    lookup,
+                    coin_push,
+                    swap,
+                    concatenate,
+                ]);
+                has_written = true;
+                insert
+            }
             Instruction::SpendShieldedFromMap {
                 nonce,
                 color,
@@ -7617,6 +7739,7 @@ impl PreparationCursor {
                 | Instruction::ListReset { .. }
                 | Instruction::MapRemove { .. }
                 | Instruction::ReceiveShieldedToMap { .. }
+                | Instruction::WriteShieldedCoinCell { .. }
         ) {
             mutation_boundary = program.len();
         }

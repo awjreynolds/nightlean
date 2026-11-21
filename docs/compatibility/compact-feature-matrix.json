@@ -2095,8 +2095,8 @@
       "id": "C-ADT-CELL-WRITECOIN",
       "layer": "language-ledger",
       "surface": "Cell.writeCoin",
-      "noctiumStatus": "missing",
-      "notes": "Method inventory entry. Split type/boundary/composition cases before implementation.",
+      "noctiumStatus": "subset",
+      "notes": "A direct Lean effect qualifies an already-booked self-contract coin into a root composite Cell. The native test stores the exact record at allocated index 42 and rejects absent or wrong-recipient bookings. It uses the pinned Cell fragment without recording a receive claim. Other recipients and live ledger qualification remain open.",
       "source": [
         "adt"
       ],
@@ -2105,7 +2105,10 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/QualifiedCoinCell.lean",
+        "runtime/tests/qualified_coin_cell.rs"
+      ],
       "equivalence": "unverified"
     },
     {
