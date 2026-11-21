@@ -651,6 +651,14 @@ def Expr.eval (ctx : EvalContext) (env : EvalEnv) : Expr ty → Except String ty
     if digest.length != 64 || !digest.all (· ≤ 255) then
       throw "SHA-512 oracle returned a malformed Bytes64 digest"
     pure digest
+  | .sha512Fab compositeEnv type values => do
+    let layout ← validateFabHashLayout compositeEnv type values
+    let fields ← fabHashLayoutFields layout
+    let input ← fabHashFieldsPreimage ctx env (fields.map Prod.snd) values
+    let digest ← ctx.sha512 input
+    if digest.length != 64 || !digest.all (· ≤ 255) then
+      throw "FAB SHA-512 oracle returned a malformed Bytes64 digest"
+    pure digest
   | .keccak256 (length := length) value => do
     if length > maxBytesLength then
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
