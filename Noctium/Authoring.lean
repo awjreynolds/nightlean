@@ -497,12 +497,18 @@ private partial def renderExpr (stx : TSyntax `nlexpr) : String :=
     s!"jubjubFromCoordinates({renderExpr x}, {renderExpr y})"
   | `(nlexpr| secp256k1Base($value:num)) => s!"secp256k1Base({value.getNat})"
   | `(nlexpr| secp256k1Scalar($value:num)) => s!"secp256k1Scalar({value.getNat})"
+  | `(nlexpr| secp256k1Point($x:num, $y:num)) =>
+    s!"secp256k1Point({x.getNat}, {y.getNat})"
   | `(nlexpr| secp256k1Identity()) => "secp256k1Identity()"
   | `(nlexpr| secp256r1Base($value:num)) => s!"secp256r1Base({value.getNat})"
   | `(nlexpr| secp256r1Scalar($value:num)) => s!"secp256r1Scalar({value.getNat})"
+  | `(nlexpr| secp256r1Point($x:num, $y:num)) =>
+    s!"secp256r1Point({x.getNat}, {y.getNat})"
   | `(nlexpr| secp256r1Identity()) => "secp256r1Identity()"
   | `(nlexpr| curve25519Base($value:num)) => s!"curve25519Base({value.getNat})"
   | `(nlexpr| curve25519Scalar($value:num)) => s!"curve25519Scalar({value.getNat})"
+  | `(nlexpr| curve25519Point($x:num, $y:num)) =>
+    s!"curve25519Point({x.getNat}, {y.getNat})"
   | `(nlexpr| curve25519Identity()) => "curve25519Identity()"
   | `(nlexpr| hashToCurve([$values,*])) =>
     s!"hashToCurve([{String.intercalate ", " (values.getElems.toList.map renderExpr)}])"
@@ -735,6 +741,16 @@ private def lowerForeignFieldConstant (stx : Syntax) (kind : Foreign.Kind) (valu
     | .ok encoding => pure encoding
     | .error message => throwErrorAt stx message
   pure {type := .scalar (.foreign kind), term := .foreignConstant kind encoding}
+
+private def lowerForeignPointConstant (stx : Syntax) (curve : Foreign.Curve)
+    (x y : Nat) : ExprM Lowered := do
+  let encoding ← match Foreign.encodePoint curve (.affine x y) with
+    | .ok encoding => pure encoding
+    | .error message => throwErrorAt stx message
+  pure {
+    type := .scalar (.foreign (.point curve))
+    term := .foreignConstant (.point curve) encoding
+  }
 
 private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEnv)
     (stx : TSyntax `nlexpr) : ExprM Lowered := do
@@ -969,6 +985,8 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     lowerForeignFieldConstant stx (.base .secp256k1) value.getNat
   | `(nlexpr| secp256k1Scalar($value:num)) =>
     lowerForeignFieldConstant stx (.scalar .secp256k1) value.getNat
+  | `(nlexpr| secp256k1Point($x:num, $y:num)) =>
+    lowerForeignPointConstant stx .secp256k1 x.getNat y.getNat
   | `(nlexpr| secp256k1Identity()) =>
     pure {
       type := .scalar (.foreign (.point .secp256k1))
@@ -978,6 +996,8 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     lowerForeignFieldConstant stx (.base .secp256r1) value.getNat
   | `(nlexpr| secp256r1Scalar($value:num)) =>
     lowerForeignFieldConstant stx (.scalar .secp256r1) value.getNat
+  | `(nlexpr| secp256r1Point($x:num, $y:num)) =>
+    lowerForeignPointConstant stx .secp256r1 x.getNat y.getNat
   | `(nlexpr| secp256r1Identity()) =>
     pure {
       type := .scalar (.foreign (.point .secp256r1))
@@ -987,6 +1007,8 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     lowerForeignFieldConstant stx (.base .curve25519) value.getNat
   | `(nlexpr| curve25519Scalar($value:num)) =>
     lowerForeignFieldConstant stx (.scalar .curve25519) value.getNat
+  | `(nlexpr| curve25519Point($x:num, $y:num)) =>
+    lowerForeignPointConstant stx .curve25519 x.getNat y.getNat
   | `(nlexpr| curve25519Identity()) =>
     pure {
       type := .scalar (.foreign (.point .curve25519))

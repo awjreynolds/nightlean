@@ -82,7 +82,7 @@ inductive Expr : Ty → Type where
   /-- Canonical literals for the pinned foreign field families. -/
   | foreignBase (curve : Foreign.Curve) (value : Nat) : Expr (.foreign (.base curve))
   | foreignScalar (curve : Foreign.Curve) (value : Nat) : Expr (.foreign (.scalar curve))
-  | foreignIdentity (curve : Foreign.Curve) : Expr (.foreign (.point curve))
+  | foreignPoint (curve : Foreign.Curve) (value : Foreign.Point) : Expr (.foreign (.point curve))
   /-- One canonical native Encode projection from a typed foreign value. -/
   | foreignEncodedField {kind : Foreign.Kind} (value : Expr (.foreign kind))
       (index : Nat) : Expr .native
@@ -115,6 +115,9 @@ inductive Expr : Ty → Type where
   /-- Hash the exact ordered Native operands with the pinned transient_hash. -/
   | transientHash (values : List (Expr .native)) : Expr .native
   deriving Repr
+
+def Expr.foreignIdentity (curve : Foreign.Curve) : Expr (.foreign (.point curve)) :=
+  .foreignPoint curve .identity
 
 structure Input where
   name : String
@@ -800,8 +803,9 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
   | .foreignScalar curve value => do
     unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
     unless value < curve.scalarModulus do throw "foreign scalar constant is not canonical"
-  | .foreignIdentity _ =>
+  | .foreignPoint curve value => do
     unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
+    discard (Foreign.encodePoint curve value)
   | .foreignEncodedField (kind := kind) value index => do
     unless caps.foreignValues do throw "target lacks typed foreign-curve value support"
     value.validate caps env

@@ -992,7 +992,7 @@ private def merkleTreeResetHistoryAtOp (state : List StateDecl) (name : String)
   pure (.merkleTreeResetHistoryAt slot depth keys)
 
 private def expressionNames : Expr ty → List String
-  | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignIdentity _ => []
+  | .native _ | .bool _ | .uint _ _ | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => []
   | .foreignEncodedField value _ | .foreignUnary _ value | .foreignToBytes value
   | .foreignFromBytes _ value => expressionNames value
   | .foreignBinary _ left right => expressionNames left ++ expressionNames right

@@ -68,7 +68,7 @@ evaluate both arms. -/
 def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .foreignBase curve value => .foreignBase curve value
   | .foreignScalar curve value => .foreignScalar curve value
-  | .foreignIdentity curve => .foreignIdentity curve
+  | .foreignPoint curve value => .foreignPoint curve value
   | .foreignEncodedField value index => .foreignEncodedField (totalize guard value) index
   | .foreignUnary op value => guardForeignUnary guard op (totalize guard value)
   | .foreignBinary op left right =>

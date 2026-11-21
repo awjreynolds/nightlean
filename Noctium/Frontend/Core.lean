@@ -265,12 +265,15 @@ scoped syntax "jubjubY(" nlexpr ")" : nlexpr
 scoped syntax "jubjubFromCoordinates(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "secp256k1Base(" num ")" : nlexpr
 scoped syntax "secp256k1Scalar(" num ")" : nlexpr
+scoped syntax "secp256k1Point(" num "," num ")" : nlexpr
 scoped syntax "secp256k1Identity()" : nlexpr
 scoped syntax "secp256r1Base(" num ")" : nlexpr
 scoped syntax "secp256r1Scalar(" num ")" : nlexpr
+scoped syntax "secp256r1Point(" num "," num ")" : nlexpr
 scoped syntax "secp256r1Identity()" : nlexpr
 scoped syntax "curve25519Base(" num ")" : nlexpr
 scoped syntax "curve25519Scalar(" num ")" : nlexpr
+scoped syntax "curve25519Point(" num "," num ")" : nlexpr
 scoped syntax "curve25519Identity()" : nlexpr
 scoped syntax "foreignAdd(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "foreignSub(" nlexpr "," nlexpr ")" : nlexpr
@@ -591,6 +594,16 @@ private def foreignBinaryOpTerm : Foreign.BinaryOp → CommandElabM (TSyntax `te
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
+
+private def foreignPointExprTerm (stx : Syntax) (curve : Foreign.Curve)
+    (x y : Nat) : CommandElabM (TSyntax `term) := do
+  match Foreign.encodePoint curve (.affine x y) with
+  | .ok _ => pure ()
+  | .error message => throwErrorAt stx message
+  let curve ← foreignCurveTerm curve
+  let x := natTerm x
+  let y := natTerm y
+  `(Noctium.Expr.foreignPoint $curve (Noctium.Foreign.Point.affine $x $y))
 
 private partial def natListTerm : List Nat → CommandElabM (TSyntax `term)
   | [] => `(([] : List Nat))
@@ -1137,6 +1150,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless value.getNat < Foreign.Curve.scalarModulus .secp256k1 do
       throwErrorAt value "Secp256k1Scalar literal is not canonical"
     pure (.foreign (.scalar .secp256k1), ← `(Noctium.Expr.foreignScalar Noctium.Foreign.Curve.secp256k1 $value))
+  | `(nlexpr| secp256k1Point($x:num, $y:num)) => do
+    let point ← foreignPointExprTerm stx .secp256k1 x.getNat y.getNat
+    pure (.foreign (.point .secp256k1), point)
   | `(nlexpr| secp256k1Identity()) =>
     pure (.foreign (.point .secp256k1), ← `(Noctium.Expr.foreignIdentity Noctium.Foreign.Curve.secp256k1))
   | `(nlexpr| secp256r1Base($value:num)) => do
@@ -1147,6 +1163,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless value.getNat < Foreign.Curve.scalarModulus .secp256r1 do
       throwErrorAt value "Secp256r1Scalar literal is not canonical"
     pure (.foreign (.scalar .secp256r1), ← `(Noctium.Expr.foreignScalar Noctium.Foreign.Curve.secp256r1 $value))
+  | `(nlexpr| secp256r1Point($x:num, $y:num)) => do
+    let point ← foreignPointExprTerm stx .secp256r1 x.getNat y.getNat
+    pure (.foreign (.point .secp256r1), point)
   | `(nlexpr| secp256r1Identity()) =>
     pure (.foreign (.point .secp256r1), ← `(Noctium.Expr.foreignIdentity Noctium.Foreign.Curve.secp256r1))
   | `(nlexpr| curve25519Base($value:num)) => do
@@ -1157,6 +1176,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     unless value.getNat < Foreign.Curve.scalarModulus .curve25519 do
       throwErrorAt value "Curve25519Scalar literal is not canonical"
     pure (.foreign (.scalar .curve25519), ← `(Noctium.Expr.foreignScalar Noctium.Foreign.Curve.curve25519 $value))
+  | `(nlexpr| curve25519Point($x:num, $y:num)) => do
+    let point ← foreignPointExprTerm stx .curve25519 x.getNat y.getNat
+    pure (.foreign (.point .curve25519), point)
   | `(nlexpr| curve25519Identity()) =>
     pure (.foreign (.point .curve25519), ← `(Noctium.Expr.foreignIdentity Noctium.Foreign.Curve.curve25519))
   | `(nlexpr| foreignAdd($left, $right)) => do

@@ -73,7 +73,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
     let mut result : Origins := []
     for value in values do result := merge result (← origins env value)
     pure result
-  | .foreignBase _ _ | .foreignScalar _ _ | .foreignIdentity _ => pure []
+  | .foreignBase _ _ | .foreignScalar _ _ | .foreignPoint _ _ => pure []
   | .foreignEncodedField value _ => origins env value
   | .foreignUnary _ value | .foreignToBytes value => origins env value
   | .foreignBinary _ left right => do

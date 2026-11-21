@@ -1,6 +1,6 @@
 # Typed Secp inputs and results
 
-This slice connects the six Secp256k1/Secp256r1 Base, Scalar and Point types to typed inputs, constants, equality, selection and results. The complete operation package remains tracked in [issue 75](https://github.com/awjreynolds/noctium/issues/75).
+Secp256k1 and Secp256r1 Base, Scalar and Point types support typed inputs, constants, equality, selection and results. [Secp implementation](https://github.com/awjreynolds/noctium/issues/75)
 
 | Source type | Native type | Encoded Native fields |
 | --- | --- | --- |
@@ -25,9 +25,17 @@ end
 
 `private` supplies a witness value for the call. Persisted private state belongs to the host application. A circuit output is a public sink, so releasing a private point requires `disclose`. The annotation authorizes release and does not change the computation or constraints.
 
-Field literals use `secp256k1Base(n)`, `secp256k1Scalar(n)` and their r1 counterparts. They require a canonical integer below the selected modulus. Point literals currently provide `secp256k1Identity()` and `secp256r1Identity()`. Equality and selection require the same family and role. Native/foreign casts and ordinary Native arithmetic do not coerce foreign values.
+Field literals use `secp256k1Base(n)`, `secp256k1Scalar(n)` and their r1 counterparts. They require a canonical integer below the selected modulus. Equality and selection require the same family and role. Native/foreign casts and ordinary Native arithmetic do not coerce foreign values.
 
-Native typed inputs perform canonical foreign decoding. Encode expands a field into two Native values and a point into five. Field encoding uses `(x - 1) mod p`, with low192/high64 limbs. Application code should use the typed SDK representation rather than build those limbs.
+Native typed inputs perform canonical foreign decoding. `Encode` expands a Secp field into two Native values and a Secp point into five. Field encoding splits `(x - 1) mod p` into a 192-bit low limb and a 64-bit high limb. Application code should use the typed SDK representation.
+
+## Affine point literals
+
+Use `secp256k1Point(x, y)`, `secp256r1Point(x, y)` or `curve25519Point(x, y)` with literal natural-number coordinates. Noctium checks coordinate bounds and curve membership at compile time. Curve25519 also requires prime-subgroup membership. Use the corresponding `Identity()` constructor for the identity element, including `curve25519Identity()` for the Edwards identity `(0, 1)`.
+
+The ZKIR 3.2.1 target emits a typed `load_constant`. A Secp point carries two encoded coordinates and an identity flag. A Curve25519 point carries two encoded coordinates. Use `curveFromCoordinates` for coordinates computed at runtime.
+
+The source fixture rejects an off-curve Secp point, a curve type mismatch and a Curve25519 point outside the prime subgroup. The Rust case compares all three emitted constants and returned points with the native codec, then checks the Secp256k1 witness control encoding. [Source fixture](../../tests/ForeignPointLiterals.lean) · [Native case](../../runtime/tests/foreign_point_literals.rs)
 
 ## Host values
 
@@ -43,4 +51,4 @@ Base/Scalar values use exactly32 little-endian bytes. Points use exactly33 nativ
 
 [ForeignTransport.lean](../../tests/ForeignTransport.lean) selects between private values and typed constants, compares against public expectations, and returns all six types. The [native case](../../runtime/tests/foreign_transport.rs) uses boundary field values and generator points and checks both selection paths, exact private-field count, altered public/private transcripts, family mismatch and byte aliases. A focused Rust Session case checks the witness path.
 
-[Field/group arithmetic and byte conversions](foreign-operations.md) have their own focused source/native qualification. Foreign ledger storage remains separate work. The source helper diagnostic trace does not evaluate foreign values yet. No new keys, proofs or deployment qualify this slice. Whole-language preservation and formal witness reconciliation remain in [issue 21](https://github.com/awjreynolds/noctium/issues/21).
+[Field/group arithmetic and byte conversions](foreign-operations.md) and [foreign ledger state](foreign-trees.md) have separate checks. The native control runtime evaluates foreign values in helper plans. Proof generation, deployment, whole-language preservation and formal witness reconciliation remain in the wider qualification work. [Issue 21](https://github.com/awjreynolds/noctium/issues/21)
