@@ -14,12 +14,13 @@ use ledger::structure::GUARANTEED_SEGMENT;
 use onchain_runtime::state::{ContractState, StateValue};
 use rand::rngs::StdRng;
 use serde_json::Value;
+use storage::storage::Map;
 use std::{collections::BTreeMap, future::pending};
 use transient_crypto::{commitment::PedersenRandomness, proofs::Proof};
 use zswap::{Offer, prove::ZswapResolver};
 
 use super::shielded_transfer::{
-    stage_contract_owned_input, stage_contract_owned_output, StagedContractInput,
+    stage_contract_owned_input, stage_contract_owned_output, stage_contract_owned_transient, StagedContractInput,
     StagedContractOutput,
 };
 
@@ -30,9 +31,9 @@ struct BookedMergeInput {
     root: transient_crypto::merkle_tree::MerkleTreeDigest,
 }
 
-struct BookedMergeOutput {
-    commitment: Commitment,
-    index: u64,
+enum SecondMergeInput {
+    Finalized(BookedMergeInput),
+    Staged { coin: Info, domain: HashOutput },
 }
 
 pub(super) struct BookedMerge {
@@ -40,11 +41,20 @@ pub(super) struct BookedMerge {
     pub(super) randomness: PedersenRandomness,
     address: ContractAddress,
     current_state: Vec<u8>,
-    inputs: [BookedMergeInput; 2],
-    output: BookedMergeOutput,
+    first: BookedMergeInput,
+    second: SecondMergeInput,
+    output: Commitment,
+    indices: Map<Commitment, u64>,
 }
 
 impl BookedMerge {
+    pub(super) fn staged_mint(&self) -> Option<(&Info, HashOutput)> {
+        match &self.second {
+            SecondMergeInput::Staged { coin, domain } => Some((coin, *domain)),
+            SecondMergeInput::Finalized(_) => None,
+        }
+    }
+
     pub(super) fn check_booking(
         &self,
         snapshot: &Snapshot,
@@ -54,31 +64,55 @@ impl BookedMerge {
             .zswap
             .try_apply(&self.offer, None)
             .map_err(|_| HostFailure)?;
-        let current_state = snapshot
+        let contract = snapshot
             .state
             .contract
             .get(&self.address)
             .ok_or(HostFailure)?;
-        let current_state = tagged_state_bytes(&current_state).map_err(|_| HostFailure)?;
+        let current_state = tagged_state_bytes(&contract).map_err(|_| HostFailure)?;
         let zswap = &snapshot.state.zswap;
         let current_root = zswap.coin_coms.root().ok_or(HostFailure)?;
+        let output = self.offer.outputs.get(0).ok_or(HostFailure)?;
         if current_state != self.current_state
-            || self.offer.inputs.len() != 2
             || self.offer.outputs.len() != 1
-            || !self.offer.transient.is_empty()
-            || self.inputs[0].nullifier == self.inputs[1].nullifier
-            || self.offer.outputs.iter_deref().any(|output| {
-                output.coin_com != self.output.commitment
-                    || output.contract_address.as_deref() != Some(&self.address)
-                    || output.ciphertext.is_some()
-            })
-            || self.offer.outputs.iter_deref().count() != 1
-            || indices.get(&self.output.commitment).as_deref() != Some(&self.output.index)
+            || output.coin_com != self.output
+            || output.contract_address.as_deref() != Some(&self.address)
+            || output.ciphertext.is_some()
+            || indices != self.indices
         {
             return Err(HostFailure);
         }
+        let second = match &self.second {
+            SecondMergeInput::Finalized(second) => {
+                if self.offer.inputs.len() != 2
+                    || !self.offer.transient.is_empty()
+                    || second.nullifier == self.first.nullifier
+                {
+                    return Err(HostFailure);
+                }
+                Some(second)
+            }
+            SecondMergeInput::Staged { coin, .. } => {
+                let transient = self.offer.transient.get(0).ok_or(HostFailure)?;
+                let commitment = coin.commitment(&Recipient::Contract(self.address));
+                let nullifier = coin.nullifier(&SenderEvidence::Contract(self.address));
+                if self.offer.inputs.len() != 1
+                    || self.offer.transient.len() != 1
+                    || transient.coin_com != commitment
+                    || transient.nullifier != nullifier
+                    || transient.contract_address.as_deref() != Some(&self.address)
+                    || transient.ciphertext.is_some()
+                    || nullifier == self.first.nullifier
+                    || zswap.nullifiers.contains_key(&nullifier)
+                    || zswap.coin_coms_set.contains_key(&commitment)
+                {
+                    return Err(HostFailure);
+                }
+                None
+            }
+        };
 
-        for expected in &self.inputs {
+        for expected in std::iter::once(&self.first).chain(second) {
             // The ledger normalizes offer order independently of the contract's inputs.
             if !self.offer.inputs.iter_deref().any(|input| {
                 input.nullifier == expected.nullifier
@@ -109,27 +143,13 @@ impl BookedMerge {
             {
                 return Err(HostFailure);
             }
-            let current_coin = map_coin_by_nonce(
-                snapshot
-                    .state
-                    .contract
-                    .get(&self.address)
-                    .ok_or(HostFailure)?,
-                expected.coin.nonce,
-            )
-            .map_err(|_| HostFailure)?;
+            let current_coin = map_coin_by_nonce(&contract, expected.coin.nonce)
+                .map_err(|_| HostFailure)?;
             if current_coin != expected.coin {
                 return Err(HostFailure);
             }
         }
 
-        let output = self.offer.outputs.iter_deref().next().ok_or(HostFailure)?;
-        if output.coin_com != self.output.commitment
-            || output.contract_address.as_deref() != Some(&self.address)
-            || output.ciphertext.is_some()
-        {
-            return Err(HostFailure);
-        }
         Ok(())
     }
 }
@@ -137,10 +157,43 @@ impl BookedMerge {
 impl DevelopmentFunding<'_> {
     /// Merge two live contract-owned Map coins into one guaranteed contract-owned output.
     pub async fn bind_shielded_map_merge(
+        self,
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Value>,
+        parameters: &TrustedParameters,
+        cache: &ProofCache,
+        signer: &impl SigningAdapter,
+        rng: StdRng,
+    ) -> Result<BoundTransaction> {
+        self.bind_shielded_merge(target, current, inputs, None, parameters, cache, signer, rng)
+            .await
+    }
+
+    /// Merge a finalized Map coin with a coin minted and consumed in the same operation.
+    pub async fn bind_minted_shielded_map_merge(
+        self,
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Value>,
+        mint_amount: u64,
+        parameters: &TrustedParameters,
+        cache: &ProofCache,
+        signer: &impl SigningAdapter,
+        rng: StdRng,
+    ) -> Result<BoundTransaction> {
+        self.bind_shielded_merge(
+            target, current, inputs, Some(mint_amount), parameters, cache, signer, rng,
+        )
+        .await
+    }
+
+    async fn bind_shielded_merge(
         mut self,
         target: &ContractOperationTarget,
         current: &CurrentStateContext,
         inputs: BTreeMap<String, Value>,
+        mint_amount: Option<u64>,
         parameters: &TrustedParameters,
         cache: &ProofCache,
         signer: &impl SigningAdapter,
@@ -148,7 +201,7 @@ impl DevelopmentFunding<'_> {
     ) -> Result<BoundTransaction> {
         let policy = self.node.policy.clone();
         check(policy.genesis == DEVELOPMENT_GENESIS, Error::Policy)?;
-        check(inputs.len() == 2, Error::State)?;
+        check(inputs.len() == if mint_amount.is_some() { 4 } else { 2 }, Error::State)?;
         let nonce_a = Nonce(read_bytes32(&inputs, "nonceA")?);
         let nonce_b = Nonce(read_bytes32(&inputs, "nonceB")?);
         check(nonce_a != nonce_b, Error::State)?;
@@ -167,10 +220,21 @@ impl DevelopmentFunding<'_> {
         let current_contract = snapshot.state.contract.get(&address).ok_or(Error::State)?;
         let current_state = tagged_state_bytes(&current_contract)?;
         let coin_a = map_coin_by_nonce(&current_contract, nonce_a)?;
-        let coin_b = map_coin_by_nonce(&current_contract, nonce_b)?;
-        check(coin_a.nonce == nonce_a && coin_b.nonce == nonce_b, Error::State)?;
         let info_a = Info::from(&coin_a);
-        let info_b = Info::from(&coin_b);
+        let (info_b, finalized, domain) = if let Some(amount) = mint_amount {
+            let domain = read_bytes32(&inputs, "domain")?;
+            let type_ = address.custom_shielded_token_type(domain);
+            check(amount > 0 && type_.0 == read_bytes32(&inputs, "colorB")?, Error::State)?;
+            (
+                Info { nonce: nonce_b, type_, value: u128::from(amount) },
+                None,
+                Some(domain),
+            )
+        } else {
+            let coin = map_coin_by_nonce(&current_contract, nonce_b)?;
+            (Info::from(&coin), Some(coin), None)
+        };
+        check(coin_a.nonce == nonce_a && info_b.nonce == nonce_b, Error::State)?;
         check(info_a.type_ == info_b.type_, Error::State)?;
         let amount = info_a.value.checked_add(info_b.value).ok_or(Error::State)?;
         let output_info = info_a.evolve_from(b"midnight:kernel:nonce_evolve", amount, info_a.type_);
@@ -182,20 +246,40 @@ impl DevelopmentFunding<'_> {
             nullifier: input_nullifier_a,
             merkle_tree_root: input_root_a,
         } = stage_contract_owned_input(zswap, address, &coin_a, &mut rng)?;
-        let StagedContractInput {
-            input: input_b,
-            commitment: input_commitment_b,
-            nullifier: input_nullifier_b,
-            merkle_tree_root: input_root_b,
-        } = stage_contract_owned_input(zswap, address, &coin_b, &mut rng)?;
-        check(input_nullifier_a != input_nullifier_b, Error::State)?;
         let StagedContractOutput {
             output,
             commitment: output_commitment,
         } = stage_contract_owned_output(address, &output_info, &mut rng)?;
-        let offer = Offer::new(vec![input_a, input_b], vec![output], vec![]).ok_or(Error::State)?;
+        let (offer, second) = if let Some(coin) = finalized {
+            let staged = stage_contract_owned_input(zswap, address, &coin, &mut rng)?;
+            check(input_nullifier_a != staged.nullifier, Error::State)?;
+            let offer = Offer::new(vec![input_a, staged.input], vec![output], vec![])
+                .ok_or(Error::State)?;
+            let second = BookedMergeInput {
+                coin,
+                commitment: staged.commitment,
+                nullifier: staged.nullifier,
+                root: staged.merkle_tree_root,
+            };
+            (offer, SecondMergeInput::Finalized(second))
+        } else {
+            let domain = domain.ok_or(Error::State)?;
+            let transient = stage_contract_owned_transient(address, &info_b, &mut rng)?;
+            check(
+                input_nullifier_a != transient.nullifier && transient.coin_com != output_commitment,
+                Error::State,
+            )?;
+            let offer = Offer::new(vec![input_a], vec![output], vec![transient])
+                .ok_or(Error::State)?;
+            (offer, SecondMergeInput::Staged { coin: info_b, domain })
+        };
         let (_, indices) = zswap.try_apply(&offer, None).map_err(|_| Error::State)?;
-        let output_index = *indices.get(&output_commitment).ok_or(Error::State)?;
+        check(indices.contains_key(&output_commitment), Error::State)?;
+        if let SecondMergeInput::Staged { coin, .. } = &second {
+            let transient = coin.commitment(&Recipient::Contract(address));
+            check(indices.size() == 2 && indices.contains_key(&transient), Error::State)?;
+        }
+        let booked_indices = indices.clone();
 
         let prepared = PreparedProof::from_contract_witness_inputs_with_com_indices(
             target,
@@ -241,29 +325,21 @@ impl DevelopmentFunding<'_> {
             randomness,
             address,
             current_state,
-            inputs: [
-                BookedMergeInput {
-                    coin: coin_a,
-                    commitment: input_commitment_a,
-                    nullifier: input_nullifier_a,
-                    root: input_root_a,
-                },
-                BookedMergeInput {
-                    coin: coin_b,
-                    commitment: input_commitment_b,
-                    nullifier: input_nullifier_b,
-                    root: input_root_b,
-                },
-            ],
-            output: BookedMergeOutput {
-                commitment: output_commitment,
-                index: output_index,
+            first: BookedMergeInput {
+                coin: coin_a,
+                commitment: input_commitment_a,
+                nullifier: input_nullifier_a,
+                root: input_root_a,
             },
+            second,
+            output: output_commitment,
+            indices: booked_indices,
         });
-        let expected = &self.shielded_merge.as_ref().ok_or(Error::State)?.offer;
+        let booked = self.shielded_merge.as_ref().ok_or(Error::State)?;
         let bound = BoundTransaction::prepare_shielded_merge(
             proved.native(),
-            expected,
+            &booked.offer,
+            booked.staged_mint(),
             policy,
             self.node,
             &self,
@@ -305,6 +381,47 @@ mod tests {
         thread,
         time::{Duration, Instant},
     };
+
+    #[test]
+    fn staged_merge_claims_reject_wrong_mint_and_transient_shape() {
+        use crate::client::shielded_merge_claims_match;
+        use base_crypto::time::{Duration as LedgerDuration, Timestamp};
+        use onchain_runtime::context::Effects;
+
+        let mut rng = StdRng::from_seed([0x5a; 32]);
+        let address = ContractAddress(HashOutput([0x21; 32]));
+        let domain = HashOutput([0x31; 32]);
+        let type_ = address.custom_shielded_token_type(domain);
+        let a = Info::new(&mut rng, 5, type_);
+        let b = Info::new(&mut rng, 7, type_);
+        let c = a.evolve_from(b"midnight:kernel:nonce_evolve", 12, type_);
+        let seed = stage_contract_owned_output(address, &a, &mut rng).unwrap();
+        let zswap = zswap::ledger::State::<Db>::new();
+        let offer = Offer::new(vec![], vec![seed.output], vec![]).unwrap();
+        let (zswap, indices) = zswap.try_apply(&offer, None).unwrap();
+        let zswap = zswap.post_block_update(Timestamp::from_secs(1), LedgerDuration::from_secs(3600));
+        let a = a.qualify(*indices.get(&seed.commitment).unwrap());
+        let input = stage_contract_owned_input(&zswap, address, &a, &mut rng).unwrap();
+        let output = stage_contract_owned_output(address, &c, &mut rng).unwrap();
+        let transient = stage_contract_owned_transient(address, &b, &mut rng).unwrap();
+        let effects = Effects {
+            claimed_nullifiers: [input.nullifier, transient.nullifier].into_iter().collect(),
+            claimed_shielded_receives: [output.commitment, transient.coin_com].into_iter().collect(),
+            claimed_shielded_spends: [output.commitment].into_iter().collect(),
+            shielded_mints: [(domain, 7)].into_iter().collect(),
+            ..Effects::default()
+        };
+        let offer = Offer::new(vec![input.input], vec![output.output], vec![transient.clone()]).unwrap();
+        assert!(shielded_merge_claims_match(&effects, address, &offer, Some((&b, domain))));
+        let wrong_amount = Info { value: 8, ..b.clone() };
+        assert!(!shielded_merge_claims_match(&effects, address, &offer, Some((&wrong_amount, domain))));
+        assert!(!shielded_merge_claims_match(
+            &effects, address, &offer, Some((&b, HashOutput([0x32; 32]))),
+        ));
+        let mut duplicate = offer.clone();
+        duplicate.transient = [transient.clone(), transient].into_iter().collect();
+        assert!(!shielded_merge_claims_match(&effects, address, &duplicate, Some((&b, domain))));
+    }
 
     async fn finalize(node: &Node, bound: &BoundTransaction) -> Result<FinalizedReceipt> {
         let sent = node
@@ -354,6 +471,16 @@ mod tests {
     #[test]
     #[ignore = "requires generated mint/merge bundles and the isolated funded development node"]
     fn funded_shielded_map_merge_localnet() -> Result<()> {
+        funded_merge(false)
+    }
+
+    #[test]
+    #[ignore = "requires same-operation mint/merge bundles and the isolated funded development node"]
+    fn funded_shielded_map_immediate_merge_localnet() -> Result<()> {
+        funded_merge(true)
+    }
+
+    fn funded_merge(immediate: bool) -> Result<()> {
         futures::executor::block_on(async {
             let setting = |name: &str| env::var(name).with_context(|| format!("missing {name}"));
             let mint_bundle = artifacts::verify(
@@ -501,44 +628,49 @@ mod tests {
                 "first minted Map coin differs from its finalized booking"
             );
 
-            let index_b = node.sync()?.state.zswap.first_free;
-            let (deposit_b, binding_b) = make_funding()
-                .bind_minted_shielded_receive_with_binding(
-                    &mint,
-                    &current,
-                    mint_inputs(&coin_b, domain),
-                    &coin_b,
-                    &mint_parameters,
-                    &cache,
-                    &make_signer(),
-                    StdRng::from_entropy(),
-                )
-                .await
-                .context("bind second merge input mint")?;
-            let receipt_b = finalize(&node, &deposit_b)
-                .await
-                .context("finalize second merge input mint")?;
-            current = binding_b
-                .admit_committed_state(
-                    &receipt_b.contract_state,
-                    deposit_b.expected_state(),
-                    &receipt_b.finalized_hash,
-                    false,
-                )
-                .context("admit second merge input state")?;
-            let state_b: ContractState<Db> = super::super::native_decode(&receipt_b.contract_state)?;
-            let qualified_b = map_coin_by_nonce(&state_b, coin_b.nonce)?;
-            ensure!(
-                qualified_b.value == coin_b.value && qualified_b.mt_index == index_b,
-                "second minted Map coin differs from its finalized booking"
-            );
-            let StateValue::Array(slots) = state_b.data.get_ref() else {
+            let (mint_b_height, state_before_merge) = if immediate {
+                (None, state_a)
+            } else {
+                let index_b = node.sync()?.state.zswap.first_free;
+                let (deposit_b, binding_b) = make_funding()
+                    .bind_minted_shielded_receive_with_binding(
+                        &mint,
+                        &current,
+                        mint_inputs(&coin_b, domain),
+                        &coin_b,
+                        &mint_parameters,
+                        &cache,
+                        &make_signer(),
+                        StdRng::from_entropy(),
+                    )
+                    .await
+                    .context("bind second merge input mint")?;
+                let receipt_b = finalize(&node, &deposit_b)
+                    .await
+                    .context("finalize second merge input mint")?;
+                current = binding_b
+                    .admit_committed_state(
+                        &receipt_b.contract_state,
+                        deposit_b.expected_state(),
+                        &receipt_b.finalized_hash,
+                        false,
+                    )
+                    .context("admit second merge input state")?;
+                let state_b: ContractState<Db> = super::super::native_decode(&receipt_b.contract_state)?;
+                let qualified_b = map_coin_by_nonce(&state_b, coin_b.nonce)?;
+                ensure!(
+                    qualified_b.value == coin_b.value && qualified_b.mt_index == index_b,
+                    "second minted Map coin differs from its finalized booking"
+                );
+                (Some(receipt_b.height), state_b)
+            };
+            let StateValue::Array(slots) = state_before_merge.data.get_ref() else {
                 anyhow::bail!("expected contract state array after input mints")
             };
             let Some(StateValue::Map(coins)) = slots.get(0) else {
                 anyhow::bail!("expected root shielded coin Map")
             };
-            ensure!(coins.size() == 2, "expected two booked merge inputs");
+            ensure!(coins.size() == if immediate { 1 } else { 2 }, "unexpected booked merge inputs");
 
             let merge_index = node.sync()?.state.zswap.first_free;
             let merged = coin_a.evolve_from(
@@ -547,21 +679,38 @@ mod tests {
                 coin_a.type_,
             );
             let output_commitment = merged.commitment(&Recipient::Contract(address));
-            let merge_bound = make_funding()
-                .bind_shielded_map_merge(
-                    &merge,
-                    &current,
-                    merge_inputs(&coin_a, &coin_b),
-                    &merge_parameters,
-                    &cache,
-                    &make_signer(),
-                    StdRng::from_entropy(),
-                )
-                .await
-                .context("prepare two-input shielded Map merge")?;
+            let merge_bound = if immediate {
+                let mut inputs = merge_inputs(&coin_a, &coin_b);
+                inputs.insert("domain".into(), bytes_input(&domain.0));
+                inputs.insert("colorB".into(), bytes_input(&coin_b.type_.0.0));
+                make_funding()
+                    .bind_minted_shielded_map_merge(
+                        &merge,
+                        &current,
+                        inputs,
+                        7,
+                        &merge_parameters,
+                        &cache,
+                        &make_signer(),
+                        StdRng::from_entropy(),
+                    )
+                    .await
+            } else {
+                make_funding()
+                    .bind_shielded_map_merge(
+                        &merge,
+                        &current,
+                        merge_inputs(&coin_a, &coin_b),
+                        &merge_parameters,
+                        &cache,
+                        &make_signer(),
+                        StdRng::from_entropy(),
+                    )
+                    .await
+            }.context("prepare shielded Map merge")?;
             let merge_receipt = finalize(&node, &merge_bound)
                 .await
-                .context("finalize two-input shielded Map merge")?;
+                .context("finalize shielded Map merge")?;
             ensure!(
                 merge_receipt.contract_state == merge_bound.expected_state(),
                 "finalized merge state differs from the prepared state"
@@ -613,12 +762,27 @@ mod tests {
                     "one merge input nullifier was not finalized"
                 );
             }
+            if immediate {
+                let transient_commitment = coin_b.commitment(&Recipient::Contract(address));
+                let transient_index = merge_index.checked_add(1).context("transient index overflow")?;
+                let (leaf, owner) = finalized
+                    .state
+                    .zswap
+                    .coin_coms
+                    .index(transient_index)
+                    .context("same-offer transient leaf missing")?;
+                ensure!(
+                    leaf == transient_commitment.0 && owner.as_deref() == Some(&address),
+                    "transient commitment and owner differ from the booked coin"
+                );
+            }
             println!(
                 "{}",
                 json!({
                     "deploymentHeight": deployed.height,
                     "mintAHeight": receipt_a.height,
-                    "mintBHeight": receipt_b.height,
+                    "mintBHeight": mint_b_height,
+                    "sameOperation": immediate,
                     "mergeHeight": merge_receipt.height,
                     "mergeTransaction": merge_receipt.transaction_id,
                     "contractAddress": target.contract_address(),

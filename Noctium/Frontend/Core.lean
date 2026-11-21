@@ -414,6 +414,8 @@ scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : n
 scoped syntax "pushFrontCoin" "(" ident "," nlexpr "," nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mergeShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "mergeShieldedImmediateFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr
+  "," nlexpr ")" : nlupdate
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
@@ -2609,6 +2611,117 @@ private def elaborateEvent (env : Bindings) (event : TSyntax `ident)
   let payload ← concatenateEventFields encoded
   `(Noctium.Effect.emitEvent $kindTerm $payload)
 
+private def elaborateShieldedMerge (schema : List (String × StateKind)) (depth : Nat)
+    (state : EntryEffects) (update : TSyntax `nlupdate) (storage : TSyntax `ident)
+    (nonceA nonceB : TSyntax `nlexpr) (incoming : Option (TSyntax `nlexpr × TSyntax `nlexpr))
+    (guard span : TSyntax `term) : CommandElabM EntryEffects := do
+  let mut state := state
+  let priorTerms := state.terms.size
+  unless depth == 0 do
+    throwErrorAt update "mergeShieldedFromMap must be unguarded"
+  match guard with
+  | `(term| none) => pure ()
+  | _ => throwErrorAt update "mergeShieldedFromMap must be unguarded"
+  let treeSchema ← treeStateSchema schema storage
+  let .map keyTy (.composite environment recordType) := treeSchema
+    | throwErrorAt storage "mergeShieldedFromMap requires a root Bytes32-keyed tree Map"
+  unless keyTy == .bytes 32 do
+    throwErrorAt storage "mergeShieldedFromMap map key must be Bytes32"
+  let fields ← match LedgerValueType.shieldedCoinRecordFields environment recordType with
+    | .ok fields => pure fields
+    | .error message => throwErrorAt storage message
+  unless fields.map Prod.fst == ["nonce", "color", "value", "mtIndex"] do
+    throwErrorAt storage "mergeShieldedFromMap requires the exact shielded coin field order"
+  let coinAName := s!"noctium_merge_coin_{state.terms.size}"
+  let coinA := mkIdent (Name.mkSimple coinAName)
+  state ← elaborateTreeRead storage coinA [nonceA] treeSchema depth state
+  let (nonceARecordSyntax, colorASyntax, amountASyntax) ←
+    readShieldedCoinFields coinAName
+  let nonceARecord ← checkedExpression state.env nonceARecordSyntax (.bytes 32)
+  let colorA ← checkedExpression state.env colorASyntax (.bytes 32)
+  let amountA ← checkedExpression state.env amountASyntax (.uint (2 ^ 128 - 1))
+  let keyAEqualitySyntax ← `(nlexpr| eq($nonceARecordSyntax, $nonceA))
+  let keyAEquality ← checkedExpression state.env keyAEqualitySyntax .bool
+  let requireKeyA ← `(Noctium.Effect.require $keyAEquality)
+  state := {state with terms := state.terms.push requireKeyA}
+
+  let (nonceBRecordSyntax, colorBSyntax, amountBSyntax) ← match incoming with
+  | some (color, amount) => pure (nonceB, color, amount)
+  | none => do
+    let coinBName := s!"noctium_merge_coin_{state.terms.size}"
+    let coinB := mkIdent (Name.mkSimple coinBName)
+    state ← elaborateTreeRead storage coinB [nonceB] treeSchema depth state
+    let (nonceBRecordSyntax, colorBSyntax, amountBSyntax) ←
+      readShieldedCoinFields coinBName
+    let keyBEqualitySyntax ← `(nlexpr| eq($nonceBRecordSyntax, $nonceB))
+    let keyBEquality ← checkedExpression state.env keyBEqualitySyntax .bool
+    let requireKeyB ← `(Noctium.Effect.require $keyBEquality)
+    state := {state with terms := state.terms.push requireKeyB}
+    pure (nonceBRecordSyntax, colorBSyntax, amountBSyntax)
+  let nonceBRecord ← checkedExpression state.env nonceBRecordSyntax (.bytes 32)
+  let colorB ← checkedExpression state.env colorBSyntax (.bytes 32)
+  let amountB ← checkedExpression state.env amountBSyntax (.uint (2 ^ 128 - 1))
+
+  let matchingColorSyntax ← `(nlexpr| eq($colorASyntax, $colorBSyntax))
+  let matchingColor ← checkedExpression state.env matchingColorSyntax .bool
+  let requireColor ← `(Noctium.Effect.require $matchingColor)
+  let sameNonceSyntax ← `(nlexpr| eq($nonceA, $nonceB))
+  let sameNonce ← checkedExpression state.env sameNonceSyntax .bool
+  let distinctNonce ← `(Noctium.Expr.select $sameNonce
+    (Noctium.Expr.bool Bool.false) (Noctium.Expr.bool Bool.true))
+  let requireDistinct ← `(Noctium.Effect.require $distinctNonce)
+  state := {state with terms := state.terms.push requireColor |>.push requireDistinct}
+
+  let addressName := s!"noctium_merge_address_{state.terms.size}"
+  unless state.env.all (fun binding => binding.1 != addressName) do
+    throwErrorAt update "reserved mergeShieldedFromMap binding collides with an existing read"
+  let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+  state := {state with terms := state.terms.push addressTerm}
+  state ← bindReadName state addressName addressName (.bytes 32)
+  let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+
+  let mergedNonce ← `(Noctium.Wire.shieldedOutputNonce $nonceARecord)
+  let mergedAmount ← `(Noctium.Expr.cast (Noctium.Ty.uint (2 ^ 128 - 1))
+    (Noctium.Expr.uadd $amountA $amountB))
+  let memberKey ← `(Noctium.PathKey.mk (Noctium.Ty.bytes 32) $mergedNonce)
+  let memberKeys ← pathKeysTerm [memberKey]
+  let memberName := s!"noctium_merge_member_{state.terms.size}"
+  unless state.env.all (fun binding => binding.1 != memberName) do
+    throwErrorAt update "reserved merge output membership binding collides with an existing read"
+  let memberTerm ← `(Noctium.Effect.memberPath
+    $(stringTerm storage.getId.toString) $(stringTerm memberName) $memberKeys)
+  state := {state with terms := state.terms.push memberTerm}
+  state ← bindReadName state memberName memberName .bool
+  let absentCondition ← `(Noctium.Expr.eq
+    (Noctium.Expr.ref $(stringTerm memberName)) (Noctium.Expr.bool Bool.false))
+  let absentTerm ← `(Noctium.Effect.require $absentCondition)
+  state := {state with terms := state.terms.push absentTerm}
+
+  let staged ← if incoming.isSome then `(Bool.true) else `(Bool.false)
+  let mergeTerm ← `(Noctium.Effect.mergeShieldedFromMap
+    $(stringTerm storage.getId.toString)
+    $nonceARecord $colorA $amountA $nonceBRecord $colorB $amountB $selfAddress $staged)
+  state := {state with terms := state.terms.push mergeTerm}
+  let keysA ← do
+    let (path, _) ← lowerTreePath state.env treeSchema [nonceA]
+    pathKeysTerm path
+  let removeA ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keysA)
+  state := {state with terms := state.terms.push removeA}
+  if incoming.isNone then
+    let (path, _) ← lowerTreePath state.env treeSchema [nonceB]
+    let keysB ← pathKeysTerm path
+    let removeB ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keysB)
+    state := {state with terms := state.terms.push removeB}
+  let receiveTerm ← `(Noctium.Effect.receiveShieldedToMap
+    $(stringTerm storage.getId.toString) $mergedNonce $colorA $mergedAmount $selfAddress)
+  let noGuard ← `(none)
+  let terms := state.terms.push receiveTerm
+  let extra := terms.size - priorTerms - 1
+  return {state with
+    terms := terms
+    spans := state.spans ++ Array.replicate extra span
+    guards := state.guards ++ Array.replicate extra noGuard}
+
 private def elaborateEffect (schema : List (String × StateKind))
     (parent : Option (TSyntax `term)) (depth : Nat) (state : EntryEffects)
     (effect : TSyntax `nleffect) : CommandElabM EntryEffects := do
@@ -2925,102 +3038,12 @@ private def elaborateEffect (schema : List (String × StateKind))
         terms := state.terms.push removeTerm
         spans := state.spans.push span |>.push span |>.push span |>.push span
         guards := state.guards.push noGuard |>.push noGuard |>.push noGuard |>.push noGuard}
-    | `(nlupdate| mergeShieldedFromMap($storage:ident, $nonceA:nlexpr, $nonceB:nlexpr)) => do
-      unless depth == 0 do
-        throwErrorAt update "mergeShieldedFromMap must be unguarded"
-      match guard with
-      | `(term| none) => pure ()
-      | _ => throwErrorAt update "mergeShieldedFromMap must be unguarded"
-      let treeSchema ← treeStateSchema schema storage
-      let .map keyTy (.composite environment recordType) := treeSchema
-        | throwErrorAt storage "mergeShieldedFromMap requires a root Bytes32-keyed tree Map"
-      unless keyTy == .bytes 32 do
-        throwErrorAt storage "mergeShieldedFromMap map key must be Bytes32"
-      let fields ← match LedgerValueType.shieldedCoinRecordFields environment recordType with
-        | .ok fields => pure fields
-        | .error message => throwErrorAt storage message
-      unless fields.map Prod.fst == ["nonce", "color", "value", "mtIndex"] do
-        throwErrorAt storage "mergeShieldedFromMap requires the exact shielded coin field order"
-      let coinAName := s!"noctium_merge_coin_{state.terms.size}"
-      let coinA := mkIdent (Name.mkSimple coinAName)
-      state ← elaborateTreeRead storage coinA [nonceA] treeSchema depth state
-      let (nonceARecordSyntax, colorASyntax, amountASyntax) ←
-        readShieldedCoinFields coinAName
-      let nonceARecord ← checkedExpression state.env nonceARecordSyntax (.bytes 32)
-      let colorA ← checkedExpression state.env colorASyntax (.bytes 32)
-      let amountA ← checkedExpression state.env amountASyntax (.uint (2 ^ 128 - 1))
-      let keyAEqualitySyntax ← `(nlexpr| eq($nonceARecordSyntax, $nonceA))
-      let keyAEquality ← checkedExpression state.env keyAEqualitySyntax .bool
-      let requireKeyA ← `(Noctium.Effect.require $keyAEquality)
-      state := {state with terms := state.terms.push requireKeyA}
-
-      let coinBName := s!"noctium_merge_coin_{state.terms.size}"
-      let coinB := mkIdent (Name.mkSimple coinBName)
-      state ← elaborateTreeRead storage coinB [nonceB] treeSchema depth state
-      let (nonceBRecordSyntax, colorBSyntax, amountBSyntax) ←
-        readShieldedCoinFields coinBName
-      let nonceBRecord ← checkedExpression state.env nonceBRecordSyntax (.bytes 32)
-      let colorB ← checkedExpression state.env colorBSyntax (.bytes 32)
-      let amountB ← checkedExpression state.env amountBSyntax (.uint (2 ^ 128 - 1))
-      let keyBEqualitySyntax ← `(nlexpr| eq($nonceBRecordSyntax, $nonceB))
-      let keyBEquality ← checkedExpression state.env keyBEqualitySyntax .bool
-      let requireKeyB ← `(Noctium.Effect.require $keyBEquality)
-      state := {state with terms := state.terms.push requireKeyB}
-
-      let matchingColorSyntax ← `(nlexpr| eq($colorASyntax, $colorBSyntax))
-      let matchingColor ← checkedExpression state.env matchingColorSyntax .bool
-      let requireColor ← `(Noctium.Effect.require $matchingColor)
-      let sameNonceSyntax ← `(nlexpr| eq($nonceA, $nonceB))
-      let sameNonce ← checkedExpression state.env sameNonceSyntax .bool
-      let distinctNonce ← `(Noctium.Expr.select $sameNonce
-        (Noctium.Expr.bool Bool.false) (Noctium.Expr.bool Bool.true))
-      let requireDistinct ← `(Noctium.Effect.require $distinctNonce)
-      state := {state with terms := state.terms.push requireColor |>.push requireDistinct}
-
-      let addressName := s!"noctium_merge_address_{state.terms.size}"
-      unless state.env.all (fun binding => binding.1 != addressName) do
-        throwErrorAt update "reserved mergeShieldedFromMap binding collides with an existing read"
-      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
-      state := {state with terms := state.terms.push addressTerm}
-      state ← bindReadName state addressName addressName (.bytes 32)
-      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
-
-      let mergedNonce ← `(Noctium.Wire.shieldedOutputNonce $nonceARecord)
-      let mergedAmount ← `(Noctium.Expr.cast (Noctium.Ty.uint (2 ^ 128 - 1))
-        (Noctium.Expr.uadd $amountA $amountB))
-      let memberKey ← `(Noctium.PathKey.mk (Noctium.Ty.bytes 32) $mergedNonce)
-      let memberKeys ← pathKeysTerm [memberKey]
-      let memberName := s!"noctium_merge_member_{state.terms.size}"
-      unless state.env.all (fun binding => binding.1 != memberName) do
-        throwErrorAt update "reserved merge output membership binding collides with an existing read"
-      let memberTerm ← `(Noctium.Effect.memberPath
-        $(stringTerm storage.getId.toString) $(stringTerm memberName) $memberKeys)
-      state := {state with terms := state.terms.push memberTerm}
-      state ← bindReadName state memberName memberName .bool
-      let absentCondition ← `(Noctium.Expr.eq
-        (Noctium.Expr.ref $(stringTerm memberName)) (Noctium.Expr.bool Bool.false))
-      let absentTerm ← `(Noctium.Effect.require $absentCondition)
-      state := {state with terms := state.terms.push absentTerm}
-
-      let mergeTerm ← `(Noctium.Effect.mergeShieldedFromMap
-        $(stringTerm storage.getId.toString)
-        $nonceARecord $colorA $amountA $nonceBRecord $colorB $amountB $selfAddress)
-      state := {state with terms := state.terms.push mergeTerm}
-      let keysA ← do
-        let (path, _) ← lowerTreePath state.env treeSchema [nonceA]
-        pathKeysTerm path
-      let keysB ← do
-        let (path, _) ← lowerTreePath state.env treeSchema [nonceB]
-        pathKeysTerm path
-      let removeA ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keysA)
-      let removeB ← `(Noctium.Effect.removePath $(stringTerm storage.getId.toString) $keysB)
-      let receiveTerm ← `(Noctium.Effect.receiveShieldedToMap
-        $(stringTerm storage.getId.toString) $mergedNonce $colorA $mergedAmount $selfAddress)
-      let noGuard ← `(none)
-      state := {state with
-        terms := state.terms.push removeA |>.push removeB |>.push receiveTerm
-        spans := state.spans ++ Array.replicate 12 span
-        guards := state.guards ++ Array.replicate 12 noGuard}
+    | `(nlupdate| mergeShieldedFromMap($storage:ident, $nonceA:nlexpr, $nonceB:nlexpr)) =>
+      state ← elaborateShieldedMerge schema depth state update storage nonceA nonceB none guard span
+    | `(nlupdate| mergeShieldedImmediateFromMap($storage:ident, $nonceA:nlexpr, $nonceB:nlexpr,
+          $color:nlexpr, $amount:nlexpr)) =>
+      state ← elaborateShieldedMerge schema depth state update storage nonceA nonceB
+        (some (color, amount)) guard span
     | `(nlupdate| sendShieldedFromMap($storage:ident, $nonce:nlexpr,
         $sendAmount:nlexpr, $recipient:nlexpr)) => do
       unless depth == 0 do

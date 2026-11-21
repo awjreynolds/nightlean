@@ -392,4 +392,28 @@ def vectorIndexReplay : Bool := Id.run do
 
 #guard vectorIndexReplay
 
+/-- The recorder preserves private lookup arguments even when the provider's
+response, public result, and staged write agree. -/
+private def providerObservesPrivateArguments : Bool := Id.run do
+  let lookup : Provider := fun request =>
+    if request.operation == "noctium.lookup.v1" then .value (.scalar (.native 14))
+    else cacheLookupProvider request
+  let record (seed : Nat) :=
+    recordInvocation {} 4096 nativeContext cachedClaim "claim"
+      [("expected", .scalar (.native 14)), ("seed", .scalar (.native seed))]
+      claimInitialState claimGrants lookup
+  let .ok left := record 7 | return false
+  let .ok right := record 11 | return false
+  let lookupArguments (invocation : RecordedInvocation) :=
+    (invocation.observation.tape.filter (·.operation == "noctium.lookup.v1")).map
+      WitnessInvocation.arguments
+  return left.observation.result == .success (.scalar (.native 14)) &&
+    left.observation.result == right.observation.result &&
+    left.observation.journal == right.observation.journal &&
+    left.observation.stagedState == right.observation.stagedState &&
+    lookupArguments left == [[.scalar (.native 7)], [.scalar (.native 7)]] &&
+    lookupArguments right == [[.scalar (.native 11)], [.scalar (.native 11)]]
+
+#guard providerObservesPrivateArguments
+
 end WitnessSemanticsTest

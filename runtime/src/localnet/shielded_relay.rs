@@ -1,4 +1,5 @@
 use super::{DEVELOPMENT_GENESIS, DevelopmentFunding, Error, ProofCache, Result, check};
+use super::shielded_transfer::{stage_contract_owned_output, stage_contract_owned_transient};
 use crate::{
     Db,
     client::{BoundTransaction, HostFailure, SigningAdapter, Snapshot},
@@ -18,7 +19,7 @@ use rand::rngs::StdRng;
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, future::pending};
 use transient_crypto::{commitment::PedersenRandomness, curve::Fr, proofs::Proof};
-use zswap::{Offer, Output, Transient, prove::ZswapResolver};
+use zswap::{Offer, prove::ZswapResolver};
 
 const RELAY_AMOUNT: u128 = 5;
 
@@ -186,32 +187,17 @@ impl DevelopmentFunding<'_> {
         let relay_state = tagged_state_bytes(&relay_state)?;
         let destination_state = tagged_state_bytes(&destination_state)?;
 
-        let relay_output = Output::<_, Db>::new_contract_owned(
-            &mut rng,
-            &mint,
-            Some(GUARANTEED_SEGMENT),
-            relay_address,
-        )
-        .map_err(|_| Error::State)?;
-        let transient = Transient::<_, Db>::new_from_contract_owned_output(
-            &mut rng,
-            &mint.qualify(0),
-            Some(GUARANTEED_SEGMENT),
-            relay_output,
-        )
-        .map_err(|_| Error::State)?;
-        let destination_output = Output::<_, Db>::new_contract_owned(
-            &mut rng,
-            &destination_coin,
-            Some(GUARANTEED_SEGMENT),
+        let transient = stage_contract_owned_transient(relay_address, &mint, &mut rng)?;
+        let destination = stage_contract_owned_output(
             destination_address,
-        )
-        .map_err(|_| Error::State)?;
+            &destination_coin,
+            &mut rng,
+        )?;
         let transient_commitment = transient.coin_com;
         let transient_nullifier = transient.nullifier;
-        let destination_commitment = destination_output.coin_com;
+        let destination_commitment = destination.commitment;
         let offer =
-            Offer::new(vec![], vec![destination_output], vec![transient]).ok_or(Error::State)?;
+            Offer::new(vec![], vec![destination.output], vec![transient]).ok_or(Error::State)?;
         let (_, booked_indices) = snapshot
             .state
             .zswap

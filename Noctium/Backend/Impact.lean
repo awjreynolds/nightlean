@@ -177,6 +177,7 @@ inductive Op where
       (outputNonce outputColor : Expr (.bytes 32))
       (outputAmount : Expr (.uint (2 ^ 128 - 1)))
       (nullifierA nullifierB outputCommitment : Expr (.bytes 32))
+      (stagedCommitment : Option (Expr (.bytes 32)))
   | sendShieldedFromMap (nonce color : Expr (.bytes 32))
       (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
       (recipient nullifier outputCommitment changeCommitment : Expr (.bytes 32))
@@ -284,7 +285,7 @@ private def mergeShieldedOp (nonceA colorA : Expr (.bytes 32))
     (amountA : Expr (.uint (2 ^ 128 - 1)))
     (nonceB colorB : Expr (.bytes 32))
     (amountB : Expr (.uint (2 ^ 128 - 1)))
-    (selfAddress : Expr (.bytes 32)) : Op :=
+    (selfAddress : Expr (.bytes 32)) (stagedInput : Bool) : Op :=
   let outputNonce := Wire.shieldedOutputNonce nonceA
   let outputColor := colorA
   let outputAmount : Expr (.uint (2 ^ 128 - 1)) :=
@@ -295,8 +296,11 @@ private def mergeShieldedOp (nonceA colorA : Expr (.bytes 32))
     shieldedCoinDigest "midnight:zswap-cn[v1]" 0 nonceB colorB amountB selfAddress
   let outputCommitment := shieldedCoinDigest
     "midnight:zswap-cc[v1]" 0 outputNonce outputColor outputAmount selfAddress
+  let stagedCommitment := if stagedInput then
+    some (shieldedCoinDigest "midnight:zswap-cc[v1]" 0 nonceB colorB amountB selfAddress)
+    else none
   .mergeShieldedFromMap nonceA colorA amountA nonceB colorB amountB
-    outputNonce outputColor outputAmount nullifierA nullifierB outputCommitment
+    outputNonce outputColor outputAmount nullifierA nullifierB outputCommitment stagedCommitment
 
 private def sendShieldedOp (nonce color : Expr (.bytes 32))
     (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
@@ -769,8 +773,8 @@ def Op.fields : Op → List Scalar
       (receiveShieldedFieldGroups slot nonce color amount commitment).flatten
   | .spendShieldedFromMap _ _ _ _ nullifier output =>
       (shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output).flatten
-  | .mergeShieldedFromMap _ _ _ _ _ _ _ _ _ nullifierA nullifierB output =>
-      (shieldedClaimFieldGroups 0 nullifierA ++ shieldedClaimFieldGroups 0 nullifierB ++
+  | .mergeShieldedFromMap _ _ _ _ _ _ _ _ _ nullifierA nullifierB output staged =>
+      ((staged.map (shieldedClaimFieldGroups 1)).getD [] ++ shieldedClaimFieldGroups 0 nullifierA ++ shieldedClaimFieldGroups 0 nullifierB ++
         shieldedClaimFieldGroups 2 output).flatten
   | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
       (shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
@@ -893,8 +897,8 @@ def Op.fieldGroups : Op → List (List Scalar)
       receiveShieldedFieldGroups slot nonce color amount commitment
   | .spendShieldedFromMap _ _ _ _ nullifier output =>
       shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output
-  | .mergeShieldedFromMap _ _ _ _ _ _ _ _ _ nullifierA nullifierB output =>
-      shieldedClaimFieldGroups 0 nullifierA ++ shieldedClaimFieldGroups 0 nullifierB ++
+  | .mergeShieldedFromMap _ _ _ _ _ _ _ _ _ nullifierA nullifierB output staged =>
+      (staged.map (shieldedClaimFieldGroups 1)).getD [] ++ shieldedClaimFieldGroups 0 nullifierA ++ shieldedClaimFieldGroups 0 nullifierB ++
         shieldedClaimFieldGroups 2 output
   | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
       shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
@@ -1646,9 +1650,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
-  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress =>
+  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress staged =>
     pure {plan with operations := plan.operations ++ [
-      mergeShieldedOp nonceA colorA amountA nonceB colorB amountB selfAddress]}
+      mergeShieldedOp nonceA colorA amountA nonceB colorB amountB selfAddress staged]}
   | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}
@@ -2322,9 +2326,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
-  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress =>
+  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress staged =>
     plan := {plan with operations := plan.operations ++ [
-      mergeShieldedOp nonceA colorA amountA nonceB colorB amountB selfAddress]}
+      mergeShieldedOp nonceA colorA amountA nonceB colorB amountB selfAddress staged]}
   | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}

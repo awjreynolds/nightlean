@@ -361,7 +361,7 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("nullifier", nativeExpressionJson nullifier),
       ("outputCommitment", nativeExpressionJson outputCommitment)]
   | .mergeShieldedFromMap nonceA colorA amountA nonceB colorB amountB
-      outputNonce outputColor outputAmount nullifierA nullifierB outputCommitment => Json.mkObj [
+      outputNonce outputColor outputAmount nullifierA nullifierB outputCommitment staged => Json.mkObj ([
       ("op", toJson ("mergeShieldedFromMap" : String)),
       ("nonceA", nativeExpressionJson nonceA), ("colorA", nativeExpressionJson colorA),
       ("amountA", nativeExpressionJson amountA), ("nonceB", nativeExpressionJson nonceB),
@@ -371,7 +371,8 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("outputAmount", nativeExpressionJson outputAmount),
       ("nullifierA", nativeExpressionJson nullifierA),
       ("nullifierB", nativeExpressionJson nullifierB),
-      ("outputCommitment", nativeExpressionJson outputCommitment)]
+      ("outputCommitment", nativeExpressionJson outputCommitment)] ++
+      (staged.map fun commitment => ("stagedCommitment", nativeExpressionJson commitment)).toList)
   | .sendShieldedFromMap nonce color inputAmount sendAmount recipient nullifier
       outputCommitment changeCommitment => Json.mkObj [
       ("op", toJson ("sendShieldedFromMap" : String)),
@@ -496,12 +497,13 @@ private def effectJson : Effect → Json
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("recipient", expressionJson recipient),
       ("selfAddress", expressionJson selfAddress)]
-  | .mergeShieldedFromMap state nonceA colorA amountA nonceB colorB amountB selfAddress => Json.mkObj [
+  | .mergeShieldedFromMap state nonceA colorA amountA nonceB colorB amountB selfAddress staged => Json.mkObj ([
       ("op", toJson ("mergeShieldedFromMap" : String)), ("state", toJson state),
       ("nonceA", expressionJson nonceA), ("colorA", expressionJson colorA),
       ("amountA", expressionJson amountA), ("nonceB", expressionJson nonceB),
       ("colorB", expressionJson colorB), ("amountB", expressionJson amountB),
-      ("selfAddress", expressionJson selfAddress)]
+      ("selfAddress", expressionJson selfAddress)] ++
+      if staged then [("stagedInput", toJson staged)] else [])
   | .sendShieldedFromMap state nonce color inputAmount sendAmount recipient selfAddress => Json.mkObj [
       ("op", toJson ("sendShieldedFromMap" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),

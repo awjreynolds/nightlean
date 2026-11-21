@@ -1489,6 +1489,7 @@ impl crate::client::FundingAdapter for DevelopmentFunding<'_> {
                     contract,
                     merge.offer.clone(),
                     merge.randomness,
+                    merge.staged_mint(),
                     &policy.network_id,
                     &snapshot.state.parameters,
                     self.material,
