@@ -48,6 +48,33 @@ noctium_circuit issue70DerivedCrypto where
   output memo : Native := disclose(memoValue)
 end
 
+-- OpenZeppelin Compact Contracts f85f1a23685c6bbedfc8c2589ae3aa128aff7c46
+-- EcdhMask.test.ts pins the three ECDH memo outputs below. Its ElGamal.test.ts
+-- uses the public padded `elgamal-ek-A` fixture, whose account ID and tagged
+-- scalar are separately pinned from Compact Runtime 0.21.0.
+noctium_circuit issue70OpenZeppelinVectors where
+  let accountKey : Bytes32 := bytes32("elgamal-ek-A")
+  let accountHash : Bytes32 := persistentHashVector32([accountKey])
+  let encryptionScalarNative : Native := degradeToNative(persistentHashVector32([
+    bytes32("ElGamal:secretToScalar"), accountKey]))
+  let encryptionKeyScalar : JubjubScalar := jubjubScalarFromNative(encryptionScalarNative)
+  let recipientScalar : JubjubScalar := jubjubScalarFromNative(111222333444555)
+  let ephemeralScalar : JubjubScalar := jubjubScalarFromNative(424242)
+  let recipientPk : JubjubPoint := jubjubMulGenerator(recipientScalar)
+  let ephemeralPk : JubjubPoint := jubjubMulGenerator(ephemeralScalar)
+  let shared : JubjubPoint := jubjubMul(recipientPk, ephemeralScalar)
+  let sharedDigest : Bytes32 := persistentHashPoint(shared)
+  let mask : Native := degradeToNative(persistentHashVector32([
+    sharedDigest, bytes32("ecdh_mask_golden")]))
+  let value : Native := 170141183460469231731687303715884118073
+  let encryptedValue : Native := add(value, mask)
+  output computedAccountId : Bytes32 := disclose(accountHash)
+  output computedEncryptionScalar : Native := disclose(jubjubScalarToNative(encryptionKeyScalar))
+  output computedEphemeralX : Native := disclose(jubjubX(ephemeralPk))
+  output computedEphemeralY : Native := disclose(jubjubY(ephemeralPk))
+  output computedCiphertext : Native := disclose(encryptedValue)
+end
+
 noctium_contract Issue70DerivedCrypto where
   tree records : Bytes32 => struct EncryptedRecord {
     c1x : Native
@@ -60,6 +87,13 @@ noctium_contract Issue70DerivedCrypto where
   }
   entry encrypt uses issue70DerivedCrypto where
     write records[account] := fields(c1x, c1y, c2x, c2y, ex, ey, memo)
+  end
+  entry referenceVectors uses issue70OpenZeppelinVectors where
+    return accountId : Bytes32 := disclose(computedAccountId)
+    return encryptionScalar : Native := disclose(computedEncryptionScalar)
+    return ephemeralX : Native := disclose(computedEphemeralX)
+    return ephemeralY : Native := disclose(computedEphemeralY)
+    return ciphertext : Native := disclose(computedCiphertext)
   end
 end
 
