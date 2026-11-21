@@ -72,6 +72,75 @@ fn standard_events_bind_payload_order_and_activity() -> Result<()> {
 
 #[test]
 #[ignore = "requires fresh StandardEvents Lean artifacts"]
+fn standard_event_from_checked_helper_preserves_activity_and_order() -> Result<()> {
+    use LogEventType::*;
+
+    let output = PathBuf::from(std::env::var("NOCTIUM_EVENT_ARTIFACTS")?);
+    let plan: Plan = serde_json::from_slice(&fs::read(
+        output.join("StandardEvents.Token.logHelperSpend.impact.json"),
+    )?)?;
+    let circuit = IrSource::load(fs::File::open(
+        output.join("StandardEvents.Token.logHelperSpend.zkir"),
+    )?)?;
+    let state = create_state(&plan, &BTreeMap::new())?;
+    let execute = |active: bool, nullifier: &[u8]| {
+        prepare(
+            &plan,
+            &BTreeMap::from([
+                ("active".into(), json!(active)),
+                (
+                    "nullifier".into(),
+                    json!({"kind": "bytes", "values": nullifier}),
+                ),
+            ]),
+            &state,
+            &INITIAL_PARAMETERS,
+            ContractAddress::default(),
+        )
+    };
+    let nullifier: Vec<u8> = (1..=32).collect();
+    let mut active = execute(true, &nullifier)?;
+    let inactive = execute(false, &nullifier)?;
+    for execution in [&active, &inactive] {
+        check(execution, &circuit)?;
+        assert!(execution.logs.iter().all(|event| event.version == 1));
+    }
+    assert_eq!(
+        active
+            .logs
+            .iter()
+            .map(|event| event.event_type)
+            .collect::<Vec<_>>(),
+        [Paused, ShieldedSpend, Unpaused]
+    );
+    assert_eq!(
+        inactive
+            .logs
+            .iter()
+            .map(|event| event.event_type)
+            .collect::<Vec<_>>(),
+        [Paused, Unpaused]
+    );
+    let StateValue::Cell(data) = &active.logs[1].data else {
+        panic!("expected a byte cell");
+    };
+    assert_eq!(
+        **data,
+        AlignedValue {
+            value: Value(vec![ValueAtom(nullifier)]),
+            alignment: Alignment::singleton(AlignmentAtom::Bytes { length: 32 }),
+        }
+    );
+    active.preimage.public_transcript_inputs = execute(true, &[42; 32])?
+        .preimage
+        .public_transcript_inputs
+        .clone();
+    assert!(check(&active, &circuit).is_err());
+    Ok(())
+}
+
+#[test]
+#[ignore = "requires fresh StandardEvents Lean artifacts"]
 fn standard_event_catalog_matches_pinned_reference_payloads() -> Result<()> {
     use LogEventType::*;
 

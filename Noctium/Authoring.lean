@@ -1615,6 +1615,7 @@ private partial def statementTerm : Statement → CommandElabM (TSyntax `term)
   | .readMap .. | .readMember .. =>
     throwError "readable witness source does not support ledger map reads"
   | .writeMap .. => throwError "readable witness source does not support ledger map writes"
+  | .emitEvent .. => throwError "readable witness source does not support ledger events"
   | .branch .. => throwError "readable witness source does not support branch statements yet"
   | .forRange index start stop body => do
     let body ← body.toArray.mapM statementTerm
