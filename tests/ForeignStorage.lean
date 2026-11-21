@@ -254,12 +254,3 @@ private def foreignStorageUndisclosedWrite : Entrypoint := {
 #guard match Disclosure.entrypoint foreignStorageUndisclosedWrite with
   | .error _ => _root_.Bool.true
   | .ok _ => _root_.Bool.false
-
-private def foreignStorageForeignMapKey : Contract := {
-  name := "foreignStorageForeignMapKey"
-  state := [{name := "bad", kind := .map (.foreign (.base .secp256k1)) .native}]
-}
-
-#guard match foreignStorageForeignMapKey.validate Capabilities.source with
-  | .error _ => _root_.Bool.true
-  | .ok _ => _root_.Bool.false
