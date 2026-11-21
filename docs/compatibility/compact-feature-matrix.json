@@ -5408,8 +5408,8 @@
       "id": "C-STDLIB-EVOLVENONCE",
       "layer": "standard-library",
       "surface": "evolveNonce",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean shieldedIndexedNonce takes a UInt128 index and Bytes32 nonce. Native 3.2.1 matches pinned Compact at index zero and UInt128 maximum, and drops the nonce's high byte before hashing. Source checks reject mismatched types and require disclosure of private-derived public results. Other source and host routes remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5422,7 +5422,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/IndexedShieldedNonce.lean",
+        "runtime/tests/indexed_shielded_nonce.rs",
+        "tests/compact/indexed-shielded-nonce.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

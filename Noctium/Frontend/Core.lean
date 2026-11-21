@@ -273,6 +273,7 @@ scoped syntax "persistentCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,*
 scoped syntax "transientCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "shieldedOutputNonce(" nlexpr ")" : nlexpr
+scoped syntax "shieldedIndexedNonce(" nlexpr "," nlexpr ")" : nlexpr
 declare_syntax_cat nlcallvalue
 scoped syntax nlexpr : nlcallvalue
 scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallvalue
@@ -818,6 +819,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
   | `(nlexpr| shieldedOutputNonce($value)) => hasPartialScalar value
+  | `(nlexpr| shieldedIndexedNonce($index, $nonce)) =>
+    hasPartialScalar index || hasPartialScalar nonce
   | `(nlexpr| sha256($value))
   | `(nlexpr| sha512($value)) | `(nlexpr| keccak256($value)) => hasPartialScalar value
   | `(nlexpr| bytes($_:num, $_:str)) => Bool.false
@@ -1219,6 +1222,10 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| shieldedOutputNonce($value)) => do
     let value ← expected env value (.bytes 32)
     pure (.bytes 32, ← `(Noctium.Wire.shieldedOutputNonce $value))
+  | `(nlexpr| shieldedIndexedNonce($index, $nonce)) => do
+    let index ← expected env index (.uint (2 ^ 128 - 1))
+    let nonce ← expected env nonce (.bytes 32)
+    pure (.bytes 32, ← `(Noctium.Wire.shieldedIndexedNonce $index $nonce))
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
