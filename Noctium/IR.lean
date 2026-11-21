@@ -736,6 +736,12 @@ inductive Effect where
   The backend derives native nullifier and output-commitment claims. -/
   | spendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32))
+  /-- Merge two exact contract-owned coin records from a Bytes32-keyed tree Map.
+  The backend binds both nullifiers and the single contract-owned output. -/
+  | mergeShieldedFromMap (state : String)
+      (nonceA colorA : Expr (.bytes 32)) (amountA : Expr (.uint (2 ^ 128 - 1)))
+      (nonceB colorB : Expr (.bytes 32)) (amountB : Expr (.uint (2 ^ 128 - 1)))
+      (selfAddress : Expr (.bytes 32))
   /-- Split a recorded shielded coin between one recipient output and one
   contract-owned change output. The frontend removes the old map key and then
   reuses receiveShieldedToMap to qualify and insert the change coin. -/
@@ -1608,6 +1614,23 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         color.validate caps env
         amount.validate caps env
         recipient.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .mergeShieldedFromMap state nonceA colorA amountA nonceB colorB amountB selfAddress => do
+        if !caps.stateMaps then throw "target lacks state maps"
+        let some declaration := decls.find? (·.name == state)
+          | throw s!"unknown shielded coin map '{state}'"
+        let .tree (.map keyTy (.composite compositeEnv recordType)) := declaration.kind
+          | throw s!"shielded coin merge requires a root Bytes32-keyed tree Map '{state}'"
+        unless keyTy == .bytes 32 do
+          throw "shielded coin map key must be Bytes32"
+        discard (LedgerValueType.shieldedCoinRecordFields compositeEnv recordType)
+        nonceA.validate caps env
+        colorA.validate caps env
+        amountA.validate caps env
+        nonceB.validate caps env
+        colorB.validate caps env
+        amountB.validate caps env
         selfAddress.validate caps env
         pure []
       | .sendShieldedFromMap state nonce color inputAmount sendAmount recipient selfAddress => do

@@ -3,6 +3,7 @@
 pub mod journal;
 mod shielded_receive;
 mod shielded_relay;
+mod shielded_merge;
 mod shielded_transfer;
 use crate::{
     Db,
@@ -1426,6 +1427,7 @@ pub struct DevelopmentFunding<'a> {
     wallet_shielded_mint: Option<shielded_receive::BookedWalletMint>,
     shielded_transfer: Option<shielded_transfer::BookedTransfer>,
     shielded_split: Option<shielded_transfer::BookedTransfer>,
+    shielded_merge: Option<shielded_merge::BookedMerge>,
 }
 impl<'a> DevelopmentFunding<'a> {
     pub fn new(
@@ -1447,6 +1449,7 @@ impl<'a> DevelopmentFunding<'a> {
             wallet_shielded_mint: None,
             shielded_transfer: None,
             shielded_split: None,
+            shielded_merge: None,
         }
     }
 }
@@ -1479,7 +1482,23 @@ impl crate::client::FundingAdapter for DevelopmentFunding<'_> {
             .clone();
         let rng = self.rng.borrow_mut().take().ok_or(HostFailure)?;
         let wallet = crate::funding::DustFunding::new(secret, state);
-        let funded = if let Some(relay) = &self.shielded_relay {
+        let funded = if let Some(merge) = &self.shielded_merge {
+            merge.check_booking(snapshot)?;
+            wallet
+                .fund_shielded_merge(
+                    contract,
+                    merge.offer.clone(),
+                    merge.randomness,
+                    &policy.network_id,
+                    &snapshot.state.parameters,
+                    self.material,
+                    self.parameters,
+                    snapshot.block.tblock,
+                    self.policy,
+                    rng,
+                )
+                .await
+        } else if let Some(relay) = &self.shielded_relay {
             relay.check_booking(snapshot)?;
             wallet
                 .fund_shielded_relay(

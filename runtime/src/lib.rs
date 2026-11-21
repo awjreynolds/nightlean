@@ -1699,6 +1699,27 @@ pub enum Instruction {
         #[serde(rename = "changeCommitment")]
         change_commitment: Expr,
     },
+    #[serde(rename = "mergeShieldedFromMap", rename_all = "camelCase")]
+    MergeShieldedFromMap {
+        nonce_a: Expr,
+        color_a: Expr,
+        amount_a: Expr,
+        nonce_b: Expr,
+        color_b: Expr,
+        amount_b: Expr,
+        #[serde(rename = "outputNonce")]
+        output_nonce: Expr,
+        #[serde(rename = "outputColor")]
+        output_color: Expr,
+        #[serde(rename = "outputAmount")]
+        output_amount: Expr,
+        #[serde(rename = "nullifierA")]
+        nullifier_a: Expr,
+        #[serde(rename = "nullifierB")]
+        nullifier_b: Expr,
+        #[serde(rename = "outputCommitment")]
+        output_commitment: Expr,
+    },
     #[serde(rename = "relayShieldedImmediate", rename_all = "camelCase")]
     RelayShieldedImmediate {
         nonce: Expr,
@@ -1971,6 +1992,9 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         }
         Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SendShieldedFromMap { .. } => SEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
+        Instruction::MergeShieldedFromMap { .. } => {
+            MERGE_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec()
+        }
         Instruction::RelayShieldedImmediate { .. } => {
             RELAY_SHIELDED_IMMEDIATE_FIELD_COUNTS.to_vec()
         }
@@ -2183,6 +2207,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::SendShieldedFromMap { .. } => {
             bail!("shielded send must be unguarded")
         }
+        Instruction::MergeShieldedFromMap { .. } => {
+            bail!("shielded merge must be unguarded")
+        }
         Instruction::RelayShieldedImmediate { .. } => {
             bail!("immediate shielded relay must be unguarded")
         }
@@ -2294,6 +2321,8 @@ const WRITE_SHIELDED_COIN_CELL_FIELD_COUNTS: [usize; 8] = [5, 1, 6, 5, 11, 1, 2,
 const INSERT_SHIELDED_COIN_SET_FIELD_COUNTS: [usize; 10] = [4, 1, 6, 5, 11, 1, 2, 2, 1, 1];
 const SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 12] = [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 const SEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 18] =
+    [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
+const MERGE_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 18] =
     [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 const RELAY_SHIELDED_IMMEDIATE_FIELD_COUNTS: [usize; 18] =
     [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
@@ -3211,6 +3240,147 @@ fn validate_shielded_spend_layout(
     Ok((*slot, read_keys[0].clone()))
 }
 
+fn validate_shielded_merge_layout(
+    plan: &Plan,
+    operation_index: usize,
+    nonce_a: &Expr,
+    color_a: &Expr,
+    amount_a: &Expr,
+    nonce_b: &Expr,
+    color_b: &Expr,
+    amount_b: &Expr,
+    output_nonce: &Expr,
+    output_color: &Expr,
+    output_amount: &Expr,
+    output_commitment: &Expr,
+) -> Result<(u32, PathPart, PathPart, usize)> {
+    let removal_a = plan
+        .operations
+        .get(operation_index + 1)
+        .ok_or_else(|| anyhow!("shielded merge must remove its first input"))?;
+    let removal_b = plan
+        .operations
+        .get(operation_index + 2)
+        .ok_or_else(|| anyhow!("shielded merge must remove its second input"))?;
+    let (removal_a, guard_a) = unguarded_operation(removal_a);
+    let (removal_b, guard_b) = unguarded_operation(removal_b);
+    ensure!(guard_a.is_none() && guard_b.is_none(), "shielded merge removals must be unguarded");
+    let (Instruction::MapRemove { slot: slot_a, keys: keys_a },
+        Instruction::MapRemove { slot: slot_b, keys: keys_b }) = (removal_a, removal_b)
+    else {
+        bail!("shielded merge must be followed by two Map removals")
+    };
+    ensure!(slot_a == slot_b, "shielded merge inputs must use the same Map");
+    ensure!(keys_a.len() == 1 && keys_b.len() == 1, "shielded merge requires root Map keys");
+    ensure!(
+        keys_a[0].alignment == "bytes32" && keys_b[0].alignment == "bytes32",
+        "shielded merge Map keys must be Bytes32"
+    );
+    ensure!(keys_a[0].expression != keys_b[0].expression, "shielded merge inputs must be distinct");
+    validate_shielded_coin_map(plan, *slot_a)?;
+
+    let mut record_indices = (0..operation_index)
+        .rev()
+        .filter(|index| {
+            let (candidate, guard) = unguarded_operation(&plan.operations[*index]);
+            guard.is_none()
+                && matches!(candidate,
+                    Instruction::PopeqFields { schema, .. }
+                        if is_shielded_coin_record_schema(schema))
+        })
+        .take(2)
+        .collect::<Vec<_>>();
+    ensure!(record_indices.len() == 2, "shielded merge requires two exact coin reads");
+    let record_b_index = record_indices.remove(0);
+    let record_a_index = record_indices.remove(0);
+
+    let validate_read = |record_index: usize,
+                         nonce: &Expr,
+                         color: &Expr,
+                         amount: &Expr,
+                         removal_key: &PathPart|
+     -> Result<PathPart> {
+        let (record, guard) = unguarded_operation(&plan.operations[record_index]);
+        ensure!(guard.is_none(), "shielded merge coin reads must be unguarded");
+        let Instruction::PopeqFields { expressions, schema } = record else {
+            bail!("shielded merge input has no exact coin record read")
+        };
+        ensure!(
+            expressions.len() == 4
+                && expressions[0] == *nonce
+                && expressions[1] == *color
+                && expressions[2] == *amount,
+            "shielded merge operands differ from the coin record read"
+        );
+        let path = record_index
+            .checked_sub(1)
+            .and_then(|index| plan.operations.get(index))
+            .ok_or_else(|| anyhow!("shielded merge coin read has no indexed Map path"))?;
+        let (path, path_guard) = unguarded_operation(path);
+        ensure!(path_guard.is_none(), "shielded merge coin paths must be unguarded");
+        let Instruction::IndexPath { slot, push_path: false, keys } = path else {
+            bail!("shielded merge coin read has no indexed Map path")
+        };
+        ensure!(
+            *slot == *slot_a
+                && keys.len() == 1
+                && keys[0].alignment == "bytes32"
+                && keys[0].alignment == removal_key.alignment
+                && keys[0].expression == removal_key.expression,
+            "shielded merge removal differs from the coin read path"
+        );
+        ensure!(
+            tree_schema_at_path(plan, *slot, keys.len())?.get("composite") == Some(schema),
+            "shielded merge read differs from its coin Map schema"
+        );
+        ensure!(
+            plan.operations[record_index + 1..operation_index]
+                .iter()
+                .any(|operation| {
+                    let (operation, guard) = unguarded_operation(operation);
+                    guard.is_none() && matches!(operation, Instruction::ReadContractAddress { .. })
+                }),
+            "shielded merge requires a current contract address read"
+        );
+        ensure!(
+            !plan.operations[record_index + 1..operation_index]
+                .iter()
+                .any(mutates_contract_state),
+            "shielded merge input changes between read and merge"
+        );
+        Ok(keys[0].clone())
+    };
+
+    let key_a = validate_read(record_a_index, nonce_a, color_a, amount_a, &keys_a[0])?;
+    let key_b = validate_read(record_b_index, nonce_b, color_b, amount_b, &keys_b[0])?;
+    let receive_index = operation_index + 3;
+    let receive = plan
+        .operations
+        .get(receive_index)
+        .ok_or_else(|| anyhow!("shielded merge must receive its combined output"))?;
+    let (receive, receive_guard) = unguarded_operation(receive);
+    ensure!(receive_guard.is_none(), "shielded merge output receive must be unguarded");
+    let Instruction::ReceiveShieldedToMap {
+        slot: receive_slot,
+        nonce: receive_nonce,
+        color: receive_color,
+        amount: receive_amount,
+        commitment: receive_commitment,
+    } = receive
+    else {
+        bail!("shielded merge must be followed by its output receive")
+    };
+    ensure!(
+        *receive_slot == *slot_a
+            && receive_nonce == output_nonce
+            && receive_color == output_color
+            && receive_amount == output_amount
+            && receive_commitment == output_commitment,
+        "shielded merge receive differs from the derived output"
+    );
+    Ok((*slot_a, key_a, key_b, receive_index))
+}
+
 fn validate_shielded_send_layout(
     plan: &Plan,
     operation_index: usize,
@@ -3404,6 +3574,35 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                     color,
                     input_amount,
                     change_commitment,
+                )?;
+            }
+            Instruction::MergeShieldedFromMap {
+                nonce_a,
+                color_a,
+                amount_a,
+                nonce_b,
+                color_b,
+                amount_b,
+                output_nonce,
+                output_color,
+                output_amount,
+                output_commitment,
+                ..
+            } => {
+                ensure!(guard.is_none(), "shielded merge must be unguarded");
+                validate_shielded_merge_layout(
+                    plan,
+                    index,
+                    nonce_a,
+                    color_a,
+                    amount_a,
+                    nonce_b,
+                    color_b,
+                    amount_b,
+                    output_nonce,
+                    output_color,
+                    output_amount,
+                    output_commitment,
                 )?;
             }
             Instruction::RelayShieldedImmediate { recipient, .. } => {
@@ -5795,6 +5994,38 @@ fn probe_instruction(
                 nullifier,
                 output_commitment,
                 change_commitment,
+            ],
+            plan,
+            env,
+            deferred_outputs,
+        ),
+        Instruction::MergeShieldedFromMap {
+            nonce_a,
+            color_a,
+            amount_a,
+            nonce_b,
+            color_b,
+            amount_b,
+            output_nonce,
+            output_color,
+            output_amount,
+            nullifier_a,
+            nullifier_b,
+            output_commitment,
+        } => probe_expressions(
+            [
+                nonce_a,
+                color_a,
+                amount_a,
+                nonce_b,
+                color_b,
+                amount_b,
+                output_nonce,
+                output_color,
+                output_amount,
+            nullifier_a,
+            nullifier_b,
+            output_commitment,
             ],
             plan,
             env,
@@ -8329,6 +8560,178 @@ impl PreparationCursor {
                 program.extend(spend_ops[..5].iter().cloned());
                 spend_ops[5].clone()
             }
+            Instruction::MergeShieldedFromMap {
+                nonce_a,
+                color_a,
+                amount_a,
+                nonce_b,
+                color_b,
+                amount_b,
+                output_nonce,
+                output_color,
+                output_amount,
+                nullifier_a: source_nullifier_a_expr,
+                nullifier_b: source_nullifier_b_expr,
+                output_commitment: source_output_commitment_expr,
+            } => {
+                let (_, read_key_a, read_key_b, receive_index) =
+                    validate_shielded_merge_layout(
+                        plan,
+                        index,
+                        nonce_a,
+                        color_a,
+                        amount_a,
+                        nonce_b,
+                        color_b,
+                        amount_b,
+                        output_nonce,
+                        output_color,
+                        output_amount,
+                        source_output_commitment_expr,
+                    )?;
+                let coin_a = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce_a, &env)?,
+                        "first shielded merge coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color_a, &env)?,
+                        "first shielded merge coin color",
+                    )?),
+                    value: unshielded_amount(amount_a, &env)?,
+                };
+                let coin_b = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce_b, &env)?,
+                        "second shielded merge coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color_b, &env)?,
+                        "second shielded merge coin color",
+                    )?),
+                    value: unshielded_amount(amount_b, &env)?,
+                };
+                let key_a = claim_hash_output(
+                    evaluate(&read_key_a.expression, &env)?,
+                    "first shielded merge Map key",
+                )?;
+                let key_b = claim_hash_output(
+                    evaluate(&read_key_b.expression, &env)?,
+                    "second shielded merge Map key",
+                )?;
+                ensure!(
+                    coin_a.nonce.0 == key_a && coin_b.nonce.0 == key_b,
+                    "shielded merge coin nonce differs from its Map key"
+                );
+                ensure!(
+                    coin_a.nonce != coin_b.nonce,
+                    "shielded merge inputs must be distinct"
+                );
+                ensure!(
+                    coin_a.type_ == coin_b.type_,
+                    "shielded merge inputs must have the same color"
+                );
+                let merged_amount = coin_a
+                    .value
+                    .checked_add(coin_b.value)
+                    .ok_or_else(|| anyhow!("shielded merge amount overflows UInt128"))?;
+                let merged_coin = coin_a.evolve_from(
+                    b"midnight:kernel:nonce_evolve",
+                    merged_amount,
+                    coin_a.type_,
+                );
+                ensure!(
+                    claim_hash_output(evaluate(output_nonce, &env)?, "shielded merge output nonce")?
+                        == merged_coin.nonce.0
+                        && claim_hash_output(
+                            evaluate(output_color, &env)?,
+                            "shielded merge output color",
+                        )? == merged_coin.type_.0
+                        && unshielded_amount(output_amount, &env)? == merged_amount,
+                    "shielded merge derived output fields mismatch"
+                );
+
+                let nullifier_a =
+                    coin_a.nullifier(&SenderEvidence::Contract(context.address));
+                let source_nullifier_a = claim_hash_output(
+                    evaluate(source_nullifier_a_expr, &env)?,
+                    "first shielded merge nullifier",
+                )?;
+                let nullifier_b =
+                    coin_b.nullifier(&SenderEvidence::Contract(context.address));
+                let source_nullifier_b = claim_hash_output(
+                    evaluate(source_nullifier_b_expr, &env)?,
+                    "second shielded merge nullifier",
+                )?;
+                ensure!(
+                    nullifier_a.0 == source_nullifier_a
+                        && nullifier_b.0 == source_nullifier_b,
+                    "shielded merge nullifier mismatch"
+                );
+
+                let output_commitment =
+                    merged_coin.commitment(&Recipient::Contract(context.address));
+                let source_output_commitment = claim_hash_output(
+                    evaluate(source_output_commitment_expr, &env)?,
+                    "shielded merge output commitment",
+                )?;
+                ensure!(
+                    output_commitment.0 == source_output_commitment,
+                    "shielded merge output commitment mismatch"
+                );
+
+                let receive = plan
+                    .operations
+                    .get(receive_index)
+                    .ok_or_else(|| anyhow!("shielded merge receive is missing"))?;
+                let (receive, receive_guard) = unguarded_operation(receive);
+                ensure!(receive_guard.is_none(), "shielded merge receive must be unguarded");
+                let Instruction::ReceiveShieldedToMap {
+                    nonce,
+                    color,
+                    amount,
+                    commitment,
+                    ..
+                } = receive
+                else {
+                    bail!("shielded merge receive is missing")
+                };
+                ensure!(
+                    claim_hash_output(evaluate(nonce, &env)?, "shielded merge receive nonce")?
+                        == merged_coin.nonce.0
+                        && claim_hash_output(evaluate(color, &env)?, "shielded merge receive color")?
+                            == merged_coin.type_.0
+                        && unshielded_amount(amount, &env)? == merged_amount
+                        && claim_hash_output(
+                            evaluate(commitment, &env)?,
+                            "shielded merge receive commitment",
+                        )? == source_output_commitment,
+                    "shielded merge receive differs from the derived output"
+                );
+
+                let nullifier_a_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+                        (),
+                        (),
+                        nullifier_a
+                    );
+                let nullifier_b_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+                        (),
+                        (),
+                        nullifier_b
+                    );
+                let output_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+                        (),
+                        (),
+                        output_commitment
+                    );
+                program.extend(nullifier_a_ops);
+                program.extend(nullifier_b_ops);
+                program.extend(output_ops[..5].iter().cloned());
+                output_ops[5].clone()
+            }
             Instruction::SendShieldedFromMap {
                 nonce,
                 color,
@@ -10312,5 +10715,318 @@ mod shielded_spend_tests {
         )
         .unwrap();
         assert_eq!(receive_index, 10);
+    }
+}
+
+#[cfg(test)]
+mod shielded_merge_tests {
+    use super::*;
+    use coin_structure::coin::{Commitment, Nullifier};
+    use serde_json::json;
+    use crate::zkir::IrSource;
+
+    const NONCE_A: [u8; 32] = [2; 32];
+    const NONCE_B: [u8; 32] = [7; 32];
+    const COLOR: [u8; 32] = [1; 32];
+    const OTHER_COLOR: [u8; 32] = [9; 32];
+    const ADDRESS: [u8; 32] = [0; 32];
+
+    fn bytes_json(value: &[u8; 32]) -> Json {
+        json!({"kind":"bytes", "values":value.iter().copied().map(u64::from).collect::<Vec<_>>()})
+    }
+
+    fn reference(name: &str) -> Json {
+        json!({"tag":"reference", "name":name})
+    }
+
+    fn coin_schema() -> Json {
+        json!({
+            "id":"ShieldedCoinMerge.Coin",
+            "fields":[
+                {"name":"nonce", "type":"Bytes<32>"},
+                {"name":"color", "type":"Bytes<32>"},
+                {"name":"value", "type":"UIntRange<340282366920938463463374607431768211456>"},
+                {"name":"mtIndex", "type":"UIntRange<18446744073709551616>"}
+            ]
+        })
+    }
+
+    fn merge_plan_json() -> Json {
+        let schema = coin_schema();
+        let components = |prefix: &str| json!([
+            {"name":format!("{prefix}_nonce"), "type":"Bytes<32>"},
+            {"name":format!("{prefix}_color"), "type":"Bytes<32>"},
+            {"name":format!("{prefix}_value"), "type":"UIntRange<340282366920938463463374607431768211456>"},
+            {"name":format!("{prefix}_mtIndex"), "type":"UIntRange<18446744073709551616>"}
+        ]);
+        json!({
+            "schemaVersion":1,
+            "entrypoint":"merge",
+            "circuit":{"inputs":[
+                {"name":"nonceA", "type":"Bytes<32>", "visibility":"private"},
+                {"name":"nonceB", "type":"Bytes<32>", "visibility":"private"},
+                {"name":"outputNonce", "type":"Bytes<32>", "visibility":"private"},
+                {"name":"outputColor", "type":"Bytes<32>", "visibility":"private"},
+                {"name":"outputAmount", "type":"UIntRange<340282366920938463463374607431768211456>", "visibility":"private"},
+                {"name":"nullifierA", "type":"Bytes<32>", "visibility":"private"},
+                {"name":"nullifierB", "type":"Bytes<32>", "visibility":"private"},
+                {"name":"outputCommitment", "type":"Bytes<32>", "visibility":"private"}
+            ], "outputs":[]},
+            "state":[{"name":"pot", "kind":{"tree":{"map":["Bytes<32>", {"composite":schema}]}}}],
+            "operations":[
+                {"op":"dup"},
+                {"op":"indexPath", "slot":0, "pushPath":false, "keys":[{"alignment":"bytes32", "expression":reference("nonceA")}]},
+                {"op":"popeqFields", "schema":schema, "expressions":[reference("coinA_nonce"), reference("coinA_color"), reference("coinA_value"), reference("coinA_mtIndex")]},
+                {"op":"dup"},
+                {"op":"indexPath", "slot":0, "pushPath":false, "keys":[{"alignment":"bytes32", "expression":reference("nonceB")}]},
+                {"op":"popeqFields", "schema":schema, "expressions":[reference("coinB_nonce"), reference("coinB_color"), reference("coinB_value"), reference("coinB_mtIndex")]},
+                {"op":"readContractAddress", "destination":"selfAddress"},
+                {"op":"mergeShieldedFromMap",
+                    "nonceA":reference("coinA_nonce"), "colorA":reference("coinA_color"), "amountA":reference("coinA_value"),
+                    "nonceB":reference("coinB_nonce"), "colorB":reference("coinB_color"), "amountB":reference("coinB_value"),
+                    "outputNonce":reference("outputNonce"), "outputColor":reference("outputColor"), "outputAmount":reference("outputAmount"),
+                    "nullifierA":reference("nullifierA"), "nullifierB":reference("nullifierB"), "outputCommitment":reference("outputCommitment")},
+                {"op":"mapRemove", "slot":0, "keys":[{"alignment":"bytes32", "expression":reference("nonceA")}]},
+                {"op":"mapRemove", "slot":0, "keys":[{"alignment":"bytes32", "expression":reference("nonceB")}]},
+                {"op":"receiveShieldedToMap", "slot":0, "nonce":reference("outputNonce"), "color":reference("outputColor"), "amount":reference("outputAmount"), "commitment":reference("outputCommitment")}
+            ],
+            "reads":[
+                {"name":"coinA", "type":"Composite", "schema":schema, "components":components("coinA")},
+                {"name":"coinB", "type":"Composite", "schema":schema, "components":components("coinB")},
+                {"name":"selfAddress", "type":"Bytes<32>", "projections":byte_projection_bindings("selfAddress", 32).unwrap().into_iter().map(|(name, ty)| json!({"name":name, "type":ty})).collect::<Vec<_>>()}
+            ]
+        })
+    }
+
+    fn merge_plan() -> Plan {
+        let mut plan: Plan = serde_json::from_value(merge_plan_json()).unwrap();
+        plan.target = Some(profile::NAME.into());
+        plan.target_profile = Some(profile::target_json());
+        plan
+    }
+
+    fn merge_coins(
+        nonce_a: [u8; 32],
+        color_a: [u8; 32],
+        amount_a: u128,
+        nonce_b: [u8; 32],
+        color_b: [u8; 32],
+        amount_b: u128,
+    ) -> (ShieldedCoinInfo, ShieldedCoinInfo, ShieldedCoinInfo, Nullifier, Nullifier, Commitment) {
+        let coin_a = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(nonce_a)),
+            type_: ShieldedTokenType(HashOutput(color_a)),
+            value: amount_a,
+        };
+        let coin_b = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(nonce_b)),
+            type_: ShieldedTokenType(HashOutput(color_b)),
+            value: amount_b,
+        };
+        let amount = amount_a.checked_add(amount_b).unwrap();
+        let output = coin_a.evolve_from(b"midnight:kernel:nonce_evolve", amount, coin_a.type_);
+        let address = ContractAddress(HashOutput(ADDRESS));
+        let nullifier_a = coin_a.nullifier(&SenderEvidence::Contract(address));
+        let nullifier_b = coin_b.nullifier(&SenderEvidence::Contract(address));
+        let commitment = output.commitment(&Recipient::Contract(address));
+        (coin_a, coin_b, output, nullifier_a, nullifier_b, commitment)
+    }
+
+    fn merge_inputs(
+        output: &ShieldedCoinInfo,
+        nullifier_a: Nullifier,
+        nullifier_b: Nullifier,
+        commitment: Commitment,
+    ) -> BTreeMap<String, Json> {
+        BTreeMap::from([
+            ("nonceA".into(), bytes_json(&NONCE_A)),
+            ("nonceB".into(), bytes_json(&NONCE_B)),
+            ("outputNonce".into(), bytes_json(&output.nonce.0.0)),
+            ("outputColor".into(), bytes_json(&output.type_.0.0)),
+            ("outputAmount".into(), json!(output.value.to_string())),
+            ("nullifierA".into(), bytes_json(&nullifier_a.0.0)),
+            ("nullifierB".into(), bytes_json(&nullifier_b.0.0)),
+            ("outputCommitment".into(), bytes_json(&commitment.0.0)),
+        ])
+    }
+
+    fn merge_context(
+        schema: &Json,
+        coin_a: &ShieldedCoinInfo,
+        coin_b: &ShieldedCoinInfo,
+        commitment: Commitment,
+        output_index: u64,
+    ) -> QueryContext<Db> {
+        let checked = checked_record_schema(schema).unwrap();
+        let record = |coin: &ShieldedCoinInfo, index: u64| {
+            aligned_record_value(
+                &checked,
+                &[
+                    Value::Bytes(coin.nonce.0.0.to_vec()),
+                    Value::Bytes(coin.type_.0.0.to_vec()),
+                    Value::UInt {
+                        number: coin.value.into(),
+                        maximum: u128::MAX.into(),
+                    },
+                    Value::UInt {
+                        number: index.into(),
+                        maximum: u64::MAX.into(),
+                    },
+                ],
+            )
+            .unwrap()
+        };
+        let mut coins: HashMap<AlignedValue, StateValue<Db>, Db> = HashMap::default();
+        coins = coins
+            .insert(
+                AlignedValue::from(coin_a.nonce),
+                StateValue::Cell(Sp::new(record(coin_a, 7))),
+            )
+            .insert(
+                AlignedValue::from(coin_b.nonce),
+                StateValue::Cell(Sp::new(record(coin_b, 8))),
+            );
+        let state = ChargedState::new(StateValue::Array(vec![StateValue::Map(coins)].into()));
+        let mut context = QueryContext::new(state, ContractAddress(HashOutput(ADDRESS)));
+        context.call_context.com_indices = context
+            .call_context
+            .com_indices
+            .insert(commitment, output_index);
+        context
+    }
+
+    #[test]
+    fn shielded_map_merge_consumes_two_same_color_inputs_and_books_one_sum_output() {
+        let plan = merge_plan();
+        let (coin_a, coin_b, output, nullifier_a, nullifier_b, commitment) = merge_coins(
+            NONCE_A, COLOR, 5, NONCE_B, COLOR, 7,
+        );
+        let inputs = merge_inputs(
+            &output,
+            nullifier_a.clone(),
+            nullifier_b.clone(),
+            commitment.clone(),
+        );
+        let execution = prepare_with_context(
+            &plan,
+            &inputs,
+            merge_context(&coin_schema(), &coin_a, &coin_b, commitment.clone(), 11),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .unwrap();
+
+        let nullifier_a_ops = onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+            (), (), nullifier_a
+        );
+        let nullifier_b_ops = onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+            (), (), nullifier_b
+        );
+        let output_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+            (), (), commitment
+        );
+        let mut expected_claims: Program = nullifier_a_ops.into();
+        expected_claims.extend(nullifier_b_ops);
+        expected_claims.extend(output_ops);
+        assert!(execution.program.windows(expected_claims.len()).any(|ops| ops == expected_claims));
+        assert_eq!(execution.after.effects.claimed_nullifiers.size(), 2);
+        assert!(execution.after.effects.claimed_nullifiers.member(&nullifier_a));
+        assert!(execution.after.effects.claimed_nullifiers.member(&nullifier_b));
+        assert_eq!(execution.after.effects.claimed_shielded_spends.size(), 1);
+        assert!(execution.after.effects.claimed_shielded_spends.member(&commitment));
+        assert_eq!(execution.after.effects.claimed_shielded_receives.size(), 1);
+        assert!(execution.after.effects.claimed_shielded_receives.iter().any(|claim| **claim == commitment));
+
+        let StateValue::Array(slots) = execution.after.state.get_ref() else {
+            panic!("expected shielded merge state array")
+        };
+        let StateValue::Map(coins) = slots.get(0).unwrap() else {
+            panic!("expected shielded coin Map")
+        };
+        assert_eq!(
+            coins.size(),
+            1
+        );
+        assert_eq!(
+            coins
+                .get(&AlignedValue::from(output.nonce))
+                .as_deref(),
+            Some(&StateValue::Cell(Sp::new(AlignedValue::from(output.qualify(11)))))
+        );
+
+        for (name, wrong) in [
+            ("nullifierA", [0; 32]),
+            ("nullifierB", [0; 32]),
+            ("outputCommitment", [0; 32]),
+        ] {
+            let mut changed = inputs.clone();
+            changed.insert(name.into(), bytes_json(&wrong));
+            assert!(prepare_with_context(
+                &plan,
+                &changed,
+                merge_context(&coin_schema(), &coin_a, &coin_b, commitment.clone(), 11),
+                &ledger::structure::INITIAL_PARAMETERS,
+            )
+            .is_err());
+        }
+
+        let mut duplicate_input = inputs.clone();
+        duplicate_input.insert("nonceB".into(), bytes_json(&NONCE_A));
+        assert!(prepare_with_context(
+            &plan,
+            &duplicate_input,
+            merge_context(&coin_schema(), &coin_a, &coin_b, commitment.clone(), 11),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .is_err());
+
+        let (_, wrong_color_coin_b, _, _, _, _) = merge_coins(
+            NONCE_A, COLOR, 5, NONCE_B, OTHER_COLOR, 7,
+        );
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            merge_context(&coin_schema(), &coin_a, &wrong_color_coin_b, commitment.clone(), 11),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .is_err());
+
+        let overflow_a = ShieldedCoinInfo { value: u128::MAX, ..coin_a.clone() };
+        let overflow_b = ShieldedCoinInfo { value: 1, ..coin_b.clone() };
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            merge_context(&coin_schema(), &overflow_a, &overflow_b, commitment.clone(), 11),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .is_err());
+
+        if let Ok(directory) = std::env::var("NOCTIUM_CHECK_SHIELDED_MERGE_ARTIFACT") {
+            let directory = std::path::Path::new(&directory);
+            let compiled_plan: Plan = serde_json::from_slice(
+                &std::fs::read(directory.join("ShieldedCoinMerge.merge.impact.json")).unwrap(),
+            )
+            .unwrap();
+            let circuit_bytes =
+                std::fs::read(directory.join("ShieldedCoinMerge.merge.zkir")).unwrap();
+            let circuit = IrSource::load(circuit_bytes.as_slice()).unwrap();
+            let compiled_inputs = BTreeMap::from([
+                ("nonceA".into(), bytes_json(&NONCE_A)),
+                ("nonceB".into(), bytes_json(&NONCE_B)),
+            ]);
+            let schema = &compiled_plan.state[0].kind["tree"]["map"][1]["composite"];
+            let compiled_execution = prepare_with_context(
+                &compiled_plan,
+                &compiled_inputs,
+                merge_context(schema, &coin_a, &coin_b, commitment, 11),
+                &ledger::structure::INITIAL_PARAMETERS,
+            )
+            .unwrap();
+            let checked_schedule = compiled_execution
+                .preimage
+                .check(&circuit)
+                .unwrap_or_else(|error| panic!("compiled merge preimage check failed: {error:#}"));
+            assert_eq!(checked_schedule, compiled_execution.activity_schedule);
+            super::check(&compiled_execution, &circuit).unwrap();
+        }
     }
 }

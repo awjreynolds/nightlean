@@ -36,10 +36,10 @@ try {
   const contract = new Contract({});
   const walletKey = '00'.repeat(32);
   const { currentContractState } = await contract.initialState(createConstructorContext(null, walletKey));
-  const contextFor = (contractState, circuitId = 'tip') => createCircuitContext({
+  const contextFor = (contractState, circuitId = 'tip', zswapState = walletKey) => createCircuitContext({
     circuitId,
     contractAddress: dummyContractAddress(),
-    coinPublicKeyOrZswapState: walletKey,
+    coinPublicKeyOrZswapState: zswapState,
     contractState,
     privateState: null,
   });
@@ -160,6 +160,54 @@ try {
     );
   }
   console.log('Shielded partial spend: exact claims, 2+3 outputs, qualified change Map row, amount bounds, and replay rejection matched');
+
+  const second = { ...coin, nonce: new Uint8Array(32).fill(7), value: 7n };
+  const seedSecond = async (value) => {
+    const { context: seeded } = await contract.circuits.tip(contextFor(query.state, 'tip', {
+      coinPublicKey: walletKey, currentIndex: 1n, inputs: [], outputs: [],
+    }), value);
+    return seeded.callContext.currentQueryContext.state;
+  };
+  const mergeFrom = (state, firstNonce = coin.nonce, secondNonce = second.nonce) =>
+    contract.circuits.mergeFinalized(contextFor(state, 'mergeFinalized', {
+      coinPublicKey: walletKey, currentIndex: 2n, inputs: [], outputs: [],
+    }), firstNonce, secondNonce);
+  const mergeInputState = await seedSecond(second);
+  const { context: merged } = await mergeFrom(mergeInputState);
+  const mergeQuery = merged.callContext.currentQueryContext;
+  const mergeOffer = merged.callContext.currentZswapLocalState;
+  assert.deepEqual(mergeOffer.inputs, [{ ...coin, mt_index: 0n }, { ...second, mt_index: 1n }]);
+  assert.equal(mergeOffer.outputs.length, 1);
+  const [mergedOutput] = mergeOffer.outputs;
+  assert.deepEqual(mergedOutput.coinInfo, { ...coin, nonce: output.coinInfo.nonce, value: 12n });
+  assert.equal(mergedOutput.recipient.is_left, false);
+  assert.deepEqual(mergedOutput.recipient.right.bytes, new Uint8Array(32));
+  assert.deepEqual([...ledger(mergeQuery.state).pot], [[mergedOutput.coinInfo.nonce, {
+    ...mergedOutput.coinInfo, mt_index: 2n,
+  }]]);
+  const mergeEffects = mergeQuery.effects;
+  const outputCommitment = '54e30984c10454b1dd9077e45a0fadf79074373d4de8d5e58cca795864b6c9e5';
+  const nullifiers = [...mergeEffects.claimedNullifiers].sort();
+  assert.deepEqual(mergeEffects.claimedShieldedReceives, [outputCommitment]);
+  assert.deepEqual(mergeEffects.claimedShieldedSpends, mergeEffects.claimedShieldedReceives);
+  assert.deepEqual(nullifiers, [
+    'c37e0e4fcb94a95c0ecb7e49b0c797f80e52c12cb0cd39c1ed2924749b1e3f08',
+    afterSpend.effects.claimedNullifiers[0],
+  ]);
+  await assert.rejects(mergeFrom(mergeInputState, coin.nonce, coin.nonce), /merge inputs must be distinct/);
+  await assert.rejects(mergeFrom(mergeQuery.state), /merge input missing/);
+  await assert.rejects(mergeFrom(await seedSecond({ ...second, color: new Uint8Array(32).fill(8) })),
+    /Can only merge coins of the same color/);
+  // The pinned JS booking codec limits the output amount to UInt64 even though the source field is UInt128.
+  await assert.rejects(mergeFrom(await seedSecond({ ...second, value: (1n << 64n) - 1n })),
+    /expected UnsignedInteger\[<=18446744073709551615\]/);
+  console.log(JSON.stringify({
+    fixture: 'merge-finalized',
+    nonce: Buffer.from(mergedOutput.coinInfo.nonce).toString('hex'),
+    value: mergedOutput.coinInfo.value.toString(),
+    outputCommitment,
+    nullifiers,
+  }));
 
   const destination = { bytes: new Uint8Array(32).fill(4) };
   const selector = new Uint8Array(32).fill(5);

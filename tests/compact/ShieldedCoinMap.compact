@@ -59,6 +59,22 @@ export circuit withdrawPartial(
   );
 }
 
+export circuit mergeFinalized(nonceA: Bytes<32>, nonceB: Bytes<32>): [] {
+  const keyA = disclose(nonceA);
+  const keyB = disclose(nonceB);
+  assert(keyA != keyB, "merge inputs must be distinct");
+  assert(pot.member(keyA) && pot.member(keyB), "merge input missing");
+  const merged = mergeCoin(pot.lookup(keyA), pot.lookup(keyB));
+  assert(!pot.member(merged.nonce), "merge output already exists");
+  pot.remove(keyA);
+  pot.remove(keyB);
+  pot.insertCoin(
+    merged.nonce,
+    merged,
+    right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+  );
+}
+
 export circuit relayImmediate(
   coin: ShieldedCoinInfo,
   target: ContractAddress,

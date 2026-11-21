@@ -159,6 +159,7 @@ jobs:
           lake env lean tests/ShieldedWalletMint.lean
           lake env lean tests/ShieldedSpend.lean
           lake env lean tests/ShieldedMapPartialSpend.lean
+          lake env lean tests/ShieldedCoinMerge.lean
           lake env lean tests/ShieldedImmediateRelay.lean
           lake env lean tests/IndexedShieldedNonce.lean
           lake env lean tests/ShieldedBurnAddress.lean

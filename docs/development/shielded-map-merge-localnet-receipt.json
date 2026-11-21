@@ -1,0 +1,24 @@
+{
+  "contractAddress": "3340057105c178e3c91b165d26e4f225d6472a9f05b3015d01b68939e4ae75f0",
+  "deploymentHeight": 48293,
+  "inputNullifiersSpent": true,
+  "inputValues": [
+    5,
+    7
+  ],
+  "mapReplacedTwoInputsWithOneOutput": true,
+  "mergeCircuitK": 15,
+  "mergeHeight": 48303,
+  "mergeManifestSha256": "43771f0e22597f1d0d536d8bec29579d50e2a7283ca9d82ef51a4bdf2a3d878a",
+  "mergeTransaction": "7901d9e66c3bab8fb9aec7afaa6e8705676dde62ce005a34a3b9c6e1e2476ef0",
+  "mintAHeight": 48296,
+  "mintBHeight": 48299,
+  "mintCircuitK": 13,
+  "mintManifestSha256": "7e6220e8d21addee967fd33b99f828f1c659f98facd879dddf5e7e84c61a9458",
+  "outputCommitment": "ea916ab102c77a97c72f71cd6b6b14da7d2c025c861251f67e768e842544092a",
+  "outputIndex": 32,
+  "outputValue": 12,
+  "compilerRevision": "12cfaf45e63c54ef57872818b80a72cc23d242e3",
+  "ledger": "9.1.0.1",
+  "target": "midnight-ledger-9-zkir-3.2.1"
+}

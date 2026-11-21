@@ -360,6 +360,18 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("amount", nativeExpressionJson amount), ("recipient", nativeExpressionJson recipient),
       ("nullifier", nativeExpressionJson nullifier),
       ("outputCommitment", nativeExpressionJson outputCommitment)]
+  | .mergeShieldedFromMap nonceA colorA amountA nonceB colorB amountB
+      outputNonce outputColor outputAmount nullifierA nullifierB outputCommitment => Json.mkObj [
+      ("op", toJson ("mergeShieldedFromMap" : String)),
+      ("nonceA", nativeExpressionJson nonceA), ("colorA", nativeExpressionJson colorA),
+      ("amountA", nativeExpressionJson amountA), ("nonceB", nativeExpressionJson nonceB),
+      ("colorB", nativeExpressionJson colorB), ("amountB", nativeExpressionJson amountB),
+      ("outputNonce", nativeExpressionJson outputNonce),
+      ("outputColor", nativeExpressionJson outputColor),
+      ("outputAmount", nativeExpressionJson outputAmount),
+      ("nullifierA", nativeExpressionJson nullifierA),
+      ("nullifierB", nativeExpressionJson nullifierB),
+      ("outputCommitment", nativeExpressionJson outputCommitment)]
   | .sendShieldedFromMap nonce color inputAmount sendAmount recipient nullifier
       outputCommitment changeCommitment => Json.mkObj [
       ("op", toJson ("sendShieldedFromMap" : String)),
@@ -483,6 +495,12 @@ private def effectJson : Effect → Json
       ("op", toJson ("spendShieldedFromMap" : String)), ("state", toJson state),
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("amount", expressionJson amount), ("recipient", expressionJson recipient),
+      ("selfAddress", expressionJson selfAddress)]
+  | .mergeShieldedFromMap state nonceA colorA amountA nonceB colorB amountB selfAddress => Json.mkObj [
+      ("op", toJson ("mergeShieldedFromMap" : String)), ("state", toJson state),
+      ("nonceA", expressionJson nonceA), ("colorA", expressionJson colorA),
+      ("amountA", expressionJson amountA), ("nonceB", expressionJson nonceB),
+      ("colorB", expressionJson colorB), ("amountB", expressionJson amountB),
       ("selfAddress", expressionJson selfAddress)]
   | .sendShieldedFromMap state nonce color inputAmount sendAmount recipient selfAddress => Json.mkObj [
       ("op", toJson ("sendShieldedFromMap" : String)), ("state", toJson state),
