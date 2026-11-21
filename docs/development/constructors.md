@@ -23,10 +23,27 @@ Without a constructor, existing explicit state configuration remains supported.
 `create_state` remains the low-level explicit state constructor/hydrator.
 
 OpaqueString is deployment/host data, outside circuit `Ty`. Its cell contains one
-raw UTF-8 FAB atom with Compress alignment. The codec preserves trailing U+0000,
-which the generic byte-vector conversion would trim. Native compression uses
-the UTF-8 byte count, including multibyte characters and trailing zero bytes.
-`decode_opaque_string` validates the alignment and UTF-8 representation.
+raw UTF-8 FAB atom with Compress alignment. The codec preserves embedded U+0000
+and rejects trailing U+0000 before constructing state. Ledger serialization
+otherwise normalizes the atom and trims that trailing byte. Native compression
+uses the exact UTF-8 byte count. `decode_opaque_string` checks Compress alignment,
+the byte limit, FAB normal form and UTF-8. The pinned reference exercises the
+same text in a Compact constructor and Map. [Reference runner](../../tests/compact/opaque-string-cases.mjs)
+
+Run the reference with absolute paths for Compact 0.36.1 (`COMPACTC_0361`)
+and `@midnight-ntwrk/compact-runtime` 0.21.0 (`COMPACT_RUNTIME_0210`).
+
+```sh
+scratch=$(mktemp -d)
+trap 'rm -rf -- "$scratch"' EXIT
+"$COMPACTC_0361" --version | grep -E '^0\.36\.1 \(7fa3a117c'
+test "$(node -p 'require(process.argv[1]).version' "$COMPACT_RUNTIME_0210/package.json")" = '0.21.0'
+"$COMPACTC_0361" --skip-zk tests/compact/OpaqueStringCases.compact "$scratch/compact"
+mkdir -p "$scratch/node_modules/@midnight-ntwrk"
+ln -s "$COMPACT_RUNTIME_0210" "$scratch/node_modules/@midnight-ntwrk/compact-runtime"
+cp tests/compact/opaque-string-cases.mjs "$scratch/opaque-string-cases.mjs"
+node "$scratch/opaque-string-cases.mjs"
+```
 
 The compiler rejects entrypoint writes to sealed cells, including inactive
 writes. The runtime rejects a prepared call which changes a sealed cell. Bundle

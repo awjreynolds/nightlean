@@ -707,6 +707,36 @@ impl WitnessContractTarget {
         let (intent, binding) = self
             .prepare_installation(current, operations, signer, lock, ttl, rng)
             .map_err(Error::Proof)?;
+        self.start_maintenance_client(current_state, intent, binding, descriptor_json, setup_json)
+    }
+
+    /// Replace the active single-key maintenance authority after all authenticated verifiers
+    /// have been installed. The current token stays with the caller on any startup failure.
+    pub fn start_authority_rotation_client(
+        &self,
+        current_state: &mut Option<CurrentStateContext>,
+        current_signer: &base_crypto::schnorr::SigningKey,
+        next_key: base_crypto::schnorr::VerifyingKey,
+        ttl: u64,
+        descriptor_json: &[u8],
+        setup_json: &[u8],
+        rng: &mut (impl Rng + CryptoRng),
+    ) -> Result<WitnessClient> {
+        let current = current_state.as_ref().ok_or(Error::State)?;
+        let (intent, binding) = self
+            .prepare_authority_rotation(current, current_signer, next_key, ttl, rng)
+            .map_err(Error::Proof)?;
+        self.start_maintenance_client(current_state, intent, binding, descriptor_json, setup_json)
+    }
+
+    fn start_maintenance_client(
+        &self,
+        current_state: &mut Option<CurrentStateContext>,
+        intent: crate::assembly::NativeIntent,
+        binding: proof::ContractStateBinding,
+        descriptor_json: &[u8],
+        setup_json: &[u8],
+    ) -> Result<WitnessClient> {
         let bundle = self.deployment_bundle().map_err(Error::Proof)?;
         let bytes = bundle
             .file(Role::LedgerParameters)

@@ -1,0 +1,17 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger initialized: Opaque<"string">;
+export ledger strings: Map<Bytes<32>, Opaque<"string">>;
+
+constructor(initial: Opaque<"string">) {
+  initialized = disclose(initial);
+}
+
+export circuit store(key: Bytes<32>, value: Opaque<"string">): [] {
+  strings.insert(disclose(key), disclose(value));
+}
+
+export circuit read(key: Bytes<32>): Opaque<"string"> {
+  return strings.lookup(disclose(key));
+}
