@@ -218,6 +218,8 @@ scoped syntax "default(" nltype ")" : nlexpr
 scoped syntax "disclose(" nlexpr ")" : nlexpr
 scoped syntax "boolAnd(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "boolOr(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "andThen(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "orElse(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "boolXor(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
@@ -665,6 +667,21 @@ private def spanTerm (stx : Syntax) : CommandElabM (TSyntax `term) := do
 
 private abbrev Bindings := List (String × Ty × TSyntax `term)
 
+private partial def syntaxIdentifiers : Syntax → List String
+  | .ident _ _ name _ => [name.toString]
+  | .node _ _ children => children.toList.flatMap syntaxIdentifiers
+  | _ => []
+
+private def freshLazyBooleanName (env : Bindings) (stx : TSyntax `nlexpr) : String := Id.run do
+  let usedNames := env.map (fun binding => binding.1) ++ syntaxIdentifiers stx.raw
+  let baseName := s!"$lazyBool{stx.raw.getPos?.getD 0}"
+  let mut candidate := baseName
+  let mut suffix := 0
+  while usedNames.contains candidate do
+    candidate := s!"{baseName}_local{suffix}"
+    suffix := suffix + 1
+  return candidate
+
 private def callExpressions (role : String) (ordered : List (String × Ty))
     (groups : List (String × List (String × Ty)))
     (values : Array (TSyntax `nlcallvalue)) (site : Syntax) :
@@ -734,7 +751,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| disclose($value)) => hasPartialScalar value
   | `(nlexpr| add($a, $b)) | `(nlexpr| mul($a, $b))
   | `(nlexpr| eq($a, $b)) | `(nlexpr| boolAnd($a, $b))
-  | `(nlexpr| boolOr($a, $b)) | `(nlexpr| boolXor($a, $b))
+  | `(nlexpr| boolOr($a, $b)) | `(nlexpr| andThen($a, $b))
+  | `(nlexpr| orElse($a, $b)) | `(nlexpr| boolXor($a, $b))
   | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
@@ -953,6 +971,27 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let left ← expected env left .bool
     let right ← expected env right .bool
     pure (.bool, ← `(Noctium.Expr.boolOr $left $right))
+  | `(nlexpr| andThen($left, $right)) => do
+    let left ← expected env left .bool
+    let (rightTy, right) ← expression env right
+    unless rightTy == .bool do throwErrorAt stx "andThen requires a Bool right operand"
+    let name := freshLazyBooleanName env stx
+    let leftRef ← `(Noctium.Expr.ref (ty := Noctium.Ty.bool) $(stringTerm name))
+    let safeRight ← `(Noctium.GuardedExpression.totalize $leftRef $right)
+    let falseValue ← `(Noctium.Expr.bool Bool.false)
+    pure (.bool, ← `(Noctium.Expr.letE $(stringTerm name) $left
+      (Noctium.Expr.select $leftRef $safeRight $falseValue)))
+  | `(nlexpr| orElse($left, $right)) => do
+    let left ← expected env left .bool
+    let (rightTy, right) ← expression env right
+    unless rightTy == .bool do throwErrorAt stx "orElse requires a Bool right operand"
+    let name := freshLazyBooleanName env stx
+    let leftRef ← `(Noctium.Expr.ref (ty := Noctium.Ty.bool) $(stringTerm name))
+    let inactiveRightGuard ← `(Noctium.Expr.eq $leftRef (Noctium.Expr.bool Bool.false))
+    let safeRight ← `(Noctium.GuardedExpression.totalize $inactiveRightGuard $right)
+    let trueValue ← `(Noctium.Expr.bool Bool.true)
+    pure (.bool, ← `(Noctium.Expr.letE $(stringTerm name) $left
+      (Noctium.Expr.select $leftRef $trueValue $safeRight)))
   | `(nlexpr| boolXor($left, $right)) => do
     let left ← expected env left .bool
     let right ← expected env right .bool
@@ -1794,11 +1833,6 @@ private def chooseBranchLocalName (env : Bindings) (used : List String) (next : 
     candidateIndex := candidateIndex + 1
     candidate := s!"{namePrefix}{candidateIndex}"
   return (candidate, candidateIndex + 1)
-
-private partial def syntaxIdentifiers : Syntax → List String
-  | .ident _ _ name _ => [name.toString]
-  | .node _ _ children => children.toList.flatMap syntaxIdentifiers
-  | _ => []
 
 private def freshReadName (depth : Nat) (state : EntryEffects) (destination : TSyntax `ident) :
     CommandElabM (String × EntryEffects) := do
