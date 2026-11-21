@@ -39,13 +39,22 @@ fn constructor_binds_public_metadata_and_rejects_sealed_mutation() {
             .as_slice(),
     )
     .unwrap();
-    let name = "Token 夜\0";
+    let name = "Token\0夜";
     let arguments = BTreeMap::from([
         ("name_".into(), json!(name)),
         ("symbol_".into(), json!("NOC")),
         ("decimals_".into(), json!("6")),
     ]);
     let initial = construct_state(&plan, &arguments).unwrap();
+    let mut noncanonical = arguments.clone();
+    noncanonical.insert("name_".into(), json!("Token 夜\0"));
+    let error = construct_state(&plan, &noncanonical)
+        .err()
+        .expect("state construction must reject a trailing NUL");
+    assert!(format!("{error:#}").contains("opaque string has trailing zero bytes"));
+    noncanonical.insert("name_".into(), json!(""));
+    let empty_name = construct_state(&plan, &noncanonical).unwrap();
+    assert_eq!(decode_opaque_string(cell(&plan, &empty_name, "name")).unwrap(), "");
     assert_eq!(
         decode_opaque_string(cell(&plan, &initial, "name")).unwrap(),
         name
@@ -93,7 +102,7 @@ fn constructor_binds_public_metadata_and_rejects_sealed_mutation() {
         .position(|decl| decl.name == "decimals")
         .unwrap();
     let mut forged = plan.clone();
-    forged.operations = vec![
+    forged.operations.extend([
         Instruction::Push {
             storage: false,
             expression: Expr::Constant {
@@ -107,8 +116,7 @@ fn constructor_binds_public_metadata_and_rejects_sealed_mutation() {
             alignment: "field".into(),
         },
         Instruction::Insert { n: 1 },
-    ];
-    forged.reads.clear();
+    ]);
     let error = prepare(&forged, &BTreeMap::new(), &initial, params, address)
         .err()
         .expect("sealed cell mutation must reject");
