@@ -1511,15 +1511,28 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         } => {
             let parsed = checked_record_schema(schema)?;
             ensure!(
-                expressions.len() == parsed.counts().leaves,
+                expressions.len() == parsed.fields.len(),
                 "list record expression count mismatch"
             );
             let path = path_field_count(plan, *slot, keys)?;
-            let n = expressions.len();
             if matches!(instruction, Instruction::ListHead { .. }) {
-                vec![1, path, 4, 2 + 2 * n]
+                vec![1, path, 4, parsed.popeq_impact_width()]
             } else {
-                vec![path, 1, 4, 2, 6 + 2 * n, 1, 5, 1, 1, 1, 5, 1, 1]
+                vec![
+                    path,
+                    1,
+                    4,
+                    2,
+                    parsed.push_impact_width() + 3,
+                    1,
+                    5,
+                    1,
+                    1,
+                    1,
+                    5,
+                    1,
+                    1,
+                ]
             }
         }
         Instruction::ListPopFront { slot, keys } => {
@@ -1652,21 +1665,41 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
             schema,
             ..
         } => {
-            ensure!(
-                expressions.len() == aligned_schema_field_count(schema)?,
-                "aligned value expression count mismatch"
-            );
-            3 + 2 * expressions.len()
+            if let Some(name) = typed_scalar_schema_token(schema) {
+                let ty = ScalarType::parse(name)?;
+                ensure!(
+                    expressions.len() == typed_scalar_field_count(&ty)?,
+                    "aligned value expression count mismatch"
+                );
+                3 + 2 * expressions.len()
+            } else {
+                let schema = checked_record_schema(schema)?;
+                ensure!(
+                    expressions.len() == schema.fields.len(),
+                    "aligned value expression count mismatch"
+                );
+                schema.push_impact_width()
+            }
         }
         Instruction::PopeqFields {
             expressions,
             schema,
         } => {
-            ensure!(
-                expressions.len() == aligned_schema_field_count(schema)?,
-                "aligned value expression count mismatch"
-            );
-            2 + 2 * expressions.len()
+            if let Some(name) = typed_scalar_schema_token(schema) {
+                let ty = ScalarType::parse(name)?;
+                ensure!(
+                    expressions.len() == typed_scalar_field_count(&ty)?,
+                    "aligned value expression count mismatch"
+                );
+                2 + 2 * expressions.len()
+            } else {
+                let schema = checked_record_schema(schema)?;
+                ensure!(
+                    expressions.len() == schema.fields.len(),
+                    "aligned value expression count mismatch"
+                );
+                schema.popeq_impact_width()
+            }
         }
         Instruction::Guarded { .. } => bail!("nested guarded native operation is unsupported"),
     })
@@ -1836,13 +1869,472 @@ fn validate_tree_schema(schema: &Json, depth: usize) -> Result<()> {
     validate_tree_schema(&parts[1], depth + 1)
 }
 
-fn checked_record_schema(json: &Json) -> Result<aggregates::Schema> {
-    let schema = aggregates::Schema::from_json(&serde_json::to_vec(json)?)?;
+struct RecordField {
+    name: Option<String>,
+    ty: ScalarType,
+}
+
+struct CheckedRecordSchema {
+    fields: Vec<RecordField>,
+    aggregate: Option<aggregates::Schema>,
+}
+
+impl CheckedRecordSchema {
+    fn alignment_atoms(&self) -> usize {
+        self.fields
+            .iter()
+            .map(|field| {
+                if field.ty == ScalarType::JubjubPoint {
+                    2
+                } else {
+                    1
+                }
+            })
+            .sum()
+    }
+
+    fn field_values(&self) -> usize {
+        self.fields
+            .iter()
+            .map(|field| match &field.ty {
+                ScalarType::Bytes32 | ScalarType::JubjubPoint => 2,
+                _ => 1,
+            })
+            .sum()
+    }
+
+    fn push_impact_width(&self) -> usize {
+        3 + self.alignment_atoms() + self.field_values()
+    }
+
+    fn popeq_impact_width(&self) -> usize {
+        2 + self.alignment_atoms() + self.field_values()
+    }
+}
+
+fn record_projection_bindings(name: &str, ty: &ScalarType) -> Result<Vec<(String, String)>> {
+    Ok(match ty {
+        ScalarType::Bytes32 => byte_projection_bindings(name, 32)?,
+        ScalarType::JubjubPoint => (0..2)
+            .map(|index| {
+                (
+                    format!("_noctium_jubjub_read_{name}_{index}"),
+                    "Native".into(),
+                )
+            })
+            .collect(),
+        _ => Vec::new(),
+    })
+}
+
+fn bind_record_values(
+    read: &Read,
+    schema: &CheckedRecordSchema,
+    values: &[Value],
+    env: &mut Environment,
+) -> Result<Vec<String>> {
     ensure!(
-        schema.counts().leaves > 0 && schema.native_field_only(),
-        "record requires nonempty Native leaves"
+        read.components.len() == schema.fields.len() && values.len() == schema.fields.len(),
+        "record binding field count mismatch"
     );
-    Ok(schema)
+    let mut produced = Vec::new();
+    for ((component, field), value) in read.components.iter().zip(&schema.fields).zip(values) {
+        ensure!(
+            ScalarType::parse(&component.ty)? == field.ty && value.scalar_type() == field.ty,
+            "record binding type mismatch"
+        );
+        ensure!(
+            !env.contains_key(&component.name),
+            "record component shadows an existing value"
+        );
+        env.insert(component.name.clone(), value.clone());
+        produced.push(component.name.clone());
+
+        let projections = record_projection_bindings(&component.name, &field.ty)?;
+        if projections.is_empty() {
+            continue;
+        }
+        let mut encoded = Vec::new();
+        match value {
+            Value::Bytes(_) => aligned_bytes(value)?.value_only_field_repr(&mut encoded),
+            Value::JubjubPoint(point) => encoded.extend(jubjub::coordinates(*point)?),
+            _ => bail!("record projection type mismatch"),
+        }
+        ensure!(
+            projections.len() == encoded.len(),
+            "record projection field count mismatch"
+        );
+        for ((name, ty), field_value) in projections.into_iter().zip(encoded) {
+            ensure!(
+                !env.contains_key(&name),
+                "record projection shadows an existing value"
+            );
+            env.insert(
+                name.clone(),
+                input_value(&ty, &Json::String(field_decimal(field_value)))?,
+            );
+            produced.push(name);
+        }
+    }
+    Ok(produced)
+}
+
+fn valid_record_identifier(value: &str, qualified: bool) -> bool {
+    let segments = if qualified {
+        value.split('.').collect::<Vec<_>>()
+    } else {
+        vec![value]
+    };
+    !segments.is_empty()
+        && segments.iter().all(|segment| {
+            let mut chars = segment.chars();
+            chars
+                .next()
+                .is_some_and(|first| first == '_' || first.is_ascii_alphabetic())
+                && chars.all(|ch| ch == '_' || ch.is_ascii_alphanumeric())
+        })
+}
+
+fn record_type_name(ty: &ScalarType) -> Result<&'static str> {
+    Ok(match ty {
+        ScalarType::Native => "Native",
+        ScalarType::Bytes32 => "Bytes<32>",
+        ScalarType::JubjubPoint => "JubjubPoint",
+        _ => bail!("unsupported mixed record field type"),
+    })
+}
+
+fn checked_record_schema(json: &Json) -> Result<CheckedRecordSchema> {
+    if json.get("schemaVersion").is_some() {
+        let schema = aggregates::Schema::from_json(&serde_json::to_vec(json)?)?;
+        ensure!(
+            schema.counts().leaves > 0 && schema.native_field_only(),
+            "record requires nonempty Native leaves"
+        );
+        return Ok(CheckedRecordSchema {
+            fields: (0..schema.counts().leaves)
+                .map(|_| RecordField {
+                    name: None,
+                    ty: ScalarType::Native,
+                })
+                .collect(),
+            aggregate: Some(schema),
+        });
+    }
+
+    let object = json
+        .as_object()
+        .ok_or_else(|| anyhow!("invalid mixed record schema"))?;
+    ensure!(
+        object.len() == 2 && object.contains_key("id") && object.contains_key("fields"),
+        "invalid mixed record schema"
+    );
+    let id = object
+        .get("id")
+        .and_then(Json::as_str)
+        .ok_or_else(|| anyhow!("invalid mixed record identity"))?;
+    ensure!(
+        valid_record_identifier(id, true),
+        "invalid mixed record identity"
+    );
+    let fields = object
+        .get("fields")
+        .and_then(Json::as_array)
+        .filter(|fields| !fields.is_empty() && fields.len() <= aggregates::MAX_LEAVES)
+        .ok_or_else(|| anyhow!("invalid mixed record fields"))?;
+    let mut names = BTreeSet::new();
+    let mut checked = Vec::with_capacity(fields.len());
+    for field in fields {
+        let field = field
+            .as_object()
+            .ok_or_else(|| anyhow!("invalid mixed record field"))?;
+        ensure!(
+            field.len() == 2 && field.contains_key("name") && field.contains_key("type"),
+            "invalid mixed record field"
+        );
+        let name = field
+            .get("name")
+            .and_then(Json::as_str)
+            .ok_or_else(|| anyhow!("invalid mixed record field name"))?;
+        ensure!(
+            valid_record_identifier(name, false) && names.insert(name.to_owned()),
+            "invalid or duplicate mixed record field name"
+        );
+        let ty_name = field
+            .get("type")
+            .and_then(Json::as_str)
+            .ok_or_else(|| anyhow!("invalid mixed record field type"))?;
+        let ty = ScalarType::parse(ty_name)?;
+        ensure!(
+            matches!(
+                &ty,
+                ScalarType::Native | ScalarType::Bytes32 | ScalarType::JubjubPoint
+            ) && record_type_name(&ty)? == ty_name,
+            "unsupported or noncanonical mixed record field type"
+        );
+        checked.push(RecordField {
+            name: Some(name.to_owned()),
+            ty,
+        });
+    }
+    Ok(CheckedRecordSchema {
+        fields: checked,
+        aggregate: None,
+    })
+}
+
+fn validate_record_values(schema: &CheckedRecordSchema, values: &[Value]) -> Result<()> {
+    ensure!(
+        values.len() == schema.fields.len(),
+        "record field count mismatch"
+    );
+    for (field, value) in schema.fields.iter().zip(values) {
+        ensure!(
+            value.scalar_type() == field.ty,
+            "record field type mismatch"
+        );
+        value.validate()?;
+    }
+    if let Some(aggregate) = &schema.aggregate {
+        let fields = values
+            .iter()
+            .map(Value::field)
+            .collect::<Result<Vec<_>>>()?;
+        validate_record_fields(aggregate, &fields)?;
+    }
+    Ok(())
+}
+
+fn unguarded_operation(operation: &Instruction) -> (&Instruction, Option<&Expr>) {
+    match operation {
+        Instruction::Guarded { guard, operation } => (operation, Some(guard)),
+        operation => (operation, None),
+    }
+}
+
+fn is_record_schema(schema: &Json) -> bool {
+    schema.get("schemaVersion").is_some()
+        || schema
+            .as_object()
+            .is_some_and(|object| object.contains_key("id") && object.contains_key("fields"))
+}
+
+fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
+    for (index, operation) in plan.operations.iter().enumerate() {
+        let (operation, guard) = unguarded_operation(operation);
+        match operation {
+            Instruction::PushFields {
+                storage: true,
+                schema,
+                ..
+            } if is_record_schema(schema) => {
+                checked_record_schema(schema)?;
+                let key_operation = index
+                    .checked_sub(1)
+                    .and_then(|index| plan.operations.get(index))
+                    .ok_or_else(|| anyhow!("record write has no final map key"))?;
+                let path_operation = index
+                    .checked_sub(2)
+                    .and_then(|index| plan.operations.get(index))
+                    .ok_or_else(|| anyhow!("record write has no indexed map path"))?;
+                let (key_operation, key_guard) = unguarded_operation(key_operation);
+                let (path_operation, path_guard) = unguarded_operation(path_operation);
+                ensure!(
+                    key_guard == guard && path_guard == guard,
+                    "record write guard differs from its indexed path"
+                );
+                ensure!(
+                    matches!(
+                        key_operation,
+                        Instruction::Push { storage: false, .. }
+                            | Instruction::PushFields { storage: false, .. }
+                    ),
+                    "record write has an invalid final map key"
+                );
+                let Instruction::IndexPath {
+                    slot,
+                    keys,
+                    push_path: true,
+                } = path_operation
+                else {
+                    bail!("record write has no indexed map path")
+                };
+                ensure!(
+                    tree_schema_at_path(plan, *slot, keys.len() + 1)?.get("composite")
+                        == Some(schema),
+                    "record write differs from state schema"
+                );
+            }
+            Instruction::PopeqFields { schema, .. } if is_record_schema(schema) => {
+                checked_record_schema(schema)?;
+                let path_operation = index
+                    .checked_sub(1)
+                    .and_then(|index| plan.operations.get(index))
+                    .ok_or_else(|| anyhow!("record read has no indexed path"))?;
+                let (path_operation, path_guard) = unguarded_operation(path_operation);
+                ensure!(
+                    path_guard == guard,
+                    "record read guard differs from its indexed path"
+                );
+                let Instruction::IndexPath {
+                    slot,
+                    keys,
+                    push_path: false,
+                } = path_operation
+                else {
+                    bail!("record read has no indexed path")
+                };
+                ensure!(
+                    tree_schema_at_path(plan, *slot, keys.len())?.get("composite") == Some(schema),
+                    "record read differs from state schema"
+                );
+            }
+            Instruction::ListHead {
+                slot, keys, schema, ..
+            }
+            | Instruction::ListPushFront {
+                slot, keys, schema, ..
+            } => {
+                checked_record_schema(schema)?;
+                ensure!(
+                    list_schema_at_path(plan, *slot, keys.len())? == schema,
+                    "List record operation differs from state schema"
+                );
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn record_values_from_json(schema: &CheckedRecordSchema, json: &Json) -> Result<Vec<Value>> {
+    let values = if let Some(aggregate) = &schema.aggregate {
+        let leaves = aggregate.flatten_leaves_json(&serde_json::to_vec(json)?)?;
+        leaves
+            .iter()
+            .map(|leaf| input_value("Native", leaf))
+            .collect::<Result<Vec<_>>>()?
+    } else {
+        let object = json
+            .as_object()
+            .ok_or_else(|| anyhow!("mixed record value must be an object"))?;
+        ensure!(
+            object.len() == schema.fields.len(),
+            "mixed record value field count mismatch"
+        );
+        schema
+            .fields
+            .iter()
+            .map(|field| {
+                let name = field
+                    .name
+                    .as_deref()
+                    .ok_or_else(|| anyhow!("mixed record field lacks a name"))?;
+                let value = object
+                    .get(name)
+                    .ok_or_else(|| anyhow!("mixed record value is missing a field"))?;
+                input_value(record_type_name(&field.ty)?, value)
+            })
+            .collect::<Result<Vec<_>>>()?
+    };
+    validate_record_values(schema, &values)?;
+    Ok(values)
+}
+
+fn record_values_from_expressions(
+    schema: &CheckedRecordSchema,
+    expressions: &[Expr],
+    env: &Environment,
+) -> Result<Vec<Value>> {
+    ensure!(
+        expressions.len() == schema.fields.len(),
+        "record expression count mismatch"
+    );
+    let values = expressions
+        .iter()
+        .map(|expression| evaluate(expression, env))
+        .collect::<Result<Vec<_>>>()?;
+    validate_record_values(schema, &values)?;
+    Ok(values)
+}
+
+fn aligned_record_value(schema: &CheckedRecordSchema, values: &[Value]) -> Result<AlignedValue> {
+    validate_record_values(schema, values)?;
+    let parts = values
+        .iter()
+        .map(aligned_storage_cell)
+        .collect::<Result<Vec<_>>>()?;
+    Ok(AlignedValue::concat(parts.iter()))
+}
+
+fn decode_record_value(schema: &CheckedRecordSchema, value: &AlignedValue) -> Result<Vec<Value>> {
+    let defaults = schema
+        .fields
+        .iter()
+        .map(|field| inactive_read_value(record_type_name(&field.ty)?))
+        .collect::<Result<Vec<_>>>()?;
+    let templates = defaults
+        .iter()
+        .map(aligned_storage_cell)
+        .collect::<Result<Vec<_>>>()?;
+    let expected = AlignedValue::concat(templates.iter());
+    ensure!(
+        value.alignment == expected.alignment && value.value.0.len() == expected.value.0.len(),
+        "record cell alignment mismatch"
+    );
+    ensure!(
+        value.alignment.fits(&value.value),
+        "record cell encoding mismatch"
+    );
+    let mut offset: usize = 0;
+    let mut values = Vec::with_capacity(schema.fields.len());
+    for (field, template) in schema.fields.iter().zip(templates) {
+        let end = offset
+            .checked_add(template.value.0.len())
+            .ok_or_else(|| anyhow!("record atom count overflow"))?;
+        let part = AlignedValue {
+            value: FabValue(value.value.0[offset..end].to_vec()),
+            alignment: template.alignment,
+        };
+        offset = end;
+        let alignment = if field.ty == ScalarType::Bytes32 {
+            "bytes32"
+        } else {
+            "field"
+        };
+        values.push(decode_state_cell(
+            &part,
+            record_type_name(&field.ty)?,
+            alignment,
+        )?);
+    }
+    ensure!(
+        offset == value.value.0.len(),
+        "record cell atom count mismatch"
+    );
+    validate_record_values(schema, &values)?;
+    Ok(values)
+}
+
+pub(crate) fn default_record_value(schema: &Json) -> Result<Json> {
+    let schema = checked_record_schema(schema)?;
+    if let Some(aggregate) = schema.aggregate {
+        return Ok(serde_json::from_slice(&aggregate.from_leaf_json(
+            &vec![Json::String("0".into()); aggregate.counts().leaves],
+        )?)?);
+    }
+    let fields = schema
+        .fields
+        .into_iter()
+        .map(|field| {
+            let name = field
+                .name
+                .ok_or_else(|| anyhow!("mixed record field lacks a name"))?;
+            let value = inactive_read_value(record_type_name(&field.ty)?)?.public_json();
+            Ok((name, value))
+        })
+        .collect::<Result<serde_json::Map<_, _>>>()?;
+    Ok(Json::Object(fields))
 }
 
 fn typed_scalar_schema_token(schema: &Json) -> Option<&str> {
@@ -1907,13 +2399,6 @@ fn aligned_storage_cell(value: &Value) -> Result<AlignedValue> {
     }
 }
 
-fn aligned_schema_field_count(schema: &Json) -> Result<usize> {
-    if let Some(name) = typed_scalar_schema_token(schema) {
-        return typed_scalar_field_count(&ScalarType::parse(name)?);
-    }
-    Ok(checked_record_schema(schema)?.counts().leaves)
-}
-
 fn aligned_fields(fields: &[Fr]) -> AlignedValue {
     let fields: Vec<_> = fields.iter().copied().map(field_value).collect();
     AlignedValue::concat(fields.iter())
@@ -1940,23 +2425,29 @@ fn validate_record_fields(schema: &aggregates::Schema, fields: &[Fr]) -> Result<
     Ok(())
 }
 
-fn record_component_names<'a>(
-    read: &'a Read,
+fn record_component_names(
+    read: &Read,
     expressions: &[Expr],
     schema: &Json,
-) -> Result<Vec<&'a str>> {
+) -> Result<()> {
     let checked = checked_record_schema(schema)?;
     ensure!(
         read.ty == "Composite"
             && read.schema.as_ref() == Some(schema)
-            && read.components.len() == checked.counts().leaves
-            && expressions.len() == read.components.len(),
+            && read.components.len() == checked.fields.len()
+            && expressions.len() == read.components.len()
+            && read.projections.is_none(),
         "record read schema mismatch"
     );
     let mut names = BTreeSet::new();
-    for (component, expression) in read.components.iter().zip(expressions) {
+    for ((component, field), expression) in
+        read.components.iter().zip(&checked.fields).zip(expressions)
+    {
+        let component_type = ScalarType::parse(&component.ty)?;
         ensure!(
-            component.ty == "Native" && names.insert(component.name.as_str()),
+            component_type == field.ty
+                && component.ty == record_type_name(&field.ty)?
+                && names.insert(component.name.as_str()),
             "invalid record read component"
         );
         ensure!(
@@ -1964,11 +2455,7 @@ fn record_component_names<'a>(
             "record read expression differs from source component"
         );
     }
-    Ok(read
-        .components
-        .iter()
-        .map(|component| component.name.as_str())
-        .collect())
+    Ok(())
 }
 
 fn validate_byte_read_projections(read: &Read, ty: &ScalarType) -> Result<()> {
@@ -2177,6 +2664,7 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
         "duplicate input name"
     );
     call_input_header(&plan.circuit.inputs, &plan.call_inputs)?;
+    validate_record_operation_schemas(plan)?;
     #[cfg(feature = "zkir-321")]
     validate_foreign_key_pushes(plan)?;
     let mut output_names = BTreeSet::new();
@@ -2543,17 +3031,10 @@ pub fn create_state(plan: &Plan, config: &BTreeMap<String, Json>) -> Result<Char
                 )?)));
             } else if let Some(schema) = schema.get("composite") {
                 let schema = checked_record_schema(schema)?;
-                let leaves = schema.flatten_leaves_json(&serde_json::to_vec(value)?)?;
-                let fields = leaves
-                    .iter()
-                    .map(|leaf| {
-                        canonical_field(
-                            leaf.as_str()
-                                .ok_or_else(|| anyhow!("record requires Native leaves"))?,
-                        )
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                values.push(StateValue::Cell(Sp::new(aligned_fields(&fields))));
+                let fields = record_values_from_json(&schema, value)?;
+                values.push(StateValue::Cell(Sp::new(aligned_record_value(
+                    &schema, &fields,
+                )?)));
             } else {
                 ensure!(
                     value.as_array().is_some_and(|items| items.is_empty()),
@@ -2890,13 +3371,7 @@ fn native_list_value(
         bail!("invalid List head cell")
     };
     let checked = checked_record_schema(schema)?;
-    let mut fields = Vec::new();
-    head.value_only_field_repr(&mut fields);
-    ensure!(
-        **head == aligned_fields(&fields),
-        "List head alignment mismatch"
-    );
-    validate_record_fields(&checked, &fields)?;
+    decode_record_value(&checked, head)?;
     Ok((length, Some((**head).clone())))
 }
 
@@ -3669,22 +4144,31 @@ fn read_event(
     env: &Environment,
     produced: Vec<String>,
 ) -> PreparationRead {
-    let declared: BTreeSet<_> = std::iter::once(read.name.as_str())
-        .chain(
-            read.components
-                .iter()
-                .map(|component| component.name.as_str()),
-        )
-        .chain(
-            read.projections
-                .iter()
-                .flatten()
-                .map(|projection| projection.name.as_str()),
-        )
-        .collect();
+    let mut declared = BTreeSet::from([read.name.clone()]);
+    declared.extend(
+        read.components
+            .iter()
+            .map(|component| component.name.clone()),
+    );
+    declared.extend(
+        read.projections
+            .iter()
+            .flatten()
+            .map(|projection| projection.name.clone()),
+    );
+    for component in &read.components {
+        match component.ty.as_str() {
+            "Bytes<32>" => declared
+                .extend((0..2).map(|index| format!("_noctium_bytes_{}_{}", component.name, index))),
+            "JubjubPoint" => declared.extend(
+                (0..2).map(|index| format!("_noctium_jubjub_read_{}_{}", component.name, index)),
+            ),
+            _ => {}
+        }
+    }
     let values = produced
         .into_iter()
-        .filter(|name| declared.contains(name.as_str()))
+        .filter(|name| declared.contains(name))
         .filter_map(|name| env.get(&name).cloned().map(|value| (name, value)))
         .collect();
     PreparationRead {
@@ -4295,16 +4779,14 @@ impl PreparationCursor {
                             );
                             event = Some(read_event(read, false, env, vec![read.name.clone()]));
                         } else {
-                            let names = record_component_names(read, expressions, schema)?;
-                            let mut produced = Vec::with_capacity(names.len());
-                            for name in names.iter().copied() {
-                                ensure!(
-                                    !env.contains_key(name),
-                                    "record component shadows an existing value"
-                                );
-                                env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
-                                produced.push(name.to_owned());
-                            }
+                            record_component_names(read, expressions, schema)?;
+                            let checked = checked_record_schema(schema)?;
+                            let defaults = checked
+                                .fields
+                                .iter()
+                                .map(|field| inactive_read_value(record_type_name(&field.ty)?))
+                                .collect::<Result<Vec<_>>>()?;
+                            let produced = bind_record_values(read, &checked, &defaults, env)?;
                             event = Some(read_event(read, false, env, produced));
                         }
                         read_index += 1;
@@ -4365,16 +4847,14 @@ impl PreparationCursor {
                                 read.guard.as_ref() == Some(guard),
                                 "inactive List head guard mismatch"
                             );
-                            let names = record_component_names(read, expressions, schema)?;
-                            let mut produced = Vec::with_capacity(names.len());
-                            for name in names.iter().copied() {
-                                ensure!(
-                                    !env.contains_key(name),
-                                    "List head component shadows an existing value"
-                                );
-                                env.insert(name.to_owned(), Value::Native(Fr::from(0u64)));
-                                produced.push(name.to_owned());
-                            }
+                            record_component_names(read, expressions, schema)?;
+                            let checked = checked_record_schema(schema)?;
+                            let defaults = checked
+                                .fields
+                                .iter()
+                                .map(|field| inactive_read_value(record_type_name(&field.ty)?))
+                                .collect::<Result<Vec<_>>>()?;
+                            let produced = bind_record_values(read, &checked, &defaults, env)?;
                             event = Some(read_event(read, false, env, produced));
                             read_index += 1;
                         }
@@ -4540,20 +5020,12 @@ impl PreparationCursor {
                     }
                 } else {
                     let schema = checked_record_schema(schema)?;
-                    let fields = expressions
-                        .iter()
-                        .map(|expression| evaluate(expression, &env)?.field())
-                        .collect::<Result<Vec<_>>>()?;
-                    ensure!(
-                        expressions.len() == schema.counts().leaves,
-                        "record expression count mismatch"
-                    );
-                    validate_record_fields(&schema, &fields)?;
+                    let fields = record_values_from_expressions(&schema, expressions, &env)?;
                     Op::Push {
                         storage: *storage,
-                        value: StateValue::Cell(Sp::new(aligned_fields(&fields)))
+                        value: StateValue::Cell(Sp::new(aligned_record_value(&schema, &fields)?))
                             .try_into_checked()
-                            .map_err(|_| anyhow!("invalid native record value"))?,
+                            .map_err(|_| anyhow!("invalid record value"))?,
                     }
                 }
             }
@@ -4706,7 +5178,7 @@ impl PreparationCursor {
                         result: value,
                     }
                 } else {
-                    let names = record_component_names(read, expressions, schema)?;
+                    record_component_names(read, expressions, schema)?;
                     let (slot, keys) = previous_index
                         .as_ref()
                         .ok_or_else(|| anyhow!("record read lacks a native index"))?;
@@ -4729,24 +5201,9 @@ impl PreparationCursor {
                         &context
                     };
                     let value = read_state_aligned(read_context, *slot, keys)?;
-                    let expected_alignment =
-                        aligned_fields(&vec![Fr::from(0u64); names.len()]).alignment;
-                    ensure!(
-                        value.alignment == expected_alignment,
-                        "record cell alignment mismatch"
-                    );
-                    let mut fields = Vec::new();
-                    value.value_only_field_repr(&mut fields);
-                    validate_record_fields(&checked_record_schema(schema)?, &fields)?;
-                    let mut produced = Vec::with_capacity(names.len());
-                    for (name, field) in names.into_iter().zip(fields) {
-                        ensure!(
-                            !env.contains_key(name),
-                            "record component shadows an existing value"
-                        );
-                        env.insert(name.to_owned(), Value::Native(field));
-                        produced.push(name.to_owned());
-                    }
+                    let checked = checked_record_schema(schema)?;
+                    let values = decode_record_value(&checked, &value)?;
+                    let produced = bind_record_values(read, &checked, &values, env)?;
                     event = Some(read_event(read, true, env, produced));
                     read_index += 1;
                     Op::Popeq {
@@ -5149,7 +5606,7 @@ impl PreparationCursor {
                     read.guard.as_ref() == instruction_guard,
                     "List head guard mismatch"
                 );
-                let names = record_component_names(read, expressions, schema)?;
+                record_component_names(read, expressions, schema)?;
                 let (_, head) = native_list_value(
                     if has_written {
                         &prefix_context
@@ -5161,17 +5618,9 @@ impl PreparationCursor {
                     schema,
                 )?;
                 let head = head.ok_or_else(|| anyhow!("head of empty List"))?;
-                let mut fields = Vec::new();
-                head.value_only_field_repr(&mut fields);
-                let mut produced = Vec::with_capacity(names.len());
-                for (name, value) in names.into_iter().zip(fields) {
-                    ensure!(
-                        !env.contains_key(name),
-                        "List head component shadows an existing value"
-                    );
-                    env.insert(name.to_owned(), Value::Native(value));
-                    produced.push(name.to_owned());
-                }
+                let checked = checked_record_schema(schema)?;
+                let values = decode_record_value(&checked, &head)?;
+                let produced = bind_record_values(read, &checked, &values, env)?;
                 event = Some(read_event(read, true, env, produced));
                 read_index += 1;
                 program.extend([Op::Dup { n: 0 }, index, list_index(0)]);
@@ -5201,14 +5650,11 @@ impl PreparationCursor {
                     &values,
                     schema,
                 )?;
-                let fields = expressions
-                    .iter()
-                    .map(|value| evaluate(value, &env)?.field())
-                    .collect::<Result<Vec<_>>>()?;
-                validate_record_fields(&checked_record_schema(schema)?, &fields)?;
+                let checked = checked_record_schema(schema)?;
+                let fields = record_values_from_expressions(&checked, expressions, &env)?;
                 let node = StateValue::Array(
                     vec![
-                        StateValue::Cell(Sp::new(aligned_fields(&fields))),
+                        StateValue::Cell(Sp::new(aligned_record_value(&checked, &fields)?)),
                         StateValue::Null,
                         StateValue::Null,
                     ]

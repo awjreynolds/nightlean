@@ -117,10 +117,7 @@ fn default_value(decl: &StateDecl) -> Result<Json> {
             return scalar_zero(ty);
         }
         if let Some(record) = schema.get("composite") {
-            let checked = crate::checked_record_schema(record)?;
-            return Ok(serde_json::from_slice(
-                &checked.from_leaf_json(&vec![json!("0"); checked.counts().leaves])?,
-            )?);
+            return crate::default_record_value(record);
         }
     }
     // create_state validates collection schemas and requires these defaults to be empty.

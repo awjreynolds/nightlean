@@ -4,6 +4,7 @@ import Noctium.Field
 import Noctium.Semantics
 import Noctium.Disclosure
 import Noctium.Types.ValueSchema
+import Noctium.NativeExpression
 import Lean
 
 namespace Noctium.Backend.Impact
@@ -44,6 +45,48 @@ private def foreignNativeFields : (kind : Foreign.Kind) → Expr (.foreign kind)
 private def nativeFieldSequence (values : List Scalar) : List Scalar :=
   [.native values.length] ++ List.replicate values.length (.native (Field.modulus - 2)) ++ values
 
+private def ledgerFieldAtomCount : LedgerFieldExpr → Nat
+  | .mk .jubjubPoint _ => 2
+  | .mk (.foreign kind) _ => kind.encodedFieldCount
+  | _ => 1
+
+private def ledgerFieldTags : LedgerFieldExpr → List Scalar
+  | .mk (.bytes 32) _ => [.native 32]
+  | .mk .jubjubPoint _ => List.replicate 2 (.native (Field.modulus - 2))
+  | .mk (.foreign kind) _ => List.replicate kind.encodedFieldCount (.native (Field.modulus - 2))
+  | .mk _ _ => [.native (Field.modulus - 2)]
+
+private def ledgerFieldPayloads : LedgerFieldExpr → List Scalar
+  | .mk .native value => [value]
+  | .mk .bool value => [.select value (.native 1) (.native 0)]
+  | .mk (.uint _) value => [.cast .native value]
+  | .mk (.bytes 32) value => [.bytesField value 0, .bytesField value 1]
+  | .mk (.bytes length) value =>
+      (List.range (alignedByteChunkCount length)).map (.bytesField value)
+  | .mk .jubjubScalar value => [.jubjubScalarToNative value]
+  | .mk .jubjubPoint value => [.jubjubCoordinate value 0, .jubjubCoordinate value 1]
+  | .mk (.foreign kind) value => foreignNativeFields kind value
+
+private def ledgerFieldSequence (values : List LedgerFieldExpr) : List Scalar :=
+  if values.all (fun value => value.ty == .native) then
+    nativeFieldSequence (values.flatMap ledgerFieldPayloads)
+  else
+    [.native (values.foldl (fun count value => count + ledgerFieldAtomCount value) 0)] ++
+      values.flatMap ledgerFieldTags ++ values.flatMap ledgerFieldPayloads
+
+private def nativeFieldExpressions (values : List Scalar) : List LedgerFieldExpr :=
+  values.map fun value => .mk .native value
+
+private def refLedgerFieldExpr (name : String) (ty : Ty) : LedgerFieldExpr :=
+  match ty with
+  | .native => .mk .native (.ref name)
+  | .bool => .mk .bool (.ref name)
+  | .uint maximum => .mk (.uint maximum) (.ref name)
+  | .bytes length => .mk (.bytes length) (.ref name)
+  | .jubjubScalar => .mk .jubjubScalar (.ref name)
+  | .jubjubPoint => .mk .jubjubPoint (.ref name)
+  | .foreign kind => .mk (.foreign kind) (.ref name)
+
 private def natBytes (n : Nat) : List Nat := if n == 0 then [] else go n (n.log2 / 8 + 1)
 where
   go (n : Nat) : Nat → List Nat
@@ -58,8 +101,8 @@ inductive Op where
   | push (value : Aligned) (storage : Bool := false)
   | newMap
   | popeq (value : Aligned)
-  | pushFields (schema : Lean.Json) (values : List Scalar) (storage : Bool := false)
-  | popeqFields (schema : Lean.Json) (values : List Scalar)
+  | pushFields (schema : Lean.Json) (values : List LedgerFieldExpr) (storage : Bool := false)
+  | popeqFields (schema : Lean.Json) (values : List LedgerFieldExpr)
   | member
   | insert (levels : Nat)
   | addImmediate (amount : Nat)
@@ -91,8 +134,8 @@ inductive Op where
       (hash : Expr (.bytes 32)) (index : Expr (.uint (2 ^ 64 - 1)))
   | merkleTreeResetAt (slot depth : Nat) (historic : Bool) (keys : List Aligned)
   | merkleTreeResetHistoryAt (slot depth : Nat) (keys : List Aligned)
-  | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
-  | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List Scalar)
+  | listHead (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
+  | listPushFront (slot : Nat) (keys : List Aligned) (schema : Lean.Json) (values : List LedgerFieldExpr)
   | listPopFront (slot : Nat) (keys : List Aligned)
   | listReset (slot : Nat) (keys : List Aligned)
   | mapRemove (slot : Nat) (keys : List Aligned)
@@ -331,9 +374,8 @@ private def callerFieldGroups (names : CallerBindings) : List (List Scalar) :=
     [.native 0x0b], [.native 0x10, .native 1] ++ layout ++ List.replicate 6 (.native 0),
     result]
 
-private def listNodePushFields (values : List Scalar) : List Scalar :=
-  [.native 0x11, .native 51, .native 1, .native values.length] ++
-    List.replicate values.length (.native (Field.modulus - 2)) ++ values ++
+private def listRecordNodePushFields (values : List LedgerFieldExpr) : List Scalar :=
+  [.native 0x11, .native 51, .native 1] ++ ledgerFieldSequence values ++
     [.native 0, .native 0]
 
 private def emptyListPushFields : List Scalar :=
@@ -421,9 +463,8 @@ def Op.fields : Op → List Scalar
   | .newMap => [.native 0x05]
   | .popeq value => [.native 0x0c] ++ value.fields
   | .pushFields _ values storage =>
-      [.native (if storage then 0x11 else 0x10), .native 1] ++
-        (Aligned.nativeFields values).fields
-  | .popeqFields _ values => [.native 0x0c] ++ (Aligned.nativeFields values).fields
+      [.native (if storage then 0x11 else 0x10), .native 1] ++ ledgerFieldSequence values
+  | .popeqFields _ values => [.native 0x0c] ++ ledgerFieldSequence values
   | .member => [.native 0x18]
   | .insert levels => [.native (0x90 + levels)]
   | .addImmediate amount => [.native 0x0e, .native amount]
@@ -474,10 +515,10 @@ def Op.fields : Op → List Scalar
       (merkleTreeResetHistoryFieldGroups slot keys).flatten
   | .listHead slot keys _schema values =>
       [.native 0x30] ++ indexPathFields slot false keys ++ listIndexFields 0 ++
-      [.native 0x0c] ++ (Aligned.nativeFields values).fields
+      [.native 0x0c] ++ ledgerFieldSequence values
   | .listPushFront slot keys _ values =>
       indexPathFields slot true keys ++ [.native 0x30] ++ listIndexFields 2 ++
-      [.native 0x0e, .native 1] ++ listNodePushFields values ++
+      [.native 0x0e, .native 1] ++ listRecordNodePushFields values ++
       [.native 0x40, .native 0x10, .native 1, .native 1, .native 1, .native 2] ++
       [.native 0x40, .native 0x91, .native 0x40, .native 0x10, .native 1,
         .native 1, .native 1, .native 1, .native 0x40, .native (0x90 + keys.length + 2)]
@@ -572,10 +613,10 @@ def Op.fieldGroups : Op → List (List Scalar)
       merkleTreeResetHistoryFieldGroups slot keys
   | .listHead slot keys _schema values =>
       [[.native 0x30], indexPathFields slot false keys, listIndexFields 0,
-        [.native 0x0c] ++ (Aligned.nativeFields values).fields]
+        [.native 0x0c] ++ ledgerFieldSequence values]
   | .listPushFront slot keys _ values =>
       [indexPathFields slot true keys, [.native 0x30], listIndexFields 2,
-        [.native 0x0e, .native 1], listNodePushFields values, [.native 0x40],
+        [.native 0x0e, .native 1], listRecordNodePushFields values, [.native 0x40],
         listU8CellPushFields 2, [.native 0x40], [.native 0x91], [.native 0x40],
         listU8CellPushFields 1, [.native 0x40], [.native (0x90 + keys.length + 2)]]
   | .listPopFront slot keys =>
@@ -658,8 +699,11 @@ def Read.inactiveDefaultConstraint (read : Read) : Option (Expr .bool) :=
   | .uint maximum, some guard => some (.eq (.ref read.name)
       (.select guard (.ref read.name) (.uint maximum 0)))
 
-def Read.bindings (read : Read) : List (String × Ty) :=
-  if !read.components.isEmpty then read.components else
+def Read.scalarReads (read : Read) : List Read :=
+  if read.components.isEmpty then [read]
+  else read.components.map fun (name, ty) => {name, ty, guard := read.guard}
+
+private def Read.scalarBindings (read : Read) : List (String × Ty) :=
   match read.ty with
   | .bytes length =>
     let count := alignedByteChunkCount length
@@ -672,26 +716,23 @@ def Read.bindings (read : Read) : List (String × Ty) :=
       (Read.jubjubPointCoordinateName read.name 1, .native)]
   | _ => [(read.name, read.ty)]
 
+def Read.bindings (read : Read) : List (String × Ty) :=
+  read.scalarReads.flatMap Read.scalarBindings
+
+private def Read.scalarInactiveDefaultConstraints (read : Read) : List (Expr .bool) :=
+  if read.ty == .jubjubPoint then
+    match read.guard with
+    | none => []
+    | some guard =>
+      let point : Expr .jubjubPoint := .ref read.name
+      [.eq (.jubjubCoordinate point 0)
+          (.select guard (.jubjubCoordinate point 0) (.native 0)),
+        .eq (.jubjubCoordinate point 1)
+          (.select guard (.jubjubCoordinate point 1) (.native 1))]
+  else read.inactiveDefaultConstraint.toList
+
 def Read.inactiveDefaultConstraints (read : Read) : List (Expr .bool) :=
-  if read.components.isEmpty then
-    if read.ty == .jubjubPoint then
-      match read.guard with
-      | none => []
-      | some guard =>
-        let point : Expr .jubjubPoint := .ref read.name
-        [.eq (.jubjubCoordinate point 0)
-            (.select guard (.jubjubCoordinate point 0) (.native 0)),
-          .eq (.jubjubCoordinate point 1)
-            (.select guard (.jubjubCoordinate point 1) (.native 1))]
-    else read.inactiveDefaultConstraint.toList else
-  match read.guard with
-  | none => []
-  | some guard => read.components.filterMap fun (name, type) =>
-      match type with
-      | .native => some (.eq (.ref name) (.select guard (.ref name) (.native 0)))
-      | .bool => some (.eq (.ref name) (.select guard (.ref name) (.bool false)))
-      | .uint maximum => some (.eq (.ref name) (.select guard (.ref name) (.uint maximum 0)))
-      | .bytes _ | .jubjubScalar | .jubjubPoint | .foreign _ => none
+  read.scalarReads.flatMap Read.scalarInactiveDefaultConstraints
 
 structure Plan where
   operations : List Op := []
@@ -740,9 +781,10 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
   let env := entry.circuit.inputs.map (fun input => (input.name, input.ty)) ++
     entry.circuit.outputs.map (fun output => (output.name, output.ty)) ++
     (plan.reads.drop publicCount).flatMap fun read =>
-      (match read.ty with
-        | .bytes _ | .jubjubPoint => [(read.name, read.ty)]
-        | _ => []) ++ read.bindings
+      read.scalarReads.flatMap fun scalarRead =>
+        (match scalarRead.ty with
+          | .bytes _ | .jubjubPoint => [(scalarRead.name, scalarRead.ty)]
+          | _ => []) ++ scalarRead.bindings
   for field in plan.fields do field.validate expressionCapabilities env
   for guard in plan.guards do guard.validate expressionCapabilities env
   unless plan.activityGuards.isEmpty || plan.activityGuards.length == plan.operations.length do
@@ -755,8 +797,10 @@ def Plan.validate (plan : Plan) (entry : Entrypoint) : Except String Unit := do
     if !read.components.isEmpty then
       unless uniqueNames (read.components.map Prod.fst) do
         throw "duplicate native composite read field binding"
-      unless read.components.all (fun component => component.2 == .native) do
-        throw "native composite reads currently require Native fields"
+      unless read.components.all (fun component =>
+          component.2 == .native || component.2 == .bytes 32 || component.2 == .jubjubPoint) do
+        throw "native composite reads require Native, Bytes32, or JubjubPoint fields"
+      for (_, ty) in read.components do ty.validate expressionCapabilities
     if let some guard := read.guard then guard.validate expressionCapabilities env
 
 private def nativeValue : (ty : Ty) → Expr ty → Except String Scalar
@@ -785,7 +829,8 @@ private def nativeRead (ty : Ty) (name : String) : Except String Scalar :=
 
 private def pushKey : Aligned → Op
   | .foreignKey kind value =>
-    .pushFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value) false
+    .pushFields (Lean.Json.str kind.sourceName)
+      (nativeFieldExpressions (foreignNativeFields kind value)) false
   | value => .push value false
 
 private def keyValueJson (kind : Foreign.Kind) (value : Expr (.foreign kind))
@@ -797,12 +842,14 @@ private def keyValueJson (kind : Foreign.Kind) (value : Expr (.foreign kind))
 
 private def storageWriteValue : (ty : Ty) → Expr ty → Except String Op
   | .foreign kind, value =>
-    pure (.pushFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value) true)
+    pure (.pushFields (Lean.Json.str kind.sourceName)
+      (nativeFieldExpressions (foreignNativeFields kind value)) true)
   | .jubjubScalar, value =>
-    pure (.pushFields (Lean.Json.str "JubjubScalar") [.jubjubScalarToNative value] true)
+    pure (.pushFields (Lean.Json.str "JubjubScalar")
+      (nativeFieldExpressions [.jubjubScalarToNative value]) true)
   | .jubjubPoint, value =>
     pure (.pushFields (Lean.Json.str "JubjubPoint")
-      [.jubjubCoordinate value 0, .jubjubCoordinate value 1] true)
+      (nativeFieldExpressions [.jubjubCoordinate value 0, .jubjubCoordinate value 1]) true)
   | .bytes 32, value => pure (.push (.bytes32 value) true)
   | .bytes length, value => pure (.push (.bytes length value) true)
   | ty, value => do
@@ -818,24 +865,35 @@ private def storageReadValue (ty : Ty) (name : String) : Except String Op := do
     pure (.popeq (.bytes length value))
   | .foreign kind =>
     let value : Expr (.foreign kind) := .ref name
-    pure (.popeqFields (Lean.Json.str kind.sourceName) (foreignNativeFields kind value))
+    pure (.popeqFields (Lean.Json.str kind.sourceName)
+      (nativeFieldExpressions (foreignNativeFields kind value)))
   | .jubjubScalar =>
     let value : Expr .jubjubScalar := .ref name
-    pure (.popeqFields (Lean.Json.str "JubjubScalar") [.jubjubScalarToNative value])
+    pure (.popeqFields (Lean.Json.str "JubjubScalar")
+      (nativeFieldExpressions [.jubjubScalarToNative value]))
   | .jubjubPoint =>
     let value : Expr .jubjubPoint := .ref name
     pure (.popeqFields (Lean.Json.str "JubjubPoint")
-      [.jubjubCoordinate value 0, .jubjubCoordinate value 1])
+      (nativeFieldExpressions [.jubjubCoordinate value 0, .jubjubCoordinate value 1]))
   | _ => pure (.popeq (.field (← nativeRead ty name)))
 
 private def nativePathKeys (keys : List PathKey) : Except String (List Aligned) :=
   keys.mapM fun key => match key with
     | .mk ty value => nativeAligned ty value
 
-private def compositeSchema (environment : Types.CompositeEnv) (type : Types.CompositeType) :
+def recordSchema (environment : Types.CompositeEnv) (type : Types.CompositeType) :
     Except String Lean.Json := do
-  let compiled ← (Types.compileType environment type).mapError (·.message)
-  Types.schemaJson compiled
+  let fields ← LedgerValueType.recordFields environment type
+  if fields.all (fun (_, ty) => ty == .native) then
+    let compiled ← (Types.compileType environment type).mapError (·.message)
+    Types.schemaJson compiled
+  else
+    let .structure id := type | throw "mixed ledger records must be named structures"
+    pure <| Lean.Json.mkObj [
+      ("id", Lean.toJson id),
+      ("fields", Lean.toJson (fields.map fun (name, ty) => Lean.Json.mkObj [
+        ("name", Lean.toJson name),
+        ("type", Lean.toJson (Noctium.NativeExpression.typeName ty))]))]
 
 private def splitPath (keys : List Aligned) : Except String (List Aligned × Aligned) := do
   if keys.isEmpty then throw "nested map path must contain at least one key"
@@ -850,7 +908,7 @@ private def pathWriteOps (slot : Nat) (keys : List Aligned) (value : List Op)
   pure ([.indexPath slot true parents, pushKey finalKey] ++ value ++ [.insert levels])
 
 private def pathWriteCompositeOps (slot : Nat) (keys : List Aligned)
-    (schema : Lean.Json) (values : List Scalar) : Except String (List Op) := do
+    (schema : Lean.Json) (values : List LedgerFieldExpr) : Except String (List Op) := do
   let (parents, finalKey) ← splitPath keys
   let levels := keys.length + 1
   if levels >= 16 then throw "nested map insertion exceeds native Ins depth"
@@ -876,7 +934,7 @@ private def resolveCounterState (state : List StateDecl) (name : String)
 
 private def resolveListState (state : List StateDecl) (name : String)
     (keys : List PathKey) :
-    Except String (Types.CompositeEnv × Types.CompositeType × Types.CheckedLayout Types.defaultLimits) := do
+    Except String (Types.CompositeEnv × Types.CompositeType × List (String × Ty)) := do
   let some declaration := state.find? (·.name == name) | throw s!"unknown List state '{name}'"
   let .tree schema := declaration.kind | throw s!"state '{name}' is not a recursive tree"
   schema.listPath keys
@@ -1059,6 +1117,15 @@ private def totalizeActivityValue (guard : Expr .bool) (avoid : List String)
     (value : Expr ty) : Expr ty :=
   let name := freshActivityName (avoid ++ expressionNames guard ++ expressionNames value)
   .letE name guard (Noctium.GuardedExpression.totalize (.ref name) value)
+
+private def ledgerFieldExprNames (values : List LedgerFieldExpr) : List String :=
+  values.flatMap fun
+    | .mk _ value => expressionNames value
+
+private def totalizeLedgerFieldExpr (guard : Expr .bool) (avoid : List String)
+    (value : LedgerFieldExpr) : LedgerFieldExpr :=
+  match value with
+  | .mk ty expression => .mk ty (totalizeActivityValue guard avoid expression)
 
 private def totalizeActivityKey (guard : Expr .bool) (avoid : List String) :
     (ty : Ty) → Expr ty → Expr ty
@@ -1284,26 +1351,26 @@ def appendEffect (state : List StateDecl) (effect : Effect)
       reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
   | .listHead name destination keys type destinations => do
     let slot ← stateSlot state name
-    let (environment, foundType, _) ← resolveListState state name keys
+    let (environment, foundType, fields) ← resolveListState state name keys
     unless foundType == type do throw "List head record type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == destinations.length do throw "List head destination count mismatch"
+    unless fields.map Prod.snd == destinations.map Prod.snd do
+      throw "List head destination type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
-    let values := destinations.map fun field => Expr.ref (ty := .native) field
-    let components := destinations.map fun field => (field, Ty.native)
+    let schema ← recordSchema environment type
+    let values := destinations.map fun (field, ty) => refLedgerFieldExpr field ty
+    let components := destinations
     let read : Read := {name := destination, ty := Ty.native, components := components, schema := some schema}
     pure {plan with
       operations := plan.operations ++ [.listHead slot alignedKeys schema values]
       reads := plan.reads ++ [read]}
   | .listPushFront name keys type values => do
     let slot ← stateSlot state name
-    let (environment, foundType, _) ← resolveListState state name keys
+    let (environment, foundType, fields) ← resolveListState state name keys
     unless foundType == type do throw "List push record type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == values.length do throw "List push record leaf count mismatch"
+    unless fields.map Prod.snd == values.map LedgerFieldExpr.ty do
+      throw "List push record field type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
+    let schema ← recordSchema environment type
     pure {plan with operations := plan.operations ++ [
       .listPushFront slot alignedKeys schema values]}
   | .listPopFront name keys => do
@@ -1330,12 +1397,13 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let .composite environment foundType ← resolveTreeState state name keys
       | throw "nested composite read must select a composite value"
     unless foundType == type do throw "nested composite read type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == destinations.length do throw "nested composite read destination count mismatch"
+    let fields ← LedgerValueType.recordFields environment type
+    unless fields.map Prod.snd == destinations.map Prod.snd do
+      throw "nested composite read destination type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
-    let values := destinations.map fun name => Expr.ref (ty := .native) name
-    let components := destinations.map fun name => (name, Ty.native)
+    let schema ← recordSchema environment type
+    let values := destinations.map fun (name, ty) => refLedgerFieldExpr name ty
+    let components := destinations
     pure {plan with
       operations := plan.operations ++ [
         .dup, .indexPath slot false alignedKeys, .popeqFields schema values]
@@ -1362,10 +1430,11 @@ def appendEffect (state : List StateDecl) (effect : Effect)
     let .composite environment foundType ← resolveTreeState state name keys
       | throw "nested composite write must select a composite value"
     unless foundType == type do throw "nested composite write type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == values.length do throw "nested composite write leaf count mismatch"
+    let fields ← LedgerValueType.recordFields environment type
+    unless fields.map Prod.snd == values.map LedgerFieldExpr.ty do
+      throw "nested composite write field type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
+    let schema ← recordSchema environment type
     let operations ← pathWriteCompositeOps slot alignedKeys schema values
     pure {plan with operations := plan.operations ++ operations}
   | .counterAdjust name keys subtract amount => do
@@ -1491,9 +1560,9 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
     | some condition, .listHead name destination keys type destinations =>
       pure (.listHead name destination (totalizePathKeys condition keys) type destinations)
     | some condition, .listPushFront name keys type values =>
-      let avoid := pathExpressionNames keys ++ values.flatMap expressionNames
+      let avoid := pathExpressionNames keys ++ ledgerFieldExprNames values
       pure (.listPushFront name (totalizePathKeys condition keys) type
-        (values.map (totalizeActivityValue condition avoid)))
+        (values.map (totalizeLedgerFieldExpr condition avoid)))
     | some condition, .listPopFront name keys =>
       pure (.listPopFront name (totalizePathKeys condition keys))
     | some condition, .listReset name keys =>
@@ -1540,9 +1609,9 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.writePath name (totalizePathKeys condition keys) ty
         (totalizeActivityValue condition avoid value))
     | some condition, .writeCompositePath name keys type values =>
-      let avoid := pathExpressionNames keys ++ values.flatMap expressionNames
+      let avoid := pathExpressionNames keys ++ ledgerFieldExprNames values
       pure (.writeCompositePath name (totalizePathKeys condition keys) type
-        (values.map (totalizeActivityValue condition avoid)))
+        (values.map (totalizeLedgerFieldExpr condition avoid)))
     | some condition, .emptyMapPath name keys =>
       pure (.emptyMapPath name (totalizePathKeys condition keys))
     | some condition, .setInsert name keys =>
@@ -1898,26 +1967,26 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
       reads := plan.reads ++ [{name := destination, ty := .uint (2 ^ 64 - 1)}]}
   | .listHead name destination keys type destinations => do
     let slot ← stateSlot state name
-    let (environment, foundType, _) ← resolveListState state name keys
+    let (environment, foundType, fields) ← resolveListState state name keys
     unless foundType == type do throw "List head record type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == destinations.length do throw "List head destination count mismatch"
+    unless fields.map Prod.snd == destinations.map Prod.snd do
+      throw "List head destination type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
-    let values := destinations.map fun field => Expr.ref (ty := .native) field
-    let components := destinations.map fun field => (field, Ty.native)
+    let schema ← recordSchema environment type
+    let values := destinations.map fun (field, ty) => refLedgerFieldExpr field ty
+    let components := destinations
     let read : Read := {name := destination, ty := Ty.native, components := components, schema := some schema}
     plan := {plan with
       operations := plan.operations ++ [.listHead slot alignedKeys schema values]
       reads := plan.reads ++ [read]}
   | .listPushFront name keys type values => do
     let slot ← stateSlot state name
-    let (environment, foundType, _) ← resolveListState state name keys
+    let (environment, foundType, fields) ← resolveListState state name keys
     unless foundType == type do throw "List push record type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == values.length do throw "List push record leaf count mismatch"
+    unless fields.map Prod.snd == values.map LedgerFieldExpr.ty do
+      throw "List push record field type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
+    let schema ← recordSchema environment type
     plan := {plan with operations := plan.operations ++ [
       .listPushFront slot alignedKeys schema values]}
   | .listPopFront name keys => do
@@ -1935,12 +2004,13 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let .composite environment foundType ← resolveTreeState state name keys
       | throw "nested composite read must select a composite value"
     unless foundType == type do throw "nested composite read type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == destinations.length do throw "nested composite read destination count mismatch"
+    let fields ← LedgerValueType.recordFields environment type
+    unless fields.map Prod.snd == destinations.map Prod.snd do
+      throw "nested composite read destination type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
-    let values := destinations.map fun name => Expr.ref (ty := .native) name
-    let components := destinations.map fun name => (name, Ty.native)
+    let schema ← recordSchema environment type
+    let values := destinations.map fun (name, ty) => refLedgerFieldExpr name ty
+    let components := destinations
     plan := {plan with
       operations := plan.operations ++ [
         .dup, .indexPath slot false alignedKeys, .popeqFields schema values]
@@ -1967,10 +2037,11 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
     let .composite environment foundType ← resolveTreeState state name keys
       | throw "nested composite write must select a composite value"
     unless foundType == type do throw "nested composite write type mismatch"
-    let names ← LedgerValueType.nativeLeafNames environment type
-    unless names.length == values.length do throw "nested composite write leaf count mismatch"
+    let fields ← LedgerValueType.recordFields environment type
+    unless fields.map Prod.snd == values.map LedgerFieldExpr.ty do
+      throw "nested composite write field type mismatch"
     let alignedKeys ← nativePathKeys keys
-    let schema ← compositeSchema environment type
+    let schema ← recordSchema environment type
     let operations ← pathWriteCompositeOps slot alignedKeys schema values
     plan := {plan with operations := plan.operations ++ operations}
   | .counterAdjust name keys subtract amount => do
@@ -2073,8 +2144,8 @@ def lowerWithEffectBoundaries (state : List StateDecl) (entry : Entrypoint) :
             .merkleTreeIsFull _ destination | .merkleTreeCheckRoot _ _ destination |
             .merkleTreeIsFullAt _ _ destination | .merkleTreeCheckRootAt _ _ _ destination => [destination]
         | .readCaller destinations => destinations.types.map Prod.fst
-        | .readCompositePath _ _ _ _ destinations => destinations
-        | .listHead _ _ _ _ destinations => destinations
+        | .readCompositePath _ _ _ _ destinations => destinations.map Prod.fst
+        | .listHead _ _ _ _ destinations => destinations.map Prod.fst
         | _ => [])
     if sourceNames.any (·.startsWith "_noctium_") then
       throw "source names beginning '_noctium_' are reserved by the native transcript producer"
@@ -2158,11 +2229,11 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
     pure (Lean.Json.mkObj [("popeq", Lean.Json.mkObj [("cached", Lean.toJson false),
       ("result", ← value.toJson ctx env)])])
   | .pushFields schema values storage => do
-    let values ← values.mapM (fun value => value.eval ctx env)
+    let values ← (values.flatMap ledgerFieldPayloads).mapM (fun value => value.eval ctx env)
     pure (Lean.Json.mkObj [("pushFields", Lean.Json.mkObj [
       ("schema", schema), ("storage", Lean.toJson storage), ("values", Lean.toJson values)])])
   | .popeqFields schema values => do
-    let values ← values.mapM (fun value => value.eval ctx env)
+    let values ← (values.flatMap ledgerFieldPayloads).mapM (fun value => value.eval ctx env)
     pure (Lean.Json.mkObj [("popeqFields", Lean.Json.mkObj [
       ("schema", schema), ("values", Lean.toJson values)])])
   | .member => pure (Lean.toJson ("member" : String))
@@ -2192,12 +2263,12 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .merkleTreeResetHistory .. | .merkleTreeResetHistoryAt .. =>
     throw "merkleTreeResetHistory uses its dedicated native-plan operation JSON"
   | .listHead slot keys schema values => do
-    let values ← values.mapM (fun value => value.eval ctx env)
+    let values ← (values.flatMap ledgerFieldPayloads).mapM (fun value => value.eval ctx env)
     pure (Lean.Json.mkObj [("listHead", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length),
       ("schema", schema), ("values", Lean.toJson values)])])
   | .listPushFront slot keys schema values => do
-    let values ← values.mapM (fun value => value.eval ctx env)
+    let values ← (values.flatMap ledgerFieldPayloads).mapM (fun value => value.eval ctx env)
     pure (Lean.Json.mkObj [("listPushFront", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length),
       ("schema", schema), ("values", Lean.toJson values)])])

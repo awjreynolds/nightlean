@@ -144,7 +144,7 @@ def expectedEntrypoint (state : List StateDecl) (value : Entrypoint) : Except Di
     aliases := (output.name, result.term) :: aliases
     outputBounds := outputBounds ++ result.bounds
     outputAssertions := outputAssertions ++ result.assertions
-  for read in plan.reads.drop publicCount do
+  for read in (plan.reads.drop publicCount).flatMap Impact.Read.scalarReads do
     let guard ← read.guard.mapM fun guard =>
       convert value.span (normalize aliases guard)
     match read.ty with

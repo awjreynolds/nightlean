@@ -3941,13 +3941,31 @@ fn expected_ledger_inputs(
                 continue;
             }
             for component in components {
-                append_impact_ledger_input(
-                    component,
-                    false,
-                    source_inputs.len(),
-                    &mut names,
-                    &mut expected,
-                )?;
+                shape(component, &["name", "type"], false)?;
+                let name = name(text(component, "name")?)?;
+                let projections = match ScalarType::parse(text(component, "type")?)? {
+                    ScalarType::Bytes32 => crate::byte_projection_bindings(&name, 32)?,
+                    ScalarType::JubjubPoint => expected_point_projection_bindings(&name),
+                    _ => {
+                        append_impact_ledger_input(
+                            component,
+                            false,
+                            source_inputs.len(),
+                            &mut names,
+                            &mut expected,
+                        )?;
+                        continue;
+                    }
+                };
+                for (name, ty) in projections {
+                    append_impact_ledger_input(
+                        &json!({"name": name, "type": ty}),
+                        false,
+                        source_inputs.len(),
+                        &mut names,
+                        &mut expected,
+                    )?;
+                }
             }
         } else {
             append_impact_ledger_input(read, true, source_inputs.len(), &mut names, &mut expected)?;
@@ -7087,6 +7105,36 @@ mod aggregate_budget_tests {
 
 #[cfg(test)]
 mod completed_invocation_tests {
+    #[test]
+    fn typed_record_ledger_inputs_follow_fab_field_order() {
+        let plan = serde_json::json!({
+            "circuit": {"inputs": []},
+            "reads": [{
+                "name": "memo", "type": "Composite",
+                "components": [
+                    {"name": "memo_amount", "type": "Native"},
+                    {"name": "memo_payload", "type": "Bytes<32>"},
+                    {"name": "memo_recipient", "type": "JubjubPoint"}
+                ]
+            }]
+        });
+        let (inputs, _) = super::expected_ledger_inputs(&plan).unwrap();
+        let names: Vec<_> = inputs
+            .iter()
+            .map(|input| input["name"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "memo_amount",
+                "_noctium_bytes_memo_payload_0",
+                "_noctium_bytes_memo_payload_1",
+                "_noctium_jubjub_read_memo_recipient_0",
+                "_noctium_jubjub_read_memo_recipient_1"
+            ]
+        );
+    }
+
     #[cfg(feature = "zkir-321")]
     #[test]
     fn typed_public_prologue_uses_all_byte_and_curve_projection_reads() {

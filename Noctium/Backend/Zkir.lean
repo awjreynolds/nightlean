@@ -1186,51 +1186,52 @@ def lowerEntrypointBody (entry : Entrypoint) (plan : Impact.Plan) : LowerM Unit 
   -- come from ledger cells and the VM membership result in transcript order.
   let publicCount := Impact.publicInputReadCount entry.circuit.inputs
   for read in plan.reads.drop publicCount do
-    let activity ← match read.guard with
-      | none => pure none
-      | some guard => pure (some (← lowerExpr guard))
-    let activityJson := (activity.map toJson).getD Json.null
-    for (name, ty) in read.bindings do
-      let output := "%input_" ++ name
-      match ty with
-      | .jubjubScalar => do
-        emit "public_input" [
-          ("guard", activityJson),
-          ("type", nativeType), ("output", toJson output)]
-        let scalar ← lowerJubjubScalarFromNative output
-        let encoded ← lowerJubjubScalarToNative scalar
-        emit "constrain_eq" [("a", toJson output), ("b", toJson encoded)]
-        modify fun state => {state with aliases := (read.name, scalar) :: state.aliases}
-      | .foreign kind =>
-        emit "public_input" [
-          ("guard", activityJson),
-          ("type", toJson kind.nativeName), ("output", toJson output)]
-      | _ =>
-        emit "public_input" [
-          ("guard", activityJson),
-          ("type", nativeType), ("output", toJson output)]
-        constrainType ty output
-    if let .bytes _ := read.ty then do
-      let values ← read.bindings.mapM fun (name, ty) => do
-        match read.guard, ty with
-        | some guard, .uint maximum =>
-          lowerExpr (.select guard (.ref name : Expr (.uint maximum)) (.uint maximum 0))
-        | _, _ => pure ("%input_" ++ name)
-      modify fun state => {state with byteAliases :=
-        (read.name, {values := values.reverse, packed := true}) :: state.byteAliases}
-    if read.ty == .jubjubPoint then do
-      let xName := read.bindings[0]!.1
-      let yName := read.bindings[1]!.1
-      let x := "%input_" ++ xName
-      let y := "%input_" ++ yName
-      let x ← match read.guard with
-        | none => pure x
-        | some guard => lowerExpr (.select guard (.ref xName : Expr .native) (.native 0))
-      let y ← match read.guard with
-        | none => pure y
-        | some guard => lowerExpr (.select guard (.ref yName : Expr .native) (.native 1))
-      let point ← lowerPointFromCoordinates x y
-      modify fun state => {state with aliases := (read.name, point) :: state.aliases}
+    for scalarRead in Impact.Read.scalarReads read do
+      let activity ← match scalarRead.guard with
+        | none => pure none
+        | some guard => pure (some (← lowerExpr guard))
+      let activityJson := (activity.map toJson).getD Json.null
+      for (name, ty) in scalarRead.bindings do
+        let output := "%input_" ++ name
+        match ty with
+        | .jubjubScalar => do
+          emit "public_input" [
+            ("guard", activityJson),
+            ("type", nativeType), ("output", toJson output)]
+          let scalar ← lowerJubjubScalarFromNative output
+          let encoded ← lowerJubjubScalarToNative scalar
+          emit "constrain_eq" [("a", toJson output), ("b", toJson encoded)]
+          modify fun state => {state with aliases := (scalarRead.name, scalar) :: state.aliases}
+        | .foreign kind =>
+          emit "public_input" [
+            ("guard", activityJson),
+            ("type", toJson kind.nativeName), ("output", toJson output)]
+        | _ =>
+          emit "public_input" [
+            ("guard", activityJson),
+            ("type", nativeType), ("output", toJson output)]
+          constrainType ty output
+      if let .bytes _ := scalarRead.ty then do
+        let values ← scalarRead.bindings.mapM fun (name, ty) => do
+          match scalarRead.guard, ty with
+          | some guard, .uint maximum =>
+            lowerExpr (.select guard (.ref name : Expr (.uint maximum)) (.uint maximum 0))
+          | _, _ => pure ("%input_" ++ name)
+        modify fun state => {state with byteAliases :=
+          (scalarRead.name, {values := values.reverse, packed := true}) :: state.byteAliases}
+      if scalarRead.ty == .jubjubPoint then do
+        let xName := scalarRead.bindings[0]!.1
+        let yName := scalarRead.bindings[1]!.1
+        let x := "%input_" ++ xName
+        let y := "%input_" ++ yName
+        let x ← match scalarRead.guard with
+          | none => pure x
+          | some guard => lowerExpr (.select guard (.ref xName : Expr .native) (.native 0))
+        let y ← match scalarRead.guard with
+          | none => pure y
+          | some guard => lowerExpr (.select guard (.ref yName : Expr .native) (.native 1))
+        let point ← lowerPointFromCoordinates x y
+        modify fun state => {state with aliases := (scalarRead.name, point) :: state.aliases}
     for condition in read.inactiveDefaultConstraints do
       emit "assert" [("cond", toJson (← lowerExpr condition))]
   for condition in plan.guards do

@@ -5281,6 +5281,7 @@
       "checked nonempty Native-field record cells under one or two map keys",
       "standalone and nested Counter cells with native Bytes8 encoding, reads, u32 immediate increments/decrements and reset",
       "standalone and nested Lists of checked Native-field records, with prepend, length/head reads, nonempty pop and reset",
+      "checked ledger records with Native, Bytes32 and JubjubPoint fields in map cells and List elements",
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks",
       "integrated confidential-token registration, mint-to-pending, authenticated sweep, transfer, burn, views, conserving self-moves epoch-checked memo clearing and encrypted escrow approval/refund/replacement and delegated spend/burn with supply/memos/permanent pair counters",
       "guarded native map leaf deletion with idempotent absent-leaf behavior, missing-parent rejection and separate VM activity groups",
@@ -5405,6 +5406,12 @@
       "source": "../../tests/OptionalListHead.lean",
       "native": "../../runtime/tests/optional_list_head.rs",
       "scope": "headOrDefault binds presence and Native-field record leaves. Frontend lowering reuses an ordered native length read followed by a head read guarded by nonemptiness. Empty and inactive reads bind false and zero fields. This covers the pinned ledger's optional head result semantics. Mixed record element types and broader proof and deployment evidence remain separate."
+    },
+    "mixedLedgerRecords": {
+      "issue": 175,
+      "source": "../../tests/MixedLedgerRecord.lean",
+      "native": "../../runtime/tests/mixed_ledger_record.rs",
+      "scope": "Flat named ledger fields keep their Native, Bytes32 or JubjubPoint type through direct and nested map cells and List nodes. Bytes32 uses one Bytes32 FAB atom. JubjubPoint uses two checked Field coordinates. Guarded and empty optional reads bind zero Native and Bytes32 values and the Jubjub identity. Disclosure is checked per private field expression."
     },
     "namespaceMigration": {
       "status": "canonical-noctium-only",
