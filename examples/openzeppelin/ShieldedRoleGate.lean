@@ -1,4 +1,5 @@
 import Noctium.Frontend
+import Noctium.Types.MerklePath
 
 /-!
 One protected action using the role-membership slice of the pinned OpenZeppelin
@@ -21,21 +22,7 @@ namespace OpenZeppelinPort.ShieldedRoleGate
 private def rolePathWire : Helpers.Wire.Codec := {
   payload := .structure "ShieldedRolePath"
   frameBytes := 692
-  composites := {
-    structures := [
-      {id := "MerkleTreeDigest", fields := [
-        {name := "field", type := .scalar .native}
-      ]},
-      {id := "MerkleTreePathEntry", fields := [
-        {name := "sibling", type := .structure "MerkleTreeDigest"},
-        {name := "goes_left", type := .scalar .bool}
-      ]},
-      {id := "ShieldedRolePath", fields := [
-        {name := "leaf", type := .bytes 32},
-        {name := "path", type := .vector 20 (.structure "MerkleTreePathEntry")}
-      ]}
-    ]
-  }
+  composites := Noctium.Types.MerklePath.environment {} "ShieldedRolePath" (.bytes 32) 20
 }
 
 private def roleLeafWire : Helpers.Wire.Codec := {

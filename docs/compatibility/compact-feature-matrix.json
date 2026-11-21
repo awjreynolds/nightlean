@@ -3637,50 +3637,8 @@
       "id": "C-STDLIB-MERKLETREEDIGEST",
       "layer": "standard-library",
       "surface": "MerkleTreeDigest",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-MERKLETREEPATHENTRY",
-      "layer": "standard-library",
-      "surface": "MerkleTreePathEntry",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
-      "source": [
-        "stdlib",
-        "stdlibSource",
-        "v3Source",
-        "natives",
-        "v3Natives"
-      ],
-      "requiredEvidence": [
-        "SEM",
-        "ZK",
-        "ABI"
-      ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
-    },
-    {
-      "id": "C-STDLIB-MERKLETREEPATH",
-      "layer": "standard-library",
-      "surface": "MerkleTreePath",
-      "noctiumStatus": "related-subset",
-      "notes": "The shielded role example uses a checked depth-20 Bytes32 path with a native sibling and a Boolean direction per step. The provider ABI binds the exact codec. Other depths and leaf types need separate evidence.",
+      "noctiumStatus": "subset",
+      "notes": "The shared Lean Merkle digest schema carries one Native field. A depth-two fixture consumes nested digest witnesses and matches the exact pinned Compact root.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3694,6 +3652,62 @@
         "ABI"
       ],
       "observedEvidence": [
+        "Noctium/Types/MerklePath.lean",
+        "tests/MerklePathRootNoLeafHash.lean",
+        "runtime/tests/merkle_path_types.rs",
+        "tests/compact/merkle-path-root-no-leaf-hash.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATHENTRY",
+      "layer": "standard-library",
+      "surface": "MerkleTreePathEntry",
+      "noctiumStatus": "subset",
+      "notes": "The shared Lean path entry has a nested Native digest and checked Bool direction. The paired depth-two fixture matches mixed left/right order and rejects a malformed direction or wrong path length at the provider boundary.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Types/MerklePath.lean",
+        "tests/MerklePathRootNoLeafHash.lean",
+        "runtime/tests/merkle_path_types.rs",
+        "tests/compact/merkle-path-root-no-leaf-hash.mjs"
+      ],
+      "equivalence": "unverified"
+    },
+    {
+      "id": "C-STDLIB-MERKLETREEPATH",
+      "layer": "standard-library",
+      "surface": "MerkleTreePath",
+      "noctiumStatus": "subset",
+      "notes": "Lean uses the shared fixed-depth Bytes32 path schema in the native-checked depth-two fixture and the existing depth-20 shielded role case. The former matches the pinned Compact root and rejects malformed witness shapes. Other leaf types and broader host coverage remain open.",
+      "source": [
+        "stdlib",
+        "stdlibSource",
+        "v3Source",
+        "natives",
+        "v3Natives"
+      ],
+      "requiredEvidence": [
+        "SEM",
+        "ZK",
+        "ABI"
+      ],
+      "observedEvidence": [
+        "Noctium/Types/MerklePath.lean",
+        "tests/MerklePathRootNoLeafHash.lean",
+        "runtime/tests/merkle_path_types.rs",
+        "tests/compact/merkle-path-root-no-leaf-hash.mjs",
         "tests/TypedWitnessResultCodec.lean",
         "docs/development/shielded-role-gate.md"
       ],
