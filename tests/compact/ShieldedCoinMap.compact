@@ -21,3 +21,15 @@ export circuit storeWithoutReceive(coin: ShieldedCoinInfo): [] {
     right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
   );
 }
+
+export circuit withdraw(nonce: Bytes<32>, recipient: ZswapCoinPublicKey): [] {
+  assert(pot.member(disclose(nonce)), "coin nonce missing");
+  const coin = pot.lookup(disclose(nonce));
+  const result = sendShielded(
+    coin,
+    left<ZswapCoinPublicKey, ContractAddress>(disclose(recipient)),
+    coin.value
+  );
+  assert(!result.change.is_some, "full send must have no change");
+  pot.remove(disclose(nonce));
+}

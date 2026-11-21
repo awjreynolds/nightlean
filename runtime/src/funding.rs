@@ -207,6 +207,104 @@ impl DustFunding {
             return Err(Error::Intent);
         }
 
+        self.fund_shielded_offer(
+            contract,
+            offer,
+            offer_binding_randomness,
+            network_id,
+            parameters,
+            material,
+            srs,
+            now,
+            policy,
+            rng,
+        )
+        .await
+    }
+
+    /// Fund one whole-coin contract spend to one encrypted user output.
+    /// The proved call must claim exactly the offer's nullifier and output commitment.
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn fund_shielded_transfer(
+        &self,
+        contract: &ProvedNativeIntent,
+        offer: ZswapOffer<Proof, Db>,
+        offer_binding_randomness: PedersenRandomness,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
+        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+            return Err(Error::Intent);
+        };
+        let Some(input) = offer.inputs.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(output) = offer.outputs.get(0) else {
+            return Err(Error::Intent);
+        };
+        if contract.actions.len() != 1
+            || call.fallible_transcript.is_some()
+            || transcript.effects.claimed_nullifiers.size() != 1
+            || !transcript
+                .effects
+                .claimed_nullifiers
+                .iter()
+                .any(|nullifier| **nullifier == input.nullifier)
+            || transcript.effects.claimed_shielded_spends.size() != 1
+            || !transcript
+                .effects
+                .claimed_shielded_spends
+                .iter()
+                .any(|commitment| **commitment == output.coin_com)
+            || transcript.effects.claimed_shielded_receives.size() != 0
+            || transcript.effects.shielded_mints.size() != 0
+            || offer.inputs.len() != 1
+            || offer.outputs.len() != 1
+            || !offer.transient.is_empty()
+            || input.contract_address.as_deref() != Some(&call.address)
+            || output.contract_address.is_some()
+            || output.ciphertext.is_none()
+        {
+            return Err(Error::Intent);
+        }
+
+        self.fund_shielded_offer(
+            contract,
+            offer,
+            offer_binding_randomness,
+            network_id,
+            parameters,
+            material,
+            srs,
+            now,
+            policy,
+            rng,
+        )
+        .await
+    }
+
+    #[cfg(feature = "localnet")]
+    async fn fund_shielded_offer(
+        &self,
+        contract: &ProvedNativeIntent,
+        offer: ZswapOffer<Proof, Db>,
+        offer_binding_randomness: PedersenRandomness,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
         let mut base = one_intent(network_id, CONTRACT_SEGMENT, contract.clone());
         let Transaction::Standard(transaction) = &mut base else {
             return Err(Error::Intent);
