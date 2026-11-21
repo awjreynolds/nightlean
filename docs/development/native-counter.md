@@ -6,23 +6,32 @@ alignment is one eight-byte atom, not the Field alignment used by ordinary
 
 The source forms are `counter total`, `tree epochs : Bytes32 => Counter`, and
 `tree epochs : Bytes32 => Bytes32 => Counter`. Existing `read ... as` binds the
-value. `increment ... by N` and `decrement ... by N` take a public compile-time
-u32 amount. `reset ...` writes zero. Missing parent maps require explicit
+value. `increment ... by amount` and `decrement ... by amount` accept a UInt16
+expression or a numeric literal through the native u32 limit. A private amount
+needs explicit disclosure, as in `increment total by disclose(amount)`.
+`reset ...` writes zero. Missing parent maps require explicit
 initialization. A reset initializes an absent counter leaf or replaces an
 existing value. Contracts decide whether to expose reset to callers.
 
 `counterLessThan path against limit as below` binds a Bool from the native VM. The threshold has type `UInt 64`, and equality returns `false`. The same syntax works on a standalone Counter or a nested path. Under `when`, an inactive comparison returns `false` without reading the path or evaluating the threshold. Active comparisons require an existing Counter with the ledger's Bytes8 alignment. Disclose private values before using them in the path, threshold or public activity guard.
 
-Updates use native `Idx(push_path)`, `Addi` or `Subi`, then `Ins`. They do not
+Updates use native `Idx(push_path)`, one `Addi` or `Subi`, then `Ins`. The
+relation binds the evaluated amount in the immediate operand. Updates do not
 bind the previous value as a circuit read unless the source requests a read.
-The native VM rejects u64 overflow and underflow. Guards cover every operation
-in the selected update sequence, including indexing into an absent path.
+The native VM rejects u64 overflow and underflow. A false guard skips path
+lookup and amount evaluation.
 
 `tests/NativeCounter.lean` and `runtime/tests/native_counter.rs` provide the
 focused source/native example. It exercises standalone and nested counters,
 reads after updates, reset, inactive guards, checked arithmetic and rejection
 of field-aligned state supplied as a Counter. The fixture exposes test-only
 update/reset entrypoints and establishes no token authorization policy.
+
+[CounterAmounts.lean](../../tests/CounterAmounts.lean) and its
+[native checker case](../../runtime/tests/counter_amounts.rs) exercise
+expression amounts in both directions. The
+[Compact 0.36.1 oracle](../../tests/compact/counter-amounts.mjs) checks
+the same accepted amounts and state transitions with the pinned runtime.
 
 The pinned recipes are
 [Counter operations](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-runtime/vendored/program_fragments.rs#L158-L217).

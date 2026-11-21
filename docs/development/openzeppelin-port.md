@@ -151,7 +151,8 @@ Storage uses the ledger's eight-byte u64 cell encoding, distinct from Field-alig
 UInt64 values. Updates use native Addi/Subi and retain overflow/underflow rejection.
 A focused native sequence checks current-state reads, reset, inactive guards and
 codec rejection. `counterLessThan` checks strict UInt64 comparison on standalone
-and nested Counters. [Expression-valued updates](https://github.com/awjreynolds/noctium/issues/178) remain open.
+and nested Counters. The paired source and native fixture also checks UInt16
+expression amounts for increments and decrements.
 See [Counter encoding and scope](native-counter.md).
 
 The first source component is

@@ -105,8 +105,8 @@ inductive Op where
   | popeqFields (schema : Lean.Json) (values : List LedgerFieldExpr)
   | member
   | insert (levels : Nat)
-  | addImmediate (amount : Nat)
-  | subImmediate (amount : Nat)
+  | addImmediate (amount : Expr (.uint (2 ^ 32 - 1)))
+  | subImmediate (amount : Expr (.uint (2 ^ 32 - 1)))
   | listLength (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
   | mapSize (slot : Nat) (keys : List Aligned) (value : Expr (.uint (2 ^ 64 - 1)))
   | mapIsEmpty (slot : Nat) (keys : List Aligned) (destination : String)
@@ -467,8 +467,8 @@ def Op.fields : Op → List Scalar
   | .popeqFields _ values => [.native 0x0c] ++ ledgerFieldSequence values
   | .member => [.native 0x18]
   | .insert levels => [.native (0x90 + levels)]
-  | .addImmediate amount => [.native 0x0e, .native amount]
-  | .subImmediate amount => [.native 0x0f, .native amount]
+  | .addImmediate amount => [.native 0x0e, .cast .native amount]
+  | .subImmediate amount => [.native 0x0f, .cast .native amount]
   | .listLength slot keys value =>
       [.native 0x30] ++ indexPathFields slot false keys ++
       listIndexFields 2 ++ [.native 0x0c] ++ (Aligned.counter value).fields
@@ -1548,6 +1548,10 @@ private def appendEffectWithActivity (state : List StateDecl) (effect : Effect)
       pure (.counterLessThan name destination (totalizePathKeys condition keys)
         (totalizeActivityValue condition avoid threshold))
     | some condition, .counterAdjust name keys subtract amount =>
+      let amount := match amount with
+        | .uint _ _ => amount
+        | _ => totalizeActivityValue condition
+            (pathExpressionNames keys ++ expressionNames amount) amount
       pure (.counterAdjust name (totalizePathKeys condition keys) subtract amount)
     | some condition, .counterReset name keys =>
       pure (.counterReset name (totalizePathKeys condition keys))
@@ -2239,10 +2243,12 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .member => pure (Lean.toJson ("member" : String))
   | .insert levels => pure (Lean.Json.mkObj [("ins", Lean.Json.mkObj [
       ("cached", Lean.toJson false), ("n", Lean.toJson levels)])])
-  | .addImmediate amount => pure (Lean.Json.mkObj [("addi", Lean.Json.mkObj [
-      ("immediate", Lean.toJson amount)])])
-  | .subImmediate amount => pure (Lean.Json.mkObj [("subi", Lean.Json.mkObj [
-      ("immediate", Lean.toJson amount)])])
+  | .addImmediate amount => do
+    pure (Lean.Json.mkObj [("addi", Lean.Json.mkObj [
+      ("immediate", Lean.toJson (← amount.eval ctx env))])])
+  | .subImmediate amount => do
+    pure (Lean.Json.mkObj [("subi", Lean.Json.mkObj [
+      ("immediate", Lean.toJson (← amount.eval ctx env))])])
   | .listLength slot keys value => do
     pure (Lean.Json.mkObj [("listLength", Lean.Json.mkObj [
       ("slot", Lean.toJson slot), ("keyCount", Lean.toJson keys.length),

@@ -131,6 +131,18 @@ private def expressionJson : Expr ty → Json
 private abbrev nativeExpressionJson {ty : Ty} : Expr ty → Json :=
   _root_.Noctium.NativeExpression.toJson
 
+private def nativeImmediateAmountJson
+    (amount : Expr (.uint (2 ^ 32 - 1))) : Json :=
+  match amount with
+  | .uint _ value => toJson value
+  | _ => nativeExpressionJson amount
+
+private def sourceImmediateAmountJson
+    (amount : Expr (.uint (2 ^ 32 - 1))) : Json :=
+  match amount with
+  | .uint _ value => toJson value
+  | _ => expressionJson amount
+
 private def alignedJson (value : Backend.Impact.Aligned) : List (String × Json) :=
   match value with
   | .field expression => [("alignment", toJson ("field" : String)), ("expression", nativeExpressionJson expression)]
@@ -185,8 +197,10 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("expressions", toJson (expressions.map ledgerFieldExprJson)), ("schema", schema)]
   | .member => Json.mkObj [("op", toJson ("member" : String))]
   | .insert n => Json.mkObj [("op", toJson ("insert" : String)), ("n", toJson n)]
-  | .addImmediate amount => Json.mkObj [("op", toJson ("addImmediate" : String)), ("amount", toJson amount)]
-  | .subImmediate amount => Json.mkObj [("op", toJson ("subImmediate" : String)), ("amount", toJson amount)]
+  | .addImmediate amount => Json.mkObj [("op", toJson ("addImmediate" : String)),
+      ("amount", nativeImmediateAmountJson amount)]
+  | .subImmediate amount => Json.mkObj [("op", toJson ("subImmediate" : String)),
+      ("amount", nativeImmediateAmountJson amount)]
   | .listLength slot keys expression => Json.mkObj [
       ("op", toJson ("listLength" : String)), ("slot", toJson slot),
       ("keys", toJson (keys.map fun key => Json.mkObj (alignedJson key))),
@@ -418,7 +432,7 @@ private def effectJson : Effect → Json
       ("op", toJson ("counterAdjust" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with
         | .mk _ value => expressionJson value)),
-      ("subtract", toJson subtract), ("amount", toJson amount)]
+      ("subtract", toJson subtract), ("amount", sourceImmediateAmountJson amount)]
   | .counterReset state keys => Json.mkObj [
       ("op", toJson ("counterReset" : String)), ("state", toJson state),
       ("keys", toJson (keys.map fun key => match key with

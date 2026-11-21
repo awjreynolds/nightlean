@@ -366,12 +366,8 @@ scoped syntax "when" nlexpr "headOrDefault" nlpath "as" "(" ident "," ident ")" 
 scoped syntax ident nlpath "as" ident : nleffect
 scoped syntax "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
 scoped syntax "when" nlexpr "readCaller" "as" "(" ident "," ident "," ident "," ident ")" : nleffect
-scoped syntax "increment" ident "by" num : nleffect
-scoped syntax "increment" ident "[" nlexpr "]" "by" num : nleffect
-scoped syntax "increment" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
-scoped syntax "decrement" ident "by" num : nleffect
-scoped syntax "decrement" ident "[" nlexpr "]" "by" num : nleffect
-scoped syntax "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
+scoped syntax "increment" nlpath "by" nlexpr : nleffect
+scoped syntax "decrement" nlpath "by" nlexpr : nleffect
 scoped syntax "reset" nlpath : nleffect
 scoped syntax "resetHistory" nlpath : nleffect
 scoped syntax "insertHash" nlpath ":=" nlexpr : nleffect
@@ -406,12 +402,8 @@ scoped syntax "when" nlexpr "tokenBalanceLt(" nlexpr "," nlexpr "," nlexpr ")" "
 scoped syntax "when" nlexpr "tokenBalanceGt(" nlexpr "," nlexpr "," nlexpr ")" "as" ident : nleffect
 scoped syntax "when" nlexpr "counterLessThan" nlpath "against" nlexpr "as" ident : nleffect
 scoped syntax "when" nlexpr ident nlpath "as" ident : nleffect
-scoped syntax "when" nlexpr "increment" ident "by" num : nleffect
-scoped syntax "when" nlexpr "increment" ident "[" nlexpr "]" "by" num : nleffect
-scoped syntax "when" nlexpr "increment" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
-scoped syntax "when" nlexpr "decrement" ident "by" num : nleffect
-scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "by" num : nleffect
-scoped syntax "when" nlexpr "decrement" ident "[" nlexpr "]" "[" nlexpr "]" "by" num : nleffect
+scoped syntax "when" nlexpr "increment" nlpath "by" nlexpr : nleffect
+scoped syntax "when" nlexpr "decrement" nlpath "by" nlexpr : nleffect
 scoped syntax "when" nlexpr "reset" nlpath : nleffect
 scoped syntax "when" nlexpr "resetHistory" nlpath : nleffect
 scoped syntax "when" nlexpr "insertHash" nlpath ":=" nlexpr : nleffect
@@ -1621,12 +1613,8 @@ private def explicitEffectGuard (effect : TSyntax `nleffect) : Option (TSyntax `
   | `(nleffect| when $condition:nlexpr tokenBalanceGt($_:nlexpr, $_:nlexpr, $_:nlexpr) as $_:ident) => some condition
   | `(nleffect| when $condition:nlexpr headOrDefault $_:nlpath as ($_:ident, $_:ident)) => some condition
   | `(nleffect| when $condition:nlexpr $_operation:ident $_path:nlpath as $_dest:ident) => some condition
-  | `(nleffect| when $condition:nlexpr increment $_state:ident by $_amount:num) => some condition
-  | `(nleffect| when $condition:nlexpr increment $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
-  | `(nleffect| when $condition:nlexpr increment $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] by $_amount:num) => some condition
-  | `(nleffect| when $condition:nlexpr decrement $_state:ident by $_amount:num) => some condition
-  | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_key:nlexpr ] by $_amount:num) => some condition
-  | `(nleffect| when $condition:nlexpr decrement $_state:ident [ $_owner:nlexpr ] [ $_spender:nlexpr ] by $_amount:num) => some condition
+  | `(nleffect| when $condition:nlexpr increment $_path:nlpath by $_amount:nlexpr) => some condition
+  | `(nleffect| when $condition:nlexpr decrement $_path:nlpath by $_amount:nlexpr) => some condition
   | `(nleffect| when $condition:nlexpr reset $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr resetHistory $_path:nlpath) => some condition
   | `(nleffect| when $condition:nlexpr insertField $_path:nlpath := $_leaf:nlexpr) => some condition
@@ -1788,16 +1776,23 @@ private def elaborateTreeRead (storage destination : TSyntax `ident)
     bindReadName updated destination.getId.toString readName ty
 
 private def elaborateCounterAdjust (schema : List (String × StateKind))
-    (storage : TSyntax `ident) (keys : List (TSyntax `nlexpr))
-    (subtract : _root_.Bool) (amount : TSyntax `num) (state : EntryEffects) : CommandElabM EntryEffects := do
-  let value := amount.getNat
-  unless value ≤ 2 ^ 32 - 1 do
-    throwErrorAt amount "Counter adjustment exceeds the native u32 immediate"
+    (path : TSyntax `nlpath) (subtract : _root_.Bool)
+    (amount : TSyntax `nlexpr) (state : EntryEffects) : CommandElabM EntryEffects := do
+  let maximum := 2 ^ 32 - 1
+  let value ← match amount with
+    | `(nlexpr| $n:num) => do
+      unless n.getNat ≤ maximum do
+        throwErrorAt amount "Counter adjustment exceeds the native u32 immediate"
+      `(Noctium.Expr.uint $(natTerm maximum) $n)
+    | _ => do
+      let value ← checkedExpression state.env amount (.uint (2 ^ 16 - 1))
+      `(Noctium.Expr.cast $(← tyTerm (.uint maximum)) $value)
+  let (storage, keys) ← sourcePathParts path
   let treeSchema ← treeStateSchema schema storage
   let path ← counterPathTerm state.env treeSchema keys
   let direction ← if subtract then `(Bool.true) else `(Bool.false)
   let term ← `(Noctium.Effect.counterAdjust
-    $(stringTerm storage.getId.toString) $path $direction $(natTerm value))
+    $(stringTerm storage.getId.toString) $path $direction $value)
   pure {state with terms := state.terms.push term}
 
 private def elaborateListLength (schema : List (String × StateKind))
@@ -2347,24 +2342,12 @@ private def elaborateEffect (schema : List (String × StateKind))
       `(Noctium.Effect.insertPath $(stringTerm storage.getId.toString) $keys $(← tyTerm ty) $loweredValue)
       else `(Noctium.Effect.writePath $(stringTerm storage.getId.toString) $keys $(← tyTerm ty) $loweredValue)
     state := {state with terms := state.terms.push term}
-  | `(nleffect| increment $storage:ident by $amount:num)
-  | `(nleffect| when $_:nlexpr increment $storage:ident by $amount:num) =>
-    state := ← elaborateCounterAdjust schema storage [] Bool.false amount state
-  | `(nleffect| increment $storage:ident [ $key:nlexpr ] by $amount:num)
-  | `(nleffect| when $_:nlexpr increment $storage:ident [ $key:nlexpr ] by $amount:num) =>
-    state := ← elaborateCounterAdjust schema storage [key] Bool.false amount state
-  | `(nleffect| increment $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num)
-  | `(nleffect| when $_:nlexpr increment $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num) =>
-    state := ← elaborateCounterAdjust schema storage [owner, spender] Bool.false amount state
-  | `(nleffect| decrement $storage:ident by $amount:num)
-  | `(nleffect| when $_:nlexpr decrement $storage:ident by $amount:num) =>
-    state := ← elaborateCounterAdjust schema storage [] Bool.true amount state
-  | `(nleffect| decrement $storage:ident [ $key:nlexpr ] by $amount:num)
-  | `(nleffect| when $_:nlexpr decrement $storage:ident [ $key:nlexpr ] by $amount:num) =>
-    state := ← elaborateCounterAdjust schema storage [key] Bool.true amount state
-  | `(nleffect| decrement $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num)
-  | `(nleffect| when $_:nlexpr decrement $storage:ident [ $owner:nlexpr ] [ $spender:nlexpr ] by $amount:num) =>
-    state := ← elaborateCounterAdjust schema storage [owner, spender] Bool.true amount state
+  | `(nleffect| increment $path:nlpath by $amount:nlexpr)
+  | `(nleffect| when $_:nlexpr increment $path:nlpath by $amount:nlexpr) =>
+    state := ← elaborateCounterAdjust schema path Bool.false amount state
+  | `(nleffect| decrement $path:nlpath by $amount:nlexpr)
+  | `(nleffect| when $_:nlexpr decrement $path:nlpath by $amount:nlexpr) =>
+    state := ← elaborateCounterAdjust schema path Bool.true amount state
   | `(nleffect| pushFront $path:nlpath := $payload:nlleaves)
   | `(nleffect| when $_:nlexpr pushFront $path:nlpath := $payload:nlleaves) =>
     state := ← elaborateListPushFront schema path payload state

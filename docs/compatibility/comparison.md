@@ -16,7 +16,7 @@ This comparison uses Compact 0.36.1, language 0.28, and the selected Noctium tar
 
 ### Ledger collection gaps
 
-The feature register links implemented Map, Set, List and Counter paths to their source and checks. General Map default insertion, qualified shielded-coin insertion, and read-only SDK collection iterators remain open. [Expression-valued Counter updates](https://github.com/awjreynolds/noctium/issues/178) · [Lists of scalar values](https://github.com/awjreynolds/noctium/issues/179)
+The feature register links implemented Map, Set, List and Counter paths to their source and checks. Expression-valued Counter updates have a matched native and Compact fixture. General Map default insertion, qualified shielded-coin insertion, and read-only SDK collection iterators remain open. [Counter checks](../development/native-counter.md) · [Lists of scalar values](https://github.com/awjreynolds/noctium/issues/179)
 
 Compact's List head returns `Maybe<T>`. Noctium's `headOrDefault` binds presence and typed defaults, while strict `head` requires a nonempty List. The scoped native examples cover Noctium's result shapes. Matched reference checks are still required for equivalence. [Pinned ledger ADT reference](https://github.com/LFDT-Minokawa/compact/blob/7fa3a117c5e7efe9d2c51da04263e5f0b3509144/doc/ledger-adt.mdx) · [Noctium List examples](../development/native-lists.md)
 

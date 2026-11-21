@@ -1193,6 +1193,7 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       let evaluated ← evaluatePath ctx env keys
       let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
       let current ← counterValueAt ctx root evaluated
+      let amount ← amount.eval ctx env
       let value ← adjustCounter current amount subtract
       let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) value))
         | throw s!"nested Counter parent is missing or not a map '{name}'"
@@ -1499,6 +1500,7 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           let evaluated ← evaluatePath ctx env keys
           let some root := next.trees.lookup name | throw s!"missing recursive Counter state '{name}'"
           let current ← counterValueAt ctx root evaluated
+          let amount ← amount.eval ctx env
           let value ← adjustCounter current amount subtract
           let some updated := treeSet root evaluated (.scalar (.uint (2 ^ 64 - 1) value))
             | throw s!"nested Counter parent is missing or not a map '{name}'"
