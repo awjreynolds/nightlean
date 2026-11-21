@@ -4256,8 +4256,8 @@
       "id": "C-STDLIB-PERSISTENTHASH",
       "layer": "standard-library",
       "surface": "persistentHash",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean lowers persistent hashing for checked flat named records of bounded bytes, scalars and fieldless enums. Two mixed-record cases match pinned Compact digests through the emitted native relation. The runtime rejects a mismatched byte field wrapper. Recursive layouts and general overloads remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4270,7 +4270,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabPersistentHash.lean",
+        "tests/compact/mixed-fab-persistent-hash.mjs",
+        "runtime/tests/mixed_fab_persistent_hash.rs"
+      ],
       "equivalence": "unverified"
     },
     {

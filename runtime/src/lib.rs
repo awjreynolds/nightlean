@@ -443,6 +443,11 @@ pub enum Expr {
     PersistentHashNativeVector {
         values: Vec<Expr>,
     },
+    #[serde(rename = "persistentHashFab")]
+    PersistentHashFab {
+        schema: Json,
+        values: Vec<FabHashInput>,
+    },
     #[serde(rename = "transientHash")]
     TransientHash {
         values: Vec<Expr>,
@@ -539,6 +544,31 @@ pub enum Expr {
         right: Box<Expr>,
     },
 }
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(tag = "tag", rename_all = "camelCase", deny_unknown_fields)]
+pub enum FabHashInput {
+    Bytes {
+        length: usize,
+        value: Box<Expr>,
+    },
+    Bool {
+        value: Box<Expr>,
+    },
+    Uint {
+        maximum: String,
+        value: Box<Expr>,
+    },
+    EnumTag {
+        id: String,
+        maximum: String,
+        value: Box<Expr>,
+    },
+    Native {
+        value: Box<Expr>,
+    },
+}
+
 pub type Environment = BTreeMap<String, Value>;
 
 #[derive(Debug)]
@@ -567,6 +597,115 @@ fn persistent_hash(value: AlignedValue) -> Result<Value> {
     let mut bytes = zeroize::Zeroizing::new(Vec::new());
     ValueReprAlignedValue(decoded).binary_repr(&mut *bytes);
     Ok(Value::Bytes(Sha256::digest(bytes.as_slice()).to_vec()))
+}
+
+fn fab_uint_maximum(text: &str) -> Result<BigUint> {
+    ensure!(
+        !text.is_empty()
+            && text.bytes().all(|byte| byte.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0')),
+        "noncanonical FAB unsigned maximum"
+    );
+    let maximum = BigUint::parse_bytes(text.as_bytes(), 10)
+        .ok_or_else(|| anyhow!("invalid FAB unsigned maximum"))?;
+    ensure!(
+        maximum <= scalars::max_uint(),
+        "FAB unsigned type exceeds target maximum"
+    );
+    Ok(maximum)
+}
+
+fn aligned_fab_uint(value: &Value, maximum: &BigUint) -> Result<AlignedValue> {
+    let Value::UInt {
+        number,
+        maximum: actual_maximum,
+    } = value
+    else {
+        bail!("FAB unsigned field requires UInt")
+    };
+    ensure!(actual_maximum == maximum, "FAB unsigned field type mismatch");
+    ensure!(number <= maximum, "FAB unsigned field outside declared type");
+    let length = usize::try_from(maximum.bits().div_ceil(8).max(1))?;
+    let bytes = ValueAtom(number.to_bytes_le()).normalize();
+    AlignedValue::new(
+        FabValue(vec![bytes]),
+        Alignment::singleton(AlignmentAtom::Bytes {
+            length: u32::try_from(length)?,
+        }),
+    )
+    .ok_or_else(|| anyhow!("invalid FAB unsigned alignment"))
+}
+
+fn persistent_hash_fab(
+    schema_json: &Json,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let schema_bytes = serde_json::to_vec(schema_json)?;
+    let schema = Schema::from_json(&schema_bytes)?;
+    let fields = schema.fab_hash_fields()?;
+    ensure!(!fields.is_empty(), "FAB hash requires at least one field");
+    ensure!(
+        fields.len() == values.len(),
+        "FAB hash value count differs from its schema"
+    );
+    let aligned = fields
+        .iter()
+        .zip(values)
+        .map(|(field, input)| -> Result<AlignedValue> {
+            match (field, input) {
+                (
+                    crate::aggregates::FabHashField::Bytes(expected),
+                    FabHashInput::Bytes { length, value },
+                ) => {
+                    ensure!(
+                        length == expected,
+                        "FAB byte field length differs from schema"
+                    );
+                    let value = evaluate(value, env)?;
+                    ensure!(
+                        value.scalar_type().bytes_length() == Some(*expected),
+                        "FAB byte field type differs from schema"
+                    );
+                    aligned_bytes(&value)
+                }
+                (crate::aggregates::FabHashField::Bool, FabHashInput::Bool { value }) => {
+                    aligned(&evaluate(value, env)?, "bit")
+                }
+                (
+                    crate::aggregates::FabHashField::UInt(expected),
+                    FabHashInput::Uint { maximum, value },
+                ) => {
+                    ensure!(
+                        fab_uint_maximum(maximum)? == *expected,
+                        "FAB unsigned maximum differs from schema"
+                    );
+                    let value = evaluate(value, env)?;
+                    aligned_fab_uint(&value, expected)
+                }
+                (
+                    crate::aggregates::FabHashField::EnumTag {
+                        id: expected_id,
+                        maximum: expected_maximum,
+                    },
+                    FabHashInput::EnumTag { id, maximum, value },
+                ) => {
+                    ensure!(id == expected_id, "FAB enum identity differs from schema");
+                    ensure!(
+                        fab_uint_maximum(maximum)? == *expected_maximum,
+                        "FAB enum tag maximum differs from schema"
+                    );
+                    let value = evaluate(value, env)?;
+                    aligned_fab_uint(&value, expected_maximum)
+                }
+                (crate::aggregates::FabHashField::Native, FabHashInput::Native { value }) => {
+                    Ok(field_value(evaluate(value, env)?.field()?))
+                }
+                _ => bail!("FAB hash value type differs from schema"),
+            }
+        })
+        .collect::<Result<Vec<_>>>()?;
+    persistent_hash(AlignedValue::concat(&aligned))
 }
 
 pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
@@ -771,6 +910,7 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
                 .collect::<Result<Vec<_>>>()?;
             persistent_hash(AlignedValue::concat(&parts))?
         }
+        Expr::PersistentHashFab { schema, values } => persistent_hash_fab(schema, values, env)?,
         Expr::TransientHash { values } => {
             ensure!(
                 values.len() <= MAX_TRANSIENT_HASH_FIELDS,
