@@ -35,6 +35,7 @@ def checkSink (sink : Sink) (payload : Origins) (control : Origins := []) : Exce
       s!"undisclosed private {kindName origin.kind} '{origin.name}' at {location origin.span} reaches {sink.description}; use disclose(...) for the released value"}
   | none, none => .ok ()
 
+mutual
 /-- Every scalar/native constructor has an explicit rule. Hashing propagates
 origins. Missing references fail closed instead of becoming public values. -/
 def origins (env : Environment) : Expr ty → Except String Origins
@@ -60,6 +61,7 @@ def origins (env : Environment) : Expr ty → Except String Origins
     let mut result : Origins := []
     for value in values do result := merge result (← origins env value)
     pure result
+  | .persistentHashFab _ _ values => originsFabValues env values
   | .toBytes32 value => origins env value
   | .fromBytes32 value => origins env value
   | .fromBytes value => origins env value
@@ -103,6 +105,25 @@ def origins (env : Environment) : Expr ty → Except String Origins
   | .disclose _ value => do
     discard (origins env value)
     pure []
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have h := Noctium.sizeOfMemberListLt (by assumption); omega
+    | omega
+
+private def originsFabValues (env : Environment) :
+    List (Sigma Expr) → Except String Origins
+  | [] => pure []
+  | ⟨_, value⟩ :: rest => do
+    pure (merge (← origins env value) (← originsFabValues env rest))
+termination_by values => sizeOf values
+decreasing_by
+  all_goals simp_wf
+  all_goals first
+    | have _h := Noctium.sizeOfSigmaExprHeadLt _ _; omega
+    | omega
+end
 
 private def expression (env : Environment) (span : SourceSpan) (value : Expr ty) :
     Except Diagnostic Origins :=
