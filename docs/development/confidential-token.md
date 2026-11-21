@@ -144,15 +144,18 @@ the verified public SRS and native DUST material before running the host.
 The localnet rejected installing all sixteen keys in one deployment because its
 transaction weight exceeded the normal extrinsic limit. The host deploys eight
 keys, then installs the remaining eight through a signed native maintenance
-update. The same update replaces the temporary maintenance authority with an
-empty committee and threshold one, permanently disabling further maintenance.
-The SDK prevents calls until the complete authenticated verifier map and locked
-authority match the intended contract. Both installation transactions finalized
-on the isolated localnet. Pure circuits retain an empty guaranteed transcript,
-as required by native ledger sequencing.
+update. It rotates the temporary authority from key A to caller-selected key B
+with a second signed update, then B locks maintenance with an empty committee
+and threshold one. The SDK rejects a stale A rotation attempt before submission
+and retains the current state token. Calls stay blocked until the complete
+authenticated verifier map and locked authority match the intended contract.
+Pure circuits retain an empty guaranteed transcript, as required by native
+ledger sequencing.
 
 `WitnessContractTarget::from_staged_state_config` and
-`start_installation_client` expose this bootstrap path. Recovery uses
+`start_installation_client` expose verifier staging. The new
+`start_authority_rotation_client` exposes the signed A-to-B replacement.
+Recovery uses
 `restore_deployment` and `recover_client` with trusted durable journal records,
 then reobserves finality and acknowledges the private CAS before issuing a new
 state token. The example accepts paired `deploymentAttempt` and `resumeAttempt`
@@ -167,12 +170,18 @@ host entropy. These callbacks demonstrate the host boundary and require a real
 wallet implementation for production use. On 2026-11-18, the complete scenario
 finished with 17 accepted calls across all sixteen entrypoints.
 
-[Public receipt evidence](../../tests/confidential-token-localnet-evidence.json)
-records the deployment, locked verifier installation and each accepted call.
-The final call finalized at block 23680. Supply is nine. Alice holds one
+[Historical receipt evidence](../../tests/confidential-token-localnet-evidence.json)
+records the earlier deployment, locked verifier installation and each accepted
+call. The final call finalized at block 23680. Supply is nine. Alice holds one
 spendable and one pending, Bob holds seven pending and zero spendable, and both
 escrow copies and the owner escrow memo decrypt to zero. Bob's credit epoch and
 the permanent escrow spend epoch both equal two. The process exited
 successfully after checking these values from the verified final receipt state.
 This chain scenario approves three once. Approval refund and replacement retain
 their separate native checker evidence described above.
+
+[Authority-rotation receipt evidence](../../tests/native-authority-rotation-localnet-evidence.json)
+records a fresh isolated run with the staged install, A-to-B rotation, final
+lock, stale-A rejection and all seventeen post-lock calls. It covers this
+single-key rotation flow and does not qualify general verifier-key or IR
+maintenance equivalence.

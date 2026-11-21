@@ -1567,8 +1567,8 @@
       "id": "C-SDK-MAINTENANCE",
       "layer": "ledger-sdk",
       "surface": "Authority replacement and verifier-key/IR maintenance",
-      "noctiumStatus": "missing",
-      "notes": "Exposed by ledger SDK, not a Compact language primitive. Include deployment lifecycle tests as a separate compatibility track.",
+      "noctiumStatus": "subset",
+      "notes": "Native staged deployment supports one authenticated Schnorr authority rotation after the complete verifier map is installed, followed by the existing empty-committee lock. General verifier-key removal, IR maintenance and Compact API equivalence remain unverified.",
       "source": [
         "ledger",
         "release0360"
@@ -1577,8 +1577,24 @@
         "LEDGER",
         "ABI"
       ],
-      "observedEvidence": [],
-      "equivalence": "unverified"
+      "observedEvidence": [
+        "runtime/src/proof.rs",
+        "runtime/src/witness_execution.rs",
+        "runtime/examples/confidential_token_localnet.rs",
+        "tests/native-authority-rotation-localnet-evidence.json"
+      ],
+      "equivalence": "unverified",
+      "implementationUpdate": {
+        "checkedOn": "2026-11-21",
+        "scope": "A staged ConfidentialToken fixture installs all sixteen authenticated verifiers, rotates the maintenance authority from A at counter 1 to B at counter 2, then locks with B at counter 3. The sixteen-entry operation map stays unchanged. A stale-A attempt is rejected by the SDK before submission. The isolated run finalized the deployment, three maintenance updates and all seventeen post-lock calls.",
+        "evidence": [
+          "runtime/src/proof.rs",
+          "runtime/src/witness_execution.rs",
+          "runtime/examples/confidential_token_localnet.rs",
+          "tests/native-authority-rotation-localnet-evidence.json"
+        ],
+        "fullEquivalence": "unverified"
+      }
     },
     {
       "id": "C-SDK-INTEGRATION",
