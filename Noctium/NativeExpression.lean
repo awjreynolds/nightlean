@@ -109,6 +109,36 @@ private def nativeExpressionJson : Expr ty → Json
       return Json.mkObj [
         ("tag", toJson ("persistentHashFab" : String)),
         ("schema", schema), ("values", encodedValues)]
+  | .persistentCommitFab environment type opening values => Id.run do
+      let compiled := Types.compileType environment type
+      let schema := match compiled with
+        | .ok value => (Types.schemaJson value).toOption.getD Json.null
+        | .error _ => Json.null
+      let encodedValues := match compiled with
+        | .ok value => match value.checked.value with
+          | .structure _ fields => Json.arr
+              (nativeExpressionFabValuesJson (fields.map Prod.snd) values)
+          | _ => Json.arr #[]
+        | .error _ => Json.arr #[]
+      return Json.mkObj [
+        ("tag", toJson ("persistentCommitFab" : String)),
+        ("schema", schema), ("opening", nativeExpressionJson opening),
+        ("values", encodedValues)]
+  | .transientCommitFab environment type opening values => Id.run do
+      let compiled := Types.compileType environment type
+      let schema := match compiled with
+        | .ok value => (Types.schemaJson value).toOption.getD Json.null
+        | .error _ => Json.null
+      let encodedValues := match compiled with
+        | .ok value => match value.checked.value with
+          | .structure _ fields => Json.arr
+              (nativeExpressionFabValuesJson (fields.map Prod.snd) values)
+          | _ => Json.arr #[]
+        | .error _ => Json.arr #[]
+      return Json.mkObj [
+        ("tag", toJson ("transientCommitFab" : String)),
+        ("schema", schema), ("opening", nativeExpressionJson opening),
+        ("values", encodedValues)]
   | .transientHash values => Json.mkObj [("tag", toJson ("transientHash" : String)),
       ("values", toJson (values.map nativeExpressionJson))]
   | .toBytes32 value => Json.mkObj [("tag", toJson ("toBytes32" : String)),

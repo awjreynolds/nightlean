@@ -64,6 +64,12 @@ private def expressionJson : Expr ty → Json
       ("values", toJson (values.map expressionJson))]
   | .persistentHashFab environment type values =>
       _root_.Noctium.NativeExpression.toJson (.persistentHashFab environment type values)
+  | .persistentCommitFab environment type opening values =>
+      _root_.Noctium.NativeExpression.toJson
+        (.persistentCommitFab environment type opening values)
+  | .transientCommitFab environment type opening values =>
+      _root_.Noctium.NativeExpression.toJson
+        (.transientCommitFab environment type opening values)
   | .transientHash values => Json.mkObj [("tag", toJson ("transientHash" : String)),
       ("values", toJson (values.map expressionJson))]
   | .toBytes32 value => Json.mkObj [("tag", toJson ("toBytes32" : String)),

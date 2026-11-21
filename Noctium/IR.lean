@@ -132,6 +132,14 @@ inductive Expr : Ty → Type where
   checked layout rather than accepting a caller-provided alignment vector. -/
   | persistentHashFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
       (values : List (Sigma Expr)) : Expr (.bytes 32)
+  /-- Commit to a checked flat FAB payload using a Bytes32 opening prepended
+  to its canonical binary encoding. -/
+  | persistentCommitFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (opening : Expr (.bytes 32)) (values : List (Sigma Expr)) : Expr (.bytes 32)
+  /-- Commit to a checked flat FAB payload using a Native opening prepended
+  to its canonical FAB field sequence. -/
+  | transientCommitFab (environment : Types.CompositeEnv) (type : Types.CompositeType)
+      (opening : Expr .native) (values : List (Sigma Expr)) : Expr .native
   deriving Repr
 
 def Expr.foreignIdentity (curve : Foreign.Curve) : Expr (.foreign (.point curve)) :=
@@ -971,6 +979,16 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless caps.persistentHash32 do throw "target lacks qualified FAB persistent-hash support"
     discard (validateFabHashLayout compositeEnv type values)
     validateFabHashValues caps env values
+  | .persistentCommitFab compositeEnv type opening values => do
+    unless caps.persistentHash32 do throw "target lacks qualified FAB persistent-commit support"
+    discard (validateFabHashLayout compositeEnv type values)
+    opening.validate caps env
+    validateFabHashValues caps env values
+  | .transientCommitFab compositeEnv type opening values => do
+    unless caps.poseidon2 do throw "target lacks qualified FAB transient-commit support"
+    discard (validateFabHashLayout compositeEnv type values)
+    opening.validate caps env
+    validateFabHashValues caps env values
   | .toBytes32 (source := source) value => do
     unless caps.bytes32Conversions do throw "target lacks qualified Bytes32 conversion support"
     unless source == .native || source == .jubjubScalar || source == .jubjubPoint do
@@ -1153,6 +1171,12 @@ private def validateStateScalar (caps : Capabilities) (ty : Ty) : Except String 
   if ty.isOpaqueString then
     throw "OpaqueString is only supported as a root Bytes32 tree Map value"
   ty.validate caps
+
+private def validateCellStateScalar (caps : Capabilities) (ty : Ty) : Except String Unit := do
+  if ty.isOpaqueString then
+    ty.validate caps
+  else
+    validateStateScalar caps ty
 
 def LedgerValueType.validate (caps : Capabilities) (schema : LedgerValueType) : Except String Unit :=
   match schema with
@@ -1359,7 +1383,10 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match validateStateScalar caps ty with
+      let validation := match decl.kind with
+        | .cell _ => validateCellStateScalar caps ty
+        | _ => validateStateScalar caps ty
+      match validation with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
   e.circuit.validate caps
@@ -1943,7 +1970,10 @@ def Contract.validate (caps : Capabilities) (c : Contract) : Except Diagnostic U
       | .merkleTree _ | .historicMerkleTree _ => []
       | .opaqueString => []
     for ty in types do
-      match validateStateScalar caps ty with
+      let validation := match decl.kind with
+        | .cell _ => validateCellStateScalar caps ty
+        | _ => validateStateScalar caps ty
+      match validation with
       | .error message => throw {span := decl.span, message}
       | .ok _ => pure ()
     if let .tree schema := decl.kind then

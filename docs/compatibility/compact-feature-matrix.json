@@ -516,7 +516,7 @@
       "layer": "language",
       "surface": "Opaque string and Uint8Array",
       "noctiumStatus": "subset",
-      "notes": "OpaqueBytes and OpaqueString store and read typed public values in root Bytes32-keyed Maps. Each binds one FAB Compress field on ZKIR 3.2.1. Separate development Ledger 9 runs finalized a binary and a UTF-8 store and read with unchanged read state. The string run preserves an embedded NUL and binds the exact public read return to the proof transcript. The native string check also covers empty input and rejects trailing NUL, malformed stored UTF-8, byte-tag substitution and a changed transcript. Sealed constructor strings use a separate path. Other containers and full host equivalence remain open.",
+      "notes": "OpaqueBytes and OpaqueString store and read typed public values in root Bytes32-keyed Maps. Each binds one FAB Compress field on ZKIR 3.2.1. Separate development Ledger 9 runs finalized a binary and a UTF-8 store and read with unchanged read state. The string run preserves an embedded NUL and binds the exact public read return to the proof transcript. The native string check also covers empty input and rejects trailing NUL, malformed stored UTF-8, byte-tag substitution and a changed transcript. Sealed constructor strings use a separate path. Root Cells also support mutable byte and string values. The paired native check covers canonical empty defaults, exact bytes and altered transcript rejection. Finalized opaque Cell execution and full host equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -525,6 +525,9 @@
         "ZK"
       ],
       "observedEvidence": [
+        "tests/OpaqueCells.lean",
+        "runtime/tests/opaque_cells.rs",
+        "tests/compact/opaque-cells.mjs",
         "tests/OpaqueByteMap.lean",
         "runtime/tests/opaque_byte_map.rs",
         "tests/OpaqueStringMap.lean",
@@ -2032,7 +2035,7 @@
       "layer": "language-ledger",
       "surface": "Cell.read",
       "noctiumStatus": "subset",
-      "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
+      "notes": "The checked root Cell reads both opaque types in addition to scoped scalar cases. Compact and the native checker match empty and nonempty payloads. The native return binds one Compress field. Finalized opaque Cell execution remains open.",
       "source": [
         "adt"
       ],
@@ -2042,6 +2045,9 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "tests/OpaqueCells.lean",
+        "runtime/tests/opaque_cells.rs",
+        "tests/compact/opaque-cells.mjs",
         "Noctium/IR.lean",
         "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
@@ -2091,7 +2097,7 @@
       "layer": "language-ledger",
       "surface": "Cell.write",
       "noctiumStatus": "subset",
-      "notes": "Native/Bool subset only. Compact ADT value layout and method equivalence unverified.",
+      "notes": "The checked root Cell writes both opaque types in addition to scoped scalar cases. The native checker matches public UTF-8 and byte payloads and rejects altered Compress transcript inputs. Finalized opaque Cell execution remains open.",
       "source": [
         "adt"
       ],
@@ -2101,6 +2107,9 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "tests/OpaqueCells.lean",
+        "runtime/tests/opaque_cells.rs",
+        "tests/compact/opaque-cells.mjs",
         "Noctium/IR.lean",
         "Noctium/Backend/Impact.lean",
         "docs/development/native-localnet.md"
@@ -4257,8 +4266,8 @@
       "id": "C-STDLIB-TRANSIENTCOMMIT",
       "layer": "standard-library",
       "surface": "transientCommit",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean transientCommitFab prepends a Native opening to the canonical FAB value fields of a checked flat named record. The paired 3.2.1 check matches pinned Compact under independent changes to payload and opening. Recursive types and general overloads remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4271,7 +4280,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabCommitments.lean",
+        "runtime/tests/mixed_fab_commitments.rs",
+        "tests/compact/mixed-fab-persistent-hash.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -4303,8 +4316,8 @@
       "id": "C-STDLIB-PERSISTENTCOMMIT",
       "layer": "standard-library",
       "surface": "persistentCommit",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean persistentCommitFab prepends a Bytes32 opening to the canonical FAB bytes of a checked flat named record. The paired 3.2.1 check matches pinned Compact under independent changes to payload and opening. Recursive types and general overloads remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -4317,7 +4330,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabCommitments.lean",
+        "runtime/tests/mixed_fab_commitments.rs",
+        "tests/compact/mixed-fab-persistent-hash.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

@@ -504,6 +504,18 @@ pub enum Expr {
         schema: Json,
         values: Vec<FabHashInput>,
     },
+    #[serde(rename = "persistentCommitFab")]
+    PersistentCommitFab {
+        schema: Json,
+        opening: Box<Expr>,
+        values: Vec<FabHashInput>,
+    },
+    #[serde(rename = "transientCommitFab")]
+    TransientCommitFab {
+        schema: Json,
+        opening: Box<Expr>,
+        values: Vec<FabHashInput>,
+    },
     #[serde(rename = "transientHash")]
     TransientHash {
         values: Vec<Expr>,
@@ -692,11 +704,11 @@ fn aligned_fab_uint(value: &Value, maximum: &BigUint) -> Result<AlignedValue> {
     .ok_or_else(|| anyhow!("invalid FAB unsigned alignment"))
 }
 
-fn persistent_hash_fab(
+fn aligned_fab_payload(
     schema_json: &Json,
     values: &[FabHashInput],
     env: &Environment,
-) -> Result<Value> {
+) -> Result<AlignedValue> {
     let schema_bytes = serde_json::to_vec(schema_json)?;
     let schema = Schema::from_json(&schema_bytes)?;
     let fields = schema.fab_hash_fields()?;
@@ -761,7 +773,41 @@ fn persistent_hash_fab(
             }
         })
         .collect::<Result<Vec<_>>>()?;
-    persistent_hash(AlignedValue::concat(&aligned))
+    Ok(AlignedValue::concat(&aligned))
+}
+
+fn persistent_hash_fab(
+    schema_json: &Json,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    persistent_hash(aligned_fab_payload(schema_json, values, env)?)
+}
+
+fn persistent_commit_fab(
+    schema_json: &Json,
+    opening: &Expr,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let opening = claim_hash_output(evaluate(opening, env)?, "FAB persistent commitment opening")?;
+    let payload = aligned_fab_payload(schema_json, values, env)?;
+    let commitment = base_crypto::hash::persistent_commit(&ValueReprAlignedValue(payload), opening);
+    Ok(Value::Bytes(commitment.0.to_vec()))
+}
+
+fn transient_commit_fab(
+    schema_json: &Json,
+    opening: &Expr,
+    values: &[FabHashInput],
+    env: &Environment,
+) -> Result<Value> {
+    let opening = evaluate(opening, env)?.field()?;
+    let payload = aligned_fab_payload(schema_json, values, env)?;
+    Ok(Value::Native(transient_crypto::hash::transient_commit(
+        &ValueReprAlignedValue(payload),
+        opening,
+    )))
 }
 
 pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
@@ -967,6 +1013,16 @@ pub fn evaluate(expr: &Expr, env: &Environment) -> Result<Value> {
             persistent_hash(AlignedValue::concat(&parts))?
         }
         Expr::PersistentHashFab { schema, values } => persistent_hash_fab(schema, values, env)?,
+        Expr::PersistentCommitFab {
+            schema,
+            opening,
+            values,
+        } => persistent_commit_fab(schema, opening, values, env)?,
+        Expr::TransientCommitFab {
+            schema,
+            opening,
+            values,
+        } => transient_commit_fab(schema, opening, values, env)?,
         Expr::TransientHash { values } => {
             ensure!(
                 values.len() <= MAX_TRANSIENT_HASH_FIELDS,
@@ -2261,25 +2317,32 @@ fn validate_scalar_storage_type(
         "typed ledger type differs from state schema"
     );
     if *ty == ScalarType::OpaqueString {
-        ensure!(
-            depth == 1,
-            "OpaqueString is only supported as a root Map value"
-        );
-        let tree = plan
+        let state = plan
             .state
             .get(slot as usize)
-            .and_then(|state| state.kind.get("tree"))
-            .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
-        let map = tree
-            .get("map")
-            .and_then(Json::as_array)
-            .filter(|parts| parts.len() == 2)
-            .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
-        ensure!(
-            map[0].as_str() == Some("Bytes<32>")
-                && map[1] == serde_json::json!({"scalar":"OpaqueString"}),
-            "OpaqueString requires a Bytes32-keyed Map leaf"
-        );
+            .ok_or_else(|| anyhow!("state slot out of range"))?;
+        if state.kind.get("cell").and_then(Json::as_str) == Some("OpaqueString") {
+            ensure!(depth == 0, "OpaqueString Cell path schema mismatch");
+        } else {
+            ensure!(
+                depth == 1,
+                "OpaqueString is only supported as a root Cell or Map value"
+            );
+            let tree = state
+                .kind
+                .get("tree")
+                .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
+            let map = tree
+                .get("map")
+                .and_then(Json::as_array)
+                .filter(|parts| parts.len() == 2)
+                .ok_or_else(|| anyhow!("OpaqueString requires a root tree Map"))?;
+            ensure!(
+                map[0].as_str() == Some("Bytes<32>")
+                    && map[1] == serde_json::json!({"scalar":"OpaqueString"}),
+                "OpaqueString requires a Bytes32-keyed Map leaf"
+            );
+        }
     }
     Ok(())
 }
@@ -2290,6 +2353,52 @@ fn opaque_compressed_storage_path(
     guard: Option<&Expr>,
     ty: &ScalarType,
 ) -> Result<(u32, usize)> {
+    let insert_operation = operation_index
+        .checked_add(1)
+        .and_then(|index| plan.operations.get(index))
+        .ok_or_else(|| anyhow!("opaque write has no adjacent insertion"))?;
+    let (insert_operation, insert_guard) = unguarded_operation(insert_operation);
+    ensure!(
+        insert_guard == guard,
+        "opaque insertion guard differs from its write"
+    );
+    if matches!(insert_operation, Instruction::Insert { n: 1 }) {
+        let index_operation = operation_index
+            .checked_sub(1)
+            .and_then(|index| plan.operations.get(index))
+            .ok_or_else(|| anyhow!("opaque Cell write has no adjacent slot push"))?;
+        let (index_operation, index_guard) = unguarded_operation(index_operation);
+        ensure!(
+            index_guard == guard,
+            "opaque Cell index guard differs from its write"
+        );
+        let Instruction::Push {
+            storage: false,
+            expression: Expr::Constant { value },
+            alignment,
+        } = index_operation
+        else {
+            bail!("opaque Cell write requires a constant root Cell slot")
+        };
+        ensure!(
+            alignment == "field",
+            "opaque Cell index must use field alignment"
+        );
+        let slot = value
+            .parse::<u32>()
+            .map_err(|_| anyhow!("opaque Cell index is not a canonical slot"))?;
+        ensure!(
+            plan.state
+                .get(slot as usize)
+                .and_then(|state| state.kind.get("cell"))
+                .and_then(Json::as_str)
+                .is_some(),
+            "opaque Cell write does not select a root Cell"
+        );
+        validate_scalar_storage_type(plan, slot, 0, ty)?;
+        return Ok((slot, 0));
+    }
+
     let key_operation = operation_index
         .checked_sub(1)
         .and_then(|index| plan.operations.get(index))
@@ -2338,13 +2447,8 @@ fn opaque_compressed_storage_path(
         key_types.len() == 1 && key_types[0] == ScalarType::Bytes32,
         "opaque Map key must be Bytes32"
     );
-    let insert_operation = operation_index
-        .checked_add(1)
-        .and_then(|index| plan.operations.get(index))
-        .ok_or_else(|| anyhow!("opaque write has no adjacent Map insertion"))?;
-    let (insert_operation, insert_guard) = unguarded_operation(insert_operation);
     ensure!(
-        insert_guard == guard && matches!(insert_operation, Instruction::Insert { n: 2 }),
+        matches!(insert_operation, Instruction::Insert { n: 2 }),
         "opaque Map value push must be followed by Insert(2)"
     );
     validate_scalar_storage_type(plan, *slot, 1, ty)?;
@@ -3572,6 +3676,7 @@ fn aligned_storage_cell(value: &Value) -> Result<AlignedValue> {
     match value {
         Value::Bytes(_) => aligned_bytes(value),
         Value::OpaqueBytes(_) => aligned_opaque_bytes(value),
+        Value::OpaqueString(_) => aligned_opaque_string(value),
         Value::JubjubScalar(_) | Value::JubjubPoint(_) => {
             Ok(aligned_fields(&typed_scalar_fields(value)?))
         }
@@ -6480,7 +6585,7 @@ impl PreparationCursor {
                             );
                             let (slot, keys) = previous_index
                                 .as_ref()
-                                .ok_or_else(|| anyhow!("OpaqueString read has no Map path"))?;
+                                .ok_or_else(|| anyhow!("OpaqueString read has no state path"))?;
                             validate_scalar_storage_type(plan, *slot, keys.len(), &read_type)?;
                         }
                         if let Some(length) = byte_alignment_length(alignment)? {

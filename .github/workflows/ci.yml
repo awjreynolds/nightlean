@@ -56,6 +56,7 @@ jobs:
           lake env lean tests/Issue69CompositeMap.lean
           lake env lean tests/Issue70PersistentHash.lean
           lake env lean tests/MixedFabPersistentHash.lean
+          lake env lean tests/MixedFabCommitments.lean
           lake env lean tests/Issue70HashPreimages.lean
           lake env lean tests/Issue70Jubjub.lean
           lake env lean tests/JubjubScalarBoundary.lean
@@ -168,6 +169,7 @@ jobs:
           lake env lean tests/NativeOpaqueReturns.lean
           lake env lean tests/OpaqueByteMap.lean
           lake env lean tests/OpaqueStringMap.lean
+          lake env lean tests/OpaqueCells.lean
           lake env lean tests/ConstructorMetadata.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean
