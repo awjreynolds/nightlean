@@ -105,6 +105,8 @@ def totalize (guard : Expr .bool) : Expr ty → Expr ty
   | .persistentHashNativeVector values => .persistentHashNativeVector (values.map (totalize guard))
   | .persistentHashFab environment type values =>
     .persistentHashFab environment type (totalizeFabValues guard values)
+  | .sha512Fab environment type values =>
+    .sha512Fab environment type (totalizeFabValues guard values)
   | .persistentCommitFab environment type opening values =>
     .persistentCommitFab environment type (totalize guard opening)
       (totalizeFabValues guard values)
