@@ -1132,7 +1132,16 @@ elab "#noctium_check" : command => do
   let (circuits, contracts) ← unsafe inspect
   logInfo m!"checked {circuits.size} circuit(s), {contracts.size} contract(s); target integration unqualified"
 
+private def checkRequiredTarget (profile : TargetProfile) : CommandElabM Unit := do
+  let required := noctium.requiredTarget.get (← getOptions)
+  unless required.isEmpty do
+    unless required == TargetProfile.sourceBaseline.name || required == TargetProfile.selected321.name do
+      throwError "unknown Noctium source target requirement '{required}'"
+    unless required == profile.name do
+      throwError "Noctium source requires target '{required}', selected '{profile.name}'"
+
 private unsafe def checkTarget (profile : TargetProfile) : CommandElabM Unit := do
+  checkRequiredTarget profile
   let (circuits, contracts) ← unsafe inspect
   logInfo m!"checked {circuits.size} circuit(s), {contracts.size} contract(s); target {profile.name} ({profile.qualification})"
 
@@ -1148,6 +1157,7 @@ elab "#noctium_check_target" profileJson:str : command => do
 private def compileArtifacts (directory : String) (profile : TargetProfile)
     (displayDirectory : String := directory) (roles : List ArtifactRole := [])
     (rustBindings dedupRangeChecks : _root_.Bool := Bool.false) : CommandElabM Unit := do
+  checkRequiredTarget profile
   let moduleOutputs ← unsafe rebuildModuleOutputs
   let (circuits, contracts, hosted) ← unsafe inspectWithModules moduleOutputs dedupRangeChecks
   let emit := fun role => roles.isEmpty || roles.contains role

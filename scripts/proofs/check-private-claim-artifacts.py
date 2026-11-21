@@ -17,6 +17,7 @@ import re
 import runpy
 import shutil
 import subprocess
+import sys
 import tarfile
 import tempfile
 
@@ -93,9 +94,19 @@ def clean_env(toolchain: Path, imports: Path | None = None) -> dict:
 def toolchain_measurement(root: Path | None = None) -> dict:
     if root is None:
         root = Path(run(["lake", "env", "lean", "--print-prefix"]).stdout.strip()).resolve()
+    # Lean v4.35.0's Linux release stages ld.lld; preserve the existing macOS tool.
+    if sys.platform == "darwin":
+        linker = "ld64.lld"
+    elif sys.platform.startswith("linux"):
+        linker = "ld.lld"
+    else:
+        raise AssertionError("unsupported_Lean_toolchain_platform: " + sys.platform)
+
     identities = {}
-    for name in ["lean", "lake", "leanexport", "leanchecker", "leanc", "clang", "ld64.lld", "llvm-ar"]:
-        identities["bin/" + name] = sha(root / "bin" / name)
+    for name in ["lean", "lake", "leanexport", "leanchecker", "leanc", "clang", linker, "llvm-ar"]:
+        path = root / "bin" / name
+        assert path.is_file(), "required_toolchain_binary_missing: bin/" + name
+        identities["bin/" + name] = sha(path)
     for path in sorted((root / "lib").rglob("*")):
         if path.is_file() and path.name.endswith((".dylib", ".so", ".olean", ".olean.private", ".ir", ".ir.sig")):
             identities[path.relative_to(root).as_posix()] = sha(path)
@@ -506,6 +517,9 @@ open Noctium.Verification.ArtifactBytes Noctium.Verification.ArtifactCertificate
 
 
 def main() -> int:
+    if not __debug__:
+        print(json.dumps({"status": "rejected", "error": "optimized_python_is_not_qualified"}))
+        return 1
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     measurement = commands.add_parser("measure", help="Produce untrusted measurements for independent review/pinning")

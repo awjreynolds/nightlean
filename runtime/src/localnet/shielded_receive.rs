@@ -9,8 +9,9 @@ use crate::{
 };
 use base_crypto::{hash::HashOutput, rng::SplittableRng};
 use coin_structure::{
-    coin::{Commitment, Info},
+    coin::{Commitment, Info, PublicKey},
     contract::ContractAddress,
+    transfer::Recipient,
 };
 use ledger::structure::GUARANTEED_SEGMENT;
 use rand::rngs::StdRng;
@@ -18,9 +19,40 @@ use serde_json::Value;
 use std::{collections::BTreeMap, future::pending};
 use transient_crypto::{
     commitment::PedersenRandomness,
+    encryption,
     proofs::{Proof, ProofPreimage},
 };
 use zswap::{Input, Offer, Output, prove::ZswapResolver};
+
+fn read_witness_bytes32(inputs: &BTreeMap<String, Value>, name: &str) -> Result<[u8; 32]> {
+    let value = inputs.get(name).ok_or(Error::State)?;
+    check(
+        value.get("kind").and_then(Value::as_str) == Some("bytes"),
+        Error::State,
+    )?;
+    let values = value
+        .get("values")
+        .and_then(Value::as_array)
+        .ok_or(Error::State)?;
+    check(values.len() == 32, Error::State)?;
+    let mut bytes = [0; 32];
+    for (slot, value) in bytes.iter_mut().zip(values) {
+        *slot = u8::try_from(value.as_u64().ok_or(Error::State)?).map_err(|_| Error::State)?;
+    }
+    Ok(bytes)
+}
+
+fn read_witness_uint64(inputs: &BTreeMap<String, Value>, name: &str) -> Result<u64> {
+    let value = inputs.get(name).ok_or(Error::State)?;
+    if let Some(value) = value.as_u64() {
+        return Ok(value);
+    }
+    value
+        .as_str()
+        .ok_or(Error::State)?
+        .parse()
+        .map_err(|_| Error::State)
+}
 
 pub(super) struct BookedOffer {
     pub(super) offer: Offer<Proof, Db>,
@@ -64,6 +96,54 @@ pub(super) struct BookedWalletOffer {
     commitment: Commitment,
     index: u64,
     current_state: Vec<u8>,
+}
+
+pub(super) struct BookedWalletMint {
+    pub(super) offer: Offer<Proof, Db>,
+    pub(super) randomness: PedersenRandomness,
+    pub(super) domain: HashOutput,
+    pub(super) coin: Info,
+    pub(super) recipient: PublicKey,
+    address: ContractAddress,
+    commitment: Commitment,
+    index: u64,
+    current_state: Vec<u8>,
+}
+
+impl BookedWalletMint {
+    pub(super) fn check_booking(
+        &self,
+        snapshot: &Snapshot,
+    ) -> std::result::Result<(), HostFailure> {
+        let (_, indices) = snapshot
+            .state
+            .zswap
+            .try_apply(&self.offer, None)
+            .map_err(|_| HostFailure)?;
+        let state = snapshot
+            .state
+            .contract
+            .get(&self.address)
+            .ok_or(HostFailure)?;
+        let mut bytes = Vec::new();
+        serialize::tagged_serialize(&*state, &mut bytes).map_err(|_| HostFailure)?;
+        let Some(output) = self.offer.outputs.get(0) else {
+            return Err(HostFailure);
+        };
+        if bytes != self.current_state
+            || indices.get(&self.commitment).as_deref() != Some(&self.index)
+            || self.offer.inputs.len() != 0
+            || self.offer.outputs.len() != 1
+            || !self.offer.transient.is_empty()
+            || self.commitment != self.coin.commitment(&Recipient::User(self.recipient))
+            || output.coin_com != self.commitment
+            || output.contract_address.is_some()
+            || output.ciphertext.is_none()
+        {
+            return Err(HostFailure);
+        }
+        Ok(())
+    }
 }
 
 impl BookedWalletOffer {
@@ -127,6 +207,166 @@ impl DevelopmentFunding<'_> {
         )
         .await
         .map(|(bound, _)| bound)
+    }
+
+    /// Mint one shielded coin directly to a wallet key and bind its exact output.
+    pub async fn bind_minted_shielded_wallet(
+        self,
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Value>,
+        coin: &Info,
+        recipient: PublicKey,
+        recipient_encryption_key: encryption::PublicKey,
+        parameters: &TrustedParameters,
+        cache: &ProofCache,
+        signer: &impl SigningAdapter,
+        rng: StdRng,
+    ) -> Result<BoundTransaction> {
+        self.bind_minted_shielded_wallet_with_binding(
+            target,
+            current,
+            inputs,
+            coin,
+            recipient,
+            recipient_encryption_key,
+            parameters,
+            cache,
+            signer,
+            rng,
+        )
+        .await
+        .map(|(bound, _)| bound)
+    }
+
+    pub(crate) async fn bind_minted_shielded_wallet_with_binding(
+        mut self,
+        target: &ContractOperationTarget,
+        current: &CurrentStateContext,
+        inputs: BTreeMap<String, Value>,
+        coin: &Info,
+        recipient: PublicKey,
+        recipient_encryption_key: encryption::PublicKey,
+        parameters: &TrustedParameters,
+        cache: &ProofCache,
+        signer: &impl SigningAdapter,
+        mut rng: StdRng,
+    ) -> Result<(BoundTransaction, ContractStateBinding)> {
+        check(inputs.len() == 4, Error::State)?;
+        let domain = HashOutput(read_witness_bytes32(&inputs, "domain")?);
+        check(
+            read_witness_bytes32(&inputs, "nonce")? == coin.nonce.0.0
+                && read_witness_bytes32(&inputs, "recipient")? == recipient.0.0
+                && read_witness_uint64(&inputs, "amount")?
+                    == u64::try_from(coin.value).map_err(|_| Error::State)?,
+            Error::State,
+        )?;
+
+        let policy = self.node.policy.clone();
+        check(policy.genesis == DEVELOPMENT_GENESIS, Error::Policy)?;
+        check(
+            coin.value > 0 && coin.value <= u128::from(u64::MAX),
+            Error::State,
+        )?;
+        let address_bytes = hex::decode(
+            target
+                .contract_address()
+                .strip_prefix("0x")
+                .unwrap_or(target.contract_address()),
+        )
+        .map_err(|_| Error::State)?;
+        let address = ContractAddress(HashOutput(
+            address_bytes.try_into().map_err(|_| Error::State)?,
+        ));
+        check(
+            coin.type_ == address.custom_shielded_token_type(domain),
+            Error::State,
+        )?;
+
+        let snapshot = self.node.sync()?;
+        snapshot.validate(&policy).map_err(|_| Error::Network)?;
+        check(policy == self.node.policy, Error::Policy)?;
+        let mut current_rng = rng.split();
+        let output = Output::<_, Db>::new(
+            &mut current_rng,
+            coin,
+            Some(GUARANTEED_SEGMENT),
+            &recipient,
+            Some(recipient_encryption_key),
+        )
+        .map_err(|_| Error::State)?;
+        let commitment = coin.commitment(&Recipient::User(recipient));
+        check(output.coin_com == commitment, Error::State)?;
+        let offer = Offer::new(vec![], vec![output], vec![]).ok_or(Error::State)?;
+        let (_, indices) = snapshot
+            .state
+            .zswap
+            .try_apply(&offer, None)
+            .map_err(|_| Error::State)?;
+        let index = *indices.get(&commitment).ok_or(Error::State)?;
+
+        let prepared = PreparedProof::from_contract_witness_inputs_with_com_indices(
+            target, current, inputs, indices, &mut rng,
+        )
+        .map_err(|_| Error::Proof)?;
+        let proved = prepared
+            .prove(
+                &LocalProver::new(rng.split()),
+                parameters,
+                1_048_576,
+                pending(),
+            )
+            .await
+            .map_err(|_| Error::Proof)?;
+        let binding = proved.contract_binding().ok_or(Error::State)?;
+        let current_state = binding.current_state_bytes().ok_or(Error::State)?.to_vec();
+
+        let mut provider = cache.provider.clone();
+        provider.expected_data = zswap::ZSWAP_EXPECTED_FILES.to_vec();
+        let resolver = ZswapResolver(provider);
+        let randomness = offer.binding_randomness();
+        let (_, offer) = offer
+            .prove(
+                builtin_zkir::LocalProvingProvider {
+                    rng: rng.split(),
+                    resolver: &resolver,
+                    params: &resolver,
+                },
+                GUARANTEED_SEGMENT,
+            )
+            .await
+            .map_err(|_| Error::Proof)?;
+        self.wallet_shielded_mint = Some(BookedWalletMint {
+            offer,
+            randomness,
+            domain,
+            coin: *coin,
+            recipient,
+            address,
+            commitment,
+            index,
+            current_state,
+        });
+        let expected = &self
+            .wallet_shielded_mint
+            .as_ref()
+            .ok_or(Error::State)?
+            .offer;
+        let bound = BoundTransaction::prepare_shielded_receive(
+            proved.native(),
+            expected,
+            policy,
+            self.node,
+            &self,
+            signer,
+        )
+        .await
+        .map_err(|_| Error::State)?;
+        check(
+            bound.expected_state() == binding.expected_state(),
+            Error::State,
+        )?;
+        Ok((bound, binding.clone()))
     }
 
     /// Bind one wallet-owned input into one contract-owned Map coin.
@@ -680,6 +920,332 @@ mod tests {
                     "stateSha256": artifacts::digest(&finalized_contract.bytes),
                     "k": circuit.k(),
                     "rejected": ["missingOffer", "mismatchedOffer"]
+                })
+            );
+            Ok(())
+        })
+    }
+
+    #[test]
+    #[ignore = "requires one generated wallet-mint bundle and an isolated development node"]
+    fn funded_shielded_wallet_mint_localnet() -> Result<()> {
+        futures::executor::block_on(async {
+            let setting = |name| env::var(name).with_context(|| format!("missing {name}"));
+            let bundle = artifacts::verify(
+                Path::new(&setting("NOCTIUM_WALLET_MINT_BUNDLE")?),
+                Some(&setting("NOCTIUM_WALLET_MINT_MANIFEST_SHA256")?),
+            )?;
+            let bundle_manifest_sha256 = bundle
+                .authenticated_manifest_sha256()
+                .unwrap_or_default()
+                .to_owned();
+            let circuit = IrSource::load(bundle.file(Role::Circuit)?)?;
+            let cache = ProofCache::new(
+                setting("NOCTIUM_WALLET_MINT_PARAMETER_CACHE")?.into(),
+                "https://srs.midnight.network/".parse()?,
+            )?;
+            let policy = NetworkPolicy {
+                network_id: "undeployed".into(),
+                genesis: DEVELOPMENT_GENESIS.into(),
+                spec_version: 2_001_100,
+                transaction_version: 4,
+                profile: crate::profile::NAME.into(),
+                max_dust: 10u128.pow(22),
+            };
+            let node = Node::connect(
+                &setting("NOCTIUM_WALLET_MINT_NODE")?,
+                policy.clone(),
+                Duration::from_secs(15),
+                64 * 1024 * 1024,
+                10_000,
+            )?;
+            let mut seed = [0; 32];
+            seed[31] = 1;
+            node.attach_dust_seed(&seed)?;
+            let dust = cache.dust().await?;
+            let dust_parameters = cache.parameters(dust.k()).await?;
+            let parameters = cache.parameters(circuit.k()).await?;
+            let ttl = node.sync()?.block.tblock.to_secs() + 1800;
+            let zero_bytes = json!({"kind": "bytes", "values": vec![0; 32]});
+            let state_config = serde_json::to_vec(&json!({"state": {
+                "minted": {
+                    "nonce": zero_bytes.clone(),
+                    "color": zero_bytes,
+                    "value": "0",
+                    "mtIndex": "0"
+                }
+            }}))?;
+            let target = WitnessContractTarget::from_state_config(
+                ContractBundleSet::new(vec![bundle])?,
+                &state_config,
+                ttl,
+                &mut OsRng,
+            )?;
+            let operation = target.operation("mintToWallet", &parameters, ttl)?;
+            let make_funding = || {
+                DevelopmentFunding::new(
+                    &node,
+                    &dust,
+                    &dust_parameters,
+                    FeePolicy {
+                        max_dust: policy.max_dust,
+                        margin_blocks: 3,
+                        max_spends: 8,
+                    },
+                    StdRng::from_entropy(),
+                )
+            };
+            let approve = |_: &UnsealedTransaction, candidate: &NetworkPolicy| *candidate == policy;
+            let make_signer = || ExplicitSeal::new(approve, StdRng::from_entropy());
+            let (_, deploy) = target
+                .deployment_intent()
+                .prove(
+                    CONTRACT_SEGMENT,
+                    builtin_zkir::LocalProvingProvider {
+                        rng: StdRng::from_entropy(),
+                        resolver: &dust,
+                        params: &dust_parameters,
+                    },
+                    &node.sync()?.state.parameters.cost_model.runtime_cost_model,
+                )
+                .await
+                .map_err(|error| anyhow::anyhow!("{error:?}"))?;
+            let deploy = BoundTransaction::prepare(
+                &deploy,
+                policy.clone(),
+                &node,
+                &make_funding(),
+                &make_signer(),
+            )
+            .await?;
+            let deployed = finalize(&node, &deploy).await?;
+            let current = target
+                .deployment_binding("mintToWallet")?
+                .admit_committed_state(
+                    &deployed.contract_state,
+                    deploy.expected_state(),
+                    &deployed.finalized_hash,
+                    true,
+                )?;
+            let address_bytes = hex::decode(
+                target
+                    .contract_address()
+                    .strip_prefix("0x")
+                    .unwrap_or(target.contract_address()),
+            )?;
+            let address = ContractAddress(HashOutput(
+                address_bytes
+                    .try_into()
+                    .map_err(|_| anyhow::anyhow!("wrong contract address size"))?,
+            ));
+            let mut rng = StdRng::from_entropy();
+            let domain = HashOutput([0x3d; 32]);
+            let coin = Info::new(&mut rng, 5, address.custom_shielded_token_type(domain));
+            let wallet_keys = SecretKeys::from_rng_seed(&mut rng);
+            let recipient = wallet_keys.coin_public_key();
+            let encryption_key = wallet_keys.enc_public_key();
+            let before_call = node.sync()?;
+            let expected_index = before_call.state.zswap.first_free;
+            let mut wallet_state = WalletState::<Db>::new();
+            if expected_index > 0 {
+                let update = MerkleTreeCollapsedUpdate::new(
+                    &before_call.state.zswap.coin_coms,
+                    0,
+                    expected_index - 1,
+                )
+                .context("build initial wallet Merkle sync")?;
+                wallet_state = wallet_state
+                    .apply_collapsed_update(&update)
+                    .context("apply initial wallet Merkle sync")?;
+            }
+            let inputs = || {
+                BTreeMap::from([
+                    (
+                        "domain".into(),
+                        json!({"kind": "bytes", "values": domain.0}),
+                    ),
+                    (
+                        "nonce".into(),
+                        json!({"kind": "bytes", "values": coin.nonce.0.0}),
+                    ),
+                    ("amount".into(), json!(coin.value.to_string())),
+                    (
+                        "recipient".into(),
+                        json!({"kind": "bytes", "values": recipient.0.0}),
+                    ),
+                ])
+            };
+
+            let current_state_before = node
+                .finalized_contract_state(target.contract_address())?
+                .bytes;
+            let changed_recipient = PublicKey(HashOutput([0xa7; 32]));
+            ensure!(
+                make_funding()
+                    .bind_minted_shielded_wallet(
+                        &operation,
+                        &current,
+                        inputs(),
+                        &coin,
+                        changed_recipient,
+                        encryption_key,
+                        &parameters,
+                        &cache,
+                        &make_signer(),
+                        StdRng::from_entropy(),
+                    )
+                    .await
+                    .is_err(),
+                "changed recipient bound a wallet mint"
+            );
+            ensure!(
+                node.finalized_contract_state(target.contract_address())?
+                    .bytes
+                    == current_state_before,
+                "recipient mismatch changed contract state"
+            );
+
+            let (bound, binding) = make_funding()
+                .bind_minted_shielded_wallet_with_binding(
+                    &operation,
+                    &current,
+                    inputs(),
+                    &coin,
+                    recipient,
+                    encryption_key,
+                    &parameters,
+                    &cache,
+                    &make_signer(),
+                    StdRng::from_entropy(),
+                )
+                .await
+                .context("bind shielded wallet mint")?;
+            let receipt = finalize(&node, &bound)
+                .await
+                .context("finalize shielded wallet mint")?;
+            let offer = offer_from_bound(&bound)?;
+            ensure!(
+                offer.inputs.is_empty() && offer.outputs.len() == 1 && offer.transient.is_empty(),
+                "wallet mint offer has unexpected inputs, outputs or transients"
+            );
+            let commitment = coin.commitment(&Recipient::User(recipient));
+            let Some(offer_output) = offer.outputs.get(0) else {
+                anyhow::bail!("minted wallet output is missing")
+            };
+            ensure!(
+                offer_output.coin_com == commitment
+                    && offer_output.contract_address.is_none()
+                    && offer_output.ciphertext.is_some(),
+                "minted offer differs from the proof-bound wallet coin"
+            );
+            let final_snapshot = node.sync()?;
+            let (leaf, owner) = final_snapshot
+                .state
+                .zswap
+                .coin_coms
+                .index(expected_index)
+                .context("finalized user output leaf missing")?;
+            ensure!(
+                leaf == commitment.0 && owner.is_none(),
+                "finalized output commitment or user ownership mismatch"
+            );
+            ensure!(
+                final_snapshot
+                    .state
+                    .zswap
+                    .coin_coms_set
+                    .contains_key(&commitment),
+                "finalized user output commitment is missing"
+            );
+
+            let finalized_contract = node.finalized_contract_state(target.contract_address())?;
+            ensure!(
+                finalized_contract.bytes == receipt.contract_state,
+                "finalized contract state differs from the mint receipt"
+            );
+            let state: ContractState<Db> = native_decode(&finalized_contract.bytes)?;
+            let StateValue::Array(slots) = state.data.get_ref() else {
+                anyhow::bail!("expected root state array")
+            };
+            let Some(StateValue::Cell(stored)) = slots.get(0) else {
+                anyhow::bail!("expected minted coin Cell")
+            };
+            let qualified = AlignedValue::from(coin.qualify(expected_index));
+            ensure!(
+                &**stored == &qualified,
+                "finalized Cell differs from the wallet output index"
+            );
+
+            wallet_state = wallet_state
+                .apply(&wallet_keys, &offer)
+                .context("apply minted user output to wallet state")?;
+            let nullifier = coin.nullifier(&SenderEvidence::User(Cow::Borrowed(
+                &wallet_keys.coin_secret_key,
+            )));
+            let wallet_coin = wallet_state
+                .coins
+                .get(&nullifier)
+                .map(|coin| *coin)
+                .context("minted coin is missing from wallet state")?;
+            ensure!(
+                wallet_coin == coin.qualify(expected_index),
+                "wallet state returned the wrong coin or index"
+            );
+
+            let current_after_mint = binding.admit_committed_state(
+                &receipt.contract_state,
+                bound.expected_state(),
+                &receipt.finalized_hash,
+                false,
+            )?;
+            ensure!(
+                make_funding()
+                    .bind_minted_shielded_wallet(
+                        &operation,
+                        &current_after_mint,
+                        inputs(),
+                        &coin,
+                        recipient,
+                        encryption_key,
+                        &parameters,
+                        &cache,
+                        &make_signer(),
+                        StdRng::from_entropy(),
+                    )
+                    .await
+                    .is_err(),
+                "replayed wallet mint was accepted"
+            );
+            ensure!(
+                node.finalized_contract_state(target.contract_address())?
+                    .bytes
+                    == receipt.contract_state,
+                "replayed wallet mint changed contract state"
+            );
+
+            println!(
+                "{}",
+                json!({
+                    "entrypoint": "mintToWallet",
+                    "deploymentHeight": deployed.height,
+                    "callHeight": receipt.height,
+                    "callTransaction": receipt.transaction_id,
+                    "contractAddress": receipt.contract_address,
+                    "domain": hex::encode(domain.0),
+                    "nonce": hex::encode(coin.nonce.0.0),
+                    "color": hex::encode(coin.type_.0.0),
+                    "value": coin.value.to_string(),
+                    "recipient": hex::encode(recipient.0.0),
+                    "commitment": hex::encode(commitment.0.0),
+                    "mtIndex": expected_index,
+                    "finalizedOutputMatchesWalletCoin": true,
+                    "walletStateMatchesMintedCoin": true,
+                    "cellMatchesFinalizedOutput": true,
+                    "changedRecipientRejectedBeforeSubmit": true,
+                    "replayRejectedBeforeSubmit": true,
+                    "k": circuit.k(),
+                    "bundleManifestSha256": bundle_manifest_sha256,
+                    "rejected": ["changedRecipient", "replay"]
                 })
             );
             Ok(())

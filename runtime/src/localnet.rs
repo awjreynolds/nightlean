@@ -1424,6 +1424,7 @@ pub struct DevelopmentFunding<'a> {
     shielded_receive: Option<shielded_receive::BookedOffer>,
     shielded_relay: Option<shielded_relay::BookedRelay>,
     wallet_shielded_receive: Option<shielded_receive::BookedWalletOffer>,
+    wallet_shielded_mint: Option<shielded_receive::BookedWalletMint>,
     shielded_transfer: Option<shielded_transfer::BookedTransfer>,
     shielded_split: Option<shielded_transfer::BookedTransfer>,
     shielded_merge: Option<shielded_merge::BookedMerge>,
@@ -1445,6 +1446,7 @@ impl<'a> DevelopmentFunding<'a> {
             shielded_receive: None,
             shielded_relay: None,
             wallet_shielded_receive: None,
+            wallet_shielded_mint: None,
             shielded_transfer: None,
             shielded_split: None,
             shielded_merge: None,
@@ -1521,6 +1523,25 @@ impl crate::client::FundingAdapter for DevelopmentFunding<'_> {
                     contract,
                     receive.offer.clone(),
                     receive.randomness,
+                    &policy.network_id,
+                    &snapshot.state.parameters,
+                    self.material,
+                    self.parameters,
+                    snapshot.block.tblock,
+                    self.policy,
+                    rng,
+                )
+                .await
+        } else if let Some(mint) = &self.wallet_shielded_mint {
+            mint.check_booking(snapshot)?;
+            wallet
+                .fund_shielded_wallet_mint(
+                    contract,
+                    mint.offer.clone(),
+                    mint.randomness,
+                    mint.domain,
+                    &mint.coin,
+                    mint.recipient,
                     &policy.network_id,
                     &snapshot.state.parameters,
                     self.material,

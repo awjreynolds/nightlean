@@ -38,10 +38,27 @@ jobs:
           lint: false
           use-mathlib-cache: false
           use-github-cache: false
+      - name: Check the installed Linux Lean toolchain layout
+        if: runner.os == 'Linux'
+        run: |
+          python3 - <<'PY'
+          import json
+          import runpy
+
+          measure = runpy.run_path("scripts/proofs/check-private-claim-artifacts.py")["toolchain_measurement"]()
+          assert "bin/ld.lld" in measure["identity"]["files"]
+          print(json.dumps({
+              "toolchainRoot": measure["root"],
+              "toolCount": len(measure["identity"]["files"]),
+              "toolchainSha256": measure["sha256"],
+          }, sort_keys=True))
+          PY
       - name: Build the POC compiler
         run: lake build noctium Noctium.Compiler Noctium.Foreign Noctium.Claim Noctium.Verification.RangeDedup
       - name: Check the private claim source-proof report
-        run: python3 scripts/proofs/check-private-claim-audit.py --report
+        run: |
+          python3 tests/check-public-audit-assertions.py
+          python3 scripts/proofs/check-private-claim-audit.py --report
       - name: Check source contract examples
         run: |
           lake env lean examples/PrivateClaim.lean
@@ -86,6 +103,8 @@ jobs:
           lake env lean tests/ImpactEffectBoundaries.lean
           lake env lean tests/HostedLedgerWitness.lean
           lake env lean tests/TypedWitnessResultCodec.lean
+          lake env lean tests/MerklePathRootNoLeafHash.lean
+          lake env lean tests/OwnPublicKeyWitness.lean
           lake env lean tests/LedgerWitnessTransform.lean
           lake env lean tests/StructuredLedgerWitness.lean
           lake env lean tests/StructuredTypedCells.lean
@@ -110,7 +129,9 @@ jobs:
           lake env lean tests/HashToCurve.lean
           lake env lean tests/ForeignTransport.lean
           lake env lean tests/ForeignPointLiterals.lean
+          lake env lean tests/SecpProjections.lean
           lake env lean tests/ForeignOperations.lean
+          lake env lean tests/ForeignFieldNegInv.lean
           lake env lean tests/ForeignStorage.lean
           lake env lean tests/ForeignTree.lean
           lake env lean tests/ForeignKeys.lean
@@ -130,19 +151,25 @@ jobs:
           lake env lean tests/CounterCompare.lean
           lake env lean tests/NativeSet.lean
           lake env lean tests/NativeCaller.lean
+          lake env lean tests/NativeKernelContext.lean
           lake env lean tests/NativeCellReset.lean
           lake env lean tests/NativeStandaloneMints.lean
           lake env lean tests/ShieldedReceive.lean
           lake env lean tests/FundedShieldedReceive.lean
+          lake env lean tests/ShieldedWalletMint.lean
           lake env lean tests/ShieldedSpend.lean
           lake env lean tests/ShieldedMapPartialSpend.lean
           lake env lean tests/ShieldedImmediateRelay.lean
           lake env lean tests/IndexedShieldedNonce.lean
+          lake env lean tests/ShieldedBurnAddress.lean
           lake env lean tests/QualifiedCoinCell.lean
+          lake env lean tests/ShieldedCoinInfo.lean
+          lake env lean tests/ShieldedSendResult.lean
           lake env lean tests/QualifiedCoinSet.lean
           lake env lean tests/QualifiedCoinList.lean
           lake env lean tests/QualifiedCoinRecipient.lean
           lake env lean tests/NominalShieldedRecipients.lean
+          lake env lean tests/TypedPublicAddress.lean
           lake env lean tests/NativeTaggedSettlement.lean
           lake env lean tests/NativeUnshieldedSend.lean
           lake env lean tests/ReceiveUnshielded.lean
@@ -213,9 +240,12 @@ jobs:
         run: |
           lake build Noctium.Verification Noctium.Verification.ScalarNormalizationSoundness
           lake env lean tests/Verification.lean
+          lake env lean tests/SourceProofCoverage.lean
       - name: Check readable private state source and disclosure
         run: |
           bash tests/private-authoring-cli.sh
           bash tests/disclosure-cli.sh
       - name: Check module identity and re-export disclosure
         run: bash tests/modules/check.sh
+      - name: Check source target compatibility
+        run: bash tests/source-target-requirement.sh
