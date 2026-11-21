@@ -576,7 +576,8 @@ inductive Effect where
   | counterRead (state destination : String) (keys : List PathKey)
   | counterLessThan (state destination : String) (keys : List PathKey)
       (threshold : Expr (.uint (2 ^ 64 - 1)))
-  | counterAdjust (state : String) (keys : List PathKey) (subtract : Bool) (amount : Nat)
+  | counterAdjust (state : String) (keys : List PathKey) (subtract : Bool)
+      (amount : Expr (.uint (2 ^ 32 - 1)))
   | counterReset (state : String) (keys : List PathKey)
   | insertPath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
   | writePath (state : String) (keys : List PathKey) (valueTy : Ty) (value : Expr valueTy)
@@ -992,12 +993,10 @@ private def resolveListState (decls : List StateDecl) (state : String)
   schema.listPath keys
 
 private def validateCounterEffect (decls : List StateDecl) (state : String)
-    (keys : List PathKey) (amount? : Option Nat := none) : Except String Unit := do
+    (keys : List PathKey) : Except String Unit := do
   let some decl := decls.find? (·.name == state) | throw s!"unknown tree state '{state}'"
   let .tree schema := decl.kind | throw s!"state '{state}' is not a recursive tree"
   schema.counterPath keys
-  if let some amount := amount? then
-    if amount > 2 ^ 32 - 1 then throw "counter adjustment exceeds the native u32 immediate"
 
 def uniqueNames (names : List String) : Bool := names.eraseDups.length == names.length
 
@@ -1321,7 +1320,8 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
       | .counterAdjust state keys _ amount => do
         if !caps.stateMaps then throw "target lacks state maps"
         for key in keys do key.validate caps env
-        validateCounterEffect decls state keys (some amount)
+        validateCounterEffect decls state keys
+        amount.validate caps env
         pure []
       | .counterReset state keys => do
         if !caps.stateMaps then throw "target lacks state maps"

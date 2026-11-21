@@ -1040,6 +1040,16 @@ pub struct PathPart {
     pub alignment: String,
     pub expression: Expr,
 }
+
+/// A native counter immediate is either the historical numeric opcode
+/// argument or a source-checked unsigned expression evaluated by the runtime.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(untagged)]
+pub enum ImmediateAmount {
+    Literal(u32),
+    Expression(Expr),
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "op", rename_all = "lowercase", deny_unknown_fields)]
 pub enum Instruction {
@@ -1186,11 +1196,11 @@ pub enum Instruction {
     },
     #[serde(rename = "addImmediate")]
     AddImmediate {
-        amount: u32,
+        amount: ImmediateAmount,
     },
     #[serde(rename = "subImmediate")]
     SubImmediate {
-        amount: u32,
+        amount: ImmediateAmount,
     },
     #[serde(rename = "claimcontractcall")]
     ClaimContractCall {
@@ -1271,6 +1281,22 @@ pub enum Instruction {
     },
 }
 
+fn evaluate_immediate_amount(amount: &ImmediateAmount, env: &Environment) -> Result<u32> {
+    match amount {
+        ImmediateAmount::Literal(amount) => Ok(*amount),
+        ImmediateAmount::Expression(expression) => {
+            let Value::UInt { number, maximum } = evaluate(expression, env)? else {
+                bail!("counter adjustment amount must be unsigned")
+            };
+            ensure!(
+                maximum <= BigUint::from(u32::MAX),
+                "counter adjustment amount must be bounded by UInt32"
+            );
+            u32::try_from(number).map_err(|_| anyhow!("counter adjustment amount exceeds u32"))
+        }
+    }
+}
+
 fn event_payload_length(tag: u8) -> Result<usize> {
     match tag {
         0 => Ok(32),
@@ -1306,6 +1332,20 @@ fn counter_path_field_count(plan: &Plan, slot: u32, keys: &[PathPart]) -> Result
         "counter comparison path schema mismatch"
     );
     Ok(fields)
+}
+
+fn validate_counter_adjustment_path<'a>(
+    plan: &Plan,
+    previous_index: Option<&'a (u32, Vec<AlignedValue>)>,
+) -> Result<&'a (u32, Vec<AlignedValue>)> {
+    let previous_index = previous_index
+        .ok_or_else(|| anyhow!("counter adjustment requires a complete index path"))?;
+    let (slot, keys) = previous_index;
+    ensure!(
+        tree_schema_at_path(plan, *slot, keys.len())?.get("counter") == Some(&Json::Bool(true)),
+        "counter adjustment path schema mismatch"
+    );
+    Ok(previous_index)
 }
 
 pub(crate) fn ledger_key_type(value: &Json) -> Result<ScalarType> {
@@ -3853,6 +3893,7 @@ fn probe_instruction(
     plan: &Plan,
     env: &Environment,
     deferred_outputs: &BTreeMap<String, Vec<Input>>,
+    previous_index: Option<&(u32, Vec<AlignedValue>)>,
 ) -> Result<Option<Input>> {
     match instruction {
         Instruction::Guarded { .. } => bail!("nested guarded native operation is unsupported"),
@@ -3981,6 +4022,15 @@ fn probe_instruction(
             env,
             deferred_outputs,
         ),
+        Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {
+            match amount {
+                ImmediateAmount::Literal(_) => Ok(None),
+                ImmediateAmount::Expression(expression) => {
+                    validate_counter_adjustment_path(plan, previous_index)?;
+                    probe_expression(expression, plan, env, deferred_outputs)
+                }
+            }
+        }
         // Read expressions bind values produced by the state read itself.
         Instruction::Popeq { .. }
         | Instruction::PopeqFields { .. }
@@ -3988,9 +4038,7 @@ fn probe_instruction(
         | Instruction::Checkpoint
         | Instruction::New
         | Instruction::Member
-        | Instruction::Insert { .. }
-        | Instruction::AddImmediate { .. }
-        | Instruction::SubImmediate { .. } => Ok(None),
+        | Instruction::Insert { .. } => Ok(None),
     }
 }
 
@@ -4493,7 +4541,13 @@ impl PreparationCursor {
         };
         if let Some(operation) = operation {
             if let Some(input) =
-                probe_instruction(operation, &self.plan, &self.env, &self.deferred_outputs)?
+                probe_instruction(
+                    operation,
+                    &self.plan,
+                    &self.env,
+                    &self.deferred_outputs,
+                    self.previous_index.as_ref(),
+                )?
             {
                 return Ok(PreparationStep::PendingInputs(vec![input]));
             }
@@ -6104,14 +6158,9 @@ impl PreparationCursor {
             }
             Instruction::Member => Op::Member,
             Instruction::AddImmediate { amount } | Instruction::SubImmediate { amount } => {
-                let (slot, keys) = previous_index
-                    .as_ref()
-                    .ok_or_else(|| anyhow!("counter adjustment requires a complete index path"))?;
-                ensure!(
-                    tree_schema_at_path(plan, *slot, keys.len())?.get("counter")
-                        == Some(&Json::Bool(true)),
-                    "counter adjustment path schema mismatch"
-                );
+                let (slot, keys) =
+                    validate_counter_adjustment_path(plan, previous_index.as_ref())?;
+                let amount = evaluate_immediate_amount(amount, &env)?;
                 if has_written {
                     advance_native_state_prefix(
                         prefix_context,
@@ -6134,9 +6183,9 @@ impl PreparationCursor {
                     "u64",
                 )?;
                 if matches!(instruction, Instruction::AddImmediate { .. }) {
-                    Op::Addi { immediate: *amount }
+                    Op::Addi { immediate: amount }
                 } else {
-                    Op::Subi { immediate: *amount }
+                    Op::Subi { immediate: amount }
                 }
             }
             Instruction::Insert { n } => {

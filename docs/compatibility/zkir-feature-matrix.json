@@ -5279,7 +5279,7 @@
       "Bytes32 map keys",
       "nested scalar map paths and explicit empty-map construction",
       "checked nonempty Native-field record cells under one or two map keys",
-      "standalone and nested Counter cells with native Bytes8 encoding, reads, u32 immediate increments/decrements and reset",
+      "standalone and nested Counter cells with native Bytes8 encoding, reads, expression-valued or literal increments and decrements, and reset",
       "standalone and nested Lists of checked Native-field records, with prepend, length/head reads, nonempty pop and reset",
       "checked ledger records with Native, Bytes32 and JubjubPoint fields in map cells and List elements",
       "typed scalar getter and post-update results committed as native call output, with source disclosure checks",
@@ -5394,6 +5394,14 @@
       "guide": "../development/native-counter.md",
       "scope": "Strict Counter less-than on the pinned Ledger 9 VM. The source binds the Bool checked by Lt with a Bytes8 UInt64 threshold, including nested paths and ordered reads after writes. Inactive comparisons skip path lookup and threshold evaluation and bind false.",
       "focusedChecks": "Lean semantics and native checking agree after mutation. Native tests cover 0, equality, a comparison across a byte boundary, and a maximum UInt64 threshold. Undisclosed path and threshold inputs reject before emission. Active missing paths and malformed Counter alignment reject in native preparation."
+    },
+    "counterAdjustmentAmounts": {
+      "issue": 178,
+      "source": "../../tests/CounterAmounts.lean",
+      "native": "../../runtime/tests/counter_amounts.rs",
+      "reference": "../../tests/compact/counter-amounts.mjs",
+      "scope": "One native Addi or Subi immediate per source Counter update. Checked UInt16 expressions widen to the native u32 immediate type. Guards suppress inactive path access and amount evaluation. Explicit disclosure covers private amount, path and activity.",
+      "focusedChecks": "Pinned Compact 0.36.1/runtime 0.21.0 and Noctium Ledger 9/ZKIR 3.2.1 checker cases agree on 0, 3, 2 and 65535, out-of-range admission, underflow and an inactive missing path. Noctium also rejects an altered amount against the original relation and tests an inactive partial expression. No new proving keys or deployment."
     },
     "listEvidence": {
       "source": "tests/NativeList.lean",
