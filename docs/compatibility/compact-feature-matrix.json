@@ -516,7 +516,7 @@
       "layer": "language",
       "surface": "Opaque string and Uint8Array",
       "noctiumStatus": "subset",
-      "notes": "OpaqueBytes and OpaqueString store and read typed public values in root Bytes32-keyed Maps. Each binds one FAB Compress field on ZKIR 3.2.1. A development Ledger 9 run finalized one binary store and read with unchanged state. The native string check preserves empty and embedded-NUL UTF-8, rejects trailing NUL, malformed stored UTF-8 and byte-tag substitution, and rejects a changed proof transcript. Sealed constructor strings use a separate path. Finalized string execution, other containers and full host equivalence remain open.",
+      "notes": "OpaqueBytes and OpaqueString store and read typed public values in root Bytes32-keyed Maps. Each binds one FAB Compress field on ZKIR 3.2.1. Separate development Ledger 9 runs finalized a binary and a UTF-8 store and read with unchanged read state. The string run preserves an embedded NUL and binds the exact public read return to the proof transcript. The native string check also covers empty input and rejects trailing NUL, malformed stored UTF-8, byte-tag substitution and a changed transcript. Sealed constructor strings use a separate path. Other containers and full host equivalence remain open.",
       "source": [
         "reference"
       ],
@@ -534,6 +534,7 @@
         "tests/compact/opaque-string-cases.mjs",
         "docs/development/opaque-byte-map.md",
         "tests/opaque-byte-map-localnet-evidence.json",
+        "tests/opaque-string-map-localnet-evidence.json",
         "docs/development/constructors.md"
       ],
       "equivalence": "unverified"
