@@ -1956,7 +1956,7 @@
       "layer": "language-ledger",
       "surface": "Kernel.mintUnshielded",
       "noctiumStatus": "subset",
-      "notes": "Guarded native unshielded mint by Bytes32 domain, with UInt64 amounts and accumulation. Transfer and settlement require separate ledger effects.",
+      "notes": "Guarded native unshielded mint by Bytes32 domain, with UInt64 amounts and accumulation. Recipient mint settlement is covered compositionally by deriving the contract color, recording a tagged spend claim, and adding a self-credit input only when a contract recipient matches the executing contract.",
       "source": [
         "adt"
       ],
@@ -1969,7 +1969,10 @@
         "tests/NativeStandaloneMints.lean",
         "tests/compact/standalone-mints.mjs",
         "runtime/tests/native_standalone_mints.rs",
-        "docs/development/native-standalone-mints-localnet-receipt.json"
+        "docs/development/native-standalone-mints-localnet-receipt.json",
+        "tests/NativeUnshieldedMintRecipient.lean",
+        "tests/compact/UnshieldedMintRecipient.compact",
+        "runtime/tests/native_unshielded_mint_recipient.rs"
       ],
       "equivalence": "unverified"
     },
@@ -5436,8 +5439,8 @@
       "id": "C-STDLIB-MINTUNSHIELDEDTOKEN",
       "layer": "standard-library",
       "surface": "mintUnshieldedToken",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "related-subset",
+      "notes": "No direct mintUnshieldedToken frontend form. Existing Noctium effects reproduce the tested recipient-aware flow through composition: derive the color from the contract address and domain, record the mint and tagged spend, and credit unshielded input only when the contract recipient is self. Other mint shapes and full helper equivalence remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5450,7 +5453,12 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/NativeUnshieldedMintRecipient.lean",
+        "tests/compact/UnshieldedMintRecipient.compact",
+        "tests/compact/unshielded-mint-recipient.mjs",
+        "runtime/tests/native_unshielded_mint_recipient.rs"
+      ],
       "equivalence": "unverified"
     },
     {
