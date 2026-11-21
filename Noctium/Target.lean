@@ -1,5 +1,10 @@
 import Lean
 
+register_option noctium.requiredTarget : String := {
+  defValue := ""
+  descr := "Exact Midnight target profile required by this Noctium source file"
+}
+
 namespace Noctium
 
 /-- The upstream source identity used by the selected native toolchain profile. -/

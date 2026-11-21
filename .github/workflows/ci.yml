@@ -111,7 +111,9 @@ jobs:
           lake env lean tests/HashToCurve.lean
           lake env lean tests/ForeignTransport.lean
           lake env lean tests/ForeignPointLiterals.lean
+          lake env lean tests/SecpProjections.lean
           lake env lean tests/ForeignOperations.lean
+          lake env lean tests/ForeignFieldNegInv.lean
           lake env lean tests/ForeignStorage.lean
           lake env lean tests/ForeignTree.lean
           lake env lean tests/ForeignKeys.lean
@@ -221,3 +223,5 @@ jobs:
           bash tests/disclosure-cli.sh
       - name: Check module identity and re-export disclosure
         run: bash tests/modules/check.sh
+      - name: Check source target compatibility
+        run: bash tests/source-target-requirement.sh
