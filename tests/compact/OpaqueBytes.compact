@@ -1,0 +1,12 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export ledger payloads: Map<Bytes<32>, Opaque<"Uint8Array">>;
+
+export circuit store(key: Bytes<32>, payload: Opaque<"Uint8Array">): [] {
+  payloads.insert(disclose(key), disclose(payload));
+}
+
+export circuit read(key: Bytes<32>): Opaque<"Uint8Array"> {
+  return payloads.lookup(disclose(key));
+}
