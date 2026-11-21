@@ -267,11 +267,13 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashFab(" ident "," ident "," "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "hashToCurveFab(" ident "," ident "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "sha512Fab(" ident "," ident "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "shieldedOutputNonce(" nlexpr ")" : nlexpr
+scoped syntax "shieldedIndexedNonce(" nlexpr "," nlexpr ")" : nlexpr
 declare_syntax_cat nlcallvalue
 scoped syntax nlexpr : nlcallvalue
 scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallvalue
@@ -817,6 +819,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
   | `(nlexpr| shieldedOutputNonce($value)) => hasPartialScalar value
+  | `(nlexpr| shieldedIndexedNonce($index, $nonce)) =>
+    hasPartialScalar index || hasPartialScalar nonce
   | `(nlexpr| sha256($value))
   | `(nlexpr| sha512($value)) | `(nlexpr| keccak256($value)) => hasPartialScalar value
   | `(nlexpr| bytes($_:num, $_:str)) => Bool.false
@@ -831,6 +835,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
     hasPartialScalar domain || hasPartialScalar contractAddress
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*])) =>
+    values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| hashToCurveFab($_:ident, $_:ident, [$values,*])) =>
     values.getElems.toList.any hasPartialScalar
   | `(nlexpr| sha512Fab($_:ident, $_:ident, [$values,*])) =>
     values.getElems.toList.any hasPartialScalar
@@ -1216,6 +1222,10 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| shieldedOutputNonce($value)) => do
     let value ← expected env value (.bytes 32)
     pure (.bytes 32, ← `(Noctium.Wire.shieldedOutputNonce $value))
+  | `(nlexpr| shieldedIndexedNonce($index, $nonce)) => do
+    let index ← expected env index (.uint (2 ^ 128 - 1))
+    let nonce ← expected env nonce (.bytes 32)
+    pure (.bytes 32, ← `(Noctium.Wire.shieldedIndexedNonce $index $nonce))
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -1513,6 +1523,20 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let values ← sourceValues.mapM fun value => expected env value .native
     let valueList ← nativeExprListTerm values
     pure (.jubjubPoint, ← `(Noctium.Expr.hashToCurve $valueList))
+  | `(nlexpr| hashToCurveFab($environment:ident, $type:ident, [$values,*])) => do
+    let environmentName ← liftCoreM <| resolveGlobalConstNoOverload environment
+    let typeName ← liftCoreM <| resolveGlobalConstNoOverload type
+    let environmentTerm : TSyntax `term := ⟨mkIdent environmentName⟩
+    let typeTerm : TSyntax `term := ⟨mkIdent typeName⟩
+    let sourceValues := values.getElems.toList
+    unless !sourceValues.isEmpty && sourceValues.length ≤ 32 do
+      throwErrorAt stx "hashToCurveFab requires 1 to 32 values"
+    let encodedValues ← sourceValues.mapM fun sourceValue => do
+      let (actualType, value) ← expression env sourceValue
+      let actualType ← tyTerm actualType
+      `(Sigma.mk $actualType $value)
+    let valueList ← sigmaExprListTerm encodedValues
+    pure (.jubjubPoint, ← `(Noctium.Expr.hashToCurveFab $environmentTerm $typeTerm $valueList))
   | _ => throwErrorAt stx "unsupported Noctium expression"
 where
   expected (env : Bindings) (stx : TSyntax `nlexpr) (ty : Ty) : CommandElabM (TSyntax `term) := do

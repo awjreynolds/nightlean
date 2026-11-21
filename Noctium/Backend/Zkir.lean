@@ -70,6 +70,7 @@ private def checkConstants : Expr ty → Except String Unit
     checkConstants opening
     checkFabConstants values
   | .hashToCurve values | .persistentHashNativeVector values | .transientHash values => checkNativeConstants values
+  | .hashToCurveFab _ _ values => checkFabConstants values
   | .jubjubScalarFromNative value | .jubjubScalarToNative value
   | .jubjubMulGenerator value | .jubjubNeg value
   | .jubjubCoordinate value _ => checkConstants value
@@ -1042,11 +1043,11 @@ private def lowerFabHashFields : List (String × Types.Layout) → List (Sigma E
       | .enumeration _ (.enumTagField _) _ 0 _ _, ⟨.uint _, expression⟩ =>
         pure [← lowerExpr expression]
       | _, _ => do
-        rejectLowering "mixed FAB persistent hash field type differs from its checked layout"
+        rejectLowering "mixed FAB field type differs from its checked layout"
         pure []
     pure (aligned ++ (← lowerFabHashFields fields rest))
   | _, _ => do
-    rejectLowering "mixed FAB persistent hash field count differs from its checked layout"
+    rejectLowering "mixed FAB field count differs from its checked layout"
     pure []
 termination_by _ values => sizeOf values
 decreasing_by
@@ -1154,6 +1155,26 @@ def lowerExpr : Expr ty → LowerM String
     emit "hash_to_curve" [("inputs", toJson operands), ("output", toJson output)]
     modify fun state => {state with expressions := (key, output) :: state.expressions}
     pure output
+  | .hashToCurveFab environment type values => do
+    match validateFabHashLayout environment type values with
+    | .error message =>
+      rejectLowering message
+      pure "0x00"
+    | .ok compiled => do
+      let fields ← match fabHashLayoutFields compiled with
+        | .ok fields => pure fields
+        | .error message =>
+          rejectLowering message
+          pure []
+      unless fabHashEncodedFieldCount fields ≤ Types.defaultLimits.maxVectorLength do
+        rejectLowering s!"hash_to_curve input count exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
+      let operands ← lowerFabHashFields fields values
+      let key : ExpressionKey := ("hash_to_curve", operands, none)
+      if let some existing := (← get).expressions.lookup key then return existing
+      let output ← fresh
+      emit "hash_to_curve" [("inputs", toJson operands), ("output", toJson output)]
+      modify fun state => {state with expressions := (key, output) :: state.expressions}
+      pure output
   | .transientHash values => do
     let operands ← lowerNativeVectorFields values
     let key : ExpressionKey := ("transient_hash", operands, none)

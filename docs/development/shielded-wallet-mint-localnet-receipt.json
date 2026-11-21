@@ -1,0 +1,32 @@
+{
+  "profile": "midnight-ledger-9-zkir-3.2.1",
+  "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "specVersion": 2001100,
+  "transactionVersion": 4,
+  "entrypoint": "ShieldedWalletMint.mintToWallet",
+  "deploymentHeight": 96,
+  "callHeight": 99,
+  "callBlockHash": "46372160e128d9bd8972a52fc407d9119806e75c4d70eda81a40e854ff8b1808",
+  "callTransaction": "72123c7af940951f75f947acd5f8a5d69c0a928f6f416c590a4189f0f4f1cd5e",
+  "contractAddress": "3e9ca8cf99ebbf15aa6d9854dc8159493cf701fdadbd5efb7ed84b7b98a66676",
+  "outputCommitment": "781980e9a016a7d3632a9d343fae799c6a0c0dd0b3837f923c064003aef66167",
+  "value": "5",
+  "mtIndex": 28,
+  "finalizedOutputMatchesWalletCoin": true,
+  "walletStateMatchesMintedCoin": true,
+  "cellMatchesFinalizedOutput": true,
+  "changedRecipientRejectedBeforeSubmit": true,
+  "replayRejectedBeforeSubmit": true,
+  "bundleManifestSha256": "1bc5af176cbfffef18f2d9a092fa9983643e8d3e58207112424e9eb56e6da122",
+  "reference": "tests/compact/explicit-booked-coin-recipients.mjs",
+  "artifactSha256": {
+    "source": "89a308c3189f2cea6fc3718fe95f444a3182fc5f201fcea95fb9f538c98f9453",
+    "plan": "d4eba9c5f3c2327aa0dbe68a753f109c736af4e03bacf7bf9e0a3544fd4f5097",
+    "circuit": "c046949bc2aa482bf4365dcc6de39737449cb6a1e4516b8e240198f4ce679ca8",
+    "ledgerParameters": "d7d5f27e5dba936f21c14a8a1d5128c65f17fd09b2958c5b3c3593a94cd708"
+  },
+  "circuit": {
+    "k": 14,
+    "rows": 10671
+  }
+}
