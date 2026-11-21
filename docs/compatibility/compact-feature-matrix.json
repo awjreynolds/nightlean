@@ -5594,8 +5594,8 @@
       "id": "C-STDLIB-UNSHIELDEDBALANCE",
       "layer": "standard-library",
       "surface": "unshieldedBalance",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A fixed unshielded tag selects the exact UInt128 balance. The matched fixture covers a missing token with a shielded balance of the same color. The underlying read has a finalized zero-balance Ledger 9 receipt.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5608,15 +5608,20 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/UnshieldedBalanceHelpers.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs",
+        "docs/development/native-token-balance-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDBALANCELT",
       "layer": "standard-library",
       "surface": "unshieldedBalanceLt",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A fixed unshielded tag selects the native strict less-than comparison. Matched cases include equality, guarded inactivity and the active UInt64 operand limit.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5629,15 +5634,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/UnshieldedBalanceHelpers.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDBALANCEGTE",
       "layer": "standard-library",
       "surface": "unshieldedBalanceGte",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean negates the native unshielded less-than result and selects false when the comparison is inactive. Matched cases include equality and the active UInt64 operand limit.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5650,15 +5659,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/UnshieldedBalanceHelpers.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDBALANCEGT",
       "layer": "standard-library",
       "surface": "unshieldedBalanceGt",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A fixed unshielded tag selects the native strict greater-than comparison. Matched cases include equality, guarded inactivity and the active UInt64 operand limit.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5671,15 +5684,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/UnshieldedBalanceHelpers.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDBALANCELTE",
       "layer": "standard-library",
       "surface": "unshieldedBalanceLte",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean negates the native unshielded greater-than result and selects false when the comparison is inactive. Matched cases include equality and the active UInt64 operand limit.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5692,7 +5709,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/UnshieldedBalanceHelpers.lean",
+        "tests/compact/token-balance.mjs",
+        "runtime/tests/native_token_balance.rs"
+      ],
       "equivalence": "unverified"
     },
     {
