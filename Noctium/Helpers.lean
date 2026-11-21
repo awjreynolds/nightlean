@@ -1897,6 +1897,8 @@ private partial def expressionUsesName (name : String) : Expr ty → Bool
   | .persistentCommitFab _ _ opening values | .transientCommitFab _ _ opening values =>
     expressionUsesName name opening ||
       values.any (fun ⟨_, value⟩ => expressionUsesName name value)
+  | .sha512Fab _ _ values =>
+    values.any (fun ⟨_, value⟩ => expressionUsesName name value)
   | .concatBytes left right | .foreignBinary _ left right | .jubjubMul left right
   | .jubjubAdd left right | .add left right | .mul left right | .sub left right
   | .uadd left right | .usub left right | .umul left right | .eq left right

@@ -178,6 +178,18 @@ private def fabBytes32Pairs : List Term → List (Term × Term)
 def fixedByteHashTerm (algorithm : String) (length : Nat) (alignedChunks : List Term) : Term :=
   .unary s!"{algorithm}_bytes:{length}" (.hash alignedChunks)
 
+/-- Canonical symbolic meaning of SHA-512 over a checked FAB field sequence.
+A singleton byte atom has the same binary representation as fixed-byte SHA-512. -/
+def sha512FabTerm (alignment : List String) (values : List Term) : Term := Id.run do
+  match alignment with
+  | [descriptor] =>
+    if descriptor.startsWith "bytes:" then
+      if let some width := (descriptor.drop 6).toNat? then
+        if 0 < width && width ≤ 32 && values.length == (width + 30) / 31 then
+          return fixedByteHashTerm "sha512" width values
+    return .unary ("sha512_fab:" ++ String.intercalate "," alignment) (.hash values)
+  | _ => return .unary ("sha512_fab:" ++ String.intercalate "," alignment) (.hash values)
+
 /-- Homogeneous FAB roots share the existing native meaning for their canonical
 single/vector encodings. Mixed layouts retain their explicit alignment tag. -/
 def persistentHashFabTerm (alignment : List String) (values : List Term) : Term := Id.run do
@@ -261,7 +273,7 @@ private def opaqueBytes32Value : Term → Bool
   | .unary opcode _ => opcode == "persistent_hash32" || opcode == "persistent_hash_native" ||
       opcode == "keccak256_secp256k1_point" ||
       opcode.startsWith "persistent_hash_vector32:" || opcode.startsWith "persistent_hash_native_vector:" ||
-      opcode.startsWith "persistent_hash_fab:" ||
+      opcode.startsWith "persistent_hash_fab:" || opcode.startsWith "sha512_fab:" ||
       opcode.startsWith "to_bytes32_" || opcode.startsWith "from_bytes32_" ||
       opcode == "bytes32_from_chunks" || opcode == "reverse_bytes32"
       || opcode.startsWith "bytes_from_chunks:" || opcode.startsWith "reverse_bytes:"
@@ -590,6 +602,13 @@ def normalize (env : AliasEnvironment) : (value : Expr ty) → Except String Nor
     let normalized ← normalize env value
     let chunks ← bytesChunksTerm length normalized.term
     pure {normalized with term := fixedByteHashTerm "sha512" length chunks.reverse}
+  | .sha512Fab compositeEnv compositeType values => do
+    let compiled ← validateFabHashLayout compositeEnv compositeType values
+    let fields ← fabHashLayoutFields compiled
+    let normalizedValues ← normalizeFabValues env values
+    let payload ← alignedFabPayload fields normalizedValues
+    let {alignment, operands, bounds, assertions} := payload
+    pure (Normalized.mk (sha512FabTerm alignment operands) bounds assertions)
   | .keccak256 (length := length) value => do
     let normalized ← normalize env value
     let chunks ← bytesChunksTerm length normalized.term

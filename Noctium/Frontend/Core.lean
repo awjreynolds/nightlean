@@ -267,6 +267,7 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashFab(" ident "," ident "," "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "sha512Fab(" ident "," ident "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientCommitFab(" ident "," ident "," nlexpr "," "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
@@ -834,6 +835,8 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| persistentHashNative($value)) => hasPartialScalar value
   | `(nlexpr| persistentHashFab($_:ident, $_:ident, [$values,*])) =>
     values.getElems.toList.any hasPartialScalar
+  | `(nlexpr| sha512Fab($_:ident, $_:ident, [$values,*])) =>
+    values.getElems.toList.any hasPartialScalar
   | `(nlexpr| persistentCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
     hasPartialScalar opening || values.getElems.toList.any hasPartialScalar
   | `(nlexpr| transientCommitFab($_:ident, $_:ident, $opening, [$values,*])) =>
@@ -1115,6 +1118,20 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let .bytes _ := valueTy
       | throwErrorAt stx "sha512 requires a Bytes expression"
     pure (.bytes 64, ← `(Noctium.Expr.sha512 $value))
+  | `(nlexpr| sha512Fab($environment:ident, $type:ident, [$values,*])) => do
+    let environmentName ← liftCoreM <| resolveGlobalConstNoOverload environment
+    let typeName ← liftCoreM <| resolveGlobalConstNoOverload type
+    let environmentTerm : TSyntax `term := ⟨mkIdent environmentName⟩
+    let typeTerm : TSyntax `term := ⟨mkIdent typeName⟩
+    let sourceValues := values.getElems.toList
+    unless !sourceValues.isEmpty && sourceValues.length ≤ 32 do
+      throwErrorAt stx "sha512Fab requires 1 to 32 values"
+    let encodedValues ← sourceValues.mapM fun sourceValue => do
+      let (actualType, value) ← expression env sourceValue
+      let actualType ← tyTerm actualType
+      `(Sigma.mk $actualType $value)
+    let valueList ← sigmaExprListTerm encodedValues
+    pure (.bytes 64, ← `(Noctium.Expr.sha512Fab $environmentTerm $typeTerm $valueList))
   | `(nlexpr| keccak256($value)) => do
     let (valueTy, value) ← expression env value
     match valueTy with
