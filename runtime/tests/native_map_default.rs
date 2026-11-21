@@ -113,6 +113,15 @@ fn assert_scalar_map(
     assert_eq!(**stored, field_value(Fr::from(value)));
 }
 
+fn assert_empty_scalar_map(state: &ChargedState<Db>, plan: &Plan) {
+    let StateValue::Map(values) = state_slot(state, plan, "values") else {
+        panic!("expected scalar Map")
+    };
+    assert_eq!(values.size(), 0);
+    assert!(values.get(&field_value(Fr::from(1u64))).is_none());
+    assert!(values.get(&field_value(Fr::from(2u64))).is_none());
+}
+
 fn owner_map(state: &ChargedState<Db>, plan: &Plan, name: &str) -> Sp<StateValue<Db>> {
     let StateValue::Map(owners) = state_slot(state, plan, name) else {
         panic!("expected outer owner Map")
@@ -189,6 +198,7 @@ fn native_map_default_inserts_replaces_and_initializes_typed_values() {
     let directory = artifacts();
     let (seed, seed_circuit) = fixture(&directory, "seed");
     let (default, default_circuit) = fixture(&directory, "defaultValue");
+    let (clear, clear_circuit) = fixture(&directory, "clear");
     let (defaults, defaults_circuit) = fixture(&directory, "defaults");
     let (missing_parent, missing_parent_circuit) = fixture(&directory, "missingParent");
     let initial = empty_state(&seed);
@@ -234,20 +244,30 @@ fn native_map_default_inserts_replaces_and_initializes_typed_values() {
     assert_scalar_map(&replaced.after.state, &default, 2, 2, 0);
     assert_scalar_map(&replaced.after.state, &default, 2, 1, 0);
 
+    let cleared = run(&clear, &clear_circuit, 1, 0, false, &replaced.after.state);
+    assert_eq!(
+        cleared.returns_json(),
+        BTreeMap::from([
+            ("hasEntry".into(), json!(false)),
+            ("entries".into(), json!("0")),
+        ])
+    );
+    assert_empty_scalar_map(&cleared.after.state, &clear);
+
     let missing_parent_skipped = run(
         &missing_parent,
         &missing_parent_circuit,
         3,
         0,
         false,
-        &replaced.after.state,
+        &cleared.after.state,
     );
-    assert_eq!(missing_parent_skipped.after.state, replaced.after.state);
+    assert_eq!(missing_parent_skipped.after.state, cleared.after.state);
     assert!(
         prepare(
             &missing_parent,
             &inputs(&missing_parent, 3, 0, true),
-            &replaced.after.state,
+            &cleared.after.state,
             &ledger::structure::INITIAL_PARAMETERS,
             coin_structure::contract::ContractAddress::default(),
         )
@@ -260,7 +280,7 @@ fn native_map_default_inserts_replaces_and_initializes_typed_values() {
         4,
         0,
         false,
-        &replaced.after.state,
+        &cleared.after.state,
     );
     let owner: AlignedValue = [7u8; 32].into();
     let StateValue::Map(records) = state_slot(&inactive.after.state, &defaults, "records") else {

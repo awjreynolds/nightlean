@@ -2593,7 +2593,7 @@
       "layer": "language-ledger",
       "surface": "Map.resetToDefault",
       "noctiumStatus": "subset",
-      "notes": "Reset lowers to native empty-map replacement for a standalone or nested Map. Nested emptyMap insertion exercises the same effect in the native fixtures. A dedicated reference comparison for clearing a populated Map remains open.",
+      "notes": "Reset lowers to native empty-map replacement for a standalone or nested Map. A matched in-memory Compact 0.36.1 and Noctium case clears a two-entry Map, returns size zero and absent membership, and checks the exact empty native Map after-state. Full equivalence remains unverified.",
       "source": [
         "adt"
       ],
@@ -2606,7 +2606,11 @@
         "Noctium/Frontend/Core.lean",
         "Noctium/Backend/Impact.lean",
         "tests/Issue69NestedCounter.lean",
-        "runtime/tests/nested_counter.rs"
+        "runtime/tests/nested_counter.rs",
+        "tests/NativeMapDefault.lean",
+        "tests/compact/NativeMapDefault.compact",
+        "tests/compact/native-map-default.mjs",
+        "runtime/tests/native_map_default.rs"
       ],
       "equivalence": "unverified"
     },
