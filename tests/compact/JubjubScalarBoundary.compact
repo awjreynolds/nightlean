@@ -1,0 +1,6 @@
+pragma language_version >= 0.28;
+import CompactStandardLibrary;
+
+export pure circuit multiplyField(raw: Field): JubjubPoint {
+  return ecMulGenerator(raw as JubjubScalar);
+}
