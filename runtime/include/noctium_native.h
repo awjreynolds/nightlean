@@ -229,6 +229,86 @@ int32_t noctium_native_witness_target_begin(const uint8_t*,size_t,
 int32_t noctium_native_target_context_free(uint64_t);
 int32_t noctium_native_begin_from_witness(const uint8_t*,size_t,uint64_t,uint64_t,
   const uint8_t*,size_t,const uint8_t*,size_t,uint64_t*);
+
+/* Multi-entry native contract execution. A target authenticates every selected
+   operation bundle and binds their complete operation map to one deployment.
+   It retains an opaque current-state token only after SDK60 verifies finalized
+   receipt state and durable private-state CAS. It accepts no caller-supplied state
+   bytes. Free target and state handles when finished.
+
+   Target descriptor UTF-8 JSON (unknown fields reject):
+     {"abiVersion":1,"profile":"<selected profile NAME>","ttl":2000000000,
+      "journalDirectory":"<absolute host-authorized SDK60 journal directory>",
+      "operations":[{"bundleDirectory":"<explicit directory>",
+        "trustedManifestSha256":"<independent lowercase SHA-256>"}, ...]}
+   Every contract operation must appear exactly once. The aggregate retained
+   payload limit is 16MiB. Private initial state is the existing strict
+   {"state":{...}} JSON. Target result metadata includes contractAddress and the
+   ordered operation names. Supply fresh 32-byte host entropy.
+
+   target_restore takes the same descriptor, state and entropy, plus the exact
+   durable deployment attempt ID. It restores the original address from the
+   host-authorized DirectoryJournal before registering the target. call_recover
+   takes that restored target, a separate interrupted call attempt ID, an SDK60
+   client descriptor and its private hostContext JSON. It recovers through the
+   same journal and revalidates that attempt ID against the context.
+
+   deployment_start chooses one authenticated operation name for the SDK60
+   deployment binding and accepts the existing client descriptor plus private
+   setup JSON. It starts the retained operation-map deployment once.
+
+   contract_state_take returns an opaque state only after finality, receipt
+   verification, journal durability and successful private CAS. Each bound
+   client issues at most one state token. Repeated extraction returns
+   INVALID_STATE. The token is consumed by a successful contract_call_start.
+   Failed validation or proof/client startup leaves the token available to retry.
+
+   contract_call_start descriptor UTF-8 JSON (unknown fields reject):
+     {"abiVersion":1,"operation":"firstUpdate","k":6,"ttl":2000000000,
+      "proofParametersSha256":"<independent SRS SHA-256>"}
+   SRS bytes, private scalar input object, entropy, client descriptor and setup
+   use separate length-bounded channels. This direct route supports scalar
+   entrypoints without a WitnessControl sidecar. Sidecar entrypoints use the
+   typed witness front door. The local proof is verified and bound before the
+   SDK60 client starts. State is borrowed through every failure path and consumed
+   only after successful bound client startup. No receipt, state or proof claim is
+   accepted from the host.
+
+   Each byte channel is bounded, immutable and caller-owned until return. Private
+   maps and local proof responses are cleared by Rust on drop. DirectoryJournal
+   recovery requires feature localnet and otherwise returns INVALID_STATE. */
+int32_t noctium_native_contract_target_begin(
+  const uint8_t *descriptor,size_t descriptor_len,
+  const uint8_t *state_config,size_t state_config_len,
+  const uint8_t *coins,size_t coins_len,
+  uint64_t *out_target,uint64_t *out_metadata);
+int32_t noctium_native_contract_target_restore(
+  const uint8_t *descriptor,size_t descriptor_len,
+  const uint8_t *state_config,size_t state_config_len,
+  const uint8_t *coins,size_t coins_len,
+  const uint8_t *deployment_attempt_id,size_t deployment_attempt_id_len,
+  uint64_t *out_target,uint64_t *out_metadata);
+int32_t noctium_native_contract_target_free(uint64_t target);
+int32_t noctium_client_contract_deployment_start(
+  uint64_t target,const uint8_t *operation,size_t operation_len,
+  const uint8_t *client_descriptor,size_t client_descriptor_len,
+  const uint8_t *setup,size_t setup_len,uint64_t *out_client);
+int32_t noctium_native_contract_state_take(uint64_t client,uint64_t *out_state);
+int32_t noctium_native_contract_state_free(uint64_t state);
+int32_t noctium_client_contract_call_start(
+  uint64_t target,uint64_t state,
+  const uint8_t *call_descriptor,size_t call_descriptor_len,
+  const uint8_t *inputs,size_t inputs_len,
+  const uint8_t *srs,size_t srs_len,
+  const uint8_t *coins,size_t coins_len,
+  const uint8_t *client_descriptor,size_t client_descriptor_len,
+  const uint8_t *setup,size_t setup_len,uint64_t *out_client);
+int32_t noctium_native_contract_call_recover(
+  uint64_t target,
+  const uint8_t *call_attempt_id,size_t call_attempt_id_len,
+  const uint8_t *client_descriptor,size_t client_descriptor_len,
+  const uint8_t *host_context,size_t host_context_len,uint64_t *out_client);
+
 /* Phase B: explicit pull/resume SDK60 client extension. Existing phase-A calls
    above keep their original behavior. Only Rust-owned futures/objects survive
    calls. No foreign callback, stack frame or buffer is retained.

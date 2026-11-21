@@ -17,6 +17,8 @@ use rand::{Rng, SeedableRng, rngs::StdRng};
 use serde::Deserialize;
 use serde_json::{Value as Json, json};
 use serialize::{Deserializable, Serializable, Tagged, tagged_deserialize, tagged_serialize};
+#[cfg(feature = "localnet")]
+use std::time::Duration;
 use std::{
     collections::BTreeMap,
     panic::{AssertUnwindSafe, catch_unwind},
@@ -101,6 +103,30 @@ struct CompositionOwnerBegin {
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContractBundleBegin {
+    bundle_directory: PathBuf,
+    trusted_manifest_sha256: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContractTargetBegin {
+    abi_version: u32,
+    profile: String,
+    ttl: u64,
+    journal_directory: PathBuf,
+    operations: Vec<ContractBundleBegin>,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContractCallBegin {
+    abi_version: u32,
+    operation: String,
+    k: u8,
+    ttl: u64,
+    proof_parameters_sha256: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Reply {
     abi_version: u32,
     request_id: u64,
@@ -150,6 +176,17 @@ struct CompositionOwnerSlot {
     owner: Arc<Mutex<CompositionOwner>>,
     busy: bool,
 }
+struct ContractTargetSlot {
+    target: Arc<crate::proof::WitnessContractTarget>,
+    #[cfg(feature = "localnet")]
+    journal_directory: PathBuf,
+    busy: bool,
+    deployment_started: bool,
+}
+struct ContractStateSlot {
+    current: Option<crate::proof::CurrentStateContext>,
+    busy: bool,
+}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ProofReservation {
     session: u64,
@@ -164,6 +201,9 @@ struct Registry {
     sessions: BTreeMap<u64, Session>,
     targets: BTreeMap<u64, TargetContext>,
     composition_owners: BTreeMap<u64, CompositionOwnerSlot>,
+    contract_targets: BTreeMap<u64, ContractTargetSlot>,
+    contract_states: BTreeMap<u64, ContractStateSlot>,
+    contract_client_targets: BTreeMap<u64, Arc<crate::proof::WitnessContractTarget>>,
     results: BTreeMap<u64, Vec<u8>>,
     private: BTreeMap<u64, Private>,
     active_work: usize,
@@ -178,6 +218,9 @@ impl Default for Registry {
             sessions: BTreeMap::new(),
             targets: BTreeMap::new(),
             composition_owners: BTreeMap::new(),
+            contract_targets: BTreeMap::new(),
+            contract_states: BTreeMap::new(),
+            contract_client_targets: BTreeMap::new(),
             results: BTreeMap::new(),
             private: BTreeMap::new(),
             active_work: 0,
@@ -220,6 +263,8 @@ impl Registry {
             + self.clients.len()
             + self.targets.len()
             + self.composition_owners.len()
+            + self.contract_targets.len()
+            + self.contract_states.len()
     }
 }
 // Work outlives cancellation of its session. Its resource slot ends only when the call returns.
@@ -332,6 +377,208 @@ impl Drop for CompositionOwnerReservation {
             slot.busy = false;
             Ok(())
         });
+    }
+}
+
+struct ContractTargetReservation {
+    token: u64,
+    target: Arc<crate::proof::WitnessContractTarget>,
+    #[cfg(feature = "localnet")]
+    journal_directory: PathBuf,
+    deployment_started: bool,
+}
+impl ContractTargetReservation {
+    fn reserve(token: u64) -> Result<Self, i32> {
+        registry(|r| {
+            let slot = r.contract_targets.get_mut(&token).ok_or(INVALID_HANDLE)?;
+            if slot.busy {
+                return Err(INVALID_STATE);
+            }
+            slot.busy = true;
+            Ok(Self {
+                token,
+                target: Arc::clone(&slot.target),
+                #[cfg(feature = "localnet")]
+                journal_directory: slot.journal_directory.clone(),
+                deployment_started: slot.deployment_started,
+            })
+        })
+    }
+}
+impl Drop for ContractTargetReservation {
+    fn drop(&mut self) {
+        let _ = registry(|r| {
+            let slot = r.contract_targets.get_mut(&self.token).ok_or(INTERNAL)?;
+            slot.busy = false;
+            Ok(())
+        });
+    }
+}
+
+struct ContractStateReservation {
+    token: u64,
+    current: Option<crate::proof::CurrentStateContext>,
+}
+impl ContractStateReservation {
+    fn reserve(token: u64) -> Result<Self, i32> {
+        registry(|r| {
+            let slot = r.contract_states.get_mut(&token).ok_or(INVALID_HANDLE)?;
+            if slot.busy {
+                return Err(INVALID_STATE);
+            }
+            let current = slot.current.take().ok_or(INVALID_STATE)?;
+            slot.busy = true;
+            Ok(Self {
+                token,
+                current: Some(current),
+            })
+        })
+    }
+
+    fn current(&self) -> Result<&crate::proof::CurrentStateContext, i32> {
+        self.current.as_ref().ok_or(INVALID_STATE)
+    }
+
+    fn consume(&mut self) {
+        self.current.take();
+    }
+}
+impl Drop for ContractStateReservation {
+    fn drop(&mut self) {
+        let current = self.current.take();
+        let _ = registry(|r| {
+            if let Some(current) = current {
+                let slot = r.contract_states.get_mut(&self.token).ok_or(INTERNAL)?;
+                slot.current = Some(current);
+                slot.busy = false;
+            } else {
+                r.contract_states.remove(&self.token).ok_or(INTERNAL)?;
+            }
+            Ok(())
+        });
+    }
+}
+
+struct ContractStateRegistration {
+    token: u64,
+    committed: bool,
+}
+impl ContractStateRegistration {
+    fn reserve() -> Result<Self, i32> {
+        registry(|r| {
+            if r.live_contexts() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let token = r.token()?;
+            r.contract_states.insert(
+                token,
+                ContractStateSlot {
+                    current: None,
+                    busy: true,
+                },
+            );
+            Ok(Self {
+                token,
+                committed: false,
+            })
+        })
+    }
+
+    fn commit(mut self, current: crate::proof::CurrentStateContext) -> Result<u64, i32> {
+        registry(|r| {
+            let slot = r.contract_states.get_mut(&self.token).ok_or(INTERNAL)?;
+            if !slot.busy || slot.current.is_some() {
+                return Err(INTERNAL);
+            }
+            slot.current = Some(current);
+            slot.busy = false;
+            Ok(())
+        })?;
+        self.committed = true;
+        Ok(self.token)
+    }
+}
+impl Drop for ContractStateRegistration {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = registry(|r| {
+                r.contract_states.remove(&self.token).ok_or(INTERNAL)?;
+                Ok(())
+            });
+        }
+    }
+}
+
+struct ContractClientRegistration {
+    token: u64,
+    committed: bool,
+}
+impl ContractClientRegistration {
+    fn reserve() -> Result<Self, i32> {
+        registry(|r| {
+            if r.live_contexts() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let token = r.token()?;
+            r.clients.insert(token, None);
+            Ok(Self {
+                token,
+                committed: false,
+            })
+        })
+    }
+
+    fn commit(
+        mut self,
+        driver: crate::native_client::Driver,
+        target_token: u64,
+        target: Arc<crate::proof::WitnessContractTarget>,
+        deployment_start: bool,
+    ) -> Result<u64, i32> {
+        registry(|r| {
+            if !r.clients.contains_key(&self.token) {
+                return Err(INTERNAL);
+            }
+            if deployment_start {
+                let slot = r
+                    .contract_targets
+                    .get(&target_token)
+                    .ok_or(INVALID_HANDLE)?;
+                if !slot.busy || slot.deployment_started {
+                    return Err(INVALID_STATE);
+                }
+            }
+            *r.clients.get_mut(&self.token).ok_or(INTERNAL)? = Some(driver);
+            r.contract_client_targets.insert(self.token, target);
+            if deployment_start {
+                r.contract_targets
+                    .get_mut(&target_token)
+                    .ok_or(INTERNAL)?
+                    .deployment_started = true;
+            }
+            Ok(())
+        })?;
+        self.committed = true;
+        Ok(self.token)
+    }
+}
+impl Drop for ContractClientRegistration {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = registry(|r| {
+                r.clients.remove(&self.token).ok_or(INTERNAL)?;
+                Ok(())
+            });
+        }
+    }
+}
+
+struct NativePrivateInputs(BTreeMap<String, Json>);
+impl Drop for NativePrivateInputs {
+    fn drop(&mut self) {
+        for value in self.0.values_mut() {
+            crate::control::wipe_json(value);
+        }
     }
 }
 
@@ -1925,6 +2172,7 @@ pub extern "C" fn noctium_client_detach(client: u64) -> i32 {
                 return Err(INVALID_STATE);
             }
             r.clients.remove(&client);
+            r.contract_client_targets.remove(&client);
             client_revoke(r, client);
             Ok(())
         })
@@ -2018,4 +2266,508 @@ pub(crate) fn service_private_revoke(owner: u64) {
         r.revoke_private(owner);
         Ok(())
     });
+}
+
+fn validate_contract_target_begin(begin: &ContractTargetBegin) -> Result<(), i32> {
+    if begin.abi_version != 1
+        || begin.profile != crate::profile::NAME
+        || begin.ttl == 0
+        || begin.operations.is_empty()
+        || begin.operations.len() > artifacts::MAX_ENTRIES
+        || begin.journal_directory.as_os_str().len() > 4096
+        || !begin.journal_directory.is_absolute()
+    {
+        return Err(INVALID_ARGUMENT);
+    }
+    Ok(())
+}
+
+fn verify_contract_bundle_set(
+    begin: &ContractTargetBegin,
+) -> Result<artifacts::ContractBundleSet, i32> {
+    let mut total_bytes = 0u64;
+    let mut bundles = Vec::with_capacity(begin.operations.len());
+    for operation in &begin.operations {
+        if operation.bundle_directory.as_os_str().len() > 4096 {
+            return Err(INVALID_ARGUMENT);
+        }
+        let bundle = artifacts::verify_with_limit(
+            &operation.bundle_directory,
+            Some(&operation.trusted_manifest_sha256),
+            MAX_BUNDLE,
+        )
+        .map_err(|error| {
+            if error.code == "limit_exceeded" {
+                LIMIT
+            } else {
+                INVALID_ARGUMENT
+            }
+        })?;
+        if bundle.manifest().profile != begin.profile {
+            return Err(INVALID_ARGUMENT);
+        }
+        total_bytes = bundle
+            .manifest()
+            .entries
+            .iter()
+            .try_fold(total_bytes, |sum, entry| sum.checked_add(entry.size))
+            .filter(|sum| *sum <= MAX_BUNDLE)
+            .ok_or(LIMIT)?;
+        bundles.push(bundle);
+    }
+    artifacts::ContractBundleSet::new(bundles).map_err(|error| {
+        if error.code == "limit_exceeded" {
+            LIMIT
+        } else {
+            INVALID_ARGUMENT
+        }
+    })
+}
+
+fn contract_target_metadata(
+    target: &crate::proof::WitnessContractTarget,
+    contract_name: &str,
+    operations: &[String],
+    ttl: u64,
+) -> Result<Vec<u8>, i32> {
+    encoded(json!({
+        "abiVersion": 1,
+        "status": "contract_target_ready",
+        "profile": crate::profile::NAME,
+        "contractName": contract_name,
+        "contractSetIdentity": target.identity(),
+        "contractAddress": target.contract_address(),
+        "operations": operations,
+        "ttl": ttl
+    }))
+}
+
+fn contract_set_details(bundles: &artifacts::ContractBundleSet) -> (String, Vec<String>) {
+    (
+        bundles.contract_name().to_owned(),
+        bundles
+            .iter()
+            .map(|(operation, _)| operation.to_owned())
+            .collect(),
+    )
+}
+
+/// # Safety
+/// All byte channels must stay readable and immutable until return. `state_config` contains
+/// private initial contract state. `coins` must contain 32 bytes of fresh host entropy.
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_contract_target_begin(
+    descriptor: *const u8,
+    descriptor_len: usize,
+    state_config: *const u8,
+    state_config_len: usize,
+    coins: *const u8,
+    coins_len: usize,
+    out_target: *mut u64,
+    out_metadata: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            output(out_target)?;
+            output(out_metadata)?;
+        }
+        let begin: ContractTargetBegin =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        validate_contract_target_begin(&begin)?;
+        let _work = Work::reserve()?;
+        let bundles = verify_contract_bundle_set(&begin)?;
+        let (contract_name, operations) = contract_set_details(&bundles);
+        let mut rng = unsafe { entropy(coins, coins_len)? };
+        let target = crate::proof::WitnessContractTarget::from_state_config(
+            bundles,
+            unsafe { input(state_config, state_config_len, MAX_BYTES)? },
+            begin.ttl,
+            &mut rng,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let metadata = contract_target_metadata(&target, &contract_name, &operations, begin.ttl)?;
+        let target = Arc::new(target);
+        registry(|r| {
+            if r.live_contexts() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let target_token = r.token()?;
+            let metadata_token = r.result(metadata)?;
+            r.contract_targets.insert(
+                target_token,
+                ContractTargetSlot {
+                    target,
+                    #[cfg(feature = "localnet")]
+                    journal_directory: begin.journal_directory,
+                    busy: false,
+                    deployment_started: false,
+                },
+            );
+            unsafe {
+                out_target.write(target_token);
+                out_metadata.write(metadata_token);
+            }
+            Ok(())
+        })
+    })
+}
+
+/// # Safety
+/// Same buffers as target_begin plus a public SDK60 deployment attempt identity. The explicit
+/// journal directory is host-authorized and contains the durable deployment attempt.
+#[cfg(feature = "localnet")]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_contract_target_restore(
+    descriptor: *const u8,
+    descriptor_len: usize,
+    state_config: *const u8,
+    state_config_len: usize,
+    coins: *const u8,
+    coins_len: usize,
+    deployment_attempt_id: *const u8,
+    deployment_attempt_id_len: usize,
+    out_target: *mut u64,
+    out_metadata: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            output(out_target)?;
+            output(out_metadata)?;
+        }
+        let begin: ContractTargetBegin =
+            serde_json::from_slice(unsafe { input(descriptor, descriptor_len, MAX_DESCRIPTOR)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        validate_contract_target_begin(&begin)?;
+        let attempt_id = std::str::from_utf8(unsafe {
+            input(deployment_attempt_id, deployment_attempt_id_len, 256)?
+        })
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let _work = Work::reserve()?;
+        let bundles = verify_contract_bundle_set(&begin)?;
+        let (contract_name, operations) = contract_set_details(&bundles);
+        let mut rng = unsafe { entropy(coins, coins_len)? };
+        let target = crate::proof::WitnessContractTarget::from_state_config(
+            bundles,
+            unsafe { input(state_config, state_config_len, MAX_BYTES)? },
+            begin.ttl,
+            &mut rng,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let store = crate::localnet::journal::DirectoryJournal::new(
+            &begin.journal_directory,
+            Duration::from_secs(2),
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let target = block_on(
+            target.restore_deployment_from_journal(&store, attempt_id, begin.ttl, &mut rng),
+        )
+        .map_err(|_| INVALID_RESPONSE)?;
+        let metadata = contract_target_metadata(&target, &contract_name, &operations, begin.ttl)?;
+        let target = Arc::new(target);
+        registry(|r| {
+            if r.live_contexts() >= MAX_SESSIONS {
+                return Err(LIMIT);
+            }
+            let target_token = r.token()?;
+            let metadata_token = r.result(metadata)?;
+            r.contract_targets.insert(
+                target_token,
+                ContractTargetSlot {
+                    target,
+                    journal_directory: begin.journal_directory,
+                    busy: false,
+                    deployment_started: true,
+                },
+            );
+            unsafe {
+                out_target.write(target_token);
+                out_metadata.write(metadata_token);
+            }
+            Ok(())
+        })
+    })
+}
+
+#[cfg(not(feature = "localnet"))]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_contract_target_restore(
+    _descriptor: *const u8,
+    _descriptor_len: usize,
+    _state_config: *const u8,
+    _state_config_len: usize,
+    _coins: *const u8,
+    _coins_len: usize,
+    _deployment_attempt_id: *const u8,
+    _deployment_attempt_id_len: usize,
+    out_target: *mut u64,
+    out_metadata: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe {
+            output(out_target)?;
+            output(out_metadata)?;
+        }
+        Err(INVALID_STATE)
+    })
+}
+
+/// # Safety
+/// `operation`, client descriptor and private setup buffers must remain valid until return.
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_client_contract_deployment_start(
+    target: u64,
+    operation: *const u8,
+    operation_len: usize,
+    client_descriptor: *const u8,
+    client_descriptor_len: usize,
+    setup: *const u8,
+    setup_len: usize,
+    out_client: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_client)? };
+        let operation = std::str::from_utf8(unsafe { input(operation, operation_len, 256)? })
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let descriptor =
+            unsafe { input(client_descriptor, client_descriptor_len, MAX_DESCRIPTOR)? };
+        let setup = unsafe { input(setup, setup_len, MAX_BYTES)? };
+        let _work = Work::reserve()?;
+        let target_reservation = ContractTargetReservation::reserve(target)?;
+        if target_reservation.deployment_started {
+            return Err(INVALID_STATE);
+        }
+        let registration = ContractClientRegistration::reserve()?;
+        let client = target_reservation
+            .target
+            .start_deployment_client(operation, descriptor, setup)
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let client_token = registration.commit(
+            client.into_driver(),
+            target,
+            Arc::clone(&target_reservation.target),
+            true,
+        )?;
+        unsafe { out_client.write(client_token) };
+        Ok(())
+    })
+}
+
+/// # Safety
+/// Output points to a writable u64. The SDK issues one state token only after finalized receipt
+/// verification and durable compare-and-set completion.
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_contract_state_take(
+    client: u64,
+    out_state: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_state)? };
+        let _work = Work::reserve()?;
+        registry(|r| {
+            if !r.clients.contains_key(&client) {
+                return Err(INVALID_HANDLE);
+            }
+            if !r.contract_client_targets.contains_key(&client) {
+                return Err(INVALID_STATE);
+            }
+            Ok(())
+        })?;
+        let registration = ContractStateRegistration::reserve()?;
+        let mut lease = ClientLease::take(client)?;
+        let current = lease
+            .driver()?
+            .current_state_context()
+            .map_err(|_| INVALID_STATE)?;
+        drop(lease);
+        let state_token = registration.commit(current)?;
+        unsafe { out_state.write(state_token) };
+        Ok(())
+    })
+}
+
+/// # Safety
+/// All byte channels must remain readable and immutable until return. Private scalar inputs are
+/// parsed only after the authenticated target and operation have been selected.
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_client_contract_call_start(
+    target: u64,
+    state: u64,
+    call_descriptor: *const u8,
+    call_descriptor_len: usize,
+    inputs: *const u8,
+    inputs_len: usize,
+    srs: *const u8,
+    srs_len: usize,
+    coins: *const u8,
+    coins_len: usize,
+    client_descriptor: *const u8,
+    client_descriptor_len: usize,
+    setup: *const u8,
+    setup_len: usize,
+    out_client: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_client)? };
+        let begin: ContractCallBegin = serde_json::from_slice(unsafe {
+            input(call_descriptor, call_descriptor_len, MAX_DESCRIPTOR)?
+        })
+        .map_err(|_| INVALID_ARGUMENT)?;
+        if begin.abi_version != 1 || begin.operation.is_empty() || begin.ttl == 0 {
+            return Err(INVALID_ARGUMENT);
+        }
+        let srs = unsafe { input(srs, srs_len, MAX_PARAMETERS)? };
+        let descriptor =
+            unsafe { input(client_descriptor, client_descriptor_len, MAX_DESCRIPTOR)? };
+        let setup = unsafe { input(setup, setup_len, MAX_BYTES)? };
+        let _work = Work::reserve()?;
+        let target_reservation = ContractTargetReservation::reserve(target)?;
+        if !target_reservation.deployment_started {
+            return Err(INVALID_STATE);
+        }
+        let parameters =
+            TrustedParameters::from_bytes(srs, begin.k, &begin.proof_parameters_sha256)
+                .map_err(|_| INVALID_ARGUMENT)?;
+        let operation = target_reservation
+            .target
+            .operation(&begin.operation, &parameters, begin.ttl)
+            .map_err(|_| INVALID_ARGUMENT)?;
+        if operation
+            .bundle()
+            .map_err(|_| INVALID_ARGUMENT)?
+            .manifest()
+            .entries
+            .iter()
+            .any(|entry| entry.role == artifacts::Role::WitnessControl)
+        {
+            return Err(INVALID_ARGUMENT);
+        }
+        let mut inputs = NativePrivateInputs(
+            serde_json::from_slice(unsafe { input(inputs, inputs_len, MAX_BYTES)? })
+                .map_err(|_| INVALID_ARGUMENT)?,
+        );
+        let mut current = ContractStateReservation::reserve(state)?;
+        let registration = ContractClientRegistration::reserve()?;
+        let mut rng = unsafe { entropy(coins, coins_len)? };
+        let prepared = PreparedProof::from_contract_witness_inputs(
+            &operation,
+            current.current()?,
+            std::mem::take(&mut inputs.0),
+            &mut rng,
+        )
+        .map_err(|_| INVALID_ARGUMENT)?;
+        let response = Zeroizing::new(
+            block_on(prepared.local_response(&parameters, MAX_BYTES, &mut rng))
+                .map_err(|_| INVALID_RESPONSE)?,
+        );
+        let proved = block_on(prepared.attach_response(&parameters, &response, MAX_BYTES))
+            .map_err(|_| INVALID_RESPONSE)?;
+        let mut proved = Some(proved);
+        let client = target_reservation
+            .target
+            .start_call_client(&operation, &mut proved, descriptor, setup)
+            .map_err(|_| INVALID_ARGUMENT)?;
+        let client_token = registration.commit(
+            client.into_driver(),
+            target,
+            Arc::clone(&target_reservation.target),
+            false,
+        )?;
+        current.consume();
+        unsafe { out_client.write(client_token) };
+        Ok(())
+    })
+}
+
+/// # Safety
+/// The explicit host journal context and SDK60 descriptor must remain readable until return.
+#[cfg(feature = "localnet")]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_contract_call_recover(
+    target: u64,
+    call_attempt_id: *const u8,
+    call_attempt_id_len: usize,
+    client_descriptor: *const u8,
+    client_descriptor_len: usize,
+    host_context: *const u8,
+    host_context_len: usize,
+    out_client: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_client)? };
+        let attempt_id =
+            std::str::from_utf8(unsafe { input(call_attempt_id, call_attempt_id_len, 256)? })
+                .map_err(|_| INVALID_ARGUMENT)?;
+        let descriptor =
+            unsafe { input(client_descriptor, client_descriptor_len, MAX_DESCRIPTOR)? };
+        let context = unsafe { input(host_context, host_context_len, MAX_RECOVERY_CONTEXT)? };
+        let _work = Work::reserve()?;
+        let target_reservation = ContractTargetReservation::reserve(target)?;
+        let registration = ContractClientRegistration::reserve()?;
+        let client = {
+            let store = crate::localnet::journal::DirectoryJournal::new(
+                &target_reservation.journal_directory,
+                Duration::from_secs(2),
+            )
+            .map_err(|_| INVALID_ARGUMENT)?;
+            block_on(
+                target_reservation
+                    .target
+                    .recover_client(&store, attempt_id, descriptor, context),
+            )
+            .map_err(|_| INVALID_RESPONSE)?
+        };
+        let client_token = registration.commit(
+            client.into_driver(),
+            target,
+            Arc::clone(&target_reservation.target),
+            false,
+        )?;
+        unsafe { out_client.write(client_token) };
+        Ok(())
+    })
+}
+
+#[cfg(not(feature = "localnet"))]
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub unsafe extern "C" fn noctium_native_contract_call_recover(
+    _target: u64,
+    _call_attempt_id: *const u8,
+    _call_attempt_id_len: usize,
+    _client_descriptor: *const u8,
+    _client_descriptor_len: usize,
+    _host_context: *const u8,
+    _host_context_len: usize,
+    out_client: *mut u64,
+) -> i32 {
+    guard(|| {
+        unsafe { output(out_client)? };
+        Err(INVALID_STATE)
+    })
+}
+
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub extern "C" fn noctium_native_contract_target_free(target: u64) -> i32 {
+    guard(|| {
+        registry(|r| {
+            if r.contract_targets.get(&target).ok_or(INVALID_HANDLE)?.busy {
+                return Err(INVALID_STATE);
+            }
+            r.contract_targets.remove(&target).ok_or(INVALID_HANDLE)?;
+            Ok(())
+        })
+    })
+}
+
+#[cfg_attr(not(target_family = "wasm"), unsafe(no_mangle))]
+pub extern "C" fn noctium_native_contract_state_free(state: u64) -> i32 {
+    guard(|| {
+        registry(|r| {
+            if r.contract_states.get(&state).ok_or(INVALID_HANDLE)?.busy {
+                return Err(INVALID_STATE);
+            }
+            r.contract_states.remove(&state).ok_or(INVALID_HANDLE)?;
+            Ok(())
+        })
+    })
 }

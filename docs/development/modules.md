@@ -114,6 +114,12 @@ same circuit and verifier key. The SDK rejected a proof bound to the wrong
 alias and rejected the stale read before proving.
 [Finalized receipts and artifact hashes](module-ledger-localnet-receipts.json)
 
+The linked C++ client executed the same sequence on Ledger 9 with identical
+ZKIR, Impact plans and verifier keys. It recovered the original signed
+`firstUpdate` after a process restart. All five finalized state digests
+matched the Rust run.
+[C++ receipts and artifact hashes](module-ledger-cpp-localnet-receipts.json)
+
 The compiler re-expands each module contract from its registered source
 constants during inspection. It then re-runs generic specialization,
 component disclosure, witness compilation, and contract validation. Cached
