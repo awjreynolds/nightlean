@@ -5,6 +5,10 @@ namespace Noctium
 
 def maxBytesLength : Nat := Types.defaultLimits.maxVectorLength
 
+/-- Variable UTF-8 strings use the native Compress codec's byte limit, not the
+fixed-vector limit used by `Bytes`. Keep this aligned with the host scalar codec. -/
+def maxOpaqueStringBytes : Nat := 1_048_576
+
 def balanceMaximum : Nat := 2 ^ 128 - 1
 
 inductive Visibility where
@@ -34,6 +38,8 @@ inductive Expr : Ty → Type where
   /-- The one Native projection used for FAB `Compress` alignment. The raw byte
   sequence stays in the host plan and is never reconstructed from this field. -/
   | opaqueBytesProjection (value : Expr .opaqueBytes) : Expr .native
+  /-- The one Native projection used for FAB `Compress` alignment of UTF-8 text. -/
+  | opaqueStringProjection (value : Expr .opaqueString) : Expr .native
   /-- A fixed-length, right-zero-padded source byte string. -/
   | bytesLiteral (length : Nat) (values : List Nat) : Expr (.bytes length)
   /-- Reverse a fixed-length source byte string without changing its type. -/
@@ -150,6 +156,7 @@ def Input.nativeIdentifiers (input : Input) : List String :=
   | .jubjubPoint => [s!"%input_{input.name}_x", s!"%input_{input.name}_y"]
   | .foreign _ => ["%input_" ++ input.name]
   | .opaqueBytes => ["%input_" ++ input.name]
+  | .opaqueString => ["%input_" ++ input.name]
   | _ => ["%input_" ++ input.name]
 
 /-- Committed byte arguments use FAB high-to-low chunks, as returns do. -/
@@ -192,6 +199,7 @@ def Expr.nativeCallFields : Expr ty → List (Expr .native) :=
   | .foreign kind => fun value =>
     (List.range kind.encodedFieldCount).map fun index => .foreignEncodedField value index
   | .opaqueBytes => fun value => [.opaqueBytesProjection value]
+  | .opaqueString => fun value => [.opaqueStringProjection value]
 
 def Output.nativeReturnFields (output : Output) : Except String (List (Expr .native)) :=
   pure (output.value.nativeCallFields)
@@ -760,7 +768,7 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
   | .bytes length =>
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
-  | .opaqueBytes => pure ()
+  | .opaqueBytes | .opaqueString => pure ()
   | .jubjubScalar | .jubjubPoint =>
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
   | .foreign _ =>
@@ -792,6 +800,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
       if length == 32 then throw "Bytes32 byte index is out of range"
       else throw "byte index is out of range"
   | .opaqueBytesProjection value => value.validate caps env
+  | .opaqueStringProjection value => value.validate caps env
   | .bytesLiteral length values => do
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
@@ -963,7 +972,8 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     | _ => throw "inverse supports only Native and JubjubScalar"
     value.validate caps env
   | .cast target (source := source) value => do
-    if target.isBytes || source.isBytes || target.isOpaqueBytes || source.isOpaqueBytes then
+    if target.isBytes || source.isBytes || target.isOpaqueBytes || source.isOpaqueBytes ||
+        target.isOpaqueString || source.isOpaqueString then
       throw "byte strings do not support scalar casts"
     if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
       throw "curve values do not support scalar casts"
@@ -977,13 +987,13 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     body.validate caps env
   | .copyValue value | .disclose _ value => value.validate caps env
   | .eq (ty := operandTy) a b => do
-    if operandTy.isBytes || operandTy.isOpaqueBytes then
+    if operandTy.isBytes || operandTy.isOpaqueBytes || operandTy.isOpaqueString then
       throw "byte string equality is not supported by this source surface"
     if !caps.equality then throw "target lacks equality"
     a.validate caps env
     b.validate caps env
   | .select c a b => do
-    if ty.isJubjub || ty.isOpaqueBytes || (ty.isBytes && !caps.bytes32Conversions) then
+    if ty.isJubjub || ty.isOpaqueBytes || ty.isOpaqueString || (ty.isBytes && !caps.bytes32Conversions) then
       throw "byte string and Jubjub selection is not supported by this source surface"
     if ty.isForeign && !caps.foreignValues then
       throw "target lacks typed foreign-curve value support"
@@ -1141,6 +1151,8 @@ def Circuit.validate (caps : Capabilities) (c : Circuit) : Except Diagnostic Uni
     match input.ty.validate caps with
     | .error message => throw {span := input.span, message}
     | .ok _ => pure ()
+    if input.ty == .opaqueString && input.visibility != .public then
+      throw {span := input.span, message := "OpaqueString inputs currently require public visibility"}
   if !uniqueNames (c.inputs.flatMap Input.nativeIdentifiers) then
     throw {span := c.span, message := "input names collide after native byte expansion"}
   let projections := c.inputs.flatMap Input.publicProjectionIdentifiers

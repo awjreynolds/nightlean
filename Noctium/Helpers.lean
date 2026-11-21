@@ -1847,6 +1847,7 @@ private def nativeOfScalar (span : SourceSpan) (value : Scalar) : Except Diagnos
   | ⟨.uint _, value⟩ => pure (.cast .native value)
   | ⟨.bytes _, _⟩ => fail span "byte strings require separate native byte leaves"
   | ⟨.opaqueBytes, _⟩ => fail span "OpaqueBytes require a Compress projection"
+  | ⟨.opaqueString, _⟩ => fail span "OpaqueString requires a Compress projection"
   | ⟨.jubjubScalar, _⟩ | ⟨.jubjubPoint, _⟩ =>
     fail span "Jubjub values require a qualified curve operation"
   | ⟨.foreign _, _⟩ => fail span "foreign values require a qualified curve operation"

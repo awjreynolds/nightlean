@@ -189,6 +189,7 @@ scoped syntax "UIntRange" num : nltype
 scoped syntax "Bytes32" : nltype
 scoped syntax "Bytes" num : nltype
 scoped syntax "OpaqueBytes" : nltype
+scoped syntax "OpaqueString" : nltype
 scoped syntax "JubjubScalar" : nltype
 scoped syntax "JubjubPoint" : nltype
 scoped syntax "Secp256k1Base" : nltype
@@ -501,6 +502,7 @@ private def readTy (stx : TSyntax `nltype) : CommandElabM Ty :=
       throwErrorAt length s!"byte string length exceeds the maximum of {Noctium.maxBytesLength}"
     pure (.bytes length.getNat)
   | `(nltype| OpaqueBytes) => pure .opaqueBytes
+  | `(nltype| OpaqueString) => pure .opaqueString
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
   | `(nltype| Secp256k1Base) => pure (.foreign (.base .secp256k1))
@@ -520,6 +522,7 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .uint maximum => `(Noctium.Ty.uint $(⟨Syntax.mkNumLit (toString maximum)⟩))
   | .bytes len => `(Noctium.Ty.bytes $(⟨Syntax.mkNumLit (toString len)⟩))
   | .opaqueBytes => `(Noctium.Ty.opaqueBytes)
+  | .opaqueString => `(Noctium.Ty.opaqueString)
   | .jubjubScalar => `(Noctium.Ty.jubjubScalar)
   | .jubjubPoint => `(Noctium.Ty.jubjubPoint)
   | .foreign (.base .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1))
@@ -855,6 +858,8 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let (source, value) ← expression env value
     if target.isOpaqueBytes || source.isOpaqueBytes then
       throwErrorAt stx "OpaqueBytes do not support scalar casts"
+    if target.isOpaqueString || source.isOpaqueString then
+      throwErrorAt stx "OpaqueString does not support scalar casts"
     if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
       throwErrorAt stx "curve values require explicit typed conversions"
     pure (target, ← `(Noctium.Expr.cast $(← tyTerm target) $value))
@@ -866,6 +871,7 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     | .uint maximum => pure (target, ← `(Noctium.Expr.uint $(natTerm maximum) 0))
     | .bytes _ => throwErrorAt stx "byte strings have no scalar default expression"
     | .opaqueBytes => throwErrorAt stx "OpaqueBytes have no generic default expression"
+    | .opaqueString => throwErrorAt stx "OpaqueString has no generic default expression"
     | .jubjubScalar | .jubjubPoint => throwErrorAt stx "Jubjub values have no generic default expression"
     | .foreign _ => throwErrorAt stx "foreign values have no generic default expression"
   | `(nlexpr| disclose($value)) =>
@@ -2802,13 +2808,15 @@ private def elaborateEffect (schema : List (String × StateKind))
       | some (.tree _) => do
         let treeSchema ← treeStateSchema schema storage
         let (path, selected) ← lowerTreePath state.env treeSchema [key]
-        unless selected == .scalar .opaqueBytes do
-          throwErrorAt storage "single-key tree insertion currently supports only OpaqueBytes leaves"
-        let loweredValue ← checkedExpression state.env value .opaqueBytes
+        let valueTy ← match selected with
+          | .scalar .opaqueBytes => pure .opaqueBytes
+          | .scalar .opaqueString => pure .opaqueString
+          | _ => throwErrorAt storage "single-key tree insertion supports only OpaqueBytes or OpaqueString leaves"
+        let loweredValue ← checkedExpression state.env value valueTy
         let keys ← pathKeysTerm path
         `(Noctium.Effect.insertPath $(stringTerm storage.getId.toString) $keys
-          Noctium.Ty.opaqueBytes $loweredValue)
-      | _ => throwErrorAt storage "insert requires a declared state map or OpaqueBytes tree"
+          $(← tyTerm valueTy) $loweredValue)
+      | _ => throwErrorAt storage "insert requires a declared state map or opaque-value tree"
     state := {state with terms := state.terms.push term}
   | `(nleffect| insert $storage:ident [$owner:nlexpr] := emptyMap) => do
     let schema ← treeStateSchema schema storage
@@ -3289,8 +3297,8 @@ private def elaborateMerkleState (keys : List (TSyntax `nltype)) (depth : Nat)
         | `(nlstate| tree $id:ident : $key:nltype => $value:nltype) => do
           let keyTy ← readTy key
           let valueTy ← readTy value
-          unless keyTy == .bytes 32 && valueTy == .opaqueBytes do
-            throwErrorAt state "single-key scalar trees currently support only Bytes32 => OpaqueBytes"
+          unless keyTy == .bytes 32 && (valueTy == .opaqueBytes || valueTy == .opaqueString) do
+            throwErrorAt state "single-key scalar trees currently support only Bytes32 => OpaqueBytes or OpaqueString"
           let valueSchema := LedgerValueType.map keyTy (.scalar valueTy)
           let valueTerm ← `(Noctium.LedgerValueType.map $(← tyTerm keyTy)
             (Noctium.LedgerValueType.scalar $(← tyTerm valueTy)))
