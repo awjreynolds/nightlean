@@ -1818,7 +1818,7 @@
       "layer": "language-ledger",
       "surface": "Kernel.claimZswapCoinReceive",
       "noctiumStatus": "related-subset",
-      "notes": "The native mint-and-receive fixture claims one guaranteed contract-owned output. The partial spend also claims and retains one change output. Both finalize on Ledger 9.1.0.1. A standalone public source primitive and other offer shapes remain open.",
+      "notes": "Finalized native mint-funded receive, wallet-funded receive and partial-spend change each claim one guaranteed contract-owned output. Other offer shapes and a standalone public claim primitive remain open.",
       "source": [
         "adt"
       ],
@@ -1828,6 +1828,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/wallet-shielded-receive-localnet-receipt.json",
         "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-receive-localnet-receipt.json"
       ],
@@ -2436,7 +2437,7 @@
       "layer": "language-ledger",
       "surface": "Map.insertCoin",
       "noctiumStatus": "related-subset",
-      "notes": "Native same-call mint-and-receive and partial-spend change finalize on Ledger 9.1.0.1 and store the Ledger-assigned index in a root Bytes32-keyed Map. General Map.insertCoin remains open.",
+      "notes": "Mint-funded receive, wallet-funded receive and partial-spend change finalize on Ledger 9.1.0.1 and store the assigned index in a root Bytes32-keyed Map. General Map.insertCoin remains open.",
       "source": [
         "adt"
       ],
@@ -2446,6 +2447,7 @@
         "LEDGER"
       ],
       "observedEvidence": [
+        "docs/development/wallet-shielded-receive-localnet-receipt.json",
         "docs/development/shielded-partial-spend-localnet-receipt.json",
         "docs/development/shielded-receive-localnet-receipt.json",
         "tests/ShieldedReceive.lean",
@@ -3799,8 +3801,8 @@
       "id": "C-STDLIB-SHIELDEDSPEND",
       "layer": "language-ledger",
       "surface": "ShieldedSpend",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3813,15 +3815,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SHIELDEDRECEIVE",
       "layer": "language-ledger",
       "surface": "ShieldedReceive",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3834,15 +3840,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SHIELDEDMINT",
       "layer": "language-ledger",
       "surface": "ShieldedMint",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3855,15 +3865,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-SHIELDEDBURN",
       "layer": "language-ledger",
       "surface": "ShieldedBurn",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3876,15 +3890,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDSPEND",
       "layer": "language-ledger",
       "surface": "UnshieldedSpend",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3897,15 +3915,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDRECEIVE",
       "layer": "language-ledger",
       "surface": "UnshieldedReceive",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3918,15 +3940,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDMINT",
       "layer": "language-ledger",
       "surface": "UnshieldedMint",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3939,15 +3965,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNSHIELDEDBURN",
       "layer": "language-ledger",
       "surface": "UnshieldedBurn",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3960,15 +3990,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-PAUSED",
       "layer": "language-ledger",
       "surface": "Paused",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -3981,15 +4015,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-UNPAUSED",
       "layer": "language-ledger",
       "surface": "Unpaused",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -4002,15 +4040,19 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-MISC",
       "layer": "language-ledger",
       "surface": "Misc",
-      "noctiumStatus": "missing",
-      "notes": "Standard event schema. Shape, tag and exact byte encoding require independent cases.",
+      "noctiumStatus": "related-subset",
+      "notes": "The published catalog fixture includes this event. The native checker matches its version, tag, width and payload digest to pinned Compact values, and a catalog call finalized on Ledger 9.1.0.1. Full semantic equivalence remains unverified.",
       "source": [
         "stdlib",
         "events",
@@ -4023,7 +4065,11 @@
         "ZK",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "examples/StandardEvents.lean",
+        "runtime/tests/standard_events.rs",
+        "docs/development/standard-events.md"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5196,7 +5242,7 @@
       "layer": "standard-library",
       "surface": "receiveShielded",
       "noctiumStatus": "related-subset",
-      "notes": "The unguarded own-contract mint-and-receive fixture finalizes on localnet, with missing and mismatched offers rejected before submission. Wallet-funded receives and other settlement shapes remain open.",
+      "notes": "The unguarded native receive finalizes on Ledger 9.1.0.1 for a same-call mint or one equal-value wallet-owned input. The wallet test rejects unequal value and replay. Additional settlement shapes remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5210,6 +5256,7 @@
         "ABI"
       ],
       "observedEvidence": [
+        "docs/development/wallet-shielded-receive-localnet-receipt.json",
         "docs/development/shielded-receive-localnet-receipt.json",
         "tests/ShieldedReceive.lean",
         "runtime/tests/shielded_receive.rs",

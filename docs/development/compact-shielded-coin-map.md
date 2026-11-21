@@ -31,7 +31,7 @@ NOCTIUM_SHIELDED_RECEIVE_DIR="$PWD/build/shielded-receive" \
 
 The Lean fixture mints five units and receives one contract-owned output in the same guaranteed section. The Rust host books its index against the finalized Zswap state, proves the contract call and output, and funds fees from the development DUST wallet. Before funding, the host rechecks the booking and the initial contract state against the latest finalized snapshot.
 
-Ledger 9.1.0.1 finalized the call at block 140. The stored coin matched the nonce, color, value and Ledger index 29. The native host rejected missing and mismatched offers before submission and checked the Map remained unchanged. The ZKIR 3.2.1 circuit used k=13 and 6,646 rows. Wallet-funded transfers remain open. [Receipt](shielded-receive-localnet-receipt.json)
+Ledger 9.1.0.1 finalized the call at block 140. The stored coin matched the nonce, color, value and Ledger index 29. The native host rejected missing and mismatched offers before submission and checked the Map remained unchanged. The ZKIR 3.2.1 circuit used k=13 and 6,646 rows. Wallet-funded receive is a separate focused test below, with no receipt recorded here. [Receipt](shielded-receive-localnet-receipt.json)
 
 Compile `tests/FundedShieldedReceive.lean` with the ZKIR 3.2.1 target above and select `FundedShieldedReceive.tip.zkir` and its Impact plan in the bundle recipe. Generate keys with the pinned ZKIR CLI and use the isolated node's Ledger parameters. [Bundle setup](portable-artifacts.md) · [Localnet setup](../../scripts/localnet/README.md)
 
@@ -43,6 +43,30 @@ NOCTIUM_RECEIVE_MANIFEST_SHA256=YOUR_MANIFEST_SHA256 \
   cargo test --locked --manifest-path runtime/Cargo.toml --lib \
   --no-default-features --features zkir-321,localnet \
   funded_shielded_receive_localnet -- --ignored --nocapture
+```
+
+## Wallet-funded receive into a Map
+
+The focused test follows one wallet-owned input into the deposit contract's `pot` Map. `ShieldedSpend.tip` mints and books a seed coin. `ShieldedSpend.spend` sends it to a temporary Rust wallet, which applies the two proved offers to its local wallet state and constructs the spend input. The wallet keeps its keys and state and gives the receive host the input preimage. It checks that the input belongs to a wallet, uses the guaranteed segment, and matches the contract output's token and value.
+
+The host creates one contract-owned output, applies the offer to the current Zswap snapshot to obtain its Ledger index, and passes that index into the contract proof context. It binds the exact offer before signing. After finalization, the test checks the `pot` entry, output commitment and owner at that index, plus the spent input nullifier. It also checks that a changed opening and replayed input do not alter the finalized Map.
+
+Ledger 9.1.0.1 finalized the wallet-funded receive at block 480. The Map held the five-unit contract output at index 42, and the finalized Zswap state included the spent wallet input nullifier. The harness rejected unequal value and replay before submission. [Receipt](wallet-shielded-receive-localnet-receipt.json)
+
+Export the 3.2.1 ledger artifacts from `tests/ShieldedSpend.lean` and `tests/ShieldedReceive.lean`. Prepare authenticated bundles for `ShieldedSpend.tip`, `ShieldedSpend.spend` and `ShieldedReceive.tip`, using the same development node and ledger parameters. [Bundle setup](portable-artifacts.md)
+
+```sh
+NOCTIUM_WALLET_RECEIVE_NODE=http://127.0.0.1:19944 \
+NOCTIUM_WALLET_RECEIVE_PARAMETER_CACHE=/path/to/verified/parameter-cache \
+NOCTIUM_WALLET_RECEIVE_DEPOSIT_BUNDLE=/path/to/deposit-bundle \
+NOCTIUM_WALLET_RECEIVE_DEPOSIT_MANIFEST_SHA256=YOUR_DEPOSIT_MANIFEST_SHA256 \
+NOCTIUM_WALLET_RECEIVE_SEED_TIP_BUNDLE=/path/to/seed-tip-bundle \
+NOCTIUM_WALLET_RECEIVE_SEED_TIP_MANIFEST_SHA256=YOUR_SEED_TIP_MANIFEST_SHA256 \
+NOCTIUM_WALLET_RECEIVE_SEED_SPEND_BUNDLE=/path/to/seed-spend-bundle \
+NOCTIUM_WALLET_RECEIVE_SEED_SPEND_MANIFEST_SHA256=YOUR_SEED_SPEND_MANIFEST_SHA256 \
+  cargo test --locked --manifest-path runtime/Cargo.toml --lib \
+  --no-default-features --features zkir-321,localnet \
+  funded_wallet_shielded_receive_localnet -- --ignored --nocapture
 ```
 
 ## Whole-coin spend from a Map

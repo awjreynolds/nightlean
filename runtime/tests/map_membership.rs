@@ -61,6 +61,9 @@ fn operation_fields(instruction: &Instruction) -> usize {
         Instruction::PushFields { .. } | Instruction::PopeqFields { .. } => {
             panic!("this scalar fixture has no grouped record operations")
         }
+        unsupported => panic!(
+            "map-membership fixture has no transcript field width for operation {unsupported:?}"
+        ),
     }
 }
 

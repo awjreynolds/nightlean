@@ -1422,6 +1422,7 @@ pub struct DevelopmentFunding<'a> {
     rng: RefCell<Option<rand::rngs::StdRng>>,
     shielded_receive: Option<shielded_receive::BookedOffer>,
     shielded_relay: Option<shielded_relay::BookedRelay>,
+    wallet_shielded_receive: Option<shielded_receive::BookedWalletOffer>,
     shielded_transfer: Option<shielded_transfer::BookedTransfer>,
     shielded_split: Option<shielded_transfer::BookedTransfer>,
 }
@@ -1441,6 +1442,7 @@ impl<'a> DevelopmentFunding<'a> {
             rng: RefCell::new(Some(rng)),
             shielded_receive: None,
             shielded_relay: None,
+            wallet_shielded_receive: None,
             shielded_transfer: None,
             shielded_split: None,
         }
@@ -1484,6 +1486,22 @@ impl crate::client::FundingAdapter for DevelopmentFunding<'_> {
                     relay.randomness,
                     &relay.mint,
                     relay.domain,
+                    &policy.network_id,
+                    &snapshot.state.parameters,
+                    self.material,
+                    self.parameters,
+                    snapshot.block.tblock,
+                    self.policy,
+                    rng,
+                )
+                .await
+        } else if let Some(receive) = &self.wallet_shielded_receive {
+            receive.check_booking(snapshot)?;
+            wallet
+                .fund_wallet_shielded_receive(
+                    contract,
+                    receive.offer.clone(),
+                    receive.randomness,
                     &policy.network_id,
                     &snapshot.state.parameters,
                     self.material,
