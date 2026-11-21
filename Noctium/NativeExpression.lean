@@ -109,6 +109,20 @@ private def nativeExpressionJson : Expr ty → Json
       return Json.mkObj [
         ("tag", toJson ("persistentHashFab" : String)),
         ("schema", schema), ("values", encodedValues)]
+  | .hashToCurveFab environment type values => Id.run do
+      let compiled := Types.compileType environment type
+      let schema := match compiled with
+        | .ok value => (Types.schemaJson value).toOption.getD Json.null
+        | .error _ => Json.null
+      let encodedValues := match compiled with
+        | .ok value => match fabHashLayoutFields value.checked.value with
+          | .ok fields => Json.arr
+              (nativeExpressionFabValuesJson (fields.map Prod.snd) values)
+          | .error _ => Json.arr #[]
+        | .error _ => Json.arr #[]
+      return Json.mkObj [
+        ("tag", toJson ("hashToCurveFab" : String)),
+        ("schema", schema), ("values", encodedValues)]
   | .sha512Fab environment type values => Id.run do
       let compiled := Types.compileType environment type
       let schema := match compiled with

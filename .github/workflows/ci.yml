@@ -60,6 +60,7 @@ jobs:
           lake env lean tests/FlatFabTuple.lean
           lake env lean tests/Sha512Fab.lean
           lake env lean tests/Issue70HashPreimages.lean
+          lake env lean tests/MixedFabHashToCurve.lean
           lake env lean tests/Issue70Jubjub.lean
           lake env lean tests/JubjubGroupParity.lean
           lake env lean tests/JubjubScalarBoundary.lean
@@ -137,6 +138,7 @@ jobs:
           lake env lean tests/ShieldedSpend.lean
           lake env lean tests/ShieldedMapPartialSpend.lean
           lake env lean tests/ShieldedImmediateRelay.lean
+          lake env lean tests/IndexedShieldedNonce.lean
           lake env lean tests/QualifiedCoinCell.lean
           lake env lean tests/QualifiedCoinSet.lean
           lake env lean tests/QualifiedCoinList.lean
