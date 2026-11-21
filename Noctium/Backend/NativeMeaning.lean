@@ -170,8 +170,28 @@ def fabHashLayoutAtom : Types.Layout → Except String String
     pure "bytes:1"
   | _ => throw "unsupported mixed FAB field layout"
 
-def persistentHashFabTerm (alignment : List String) (values : List Term) : Term :=
-  .unary ("persistent_hash_fab:" ++ String.intercalate "," alignment) (.hash values)
+private def fabBytes32Pairs : List Term → List (Term × Term)
+  | highByte :: low31 :: rest => (highByte, low31) :: fabBytes32Pairs rest
+  | _ => []
+
+/-- Distinct algorithms bind the fixed preimage length and ordered FAB chunks. -/
+def fixedByteHashTerm (algorithm : String) (length : Nat) (alignedChunks : List Term) : Term :=
+  .unary s!"{algorithm}_bytes:{length}" (.hash alignedChunks)
+
+/-- Homogeneous FAB roots share the existing native meaning for their canonical
+single/vector encodings. Mixed layouts retain their explicit alignment tag. -/
+def persistentHashFabTerm (alignment : List String) (values : List Term) : Term := Id.run do
+  if !alignment.isEmpty && alignment.length == values.length && alignment.all (· == "field") then
+    return persistentHashNativeVectorTerm values
+  if !alignment.isEmpty && alignment.length * 2 == values.length &&
+      alignment.all (· == "bytes:32") then
+    return persistentHashVector32Term (fabBytes32Pairs values)
+  if let [descriptor] := alignment then
+    if descriptor.startsWith "bytes:" then
+      if let some width := (descriptor.drop 6).toNat? then
+        if 0 < width && width < 32 && values.length == 1 then
+          return fixedByteHashTerm "persistent_hash" width values
+  return .unary ("persistent_hash_fab:" ++ String.intercalate "," alignment) (.hash values)
 
 /-- Foreign values retain their kind and canonical Encode representation. -/
 def foreignConstantTerm (kind : Foreign.Kind) (encoding : List Nat) : Term :=
@@ -225,10 +245,6 @@ def typedScalarFromBytesTerm (target : Ty) (length : Nat) (value : Term) : Excep
 /-- The native overload hashes the complete ordered Native preimage to Jubjub. -/
 def hashToCurveTerm (values : List Term) : Term :=
   .unary "hash_to_curve_jubjub" (.hash values)
-
-/-- Distinct algorithms bind the fixed preimage length and ordered FAB chunks. -/
-def fixedByteHashTerm (algorithm : String) (length : Nat) (alignedChunks : List Term) : Term :=
-  .unary s!"{algorithm}_bytes:{length}" (.hash alignedChunks)
 
 /-- Modern Encode output chunk terms. Index 0 is low31 and index 1 is highByte. -/
 def encodedHashChunkTerm (digest : Term) (index : Nat) : Term :=
