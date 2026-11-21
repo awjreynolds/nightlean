@@ -314,6 +314,14 @@ private def operationJsonBare : Backend.Impact.Op → Json
       ("nullifier", nativeExpressionJson nullifier),
       ("outputCommitment", nativeExpressionJson outputCommitment),
       ("changeCommitment", nativeExpressionJson changeCommitment)]
+  | .relayShieldedImmediate nonce color amount recipient inputCommitment nullifier outputCommitment =>
+      Json.mkObj [
+        ("op", toJson ("relayShieldedImmediate" : String)),
+        ("nonce", nativeExpressionJson nonce), ("color", nativeExpressionJson color),
+        ("amount", nativeExpressionJson amount), ("recipient", nativeExpressionJson recipient),
+        ("inputCommitment", nativeExpressionJson inputCommitment),
+        ("nullifier", nativeExpressionJson nullifier),
+        ("outputCommitment", nativeExpressionJson outputCommitment)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", nativeExpressionJson domain),
       ("amount", nativeExpressionJson amount)]
@@ -398,6 +406,11 @@ private def effectJson : Effect → Json
       ("nonce", expressionJson nonce), ("color", expressionJson color),
       ("inputAmount", expressionJson inputAmount), ("sendAmount", expressionJson sendAmount),
       ("recipient", expressionJson recipient), ("selfAddress", expressionJson selfAddress)]
+  | .relayShieldedImmediate nonce color amount recipient selfAddress => Json.mkObj [
+      ("op", toJson ("relayShieldedImmediate" : String)),
+      ("nonce", expressionJson nonce), ("color", expressionJson color),
+      ("amount", expressionJson amount), ("recipient", expressionJson recipient),
+      ("selfAddress", expressionJson selfAddress)]
   | .mintShielded domain amount => Json.mkObj [
       ("op", toJson ("mintShielded" : String)), ("domain", expressionJson domain),
       ("amount", expressionJson amount)]
@@ -805,6 +818,16 @@ private def moduleCircuitFor (outputs : Array (Name × ModuleBuildOutput)) (name
     Option ModuleCircuitBuildInfo :=
   outputs.toList.flatMap (·.2.circuits) |>.find? (·.declarationName == name)
 
+private def importedModuleCircuit (env : Environment) (name : Name) : _root_.Bool :=
+  match name with
+  | .str (.str owner "__moduleCircuit") _ =>
+    (moduleBuildRegistry.getState env).any fun info =>
+      env.isImportedConst info.contractName && owner == info.contractName
+  | _ => _root_.Bool.false
+
+private def importedWitnessCircuit (env : Environment) (name : Name) : _root_.Bool :=
+  (witnessRegistry.getState env).any (·.circuitName == name)
+
 private def moduleWitnessProgramFor (outputs : Array (Name × ModuleBuildOutput))
     (info : WitnessInfo) : Option Helpers.Program := do
   let circuit ← outputs.toList.flatMap (·.2.circuits) |>.find? fun item =>
@@ -817,9 +840,17 @@ private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuil
     (contracts : Array (Name × Contract)) :
     CommandElabM (Array (Name × Circuit)) := do
   let env ← getEnv
+  let referencedCircuits := contracts.toList.flatMap fun (_, contract) =>
+    contract.entrypoints.map (·.circuit.name)
   let mut circuits := #[]
   for info in circuitRegistry.getState env do
-    unless env.isImportedConst info.declName do
+    let imported := env.isImportedConst info.declName
+    let selectedImportedOrdinary := imported &&
+      referencedCircuits.contains info.declName.toString &&
+      info.stateProgram?.isNone &&
+      !importedWitnessCircuit env info.declName &&
+      !importedModuleCircuit env info.declName
+    if !imported || selectedImportedOrdinary then
       let moduleCircuit := moduleCircuitFor moduleOutputs info.declName
       if moduleCircuit.isNone then
         if let some (sourceName, exportName) := info.sourceProgram? then
@@ -842,6 +873,9 @@ private unsafe def registeredCircuits (moduleOutputs : Array (Name × ModuleBuil
       match circuit.validate sourceCapabilities with
       | .error d => failDiagnostic d
       | .ok _ =>
+        if selectedImportedOrdinary then
+          unless circuit.name == info.declName.toString do
+            throwError "registered circuit identity does not match declaration '{info.declName}'"
         match Disclosure.circuit circuit with
         | .error d => failDiagnostic d
         | .ok _ => circuits := circuits.push (info.declName, circuit)

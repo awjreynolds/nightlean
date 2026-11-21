@@ -1,16 +1,16 @@
 //! Native proof service boundary. Public artifacts stay retained, private values have no Debug.
 //! This API proves frozen native call intents. It does not fund, sign, or submit transactions.
 use crate::{
-    Db, Plan,
+    Config, Db, Plan,
     artifacts::{ContractBundleSet, Role, VerifiedBundle},
-    assembly::NativeIntent,
+    assembly::{BookedComIndices, CheckedNativeCall, NativeIntent},
     zkir::IrSource,
 };
 use base_crypto::cost_model::CostDuration;
-use coin_structure::coin::Commitment;
+use coin_structure::coin::{Commitment, PublicAddress};
 use futures::{Future, FutureExt, pin_mut, select_biased};
 use ledger::structure::{
-    ContractAction, ContractCall, Intent, LedgerParameters, ProofKind, ProofMarker,
+    ContractAction, ContractCall, Intent, LedgerParameters, LedgerState, ProofKind, ProofMarker,
     ProofPreimageVersioned, ProofVersioned, Signature,
 };
 use midnight_proofs::{plonk::ConstraintSystem, poly::kzg::params::ParamsKZG, utils::SerdeFormat};
@@ -252,6 +252,15 @@ pub struct CurrentStateContext {
     identity: String,
     state_bytes: Vec<u8>,
     state: ContractState<Db>,
+}
+
+/// One side of the private two-call relay path. The state token moves only after the
+/// complete, snapshot-checked composition has been prepared.
+pub(crate) struct CurrentStateCompositionCall<'target, 'state> {
+    pub(crate) target: &'target ContractOperationTarget,
+    pub(crate) current: &'state mut Option<CurrentStateContext>,
+    pub(crate) parameters: &'target TrustedParameters,
+    pub(crate) inputs: BTreeMap<String, Json>,
 }
 
 /// Private binding carried from prepared source call through client receipt validation.
@@ -1992,6 +2001,230 @@ impl PreparedProof {
             .map_err(|_| Error::InvalidProof)?;
         ProvedIntent::checked_encoding(intent, self.contract_binding.clone())
     }
+}
+
+/// Prepare the native relay and destination calls in fixed ledger order. Both calls
+/// evaluate against the same snapshot and booked index map. The destination's
+/// communication randomness is the opening committed by the relay source call.
+pub(crate) fn prepare_relay_destination_composition<'target, 'state>(
+    relay: CurrentStateCompositionCall<'target, 'state>,
+    destination: CurrentStateCompositionCall<'target, 'state>,
+    snapshot: &LedgerState<Db>,
+    booked_indices: &BookedComIndices,
+    destination_communication_commitment_rand: Fr,
+    rng: &mut (impl Rng + CryptoRng),
+) -> Result<(PreparedComposition<'target>, [ContractStateBinding; 2])> {
+    let CurrentStateCompositionCall {
+        target: relay_target,
+        current: relay_current_slot,
+        parameters: relay_parameters,
+        inputs: relay_input_values,
+    } = relay;
+    let CurrentStateCompositionCall {
+        target: destination_target,
+        current: destination_current_slot,
+        parameters: destination_parameters,
+        inputs: destination_input_values,
+    } = destination;
+    let relay_config = SecretConfig(Config {
+        inputs: relay_input_values,
+        state: BTreeMap::new(),
+        negative_cases: Vec::new(),
+    });
+    let destination_config = SecretConfig(Config {
+        inputs: destination_input_values,
+        state: BTreeMap::new(),
+        negative_cases: Vec::new(),
+    });
+
+    if destination_communication_commitment_rand == Fr::from(0u64)
+        || relay_target.ttl == 0
+        || relay_target.ttl != destination_target.ttl
+        || relay_target.contract_address() == destination_target.contract_address()
+    {
+        return Err(Error::BindingMismatch);
+    }
+    let relay_current = relay_current_slot
+        .as_ref()
+        .ok_or(Error::BindingMismatch)?;
+    let destination_current = destination_current_slot
+        .as_ref()
+        .ok_or(Error::BindingMismatch)?;
+    ensure_current_state_matches_snapshot(relay_target, relay_current, snapshot)?;
+    ensure_current_state_matches_snapshot(destination_target, destination_current, snapshot)?;
+
+    let relay_material = relay_target.selected_material()?;
+    let destination_material = destination_target.selected_material()?;
+    ensure_target_parameters(relay_target, relay_parameters, &relay_material)?;
+    ensure_target_parameters(
+        destination_target,
+        destination_parameters,
+        &destination_material,
+    )?;
+    let relay_plan = target_plan(relay_target)?;
+    let destination_plan = target_plan(destination_target)?;
+    let ttl = relay_target.ttl;
+    let relay_name = relay_target.inner.bundles.contract_name();
+    let destination_name = destination_target.inner.bundles.contract_name();
+    let relay_call = crate::assembly::prepare_checked_call_for_ready_state(
+        &relay_plan,
+        relay_name,
+        &relay_target.operation,
+        &relay_config.0,
+        &snapshot.parameters,
+        ContractOperation::new(Some(relay_material.verifier.clone()), None),
+        &relay_material.circuit,
+        ttl,
+        &relay_target.inner.deployment,
+        &relay_target.inner.ready_state,
+        &relay_current.state,
+        booked_indices,
+        None,
+        None,
+        rng,
+    )
+    .map_err(|_| Error::InvalidPrivateInput)?;
+    let relay_address = parse_contract_address(relay_target.contract_address())?;
+    let destination_call = crate::assembly::prepare_checked_call_for_ready_state(
+        &destination_plan,
+        destination_name,
+        &destination_target.operation,
+        &destination_config.0,
+        &snapshot.parameters,
+        ContractOperation::new(Some(destination_material.verifier.clone()), None),
+        &destination_material.circuit,
+        ttl,
+        &destination_target.inner.deployment,
+        &destination_target.inner.ready_state,
+        &destination_current.state,
+        booked_indices,
+        Some(PublicAddress::Contract(relay_address)),
+        Some(destination_communication_commitment_rand),
+        rng,
+    )
+    .map_err(|_| Error::InvalidPrivateInput)?;
+
+    let checked_calls = [
+        CheckedNativeCall {
+            execution: &relay_call.execution,
+            circuit: &relay_material.circuit,
+            initial_context: relay_call.initial_context.clone(),
+            entry_point: relay_call.entry_point.clone(),
+            communication_commitment_rand: relay_call.communication_commitment_rand,
+        },
+        CheckedNativeCall {
+            execution: &destination_call.execution,
+            circuit: &destination_material.circuit,
+            initial_context: destination_call.initial_context.clone(),
+            entry_point: destination_call.entry_point.clone(),
+            communication_commitment_rand: destination_call.communication_commitment_rand,
+        },
+    ];
+    let intent = crate::assembly::assemble_checked_calls(
+        &checked_calls,
+        &snapshot.parameters,
+        ttl,
+        rng,
+    )
+    .map_err(|_| Error::InvalidIntent)?;
+    let selections = [
+        CompositionMaterial {
+            bundle: relay_target.bundle()?,
+            parameters: relay_parameters,
+        },
+        CompositionMaterial {
+            bundle: destination_target.bundle()?,
+            parameters: destination_parameters,
+        },
+    ];
+    let prepared = PreparedComposition::from_intent(intent, snapshot, &selections)?;
+    let bindings = [
+        current_state_binding(relay_target, relay_current, &relay_call.predicted)?,
+        current_state_binding(
+            destination_target,
+            destination_current,
+            &destination_call.predicted,
+        )?,
+    ];
+
+    // These tokens are single-use. Keep both intact for every earlier error path.
+    let _relay_token = relay_current_slot.take().ok_or(Error::BindingMismatch)?;
+    let _destination_token = destination_current_slot.take().ok_or(Error::BindingMismatch)?;
+    Ok((prepared, bindings))
+}
+
+fn ensure_current_state_matches_snapshot(
+    target: &ContractOperationTarget,
+    current: &CurrentStateContext,
+    snapshot: &LedgerState<Db>,
+) -> Result<()> {
+    if !target.context_matches(current) || current.state_bytes.len() > MAX_NATIVE_STATE {
+        return Err(Error::BindingMismatch);
+    }
+    let address = parse_contract_address(target.contract_address())?;
+    let deployed = snapshot
+        .contract
+        .get(&address)
+        .ok_or(Error::BindingMismatch)?;
+    if encode(deployed)? != current.state_bytes
+        || encode(&current.state)? != current.state_bytes
+    {
+        return Err(Error::BindingMismatch);
+    }
+    Ok(())
+}
+
+fn ensure_target_parameters(
+    target: &ContractOperationTarget,
+    parameters: &TrustedParameters,
+    material: &Material,
+) -> Result<()> {
+    if parameters.k() != target.k
+        || parameters.sha256() != target.proof_parameters_sha256.as_str()
+        || material.circuit.k() != target.k
+    {
+        return Err(Error::InvalidParameters);
+    }
+    Ok(())
+}
+
+fn target_plan(target: &ContractOperationTarget) -> Result<Plan> {
+    serde_json::from_slice(
+        target
+            .bundle()?
+            .file(Role::Plan)
+            .map_err(|_| Error::InvalidArtifacts)?,
+    )
+    .map_err(|_| Error::InvalidArtifacts)
+}
+
+fn parse_contract_address(address: &str) -> Result<coin_structure::contract::ContractAddress> {
+    let bytes: [u8; 32] = hex::decode(address)
+        .map_err(|_| Error::BindingMismatch)?
+        .try_into()
+        .map_err(|_| Error::BindingMismatch)?;
+    Ok(coin_structure::contract::ContractAddress(
+        base_crypto::hash::HashOutput(bytes),
+    ))
+}
+
+fn current_state_binding(
+    target: &ContractOperationTarget,
+    current: &CurrentStateContext,
+    predicted: &ContractState<Db>,
+) -> Result<ContractStateBinding> {
+    Ok(ContractStateBinding {
+        contract_set_identity: target.contract_set_identity().to_owned(),
+        deployment_identity: target.deployment_identity().to_owned(),
+        state_schema_sha256: target.state_schema_sha256().to_owned(),
+        address: target.contract_address().to_owned(),
+        operation: target.operation.clone(),
+        context_identity: current.identity.clone(),
+        current_state_sha256: Some(hex::encode(Sha256::digest(&current.state_bytes))),
+        current_state: Some(current.state_bytes.clone()),
+        expected_state: encode(predicted)?,
+        deployment: false,
+    })
 }
 
 /// Native attached result only becomes available after local cryptographic verification.

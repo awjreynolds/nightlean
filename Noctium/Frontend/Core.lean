@@ -218,8 +218,11 @@ scoped syntax "default(" nltype ")" : nlexpr
 scoped syntax "disclose(" nlexpr ")" : nlexpr
 scoped syntax "boolAnd(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "boolOr(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "andThen(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "orElse(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "boolXor(" nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "eq(" nlexpr "," nlexpr ")" : nlexpr
+scoped syntax "ite(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "select(" nlexpr "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "poseidon2(" num "," nlexpr "," nlexpr ")" : nlexpr
 scoped syntax "persistentHash32(" nlexpr ")" : nlexpr
@@ -241,6 +244,7 @@ scoped syntax "persistentHashVector32(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "persistentHashNative(" nlexpr ")" : nlexpr
 scoped syntax "persistentHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
 scoped syntax "transientHashNativeVector(" "[" nlexpr,* "]" ")" : nlexpr
+scoped syntax "shieldedOutputNonce(" nlexpr ")" : nlexpr
 declare_syntax_cat nlcallvalue
 scoped syntax nlexpr : nlcallvalue
 scoped syntax ident ":=" "fields(" nlexpr,* ")" : nlcallvalue
@@ -356,6 +360,7 @@ scoped syntax "mintShielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "receiveShieldedToMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "spendShieldedFromMap" "(" ident "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "sendShieldedFromMap" "(" ident "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
+scoped syntax "relayShieldedImmediate" "(" nlexpr "," nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "mintUnshielded" "(" nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedInputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
 scoped syntax "incUnshieldedOutputs" "(" nlexpr "," nlexpr "," nlexpr ")" : nlupdate
@@ -665,6 +670,21 @@ private def spanTerm (stx : Syntax) : CommandElabM (TSyntax `term) := do
 
 private abbrev Bindings := List (String × Ty × TSyntax `term)
 
+private partial def syntaxIdentifiers : Syntax → List String
+  | .ident _ _ name _ => [name.toString]
+  | .node _ _ children => children.toList.flatMap syntaxIdentifiers
+  | _ => []
+
+private def freshLazyBooleanName (env : Bindings) (stx : TSyntax `nlexpr) : String := Id.run do
+  let usedNames := env.map (fun binding => binding.1) ++ syntaxIdentifiers stx.raw
+  let baseName := s!"$lazyBool{stx.raw.getPos?.getD 0}"
+  let mut candidate := baseName
+  let mut suffix := 0
+  while usedNames.contains candidate do
+    candidate := s!"{baseName}_local{suffix}"
+    suffix := suffix + 1
+  return candidate
+
 private def callExpressions (role : String) (ordered : List (String × Ty))
     (groups : List (String × List (String × Ty)))
     (values : Array (TSyntax `nlcallvalue)) (site : Syntax) :
@@ -734,10 +754,12 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| disclose($value)) => hasPartialScalar value
   | `(nlexpr| add($a, $b)) | `(nlexpr| mul($a, $b))
   | `(nlexpr| eq($a, $b)) | `(nlexpr| boolAnd($a, $b))
-  | `(nlexpr| boolOr($a, $b)) | `(nlexpr| boolXor($a, $b))
+  | `(nlexpr| boolOr($a, $b)) | `(nlexpr| andThen($a, $b))
+  | `(nlexpr| orElse($a, $b)) | `(nlexpr| boolXor($a, $b))
   | `(nlexpr| poseidon2($_:num, $a, $b)) =>
     hasPartialScalar a || hasPartialScalar b
   | `(nlexpr| persistentHash32($value)) => hasPartialScalar value
+  | `(nlexpr| shieldedOutputNonce($value)) => hasPartialScalar value
   | `(nlexpr| sha256($value))
   | `(nlexpr| sha512($value)) | `(nlexpr| keccak256($value)) => hasPartialScalar value
   | `(nlexpr| bytes($_:num, $_:str)) => Bool.false
@@ -793,7 +815,7 @@ private partial def hasPartialScalar (stx : TSyntax `nlexpr) : _root_.Bool :=
   | `(nlexpr| ed25519Verify($_:nlexpr, $_:nlexpr, $_:nlexpr, $_:nlexpr))
   | `(nlexpr| secp256k1EthereumAddress($_:nlexpr)) => Bool.true
   | `(nlexpr| jubjubSchnorrVerify([$messages,*], $_:nlexpr, $_:nlexpr, $_:nlexpr)) => Bool.true
-  | `(nlexpr| select($c, $a, $b)) =>
+  | `(nlexpr| select($c, $a, $b)) | `(nlexpr| ite($c, $a, $b)) =>
     hasPartialScalar c || hasPartialScalar a || hasPartialScalar b
   | _ => Bool.false
 
@@ -953,6 +975,27 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let left ← expected env left .bool
     let right ← expected env right .bool
     pure (.bool, ← `(Noctium.Expr.boolOr $left $right))
+  | `(nlexpr| andThen($left, $right)) => do
+    let left ← expected env left .bool
+    let (rightTy, right) ← expression env right
+    unless rightTy == .bool do throwErrorAt stx "andThen requires a Bool right operand"
+    let name := freshLazyBooleanName env stx
+    let leftRef ← `(Noctium.Expr.ref (ty := Noctium.Ty.bool) $(stringTerm name))
+    let safeRight ← `(Noctium.GuardedExpression.totalize $leftRef $right)
+    let falseValue ← `(Noctium.Expr.bool Bool.false)
+    pure (.bool, ← `(Noctium.Expr.letE $(stringTerm name) $left
+      (Noctium.Expr.select $leftRef $safeRight $falseValue)))
+  | `(nlexpr| orElse($left, $right)) => do
+    let left ← expected env left .bool
+    let (rightTy, right) ← expression env right
+    unless rightTy == .bool do throwErrorAt stx "orElse requires a Bool right operand"
+    let name := freshLazyBooleanName env stx
+    let leftRef ← `(Noctium.Expr.ref (ty := Noctium.Ty.bool) $(stringTerm name))
+    let inactiveRightGuard ← `(Noctium.Expr.eq $leftRef (Noctium.Expr.bool Bool.false))
+    let safeRight ← `(Noctium.GuardedExpression.totalize $inactiveRightGuard $right)
+    let trueValue ← `(Noctium.Expr.bool Bool.true)
+    pure (.bool, ← `(Noctium.Expr.letE $(stringTerm name) $left
+      (Noctium.Expr.select $leftRef $trueValue $safeRight)))
   | `(nlexpr| boolXor($left, $right)) => do
     let left ← expected env left .bool
     let right ← expected env right .bool
@@ -965,6 +1008,20 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
     let a ← coerceExpression stx ta ty a
     let b ← coerceExpression stx tb ty b
     pure (ty, ← `(Noctium.Expr.select $c $a $b))
+  | `(nlexpr| ite($condition, $thenValue, $elseValue)) => do
+    let condition ← expected env condition .bool
+    let (thenTy, thenValue) ← expression env thenValue
+    let (elseTy, elseValue) ← expression env elseValue
+    let ty ← commonType stx thenTy elseTy
+    let thenValue ← coerceExpression stx thenTy ty thenValue
+    let elseValue ← coerceExpression stx elseTy ty elseValue
+    let name := freshLazyBooleanName env stx
+    let conditionRef ← `(Noctium.Expr.ref (ty := Noctium.Ty.bool) $(stringTerm name))
+    let inactiveGuard ← `(Noctium.Expr.eq $conditionRef (Noctium.Expr.bool Bool.false))
+    let safeThen ← `(Noctium.GuardedExpression.totalize $conditionRef $thenValue)
+    let safeElse ← `(Noctium.GuardedExpression.totalize $inactiveGuard $elseValue)
+    pure (ty, ← `(Noctium.Expr.letE $(stringTerm name) $condition
+      (Noctium.Expr.select $conditionRef $safeThen $safeElse)))
   | `(nlexpr| poseidon2($domain:num, $a, $b)) =>
     let a ← expected env a .native
     let b ← expected env b .native
@@ -1065,6 +1122,9 @@ private partial def expression (env : Bindings) (stx : TSyntax `nlexpr) :
   | `(nlexpr| reverseBytes32($value)) => do
     let value ← expected env value (.bytes 32)
     pure (.bytes 32, ← `(Noctium.Expr.reverseBytes32 $value))
+  | `(nlexpr| shieldedOutputNonce($value)) => do
+    let value ← expected env value (.bytes 32)
+    pure (.bytes 32, ← `(Noctium.Wire.shieldedOutputNonce $value))
   | `(nlexpr| bytes32($literal:str)) => do
     let bytes := literal.getString.toUTF8.data.toList.map UInt8.toNat
     if bytes.length > 32 then throwErrorAt stx "Bytes32 string literal exceeds 32 UTF-8 bytes"
@@ -1798,11 +1858,6 @@ private def chooseBranchLocalName (env : Bindings) (used : List String) (next : 
     candidate := s!"{namePrefix}{candidateIndex}"
   return (candidate, candidateIndex + 1)
 
-private partial def syntaxIdentifiers : Syntax → List String
-  | .ident _ _ name _ => [name.toString]
-  | .node _ _ children => children.toList.flatMap syntaxIdentifiers
-  | _ => []
-
 private def freshReadName (depth : Nat) (state : EntryEffects) (destination : TSyntax `ident) :
     CommandElabM (String × EntryEffects) := do
   ensureFresh state.env destination
@@ -2353,6 +2408,31 @@ private def elaborateEffect (schema : List (String × StateKind))
       let amount ← checkedExpression state.env amount (.uint (2 ^ 64 - 1))
       let term ← `(Noctium.Effect.mintShielded $domain $amount)
       state := {state with terms := state.terms.push term}
+    | `(nlupdate| relayShieldedImmediate($nonce:nlexpr, $color:nlexpr,
+        $amount:nlexpr, $recipient:nlexpr)) => do
+      unless depth == 0 do
+        throwErrorAt update "relayShieldedImmediate must be unguarded"
+      match guard with
+      | `(term| none) => pure ()
+      | _ => throwErrorAt update "relayShieldedImmediate must be unguarded"
+      let nonce ← checkedExpression state.env nonce (.bytes 32)
+      let color ← checkedExpression state.env color (.bytes 32)
+      let amount ← checkedExpression state.env amount (.uint (2 ^ 128 - 1))
+      let recipient ← checkedExpression state.env recipient (.bytes 32)
+      let addressName := s!"noctium_relay_address_{state.terms.size}"
+      unless state.env.all (fun binding => binding.1 != addressName) do
+        throwErrorAt update "reserved relayShieldedImmediate binding collides with an existing read"
+      let addressTerm ← `(Noctium.Effect.readContractAddress $(stringTerm addressName))
+      state := {state with terms := state.terms.push addressTerm}
+      state ← bindReadName state addressName addressName (.bytes 32)
+      let selfAddress ← `(@Noctium.Expr.ref (Noctium.Ty.bytes 32) $(stringTerm addressName))
+      let relayTerm ← `(Noctium.Effect.relayShieldedImmediate
+        $nonce $color $amount $recipient $selfAddress)
+      let noGuard ← `(none)
+      state := {state with
+        terms := state.terms.push relayTerm
+        spans := state.spans.push span
+        guards := state.guards.push noGuard}
     | `(nlupdate| receiveShieldedToMap($storage:ident, $nonce:nlexpr,
         $color:nlexpr, $amount:nlexpr)) => do
       unless depth == 0 do

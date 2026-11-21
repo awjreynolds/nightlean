@@ -235,6 +235,12 @@ def describeEffect : Effect → LedgerEffectDescriptor
        .payload "inputAmount" sink inputAmount, .payload "sendAmount" sink sendAmount,
        .selector "recipient" sink recipient,
        .selector "contractAddress" sink selfAddress] []
+  | .relayShieldedImmediate nonce color amount recipient selfAddress =>
+    let sink := "public immediate shielded contract relay"
+    .publicEffect "relayShieldedImmediate" .asset .publicActivity sink
+      [.selector "nonce" sink nonce, .selector "color" sink color,
+       .payload "amount" sink amount, .selector "recipient" sink recipient,
+       .selector "contractAddress" sink selfAddress] []
   | .mintUnshielded domain amount =>
     let sink := "public unshielded mint"
     .publicEffect "mintUnshielded" .asset .publicActivity sink

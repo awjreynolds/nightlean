@@ -1,0 +1,8 @@
+pragma language_version >= 0.28.0;
+
+export circuit branches(thenCondition: Boolean, elseCondition: Boolean, amount: Uint<8>): [Boolean, Boolean] {
+  return [
+    thenCondition ? ((amount as Uint<1>) == 1) : true,
+    elseCondition ? true : ((amount as Uint<1>) == 1)
+  ];
+}

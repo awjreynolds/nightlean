@@ -337,3 +337,11 @@ the source records receipt effects. The finalized state contains 17
 unshielded-tag units and 23 shielded-tag units of the same color. The native
 assembler predicted both balances. The finalized bytes matched the SDK's
 ledger replay byte for byte.
+
+To send unshielded tokens, record the output and the recipient's spend claim.
+Use `readSelf` to get the ledger-provided contract address. Credit the input
+when the recipient has the contract tag and matches that address. The Lean,
+Compact and native checker fixtures cover the self-send, a second contract and
+a user address whose bytes match the sender. [Lean fixture](../../tests/NativeUnshieldedSend.lean)
+[Compact fixture](../../tests/compact/UnshieldedSend.compact)
+[Native checker](../../runtime/tests/native_unshielded_send.rs)

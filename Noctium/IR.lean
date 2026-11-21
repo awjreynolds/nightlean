@@ -592,6 +592,12 @@ inductive Effect where
   | sendShieldedFromMap (state : String) (nonce color : Expr (.bytes 32))
       (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
       (recipient selfAddress : Expr (.bytes 32))
+  /-- Receive an exact shielded coin transiently at this contract and forward
+  its full value to another contract. The backend derives receive, nullifier
+  and contract-recipient spend commitments. This operation does not store a
+  relay coin or create change. -/
+  | relayShieldedImmediate (nonce color : Expr (.bytes 32))
+      (amount : Expr (.uint (2 ^ 128 - 1))) (recipient selfAddress : Expr (.bytes 32))
   | mintUnshielded (domain : Expr (.bytes 32)) (amount : Expr (.uint (2 ^ 64 - 1)))
   | incUnshieldedInputs (color : Expr (.bytes 32)) (amount : Expr (.uint balanceMaximum))
       (isUnshielded : Expr .bool)
@@ -1313,6 +1319,13 @@ def Entrypoint.validate (caps : Capabilities) (decls : List StateDecl) (e : Entr
         color.validate caps env
         inputAmount.validate caps env
         sendAmount.validate caps env
+        recipient.validate caps env
+        selfAddress.validate caps env
+        pure []
+      | .relayShieldedImmediate nonce color amount recipient selfAddress => do
+        nonce.validate caps env
+        color.validate caps env
+        amount.validate caps env
         recipient.validate caps env
         selfAddress.validate caps env
         pure []

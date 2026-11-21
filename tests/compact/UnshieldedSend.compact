@@ -1,0 +1,8 @@
+pragma language_version 0.28;
+import CompactStandardLibrary;
+
+export circuit transfer(color: Bytes<32>, amount: Uint<128>, isContract: Boolean, recipient: Bytes<32>): [] {
+  const target = isContract ? left<ContractAddress, UserAddress>(ContractAddress{bytes: recipient})
+                            : right<ContractAddress, UserAddress>(UserAddress{bytes: recipient});
+  sendUnshielded(disclose(color), disclose(amount), disclose(target));
+}

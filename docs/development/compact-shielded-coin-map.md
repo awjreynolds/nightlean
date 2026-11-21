@@ -89,6 +89,30 @@ NOCTIUM_TRANSFER_SPEND_MANIFEST_SHA256=YOUR_SPEND_MANIFEST_SHA256 \
   funded_shielded_map_spend_localnet -- --ignored --nocapture
 ```
 
+## Immediate shielded relay to a destination contract
+
+The pinned Compact fixture receives a contract-owned coin, sends its full value with `sendImmediateShielded`, rejects change, then binds a `claimContractCall` to the destination using the child call's communication opening. The in-memory runner checks the receive, spend and nullifier claims, both contract-owned outputs, the destination call commitment, and the empty relay Map. [Compact source](../../tests/compact/ShieldedCoinMap.compact) · [Runner](../../tests/compact/shielded-coin-map.mjs)
+
+`tests/ShieldedImmediateRelay.lean` exercises the same bounded flow through two native calls. Relay mints five units, forms a contract-owned transient, sends an equal-value contract output to Destination, and binds the child call to the same opening. Destination receives the output into its qualified coin Map. The localnet host books the transient and destination commitments against one finalized snapshot, prepares Relay then Destination with that index map, and rechecks both contract states before DUST funding.
+
+Ledger 9.1.0.1 finalized the composed call at block 136. The Destination Map stored value 5 at output index 30. The transient used index 31, its nullifier appeared in finalized Zswap state, and the harness rejected a wrong recipient and wrong color. The relay and destination circuits used k=15/18,644 rows and k=13/6,436 rows. [Receipt](shielded-immediate-relay-localnet-receipt.json)
+
+This qualifies a related native subset of `sendImmediateShielded`. General token domains, amounts, and call shapes remain open, and feature equivalence is unverified.
+
+Run the focused funded case with the two authenticated bundles and verified Ledger parameter cache:
+
+```sh
+NOCTIUM_RELAY_NODE=http://127.0.0.1:29944 \
+NOCTIUM_RELAY_PARAMETER_CACHE=/path/to/verified/parameter-cache \
+NOCTIUM_RELAY_BUNDLE=/path/to/relay-bundle \
+NOCTIUM_RELAY_MANIFEST_SHA256=YOUR_RELAY_MANIFEST_SHA256 \
+NOCTIUM_DESTINATION_BUNDLE=/path/to/destination-bundle \
+NOCTIUM_DESTINATION_MANIFEST_SHA256=YOUR_DESTINATION_MANIFEST_SHA256 \
+  cargo test --locked --manifest-path runtime/Cargo.toml --lib \
+  --no-default-features --features zkir-321,localnet \
+  funded_shielded_immediate_relay_localnet -- --ignored --nocapture
+```
+
 ## Partial spend from a Map
 
 `tests/ShieldedMapPartialSpend.lean` adds `sendShieldedFromMap`. It spends one contract-owned coin into a user output and contract change. The native runtime enforces `0 < sendAmount < inputAmount`, derives the user nonce with `midnight:kernel:nonce_evolve` and the change nonce with `midnight:kernel:nonce_evolve/2`, removes the old Map row, then receives the change under its derived nonce. The native plan binds the nullifier and both output commitments, and allows only read-only change-key checks before the change receive.

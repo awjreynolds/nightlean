@@ -58,3 +58,22 @@ export circuit withdrawPartial(
     right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
   );
 }
+
+export circuit relayImmediate(
+  coin: ShieldedCoinInfo,
+  target: ContractAddress,
+  entryHash: Bytes<32>,
+  opening: Field
+): [] {
+  const incoming = disclose(coin);
+  const recipient = disclose(target);
+  receiveShielded(incoming);
+  const result = sendImmediateShielded(
+    incoming,
+    right<ZswapCoinPublicKey, ContractAddress>(recipient),
+    incoming.value
+  );
+  assert(!result.change.is_some, "full relay must have no change");
+  const commitment = transientCommit<ShieldedCoinInfo>(result.sent, opening);
+  kernel.claimContractCall(recipient.bytes, disclose(entryHash), disclose(commitment));
+}

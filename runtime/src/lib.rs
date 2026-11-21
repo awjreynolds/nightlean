@@ -1321,6 +1321,18 @@ pub enum Instruction {
         #[serde(rename = "changeCommitment")]
         change_commitment: Expr,
     },
+    #[serde(rename = "relayShieldedImmediate", rename_all = "camelCase")]
+    RelayShieldedImmediate {
+        nonce: Expr,
+        color: Expr,
+        amount: Expr,
+        recipient: Expr,
+        #[serde(rename = "inputCommitment")]
+        input_commitment: Expr,
+        nullifier: Expr,
+        #[serde(rename = "outputCommitment")]
+        output_commitment: Expr,
+    },
     #[serde(rename = "requireContractCaller")]
     RequireContractCaller {
         address: Expr,
@@ -1562,6 +1574,9 @@ fn impact_field_counts(instruction: &Instruction, plan: &Plan) -> Result<Vec<usi
         Instruction::ReceiveShieldedToMap { .. } => RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SpendShieldedFromMap { .. } => SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
         Instruction::SendShieldedFromMap { .. } => SEND_SHIELDED_FROM_MAP_FIELD_COUNTS.to_vec(),
+        Instruction::RelayShieldedImmediate { .. } => {
+            RELAY_SHIELDED_IMMEDIATE_FIELD_COUNTS.to_vec()
+        }
 
         Instruction::MerkleTreeIsFull {
             slot, keys, depth, ..
@@ -1753,6 +1768,9 @@ fn impact_field_count(instruction: &Instruction, plan: &Plan) -> Result<usize> {
         Instruction::SendShieldedFromMap { .. } => {
             bail!("shielded send must be unguarded")
         }
+        Instruction::RelayShieldedImmediate { .. } => {
+            bail!("immediate shielded relay must be unguarded")
+        }
         Instruction::MintShielded { .. } | Instruction::MintUnshielded { .. } => {
             impact_field_counts(instruction, plan)?.into_iter().sum()
         }
@@ -1859,6 +1877,8 @@ const RECEIVE_SHIELDED_TO_MAP_FIELD_COUNTS: [usize; 16] =
     [1, 4, 6, 2, 1, 1, 4, 6, 1, 6, 5, 11, 1, 2, 1, 1];
 const SPEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 12] = [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 const SEND_SHIELDED_FROM_MAP_FIELD_COUNTS: [usize; 18] =
+    [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
+const RELAY_SHIELDED_IMMEDIATE_FIELD_COUNTS: [usize; 18] =
     [1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1, 1, 4, 6, 2, 1, 1];
 
 fn token_accumulation_fields(key_push: usize) -> [usize; 16] {
@@ -2583,6 +2603,44 @@ fn validate_shielded_send_layout(
     Ok((slot, read_key, receive_index))
 }
 
+fn validate_relay_shielded_immediate_layout(
+    plan: &Plan,
+    operation_index: usize,
+    recipient: &Expr,
+) -> Result<()> {
+    let address_read_index = operation_index
+        .checked_sub(1)
+        .ok_or_else(|| anyhow!("immediate shielded relay requires a current address read"))?;
+    let address_read = &plan.operations[address_read_index];
+    let (address_read, address_guard) = unguarded_operation(address_read);
+    ensure!(
+        address_guard.is_none()
+            && matches!(address_read, Instruction::ReadContractAddress { .. }),
+        "immediate shielded relay requires an unguarded current address read"
+    );
+
+    let call_index = operation_index
+        .checked_add(1)
+        .ok_or_else(|| anyhow!("immediate shielded relay has no recipient call"))?;
+    let call = plan
+        .operations
+        .get(call_index)
+        .ok_or_else(|| anyhow!("immediate shielded relay has no recipient call"))?;
+    let (call, guard) = unguarded_operation(call);
+    ensure!(
+        guard.is_none(),
+        "immediate shielded recipient call must be unguarded"
+    );
+    let Instruction::ClaimContractCall { address, .. } = call else {
+        bail!("immediate shielded relay must be followed by its recipient call")
+    };
+    ensure!(
+        address == recipient,
+        "immediate shielded recipient call differs from the output owner"
+    );
+    Ok(())
+}
+
 fn is_record_schema(schema: &Json) -> bool {
     schema.get("schemaVersion").is_some()
         || schema
@@ -2685,6 +2743,10 @@ fn validate_record_operation_schemas(plan: &Plan) -> Result<()> {
                     input_amount,
                     change_commitment,
                 )?;
+            }
+            Instruction::RelayShieldedImmediate { recipient, .. } => {
+                ensure!(guard.is_none(), "immediate shielded relay must be unguarded");
+                validate_relay_shielded_immediate_layout(plan, index, recipient)?;
             }
             Instruction::ListHead {
                 slot,
@@ -4902,6 +4964,28 @@ fn probe_instruction(
                 nullifier,
                 output_commitment,
                 change_commitment,
+            ],
+            plan,
+            env,
+            deferred_outputs,
+        ),
+        Instruction::RelayShieldedImmediate {
+            nonce,
+            color,
+            amount,
+            recipient,
+            input_commitment,
+            nullifier,
+            output_commitment,
+        } => probe_expressions(
+            [
+                nonce,
+                color,
+                amount,
+                recipient,
+                input_commitment,
+                nullifier,
+                output_commitment,
             ],
             plan,
             env,
@@ -7202,6 +7286,103 @@ impl PreparationCursor {
                 program.extend(change_ops[..5].iter().cloned());
                 change_ops[5].clone()
             }
+            Instruction::RelayShieldedImmediate {
+                nonce,
+                color,
+                amount,
+                recipient,
+                input_commitment,
+                nullifier,
+                output_commitment,
+            } => {
+                let coin = ShieldedCoinInfo {
+                    nonce: Nonce(claim_hash_output(
+                        evaluate(nonce, &env)?,
+                        "immediate relay coin nonce",
+                    )?),
+                    type_: ShieldedTokenType(claim_hash_output(
+                        evaluate(color, &env)?,
+                        "immediate relay coin color",
+                    )?),
+                    value: unshielded_amount(amount, &env)?,
+                };
+                ensure!(
+                    coin.value > 0,
+                    "immediate shielded relay amount must be positive"
+                );
+
+                let source_commitment = claim_hash_output(
+                    evaluate(input_commitment, &env)?,
+                    "immediate relay input commitment",
+                )?;
+                let coin_commitment = coin.commitment(&Recipient::Contract(context.address));
+                ensure!(
+                    coin_commitment.0 == source_commitment,
+                    "immediate relay input commitment mismatch"
+                );
+                let qualified_coin = context
+                    .qualify(&coin)
+                    .ok_or_else(|| anyhow!("immediate relay transient is absent from context"))?;
+                ensure!(
+                    context.call_context.com_indices.get(&coin_commitment)
+                        == Some(&qualified_coin.mt_index),
+                    "immediate relay transient index mismatch"
+                );
+
+                let coin_nullifier = coin.nullifier(&SenderEvidence::Contract(context.address));
+                let source_nullifier =
+                    claim_hash_output(evaluate(nullifier, &env)?, "immediate relay nullifier")?;
+                ensure!(
+                    coin_nullifier.0 == source_nullifier,
+                    "immediate relay nullifier mismatch"
+                );
+
+                let target = ContractAddress(claim_hash_output(
+                    evaluate(recipient, &env)?,
+                    "immediate relay recipient contract",
+                )?);
+                let output_coin = coin.evolve_from(
+                    b"midnight:kernel:nonce_evolve",
+                    coin.value,
+                    coin.type_,
+                );
+                let destination = output_coin.commitment(&Recipient::Contract(target));
+                let source_output_commitment = claim_hash_output(
+                    evaluate(output_commitment, &env)?,
+                    "immediate relay output commitment",
+                )?;
+                ensure!(
+                    destination.0 == source_output_commitment,
+                    "immediate relay output commitment mismatch"
+                );
+                ensure!(
+                    context.call_context.com_indices.contains_key(&destination),
+                    "immediate relay output commitment is absent from context"
+                );
+
+                let receive_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_coin_receive!(
+                        (),
+                        (),
+                        coin_commitment
+                    );
+                let nullifier_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+                        (),
+                        (),
+                        coin_nullifier
+                    );
+                let spend_ops =
+                    onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+                        (),
+                        (),
+                        destination
+                    );
+                program.extend(receive_ops);
+                program.extend(nullifier_ops);
+                program.extend(spend_ops[..5].iter().cloned());
+                spend_ops[5].clone()
+            }
             Instruction::ReadTokenBalance {
                 destination,
                 color,
@@ -7845,6 +8026,8 @@ mod shielded_spend_tests {
     const COLOR: [u8; 32] = [1; 32];
     const RECIPIENT: [u8; 32] = [3; 32];
     const ADDRESS: [u8; 32] = [0; 32];
+    const RELAY_TARGET: [u8; 32] = [4; 32];
+    const ENTRY_POINT: [u8; 32] = [5; 32];
 
     fn hash_from_hex(value: &str) -> [u8; 32] {
         assert_eq!(value.len(), 64);
@@ -7979,6 +8162,76 @@ mod shielded_spend_tests {
         plan
     }
 
+    fn relay_plan_json() -> Json {
+        let mut value = spend_plan_json();
+        value["entrypoint"] = json!("relayShieldedImmediate");
+        value["circuit"]["inputs"] = json!([
+            {"name":"nonce", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"color", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"amount", "type":"UIntRange<340282366920938463463374607431768211456>", "visibility":"private"},
+            {"name":"recipient", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"inputCommitment", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"nullifier", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"outputCommitment", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"entryPoint", "type":"Bytes<32>", "visibility":"private"},
+            {"name":"callCommitment", "type":"Native", "visibility":"private"}
+        ]);
+        value["operations"] = json!([
+            {"op":"readContractAddress", "destination":"selfAddress"},
+            {
+                "op":"relayShieldedImmediate",
+                "nonce":reference("nonce"),
+                "color":reference("color"),
+                "amount":reference("amount"),
+                "recipient":reference("recipient"),
+                "inputCommitment":reference("inputCommitment"),
+                "nullifier":reference("nullifier"),
+                "outputCommitment":reference("outputCommitment")
+            },
+            {
+                "op":"claimcontractcall",
+                "address":reference("recipient"),
+                "entryPointHash":reference("entryPoint"),
+                "commitment":reference("callCommitment")
+            }
+        ]);
+        value["reads"] = json!([{
+            "name":"selfAddress",
+            "type":"Bytes<32>",
+            "projections":byte_projection_bindings("selfAddress", 32)
+                .unwrap()
+                .into_iter()
+                .map(|(name, ty)| json!({"name":name, "type":ty}))
+                .collect::<Vec<_>>()
+        }]);
+        value
+    }
+
+    fn relay_plan() -> Plan {
+        let mut plan: Plan = serde_json::from_value(relay_plan_json()).unwrap();
+        plan.target = Some(profile::NAME.into());
+        plan.target_profile = Some(profile::target_json());
+        plan
+    }
+
+    fn relay_inputs(
+        input_commitment: [u8; 32],
+        nullifier: [u8; 32],
+        output_commitment: [u8; 32],
+    ) -> BTreeMap<String, Json> {
+        BTreeMap::from([
+            ("nonce".into(), bytes_json(&NONCE)),
+            ("color".into(), bytes_json(&COLOR)),
+            ("amount".into(), json!("5")),
+            ("recipient".into(), bytes_json(&RELAY_TARGET)),
+            ("inputCommitment".into(), bytes_json(&input_commitment)),
+            ("nullifier".into(), bytes_json(&nullifier)),
+            ("outputCommitment".into(), bytes_json(&output_commitment)),
+            ("entryPoint".into(), bytes_json(&ENTRY_POINT)),
+            ("callCommitment".into(), json!("17")),
+        ])
+    }
+
     fn spend_inputs(nullifier: [u8; 32], commitment: [u8; 32]) -> BTreeMap<String, Json> {
         BTreeMap::from([
             ("nonce".into(), bytes_json(&NONCE)),
@@ -8071,6 +8324,21 @@ mod shielded_spend_tests {
         )
     }
 
+    fn context_with_relay_bookings(
+        input_commitment: Commitment,
+        input_index: u64,
+        output_commitment: Commitment,
+        output_index: u64,
+    ) -> QueryContext<Db> {
+        let mut context = context(NONCE, NONCE);
+        context.call_context.com_indices = context
+            .call_context
+            .com_indices
+            .insert(input_commitment, input_index)
+            .insert(output_commitment, output_index);
+        context
+    }
+
     fn context_with_schema_send_outputs(
         schema: &Json,
         key_nonce: [u8; 32],
@@ -8089,6 +8357,46 @@ mod shielded_spend_tests {
                 .insert(send_commitment, send_index)
                 .insert(change_commitment, change_index);
         context
+    }
+
+    fn expected_relay_effects() -> (Commitment, Nullifier, Commitment) {
+        let coin = ShieldedCoinInfo {
+            nonce: Nonce(HashOutput(NONCE)),
+            type_: ShieldedTokenType(HashOutput(COLOR)),
+            value: 5,
+        };
+        let input_commitment = coin.commitment(&Recipient::Contract(ContractAddress(HashOutput(
+            ADDRESS,
+        ))));
+        let nullifier = coin.nullifier(&SenderEvidence::Contract(ContractAddress(HashOutput(
+            ADDRESS,
+        ))));
+        let output_coin = coin.evolve_from(
+            b"midnight:kernel:nonce_evolve",
+            coin.value,
+            coin.type_,
+        );
+        let output_commitment = output_coin
+            .commitment(&Recipient::Contract(ContractAddress(HashOutput(RELAY_TARGET))));
+        assert_eq!(
+            input_commitment.0,
+            HashOutput(hash_from_hex(
+                "84a93c4d7971bb71252e9b01a8cc75f4daffdcac90c25c3d3ea484a1b6eae3a0"
+            ))
+        );
+        assert_eq!(
+            nullifier.0,
+            HashOutput(hash_from_hex(
+                "d119520f9cd70fb3b835e7421773629b1991e38d642ff9b6b69eb9ed1bf86c24"
+            ))
+        );
+        assert_eq!(
+            output_commitment.0,
+            HashOutput(hash_from_hex(
+                "142498ccc64b0b945dbabf4804b879f555b3e1eefe9251b9d6e4abaad1ca5a0b"
+            ))
+        );
+        (input_commitment, nullifier, output_commitment)
     }
 
     fn expected_coin_effects() -> (Nullifier, Commitment) {
@@ -8514,6 +8822,112 @@ mod shielded_spend_tests {
             .is_err()
         );
         assert!(prepare_with_context(&plan, &inputs, context(NONCE, NONCE), parameters,).is_err());
+    }
+
+    #[test]
+    fn shielded_immediate_relay_matches_compact_claims_and_requires_booked_coins() {
+        let (input_commitment, nullifier, output_commitment) = expected_relay_effects();
+        let plan = relay_plan();
+        let inputs = relay_inputs(
+            input_commitment.0.0,
+            nullifier.0.0,
+            output_commitment.0.0,
+        );
+        let execution = prepare_with_context(
+            &plan,
+            &inputs,
+            context_with_relay_bookings(input_commitment, 7, output_commitment, 9),
+            &ledger::structure::INITIAL_PARAMETERS,
+        )
+        .unwrap();
+
+        let receive_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_receive!(
+            (),
+            (),
+            input_commitment
+        );
+        let nullifier_ops = onchain_runtime::program_fragments::kernel_claim_zswap_nullifier!(
+            (),
+            (),
+            nullifier
+        );
+        let spend_ops = onchain_runtime::program_fragments::kernel_claim_zswap_coin_spend!(
+            (),
+            (),
+            output_commitment
+        );
+        let mut expected_program: Program = receive_ops.into();
+        expected_program.extend(nullifier_ops);
+        expected_program.extend(spend_ops);
+        assert!(execution
+            .program
+            .windows(expected_program.len())
+            .any(|operations| operations == expected_program));
+        assert_eq!(execution.after.effects.claimed_nullifiers.size(), 1);
+        assert!(execution
+            .after
+            .effects
+            .claimed_nullifiers
+            .member(&nullifier));
+        assert_eq!(execution.after.effects.claimed_shielded_receives.size(), 1);
+        assert!(execution
+            .after
+            .effects
+            .claimed_shielded_receives
+            .iter()
+            .any(|entry| **entry == input_commitment));
+        assert_eq!(execution.after.effects.claimed_shielded_spends.size(), 1);
+        assert!(execution
+            .after
+            .effects
+            .claimed_shielded_spends
+            .member(&output_commitment));
+
+        let parameters = &ledger::structure::INITIAL_PARAMETERS;
+        for (name, wrong) in [
+            ("inputCommitment", [0; 32]),
+            ("nullifier", [0; 32]),
+            ("outputCommitment", [0; 32]),
+        ] {
+            let mut changed = inputs.clone();
+            changed.insert(name.into(), bytes_json(&wrong));
+            assert!(prepare_with_context(
+                &plan,
+                &changed,
+                context_with_relay_bookings(input_commitment, 7, output_commitment, 9),
+                parameters,
+            )
+            .is_err());
+        }
+
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            context_with_relay_bookings(input_commitment, 7, Commitment(HashOutput([8; 32])), 9),
+            parameters,
+        )
+        .is_err());
+        assert!(prepare_with_context(
+            &plan,
+            &inputs,
+            context_with_relay_bookings(Commitment(HashOutput([8; 32])), 7, output_commitment, 9),
+            parameters,
+        )
+        .is_err());
+
+        let mut wrong_call_target = plan.clone();
+        let Instruction::ClaimContractCall { address, .. } = &mut wrong_call_target.operations[2]
+        else {
+            unreachable!("relay plan ends with its child call")
+        };
+        *address = serde_json::from_value(reference("entryPoint")).unwrap();
+        assert!(prepare_with_context(
+            &wrong_call_target,
+            &inputs,
+            context_with_relay_bookings(input_commitment, 7, output_commitment, 9),
+            parameters,
+        )
+        .is_err());
     }
 
     #[test]
