@@ -158,6 +158,20 @@ jobs:
             --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
             --dedup-range-checks --emit ledger --emit witness --output "$role_dir"
           test "$(wc -c < "$role_dir/OpenZeppelinPort.ShieldedRoleGate.ShieldedRoleGate.protectedAction.impact.json")" -le 2097152
+      - name: Check guarded effects with and without range deduplication
+        run: |
+          artifacts=$(mktemp -d)
+          trap 'rm -rf "$artifacts"' EXIT
+          .lake/build/bin/noctium compile tests/Issue43EffectBlocks.lean \
+            --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+            --emit ledger --output "$artifacts/default"
+          .lake/build/bin/noctium compile tests/Issue43EffectBlocks.lean \
+            --target profiles/midnight-ledger-9-zkir-3.2.1-target.json \
+            --dedup-range-checks --emit ledger --output "$artifacts/dedup"
+          rustup toolchain install 1.100.0 --profile minimal --no-self-update
+          NOCTIUM_EFFECT_BLOCKS_DIR="$artifacts" \
+            cargo +1.100.0 test --manifest-path runtime/Cargo.toml --locked \
+              --no-default-features --features zkir-321 --test effect_blocks
       - name: Check source proof registration
         run: |
           lake build Noctium.Verification
