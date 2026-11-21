@@ -5,13 +5,14 @@ use futures::{
 };
 use ledger::structure::{ContractAction, ProofVersioned};
 use noctium_runtime::{
-    artifacts,
+    Db, artifacts,
     assembly::NativeIntent,
     proof::{
         Abort, Error, LocalProver, PreparedProof, ProofRequest, ProofService, ServiceError,
         TrustedParameters,
     },
 };
+use onchain_runtime::state::{ContractOperation, ContractState, EntryPointBuf};
 use rand::rngs::OsRng;
 use serialize::{Deserializable, tagged_deserialize, tagged_serialize};
 use sha2::{Digest, Sha256};
@@ -557,5 +558,152 @@ fn actual_source_claim_proves_verifies_and_attaches_without_subprocesses() {
     assert_eq!(
         PreparedProof::from_intent(&bundle, wrong_communication).err(),
         Some(Error::BindingMismatch)
+    );
+}
+
+#[test]
+#[ignore = "requires the pinned ConfidentialToken bundle, finalized state, and trusted K7 SRS"]
+fn retained_total_supply_bundle_regenerates_exact_prover_key() {
+    const BUNDLE_SHA256: &str = "0d2e6268be03691f4f3a907e6f413a3ab91d9113f26118761520b11f4ea51756";
+    const STATE_SHA256: &str = "a8183ee5ad89efa60961163e89328bd6e2dcecd873b6a6fabcfeeb028316f77d";
+    const SRS_SHA256: &str = "e82ae890c080188355f37feaffe91372584cd810615082d9143d4dec0453fd9d";
+    const SOURCE_SHA256: &str = "f841e14b4112b7a07a042b5d16347d2edc47d54f8f742900b8cdc33e542520ef";
+    const PROVER_SHA256: &str = "d954eee85eb562fcd3dd6d90f4ab5f068e7345fc009f4708aba2064c9547c09a";
+    const VERIFIER_SHA256: &str =
+        "cbaf7d0c9196c8db38c798737c147d7da0095718dea3c62ba0a5905f398b514b";
+    const SOURCE_NAME: &str = "examples/openzeppelin/ConfidentialToken.lean";
+    const COMPILER_REVISION: &str = "ca520fcf3c119229b0018c156b18ad185afcde9e";
+    const CIRCUIT_FILE: &str = "OpenZeppelinPort.ConfidentialToken.totalSupply.zkir";
+
+    let root = std::path::PathBuf::from(std::env::var("NOCTIUM_TOTAL_SUPPLY_BUNDLE").unwrap());
+    let state_path = std::env::var("NOCTIUM_TOTAL_SUPPLY_FINALIZED_STATE").unwrap();
+    let srs_path = std::env::var("NOCTIUM_TOTAL_SUPPLY_SRS").unwrap();
+    let bundle = artifacts::verify(&root, Some(BUNDLE_SHA256)).unwrap();
+    assert_eq!(bundle.authenticated_manifest_sha256(), Some(BUNDLE_SHA256));
+    assert_eq!(
+        bundle.manifest().compiler.source_revision,
+        COMPILER_REVISION
+    );
+    assert_eq!(
+        artifacts::digest(bundle.source(SOURCE_NAME).unwrap()),
+        SOURCE_SHA256
+    );
+
+    let plan: serde_json::Value =
+        serde_json::from_slice(bundle.file(artifacts::Role::Plan).unwrap()).unwrap();
+    assert_eq!(plan["contractName"], "OpenZeppelinPort.ConfidentialToken");
+    assert_eq!(plan["entrypoint"], "totalSupply");
+    assert_eq!(plan["nativeCircuitFile"], CIRCUIT_FILE);
+    assert_eq!(plan["circuit"]["name"], "OpenZeppelinPort.noViewInputs");
+    assert_eq!(
+        bundle
+            .manifest()
+            .entries
+            .iter()
+            .find(|entry| entry.role == artifacts::Role::Circuit)
+            .unwrap()
+            .name,
+        CIRCUIT_FILE
+    );
+
+    let retained_prover = bundle.file(artifacts::Role::ProverKey).unwrap().to_vec();
+    let retained_verifier = bundle.file(artifacts::Role::VerifierKey).unwrap().to_vec();
+    assert_eq!(artifacts::digest(&retained_prover), PROVER_SHA256);
+    assert_eq!(artifacts::digest(&retained_verifier), VERIFIER_SHA256);
+
+    // This fixed byte digest identifies the finalized snapshot pinned by the receipt.
+    let state_bytes = fs::read(state_path).unwrap();
+    assert_eq!(state_bytes.len(), 33_919);
+    assert_eq!(artifacts::digest(&state_bytes), STATE_SHA256);
+    let mut state_reader = state_bytes.as_slice();
+    let deployed: ContractState<Db> = tagged_deserialize(&mut state_reader).unwrap();
+    assert!(state_reader.is_empty());
+    let mut canonical_state = Vec::new();
+    tagged_serialize(&deployed, &mut canonical_state).unwrap();
+    assert_eq!(canonical_state, state_bytes);
+
+    let total_supply = EntryPointBuf(b"totalSupply".to_vec());
+    let installed_verifier = deployed
+        .operations
+        .get(&total_supply)
+        .and_then(|operation| operation.latest().cloned())
+        .expect("finalized state must install the selected totalSupply verifier");
+    assert_eq!(encoded(&installed_verifier), retained_verifier);
+
+    let srs_bytes = fs::read(srs_path).unwrap();
+    let parameters = TrustedParameters::from_bytes(&srs_bytes, 7, SRS_SHA256).unwrap();
+    assert_eq!(parameters.k(), 7);
+    assert_eq!(parameters.sha256(), SRS_SHA256);
+
+    let omitted_key_bundle = std::env::temp_dir().canonicalize().unwrap().join(format!(
+        "noctium-total-supply-regenerated-key-{}",
+        rand::Rng::r#gen::<u64>(&mut OsRng)
+    ));
+    let manifest = bundle.manifest();
+    let recipe = artifacts::Recipe {
+        schema_version: manifest.schema_version,
+        compiler_revision: manifest.compiler.source_revision.clone(),
+        files: manifest
+            .entries
+            .iter()
+            .map(|entry| artifacts::Selection {
+                role: entry.role,
+                name: entry.name.clone(),
+                input: root.join(&entry.path),
+            })
+            .collect(),
+    };
+    assert_eq!(
+        artifacts::assemble_without_prover_key(recipe, &omitted_key_bundle).unwrap(),
+        *manifest
+    );
+    struct RemoveBundle(std::path::PathBuf);
+    impl Drop for RemoveBundle {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+    let _cleanup = RemoveBundle(omitted_key_bundle.clone());
+    assert!(!omitted_key_bundle.join("keys/entrypoint.prover").exists());
+    assert!(artifacts::verify(&omitted_key_bundle, Some(BUNDLE_SHA256)).is_err());
+
+    let regenerated = block_on(artifacts::verify_and_regenerate(
+        &omitted_key_bundle,
+        BUNDLE_SHA256,
+        &deployed,
+        &parameters,
+    ))
+    .unwrap();
+    assert_eq!(
+        regenerated.file(artifacts::Role::ProverKey).unwrap(),
+        retained_prover
+    );
+    assert_eq!(
+        regenerated.file(artifacts::Role::VerifierKey).unwrap(),
+        retained_verifier
+    );
+
+    let wrong_verifier = deployed
+        .operations
+        .get(&EntryPointBuf(b"isRegistered".to_vec()))
+        .and_then(|operation| operation.latest().cloned())
+        .expect("finalized state must also install isRegistered");
+    assert_ne!(encoded(&wrong_verifier), retained_verifier);
+    let mut mismatched_state = deployed.clone();
+    mismatched_state.operations = mismatched_state.operations.insert(
+        total_supply,
+        ContractOperation::new(Some(wrong_verifier), None),
+    );
+    assert_eq!(
+        block_on(artifacts::verify_and_regenerate(
+            &omitted_key_bundle,
+            BUNDLE_SHA256,
+            &mismatched_state,
+            &parameters,
+        ))
+        .err()
+        .unwrap()
+        .code,
+        "regeneration_failed"
     );
 }
