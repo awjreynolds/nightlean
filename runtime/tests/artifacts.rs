@@ -206,6 +206,129 @@ fn witness_recipe(fixture: &Fixture) -> Recipe {
     recipe
 }
 
+fn selected_rust_recipe(fixture: &Fixture, include_rust: bool) -> Recipe {
+    let contract = "NoctiumExamples.PrivateStateCounter";
+    let entrypoint = "advance";
+    let prefix = format!("{contract}.{entrypoint}");
+    let mut recipe = fixture.recipe();
+    for selection in &mut recipe.files {
+        match selection.role {
+            Role::Circuit => {
+                selection.name = format!("{prefix}.zkir");
+                selection.input = fixture.path("entry.zkir");
+            }
+            Role::Plan => {
+                selection.name = format!("{prefix}.impact.json");
+                selection.input = fixture.path("entry.impact.json");
+            }
+            _ => {}
+        }
+    }
+    recipe.files.push(fixture.selection(
+        Role::WitnessBinding,
+        &format!("{prefix}.witness.json"),
+        "call.witness.json",
+    ));
+    recipe.files.push(fixture.selection(
+        Role::WitnessControl,
+        &format!("{prefix}.witness.control.json"),
+        "call.witness.control.json",
+    ));
+    if include_rust {
+        recipe.files.push(fixture.selection(
+            Role::RustBinding,
+            &format!("{prefix}.rs"),
+            &format!("{prefix}.rs"),
+        ));
+    }
+    recipe
+}
+
+fn rust_binding_recipe(fixture: &Fixture) -> Recipe {
+    const CIRCUIT: &[u8] = include_bytes!(
+        "fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.zkir"
+    );
+    const PLAN: &[u8] = include_bytes!(
+        "fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.impact.json"
+    );
+    const CONTROL: &[u8] = include_bytes!(
+        "fixtures/private-authoring/321/NoctiumExamples.PrivateStateCounter.advance.witness.control.json"
+    );
+    const RUST: &[u8] = include_bytes!(
+        "fixtures/private-authoring/321/bindings/rust/NoctiumExamples.PrivateStateCounter.advance.rs"
+    );
+    let control: Value = serde_json::from_slice(CONTROL).unwrap();
+    let mut plan: Value = serde_json::from_slice(PLAN).unwrap();
+    plan["circuit"].as_object_mut().unwrap().remove("file");
+    let mut plan_bytes = serde_json::to_vec(&plan).unwrap();
+    plan_bytes.push(b'\n');
+    fs::write(fixture.path("entry.zkir"), CIRCUIT).unwrap();
+    fs::write(fixture.path("entry.impact.json"), &plan_bytes).unwrap();
+    fs::write(
+        fixture.path("call.witness.json"),
+        control["binding"].as_str().unwrap().as_bytes(),
+    )
+    .unwrap();
+    fs::write(fixture.path("call.witness.control.json"), CONTROL).unwrap();
+    fs::write(
+        fixture.path("NoctiumExamples.PrivateStateCounter.advance.rs"),
+        RUST,
+    )
+    .unwrap();
+
+    let contract = "NoctiumExamples.PrivateStateCounter";
+    let entrypoint = "advance";
+    let prefix = format!("{contract}.{entrypoint}");
+    let mut metadata_entrypoint = json!({
+        "name": entrypoint,
+        "circuit": plan["circuit"]["name"],
+        "nativeCircuitFile": plan["nativeCircuitFile"],
+        "nativePlanFile": format!("{prefix}.impact.json"),
+        "nativeCircuitQualified": false,
+        "nativePlanSha256": artifacts::digest(&plan_bytes)
+    });
+    for field in ["callInputs", "returns", "returnViews"] {
+        if let Some(value) = plan.get(field) {
+            metadata_entrypoint[field] = value.clone();
+        }
+    }
+    let mut metadata_contract = json!({
+        "name": contract,
+        "state": plan["state"],
+        "entrypoints": [metadata_entrypoint]
+    });
+    if let Some(constructor) = plan.get("constructor") {
+        metadata_contract["constructor"] = constructor.clone();
+    }
+    let metadata = json!({
+        "schemaVersion": 3,
+        "target": noctium_runtime::profile::NAME,
+        "targetProfile": noctium_runtime::profile::target_json(),
+        "qualification": "unqualified-relation-and-state-description",
+        "deployable": false,
+        "contracts": [metadata_contract],
+        "circuits": [],
+        "hostWitnessPlans": [{
+            "circuit": plan["circuit"]["name"],
+            "bindingFile": format!("{prefix}.witness.json"),
+            "controlFile": format!("{prefix}.witness.control.json"),
+            "target": "entrypoint",
+            "contract": contract,
+            "entrypoint": entrypoint,
+            "nativeWitnessQualified": false
+        }],
+        "artifacts": [
+            {"file":format!("{prefix}.zkir"),"role":"ledger"},
+            {"file":format!("{prefix}.impact.json"),"role":"ledger"},
+            {"file":format!("{prefix}.witness.json"),"role":"witness"},
+            {"file":format!("{prefix}.witness.control.json"),"role":"witness"},
+            {"file":format!("bindings/rust/{prefix}.rs"),"role":"rustBinding","sha256":artifacts::digest(RUST)}
+        ]
+    });
+    fs::write(fixture.path("noctium.json"), metadata.to_string()).unwrap();
+    selected_rust_recipe(fixture, true)
+}
+
 fn write_witness_pair(fixture: &Fixture, binding: &serde_json::Value) {
     let text = serde_json::to_string(binding).unwrap();
     fs::write(fixture.path("call.witness.json"), &text).unwrap();
@@ -283,6 +406,49 @@ fn selected_compiler_inventory_binds_ledger_and_witness_files() {
         failure(artifacts::assemble(altered, &fixture.path("wrong-role"))),
         "plan_mismatch"
     );
+}
+
+#[test]
+fn rust_binding_payload_matches_exact_inventory_bytes_and_selected_control() {
+    let fixture = Fixture::new();
+    let recipe = rust_binding_recipe(&fixture);
+    let manifest = artifacts::assemble(recipe, &fixture.path("rust-binding")).unwrap();
+    let pin = artifacts::digest(&artifacts::manifest_bytes(&manifest).unwrap());
+    let bundle = artifacts::verify(&fixture.path("rust-binding"), Some(&pin)).unwrap();
+    assert_eq!(
+        bundle.file(Role::RustBinding).unwrap(),
+        include_bytes!(
+            "fixtures/private-authoring/321/bindings/rust/NoctiumExamples.PrivateStateCounter.advance.rs"
+        )
+    );
+
+    fs::write(
+        fixture.path("NoctiumExamples.PrivateStateCounter.advance.rs"),
+        b"pub fn stale_witness() {}\n",
+    )
+    .unwrap();
+    let stale_recipe = selected_rust_recipe(&fixture, true);
+    assert_eq!(
+        failure(artifacts::assemble(
+            stale_recipe,
+            &fixture.path("stale-rust-binding")
+        )),
+        "plan_mismatch"
+    );
+
+    let legacy = Fixture::new();
+    let mut no_rust_recipe = rust_binding_recipe(&legacy);
+    no_rust_recipe
+        .files
+        .retain(|selection| selection.role != Role::RustBinding);
+    let metadata_path = legacy.path("noctium.json");
+    let mut metadata: Value = serde_json::from_slice(&fs::read(&metadata_path).unwrap()).unwrap();
+    metadata["artifacts"][4]
+        .as_object_mut()
+        .unwrap()
+        .remove("sha256");
+    fs::write(metadata_path, metadata.to_string()).unwrap();
+    artifacts::assemble(no_rust_recipe, &legacy.path("no-rust-module")).unwrap();
 }
 
 #[test]
@@ -432,7 +598,9 @@ fn memory_bundle_checks_manifest_before_reading_payloads() {
     ] {
         assert_eq!(
             failure(artifacts::verify_memory_with_limit(
-                &bytes, &expected, limit, actual_count, |_, _| panic!("untrusted payload read"),
+                &bytes, &expected, limit, actual_count, |_, _| {
+                    panic!("untrusted payload read")
+                },
             )),
             code
         );
