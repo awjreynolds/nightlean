@@ -156,6 +156,7 @@ jobs:
           lake env lean tests/NativeCallClaims.lean
           lake env lean tests/NativeCopy.lean
           lake env lean tests/NativeOpaqueReturns.lean
+          lake env lean tests/OpaqueByteMap.lean
           lake env lean tests/Issue43ConditionalWrites.lean
           lake env lean tests/Issue43EmptyActivity.lean
           lake env lean tests/Issue43MapMembership.lean

@@ -89,6 +89,7 @@ fn scalar_zero(ty: &str) -> Result<Json> {
         ScalarType::Bool => json!(false),
         ScalarType::Bytes32 => json!({"kind":"bytes", "values":vec![0u8;32]}),
         ScalarType::Bytes(length) => json!({"kind":"bytes", "values":vec![0u8;length]}),
+        ScalarType::OpaqueBytes => json!({"kind":"opaqueBytes", "values":Vec::<u8>::new()}),
         ScalarType::JubjubScalar => json!({"kind":"jubjubScalar", "value":"0"}),
         ScalarType::JubjubPoint => json!({"kind":"jubjubPoint", "x":"0", "y":"1"}),
         #[cfg(feature = "zkir-321")]

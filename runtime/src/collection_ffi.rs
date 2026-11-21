@@ -362,7 +362,9 @@ fn key_order(value: &Value) -> Result<Vec<u8>, i32> {
         Value::Bytes(bytes) => Ok(bytes.clone()),
         #[cfg(feature = "zkir-321")]
         Value::Foreign(value) => value.to_bytes().map_err(|_| INVALID_ARGUMENT),
-        Value::JubjubScalar(_) | Value::JubjubPoint(_) => Err(INVALID_ARGUMENT),
+        Value::OpaqueBytes(_) | Value::JubjubScalar(_) | Value::JubjubPoint(_) => {
+            Err(INVALID_ARGUMENT)
+        }
     }
 }
 

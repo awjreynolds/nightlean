@@ -269,6 +269,7 @@ def scalarLeaf : Ty → Except String ScalarLeaf
   | .bool => pure .booleanField
   | .uint maximum => pure (.boundedUnsignedField maximum)
   | .bytes _ => .error "byte strings require a composite bytes layout"
+  | .opaqueBytes => .error "OpaqueBytes require a qualified ledger scalar schema"
   | .jubjubScalar | .jubjubPoint => .error "Jubjub values require a qualified curve schema"
   | .foreign _ => .error "foreign values require a qualified curve schema"
 
@@ -706,6 +707,7 @@ private def encodeScalar : Ty → String
   | .bool => "B"
   | .uint maximum => "U" ++ encodeNat maximum
   | .bytes length => "X" ++ encodeNat length
+  | .opaqueBytes => "O"
   | .jubjubScalar => "JS"
   | .jubjubPoint => "JP"
   | .foreign kind => "F" ++ toString kind.sourceName.length ++ ":" ++ kind.sourceName

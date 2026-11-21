@@ -47,6 +47,7 @@ private def checkConstants : Expr ty → Except String Unit
     if maximum ≤ ScalarPolicy.maxUint && value ≤ maximum then pure ()
     else throw "noncanonical unsigned constant"
   | .bytesField value _ | .bytesAt value _ => checkConstants value
+  | .opaqueBytesProjection value => checkConstants value
   | .toBytes32 value => checkConstants value
   | .copyValue value | .reverseBytes32 value | .reverseBytes value | .sliceBytes value _ _ => checkConstants value
   | .concatBytes left right => do checkConstants left; checkConstants right
@@ -177,6 +178,7 @@ def constrainType (ty : Ty) (value : String) : LowerM Unit :=
   | .bool => emit "constrain_to_boolean" [("val", toJson value)]
   | .uint maximum => constrainUnsigned maximum value
   | .bytes _ => rejectLowering "Bytes32 must be expanded into byte inputs"
+  | .opaqueBytes => pure ()
   | .jubjubScalar | .jubjubPoint | .foreign _ => rejectLowering "opaque values require their typed input bridge"
 
 private def lowerJubjubScalarFromNative (native : String) : LowerM String := do
@@ -726,6 +728,10 @@ private def lowerByteInput (input : Input) (raw : Bool := false) : LowerM Unit :
     let output := "%input_" ++ input.name
     read output (toJson kind.nativeName)
     modify fun state => {state with aliases := (input.name, output) :: state.aliases}
+  | .opaqueBytes => do
+    let output := "%input_" ++ input.name
+    read output
+    modify fun state => {state with aliases := (input.name, output) :: state.aliases}
   | .bytes _ => do
     let requirements := Native.Input.requirements input
     for spec in requirements do
@@ -755,6 +761,29 @@ private def lowerByteInput (input : Input) (raw : Bool := false) : LowerM Unit :
     constrainType input.ty output
 
 mutual
+private def lowerOpaqueBytes : Expr .opaqueBytes → LowerM String
+  | .ref name => do
+    pure ((← get).aliases.lookup name |>.getD ("%input_" ++ name))
+  | .disclose _ value => lowerOpaqueBytes value
+  | .copyValue value => do
+    unary "copy" (← lowerOpaqueBytes value) "val"
+  | @Expr.letE .opaqueBytes _ name value body => do
+    let value ← lowerOpaqueBytes value
+    let aliases := (← get).aliases
+    modify fun state => {state with aliases := (name, value) :: aliases}
+    let result ← lowerOpaqueBytes body
+    modify fun state => {state with aliases}
+    pure result
+  | .assertE condition body => do
+    emit "assert" [("cond", toJson (← lowerExpr condition))]
+    lowerOpaqueBytes body
+  | _ => do
+    rejectLowering "unsupported OpaqueBytes expression in Compress projection"
+    pure "0x00"
+termination_by value => sizeOf value
+decreasing_by
+  all_goals simp_wf <;> omega
+
 private def lowerBytes : Expr (.bytes length) → LowerM ByteOperands
   | .ref name => do
     match (← get).byteAliases.lookup name with
@@ -905,6 +934,7 @@ def lowerExpr : Expr ty → LowerM String
     lowerForeignBinary op left right
   | .foreignFromBytes (length := length) kind value => do
     lowerForeignFromBytes kind length (← lowerBytes value)
+  | .opaqueBytesProjection value => lowerOpaqueBytes value
   | .foreignBase curve value => lowerForeignConstant (.base curve) (Foreign.encodeField (.base curve) value)
   | .foreignScalar curve value => lowerForeignConstant (.scalar curve) (Foreign.encodeField (.scalar curve) value)
   | .foreignPoint curve value => lowerForeignConstant (.point curve) (Foreign.encodePoint curve value)
@@ -930,8 +960,8 @@ def lowerExpr : Expr ty → LowerM String
     lowerBoolGate "xor" left right
   | .ref name => do
     match ty with
-    | .bytes _ => do
-      rejectLowering "Bytes32 cannot be used as a scalar expression"
+    | .bytes _ | .opaqueBytes => do
+      rejectLowering "byte strings require their typed FAB alignment"
       pure "0x00"
     | .jubjubScalar | .jubjubPoint =>
       match (← get).aliases.lookup name with
@@ -1053,6 +1083,9 @@ def lowerExpr : Expr ty → LowerM String
       pure output
     | .bytes _ => do
       rejectLowering "byte strings do not support scalar casts"
+      pure "0x00"
+    | .opaqueBytes => do
+      rejectLowering "opaque byte strings do not support scalar casts"
       pure "0x00"
     | .jubjubScalar | .jubjubPoint | .foreign _ => do
       rejectLowering "opaque values do not support generic scalar casts"

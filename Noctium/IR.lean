@@ -31,6 +31,9 @@ inductive Expr : Ty → Type where
   lowering. Source expressions cannot cast or do arithmetic on byte strings. -/
   | bytesField (value : Expr (.bytes length)) (chunkIndex : Nat) : Expr .native
   | bytesAt (value : Expr (.bytes length)) (index : Nat) : Expr (.uint 255)
+  /-- The one Native projection used for FAB `Compress` alignment. The raw byte
+  sequence stays in the host plan and is never reconstructed from this field. -/
+  | opaqueBytesProjection (value : Expr .opaqueBytes) : Expr .native
   /-- A fixed-length, right-zero-padded source byte string. -/
   | bytesLiteral (length : Nat) (values : List Nat) : Expr (.bytes length)
   /-- Reverse a fixed-length source byte string without changing its type. -/
@@ -146,6 +149,7 @@ def Input.nativeIdentifiers (input : Input) : List String :=
       s!"%input_{input.name}_byte_{index}"
   | .jubjubPoint => [s!"%input_{input.name}_x", s!"%input_{input.name}_y"]
   | .foreign _ => ["%input_" ++ input.name]
+  | .opaqueBytes => ["%input_" ++ input.name]
   | _ => ["%input_" ++ input.name]
 
 /-- Committed byte arguments use FAB high-to-low chunks, as returns do. -/
@@ -187,6 +191,7 @@ def Expr.nativeCallFields : Expr ty → List (Expr .native) :=
   | .jubjubPoint => fun value => [.jubjubCoordinate value 0, .jubjubCoordinate value 1]
   | .foreign kind => fun value =>
     (List.range kind.encodedFieldCount).map fun index => .foreignEncodedField value index
+  | .opaqueBytes => fun value => [.opaqueBytesProjection value]
 
 def Output.nativeReturnFields (output : Output) : Except String (List (Expr .native)) :=
   pure (output.value.nativeCallFields)
@@ -751,6 +756,7 @@ def Ty.validate (caps : Capabilities) (ty : Ty) : Except String Unit := do
   | .bytes length =>
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
+  | .opaqueBytes => pure ()
   | .jubjubScalar | .jubjubPoint =>
     unless caps.jubjub do throw "target lacks qualified Jubjub support"
   | .foreign _ =>
@@ -781,6 +787,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     unless index < length do
       if length == 32 then throw "Bytes32 byte index is out of range"
       else throw "byte index is out of range"
+  | .opaqueBytesProjection value => value.validate caps env
   | .bytesLiteral length values => do
     unless length ≤ maxBytesLength do
       throw s!"byte string length exceeds the maximum of {maxBytesLength}"
@@ -952,7 +959,7 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     | _ => throw "inverse supports only Native and JubjubScalar"
     value.validate caps env
   | .cast target (source := source) value => do
-    if target.isBytes || source.isBytes then
+    if target.isBytes || source.isBytes || target.isOpaqueBytes || source.isOpaqueBytes then
       throw "byte strings do not support scalar casts"
     if target.isJubjub || source.isJubjub || target.isForeign || source.isForeign then
       throw "curve values do not support scalar casts"
@@ -966,12 +973,13 @@ def Expr.validate (caps : Capabilities) (env : TypeEnv) : Expr ty → Except Str
     body.validate caps env
   | .copyValue value | .disclose _ value => value.validate caps env
   | .eq (ty := operandTy) a b => do
-    if operandTy.isBytes then throw "byte string equality is not supported by this source surface"
+    if operandTy.isBytes || operandTy.isOpaqueBytes then
+      throw "byte string equality is not supported by this source surface"
     if !caps.equality then throw "target lacks equality"
     a.validate caps env
     b.validate caps env
   | .select c a b => do
-    if ty.isJubjub || (ty.isBytes && !caps.bytes32Conversions) then
+    if ty.isJubjub || ty.isOpaqueBytes || (ty.isBytes && !caps.bytes32Conversions) then
       throw "byte string and Jubjub selection is not supported by this source surface"
     if ty.isForeign && !caps.foreignValues then
       throw "target lacks typed foreign-curve value support"

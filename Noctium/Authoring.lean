@@ -52,6 +52,7 @@ private def typeName : Ty → String
   | .uint maximum => s!"UIntRange {maximum + 1}"
   | .bytes 32 => "Bytes32"
   | .bytes length => s!"Bytes {length}"
+  | .opaqueBytes => "OpaqueBytes"
   | .jubjubScalar => "JubjubScalar"
   | .jubjubPoint => "JubjubPoint"
   | .foreign kind => kind.sourceName
@@ -309,6 +310,7 @@ private def readScalarTy (stx : TSyntax `nltype) : CommandElabM Ty := do
     if length.getNat > Types.defaultLimits.maxVectorLength then
       throwErrorAt stx s!"byte string length exceeds the maximum of {Types.defaultLimits.maxVectorLength}"
     pure (.bytes length.getNat)
+  | `(nltype| OpaqueBytes) => pure .opaqueBytes
   | `(nltype| JubjubScalar) => pure .jubjubScalar
   | `(nltype| JubjubPoint) => pure .jubjubPoint
   | `(nltype| Secp256k1Base) => pure (.foreign (.base .secp256k1))
@@ -327,6 +329,7 @@ private def tyTerm : Ty → CommandElabM (TSyntax `term)
   | .bool => `(Noctium.Ty.bool)
   | .uint maximum => `(Noctium.Ty.uint $(natTerm maximum))
   | .bytes length => `(Noctium.Ty.bytes $(natTerm length))
+  | .opaqueBytes => `(Noctium.Ty.opaqueBytes)
   | .jubjubScalar => `(Noctium.Ty.jubjubScalar)
   | .jubjubPoint => `(Noctium.Ty.jubjubPoint)
   | .foreign (.base .secp256k1) => `(Noctium.Ty.foreign (Noctium.Foreign.Kind.base Noctium.Foreign.Curve.secp256k1))
@@ -434,6 +437,7 @@ private partial def renderType : TSyntax `nltype → String
   | `(nltype| UIntRange $exclusive:num) => s!"UIntRange {exclusive.getNat}"
   | `(nltype| Bytes32) => "Bytes32"
   | `(nltype| Bytes $length:num) => s!"Bytes {length.getNat}"
+  | `(nltype| OpaqueBytes) => "OpaqueBytes"
   | `(nltype| JubjubScalar) => "JubjubScalar"
   | `(nltype| JubjubPoint) => "JubjubPoint"
   | `(nltype| Secp256k1Base) => "Secp256k1Base"
