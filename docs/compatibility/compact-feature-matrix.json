@@ -5058,8 +5058,8 @@
       "id": "C-STDLIB-NEG",
       "layer": "standard-library",
       "surface": "neg",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignNeg lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. A native 3.2.1 fixture checks one nonzero value and zero for each field. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5072,15 +5072,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-INV",
       "layer": "standard-library",
       "surface": "inv",
-      "noctiumStatus": "missing",
-      "notes": "Polymorphic API. Every supported curve/field overload needs separate vectors and failure cases.",
+      "noctiumStatus": "subset",
+      "notes": "The typed Lean foreignInv lowering matches pinned Compact for the base and scalar fields of Secp256k1, Secp256r1 and Curve25519. The native 3.2.1 fixture checks one nonzero inverse per field and rejects each active zero inverse. ABI and full semantic coverage remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5093,15 +5097,19 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ForeignFieldNegInv.lean",
+        "runtime/tests/foreign_field_neg_inv.rs",
+        "tests/compact/foreign-field-neg-inv.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-HASHTOCURVE",
       "layer": "standard-library",
       "surface": "hashToCurve",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean hashToCurveFab lowers checked flat FAB layouts to the native Jubjub hash-to-curve instruction. Two changed private payloads in the mixed named record fixture match Compact 0.36.1, including the Bytes32 field split and enum tag. The native checker rejects a changed private field in the transcript. Recursive layouts and other host paths remain open.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5114,7 +5122,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/MixedFabHashToCurve.lean",
+        "runtime/tests/hash_to_curve_fab.rs",
+        "tests/compact/mixed-fab-hash-to-curve.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -5383,8 +5395,8 @@
       "id": "C-STDLIB-MINTSHIELDEDTOKEN",
       "layer": "standard-library",
       "surface": "mintShieldedToken",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean composes the native mint and recipient-specific Cell booking. Pinned Compact confirms the reference wallet recipient and Cell booking behavior. A funded Ledger 9 run checks the finalized commitment and index, wallet recovery and the stored qualified coin. Changed recipient and replay attempts leave state unchanged. Contract recipients and multi-output settlement need separate qualification.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5397,15 +5409,21 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/ShieldedWalletMint.lean",
+        "tests/compact/explicit-booked-coin-recipients.mjs",
+        "runtime/tests/shielded_wallet_mint.rs",
+        "runtime/src/localnet/shielded_receive.rs",
+        "docs/development/shielded-wallet-mint-localnet-receipt.json"
+      ],
       "equivalence": "unverified"
     },
     {
       "id": "C-STDLIB-EVOLVENONCE",
       "layer": "standard-library",
       "surface": "evolveNonce",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "Lean shieldedIndexedNonce takes a UInt128 index and Bytes32 nonce. Native 3.2.1 matches pinned Compact at index zero and UInt128 maximum, and drops the nonce's high byte before hashing. Source checks reject mismatched types and require disclosure of private-derived public results. Other source and host routes remain unverified.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -5418,7 +5436,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "tests/IndexedShieldedNonce.lean",
+        "runtime/tests/indexed_shielded_nonce.rs",
+        "tests/compact/indexed-shielded-nonce.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

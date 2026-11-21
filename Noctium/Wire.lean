@@ -74,6 +74,14 @@ private def evolveShieldedNonce (change : Bool) (nonce : Expr (.bytes 32)) :
 def shieldedOutputNonce (nonce : Expr (.bytes 32)) : Expr (.bytes 32) :=
   evolveShieldedNonce false nonce
 
+/-- Derive a shielded nonce for an indexed output under the shared nonce domain. -/
+def shieldedIndexedNonce (index : Expr (.uint (2 ^ 128 - 1)))
+    (nonce : Expr (.bytes 32)) : Expr (.bytes 32) :=
+  upgradeFromNative (.transientHash [
+    shieldedNonceDomain false,
+    .cast .native index,
+    degradeShieldedNonce nonce])
+
 /-- Derive the contract-owned change nonce for a partial shielded send. -/
 def shieldedChangeNonce (nonce : Expr (.bytes 32)) : Expr (.bytes 32) :=
   evolveShieldedNonce true nonce
