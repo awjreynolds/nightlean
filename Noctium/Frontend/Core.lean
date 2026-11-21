@@ -8,6 +8,7 @@ import Noctium.Modules
 import Noctium.Crypto.Signatures
 import Noctium.Backend.Impact
 import Noctium.Types.Maybe
+import Noctium.Types.Either
 import Noctium.EntryPointHash
 import Noctium.Wire
 import Lean
@@ -462,6 +463,7 @@ scoped syntax "if" nlexpr "then" "{" nlstatement* "}" "else" "{" nlstatement* "}
 declare_syntax_cat nlreturn
 scoped syntax "return" ident ":" nltype ":=" nlexpr : nlreturn
 scoped syntax "returnMaybe" ident "as" "(" ident "," ident ")" : nlreturn
+scoped syntax "returnEither" ident "as" "(" ident "," ident "," ident ")" : nlreturn
 scoped syntax "return" ident : nlreturn
 
 declare_syntax_cat nlentry
@@ -3037,6 +3039,63 @@ private def elaborateMaybeReturn (contractName : String) (label : TSyntax `ident
     returns := state.returns.push isSomeReturn |>.push payloadReturn
     returnViews := state.returnViews.push view}
 
+private def scalarDefault (payloadType : Ty) : CommandElabM (TSyntax `term) := do
+  match payloadType with
+  | .native => `(Noctium.Expr.native 0)
+  | .bool => `(Noctium.Expr.bool Bool.false)
+  | .uint maximum => `(Noctium.Expr.uint $(natTerm maximum) 0)
+  | _ => throwError "scalar tagged return payload must be Native, Bool, or UInt"
+
+private def elaborateEitherReturn (contractName : String) (label : TSyntax `ident)
+    (isLeftName leftName rightName : TSyntax `ident) (statement : TSyntax `nlreturn)
+    (state : EntryEffects) : CommandElabM EntryEffects := do
+  let labelName := label.getId.toString
+  let isLeftBindingName := isLeftName.getId.toString
+  let leftBindingName := leftName.getId.toString
+  let rightBindingName := rightName.getId.toString
+  let some (.bool, isLeftExpression) := maybeReturnBinding state.env isLeftBindingName
+    | throwErrorAt isLeftName "returnEither tag must reference a Bool binding"
+  let some (leftType, leftExpression) := maybeReturnBinding state.env leftBindingName
+    | throwErrorAt leftName "returnEither left value must reference a scalar binding"
+  let some (rightType, rightExpression) := maybeReturnBinding state.env rightBindingName
+    | throwErrorAt rightName "returnEither right value must reference a scalar binding"
+  let typeId ← match Noctium.Types.Either.scalarTypeId contractName leftType rightType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let _environment ← match Noctium.Types.Either.scalarEnvironment typeId leftType rightType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let fieldTypes ← match Noctium.Types.Either.scalarFieldTypes leftType rightType with
+    | .ok value => pure value
+    | .error message => throwErrorAt statement message
+  let typeIdTerm := stringTerm typeId
+  let span ← spanTerm statement
+  let mut fieldTerms := #[]
+  for (fieldName, fieldTy) in fieldTypes do
+    let fieldNameTerm := stringTerm fieldName
+    let fieldType ← `(Noctium.Types.CompositeType.scalar $(← tyTerm fieldTy))
+    fieldTerms := fieldTerms.push (← `({ name := $fieldNameTerm, type := $fieldType, span := $span : Noctium.Types.Field }))
+  let structureTerm ← `({ id := $typeIdTerm, fields := [$fieldTerms,*], span := $span : Noctium.Types.StructDecl })
+  let environmentTerm ← `({ structures := [$structureTerm] : Noctium.Types.CompositeEnv })
+  let leftDefault ← scalarDefault leftType
+  let rightDefault ← scalarDefault rightType
+  let canonicalLeft ← `(Noctium.Expr.select $isLeftExpression $leftExpression $leftDefault)
+  let canonicalRight ← `(Noctium.Expr.select $isLeftExpression $rightDefault $rightExpression)
+  let isLeftReturnName := s!"{labelName}_is_left"
+  let leftReturnName := s!"{labelName}_left"
+  let rightReturnName := s!"{labelName}_right"
+  for returnName in [isLeftReturnName, leftReturnName, rightReturnName] do
+    if state.env.any (fun binding => binding.1 == returnName) then
+      throwErrorAt label s!"structured return field '{returnName}' collides with an input or read binding"
+  let isLeftReturn ← `({ name := $(stringTerm isLeftReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $isLeftExpression), span := $span : Noctium.Output })
+  let leftReturn ← `({ name := $(stringTerm leftReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $canonicalLeft), span := $span : Noctium.Output })
+  let rightReturn ← `({ name := $(stringTerm rightReturnName), ty := Noctium.Ty.native, value := (Noctium.Expr.cast Noctium.Ty.native $canonicalRight), span := $span : Noctium.Output })
+  let compositeType ← `(Noctium.Types.CompositeType.structure $typeIdTerm)
+  let view ← `({ name := $(stringTerm labelName), environment := $environmentTerm, type := $compositeType, fields := [$(stringTerm isLeftReturnName), $(stringTerm leftReturnName), $(stringTerm rightReturnName)] : Noctium.ReturnView })
+  pure {state with
+    returns := state.returns.push isLeftReturn |>.push leftReturn |>.push rightReturn
+    returnViews := state.returnViews.push view}
+
 private def elaborateReturns (contractName : String) (statements : Array (TSyntax `nlreturn))
     (info : CircuitInfo) (initial : EntryEffects) : CommandElabM EntryEffects := do
   let mut state := initial
@@ -3050,6 +3109,14 @@ private def elaborateReturns (contractName : String) (statements : Array (TSynta
       if state.env.any (fun binding => binding.1 == labelName) then
         throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
       state ← elaborateMaybeReturn contractName label present payload statement state
+      labels := labelName :: labels
+    | `(nlreturn| returnEither $label:ident as ($isLeft:ident, $left:ident, $right:ident)) => do
+      let labelName := label.getId.toString
+      if labels.contains labelName then
+        throwErrorAt label "duplicate entry return label '{labelName}'"
+      if state.env.any (fun binding => binding.1 == labelName) then
+        throwErrorAt label "entry return label '{labelName}' collides with an input or read binding"
+      state ← elaborateEitherReturn contractName label isLeft left right statement state
       labels := labelName :: labels
     | `(nlreturn| return $label:ident : $returnTy:nltype := $value:nlexpr) => do
       let labelName := label.getId.toString
