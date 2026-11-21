@@ -28,7 +28,11 @@ evidence. Noctium lowers the root Cell and Set routes for a coin already booked
 to the current contract. The [Set fixture](../../runtime/tests/qualified_coin_set.rs)
 checks the emitted relation and the native state, including indices 17 and 42,
 duplicate insertion, and missing or wrong-recipient bookings. These checks use
-a native query context. Finalized Set execution and the List route remain open.
+a native query context. A focused funded Ledger 9 localnet run qualifies only
+the root Cell and Set writes for one self-minted coin in the same call as the
+existing Map receive. It matches each complete stored value, including the
+assigned index, to the exact finalized contract-owned output. The List route
+remains open. [Localnet receipt](shielded-coin-collections-localnet-receipt.json)
 
 The [pinned VM opcode source](https://github.com/midnightntwrk/midnight-ledger/blob/a2b30128ca4b660b73a068e29b56b48ede8c9a74/onchain-vm/src/ops.rs)
 defines opcode names and immediate encoding. The pinned runtime exports the

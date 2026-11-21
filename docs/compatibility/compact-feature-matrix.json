@@ -2122,7 +2122,7 @@
       "layer": "language-ledger",
       "surface": "Cell.writeCoin",
       "noctiumStatus": "subset",
-      "notes": "A direct Lean effect qualifies an already-booked self-contract coin into a root composite Cell. The native test stores the exact record at allocated index 42 and rejects absent or wrong-recipient bookings. It uses the pinned Cell fragment without recording a receive claim. Other recipients and live ledger qualification remain open.",
+      "notes": "A direct Lean effect qualifies an already-booked self-contract coin into a root composite Cell. The native test stores the exact record at allocated index 42 and rejects absent or wrong-recipient bookings. A funded development Ledger 9 run stores the same qualified coin in Map, Cell and Set and checks each against the finalized self-minted output. Other recipients remain open.",
       "source": [
         "adt"
       ],
@@ -2133,7 +2133,8 @@
       ],
       "observedEvidence": [
         "tests/QualifiedCoinCell.lean",
-        "runtime/tests/qualified_coin_cell.rs"
+        "runtime/tests/qualified_coin_cell.rs",
+        "docs/development/shielded-coin-collections-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
@@ -2280,7 +2281,7 @@
       "layer": "language-ledger",
       "surface": "Set.insertCoin",
       "noctiumStatus": "subset",
-      "notes": "A root Set accepts an exact QualifiedInfo record with a coin index booked for the current contract. The native query-context fixture preserves existing members, checks idempotent insertion, and rejects missing or wrong-recipient bookings. Finalized ledger execution and broader recipient cases remain open.",
+      "notes": "A root Set accepts an exact QualifiedInfo record with a coin index booked for the current contract. The native query-context fixture preserves existing members, checks idempotent insertion, and rejects missing or wrong-recipient bookings. A funded development Ledger 9 run checks the exact Set key and marker against the finalized self-minted output. Broader recipient cases remain open.",
       "source": [
         "adt"
       ],
@@ -2291,7 +2292,8 @@
       ],
       "observedEvidence": [
         "tests/QualifiedCoinSet.lean",
-        "runtime/tests/qualified_coin_set.rs"
+        "runtime/tests/qualified_coin_set.rs",
+        "docs/development/shielded-coin-collections-localnet-receipt.json"
       ],
       "equivalence": "unverified"
     },
