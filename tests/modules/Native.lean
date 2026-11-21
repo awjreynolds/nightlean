@@ -46,7 +46,7 @@ def genericLedgerModule : Noctium.Modules.Definition := {
   parameters := [⟨"N", .natural⟩, ⟨"T", .type⟩]
   members := [moduleBalance, moduleUpdateCircuit, moduleUpdateEntry]
   entrypoints := [{
-    member := 2
+    «member» := 2
     name := "update"
     circuit := .localMember 1
     effects := [⟨.writeCellOutput (.localMember 0) "result", {}⟩]}]
@@ -58,6 +58,12 @@ def genericLedgerModule : Noctium.Modules.Definition := {
 noctium_module from genericLedgerModule
 
 def moduleContractRoot : Noctium.Modules.Definition := {
+  members := [
+    {id := 0, name := "readCheck", kind := .circuit, sourceExport? := some {
+      program := `moduleIdentityProgram
+      exportName := "update"
+      arguments := [.typeValue (.scalar .native), .naturalValue 2]}},
+    {id := 1, name := "againRead", kind := .entrypoint, visibility := .«public»}]
   imports := [
     {viewName := "first", target := `genericLedgerModule,
       arguments := [.naturalValue 2, .typeValue (.scalar .native)], selections := [
@@ -65,19 +71,27 @@ def moduleContractRoot : Noctium.Modules.Definition := {
         {sourceName := "update", localName := "update"}]},
     {viewName := "again", target := `genericLedgerModule,
       arguments := [.naturalValue 2, .typeValue (.scalar .native)], selections := [
-        {sourceName := "balance", localName := "balance"},
+        {sourceName := "balance", localName := "mirror"},
         {sourceName := "update", localName := "update"}]},
     {viewName := "different", target := `genericLedgerModule,
       arguments := [.naturalValue 3, .typeValue (.scalar (.uint 255))], selections := [
         {sourceName := "balance", localName := "balance"},
         {sourceName := "update", localName := "update"}]}]
+  entrypoints := [{
+    «member» := 1
+    name := "againRead"
+    circuit := .localMember 0
+    effects := [
+      ⟨.readCell (.importedMember "again" "mirror") "observed" .native, {}⟩,
+      ⟨.require (.eq (.ref "observed" : Noctium.Expr .native) (.ref "value")), {}⟩]}]
   exports := [
     {name := "firstBalance", target := .importedMember "first" "balance"},
-    {name := "againBalance", target := .importedMember "again" "balance"},
+    {name := "againBalance", target := .importedMember "again" "mirror"},
     {name := "differentBalance", target := .importedMember "different" "balance"},
     {name := "firstUpdate", target := .importedMember "first" "update"},
     {name := "againUpdate", target := .importedMember "again" "update"},
-    {name := "differentUpdate", target := .importedMember "different" "update"}]
+    {name := "differentUpdate", target := .importedMember "different" "update"},
+    {name := "againRead", target := .localMember 1}]
 }
 
 noctium_module from moduleContractRoot

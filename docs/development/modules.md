@@ -88,14 +88,31 @@ instance/type-node limits. It also exercises the issue46 batch specialization
 API, which processes one selected export set in sorted name order while sharing
 its helper and type caches.
 
-`tests/modules/Native.lean` registers a generic module whose helper and state
-are specialized with natural and scalar type arguments. Two aliases for
-`(2, Native)` must share one state field and one circuit. `(3, UIntRange<256>)`
-must receive its own identities and state type. `tests/modules/check.sh`
-compiles the source twice for the pinned
-3.2.1 target, compares every emitted byte, and checks those relationships in
-the manifest. This checks source emission and module identity. Multi-entrypoint
-ledger acceptance remains the separate issue67 qualification.
+The [native module fixture](../../tests/modules/Native.lean) specializes a
+helper and state with a natural and scalar type argument. Two update aliases
+for `(2, Native)` share the same circuit and field. The `againRead` entrypoint
+reads the shared field through the locally renamed `mirror` view and checks
+the read against its public input. The `(3, UIntRange<256>)` instance uses a
+different circuit and field.
+
+The [module CLI check](../../tests/modules/check.sh) builds the fixture as one
+source file and then imports the same library from a separate Lean module.
+Both builds emit identical ZKIR, Impact and metadata bytes for the pinned
+3.2.1 profile. The check also makes the generic helper input private and
+verifies re-exporting its result still fails disclosure before emission.
+
+Compact 0.36.1 and its 0.21.0 runtime agree on the two aliases observing one
+balance. The oracle accepts the read at 11 after the first alias writes 11.
+It ends with shared balance 23 and distinct balance 7, and rejects a stale
+read at 22. [Compact oracle](../../tests/compact/ModuleLedger.compact) · [Runner](../../tests/compact/module-ledger.mjs)
+
+On the funded Ledger 9 development localnet, deployment finalized at block 70.
+The two alias writes and the read through `mirror` finalized at blocks 73,
+76, and 79. The distinct specialization finalized at block 82 with its own
+balance of 7 and the shared balance still 23. Both update aliases used the
+same circuit and verifier key. The SDK rejected a proof bound to the wrong
+alias and rejected the stale read before proving.
+[Finalized receipts and artifact hashes](module-ledger-localnet-receipts.json)
 
 The compiler re-expands each module contract from its registered source
 constants during inspection. It then re-runs generic specialization,
