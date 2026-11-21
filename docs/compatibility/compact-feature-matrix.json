@@ -1476,17 +1476,19 @@
         "docs/development/android-localnet-receipt.json",
         "docs/development/android-private-claim-receipt.json",
         "docs/development/web-witness-sdk.md",
-        "tests/witness62-public/qualification-evidence.json"
+        "tests/witness62-public/qualification-evidence.json",
+        "docs/development/typed-multi-entry-cpp-receipts.json"
       ],
       "equivalence": "unverified",
       "implementationUpdate": {
-        "checkedOn": "2026-11-17",
-        "sourceRevision": "b1afd9f4afa9525a5031820ab7eeaaddbee7e299",
-        "scope": "Authenticated witness binding/control roles retain exact source schemas, fresh leaf identities and native target bindings. Rust and C/C++ use consuming source/proof/client ownership, explicit cancellation, proof verification and finalized ledger acceptance before private commit. Both localnet profiles have immutable-source evidence. Multi-entrypoint/existing-state contexts and web/mobile/WASM packaging remain separate capabilities.",
+        "checkedOn": "2026-11-21",
+        "scope": "Authenticated witness binding and control roles retain source schemas, fresh leaf identities and native target bindings. Rust and C/C++ transfer the owned source runtime through proof and client execution, and commit private state after finality. Both localnet profiles have single-entrypoint evidence. On Ledger 9 with ZKIR 3.2.1, C++ finalized two typed witness entrypoints on one deployment across a process restart. The second callback read the value committed by the first. Broader host and profile qualification remains open.",
         "evidence": [
           "docs/development/typed-witnesses.md",
           "docs/development/typed-witness-qualification.md",
-          "tests/witness62-public/qualification-evidence.json"
+          "tests/witness62-public/qualification-evidence.json",
+          "tests/TypedMultiEntryWitness.lean",
+          "docs/development/typed-multi-entry-cpp-receipts.json"
         ],
         "fullEquivalence": "unverified"
       }

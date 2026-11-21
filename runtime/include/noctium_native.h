@@ -295,6 +295,56 @@ int32_t noctium_client_contract_deployment_start(
   const uint8_t *setup,size_t setup_len,uint64_t *out_client);
 int32_t noctium_native_contract_state_take(uint64_t client,uint64_t *out_state);
 int32_t noctium_native_contract_state_free(uint64_t state);
+/* Sidecar-enabled operation path. It executes the authenticated WitnessControl
+   artifact through the typed source interpreter, keeps the exact state token in
+   one opaque witness handle, and never calls Node or a second execution engine.
+
+   call_descriptor uses the same UTF-8 JSON shape as contract_call_start:
+     {"abiVersion":1,"operation":"advance","k":6,"ttl":2000000000,
+      "proofParametersSha256":"<independent SRS SHA-256>"}
+   inputs is a UTF-8 JSON object containing the Lean entrypoint arguments.
+   host_context is the typed provider context accepted by the native control ABI.
+   SRS validation, operation binding and the current state check run before source
+   arguments are admitted. `coins` must contain 32 bytes. Source begin currently
+   makes no random draws from this channel.
+
+   advance returns an ordinary result token containing only status. A need_host
+   status also carries requestId, attemptId, operation, capability and schema.
+   The private callback arguments are available only from private_request and the
+   native private buffer functions. resume accepts the exact typed V2 response:
+     {"protocolVersion":2,"requestId":"...","attemptId":"...",
+      "outcome":"value","operation":"...","capability":"...",
+      "schema":"...","value":<typed value>}
+   Invalid replies retain the pending callback. Accepted replies revoke copied
+   private request tokens. Call advance again to obtain the next callback or the
+   completed status. Status and callback metadata are host scheduling data, not
+   contract outputs.
+
+   witness_start prepares the completed call, proves it with the linked local
+   prover, and starts the SDK60 native call client without setup JSON. Fresh
+   32-byte entropy is required. Ordinary proof or client errors preserve the
+   witness at its retryable phase. Successful startup consumes the witness handle.
+   cancel consumes an unprepared witness and returns the same current state in a
+   new state token. Once proof preparation succeeds, cancellation cannot return
+   state. Freeing an active handle discards its owned state, so cancel first when
+   the state must be reused. Free revokes private tokens in either case. */
+int32_t noctium_native_contract_witness_begin(
+  uint64_t target,uint64_t state,
+  const uint8_t *call_descriptor,size_t call_descriptor_len,
+  const uint8_t *inputs,size_t inputs_len,
+  const uint8_t *host_context,size_t host_context_len,
+  const uint8_t *srs,size_t srs_len,
+  const uint8_t *coins,size_t coins_len,uint64_t *out_witness);
+int32_t noctium_native_contract_witness_advance(uint64_t witness,uint64_t *out_result);
+int32_t noctium_native_contract_witness_private_request(uint64_t witness,uint64_t *out_private);
+int32_t noctium_native_contract_witness_resume(
+  uint64_t witness,const uint8_t *typed_response,size_t typed_response_len,
+  uint64_t *out_result);
+int32_t noctium_client_contract_witness_start(
+  uint64_t witness,const uint8_t *client_descriptor,size_t client_descriptor_len,
+  const uint8_t *coins,size_t coins_len,uint64_t *out_client);
+int32_t noctium_native_contract_witness_cancel(uint64_t witness,uint64_t *out_state);
+int32_t noctium_native_contract_witness_free(uint64_t witness);
 int32_t noctium_client_contract_call_start(
   uint64_t target,uint64_t state,
   const uint8_t *call_descriptor,size_t call_descriptor_len,
