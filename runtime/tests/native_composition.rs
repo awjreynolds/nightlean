@@ -78,6 +78,23 @@ fn callee_inputs() -> BTreeMap<String, Json> {
     ])
 }
 
+fn interface_caller_inputs(expected_amount: &str) -> BTreeMap<String, Json> {
+    BTreeMap::from([
+        ("opening".into(), json!("101")),
+        ("requestAmount".into(), json!("7")),
+        ("requestAccepted".into(), json!(true)),
+        ("expectedAmount".into(), json!(expected_amount)),
+        ("expectedAccepted".into(), json!(true)),
+    ])
+}
+
+fn interface_callee_inputs() -> BTreeMap<String, Json> {
+    BTreeMap::from([
+        ("request.amount".into(), json!("7")),
+        ("request.accepted".into(), json!("1")),
+    ])
+}
+
 fn checked_call<'a>(
     execution: &'a noctium_runtime::Execution,
     circuit: &'a IrSource,
@@ -696,12 +713,20 @@ fn composed_call_finalizes_with_named_aggregate_results() {
 }
 
 #[cfg(feature = "localnet")]
+#[test]
+#[ignore = "uses the isolated development wallet and typed interface bundles"]
+fn interface_selected_aggregate_call_observes_both_states_and_rejects_mismatch() {
+    run_local_composition(LocalCase::Interface);
+}
+
+#[cfg(feature = "localnet")]
 enum LocalCase {
     Plain,
     Independent,
     Registry,
     Caller,
     Aggregate,
+    Interface,
 }
 
 #[cfg(feature = "localnet")]
@@ -796,12 +821,16 @@ fn run_local_composition(case: LocalCase) {
             submit(&deployment).await
         };
         match case {
-            LocalCase::Plain | LocalCase::Independent | LocalCase::Aggregate => {}
+            LocalCase::Plain
+            | LocalCase::Independent
+            | LocalCase::Aggregate
+            | LocalCase::Interface => {}
             LocalCase::Registry => return qualify_registry(&node, deploy, submit).await,
             LocalCase::Caller => return qualify_caller(&node, deploy, submit).await,
         }
         let independent = matches!(case, LocalCase::Independent);
         let aggregate = matches!(case, LocalCase::Aggregate);
+        let interface = matches!(case, LocalCase::Interface);
         let mut owners = independent.then(owner::Owners::spawn);
         let pair = if let Some(owners) = &owners {
             let caller_state =
@@ -821,6 +850,21 @@ fn run_local_composition(case: LocalCase) {
                 "caller",
                 "claim",
                 BTreeMap::from([("route".into(), bytes32(callee.deploy.address().0))]),
+            );
+            Pair { caller, callee }
+        } else if interface {
+            let callee = Operation::load(
+                "callee",
+                "claim",
+                BTreeMap::from([("calls".into(), json!("0"))]),
+            );
+            let caller = Operation::load(
+                "caller",
+                "claim",
+                BTreeMap::from([
+                    ("route".into(), bytes32(callee.deploy.address().0)),
+                    ("calls".into(), json!("0")),
+                ]),
             );
             Pair { caller, callee }
         } else {
@@ -844,13 +888,76 @@ fn run_local_composition(case: LocalCase) {
                         ("opening".into(), json!("101")),
                         ("amount".into(), json!("300")),
                         ("approved".into(), json!(true)),
-                        ("expectedMemo".into(), json!({"kind":"bytes","values":[12,42]})),
+                        (
+                            "expectedMemo".into(),
+                            json!({"kind":"bytes","values":[12,42]}),
+                        ),
                     ]),
                     BTreeMap::from([(
                         "frame".into(),
                         json!({"kind":"bytes","values":[44,1,1,0,1,1,12,42,200,255]}),
                     )]),
                 )
+            } else if interface {
+                let caller_inputs = interface_caller_inputs("7");
+                let callee_inputs = interface_callee_inputs();
+                let wrong_caller_inputs = interface_caller_inputs("8");
+                let caller_address = pair.caller.deploy.address();
+                let callee_address = pair.callee.deploy.address();
+                let caller_data = live
+                    .state
+                    .contract
+                    .get(&caller_address)
+                    .unwrap()
+                    .data
+                    .clone();
+                let callee_data = live
+                    .state
+                    .contract
+                    .get(&callee_address)
+                    .unwrap()
+                    .data
+                    .clone();
+                let wrong_caller = prepare(
+                    &pair.caller.plan,
+                    &wrong_caller_inputs,
+                    &caller_data,
+                    &live.state.parameters,
+                    caller_address,
+                )
+                .unwrap();
+                let callee_execution = prepare(
+                    &pair.callee.plan,
+                    &callee_inputs,
+                    &callee_data,
+                    &live.state.parameters,
+                    callee_address,
+                )
+                .unwrap();
+                let wrong_calls = [
+                    checked_call(
+                        &wrong_caller,
+                        &pair.caller.circuit,
+                        caller_data,
+                        caller_address,
+                        pair.caller.entry.clone(),
+                        Fr::from(53u64),
+                    ),
+                    checked_call(
+                        &callee_execution,
+                        &pair.callee.circuit,
+                        callee_data,
+                        callee_address,
+                        pair.callee.entry.clone(),
+                        Fr::from(101u64),
+                    ),
+                ];
+                assert!(
+                    assemble_checked_calls(&wrong_calls, &live.state.parameters, ttl, &mut OsRng,)
+                        .is_err(),
+                    "a caller claiming a different aggregate result must fail before proving"
+                );
+                pair.intent_with_inputs(&live.state, ttl, caller_inputs, callee_inputs)
             } else {
                 pair.intent(&live.state, ttl)
             };
@@ -866,18 +973,41 @@ fn run_local_composition(case: LocalCase) {
             receipt.contract_address,
             hex::encode(pair.caller.deploy.address().0.0)
         );
-        assert_eq!(
-            receipt.contract_state,
-            deployment_receipts[0].contract_state
-        );
+        if interface {
+            let expected_caller = create_state(
+                &pair.caller.plan,
+                &BTreeMap::from([
+                    ("route".into(), bytes32(pair.callee.deploy.address().0)),
+                    ("calls".into(), json!("1")),
+                ]),
+            )
+            .unwrap();
+            assert_eq!(
+                serialize::tagged_deserialize::<ContractState<Db>>(
+                    &mut receipt.contract_state.as_slice()
+                )
+                .unwrap()
+                .data,
+                expected_caller
+            );
+        } else {
+            assert_eq!(
+                receipt.contract_state,
+                deployment_receipts[0].contract_state
+            );
+        }
         let address = hex::encode(pair.callee.deploy.address().0.0);
         let bytes = &receipt.secondary_states[&address];
         let callee_state =
             serialize::tagged_deserialize::<ContractState<Db>>(&mut bytes.as_slice()).unwrap();
-        let mut expected_state = BTreeMap::from([
-            ("balance".into(), json!("13")),
-            ("count".into(), json!("1")),
-        ]);
+        let mut expected_state = if interface {
+            BTreeMap::from([("calls".into(), json!("1"))])
+        } else {
+            BTreeMap::from([
+                ("balance".into(), json!("13")),
+                ("count".into(), json!("1")),
+            ])
+        };
         if let Some(owners) = &owners {
             expected_state.insert("acceptedCredential".into(), owners.credentials[1].clone());
         }
@@ -888,8 +1018,12 @@ fn run_local_composition(case: LocalCase) {
         } else {
             let expected = create_state(&pair.callee.plan, &expected_state).unwrap();
             assert_eq!(callee_state.data, expected);
-            callee_receipt["balance"] = json!("13");
-            callee_receipt["count"] = json!("1");
+            if interface {
+                callee_receipt["calls"] = json!("1");
+            } else {
+                callee_receipt["balance"] = json!("13");
+                callee_receipt["count"] = json!("1");
+            }
         }
         eprintln!(
             "{}",

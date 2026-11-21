@@ -1318,7 +1318,7 @@
       "layer": "language-ledger",
       "surface": "Contract types and implements",
       "noctiumStatus": "subset",
-      "notes": "Named non-generic interfaces check provable entrypoint names, ordered scalar types and grouped ABI layouts. A registered Lean implementation may use different local labels. Interface-qualified commitments reuse direct native lowering. Dynamic contract values need separate evidence.",
+      "notes": "Named non-generic interfaces check provable entrypoint names, ordered scalar types and grouped ABI layouts. A funded localnet call through a named interface updated both contracts and rejected a changed expected return before proving. Compact 0.36.1 returned the same grouped values in memory. Dynamic contract values need separate evidence.",
       "source": [
         "reference",
         "release0360"
@@ -1333,7 +1333,8 @@
         "tests/compact/contract-interfaces.py",
         "examples/AggregateSerialization.lean",
         "runtime/tests/aggregate_serialization.rs",
-        "docs/development/named-interface-composition-receipt.json"
+        "docs/development/named-interface-composition-receipt.json",
+        "docs/development/named-interface-stateful-composition-receipt.json"
       ],
       "equivalence": "unverified"
     },
