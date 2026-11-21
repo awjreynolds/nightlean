@@ -2356,8 +2356,8 @@
       "id": "C-ADT-SET-ITERATOR",
       "layer": "host-ledger-view",
       "surface": "Set.[Symbol.iterator]",
-      "noctiumStatus": "missing",
-      "notes": "Compact exposes this method through TypeScript ledger views. Noctium has no matching host Set iterator in the public SDK.",
+      "noctiumStatus": "subset",
+      "notes": "The native snapshot ABI pages top-level Set members through declared scalar codecs and stable key order. The pinned Compact fixture compares exact member contents in both insertion orders. Nested Sets and SDK adapter qualification remain open.",
       "source": [
         "adt"
       ],
@@ -2365,7 +2365,12 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "runtime/tests/collection_reads.rs",
+        "runtime/include/noctium_native.h",
+        "tests/compact/NativeCollectionPages.compact",
+        "tests/compact/native-collection-pages.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
@@ -2623,8 +2628,8 @@
       "id": "C-ADT-MAP-ITERATOR",
       "layer": "host-ledger-view",
       "surface": "Map.[Symbol.iterator]",
-      "noctiumStatus": "missing",
-      "notes": "Compact exposes this method through TypeScript ledger views. Noctium has no matching host Map iterator in the public SDK.",
+      "noctiumStatus": "subset",
+      "notes": "The native snapshot ABI pages top-level Map entries with scalar keys and values in stable key order. The pinned Compact fixture compares exact contents in both insertion orders. Nested Maps, compound values and SDK adapter qualification remain open.",
       "source": [
         "adt"
       ],
@@ -2632,7 +2637,12 @@
         "SEM",
         "HOST"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "runtime/tests/collection_reads.rs",
+        "runtime/include/noctium_native.h",
+        "tests/compact/NativeCollectionPages.compact",
+        "tests/compact/native-collection-pages.mjs"
+      ],
       "equivalence": "unverified"
     },
     {

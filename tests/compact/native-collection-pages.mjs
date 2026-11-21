@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+const [generatedDirectory] = process.argv.slice(2);
+const runtimeDirectory = process.env.NOCTIUM_COMPACT_RUNTIME_DIR;
+assert.ok(generatedDirectory && runtimeDirectory, 'pass the compiler output and set NOCTIUM_COMPACT_RUNTIME_DIR');
+const { createCircuitContext, createConstructorContext, dummyContractAddress } = await import(
+  pathToFileURL(resolve(runtimeDirectory, 'dist/index.js')).href,
+);
+const { Contract, ledger } = await import(
+  pathToFileURL(resolve(generatedDirectory, 'contract/index.js')).href,
+);
+const contract = new Contract({});
+const walletKey = '00'.repeat(32);
+const { currentContractState } = await contract.initialState(createConstructorContext(null, walletKey));
+const call = async (state, entrypoint, ...args) => {
+  const context = createCircuitContext({
+    circuitId: entrypoint,
+    contractAddress: dummyContractAddress(),
+    coinPublicKeyOrZswapState: walletKey,
+    contractState: state,
+    privateState: null,
+  });
+  const result = await contract.circuits[entrypoint](context, ...args);
+  return result.context.callContext.currentQueryContext.state;
+};
+
+const flags = [[10n, true], [2n, false], [1n, true]];
+const members = [9, 1, 4];
+for (const reverse of [false, true]) {
+  let state = currentContractState.data;
+  for (const [key, value] of reverse ? [...flags].reverse() : flags) {
+    state = await call(state, 'put', key, value);
+  }
+  for (const value of reverse ? [...members].reverse() : members) {
+    state = await call(state, 'add', new Uint8Array(32).fill(value));
+  }
+  const snapshot = ledger(state);
+  // Compact iteration order is outside the comparison. Compare canonical contents.
+  const actualFlags = [...snapshot.flags].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  const actualMembers = [...snapshot.members].sort((a, b) => Buffer.compare(a, b));
+  assert.deepEqual(actualFlags, [[1n, true], [2n, false], [10n, true]]);
+  assert.deepEqual(actualMembers, [1, 4, 9].map(value => new Uint8Array(32).fill(value)));
+}
+console.log('Compact 0.36.1 Map and Set snapshots match the native pagination fixture contents');
