@@ -29,10 +29,16 @@ each iteration. If an empty tuple's body uses the item as a scalar, give it a
 type through a direct typed use. A witness parameter or an annotated `let`
 supplies the missing type. A loop also accepts `for item : UInt 8 in items do`.
 The same witness parameter rule applies to readable `map` and `fold` callbacks.
-Noctium assigns one type to the item and rejects conflicting expectations.
-Compact 0.36.1 accepted a zero-length loop whose same item appeared in both
-Boolean and UInt bindings. Uses without a known type still need a typed
-position. [Container loop and empty tuple fixture](../../tests/ReadableContainerLoop.lean)
+The same item from an empty tuple supports separate Bool and UInt uses. The
+checker gives each use its own type and checks the body. With zero elements,
+the sequence expression still runs and the callback has no invocations. A
+nonempty or annotated sequence keeps its declared element type. When neither
+the declaration nor a unique inferred type is available, use the item in a
+typed position. [Container loop and empty tuple fixture](../../tests/ReadableContainerLoop.lean)
+
+The mixed-type empty tuple case returns seed 11 with zero operator callbacks
+in the native Rust SDK, browser WASM, and Compact 0.36.1. Rust and WASM use the
+same generated host plan.
 
 For bytes `[4, 5]`, the native Rust witness executor, the browser WASM control
 session and the Compact 0.36.1 oracle all request the sequence once, read and

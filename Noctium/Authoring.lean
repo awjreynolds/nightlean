@@ -138,6 +138,12 @@ private structure Lowered where
   witnessNames : List String := []
   generatedValidity : List String := []
 
+private structure IterationParameter where
+  reference : String
+  surfaceName : String
+  views : List (String × ResultType) := []
+  deriving Inhabited
+
 private structure AuthoringExprState where
   codecs : List (Name × Helpers.Wire.Codec) := []
   composites : Types.CompositeEnv := {}
@@ -146,8 +152,7 @@ private structure AuthoringExprState where
   usedIteration : _root_.Bool := _root_.Bool.false
   nextCall : Nat := 0
   nextLet : Nat := 0
-  unresolvedIterationRefs : List String := []
-  iterationTypeConstraints : List (String × ResultType) := []
+  iterationParameters : List IterationParameter := []
   allowAssertThen : _root_.Bool := _root_.Bool.false
   deriving Inhabited
 
@@ -176,16 +181,17 @@ private def AuthoredOutput.layoutType (item : AuthoredOutput) : Types.CompositeT
 
 private abbrev ExprM := StateT AuthoringExprState CommandElabM
 
-private def freshIterationParameterRef : ExprM String := do
+private def freshIterationRef (kind : String) : ExprM String := do
   let state ← get
-  let name := s!"__noctium:iteration-parameter:{state.nextLet}"
+  let name := s!"__noctium:{kind}:{state.nextLet}"
   modify fun state => {state with nextLet := state.nextLet + 1}
   pure name
 
-private def unresolvedIterationParameter : ExprM String := do
-  let reference ← freshIterationParameterRef
+private def unresolvedIterationParameter (surfaceName : String) : ExprM String := do
+  let reference ← freshIterationRef "iteration-parameter"
   modify fun state => {state with
-    unresolvedIterationRefs := reference :: state.unresolvedIterationRefs}
+    iterationParameters := state.iterationParameters ++
+      [{reference, surfaceName, views := []}]}
   pure reference
 
 private def lowerExpectedIterationRef (env : SurfaceEnv) (expected : ResultType)
@@ -194,35 +200,29 @@ private def lowerExpectedIterationRef (env : SurfaceEnv) (expected : ResultType)
   let some (_, _, .ref refName) := env.find? (fun value => value.1 == id.getId.toString)
     | return none
   let state ← get
-  unless state.unresolvedIterationRefs.contains refName do return none
-  if let some (_, prior) := state.iterationTypeConstraints.find? (·.1 == refName) then
-    unless Helpers.subtype prior expected do
-      throwErrorAt stx s!"empty tuple item '{id.getId}' has conflicting expected types"
-    return some {type := prior, term := .ref refName}
+  let some parameter := state.iterationParameters.find? (·.reference == refName)
+    | return none
+  if let some (viewName, viewType) := parameter.views.find? fun (_, viewType) =>
+      Helpers.subtype viewType expected then
+    return some {type := viewType, term := .ref viewName}
+  let viewName ← freshIterationRef "iteration-view"
   modify fun state => {state with
-    iterationTypeConstraints := (refName, expected) :: state.iterationTypeConstraints}
-  pure (some {type := expected, term := .ref refName})
+    iterationParameters := state.iterationParameters.map fun parameter =>
+      if parameter.reference == refName then
+        {parameter with views := parameter.views ++ [(viewName, expected)]}
+      else parameter}
+  pure (some {type := expected, term := .ref viewName})
 
-private def resolvedSurfaceEnv (env : SurfaceEnv)
-    (constraints : List (String × ResultType)) : SurfaceEnv :=
-  env.map fun (name, type, term) =>
-    match term with
-    | .ref refName =>
-      match constraints.find? (·.1 == refName) with
-      | some (_, resolved) => (name, resolved, term)
-      | none => (name, type, term)
-    | _ => (name, type, term)
+-- The partial checker sees each typed binding. Zero-length callbacks are never materialized.
+private def iterationViewBindings (parameters : List IterationParameter)
+    (refs : List String) : List Statement :=
+  (parameters.filter fun parameter => refs.contains parameter.reference).flatMap fun parameter =>
+    parameter.views.map fun (viewName, viewType) =>
+      .bind viewName viewType (.ref parameter.reference)
 
-private def resolveIterationParameter (refName : String)
-    (constraints : List (String × ResultType)) : Option ResultType :=
-  (constraints.find? (·.1 == refName)).map (·.2)
-
-private def retainIterationScope (state : AuthoringExprState) (refs : List String) : AuthoringExprState :=
-  {state with
-    unresolvedIterationRefs := state.unresolvedIterationRefs.filter fun refName =>
-      !refs.contains refName
-    iterationTypeConstraints := state.iterationTypeConstraints.filter fun (refName, _) =>
-      !refs.contains refName}
+private def retainIterationScope (parameters : List IterationParameter) (refs : List String) :
+    List IterationParameter :=
+  parameters.filter fun parameter => !refs.contains parameter.reference
 
 private structure CallbackParameter where
   surfaceName : String
@@ -238,19 +238,13 @@ private def prepareCallbackParameters (parameters : List (TSyntax `ident))
     | some type =>
       bindings := bindings ++ [⟨surfaceName, surfaceName, some type⟩]
     | none =>
-      let reference ← unresolvedIterationParameter
+      let reference ← unresolvedIterationParameter surfaceName
       bindings := bindings ++ [⟨surfaceName, reference, none⟩]
   pure bindings
 
 private def callbackSurfaceEnv (bindings : List CallbackParameter) : SurfaceEnv :=
   bindings.map fun binding =>
     (binding.surfaceName, binding.type.getD .unit, .ref binding.reference)
-
-private def resolveCallbackTypes
-    (bindings : List CallbackParameter) (constraints : List (String × ResultType)) :
-    List (Option ResultType) :=
-  bindings.map fun binding =>
-    binding.type.orElse fun _ => resolveIterationParameter binding.reference constraints
 
 private def stringTerm (value : String) : TSyntax `term := ⟨Syntax.mkStrLit value⟩
 private def natTerm (value : Nat) : TSyntax `term := ⟨Syntax.mkNumLit (toString value)⟩
@@ -688,12 +682,14 @@ private def iterationProgram (stx : Syntax) (programName : String)
   pure {program with witnesses := uniqueWitnesses (program.witnesses ++ signatures)}
 
 private def iterationEnvironment (env : SurfaceEnv)
-    (staged : List (String × ResultType)) : Helpers.Environment :=
+    (staged : List (String × ResultType))
+    (parameters : List IterationParameter) : Helpers.Environment :=
+  let unresolved := parameters.map (·.reference)
   let locals := env.filterMap fun (_, type, term) =>
     match term with
-    | .ref name => some (name, type)
+    | .ref name => if unresolved.contains name then none else some (name, type)
     | _ => none
-  locals ++ staged
+  locals ++ parameters.flatMap (·.views) ++ staged
 
 private def stageIterationValues (callPrefix : String) (env : SurfaceEnv)
     (span : SourceSpan) (values : List Lowered) :
@@ -747,12 +743,13 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     match env.find? (fun value => value.1 == id.getId.toString) with
     | some (_, type, term) =>
       if let .ref refName := term then
-        if (← get).unresolvedIterationRefs.contains refName then
-          match resolveIterationParameter refName (← get).iterationTypeConstraints with
-          | some resolvedType => pure {type := resolvedType, term}
-          | none =>
-            throwErrorAt id s!"cannot infer the type of empty tuple item '{id.getId}'. Use a typed binding or loop annotation"
-        else pure {type, term}
+        match (← get).iterationParameters.find? (·.reference == refName) with
+        | some parameter =>
+          match parameter.views with
+          | [(viewName, viewType)] => pure {type := viewType, term := .ref viewName}
+          | [] => throwErrorAt id s!"cannot infer the type of empty tuple item '{parameter.surfaceName}'. Use a typed binding or loop annotation"
+          | _ => throwErrorAt id s!"empty tuple item '{parameter.surfaceName}' has multiple inferred types. Use a typed binding"
+        | none => pure {type, term}
       else pure {type, term}
     | none => throwErrorAt id s!"unknown readable witness value '{id.getId}'"
   | `(nlexpr| $n:num) =>
@@ -773,7 +770,7 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let sourceSpan ← liftM (spanValue stx)
     let (before, terms, staged) ← stageIterationValues callPrefix env sourceSpan values
     let program ← iterationProgram stx programName (values.flatMap (·.signatures))
-    let helperEnv := iterationEnvironment env staged
+    let helperEnv := iterationEnvironment env staged (← get).iterationParameters
     let elementTypes ← match Iteration.sequenceElementTypesWithLimits {}
         program 0 helperEnv sourceSpan terms with
       | .ok elementTypes => pure elementTypes
@@ -790,17 +787,17 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let callback ← lowerExpr programName (callPrefix ++ ".map")
       (callbackSurfaceEnv bindings ++ env) body
     let callbackState ← get
-    let callbackTypes := resolveCallbackTypes bindings callbackState.iterationTypeConstraints
-    modify fun state => retainIterationScope state
-      (bindings.filterMap fun binding => if binding.type.isNone then some binding.reference else none)
-    let resolvedEnv := resolvedSurfaceEnv env callbackState.iterationTypeConstraints
-    let helperEnv := iterationEnvironment resolvedEnv staged
-    let operatorParameters := (bindings.zip callbackTypes).map fun (binding, type) =>
-      {name := binding.reference,
-        type := if binding.type.isSome then none else type}
+    let localRefs := bindings.filterMap fun binding =>
+      if binding.type.isNone then some binding.reference else none
+    let localViews := iterationViewBindings callbackState.iterationParameters localRefs
+    let retainedParameters := retainIterationScope callbackState.iterationParameters localRefs
+    modify fun state => {state with iterationParameters := retainedParameters}
+    let helperEnv := iterationEnvironment env staged retainedParameters
+    let operatorParameters := bindings.map fun binding =>
+      {name := binding.reference, type := none}
     let operator := Iteration.Operator.anonymous
       operatorParameters none
-      (callback.before ++ [.return (some callback.term)])
+      (localViews ++ callback.before ++ [.return (some callback.term)])
     let program ← iterationProgram stx programName
       (values.flatMap (·.signatures) ++ callback.signatures)
     let (compiledProgram, term) ←
@@ -831,7 +828,7 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let sourceSpan ← liftM (spanValue stx)
     let (before, terms, staged) ← stageIterationValues callPrefix env sourceSpan values
     let program ← iterationProgram stx programName (values.flatMap (·.signatures))
-    let helperEnv := iterationEnvironment env staged
+    let helperEnv := iterationEnvironment env staged (← get).iterationParameters
     let elementTypes ← match Iteration.sequenceElementTypesWithLimits {}
         program 0 helperEnv sourceSpan (terms.drop 1) with
       | .ok elementTypes => pure elementTypes
@@ -849,17 +846,17 @@ private partial def lowerExpr (programName callPrefix : String) (env : SurfaceEn
     let callback ← lowerExpr programName (callPrefix ++ ".fold")
       (callbackSurfaceEnv bindings ++ env) body
     let callbackState ← get
-    let types := resolveCallbackTypes bindings callbackState.iterationTypeConstraints
-    modify fun state => retainIterationScope state
-      (bindings.filterMap fun binding => if binding.type.isNone then some binding.reference else none)
-    let resolvedEnv := resolvedSurfaceEnv env callbackState.iterationTypeConstraints
-    let helperEnv := iterationEnvironment resolvedEnv staged
-    let operatorParameters := (bindings.zip types).map fun (binding, type) =>
-      {name := binding.reference,
-        type := if binding.type.isSome then none else type}
+    let localRefs := bindings.filterMap fun binding =>
+      if binding.type.isNone then some binding.reference else none
+    let localViews := iterationViewBindings callbackState.iterationParameters localRefs
+    let retainedParameters := retainIterationScope callbackState.iterationParameters localRefs
+    modify fun state => {state with iterationParameters := retainedParameters}
+    let helperEnv := iterationEnvironment env staged retainedParameters
+    let operatorParameters := bindings.map fun binding =>
+      {name := binding.reference, type := none}
     let operator := Iteration.Operator.anonymous
       operatorParameters none
-      (callback.before ++ [.return (some callback.term)])
+      (localViews ++ callback.before ++ [.return (some callback.term)])
     let program ← iterationProgram stx programName
       (values.flatMap (·.signatures) ++ callback.signatures)
     let (compiledProgram, term) ←
@@ -1733,8 +1730,7 @@ private structure ReadableBody where
   nextLet : Nat := 0
   helperProgram : Option Helpers.Program := none
   requiresOutputViews : _root_.Bool := _root_.Bool.false
-  unresolvedIterationRefs : List String := []
-  iterationTypeConstraints : List (String × ResultType) := []
+  iterationParameters : List IterationParameter := []
   deriving Inhabited
 
 private def ReadableBody.lower (body : ReadableBody) (programName path : String)
@@ -1754,16 +1750,12 @@ private def ReadableBody.lower (body : ReadableBody) (programName path : String)
       iterationWitnesses := body.witnesses
       usedIteration := body.requiresOutputViews
       nextLet := body.nextLet
-      unresolvedIterationRefs := body.unresolvedIterationRefs
-      iterationTypeConstraints := body.iterationTypeConstraints}
-  let unresolvedEnv := resolvedSurfaceEnv body.env state.iterationTypeConstraints
+      iterationParameters := body.iterationParameters}
   pure (value, {body with
-    env := unresolvedEnv
     nextLet := state.nextLet
     helperProgram := state.iterationProgram
     requiresOutputViews := state.usedIteration
-    unresolvedIterationRefs := state.unresolvedIterationRefs
-    iterationTypeConstraints := state.iterationTypeConstraints})
+    iterationParameters := state.iterationParameters})
 
 private def ReadableBody.observe (body : ReadableBody) (value : Lowered)
     (sources : List (TSyntax `nlexpr)) (extraValidity : List String := [])
@@ -1886,9 +1878,7 @@ private partial def lowerReadableStatement (programName path : String)
       nextLet := loop.nextLet
       helperProgram := loop.helperProgram
       requiresOutputViews := loop.requiresOutputViews
-      env := resolvedSurfaceEnv body.env loop.iterationTypeConstraints
-      unresolvedIterationRefs := loop.unresolvedIterationRefs
-      iterationTypeConstraints := loop.iterationTypeConstraints}
+      iterationParameters := loop.iterationParameters}
   | `(noctium_witness_statement| for $item:ident $[: $annotation:nltype]? in $sequence:nlexpr do
       $nested:noctium_witness_statement* end) => do
     let itemName := item.getId.toString
@@ -1903,14 +1893,13 @@ private partial def lowerReadableStatement (programName path : String)
       iterationWitnesses := sourceBody.witnesses
       usedIteration := sourceBody.requiresOutputViews
       nextLet := sourceBody.nextLet
-      unresolvedIterationRefs := sourceBody.unresolvedIterationRefs
-      iterationTypeConstraints := sourceBody.iterationTypeConstraints}
+      iterationParameters := sourceBody.iterationParameters}
     let ((before, terms, staged), loopExprState) ←
       (stageIterationValues ("s" ++ path) sourceBody.env sequenceSpan [sequenceValue]).run loopExprState
     let [sequenceTerm] := terms
       | throwErrorAt statement "sequence loop must contain one sequence"
     let helperEnv := iterationEnvironment
-      (resolvedSurfaceEnv sourceBody.env sourceBody.iterationTypeConstraints) staged
+      sourceBody.env staged sourceBody.iterationParameters
     let (program, _) ← (iterationProgram statement programName sequenceValue.signatures).run loopExprState
     let inferred ← match Iteration.sequenceElementTypesWithLimits {}
         program 0 helperEnv sequenceSpan [sequenceTerm] with
@@ -1926,12 +1915,11 @@ private partial def lowerReadableStatement (programName path : String)
       iterationWitnesses := sourceBody.witnesses
       usedIteration := sourceBody.requiresOutputViews
       nextLet := loopExprState.nextLet
-      unresolvedIterationRefs := sourceBody.unresolvedIterationRefs
-      iterationTypeConstraints := sourceBody.iterationTypeConstraints}
+      iterationParameters := sourceBody.iterationParameters}
     let (elementRef, loopExprState) ← match knownElementType with
       | some _ => pure (itemName, initialLoopState)
       | none =>
-        unresolvedIterationParameter.run initialLoopState
+        (unresolvedIterationParameter itemName).run initialLoopState
     let placeholderType := knownElementType.getD .unit
     let mut loop := {sourceBody with
       env := (itemName, placeholderType, .ref elementRef) :: sourceBody.env
@@ -1939,29 +1927,23 @@ private partial def lowerReadableStatement (programName path : String)
       logicalAliases := []
       helperProgram := some program
       nextLet := loopExprState.nextLet
-      unresolvedIterationRefs := loopExprState.unresolvedIterationRefs
-      iterationTypeConstraints := loopExprState.iterationTypeConstraints}
+      iterationParameters := loopExprState.iterationParameters}
     for (child, ordinal) in nested.toList.zipIdx do
       loop ← lowerReadableStatement programName s!"{path}.{ordinal}" exprState codecTerms loop child
-    let elementType := knownElementType.orElse fun _ =>
-      resolveIterationParameter elementRef loop.iterationTypeConstraints
-    let retainedConstraints := loop.iterationTypeConstraints.filter fun (refName, _) =>
-      refName != elementRef
-    let retainedUnresolvedRefs := loop.unresolvedIterationRefs.filter fun refName =>
-      refName != elementRef
+    let localViews := iterationViewBindings loop.iterationParameters [elementRef]
+    let retainedParameters := retainIterationScope loop.iterationParameters [elementRef]
     let resolvedHelperEnv := iterationEnvironment
-      (resolvedSurfaceEnv sourceBody.env retainedConstraints) staged
+      sourceBody.env staged retainedParameters
     let operator := Iteration.Operator.anonymous
-      [{name := elementRef, type := elementType}] (some .unit)
-      (loop.statements ++ [.return none])
+      [{name := elementRef, type := knownElementType}] (some .unit)
+      (localViews ++ loop.statements ++ [.return none])
     let callbackState : AuthoringExprState := {
       exprState with
       iterationProgram := loop.helperProgram
       iterationWitnesses := loop.witnesses
       usedIteration := loop.requiresOutputViews
       nextLet := loop.nextLet
-      unresolvedIterationRefs := retainedUnresolvedRefs
-      iterationTypeConstraints := retainedConstraints}
+      iterationParameters := retainedParameters}
     let (callbackProgram, _) ←
       (iterationProgram statement programName loop.witnesses).run callbackState
     let (compiledProgram, term) ← match Iteration.mapWithLimits {}
@@ -1975,9 +1957,7 @@ private partial def lowerReadableStatement (programName path : String)
       nextLet := loop.nextLet
       helperProgram := some compiledProgram
       requiresOutputViews := loop.requiresOutputViews
-      env := resolvedSurfaceEnv body.env retainedConstraints
-      unresolvedIterationRefs := retainedUnresolvedRefs
-      iterationTypeConstraints := retainedConstraints}
+      iterationParameters := retainedParameters}
   | _ => throwErrorAt statement "finite range bodies accept let, prove, witness, private read and stage, and nested for statements"
 
 @[command_elab noctiumAuthoredWitnessCircuitCommand] unsafe def elabAuthoredWitnessCircuit : CommandElab := fun stx => do

@@ -85,12 +85,15 @@ end
   compiled.toOption.map (fun source => source.calls.map (·.name)) == some ["emptyContainer"]
 
 noctium_witness emptyTupleSeed() : Native
+noctium_witness emptyTupleFlag(item : Bool) : Native
 
 noctium_witness_circuit emptyTupleOperators using emptyTupleWire where
   let items := decode(emptyTupleWire, witness emptyContainer())
-  let mapped := map([items], fun item => witness containerStep(item, 0))
+  let mapped := map([items],
+    fun item => add(witness containerStep(item, 0), witness emptyTupleFlag(item)))
   let sum := fold(witness emptyTupleSeed(), [items, mapped],
-    fun acc item value => add(value, witness containerStep(item, acc)))
+    fun acc item value => add(value,
+      add(witness containerStep(item, acc), witness emptyTupleFlag(item))))
   output result : Native := disclose(sum)
 end
 
@@ -103,13 +106,35 @@ end
 noctium_control emptyTupleOperatorsHost from emptyTupleOperators.__program
   entry "noctium.witness-circuit.emptyTupleOperators.v1"
 
-/-- error: empty tuple item 'item' has conflicting expected types -/
-#guard_msgs in
-noctium_witness_circuit conflictingEmptyItemTypes using emptyTupleWire where
+noctium_witness_circuit mixedEmptyItemTypes using emptyTupleWire where
+  public bytes : Bytes 1
   let items := decode(emptyTupleWire, witness emptyContainer())
   for item in items do
     let flag : Bool := item
     let byte : UInt 8 := item
+    for inner in bytes do
+      let next := witness containerStep(item, inner)
+      prove eq(next, byte)
+    end
+    for index in 0 ..< 1 do
+      let next := witness emptyTupleFlag(item)
+      prove eq(next, index)
+    end
+    prove flag
+  end
+end
+
+#guard
+  let compiled := Noctium.Witness.compile mixedEmptyItemTypes.__program
+    "noctium.witness-circuit.mixedEmptyItemTypes.v1"
+  compiled.toOption.map (fun source => source.calls.map (·.name)) == some ["emptyContainer"]
+
+/-- error: readable witness expression type mismatch -/
+#guard_msgs in
+noctium_witness_circuit invalidNonemptyItemType where
+  public bytes : Bytes 1
+  for item in bytes do
+    let flag : Bool := item
     prove flag
   end
 end
