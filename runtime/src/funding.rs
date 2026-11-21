@@ -396,6 +396,90 @@ impl DustFunding {
         .await
     }
 
+    /// Fund two contract-owned input coins into one contract-owned merge output.
+    /// The proved call must claim both input nullifiers and the same output spend and receive.
+    #[cfg(feature = "localnet")]
+    pub(crate) async fn fund_shielded_merge(
+        &self,
+        contract: &ProvedNativeIntent,
+        offer: ZswapOffer<Proof, Db>,
+        offer_binding_randomness: PedersenRandomness,
+        network_id: &str,
+        parameters: &LedgerParameters,
+        material: &DustMaterial,
+        srs: &TrustedParameters,
+        now: Timestamp,
+        policy: FeePolicy,
+        rng: StdRng,
+    ) -> Result<FundedTransaction> {
+        let Some(ContractAction::Call(call)) = contract.actions.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(transcript) = call.guaranteed_transcript.as_deref() else {
+            return Err(Error::Intent);
+        };
+        let Some(input_a) = offer.inputs.get(0) else {
+            return Err(Error::Intent);
+        };
+        let Some(input_b) = offer.inputs.get(1) else {
+            return Err(Error::Intent);
+        };
+        let Some(output) = offer.outputs.get(0) else {
+            return Err(Error::Intent);
+        };
+        if contract.actions.len() != 1
+            || call.fallible_transcript.is_some()
+            || transcript.effects.claimed_nullifiers.size() != 2
+            || input_a.nullifier == input_b.nullifier
+            || !transcript
+                .effects
+                .claimed_nullifiers
+                .iter()
+                .any(|nullifier| **nullifier == input_a.nullifier)
+            || !transcript
+                .effects
+                .claimed_nullifiers
+                .iter()
+                .any(|nullifier| **nullifier == input_b.nullifier)
+            || transcript.effects.claimed_shielded_spends.size() != 1
+            || !transcript
+                .effects
+                .claimed_shielded_spends
+                .iter()
+                .any(|commitment| **commitment == output.coin_com)
+            || transcript.effects.claimed_shielded_receives.size() != 1
+            || !transcript
+                .effects
+                .claimed_shielded_receives
+                .iter()
+                .any(|commitment| **commitment == output.coin_com)
+            || transcript.effects.shielded_mints.size() != 0
+            || offer.inputs.len() != 2
+            || offer.outputs.len() != 1
+            || !offer.transient.is_empty()
+            || input_a.contract_address.as_deref() != Some(&call.address)
+            || input_b.contract_address.as_deref() != Some(&call.address)
+            || output.contract_address.as_deref() != Some(&call.address)
+            || output.ciphertext.is_some()
+        {
+            return Err(Error::Intent);
+        }
+
+        self.fund_shielded_offer(
+            contract,
+            offer,
+            offer_binding_randomness,
+            network_id,
+            parameters,
+            material,
+            srs,
+            now,
+            policy,
+            rng,
+        )
+        .await
+    }
+
     /// Fund one contract-owned coin split across one encrypted user output and one contract change.
     #[cfg(feature = "localnet")]
     pub(crate) async fn fund_shielded_split(

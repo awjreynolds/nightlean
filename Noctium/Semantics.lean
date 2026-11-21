@@ -1328,6 +1328,8 @@ def runEffectsWithEnv (ctx : EvalContext) (effects : List Effect) (env : EvalEnv
       throw "reference evaluator cannot determine the booked shielded coin index"
     | .spendShieldedFromMap .. =>
       throw "reference evaluator cannot determine the native shielded spend commitment"
+    | .mergeShieldedFromMap .. =>
+      throw "reference evaluator cannot determine the native shielded merge commitments"
     | .sendShieldedFromMap .. =>
       throw "reference evaluator cannot determine the native shielded change index"
     | .relayShieldedImmediate .. =>
@@ -1657,6 +1659,8 @@ def runEffectsWithGuardsAndEnv (ctx : EvalContext) (effects : List Effect)
           throw "reference evaluator cannot determine the booked shielded coin index"
         | .spendShieldedFromMap .. =>
           throw "reference evaluator cannot determine the native shielded spend commitment"
+        | .mergeShieldedFromMap .. =>
+          throw "reference evaluator cannot determine the native shielded merge commitments"
         | .sendShieldedFromMap .. =>
           throw "reference evaluator cannot determine the native shielded change index"
         | .relayShieldedImmediate .. =>

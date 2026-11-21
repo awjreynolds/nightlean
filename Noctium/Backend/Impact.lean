@@ -171,6 +171,12 @@ inductive Op where
       (recipient commitment : Expr (.bytes 32))
   | spendShieldedFromMap (nonce color : Expr (.bytes 32))
       (amount : Expr (.uint (2 ^ 128 - 1))) (recipient nullifier outputCommitment : Expr (.bytes 32))
+  | mergeShieldedFromMap
+      (nonceA colorA : Expr (.bytes 32)) (amountA : Expr (.uint (2 ^ 128 - 1)))
+      (nonceB colorB : Expr (.bytes 32)) (amountB : Expr (.uint (2 ^ 128 - 1)))
+      (outputNonce outputColor : Expr (.bytes 32))
+      (outputAmount : Expr (.uint (2 ^ 128 - 1)))
+      (nullifierA nullifierB outputCommitment : Expr (.bytes 32))
   | sendShieldedFromMap (nonce color : Expr (.bytes 32))
       (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
       (recipient nullifier outputCommitment changeCommitment : Expr (.bytes 32))
@@ -273,6 +279,24 @@ private def spendShieldedOp (nonce color : Expr (.bytes 32))
   let nullifier := shieldedCoinDigest "midnight:zswap-cn[v1]" 0 nonce color amount selfAddress
   let output := shieldedCoinDigest "midnight:zswap-cc[v1]" 1 evolved color amount recipient
   .spendShieldedFromMap nonce color amount recipient nullifier output
+
+private def mergeShieldedOp (nonceA colorA : Expr (.bytes 32))
+    (amountA : Expr (.uint (2 ^ 128 - 1)))
+    (nonceB colorB : Expr (.bytes 32))
+    (amountB : Expr (.uint (2 ^ 128 - 1)))
+    (selfAddress : Expr (.bytes 32)) : Op :=
+  let outputNonce := Wire.shieldedOutputNonce nonceA
+  let outputColor := colorA
+  let outputAmount : Expr (.uint (2 ^ 128 - 1)) :=
+    .cast (.uint (2 ^ 128 - 1)) (.uadd amountA amountB)
+  let nullifierA :=
+    shieldedCoinDigest "midnight:zswap-cn[v1]" 0 nonceA colorA amountA selfAddress
+  let nullifierB :=
+    shieldedCoinDigest "midnight:zswap-cn[v1]" 0 nonceB colorB amountB selfAddress
+  let outputCommitment := shieldedCoinDigest
+    "midnight:zswap-cc[v1]" 0 outputNonce outputColor outputAmount selfAddress
+  .mergeShieldedFromMap nonceA colorA amountA nonceB colorB amountB
+    outputNonce outputColor outputAmount nullifierA nullifierB outputCommitment
 
 private def sendShieldedOp (nonce color : Expr (.bytes 32))
     (inputAmount sendAmount : Expr (.uint (2 ^ 128 - 1)))
@@ -745,6 +769,9 @@ def Op.fields : Op → List Scalar
       (receiveShieldedFieldGroups slot nonce color amount commitment).flatten
   | .spendShieldedFromMap _ _ _ _ nullifier output =>
       (shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output).flatten
+  | .mergeShieldedFromMap _ _ _ _ _ _ _ _ _ nullifierA nullifierB output =>
+      (shieldedClaimFieldGroups 0 nullifierA ++ shieldedClaimFieldGroups 0 nullifierB ++
+        shieldedClaimFieldGroups 2 output).flatten
   | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
       (shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
         shieldedClaimFieldGroups 2 change).flatten
@@ -866,6 +893,9 @@ def Op.fieldGroups : Op → List (List Scalar)
       receiveShieldedFieldGroups slot nonce color amount commitment
   | .spendShieldedFromMap _ _ _ _ nullifier output =>
       shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output
+  | .mergeShieldedFromMap _ _ _ _ _ _ _ _ _ nullifierA nullifierB output =>
+      shieldedClaimFieldGroups 0 nullifierA ++ shieldedClaimFieldGroups 0 nullifierB ++
+        shieldedClaimFieldGroups 2 output
   | .sendShieldedFromMap _ _ _ _ _ nullifier output change =>
       shieldedClaimFieldGroups 0 nullifier ++ shieldedClaimFieldGroups 2 output ++
         shieldedClaimFieldGroups 2 change
@@ -1616,6 +1646,9 @@ def appendEffect (state : List StateDecl) (effect : Effect)
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
+  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress =>
+    pure {plan with operations := plan.operations ++ [
+      mergeShieldedOp nonceA colorA amountA nonceB colorB amountB selfAddress]}
   | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
     pure {plan with operations := plan.operations ++ [
       sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}
@@ -2289,6 +2322,9 @@ private def previousEffectStep (state : List StateDecl) (effect : Effect)
   | .spendShieldedFromMap _ nonce color amount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       spendShieldedOp nonce color amount recipient selfAddress]}
+  | .mergeShieldedFromMap _ nonceA colorA amountA nonceB colorB amountB selfAddress =>
+    plan := {plan with operations := plan.operations ++ [
+      mergeShieldedOp nonceA colorA amountA nonceB colorB amountB selfAddress]}
   | .sendShieldedFromMap _ nonce color inputAmount sendAmount recipient selfAddress =>
     plan := {plan with operations := plan.operations ++ [
       sendShieldedOp nonce color inputAmount sendAmount recipient selfAddress]}
@@ -2734,6 +2770,7 @@ def Op.toJson (ctx : EvalContext) (env : EvalEnv) : Op → Except String Lean.Js
   | .listPushFrontCoin .. => throw "qualified shielded coin List push uses its dedicated native-plan operation JSON"
   | .listPushFrontCoinTo .. => throw "qualified shielded coin List recipient push uses its dedicated native-plan operation JSON"
   | .spendShieldedFromMap .. => throw "shielded coin spend uses its dedicated native-plan operation JSON"
+  | .mergeShieldedFromMap .. => throw "shielded coin merge uses its dedicated native-plan operation JSON"
   | .sendShieldedFromMap .. => throw "shielded coin send uses its dedicated native-plan operation JSON"
   | .relayShieldedImmediate .. => throw "shielded coin relay uses its dedicated native-plan operation JSON"
   | .mintShielded .. => throw "shielded mint uses its dedicated native-plan operation JSON"
