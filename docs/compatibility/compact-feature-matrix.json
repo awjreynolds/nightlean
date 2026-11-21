@@ -3809,8 +3809,8 @@
       "id": "C-STDLIB-SHIELDEDSENDRESULT",
       "layer": "standard-library",
       "surface": "ShieldedSendResult",
-      "noctiumStatus": "missing",
-      "notes": "Inventory by exported name, not full semantic coverage.",
+      "noctiumStatus": "subset",
+      "notes": "A reusable Lean wire codec checks change before sent, with the pinned unqualified coin fields and a Bool presence tag. The constructor uses a zero coin for absent change. The source entry emits a 161-byte Noctium frame and uses structural decoding for raw payloads. The pinned shielded send reference exercises both change branches. Broader result transport and settlement remain separate.",
       "source": [
         "stdlib",
         "stdlibSource",
@@ -3823,7 +3823,11 @@
         "ZK",
         "ABI"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/Midnight/ShieldedSendResult.lean",
+        "tests/ShieldedSendResult.lean",
+        "tests/compact/shielded-coin-map.mjs"
+      ],
       "equivalence": "unverified"
     },
     {
