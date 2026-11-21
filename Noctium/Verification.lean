@@ -196,4 +196,141 @@ elab "#noctium_register_functional " proof:ident " for " policy:ident : command 
 elab "#noctium_register_privacy " proof:ident " for " policy:ident : command =>
   register proof policy .privacy
 
+private def roleLabel : Audit.Role → String
+  | .functional => "functional"
+  | .privacy => "privacy"
+
+private def coverageRegistrationJson (registration : Audit.Registration) : Lean.Json :=
+  Lean.Json.mkObj [
+    ("policy", toJson registration.policy.toString),
+    ("proof", toJson registration.proof.toString)]
+
+private def distinctRegistrations (registrations : Array Audit.Registration) :
+    Array Audit.Registration :=
+  registrations.foldl (fun found registration =>
+    if found.any (fun existing =>
+        existing.policy == registration.policy && existing.proof == registration.proof &&
+          existing.role == registration.role) then found
+    else found.push registration) #[]
+
+private def sourceCoverageRoleJson (role : Audit.Role)
+    (registrations : Array Audit.Registration) : Lean.Json := Id.run do
+  let distinct := distinctRegistrations registrations
+  let status := if distinct.isEmpty then "missing"
+    else if distinct.size > 1 then "ambiguous"
+    else "covered"
+  return Lean.Json.mkObj [
+    ("role", toJson (roleLabel role)),
+    ("status", toJson status),
+    ("registrations", toJson (distinct.map coverageRegistrationJson)),
+    ("duplicateRegistrationCount", toJson (registrations.size - distinct.size))]
+
+private def coverageRoleStatus (role : Audit.Role) (entrypointIndex : Nat)
+    (coverageMatches : Array (Nat × Audit.Registration)) : Array Audit.Registration :=
+  coverageMatches.filterMap fun (index, registration) =>
+    if index == entrypointIndex && registration.role == role then some registration else none
+
+private def policyDefEq (environment : Environment) (left right : Name) : Bool :=
+  match Kernel.isDefEq environment {} (mkConst left) (mkConst right) with
+  | .ok true => true
+  | _ => false
+
+syntax (name := noctiumSourceProofCoverageCommand)
+  "#noctium_source_proof_coverage " ident : command
+
+@[command_elab noctiumSourceProofCoverageCommand] unsafe def elabSourceProofCoverage :
+    CommandElab := fun stx => do
+  match stx with
+  | `(#noctium_source_proof_coverage $contractName:ident) => do
+    let contractDeclaration ← liftCoreM <| resolveGlobalConstNoOverload contractName
+    let contract ← evalConstCheck Contract ``Contract contractDeclaration
+    let environment ← getEnv
+    let mut coverageMatches : Array (Nat × Audit.Registration) := #[]
+    let mut invalidRegistrations : Array Lean.Json := #[]
+    for registration in proofRegistry.getState environment do
+      match Audit.check environment registration.policy registration.proof registration.role with
+      | .error message =>
+        invalidRegistrations := invalidRegistrations.push <| Lean.Json.mkObj [
+          ("policy", toJson registration.policy.toString),
+          ("proof", toJson registration.proof.toString),
+          ("role", toJson (roleLabel registration.role)),
+          ("error", toJson message)]
+      | .ok _ =>
+        let policy := mkConst registration.policy
+        let policySubject := mkApp (mkConst ``AuditPolicy.subject) policy
+        let policyContract := mkApp (mkConst ``Subject.contract) policySubject
+        let contractTerm := mkConst contractDeclaration
+        match Kernel.isDefEq environment {} policyContract contractTerm with
+        | .ok true =>
+          let policyValue ← evalConstCheck AuditPolicy ``AuditPolicy registration.policy
+          let index := policyValue.subject.entrypoint.val
+          if index < contract.entrypoints.length then
+            coverageMatches := coverageMatches.push (index, registration)
+        | _ => pure ()
+    let entryRows ← contract.entrypoints.zipIdx.mapM fun (entrypoint, index) => do
+      let roles := [Audit.Role.functional, Audit.Role.privacy]
+      let roleRegistrations := roles.map fun role =>
+        (role, coverageRoleStatus role index coverageMatches)
+      let roleRows := roleRegistrations.map fun (role, registrations) =>
+        sourceCoverageRoleJson role registrations
+      let functionalPolicies := (coverageRoleStatus .functional index coverageMatches)
+        |> distinctRegistrations
+      let privacyPolicies := (coverageRoleStatus .privacy index coverageMatches)
+        |> distinctRegistrations
+      let mut compatiblePolicyPairs : Array Lean.Json := #[]
+      let mut mismatchedPolicyPairs : Array Lean.Json := #[]
+      for functional in functionalPolicies do
+        for privacy in privacyPolicies do
+          let pair := Lean.Json.mkObj [
+            ("functionalPolicy", toJson functional.policy.toString),
+            ("privacyPolicy", toJson privacy.policy.toString)]
+          if policyDefEq environment functional.policy privacy.policy then
+            compatiblePolicyPairs := compatiblePolicyPairs.push pair
+          else
+            mismatchedPolicyPairs := mismatchedPolicyPairs.push pair
+      let policyPairing := if functionalPolicies.isEmpty || privacyPolicies.isEmpty then "incomplete"
+        else if compatiblePolicyPairs.isEmpty then "mismatch"
+        else if functionalPolicies.size > 1 || privacyPolicies.size > 1 then "ambiguous"
+        else "matched"
+      let missing := roleRegistrations.filterMap fun (role, registrations) =>
+        if distinctRegistrations registrations |>.isEmpty then some (roleLabel role) else none
+      let ambiguous := roleRegistrations.filterMap fun (role, registrations) =>
+        if (distinctRegistrations registrations).size > 1 then some (roleLabel role) else none
+      let status := if !ambiguous.isEmpty then "ambiguous"
+        else if policyPairing == "mismatch" then "policy-mismatch"
+        else if policyPairing == "ambiguous" then "ambiguous"
+        else if !missing.isEmpty then "incomplete"
+        else "covered"
+      pure (status, Lean.Json.mkObj [
+        ("index", toJson index),
+        ("entrypoint", toJson entrypoint.name),
+        ("status", toJson status),
+        ("roles", toJson roleRows),
+        ("policyPairing", toJson policyPairing),
+        ("compatiblePolicyPairs", toJson compatiblePolicyPairs),
+        ("mismatchedPolicyPairs", toJson mismatchedPolicyPairs),
+        ("missingRoles", toJson missing),
+        ("ambiguousRoles", toJson ambiguous)])
+    let overallStatus := if entryRows.isEmpty then "no-entrypoints"
+      else if entryRows.any (·.1 == "ambiguous") then "ambiguous"
+      else if entryRows.any (·.1 == "policy-mismatch") then "policy-mismatch"
+      else if entryRows.any (·.1 == "incomplete") then "incomplete"
+      else "covered"
+    let report := Lean.Json.mkObj [
+      ("schemaVersion", toJson (1 : Nat)),
+      ("kind", toJson ("source-proof-coverage" : String)),
+      ("contract", toJson contractDeclaration.toString),
+      ("status", toJson overallStatus),
+      ("entrypoints", toJson (entryRows.map Prod.snd)),
+      ("invalidRegistrations", toJson invalidRegistrations),
+      ("binding", Lean.Json.mkObj [
+        ("policyContract", toJson ("kernel-definitional-equality" : String)),
+        ("entrypointIndex", toJson ("policy.subject.entrypoint.val" : String)),
+        ("rolePairing", toJson ("kernel-definitional-equality-of-full-AuditPolicy" : String))]),
+      ("sourceProofsRechecked", toJson true),
+      ("nativeVerification", toJson false),
+      ("deployedVerification", toJson false)]
+    logInfo m!"NOCTIUM_SOURCE_PROOF_COVERAGE {report.compress}"
+  | _ => throwUnsupportedSyntax
+
 end Noctium.Verification
