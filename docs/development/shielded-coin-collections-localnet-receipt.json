@@ -1,27 +1,36 @@
 {
   "schemaVersion": 1,
-  "scope": "One funded Ledger 9 localnet self-mint and receive, with Map, root Cell, and root Set writes in the same call",
+  "scope": "One funded Ledger 9 localnet self-mint and receive, storing the same booked coin in a Map, root Cell, root Set, and one-element root List",
   "profile": "midnight-ledger-9-zkir-3.2.1",
   "genesis": "823383ec0302be8417cfcbcc62f21df08f4047bca37aaea89e3f54b550ebae1d",
+  "specVersion": 2001100,
   "ledger": "9.1.0.1",
   "zkir": "3.2.1",
   "nativeCli": "midnight-zkir 3.2.0",
-  "compilerRevision": "1f5deb7fa93b4db182d56f12cc704c11af2f3d08",
-  "compilerRevisionScope": "Noctium compiler source at this Git revision; the Lean fixture and Rust localnet test were uncommitted",
+  "compilerRevision": "e5715dbda5cfe196b0c21766e085c73c803afc90",
+  "compilerRevisionScope": "Noctium compiler code at this Git revision; the Lean fixture and Rust localnet test were uncommitted at run time and are identified by their hashes",
   "artifacts": {
     "source": {
       "path": "tests/FundedShieldedReceive.lean",
-      "sha256": "6a92b764dfcde03f36a6595a06bd22c0869804cf0937ef870db30e8c6e604deb"
+      "sha256": "248ec3073391ca2a24618682a2c0087d8d3669e59457719aaa12dfb60c2bd346"
     },
     "circuit": {
       "path": "FundedShieldedReceive.tip.zkir",
-      "sha256": "dc962bda6e5e10a260f07f5c8da942e8bb07ff5f972e9215453612a1283ff44d"
+      "sha256": "ead18684a1c7b322d5240c9b04e867f3ba9bef7dda973bd35dab07410f95ccaf",
+      "k": 15,
+      "rows": 24457
     },
-    "plan": {
+    "impactPlan": {
       "path": "FundedShieldedReceive.tip.impact.json",
-      "sha256": "7037829aa766b6f55b681fc909c7d4e6cd6576ba647de4b8fc82d19e3414a5d3"
+      "sha256": "43df7e3432964f04af51ae5005595bb9f8f02aeb1ff9c9705618e31ce659cab6"
     },
-    "bundleManifestSha256": "132115fbc441c9f82ec20d30db86171eed48e412483054234c25d7e2ea8324a7",
+    "compilerMetadataSha256": "2e3660a92c55cfe27779be8a92b49973736424cd359523a160f205d25bf3ee92",
+    "bundle": {
+      "entryCount": 10,
+      "manifestSha256": "7006eaf9ec5f5dae4616400073bbd2505f28e62e7da25754081c52e7ca489de5",
+      "externalManifestDigestChecked": true
+    },
+    "toolchainManifestSha256": "dccec8838ddd4739ef31f5a3268aef62ea7e8eff498fe8b875ab1ed763dc663b",
     "ledgerParametersSha256": "6b7cd98fb0b10d884db5b357877c7c26bf17f28a726918321a619913e90f7679",
     "k15SrsSha256": "724c7c3d779148bb113c7ee9c034b2f27db16e6bdf315fde90105a9bad00b1de",
     "nativeCliBinarySha256": "7396c9a368e70fb66cb91f39d1508c9f983cacc8d3bc27f7a94e12d9fe327c40"
@@ -29,28 +38,26 @@
   "test": {
     "name": "localnet::shielded_receive::tests::funded_shielded_receive_localnet",
     "sourcePath": "runtime/src/localnet/shielded_receive.rs",
-    "sourceSha256": "e9c944f87cb6185c625bce977a6e5ef5739c51d359678fbcf199a9ef7e8e37a0",
-    "binarySha256": "c2db7ba9fe4fe5658381aaec5553f277f102842597980bb673d599b316d0e6b3",
+    "sourceSha256": "751e8ce2deee0bb7bc2aa8a6f41e955e1ab2e6857a0db4503f0a78d1c960cedd",
+    "binarySha256": "7b83ff8f435f8800136ccc548e998d8155b13a0839b38c5b637c738074d92f9b",
     "result": "passed",
-    "durationSeconds": 47.33,
-    "k": 15,
-    "rows": 18499
+    "durationSeconds": 44.60
   },
   "deployment": {
     "finalized": true,
-    "height": 25
+    "height": 8
   },
   "call": {
     "finalized": true,
-    "height": 29,
-    "transactionId": "85411794fae8d0be3f95558a6a62ccbbb93063d54b527011a5ce1e6dab0706cd",
-    "contractAddress": "2ccd60086e7506c7ba871afb408046a707dfea0a5466a95cc1b9598780fe5767",
-    "stateSha256": "3fb2653f9d459e7b9edf7f1d0f2671ee6263640910c86609470f4f5dabf40b42"
+    "height": 12,
+    "transactionId": "462b6e50a339c8d1911c79d85c9ffa0956874a7896173787b9dadd5f2708497d",
+    "contractAddress": "58038cc2da786df904ef817e54901137781038323e0c63257461b575cee49be5",
+    "stateSha256": "5b409f07f1159510cfd57fff487424c2003f4c554b36a87bd3c8ec818df49b3b"
   },
   "coin": {
-    "commitment": "a0b12d3c80b86f242ec97ab7d894b6ad58f7eb1c88082da91104788084b2e957",
-    "nonce": "604035336e5143e706da047785b22d56d1eab88bcb764308f1d083950a1f481b",
-    "color": "270a2f9d2551da3b16fb0e0cf48885e07aeadee2e93d975abd3435672a4828b5",
+    "commitment": "3758cff331bf1c154d2cdfb497f87a11e3b84413c5f21bd5bdcc4d36dbcca728",
+    "nonce": "a5f35dd26e5be14d2839059418e64412ee5116798eaa4b47aed0e1a706d8f778",
+    "color": "699efb9e8f7e7642be68cbaeb14800586e1846808645fac5009d156b995a11c8",
     "value": "5",
     "mtIndex": 28
   },
@@ -59,7 +66,8 @@
     "finalizedStateMatchesCallReceipt": true,
     "mapCoinMatchesFinalizedOutput": true,
     "cellCoinMatchesFinalizedOutput": true,
-    "setCoinMatchesFinalizedOutput": true
+    "setCoinMatchesFinalizedOutput": true,
+    "listHeadMatchesFinalizedOutput": true
   },
   "rejectedBeforeSubmission": [
     "missingOffer",
