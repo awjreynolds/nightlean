@@ -1248,7 +1248,7 @@
       "layer": "language-ledger",
       "surface": "Contract constructor",
       "noctiumStatus": "subset",
-      "notes": "Native runtime config initializes scalar cells and explicitly empty maps. No general constructor language or witness initialization.",
+      "notes": "Lean source constructors accept public scalar and OpaqueString arguments and typed cell initializers. Compiler metadata drives off-chain native genesis-state construction; other state uses typed defaults. Arbitrary initialization effects and private witness callbacks are not supported.",
       "source": [
         "reference"
       ],
@@ -1258,7 +1258,12 @@
         "LEDGER"
       ],
       "observedEvidence": [
-        "scripts/zkir/native-runtime.mjs"
+        "Noctium/IR.lean",
+        "Noctium/Compiler.lean",
+        "runtime/src/constructor.rs",
+        "tests/ConstructorMetadata.lean",
+        "runtime/tests/constructor_metadata.rs",
+        "docs/development/constructors.md"
       ],
       "equivalence": "unverified"
     },
@@ -1266,8 +1271,8 @@
       "id": "C-STATE-SEALED",
       "layer": "language-ledger",
       "surface": "Sealed ledger fields",
-      "noctiumStatus": "missing",
-      "notes": "Reject mutations reachable from exported circuits, including helper calls.",
+      "noctiumStatus": "subset",
+      "notes": "Compact permits sealing any ledger field and restricts writes by exported circuits. Noctium requires constructor initialization for sealed scalar and OpaqueString cells, rejects entrypoint and helper-body writes in source validation, and rejects prepared calls that change sealed state natively. Other sealed ledger types and Compact constructor/helper initialization semantics remain unsupported or unverified.",
       "source": [
         "reference"
       ],
@@ -1275,7 +1280,15 @@
         "SEM",
         "LEDGER"
       ],
-      "observedEvidence": [],
+      "observedEvidence": [
+        "Noctium/IR.lean",
+        "Noctium/Helpers.lean",
+        "Noctium/Compiler.lean",
+        "runtime/src/constructor.rs",
+        "tests/ConstructorMetadata.lean",
+        "runtime/tests/constructor_metadata.rs",
+        "docs/development/constructors.md"
+      ],
       "equivalence": "unverified"
     },
     {
