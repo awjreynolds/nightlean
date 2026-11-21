@@ -137,6 +137,8 @@ passed a grouped `UInt 8` and `Bool` through a named interface. The caller read
 the callee address from a ledger cell. One localnet transaction finalized both
 proofs and advanced both counters from zero to one. The native assembly step
 rejected a caller that expected amount `8` from a callee returning `7`.
+The receipt uses the ZKIR 3.2.1 target with `--emit ledger --emit witness`
+and `--dedup-range-checks`.
 [Stateful composition receipt](named-interface-stateful-composition-receipt.json)
 
 With Compact 0.36.1 and runtime 0.21.0, the grouped `readPair` comparator
