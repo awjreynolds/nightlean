@@ -973,6 +973,8 @@ pub struct ReturnView {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Circuit {
     pub inputs: Vec<Input>,
+    #[serde(default, rename = "sharedBindings")]
+    pub shared_bindings: Vec<(String, Expr)>,
     pub outputs: Vec<Output>,
 }
 #[derive(Clone, Debug, Deserialize)]
@@ -2810,7 +2812,8 @@ fn input_value(ty: &str, json: &Json) -> Result<Value> {
     }
 }
 fn validate_environment_schema(plan: &Plan) -> Result<()> {
-    ensure!(plan.schema_version == 1, "unsupported plan schema");
+    let expected_schema = if plan.circuit.shared_bindings.is_empty() { 1 } else { 2 };
+    ensure!(plan.schema_version == expected_schema, "unsupported plan schema");
     ensure!(
         profile::validate_plan(plan.target.as_deref(), plan.target_profile.as_ref()),
         "plan target differs from linked native profile"
@@ -2843,6 +2846,16 @@ fn validate_environment_schema(plan: &Plan) -> Result<()> {
             "output shadows an existing name"
         );
         ScalarType::parse(&output.ty)?;
+    }
+    let mut shared_names = BTreeSet::new();
+    for (name, _) in &plan.circuit.shared_bindings {
+        ensure!(
+            !name.is_empty()
+                && !names.contains(name.as_str())
+                && !output_names.contains(name.as_str())
+                && shared_names.insert(name.as_str()),
+            "shared binding shadows an existing name"
+        );
     }
     ensure!(plan.returns.len() <= 256, "too many call returns");
     validate_return_views_specs(
@@ -3119,13 +3132,28 @@ fn parse_input_environment(
 }
 
 fn evaluate_circuit_outputs(plan: &Plan, env: &mut Environment) -> Result<()> {
+    validate_shared_binding_environment(plan, env)?;
+    let shared_bindings =
+        if plan.circuit.outputs.is_empty() || plan.circuit.shared_bindings.is_empty() {
+            Vec::new()
+        } else {
+            evaluate_shared_bindings(plan, env)?
+        };
+    let mut local = if shared_bindings.is_empty() {
+        None
+    } else {
+        Some(circuit_output_environment(env, &shared_bindings)?)
+    };
     for o in &plan.circuit.outputs {
-        let v = evaluate(&o.expression, &env)?;
+        let v = evaluate(&o.expression, local.as_ref().unwrap_or(env))?;
         ensure!(
             v.scalar_type() == ScalarType::parse(&o.ty)?,
             "output type mismatch"
         );
-        env.insert(o.name.clone(), v);
+        env.insert(o.name.clone(), v.clone());
+        if let Some(local) = &mut local {
+            local.insert(o.name.clone(), v);
+        }
     }
     Ok(())
 }
@@ -3999,18 +4027,62 @@ fn refresh_circuit_outputs(
     plan: &Plan,
     env: &mut Environment,
 ) -> Result<BTreeMap<String, Vec<Input>>> {
+    validate_shared_binding_environment(plan, env)?;
     let mut deferred = BTreeMap::new();
+    let remaining: Vec<_> = plan
+        .circuit
+        .outputs
+        .iter()
+        .filter(|output| !env.contains_key(&output.name))
+        .collect();
+    let shared_bindings = if remaining.is_empty() || plan.circuit.shared_bindings.is_empty() {
+        Vec::new()
+    } else {
+        match evaluate_shared_bindings(plan, env) {
+            Ok(values) => values,
+            Err(error) => {
+                let Some(missing) = unbound_reference(&error) else {
+                    return Err(error);
+                };
+                let Some(input) = plan
+                    .circuit
+                    .inputs
+                    .iter()
+                    .find(|input| input.name == missing)
+                else {
+                    return Err(error);
+                };
+                ensure!(
+                    input.visibility == "private" && !env.contains_key(missing),
+                    "{}",
+                    error
+                );
+                return Ok(remaining
+                    .into_iter()
+                    .map(|output| (output.name.clone(), vec![input.clone()]))
+                    .collect());
+            }
+        }
+    };
+    let mut local = if shared_bindings.is_empty() {
+        None
+    } else {
+        Some(circuit_output_environment(env, &shared_bindings)?)
+    };
     for output in &plan.circuit.outputs {
         if env.contains_key(&output.name) {
             continue;
         }
-        match evaluate(&output.expression, env) {
+        match evaluate(&output.expression, local.as_ref().unwrap_or(env)) {
             Ok(value) => {
                 ensure!(
                     value.scalar_type() == ScalarType::parse(&output.ty)?,
                     "output type mismatch"
                 );
-                env.insert(output.name.clone(), value);
+                env.insert(output.name.clone(), value.clone());
+                if let Some(local) = &mut local {
+                    local.insert(output.name.clone(), value);
+                }
             }
             Err(error) => {
                 let Some(missing) = unbound_reference(&error) else {
@@ -4037,6 +4109,81 @@ fn refresh_circuit_outputs(
         }
     }
     Ok(deferred)
+}
+
+fn validate_shared_binding_environment(plan: &Plan, env: &Environment) -> Result<()> {
+    ensure!(
+        plan.circuit
+            .shared_bindings
+            .iter()
+            .all(|(name, _)| !env.contains_key(name)),
+        "shared binding shadows an existing environment name"
+    );
+    Ok(())
+}
+
+fn circuit_output_environment(
+    env: &Environment,
+    shared_bindings: &[(String, Value)],
+) -> Result<Environment> {
+    let mut local = env.clone();
+    for (name, value) in shared_bindings {
+        ensure!(
+            !local.contains_key(name),
+            "shared binding shadows an existing environment name"
+        );
+        local.insert(name.clone(), value.clone());
+    }
+    Ok(local)
+}
+
+fn evaluate_shared_bindings(plan: &Plan, env: &Environment) -> Result<Vec<(String, Value)>> {
+    let input_names: BTreeSet<_> = plan
+        .circuit
+        .inputs
+        .iter()
+        .map(|input| input.name.as_str())
+        .collect();
+    let output_names: BTreeSet<_> = plan
+        .circuit
+        .outputs
+        .iter()
+        .map(|output| output.name.as_str())
+        .collect();
+    let shared_names: BTreeSet<_> = plan
+        .circuit
+        .shared_bindings
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect();
+    let mut local: Environment = env
+        .iter()
+        .filter(|(name, _)| input_names.contains(name.as_str()))
+        .map(|(name, value)| (name.clone(), value.clone()))
+        .collect();
+    let mut values = Vec::with_capacity(plan.circuit.shared_bindings.len());
+
+    for (name, expression) in &plan.circuit.shared_bindings {
+        let value = match evaluate(expression, &local) {
+            Ok(value) => value,
+            Err(error)
+                if unbound_reference(&error)
+                    .is_some_and(|missing| shared_names.contains(missing)) =>
+            {
+                bail!("shared binding has an unsupported forward dependency")
+            }
+            Err(error)
+                if unbound_reference(&error)
+                    .is_some_and(|missing| output_names.contains(missing)) =>
+            {
+                bail!("shared binding depends on a circuit output")
+            }
+            Err(error) => return Err(error),
+        };
+        local.insert(name.clone(), value.clone());
+        values.push((name.clone(), value));
+    }
+    Ok(values)
 }
 
 fn required_missing_input(
@@ -6740,3 +6887,115 @@ mod native_client;
 
 pub mod constructor;
 pub use constructor::construct_state;
+
+#[cfg(test)]
+mod shared_binding_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn mk_plan(circuit: Json) -> Plan {
+        let mut plan: Plan = serde_json::from_value(json!({
+            "schemaVersion": 2,
+            "entrypoint": "sharedBindings",
+            "circuit": circuit,
+            "state": [],
+            "operations": [],
+            "reads": []
+        }))
+        .unwrap();
+        plan.target = Some(profile::NAME.into());
+        plan.target_profile = Some(profile::target_json());
+        plan
+    }
+
+    fn reference(name: &str) -> Json {
+        json!({"tag":"reference", "name":name})
+    }
+
+    fn native(env: &Environment, name: &str) -> Fr {
+        let Value::Native(value) = env.get(name).unwrap() else {
+            panic!("expected Native circuit value")
+        };
+        *value
+    }
+
+    #[test]
+    fn shared_prefix_runs_in_order_and_stays_local() {
+        let plan = mk_plan(json!({
+            "inputs": [{"name":"x", "type":"Native", "visibility":"public"}],
+            "sharedBindings": [
+                ["_noctium_shared_0", {"tag":"add", "left":reference("x"), "right":{"tag":"constant", "value":"1"}}],
+                ["_noctium_shared_1", {"tag":"add", "left":reference("_noctium_shared_0"), "right":{"tag":"constant", "value":"1"}}]
+            ],
+            "outputs": [
+                {"name":"first", "visibility":"public", "type":"Native", "expression":reference("_noctium_shared_1")},
+                {"name":"second", "visibility":"public", "type":"Native", "expression":{"tag":"add", "left":reference("first"), "right":reference("_noctium_shared_0")}}
+            ]
+        }));
+        let env = environment(&plan, &BTreeMap::from([("x".into(), json!("2"))])).unwrap();
+        assert_eq!(field_decimal(native(&env, "first")), "4");
+        assert_eq!(field_decimal(native(&env, "second")), "7");
+        assert!(!env.contains_key("_noctium_shared_0"));
+        assert!(!env.contains_key("_noctium_shared_1"));
+
+        let mut wrong_schema = plan;
+        wrong_schema.schema_version = 1;
+        assert!(validate_environment_schema(&wrong_schema).is_err());
+        wrong_schema.schema_version = 2;
+        wrong_schema.circuit.shared_bindings.clear();
+        assert!(validate_environment_schema(&wrong_schema).is_err());
+    }
+
+    #[test]
+    fn shared_prefix_defers_private_inputs_and_rejects_unsafe_shapes() {
+        let plan = mk_plan(json!({
+            "inputs": [
+                {"name":"x", "type":"Native", "visibility":"public"},
+                {"name":"later", "type":"Native", "visibility":"private"}
+            ],
+            "sharedBindings": [["_noctium_shared_0", {"tag":"add", "left":reference("x"), "right":reference("later")}]],
+            "outputs": [
+                {"name":"throughShared", "visibility":"public", "type":"Native", "expression":reference("_noctium_shared_0")},
+                {"name":"direct", "visibility":"public", "type":"Native", "expression":{"tag":"constant", "value":"9"}}
+            ]
+        }));
+        let mut env =
+            parse_input_environment(&plan, &BTreeMap::from([("x".into(), json!("2"))]), true)
+                .unwrap();
+        let deferred = refresh_circuit_outputs(&plan, &mut env).unwrap();
+        assert_eq!(deferred.len(), 2);
+        assert_eq!(deferred["throughShared"][0].name, "later");
+        assert_eq!(deferred["direct"][0].name, "later");
+        assert!(!env.contains_key("direct"));
+        assert!(!env.contains_key("_noctium_shared_0"));
+
+        env.insert("later".into(), Value::Native(canonical_field("3").unwrap()));
+        assert!(refresh_circuit_outputs(&plan, &mut env).unwrap().is_empty());
+        assert_eq!(field_decimal(native(&env, "throughShared")), "5");
+        assert!(!env.contains_key("_noctium_shared_0"));
+
+        assert!(
+            serde_json::from_value::<Circuit>(json!({
+                "inputs": [], "outputs": [], "sharedBindings": [["_bad"]]
+            }))
+            .is_err()
+        );
+
+        let output_dependency = mk_plan(json!({
+            "inputs": [],
+            "sharedBindings": [["_noctium_shared_0", reference("base")]],
+            "outputs": [
+                {"name":"base", "visibility":"public", "type":"Native", "expression":{"tag":"constant", "value":"1"}},
+                {"name":"derived", "visibility":"public", "type":"Native", "expression":reference("_noctium_shared_0")}
+            ]
+        }));
+        assert!(environment(&output_dependency, &BTreeMap::new()).is_err());
+
+        let collision = mk_plan(json!({
+            "inputs": [{"name":"x", "type":"Native", "visibility":"public"}],
+            "sharedBindings": [["x", {"tag":"constant", "value":"1"}]],
+            "outputs": []
+        }));
+        assert!(environment(&collision, &BTreeMap::from([("x".into(), json!("2"))])).is_err());
+    }
+}
